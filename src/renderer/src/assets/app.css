@@ -4200,7 +4200,7 @@ select:focus-visible {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 320px;
+  width: 340px;
   background: var(--card);
   border-left: 1px solid var(--line);
   z-index: var(--z-panel);
@@ -4330,18 +4330,20 @@ select:focus-visible {
   z-index: var(--z-panel-nested);
   display: flex;
   flex-direction: column;
-  width: 360px;
+  width: 340px;
   background: var(--card);
   border-left: 1px solid var(--line);
   box-shadow: -8px 0 24px rgba(0, 0, 0, 0.24);
 }
 
+/* 2026-11-03 用户裁决：头部压缩到原高度的约 2/3，并取消分页上方分隔线；
+   图标、标题、关闭按钮同一水平中线。 */
 .contract-head {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 13px 14px;
-  border-bottom: 1px solid var(--line);
+  gap: 8px;
+  height: 30px;
+  padding: 0 12px;
 }
 
 .contract-head > div {
@@ -4393,7 +4395,7 @@ select:focus-visible {
   margin: 0;
   padding: 8px 10px;
   border: none;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0;
   border-radius: 0;
   background: rgba(255, 255, 255, 0.02);
 }
@@ -6828,7 +6830,7 @@ select:focus-visible {
 
   .side-panel,
   .node-contract-panel {
-    width: min(360px, 92vw);
+    width: min(340px, 92vw);
   }
 }
 
@@ -6841,7 +6843,7 @@ select:focus-visible {
 
 /* 资产面板比其他侧栏稍宽，两列卡片才有呼吸感 */
 .side-panel.assets-side-panel {
-  width: 344px;
+  width: 340px;
 }
 
 /* 头部多选开关：安静的幽灵药丸，激活时泛品牌色 */
@@ -8334,11 +8336,19 @@ select:focus-visible {
   flex: 0 1 auto;
 }
 
-/* 数量、画幅和分辨率只占文案加箭头所需宽度，不再被 flex 拉伸或挤重。 */
+/* 2026-11-03 用户裁决：数量、画幅、分辨率等分拉满整行，间距保持 6px，不留中间空档。 */
+.node-card.type-image-gen .gen-options-row {
+  flex-wrap: nowrap;
+}
+
 .node-card.type-image-gen .gen-options-row > .gen-select {
-  width: max-content;
+  width: auto;
   min-width: 0;
   max-width: 100%;
+  flex: 1 1 0;
+}
+
+.node-card.type-image-gen .gen-options-row > .gen-check {
   flex: 0 0 auto;
 }
 
@@ -8592,7 +8602,7 @@ select:focus-visible {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 380px;
+  width: 340px;
   background: var(--sunk);
   border-left: 1px solid var(--line);
   display: flex;
@@ -10051,10 +10061,10 @@ select:focus-visible {
 .code-body {
   flex: 1;
   overflow: auto;
-  padding: 8px;
+  padding: 4px 6px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .code-io-hints {
@@ -10244,44 +10254,7 @@ select:focus-visible {
   color: #fbbf24;
 }
 
-.code-variable-contract {
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--line);
-}
-
-/* 变量行的因果标签：直接写出这一行在代码里对应什么，用户不必猜 */
-.variable-expr {
-  flex: 0 0 auto;
-  padding: 1px 5px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--bg);
-  color: var(--txt);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.code-variable-help {
-  color: var(--muted);
-  font-size: 9px;
-  line-height: 1.45;
-}
-
-.code-variable-help code {
-  color: #8ab4f8;
-  font-family: 'Cascadia Code', monospace;
-}
-
-.code-output-object {
-  min-width: 0;
-  overflow: hidden;
-  color: #7be8bd;
-  font:
-    10px 'Cascadia Code',
-    monospace;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* 代码编辑模式 textarea：等宽字体对齐 code-pre */
 
 /* 代码节点执行结果显示（成功/失败摘要） */
 .code-result {
@@ -10366,41 +10339,6 @@ select:focus-visible {
   color: #fbbf24;
 }
 
-/* 结构数据节点：把执行器认得的占位符与其真实可引用数量摆出来 */
-.structured-tokens {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding-top: 6px;
-}
-
-.structured-token {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 6px;
-  border: 1px dashed var(--line);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 9px;
-  cursor: pointer;
-}
-
-.structured-token code {
-  color: #8ab4f8;
-  font-family: 'Cascadia Code', monospace;
-  font-size: 9px;
-}
-
-.structured-token.ready {
-  border-style: solid;
-  border-color: rgba(138, 180, 248, 0.45);
-}
-
-.structured-token.idle {
-  opacity: 0.62;
-}
 /* 代码编辑模式 textarea：等宽字体对齐 code-pre */
 .code-edit {
   font-family: 'Cascadia Code', 'Fira Code', monospace;
@@ -10443,7 +10381,7 @@ select:focus-visible {
 }
 
 .code-output-row {
-  grid-template-columns: minmax(0, 1fr) 70px minmax(56px, auto) 22px;
+  grid-template-columns: minmax(0, 1fr) 70px 22px;
 }
 
 .code-param-name {
@@ -10489,16 +10427,6 @@ select:focus-visible {
 
 .code-param-cardinality:focus {
   border-color: var(--brand);
-}
-
-.code-output-port-id {
-  overflow: hidden;
-  color: var(--muted);
-  font:
-    8px 'Cascadia Code',
-    monospace;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .code-param-type:focus {
@@ -10668,8 +10596,9 @@ select:focus-visible {
   overflow: auto;
   min-height: 0;
   flex: 1;
-  background: rgba(0, 0, 0, 0.28);
-  border-radius: 6px;
+  /* 2026-11-03 用户裁决：编辑区不再套深色框，直接作为节点正文。 */
+  background: transparent;
+  border-radius: 0;
 }
 
 .code-editor-gutter {
@@ -10679,8 +10608,8 @@ select:focus-visible {
   padding: 5px 4px 5px 6px;
   text-align: right;
   user-select: none;
-  border-right: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.15);
+  border-right: none;
+  background: transparent;
 }
 
 .code-line-number {
@@ -10694,8 +10623,12 @@ select:focus-visible {
 .node-textarea.code-edit.with-gutter {
   flex: 1;
   min-width: 0;
+  height: auto;
+  min-height: 150px;
+  /* 2026-11-03 用户裁决：代码越多编辑区越高，直到节点高度上限后内部滚动。 */
+  field-sizing: content;
   border: none;
-  border-radius: 0 6px 6px 0;
+  border-radius: 0;
   background: transparent;
   padding: 5px 6px;
   resize: none;
@@ -11483,12 +11416,13 @@ select:focus-visible {
 }
 .website-node-empty,
 .website-node-link {
-  /* 2026-10-31 用户裁决：图标与名称垂直居中对齐（此前无布局规则，inline 基线排列
-     导致图标偏高、名称贴基线）。URL 与按钮各自成行，行距沿用 §19 间距 token。 */
+  /* 2026-11-03 用户裁决：名称、网址与打开按钮作为一个整体在卡片内水平+垂直居中。 */
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  justify-content: center;
   align-items: center;
-  column-gap: 10px;
+  text-align: center;
+  height: 100%;
   row-gap: 8px;
   color: inherit;
   text-decoration: none;
@@ -11503,12 +11437,26 @@ select:focus-visible {
   flex: 0 0 auto;
 }
 
+/* 网址节点：让居中的整块内容拿到正文全部高度。 */
+.node-card.type-website .node-body-content,
+.node-card.type-website .node-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.node-card.type-website .website-node-link,
+.node-card.type-website .website-node-empty {
+  flex: 1;
+}
+
 .website-node-link > strong {
   font-size: 15px;
   font-weight: 650;
   line-height: 1.2;
   min-width: 0;
-  max-width: calc(100% - 34px);
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -11516,7 +11464,7 @@ select:focus-visible {
 
 .website-node-url {
   display: -webkit-box;
-  flex: 1 1 100%;
+  flex: 0 1 auto;
   overflow: hidden;
   max-width: 100%;
   color: #8abce8;
@@ -12052,6 +12000,11 @@ select:focus-visible {
   color: #fbbf24;
 }
 /* 循环节点底部摘要 */
+.iterate-summary {
+  margin: 0;
+  color: var(--brand);
+  font-size: 11px;
+}
 .iterate-meta {
   display: flex;
   flex-direction: column;

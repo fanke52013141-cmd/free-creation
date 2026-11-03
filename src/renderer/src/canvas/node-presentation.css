@@ -763,28 +763,40 @@
   width: 40px;
   flex-direction: column;
   overflow: hidden;
-  border-left: 1px solid var(--node-edge-strong, var(--line));
-  border-radius: 0 6px 6px 0;
+  border-left: none;
 }
 
+/* 2026-11-03 用户裁决：步进器只保留上下三角，不带按钮底色/边框。 */
 .number-stepper-button {
+  display: flex;
   flex: 1 1 50%;
+  align-items: center;
+  justify-content: center;
   padding: 0;
   border: 0;
   color: var(--node-text-muted, var(--muted));
   background: transparent;
-  font-size: 13px;
-  line-height: 1;
   cursor: pointer;
 }
 
-.number-stepper-button + .number-stepper-button {
-  border-top: 1px solid var(--node-edge-strong, var(--line));
+.number-stepper-tri {
+  width: 0;
+  height: 0;
+  border-right: 4px solid transparent;
+  border-left: 4px solid transparent;
+}
+
+.number-stepper-button:first-child .number-stepper-tri {
+  border-bottom: 6px solid currentColor;
+}
+
+.number-stepper-button:last-child .number-stepper-tri {
+  border-top: 6px solid currentColor;
 }
 
 .number-stepper-button:hover:not(:disabled) {
   color: var(--txt);
-  background: rgb(255 255 255 / 8%);
+  background: transparent;
 }
 
 .number-stepper-button:disabled {

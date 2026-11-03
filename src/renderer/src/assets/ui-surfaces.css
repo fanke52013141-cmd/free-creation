@@ -140,8 +140,9 @@
 .side-panel-head,
 .contract-head,
 .csp-header {
-  min-height: 54px;
-  padding: 11px 14px;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
   border-bottom-color: rgba(231, 238, 247, 0.1);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), transparent);
 }
@@ -1227,6 +1228,11 @@ button {
   background: linear-gradient(90deg, transparent, rgba(162, 196, 221, 0.16), transparent);
 }
 
+/* 2026-11-03 用户裁决：概览/输入输出/设置/协作 上方不再画分隔线。 */
+.contract-head::after {
+  display: none;
+}
+
 .side-panel-body,
 .csp-messages {
   padding-bottom: 22px;
@@ -1691,8 +1697,8 @@ button {
 
 /* 契约抽屉本身就是节点的说明书，不能为了紧凑牺牲文字可读性。 */
 .node-contract-panel {
-  /* Rail 占 76px，面板整体略放宽以补偿内容区宽度。 */
-  width: clamp(380px, 26vw, 420px);
+  /* 2026-11-03 用户裁决：与节点卡片同宽（340px），所有侧栏统一，不再 380–420 漂移。 */
+  width: 340px;
   /* 抽屉延伸至画布底部；底部工具条改为全局居中显示，不再挤压内容。 */
   bottom: 0;
 }
@@ -1704,14 +1710,16 @@ button {
 }
 
 .contract-head {
-  min-height: 62px;
-  padding: 13px 17px;
+  /* 2026-11-03 用户裁决：头部压缩到约原来的 2/3，并与图标、关闭按钮同一中线。 */
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
 }
 
 .contract-head strong {
   color: #f5f8fb;
-  font-size: 16px;
-  font-weight: 720;
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .contract-head small {
@@ -4393,11 +4401,17 @@ button {
 }
 
 .node-card.type-json .json-body,
-.node-card.type-structured .structured-body,
-.node-card.type-code .code-body {
+.node-card.type-structured .structured-body {
   box-sizing: border-box;
   gap: 8px;
   padding: 9px;
+}
+
+/* 2026-11-03 用户裁决：代码节点只留参数段与编辑区，间距压缩后初始高度回到 260px。 */
+.node-card.type-code .code-body {
+  box-sizing: border-box;
+  gap: 4px;
+  padding: 4px 6px;
 }
 
 .node-card.type-structured :is(.structured-preview, .json-data-card, .json-object-card) {
@@ -5309,14 +5323,13 @@ button {
   width: auto;
   min-width: 0;
 }
-/* 2026-11-02 用户裁决：生图选项行按内容紧凑宽度排布（不再等分拉宽），
-   行两端与提示词/主按钮对齐，顺序为 数量 | 画幅 | 分辨率 | 透明底。 */
+/* 2026-11-03 用户裁决：数量、画幅、分辨率等分拉满整行（间距 6px），不再按内容宽留空档。 */
 .node-card.type-image-gen .gen-options-row {
-  justify-content: space-between;
+  justify-content: flex-start;
 }
 .node-card.type-image-gen .gen-options-row > .gen-select {
-  flex: 0 0 auto;
-  width: max-content;
+  flex: 1 1 0;
+  width: auto;
   min-width: 0;
   max-width: 100%;
 }

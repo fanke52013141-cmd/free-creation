@@ -97,7 +97,12 @@ export function WebsiteSettings({ shape, editor }: NodeSettingsProps): React.JSX
     if (!link) return setError('请输入有效的 HTTP 或 HTTPS 网址')
 
     const config = JSON.stringify(link)
-    editor.updateShape({ id: shape.id, type: 'node-card', props: { config } })
+    // 2026-11-03 用户裁决：确定网址名称后，节点标题同步为该名称。
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { config, title: link.name }
+    })
     markUndoPoint(editor, 'website-config')
     setDraft(link)
     setSavedConfig(config)

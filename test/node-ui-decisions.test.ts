@@ -120,7 +120,7 @@ describe('v1.3 §16.1 端口圆点统一使用节点色、类型色环与柔光'
 describe('画布连线宽度与流动段比例', () => {
   it('正式连线和拖线预览都按 1/6 路径长度显示流动段', () => {
     expect(surfaces).toMatch(
-      /\.data-edge-visible\s*\{[^}]*stroke-width:\s*3;[\s\S]*?\.data-edge-flow\s*\{[^}]*stroke-width:\s*4\.5;[^}]*stroke-dasharray:\s*166\.667 833\.333;/
+      /\.data-edge-visible\s*\{[^}]*stroke-width:\s*1\.5;[\s\S]*?\.data-edge-flow\s*\{[^}]*stroke-width:\s*2\.25;[^}]*stroke-dasharray:\s*166\.667 833\.333;/
     )
     expect(foundation).toMatch(/\.conn-water-path\s*\{[^}]*stroke-dasharray:\s*166\.667 833\.333;/)
     // 2026-11-02 起连线层改为页面坐标 + 镜像 tldraw 相机 transform：线宽在 CSS 中按页面单位
@@ -344,13 +344,13 @@ describe('v1.2 §16.11 代码/JSON 节点：契约因果可见，教学句清零
     expect(body).toContain('编写代码')
   })
 
-  it('变量行的每一行都写出它改变了什么：入口表达式与真实端口 ID', () => {
-    expect(code).toContain('<code className="variable-expr">{inputExpr}</code>')
-    expect(code).toContain('outputPortId(data.outputName)')
-    // main 风格与表达式风格给出的读法不同，不能再混成一句话
-    expect(code).toContain('args.${data.inputName}')
-    expect(code).toContain('input.${data.inputName}')
-    expect(app).toMatch(/\.variable-expr\s*\{/)
+  it('代码节点只保留输入参数/输出参数两段，不再出现顶部 input 变量行', () => {
+    expect(code).toContain('添加输入参数')
+    expect(code).toContain('添加输出参数')
+    expect(code).toContain('code-params-section')
+    expect(code).not.toContain('variable-row input')
+    expect(code).not.toContain('inputExpr')
+    expect(app).not.toMatch(/\.variable-expr\s*\{/)
   })
 
   it('JSON 节点空态不渲染状态徽标，合法时给出结构规模', () => {
@@ -417,18 +417,18 @@ describe('v1.2 §16.12 处理/结构数据节点：只留真会改变行为的�
     expect(processor).toContain('输出结果')
   })
 
-  it('结构数据节点：占位符连同可引用数量呈现，坏 JSON 不再显示成 null', () => {
-    expect(structured).toContain('countIncomingConnections')
-    expect(structured).toContain('<PlaceholderTokens')
-    expect(structured).toContain('{{input[${index}]}}')
-    expect(structured).toContain('<NodeIdentity>')
+  it('结构数据节点不再堆提示卡片，只保留 Schema 与正文', () => {
+    expect(structured).not.toContain('countIncomingConnections')
+    expect(structured).not.toContain('PlaceholderTokens')
+    expect(structured).not.toContain('文本上下文 ×')
+    expect(structured).toContain('<NodeIdentity />')
     // 解析失败必须回显用户原文，而不是 JSON.stringify(null)
     expect(structured).toMatch(
       /parseError\s*\?\s*\(\s*raw\s*\)\s*:\s*\(\s*JSON\.stringify\(parsed, null, 2\)/
     )
     expect(structured).not.toContain('双击输入 JSON')
     expect(structured).not.toContain('等待映射')
-    expect(app).toMatch(/\.structured-token\.ready\s*\{/)
+    expect(app).not.toMatch(/\.structured-token\.ready\s*\{/)
     expect(app).toMatch(/\.json-status\.pending\s*\{/)
   })
 })
@@ -517,17 +517,11 @@ describe('v1.2 §16.13 AI 处理 / 对话：把执行器分支映射成端口与
     expect(stripComments(chat)).not.toContain(' tok')
   })
 
-  it('循环 / AI 处理 / 对话共用同一套连线状态配色', () => {
-    expect(iterate).toContain("'in-list'")
-    expect(iterate).toContain('循环体：未从「当前项」连线，运行会跳过')
-    for (const selector of [
-      '.iterate-wiring.ok',
-      '.iterate-wiring.warn',
-      '.ai-process-wiring.ok',
-      '.ai-process-wiring.warn'
-    ]) {
-      expect(app).toContain(`${selector} {`)
-    }
+  it('循环节点只保留配置与运行按钮，不再打印数据流教学句', () => {
+    expect(iterate).toContain('运行循环')
+    expect(iterate).not.toContain('尚未运行')
+    expect(iterate).not.toContain('按顺序逐项交给')
+    expect(app).toContain('.iterate-progress-wrap {')
     expect(app).toMatch(/\.ai-process-wiring\.warn\s*\{\s*color:\s*#fbbf24;/)
     expect(app).not.toContain('.chat-compact-run')
   })

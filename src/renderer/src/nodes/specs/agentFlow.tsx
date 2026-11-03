@@ -214,16 +214,7 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
     )
   }
   return (
-    <div className="agent-flow-body">
-      <div className="agent-flow-summary">
-        {agent
-          ? `${config.role === 'builder' ? '搭建' : config.role === 'coordinator' ? '主控' : '专业'} Agent · ${config.interactionMode === 'autonomous' ? '自主处理' : '人机协作'}`
-          : review
-            ? config.rejectPolicy === 'stop'
-              ? '不通过时停止受控分支'
-              : `不通过时返工 · 最多 ${config.maxReworks ?? 3} 次返工`
-            : `初始阶段：${String(config.initialState ?? '未配置')}`}
-      </div>
+    <div className={`agent-flow-body${review ? ' is-review' : ''}`}>
       {shape.props.nodeType !== 'state-machine' && (
         <label className="agent-flow-text">
           <span>{review ? '审核标准' : '任务目标'}</span>
@@ -243,21 +234,26 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
           />
         </label>
       )}
+      {agent && (
+        <div className="agent-flow-summary">
+          {config.role === 'builder' ? '搭建' : config.role === 'coordinator' ? '主控' : '专业'} Agent
+        </div>
+      )}
       {agent ? (
         config.role === 'builder' ? (
           <FlowBuilderControls shape={shape} />
         ) : (
           <AgentTaskControls shape={shape} />
         )
-      ) : (
+      ) : review ? (
         <ReviewTaskControls shape={shape} />
-      )}
+      ) : null}
       {issue && (
         <p className="agent-flow-pending" role="status">
           {issue}
         </p>
       )}
-      {!agent && (
+      {!agent && !review && (
         <NodePrimaryButton
           onClick={() => useNodePanelStore.getState().open('contract', shape.id, 'settings')}
         >

@@ -7,7 +7,6 @@ import { useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import { validateNodeSchema } from '@shared/node-schemas'
 import { markUndoPoint } from '../../../canvas/history'
-import { countIncomingConnections } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { toast } from '../../../stores/toast'
 import { jsonErrorLocation } from './shared'
@@ -30,59 +29,6 @@ function fieldEntries(value: unknown, prefix = '', depth = 0): { path: string; v
   })
 }
 
-/** 占位符卡片：把执行器认得的 token 与端口真实连线数一起呈现。 */
-function PlaceholderTokens({
-  textCount,
-  contextCount
-}: {
-  textCount: number
-  contextCount: number
-}): React.JSX.Element {
-  const indexes = Array.from({ length: Math.max(contextCount, 1) }, (_, index) => index).slice(0, 4)
-  const copy = (token: string): void => {
-    void navigator.clipboard.writeText(token).then(() => toast(`已复制 ${token}`))
-  }
-  return (
-    <div className="structured-tokens" aria-label="占位符">
-      <button
-        type="button"
-        className={`structured-token ${textCount ? 'ready' : 'idle'}`}
-        aria-label={
-          textCount > 1
-            ? `替换为 ${textCount} 条文本上下文按顺序拼接的结果`
-            : '替换为 in-text 端口连入的文本'
-        }
-        onPointerDown={(event) => stopEventPropagation(event)}
-        onClick={(event) => {
-          event.stopPropagation()
-          copy('{{text}}')
-        }}
-      >
-        <code>{'{{text}}'}</code>
-        <span>文本上下文 ×{textCount}</span>
-        <Icon name="add" size={12} />
-      </button>
-      {indexes.map((index) => (
-        <button
-          type="button"
-          key={index}
-          className={`structured-token ${contextCount > index ? 'ready' : 'idle'}`}
-          aria-label={`替换为 in-context 第 ${index + 1} 个 JSON 输入，字段写作 {{input[${index}].名称}}`}
-          onPointerDown={(event) => stopEventPropagation(event)}
-          onClick={(event) => {
-            event.stopPropagation()
-            copy(`{{input[${index}]}}`)
-          }}
-        >
-          <code>{`{{input[${index}]}}`}</code>
-          <span>结构上下文 ×{contextCount}</span>
-          <Icon name="add" size={12} />
-        </button>
-      ))}
-    </div>
-  )
-}
-
 export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const scrollRef = useRef<HTMLDivElement | null>(null)
@@ -92,8 +38,6 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
   const hasText = Boolean(raw.trim())
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(raw)
-  const contextCount = countIncomingConnections(editor, shape.id, 'in-context')
-  const textCount = countIncomingConnections(editor, shape.id, 'in-text')
   let parsed: unknown = null
   let parseError: string | null = null
   try {
@@ -202,13 +146,10 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
               JSON.stringify(parsed, null, 2)
             )
           ) : (
-            <NodeIdentity>
-              <small>按当前 Schema 校验后供下游节点使用</small>
-            </NodeIdentity>
+            <NodeIdentity />
           )}
         </div>
       )}
-      <PlaceholderTokens textCount={textCount} contextCount={contextCount} />
       {fields.length > 0 && (
         <div className="structured-field-tree" aria-label="结构字段">
           <div className="structured-field-tree-title">字段路径</div>

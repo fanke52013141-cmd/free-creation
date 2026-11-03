@@ -57,7 +57,7 @@ export function NumberStepper({
             bump(1)
           }}
         >
-          +
+          <span className="number-stepper-tri" aria-hidden="true" />
         </button>
         <button
           type="button"
@@ -70,7 +70,7 @@ export function NumberStepper({
             bump(-1)
           }}
         >
-          −
+          <span className="number-stepper-tri" aria-hidden="true" />
         </button>
       </span>
     </span>

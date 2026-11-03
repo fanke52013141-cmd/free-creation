@@ -2,13 +2,16 @@
 //
 // 界面上必须先能看出「有没有列表、有没有循环体」：这两项缺一即整节点跳过，
 // 只给配置下拉而不给连线状态，用户就只能靠猜。
-import { useRef } from 'react'
-import { stopEventPropagation, useEditor, useValue } from 'tldraw'
+import { useRef, useState } from 'react'
+import { stopEventPropagation, useEditor } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { AppSelect } from '../../../components/AppSelect'
 import { NumberStepper } from '../../../components/NumberStepper'
-import { deriveGraph, readConnectedNodeInputs } from '../../../canvas/graph'
+import { NodePrimaryButton } from '../../../canvas/NodePresentation'
+import { runNodeManually } from '../../../engine/executor'
+import { useAppStore } from '../../../stores/app'
+import { useGatewayStore } from '../../../stores/gateway'
 import {
   parseIterate,
   parseIterateResult,
@@ -48,32 +51,6 @@ function enforceConfig(c: IterateConfig): IterateConfig {
  * 从 out-item 的目标沿真实连线扩展；out-items 的目标是循环结束后的汇总消费者，
  * 不属于循环体。
  */
-function loopBodyNodeIds(
-  graph: { nodes: unknown[]; edges: Array<{ from: { nodeId: string; portId: string }; to: { nodeId: string } }> },
-  iterateId: string
-): Set<string> {
-  const finalConsumers = new Set(
-    graph.edges
-      .filter((e) => e.from.nodeId === iterateId && e.from.portId === 'out-items')
-      .map((e) => e.to.nodeId)
-  )
-  const roots = graph.edges
-    .filter((e) => e.from.nodeId === iterateId && e.from.portId === 'out-item')
-    .map((e) => e.to.nodeId)
-  const body = new Set(roots)
-  const pending = [...roots]
-  while (pending.length > 0) {
-    const id = pending.pop()!
-    for (const e of graph.edges) {
-      if (e.from.nodeId !== id || finalConsumers.has(e.to.nodeId)) continue
-      if (!body.has(e.to.nodeId)) {
-        body.add(e.to.nodeId)
-        pending.push(e.to.nodeId)
-      }
-    }
-  }
-  return body
-}
 
 function summaryFromResults(results: (IterateItemResult | null)[] | undefined): string {
   if (!results) return ''
@@ -124,56 +101,21 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
       props: { config: JSON.stringify(enforceConfig(next)) }
     })
   }
-  // 只有 out-item 的目标是循环体入口；out-items 的目标是循环结束后的汇总消费者。
-  const downstreamCount = useValue(
-    'iterate body entries',
-    () => {
-      return deriveGraph(editor).edges.filter(
-        (edge) => edge.from.nodeId === shape.id && edge.from.portId === 'out-item'
-      ).length
-    },
-    [editor, shape.id]
-  )
-  // 列表元素数量：执行器要求 in-list 是数组，否则整节点跳过，因此这里必须如实报出来。
-  const listCount = useValue<number | null>(
-    'iterate list size',
-    () => {
-      const entry = readConnectedNodeInputs(editor, shape.id).find(
-        (item) => item.targetPortId === 'in-list'
-      )
-      const value = entry?.value
-      return value && value.kind === 'json' && Array.isArray(value.data) ? value.data.length : null
-    },
-    [editor, shape.id]
-  )
-  const effectiveCount =
-    listCount === null ? null : data.limit > 0 ? Math.min(data.limit, listCount) : listCount
-  // W5：循环体内来自循环体外部的连线数量——子流程读取不到这些值，运行时要么
-  // 报 undefined 要么整项失败，必须在卡片上直接提示改法（把内容并入列表项）。
-  const externalEdgeCount = useValue(
-    'iterate body external edges',
-    () => {
-      const graph = deriveGraph(editor)
-      const body = loopBodyNodeIds(graph, shape.id)
-      return graph.edges.filter(
-        (edge) =>
-          body.has(edge.to.nodeId) &&
-          !body.has(edge.from.nodeId) &&
-          edge.from.nodeId !== shape.id
-      ).length
-    },
-    [editor, shape.id]
-  )
+  const project = useAppStore((s) => s.currentProject)
+  const providers = useGatewayStore((s) => s.providers)
+  const [busy, setBusy] = useState(false)
+  const run = async (): Promise<void> => {
+    if (!project || busy) return
+    setBusy(true)
+    try {
+      await runNodeManually(editor, project.id, providers, shape.id)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <div className="iterate-body" ref={scrollRef}>
-      <div className="iterate-contract">
-        <code className="variable-expr">in-list</code>
-        <span>按顺序逐项交给</span>
-        <code className="variable-expr">out-item</code>
-        <span>循环体，汇总到</span>
-        <code className="variable-expr">out-items</code>
-      </div>
       <div className="iterate-config">
         <div className="ai-row ai-row-num">
           <label title="只处理列表前 N 项，0 表示不限">
@@ -270,53 +212,31 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
           />
         </label>
       </div>
-      <div className="iterate-meta">
-        <span className={`iterate-wiring ${listCount === null || listCount === 0 ? 'warn' : 'ok'}`}>
-          {listCount === null
-            ? '未接入或不是数组，运行会跳过'
-            : listCount === 0
-              ? '列表为空（0 项），循环体不会执行——请检查上游数据'
-              : `${listCount} 项`}
-          {effectiveCount !== null && listCount !== null && listCount > 0 && effectiveCount < listCount
-            ? ` · 本次处理 ${effectiveCount} 项`
-            : ''}
-        </span>
-        <span className={`iterate-wiring ${downstreamCount === 0 ? 'warn' : 'ok'}`}>
-          {downstreamCount === 0
-            ? '循环体：未从「当前项」连线，运行会跳过'
-            : `循环体入口：${downstreamCount} 个`}
-        </span>
-        {externalEdgeCount > 0 && (
-          <span className="iterate-wiring warn">
-            循环体：{externalEdgeCount} 条来自循环体外部的连线在子流程中读取不到（运行会报
-            undefined 或整项失败）——请让上游把这些内容写进每个列表项
-          </span>
-        )}
-        {result?.progress && (
-          <div className="iterate-progress-wrap" role="status">
-            <div className="iterate-progress-bar">
-              <div
-                className="iterate-progress-fill"
-                style={{
-                  width: `${
-                    result.progress.total > 0
-                      ? (result.progress.completed / result.progress.total) * 100
-                      : 0
-                  }%`
-                }}
-              />
-            </div>
-            <span className="iterate-progress-text">{progressLabel(result.progress)}</span>
+      {result?.progress && (
+        <div className="iterate-progress-wrap" role="status">
+          <div className="iterate-progress-bar">
+            <div
+              className="iterate-progress-fill"
+              style={{
+                width: `${
+                  result.progress.total > 0
+                    ? (result.progress.completed / result.progress.total) * 100
+                    : 0
+                }%`
+              }}
+            />
           </div>
-        )}
-        <span className={result ? 'iterate-hint has-result' : 'iterate-hint'} role="status">
-          {shape.props.exec === 'running'
-            ? '正在按顺序处理…'
-            : result
-              ? summaryFromResults(result.items)
-              : '（尚未运行）'}
-        </span>
-      </div>
+          <span className="iterate-progress-text">{progressLabel(result.progress)}</span>
+        </div>
+      )}
+      {result && (
+        <p className="iterate-summary" role="status">
+          {shape.props.exec === 'running' ? '正在按顺序处理…' : summaryFromResults(result.items)}
+        </p>
+      )}
+      <NodePrimaryButton disabled={busy} onClick={() => void run()}>
+        {busy ? '运行中…' : '运行循环'}
+      </NodePrimaryButton>
     </div>
   )
 }

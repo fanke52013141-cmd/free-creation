@@ -66,9 +66,11 @@ export const NODE_UI = {
   radius: 12,
   identity: {
     /** 空态居中大图标尺寸（2026-11-02 裁决：无框、不重复节点名称；
-     *  同日裁决：放大两倍后按 96px 的 75% 回调至 72px，并正居中于节点卡片中心） */
+     *  同日裁决：放大两倍后按 96px 的 75% 回调至 72px，并正居中于节点卡片中心）
+     *  2026-11-03 用户裁决：身份区只保留图标的实际占位，不再固定 178px；
+     *  有配置行的节点（白模视频等）因此能保持 260px 初始高度。 */
     iconSize: 72,
-    minHeight: 178
+    minHeight: 72
   },
   description: { height: 36, maxLines: 2 },
   content: { padding: 12 },

@@ -9,11 +9,9 @@ import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
-import { VARIABLE_TYPES, type VariableValueType } from './shared'
 import {
   CODE_VALUE_TYPES,
   codePortConfigErrors,
-  outputFieldPortId,
   outputPortId,
   paramPortId,
   parseCodeConfigs,
@@ -394,111 +392,8 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
   }
 
   const text = data.source
-  const isMainStyle = /^\s*(async\s+)?function\s+main\b/.test(text)
-  const inputExpr = isMainStyle ? `args.${data.inputName}` : `input.${data.inputName}`
   return (
     <div className="code-body" ref={scrollRef}>
-      <div className="code-variable-contract">
-        <div className="variable-row input">
-          <span className="variable-direction">输入</span>
-          <input
-            value={data.inputName}
-            aria-label="代码输入变量名"
-            spellCheck={false}
-            onPointerDown={(e) => e.stopPropagation()}
-            onChange={(e) =>
-              updateConfig({ ...data, inputName: e.target.value.replace(/[^\w]/g, '') || 'input' })
-            }
-          />
-          <AppSelect
-            value={data.inputType}
-            onPointerDown={(e) => e.stopPropagation()}
-            onChange={(e) =>
-              updateConfig({ ...data, inputType: e.target.value as VariableValueType })
-            }
-          >
-            {VARIABLE_TYPES.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </AppSelect>
-          <code className="variable-expr">{inputExpr}</code>
-        </div>
-        {data.outputMode === 'single' ? (
-          <div className="variable-row output">
-            <span className="variable-direction">输出</span>
-            <input
-              value={data.outputName}
-              aria-label="代码输出变量名"
-              spellCheck={false}
-              onPointerDown={(e) => e.stopPropagation()}
-              onChange={(e) => updateConfig({ ...data, outputName: e.target.value || 'output' })}
-            />
-            <AppSelect
-              value={data.outputType}
-              onPointerDown={(e) => e.stopPropagation()}
-              onChange={(e) =>
-                updateConfig({ ...data, outputType: e.target.value as CodeValueType })
-              }
-            >
-              {CODE_VALUE_TYPES.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </AppSelect>
-            <code className="variable-expr">return → 端口</code>
-          </div>
-        ) : (
-          <div className="variable-row output">
-            <span className="variable-direction">输出</span>
-            <code className="code-output-object">
-              {`return { ${data.outputs.map((output) => output.name).join(', ')} }`}
-            </code>
-            <span className="variable-type-badge">按字段接到多个端口</span>
-          </div>
-        )}
-        <div className="code-variable-help">
-          {isMainStyle ? (
-            <>
-              代码里读 <code>args.text</code> / <code>args.json</code> / <code>{inputExpr}</code>
-              {data.params.length > 0 && (
-                <>
-                  {' '}
-                  /{' '}
-                  {data.params.map((p, i) => (
-                    <span key={i}>
-                      {i > 0 && ' / '}
-                      <code>args.{p.name}</code>
-                    </span>
-                  ))}
-                </>
-              )}
-              ；
-              {data.outputMode === 'fields' ? (
-                <>返回对象的已声明字段分别流向多个输出端口</>
-              ) : (
-                <>
-                  <code>return</code> 的值从右侧 <code>{outputPortId(data.outputName)}</code>{' '}
-                  端口流出
-                </>
-              )}
-            </>
-          ) : (
-            <>
-              读取 <code>{inputExpr}</code>，<code>return</code> 的值写入端口{' '}
-              {data.outputMode === 'fields' ? (
-                <>返回对象的已声明字段分别流向多个输出端口</>
-              ) : (
-                <>
-                  <code>{outputPortId(data.outputName)}</code>
-                </>
-              )}
-            </>
-          )}
-        </div>
-      </div>
       <div className="code-params-section">
         <div className="code-params-header">
           <span className="code-params-title">输入参数</span>
@@ -510,8 +405,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
               addParam()
             }}
           >
-            <Icon name="add" size={12} />
-            添加
+            添加输入参数
           </button>
         </div>
         {data.params.length > 0 && (
@@ -567,9 +461,6 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
             ))}
           </div>
         )}
-        {data.params.length === 0 && (
-          <div className="code-params-empty">添加字段后，会在画布上出现同名输入端口。</div>
-        )}
         {portConfigErrors.length > 0 && (
           <div className="code-ai-error" role="alert">
             动态端口配置无效：{portConfigErrors.join('；')}。请修改后再连线或运行。
@@ -578,7 +469,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
       </div>
       <div className="code-params-section code-outputs-section">
         <div className="code-params-header">
-          <span className="code-params-title">输出字段</span>
+          <span className="code-params-title">输出参数</span>
           <button
             className="btn-ghost small"
             onPointerDown={(e) => stopEventPropagation(e)}
@@ -588,62 +479,51 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
               else addOutput()
             }}
           >
-            <Icon name="add" size={12} />
-            {data.outputMode === 'single' ? '启用多输出' : '添加输出'}
+            添加输出参数
           </button>
         </div>
-        {data.outputMode === 'single' ? (
-          <div className="code-params-empty">
-            当前为单输出兼容模式。启用多输出后，代码需返回与字段名一致的对象，例如{' '}
-            {'{ caption: "...", count: 2 }'}。
-          </div>
-        ) : (
-          <div className="code-params-table">
-            {data.outputs.map((output, index) => (
-              <div className="code-param-row code-output-row" key={output.portId ?? index}>
-                <input
-                  className="code-param-name"
-                  value={output.name}
-                  spellCheck={false}
-                  placeholder="字段名"
-                  aria-label={`输出字段 ${index + 1} 名称`}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onChange={(e) =>
-                    updateOutput(index, { name: e.target.value.replace(/[^\w]/g, '') })
-                  }
-                />
-                <AppSelect
-                  className="code-param-type"
-                  aria-label={`${output.name} 输出类型`}
-                  value={output.type}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onChange={(e) => updateOutput(index, { type: e.target.value as CodeValueType })}
-                >
-                  {CODE_VALUE_TYPES.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </AppSelect>
-                <span className="code-output-port-id" title={outputFieldPortId(output)}>
-                  {outputFieldPortId(output)}
-                </span>
-                <button
-                  className="code-param-remove"
-                  aria-label={`删除输出字段 ${output.name}`}
-                  disabled={data.outputs.length <= 1}
-                  onPointerDown={(e) => stopEventPropagation(e)}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    removeOutput(index)
-                  }}
-                >
-                  <Icon name="close" size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+        <div className="code-params-table">
+          {data.outputs.map((output, index) => (
+            <div className="code-param-row code-output-row" key={output.portId ?? index}>
+              <input
+                className="code-param-name"
+                value={output.name}
+                spellCheck={false}
+                placeholder="字段名"
+                aria-label={`输出字段 ${index + 1} 名称`}
+                onPointerDown={(e) => e.stopPropagation()}
+                onChange={(e) =>
+                  updateOutput(index, { name: e.target.value.replace(/[^\w]/g, '') })
+                }
+              />
+              <AppSelect
+                className="code-param-type"
+                aria-label={`${output.name} 输出类型`}
+                value={output.type}
+                onPointerDown={(e) => e.stopPropagation()}
+                onChange={(e) => updateOutput(index, { type: e.target.value as CodeValueType })}
+              >
+                {CODE_VALUE_TYPES.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </AppSelect>
+              <button
+                className="code-param-remove"
+                aria-label={`删除输出字段 ${output.name}`}
+                disabled={data.outputs.length <= 1}
+                onPointerDown={(e) => stopEventPropagation(e)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  removeOutput(index)
+                }}
+              >
+                <Icon name="close" size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
       {text ? (
         <pre
@@ -669,9 +549,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
             setEditing(true)
           }}
         >
-          <NodeIdentity>
-            <small>编写处理逻辑，输入参数可在上方管理</small>
-          </NodeIdentity>
+          <NodeIdentity />
         </div>
       )}
       {resultDisplay && (

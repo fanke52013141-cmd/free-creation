@@ -7,6 +7,9 @@ export type IconName =
   | 'text'
   | 'image'
   | 'crop'
+  | 'split'
+  | 'split-left'
+  | 'split-right'
   | 'image-gen'
   | 'video'
   | 'video-asset'
@@ -125,6 +128,26 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M18 22V8a2 2 0 0 0-2-2H2" />
     </>
   ),
+  // 2026-11-03 用户裁决：分割用「括号 + 切点」表达，不再借用裁剪/对齐图标。
+  split: (
+    <>
+      <path d="M8 5H4v14h4" />
+      <path d="M16 5h4v14h-4" />
+      <path d="M12 3v18" strokeDasharray="2 2.6" />
+    </>
+  ),
+  'split-left': (
+    <>
+      <path d="M11 5H4v14h7" />
+      <path d="M15 4v16" />
+    </>
+  ),
+  'split-right': (
+    <>
+      <path d="M13 5h7v14h-7" />
+      <path d="M9 4v16" />
+    </>
+  ),
   'image-gen': (
     <>
       <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -139,18 +162,11 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="m10 9 5 3-5 3V9Z" />
     </>
   ),
-  // 轨道线（Stitch Variant A 改良，2026-11-02）：向下刻度的时间尺 + 两条错位轨道 + 播放头。
-  // 刻度朝下而不是朝上：朝上在 17px 下容易读成日历图标。
+  // 2026-11-03 用户裁决：轨道线用铁轨表达——两条钢轨 + 枕木，不再画时间尺/播放头。
   timeline: (
     <>
-      <line x1="3" y1="4" x2="21" y2="4" />
-      <line x1="5" y1="4" x2="5" y2="6" />
-      <line x1="12" y1="4" x2="12" y2="6" />
-      <line x1="19" y1="4" x2="19" y2="6" />
-      <rect x="3" y="8.5" width="8" height="5" rx="1.2" />
-      <rect x="14" y="8.5" width="7" height="5" rx="1.2" />
-      <rect x="6" y="16.5" width="11" height="5" rx="1.2" />
-      <line x1="9" y1="1.5" x2="9" y2="22.5" />
+      <path d="M7 3v18M17 3v18" />
+      <path d="M4 6h16M4 10h16M4 14h16M4 18h16" />
     </>
   ),
   'video-asset': (

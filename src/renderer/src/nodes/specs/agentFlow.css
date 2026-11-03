@@ -9,6 +9,12 @@
   font-size: 12px;
   margin: 0;
 }
+.agent-flow-review-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
 .agent-flow-text {
   display: flex;
   flex-direction: column;
@@ -17,8 +23,9 @@
 }
 .agent-flow-text textarea {
   width: 100%;
-  /* 2026-11-02 用户裁决：任务目标是一个正经输入框——加高、圆角，与下方按钮留出距离。 */
-  min-height: 132px;
+  /* 2026-11-03 用户裁决：任务目标/审核标准输入框不再用 132px 撑高，
+     与其它节点输入框保持同一档，初始高度回到 260px。 */
+  min-height: 96px;
   border-radius: 8px;
   resize: none;
 }

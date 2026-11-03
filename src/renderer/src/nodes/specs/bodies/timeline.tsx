@@ -459,7 +459,7 @@ function TimelineSurface({
           disabled={!selected}
           onClick={onSplit}
         >
-          <Icon name="crop" size={13} />
+          <Icon name="split" size={13} />
           分割
         </button>
         <button
@@ -470,7 +470,7 @@ function TimelineSurface({
           disabled={!selected}
           onClick={() => onSplitKeep('left')}
         >
-          <Icon name="align-left" size={13} />
+          <Icon name="split-left" size={13} />
         </button>
         <button
           type="button"
@@ -480,7 +480,7 @@ function TimelineSurface({
           disabled={!selected}
           onClick={() => onSplitKeep('right')}
         >
-          <Icon name="align-right" size={13} />
+          <Icon name="split-right" size={13} />
         </button>
         <button
           type="button"
