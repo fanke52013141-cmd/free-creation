@@ -52,34 +52,42 @@
 | --- | --- | --- | --- |
 | `text` | 普通文本 | 三条不等长横线 | `script` |
 | `image` | 图片资产 | 相框、山形、一个太阳点 | `image-gen` |
-| `image-gen` | 生成图片 | `image` + 单一四角星 | `image`、`edit` |
+| `image-gen` | 生成图片 | 横向图片框 + 右上四角星 | `image`、`edit` |
 | `crop` | 图片裁剪 | 两条裁切角线 | `frame` |
-| `edit` | 图片修改 | 照片/画笔或单笔触 | `image-gen` |
-| `video` | 视频资产/生成 | 画框 + 播放三角 | `director` |
-| `frame` | 视频取帧 | 胶片网格/定位帧 | `crop` |
-| `clip` | 视频截取 | 时间区段 + 两个边界 | `frame` |
+| `image-split` | 图片拆分 | 四块小图，其中一块错位分离 + 切分虚线 | `grid`、`crop` |
+| `image-edit` | P图 | 相框 + 斜向画笔（节点身份） | `image-gen`、`edit` |
+| `edit` | 通用编辑动作 | 铅笔/单笔触（只作动作） | `image-edit` |
+| `website` | 网址节点 | 浏览器窗 + 地址栏 + 地球 | `external`（动作）、`link` |
+| `video` | 视频生成 | 视频框 + 播放 + 横向箭头 | `director`、`video-asset` |
+| `video-asset` | 视频素材 | 胶片条 + 齿孔 + 播放三角 | `video`、`frame` |
+| `frame` | 视频取帧 | 加高胶片条 + 一条竖线 | `crop`、`clip` |
+| `clip` | 视频截取 | 加高胶片条 + 两条竖线（入点/出点） | `frame`、`split` |
+| `depth` | 深度视频 | 高重叠前后两框 + 斜向 Z 轴箭头 | `director`、`layers` |
+| `clay` | 白模视频 | 立体方块 + 右面播放三角 | `assets`、`depth` |
 | `audio` | 音频 | 五根节奏不同的声波线 | `video` |
+| `video-audio` | 截音频 | 完整音频波形被竖线切成两段 | `audio`、`speech` |
 | `sound-adjust` | 声音调整 | 三根竖向推子 + 三个错高旋钮 | `audio`、`voice-clone` |
-| `speech` | 语音合成 | 麦克风 + 两条发射弧（节点身份） | `mic`、`voice-clone` |
+| `speech` | 语音合成 | 音频波形 + AI 四角星 | `mic`、`voice-clone` |
 | `voice-clone` | 语音克隆 | 两个并排人形轮廓（双胞胎）+ 右侧三条声波柱 | `audio`、`sound-adjust` |
-| `voice-design` | 音色设计 | 左下三弧声纹 + 右上四角星；唯一 1.65 描边 | `image-gen`（星）、`audio` |
-| `vocal-separate` | 人声分离（退役） | 左侧声波柱向右分叉两支 | `sound-adjust` |
+| `voice-design` | 音色设计 | 音频波形 + 画笔 | `image-edit`、`audio` |
+| `vocal-separate` | 人声分离（退役） | 单条波形中间切开 + 右侧独立声柱 | `sound-adjust`、`audio` |
 | `mic` | 录音/麦克风控件 | 胶囊麦克风 + U 支架 + 底座 | `speech`（节点身份） |
 | `chat` | 对话 | 单气泡 + 两条内容线 | `script` |
 | `agent` | Agent | 机器人头 + 天线 + 两个实心眼点 | `spark`、`ai-process` |
 | `ai-process` | AI 处理 | 斜向魔杖 + 大小两颗四角星 | `agent`、`spark` |
 | `ai-review` | AI 审核 | 盾牌 + 内部对勾 | `check`（动作） |
-| `state-machine` | 状态机 | 两个状态圆 + 带箭头迁移曲线 | `workflow`（流程图）、`reset` |
-| `iterate` | 循环 | 三条递减横线 + 右侧回绕箭头 | `grid`、`text` |
+| `state-machine` | 状态机 | 镜像待办：左侧勾选、右侧待办文字 | `workflow`（流程图）、`reset` |
+| `iterate` | 循环 | 三个完整箭头组成圆形循环 | `grid`、`text` |
 | `script` | 脚本 | 文档 + 内容线 | `text`、`code` |
-| `processor` | 处理 | 输入/输出流向与中间节点 | `workflow` |
-| `json` | 结构化数据 | 花括号 + 三条字段线 | `code` |
+| `processor` | 处理 | 二进制数字 01 | `code`、`data` |
+| `structured` | 结构数据 | 文件目录树：文件夹 + 两条缩进文件 | `json`、`workflow` |
+| `json` | 结构化数据 | 花括号 + 三条平铺字段线 | `code`、`structured` |
 | `code` | 代码 | 尖括号 + 斜杠 | `json` |
 | `storyboard` | 分镜 | 胶片分格 | `video` |
-| `director` | 3D 预演台 | 摄像机/空间视角，不使用电影场记板 | `video` |
-| `grid` | JSON 卡片/表格呈现 | 均匀网格 | `storyboard` |
+| `director` | 3D 预演台 | 单个摄影机（无地面底座） | `video`、`depth` |
+| `grid` | 布局/表格动作 | 四个独立方块 | `storyboard`、`image-split` |
 
-**节点图标与工具/动作图标互斥**：`mic` 只用于录音控件，`speech` 独占“麦克风 + 发射弧”作为语音合成节点身份；`check` 只表示“通过”动作，`ai-review` 用盾牌对勾表示审核节点；`workflow` 只表示流程入口，`state-machine` 用“状态圆 + 迁移箭头”；`spark` 是品牌/AI 装饰点，`agent`、`ai-process` 各有独立轮廓。节点标题图标只描述“对象”，不得借用动作或状态语义。
+**节点图标与工具/动作图标互斥**：`mic` 只用于录音控件，`speech` 独占“文本行 + 喇叭 + 声波”作为语音合成节点身份；`check` 只表示“通过”动作，`ai-review` 用盾牌对勾表示审核节点；`workflow` 只表示流程入口，`state-machine` 用“三个状态圆 + 闭环迁移箭头”；`website` 用浏览器窗 + 地球，不再复用 `external` 动作箭头；`image-edit` 用相框 + 画笔，铅笔 `edit` 只作动作；`spark` 是品牌/AI 装饰点，`agent`、`ai-process` 各有独立轮廓。节点标题图标只描述“对象”，不得借用动作或状态语义。
 
 ### 工具与导航（核心 13 个）
 
@@ -135,7 +143,7 @@
 - 新增/重绘 11 个 `IconName`：`sound-adjust`、`speech`、`voice-clone`、`voice-design`、`vocal-separate`、`agent`、`ai-process`、`ai-review`、`state-machine`、`iterate`、`audio`（族锚点保留）。
 - 节点映射：声音调整/语音合成/语音克隆/音色设计/人声分离不再共用 `audio`；Agent、AI 处理不再共用 `spark`；AI 审核不再用裸 `check`；状态机不再用 `workflow`；循环不再用 `grid`。
 - 状态机在 16px 下放弃“初始点”语义（r1.25 内点会糊），改为大/小两个状态圆 + 带箭头迁移曲线；这是 2026-11-02 用户验收后的裁决。
-- `voice-design` 是唯一按 1.65 描边渲染的图标（`Icon` 组件内按名字降描边），其余保持 1.8。
+- `voice-design` 在 I4 时曾单独按 1.65 描边；I6 重绘后结构已简化，恢复统一 1.8。
 - 设计源、预览与 16px 实测见 `design/2026-11-node-identity/icons/`；新增图标契约测试 `test/icon-contract.test.ts`。
 
 ## 8. 本次生成素材
@@ -150,3 +158,23 @@
 - 用户裁决：`voice-clone` 用「双胞胎 + 音频」表达，不再用两条错位声波——后者与 `audio`、`sound-adjust` 的声波语言过于接近。
 - 轮廓：两个相同的人形（头 + 肩）并排，右侧三条声波柱表示复刻后的声音；保持 1.8 描边、24×24 网格、圆角端点。
 - 同步更新桌面图标导出（`Canvas Studio 节点图标`）与 `Icon.tsx` 语义注释。
+
+### I6 — 节点图标按点名重绘（2026-11-03）
+
+- 用户裁决：按每个节点“一句话功能”直接指定轮廓；生图、Agent 最后按点名修正。
+- 当前几何：
+  - image-gen：横向图片框（16×13）+ 山形/太阳 + 右上四角星。
+  - video：视频框 + 播放三角 + 横向箭头。
+  - frame：加高胶片条（18×11）+ 一条贯穿竖线。
+  - clip：加高胶片条（18×11）+ 两条竖线。
+  - depth：高重叠前后两框 + 斜向 Z 轴箭头。
+  - video-audio：完整音频波形被竖线切成两段。
+  - speech：音频波形 + 右上 AI 四角星。
+  - voice-design：音频波形 + 画笔。
+  - processor：二进制数字 01。
+  - structured：文件目录树（文件夹 + 两条缩进文件 + 目录线），无外框。
+  - iterate：三个完整箭头组成圆环。
+  - director：只保留摄影机，去掉地面底座。
+  - state-machine：待办镜像版——勾选在左，待办文字在右，前两条勾选。
+- 规范：24×24、1.8 描边、圆端角、无渐变/外框。
+- 设计源：用户逐条文字裁决；本仓库以 `Icon.tsx` 的 SVG 为唯一交付物。

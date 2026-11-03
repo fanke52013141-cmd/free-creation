@@ -7,6 +7,9 @@ export type IconName =
   | 'text'
   | 'image'
   | 'crop'
+  | 'image-split'
+  | 'image-edit'
+  | 'website'
   | 'split'
   | 'split-left'
   | 'split-right'
@@ -19,6 +22,7 @@ export type IconName =
   | 'frame'
   | 'clip'
   | 'audio'
+  | 'video-audio'
   | 'sound-adjust'
   | 'speech'
   | 'voice-clone'
@@ -128,6 +132,25 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M18 22V8a2 2 0 0 0-2-2H2" />
     </>
   ),
+  // 图片拆分：源图用虚线外框，四块实线小图表示切分结果。
+  // 图片拆分：一张图片被虚线切成四格，表达“从一张图切出多张”，
+  // 与 grid 的四个独立方块区分开。
+  'image-split': (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="13.5" width="7" height="7" rx="1.5" />
+      <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
+      <rect x="15" y="1.8" width="7" height="7" rx="1.5" />
+      <line x1="12" y1="12" x2="14.5" y2="9.5" strokeDasharray="1.5 1.5" strokeWidth="1.3" />
+    </>
+  ),
+  // P图：相框 + 斜向画笔，区别于“生图”的图+星，也区别于动作铅笔 edit。
+  'image-edit': (
+    <>
+      <rect x="3" y="4" width="13" height="13" rx="2" />
+      <path d="m14.5 19.5 6-6-2-2-6 6-1 3 3-1Z" />
+    </>
+  ),
   // 2026-11-03 用户裁决：分割用「括号 + 切点」表达，不再借用裁剪/对齐图标。
   split: (
     <>
@@ -150,16 +173,28 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   'image-gen': (
     <>
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <path d="m14 14 2 2 4-4" />
-      <path d="M15 4l.8 1.8 1.8.8-1.8.8-.8 1.8-.8-1.8-1.8-.8 1.8-.8L15 4Z" />
-      <circle cx="8" cy="9" r="1.5" />
+      <rect x="3" y="5" width="16" height="13" rx="2" />
+      <circle cx="7.5" cy="9" r="1.3" />
+      <path d="M6 16l3.5-3.5L12 15l2.5-2.5L19 16" />
+      <path d="M18.5 2.5l.8 1.8 1.8.8-1.8.8-.8 1.8-.8-1.8-1.8-.8 1.8-.8.8-1.8Z" />
+    </>
+  ),
+  // 网址节点：链接卡片（对象），不再用外链箭头（动作）。
+  website: (
+    <>
+      <rect x="2.5" y="3.5" width="19" height="17" rx="2.5" />
+      <line x1="2.5" y1="8" x2="21.5" y2="8" />
+      <path d="M5.5 5.75h4" strokeWidth="1.5" />
+      <circle cx="12" cy="14" r="4.2" />
+      <ellipse cx="12" cy="14" rx="1.8" ry="4.2" />
+      <line x1="7.8" y1="14" x2="16.2" y2="14" />
     </>
   ),
   video: (
     <>
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <path d="m10 9 5 3-5 3V9Z" />
+      <rect x="3" y="3" width="18" height="11" rx="2" />
+      <path d="m10 6 4.5 2.5L10 11V6Z" />
+      <path d="M4 19h13M14.5 16.5 17 19l-2.5 2.5" />
     </>
   ),
   // 2026-11-03 用户裁决：轨道线用铁轨表达——两条钢轨 + 枕木，不再画时间尺/播放头。
@@ -171,43 +206,60 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   'video-asset': (
     <>
-      <rect x="2.5" y="5" width="19" height="14" rx="2" />
-      <path d="M6.5 5v14M17.5 5v14" />
-      <path d="M2.5 9.5h4M2.5 14.5h4M17.5 9.5h4M17.5 14.5h4" />
+      <rect x="2.5" y="3.5" width="19" height="17" rx="2.5" />
+      <line x1="6.8" y1="3.5" x2="6.8" y2="20.5" />
+      <circle cx="4.65" cy="6.5" r="0.8" fill="currentColor" stroke="none" />
+      <circle cx="4.65" cy="12" r="0.8" fill="currentColor" stroke="none" />
+      <circle cx="4.65" cy="17.5" r="0.8" fill="currentColor" stroke="none" />
+      <line x1="17.2" y1="3.5" x2="17.2" y2="20.5" />
+      <circle cx="19.35" cy="6.5" r="0.8" fill="currentColor" stroke="none" />
+      <circle cx="19.35" cy="12" r="0.8" fill="currentColor" stroke="none" />
+      <circle cx="19.35" cy="17.5" r="0.8" fill="currentColor" stroke="none" />
+      <path d="M10.5 9.5l4 2.5-4 2.5z" />
     </>
   ),
   frame: (
     <>
-      <rect x="2.5" y="13" width="11.5" height="6.5" rx="1" />
-      <path d="M5 15.5v1.5M8 15.5v1.5M11 15.5v1.5" />
-      <rect x="15" y="3" width="6.5" height="5.5" rx="1" />
-      <path d="M13 11.5 17 7.5" />
-      <path d="M17 10.5v-3h-3" />
+      <rect x="3" y="6.5" width="18" height="11" rx="1.5" />
+      <path d="M6 6.5v2M9 6.5v2M15 6.5v2M18 6.5v2M6 15.5v2M9 15.5v2M15 15.5v2M18 15.5v2" />
+      <path d="M12 3v18" />
     </>
   ),
+  // 视频截取：片段块 + 左右 [ ] 修剪把手，表达入点/出点，不再复用播放卡片。
   clip: (
     <>
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <path d="M7 5v14M17 5v14" strokeDasharray="2 2.4" />
-      <path d="m10.5 9.5 3.5 2.5-3.5 2.5V9.5Z" />
+      <rect x="3" y="6.5" width="18" height="11" rx="1.5" />
+      <path d="M6 6.5v2M9 6.5v2M15 6.5v2M18 6.5v2M6 15.5v2M9 15.5v2M15 15.5v2M18 15.5v2" />
+      <path d="M8 3v18M16 3v18" />
     </>
   ),
+  // 深度视频：两帧沿 Z 轴错位叠放 + 向下的深度箭头，表达逐帧深度。
   depth: (
     <>
-      <path d="M12 3 4 7l8 4 8-4-8-4Z" />
-      <path d="m4 12 8 4 8-4" />
-      <path d="m4 16.5 8 4 8-4" />
+      <rect x="4" y="4" width="15" height="11" rx="2" />
+      <rect x="7" y="7" width="15" height="11" rx="2" />
+      <path d="M7.5 7.5 17 17" strokeDasharray="2 2" />
+      <path d="M14.5 17H17v-2.5" />
     </>
   ),
+  // 白模视频：立体方块 + 右面的播放三角，同时表达“3D 白模”和“视频”。
   clay: (
     <>
       <path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7L12 2.5Z" />
       <path d="M3.5 7 12 11.5 20.5 7M12 11.5v10" />
+      <path d="m15 12.8 3.2 1.9-3.2 1.9v-3.8Z" />
     </>
   ),
   audio: (
     <>
       <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4" />
+    </>
+  ),
+  'video-audio': (
+    <>
+      <path d="M3 9v6M6 7v10M9 9v6" />
+      <path d="M11.5 4v16" />
+      <path d="M14 9v6M17 7v10M20 9v6" />
     </>
   ),
   mic: (
@@ -229,10 +281,11 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="m15 13 3 3-3 3" />
     </>
   ),
+  // 数据处理：左侧三行输入 → 中间变换块 → 右侧两行输出，表达一次取数/转换/输出。
   processor: (
     <>
-      <path d="M10 14a3.5 3.5 0 0 0 5 0l4-4a3.5 3.5 0 0 0-5-5l-.5.5" />
-      <path d="M14 10a3.5 3.5 0 0 0-5 0l-4 4a3.5 3.5 0 0 0 5 5l.5-.5" />
+      <ellipse cx="7.5" cy="12" rx="3.5" ry="6" />
+      <path d="M16 7v10M16 7l3-1.2M14.5 17h4.5" />
     </>
   ),
   json: (
@@ -241,12 +294,15 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M16 3h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2 2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1" />
     </>
   ),
+  // 结构数据：大括号内是带缩进的字段树（父行 + 两条子行），和 json 的平铺字段区分。
   structured: (
     <>
-      <rect x="3" y="4" width="6" height="6" rx="1" />
-      <rect x="15" y="4" width="6" height="6" rx="1" />
-      <rect x="9" y="14" width="6" height="6" rx="1" />
-      <path d="M6 10v2a2 2 0 0 0 2 2h4M18 10v2a2 2 0 0 1-2 2h-4" />
+      <path d="M3 6a1 1 0 0 1 1-1h3l1.2 1.5H11a1 1 0 0 1 1 1V10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6Z" />
+      <path d="M14 7h7" />
+      <path d="M5 11v8.5M5 14.1h2M5 18.9h2" />
+      <rect x="7" y="12.8" width="2.6" height="2.6" rx="0.6" />
+      <rect x="7" y="17.6" width="2.6" height="2.6" rx="0.6" />
+      <path d="M12 14.1h8M12 18.9h6" />
     </>
   ),
   code: (
@@ -260,10 +316,11 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M3 9h18M3 15h18M9 3v18" />
     </>
   ),
+  // 3D 预演台：摄影机 + 透视地面网格 = 机位与空间，不再和深度视频共用菱形叠层。
   director: (
     <>
-      <path d="M12 2 2 7l10 5 10-5-10-5Z" />
-      <path d="m2 12 10 5 10-5M2 17l10 5 10-5" />
+      <rect x="3.5" y="7" width="10" height="8" rx="2" />
+      <path d="m13.5 9.5 5-2v7l-5-2" />
     </>
   ),
   upload: (
@@ -673,12 +730,11 @@ const PATHS: Record<IconName, React.ReactNode> = {
     </>
   ),
   // 语音合成：麦克风 + 两条发射弧；与录音控件 mic 的区别写进 UI_ICON_SYSTEM 语义字典
+  // 语音合成：左侧文本行 → 变换箭头 → 右侧声波，表达“文字变成声音”。
   speech: (
     <>
-      <rect x="9" y="3" width="6" height="8" rx="3" />
-      <path d="M6.5 10.6v.5a5.5 5.5 0 0 0 11 0v-.5M12 16.6v3.4M8.6 20h6.8" />
-      <path d="M16.8 4.4a2.8 2.8 0 0 1 0 3.6" />
-      <path d="M19.1 3.2a4.4 4.4 0 0 1 0 5.6" />
+      <path d="M3 9v6M6 7v10M9 9v6M12 7v10M15 9v6" />
+      <path d="M18.5 3l.8 1.8 1.8.8-1.8.8-.8 1.8-.8-1.8-1.8-.8 1.8-.8.8-1.8Z" />
     </>
   ),
   // 语音克隆：两个并排人形轮廓 = 双胞胎，右侧三条声波柱 = 复刻后的声音
@@ -692,20 +748,24 @@ const PATHS: Record<IconName, React.ReactNode> = {
     </>
   ),
   // 音色设计：左下声纹扇形 + 右上四角星 = 从文字描述设计音色
+  // 音色设计：声波 + 两条音色推子 + 小四角星，表达“把声音调成想要的样子”。
   'voice-design': (
     <>
-      <path d="M8.01 7.56a10.4 10.4 0 0 1 8.49 8.79" />
-      <path d="M7.47 10.61a7.3 7.3 0 0 1 5.96 6.17" />
-      <path d="M6.93 13.66a4.2 4.2 0 0 1 3.43 3.56" />
-      <path d="M17.4 4.4 18.14 6.06 19.8 6.8 18.14 7.54 17.4 9.2 16.66 7.54 15 6.8 16.66 6.06Z" />
+      <path d="M3 9v6M6 7v10M9 9v6M12 7v10" />
+      <path d="m15 19.5 6-6-2-2-6 6-1 3 3-1Z" />
     </>
   ),
   // 人声分离（退役）：左侧短声波柱向右分叉为两支
   'vocal-separate': (
     <>
-      <path d="M3.2 9.6v4.8M6.6 8v8M10 10v4M10 12h3.2" />
-      <path d="M13.2 12c2.6 0 2.4-4.8 5.5-4.8M16.5 5l2.2 2.2-2.2 2.2" />
-      <path d="M13.2 12c2.6 0 2.4 4.8 5.5 4.8M16.5 15l2.2 2.2-2.2 2.2" />
+      <line x1="3" y1="11" x2="3" y2="13" />
+      <line x1="5.5" y1="9" x2="5.5" y2="15" />
+      <line x1="8" y1="6.5" x2="8" y2="17.5" />
+      <line x1="10.5" y1="8" x2="10.5" y2="16" />
+      <line x1="13.2" y1="3" x2="13.2" y2="21" strokeDasharray="2 2" strokeWidth="1.5" />
+      <line x1="16.5" y1="9.5" x2="16.5" y2="14.5" strokeWidth="2" />
+      <line x1="19" y1="5.5" x2="19" y2="18.5" strokeWidth="2.2" />
+      <line x1="21.5" y1="8.5" x2="21.5" y2="15.5" strokeWidth="2" />
     </>
   ),
   // Agent：机器人头 + 天线 + 实心眼点 = 会执行任务的代理
@@ -736,21 +796,25 @@ const PATHS: Record<IconName, React.ReactNode> = {
   // 状态机：两个状态圆 + 带箭头的迁移曲线 = 状态与迁移，不是矩形流程图
   'state-machine': (
     <>
-      <circle cx="7.6" cy="14.6" r="3.9" />
-      <circle cx="18.2" cy="7.2" r="2.6" />
-      <path d="M10.8 12.4c1.5-1.85 2.4-2.4 3.9-2.75" />
-      <path d="M13.7 11.6 14.75 9.6 12.55 9.9" />
+      <path d="M11 6.5h10M12 12h9M10 17.5h11" />
+      <rect x="2" y="4" width="5" height="5" rx="1" />
+      <path d="m3.2 6.5 1.3 1.3 2.2-2.4" />
+      <rect x="2" y="10.5" width="5" height="5" rx="1" />
+      <path d="m3.2 13 1.3 1.3 2.2-2.4" />
+      <rect x="2" y="17" width="5" height="5" rx="1" />
     </>
   ),
   // 循环：三条递减横线 + 回绕箭头
   iterate: (
     <>
-      <path d="M6 8h7.8M6 12h5.8M6 16h3.8" />
-      <path d="M9.8 16c0 2 1.2 2.6 3 2.6h4.6a2.6 2.6 0 0 0 2.6-2.6v-4.6a2.6 2.6 0 0 0-2.6-2.6h-1.6" />
-      <path d="M18 6.8 15.8 8.8 18 10.8" />
+      <path d="M12 4A8 8 0 0 1 18.8 8" />
+      <polygon points="19.5,9.2 16.9,8.2 18.9,6.4" fill="currentColor" stroke="none" />
+      <path d="M20 12A8 8 0 0 1 15.2 19.4" />
+      <polygon points="13.9,20.2 16.2,17.7 16.6,20.1" fill="currentColor" stroke="none" />
+      <path d="M8.8 19.8A8 8 0 0 1 4.4 6.2" />
+      <polygon points="3.5,5.1 5.9,6.7 4.4,8.2" fill="currentColor" stroke="none" />
     </>
-  )
-}
+  ),}
 
 /**
  * 供测试和节点规范校验使用的运行时图标清单。
@@ -764,8 +828,8 @@ export function Icon({
   strokeWidth,
   ...props
 }: IconProps): React.JSX.Element {
-  // 默认 1.8；密集图标（音色设计的三条声纹弧）降到 1.65 才不粘。调用方显式传值时优先。
-  const resolvedStroke = strokeWidth ?? (name === 'voice-design' ? 1.65 : 1.8)
+  // 默认 1.8；I6 重绘后 voice-design 也使用统一描边，不再单独降到 1.65。
+  const resolvedStroke = strokeWidth ?? 1.8
   return (
     <svg
       width={size}

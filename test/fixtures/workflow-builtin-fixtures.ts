@@ -166,7 +166,7 @@ export const BUILTIN_TEMPLATES: {
   },
   {
     name: 'P图→后续创作',
-    icon: 'edit',
+    icon: 'image-edit',
     desc: '导入原图后，经 P 图分别连接裁剪、生图参考图和首帧视频',
     nodes: [
       { type: 'image', title: '原图资产', dx: -760, dy: 0 },
