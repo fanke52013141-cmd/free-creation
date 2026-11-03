@@ -510,14 +510,22 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
                     return (
                       <g key={edge.id} data-edge-id={edge.id}>
                         <path
+                          className="data-edge-glow artifact-provenance-glow"
+                          d={edge.path}
+                          vectorEffect="non-scaling-stroke"
+                          style={{ stroke: edge.color, color: edge.color }}
+                        />
+                        <path
                           className="data-edge-visible artifact-provenance-edge"
                           d={edge.path}
+                          vectorEffect="non-scaling-stroke"
                           style={{ stroke: edge.color, color: edge.color }}
                         />
                         <path
                           className="data-edge-flow artifact-provenance-flow"
                           d={edge.path}
                           pathLength="1000"
+                          vectorEffect="non-scaling-stroke"
                           style={{ color: edge.color }}
                         />
                       </g>
@@ -539,6 +547,7 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
                         <path
                           className="data-edge-visible"
                           d={edge.path}
+                          vectorEffect="non-scaling-stroke"
                           style={{ strokeDasharray: '10 7' }}
                         />
                       </g>
@@ -553,14 +562,22 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
                       data-edge-id={edge.id}
                     >
                       <path
+                        className="data-edge-glow"
+                        d={edge.path}
+                        vectorEffect="non-scaling-stroke"
+                        style={{ stroke: edge.color, color: edge.color }}
+                      />
+                      <path
                         className="data-edge-visible"
                         d={edge.path}
+                        vectorEffect="non-scaling-stroke"
                         style={{ stroke: edge.color, color: edge.color }}
                       />
                       <path
                         className="data-edge-flow"
                         d={edge.path}
                         pathLength="1000"
+                        vectorEffect="non-scaling-stroke"
                         style={{ color: edge.color }}
                       />
                     </g>

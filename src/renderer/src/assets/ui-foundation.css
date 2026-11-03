@@ -94,6 +94,20 @@ body {
   will-change: transform;
 }
 
+/* 2026-11-04 连线/整屏缩放闪动收敛（用户反馈：快速放大缩小时连线会闪）：
+   相机交互期间暂停全部 CSS 动画——连线流光、节点状态脉冲等每帧都会让所属合成层失效重画，
+   与相机缩放的重光栅抢帧，细线就会在新倍率画完前空一帧（视觉上"闪一下"）；
+   同时临时关掉顶栏背景模糊——backdrop-filter 每个缩放步进都要重采样整屏背景并重算 blur。
+   停止滚动 220ms 后恢复，静止观感与动画连续性与原来一致。 */
+.canvas-host.is-camera-interacting * {
+  animation-play-state: paused !important;
+}
+
+.canvas-host.is-camera-interacting .canvas-topbar {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 /* ── Top bar: one quiet material, grouped actions ───────────────────────── */
 .logo-btn {
   min-height: 36px;
