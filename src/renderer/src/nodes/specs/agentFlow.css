@@ -29,6 +29,33 @@
   border-radius: 8px;
   resize: none;
 }
+
+/* Agent 节点（2026-11-03 用户裁决）：去掉「专业 Agent」摘要行，任务目标输入框撑满正文，
+   底边与底部操作按钮（启动任务 / 查看协作）之间保持 NODE_UI_STANDARD §19 的 8px。
+   操作条自带 8px 上内边距，因此正文只需铺到操作条上沿。 */
+.node-card.type-agent .node-standard-scroll,
+.node-card.type-agent .node-standard-scroll > .node-body,
+.node-card.type-agent .node-standard-scroll > .node-body > .node-body-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.node-card.type-agent .node-standard-shell .node-body-content > .agent-flow-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.node-card.type-agent .agent-flow-text {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.node-card.type-agent .agent-flow-text textarea {
+  flex: 1 1 auto;
+  min-height: 96px;
+}
 .agent-flow-settings textarea {
   min-height: 72px;
   resize: vertical;

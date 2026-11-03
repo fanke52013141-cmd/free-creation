@@ -4200,7 +4200,7 @@ select:focus-visible {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 340px;
+  width: var(--side-panel-width);
   background: var(--card);
   border-left: 1px solid var(--line);
   z-index: var(--z-panel);
@@ -4330,7 +4330,7 @@ select:focus-visible {
   z-index: var(--z-panel-nested);
   display: flex;
   flex-direction: column;
-  width: 340px;
+  width: var(--side-panel-width);
   background: var(--card);
   border-left: 1px solid var(--line);
   box-shadow: -8px 0 24px rgba(0, 0, 0, 0.24);
@@ -6830,7 +6830,7 @@ select:focus-visible {
 
   .side-panel,
   .node-contract-panel {
-    width: min(340px, 92vw);
+    width: min(var(--side-panel-width), 92vw);
   }
 }
 
@@ -6841,9 +6841,9 @@ select:focus-visible {
   gap: 8px;
 }
 
-/* 资产面板比其他侧栏稍宽，两列卡片才有呼吸感 */
+/* 资产面板与其它侧栏同宽：宽度统一由 --side-panel-width 决定（2026-11-03 对齐顶栏） */
 .side-panel.assets-side-panel {
-  width: 340px;
+  width: var(--side-panel-width);
 }
 
 /* 头部多选开关：安静的幽灵药丸，激活时泛品牌色 */
@@ -8602,7 +8602,7 @@ select:focus-visible {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 340px;
+  width: var(--side-panel-width);
   background: var(--sunk);
   border-left: 1px solid var(--line);
   display: flex;

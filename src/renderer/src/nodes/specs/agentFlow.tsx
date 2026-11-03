@@ -234,11 +234,6 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
           />
         </label>
       )}
-      {agent && (
-        <div className="agent-flow-summary">
-          {config.role === 'builder' ? '搭建' : config.role === 'coordinator' ? '主控' : '专业'} Agent
-        </div>
-      )}
       {agent ? (
         config.role === 'builder' ? (
           <FlowBuilderControls shape={shape} />
