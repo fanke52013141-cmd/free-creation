@@ -20,12 +20,14 @@ export const STORYBOARD_UI = {
 export const TIMELINE_UI = {
   width: 880,
   /**
-   * 默认高度按「两条轨道」算（2026-11-02 用户裁决）：
-   * 工具栏 30 + 间距 8 + 刻度尺 24 + 2×56 轨 = 186，加正文内边距与描边约 200。
+   * 默认高度按「三条轨道完整可见」算（2026-11-03 用户裁决：默认三轨，下方预留三条轨道高度）：
+   * 工具栏 36 + 刻度尺 24 + 3×56 轨 = 228，加引用素材条 31 与卡片内边距后需要 286。
    */
-  height: 210,
+  height: 286,
   minWidth: 560,
   minHeight: 188,
+  /** 默认轨道数（2026-11-03 用户裁决：默认三条通用轨道，打开旧项目时补齐到这个数）。 */
+  trackCount: 3,
   /** 轨道头固定宽度（不随时间轴滚动）；要放得下「视频 1 / 音频 1」全名 + 两个小按钮 */
   trackHeaderWidth: 132,
   /** 单条轨道高度 */
@@ -38,9 +40,14 @@ export const TIMELINE_UI = {
   clipInset: 6,
   /** 时间轴尾部留白：让用户看得到"继续往右拖"的空间 */
   tailPaddingMs: 2000,
-  /** 缩放档位：每秒像素数 */
+  /** 缩放档位：每秒像素数（保留给历史数据/参考；界面已改为连续缩放） */
   pixelsPerSecondSteps: [10, 20, 40, 80, 160] as const,
-  defaultPixelsPerSecond: 40
+  /** 缩放的连续范围（2026-11-03 用户裁决：Ctrl+滚轮细粒度缩放） */
+  pixelsPerSecondMin: 8,
+  pixelsPerSecondMax: 240,
+  defaultPixelsPerSecond: 40,
+  /** 全屏编辑器时间轴区默认高度：正好三条轨道（工具栏 36 + 刻度尺 24 + 3×56 + 内边距 12）。 */
+  fullscreenPaneHeight: 240
 } as const
 
 export const NODE_UI = {

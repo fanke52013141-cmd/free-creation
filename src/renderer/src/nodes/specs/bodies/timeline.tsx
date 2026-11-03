@@ -19,12 +19,16 @@ import {
   createEmptyTimeline,
   findClip,
   formatTimecode,
+  freeStartMsFor,
   moveClip,
   moveTrack,
   parseTimeline,
   removeClip,
   removeTrack,
+  resolveMoveStartMs,
   rulerStepMs,
+  snapDropStartMs,
+  resolveClipDurationMs,
   serializeTimeline,
   splitClip,
   splitClipKeep,
@@ -186,6 +190,14 @@ function TimelineSurface({
   }
 
   const pxPerMs = pixelsPerSecond / 1000
+  // 缩放：按钮按倍数微调，Ctrl/⌘+滚轮按 1.12 倍细调，范围见 TIMELINE_UI。
+  const ZOOM_BUTTON_FACTOR = 1.3
+  const ZOOM_WHEEL_FACTOR = 1.12
+  const clampZoom = (value: number): number =>
+    Math.min(
+      TIMELINE_UI.pixelsPerSecondMax,
+      Math.max(TIMELINE_UI.pixelsPerSecondMin, Math.round(value))
+    )
   const durationMs = timelineDurationMs(data)
   // 时间轴宽度跟随卡片可用宽度：横向拉宽时逐步显示后面的时间，而不是留一片空白；
   // 只有内容比视口长时才出现横向滚动。
@@ -219,8 +231,8 @@ function TimelineSurface({
   const laneRef = useRef<HTMLDivElement | null>(null)
 
   // 自动吸附：把拖动/裁剪的目标时间吸到「同轨相邻片段边缘、时间线起点、播放头」。
-  // 阈值按像素算（8px），缩放越小吸附范围越大，符合「贴齐」直觉。
-  const SNAP_PX = 8
+  // 阈值按像素算（12px）；拖动整段时起点或末端都会参与吸附，重叠时直接贴到最近边缘。
+  const SNAP_PX = 12
   const snapPointsFor = (trackId: string, clipId: string): number[] => {
     const points = [0, playheadMs]
     for (const clip of clipsOfTrack(data, trackId)) {
@@ -252,12 +264,20 @@ function TimelineSurface({
           ?.closest<HTMLElement>('[data-timeline-track]')
         const trackId = row?.dataset.timelineTrack ?? current.trackId
         const rawStart = Math.max(0, Math.round(current.original.startMs + deltaMs))
+        const nextStart = resolveMoveStartMs({
+          data,
+          trackId,
+          clipId: current.clipId,
+          rawStartMs: rawStart,
+          durationMs: current.original.durationMs,
+          snapPointsMs: snapPointsFor(trackId, current.clipId),
+          thresholdMs: SNAP_PX / pxPerMs,
+          snapEnabled
+        })
         updateDrag({
           ...current,
           trackId,
-          startMs: snapEnabled
-            ? snapMs(rawStart, snapPointsFor(trackId, current.clipId))
-            : rawStart
+          startMs: nextStart
         })
         return
       }
@@ -431,6 +451,14 @@ function TimelineSurface({
           event.stopPropagation()
         }
       }}
+      // Ctrl/⌘ + 滚轮：细粒度缩放时间轴（2026-11-03 用户裁决）
+      onWheelCapture={(event) => {
+        if (!event.ctrlKey && !event.metaKey) return
+        event.preventDefault()
+        event.stopPropagation()
+        const factor = event.deltaY < 0 ? ZOOM_WHEEL_FACTOR : 1 / ZOOM_WHEEL_FACTOR
+        onZoom(clampZoom(pixelsPerSecond * factor))
+      }}
     >
       <div className="tl-toolbar">
         <button
@@ -453,20 +481,21 @@ function TimelineSurface({
         </button>
         <button
           type="button"
-          className="tl-btn"
+          className="tl-btn is-icon"
           data-node-pointer="control"
           title="在播放头处分割选中片段（Ctrl/⌘+B）"
+          aria-label="分割"
           disabled={!selected}
           onClick={onSplit}
         >
           <Icon name="split" size={13} />
-          分割
         </button>
         <button
           type="button"
           className="tl-btn is-icon"
           data-node-pointer="control"
           title="向左分割：保留切点左侧，删除右侧"
+          aria-label="向左分割"
           disabled={!selected}
           onClick={() => onSplitKeep('left')}
         >
@@ -477,6 +506,7 @@ function TimelineSurface({
           className="tl-btn is-icon"
           data-node-pointer="control"
           title="向右分割：保留切点右侧，删除左侧"
+          aria-label="向右分割"
           disabled={!selected}
           onClick={() => onSplitKeep('right')}
         >
@@ -484,14 +514,14 @@ function TimelineSurface({
         </button>
         <button
           type="button"
-          className="tl-btn"
+          className="tl-btn is-icon"
           data-node-pointer="control"
           title="删除选中片段（Delete）"
+          aria-label="删除片段"
           disabled={!selected}
           onClick={onDeleteClip}
         >
           <Icon name="trash" size={13} />
-          删除
         </button>
         <button
           type="button"
@@ -499,7 +529,7 @@ function TimelineSurface({
           data-node-pointer="control"
           data-tl-snap={snapEnabled ? 'on' : 'off'}
           aria-pressed={snapEnabled}
-          title={snapEnabled ? '自动吸附：开（关闭后片段可自由拖动）' : '自动吸附：关（拖到边缘会贴合）'}
+          aria-label={snapEnabled ? '自动吸附：开' : '自动吸附：关'}
           onClick={onToggleSnap}
         >
           <Icon name={snapEnabled ? 'link' : 'link-off'} size={13} />
@@ -531,46 +561,33 @@ function TimelineSurface({
         <span className="tl-timecode" data-node-pointer="control">
           {formatTimecode(playheadMs)} / {formatTimecode(durationMs)}
         </span>
-        {/* 时间轴缩放：滚轴（2026-11-03 用户裁决，与剪映一致），两端保留 −/+ 微调 */}
+        {/* 时间轴缩放：连续缩放（Ctrl+滚轮可细调，2026-11-03 用户裁决） */}
         <span className="tl-zoom" data-node-pointer="control">
           <button
             type="button"
             className="tl-zoom-step"
             aria-label="时间轴缩小"
-            title="时间轴缩小"
-            onClick={() => {
-              const steps = TIMELINE_UI.pixelsPerSecondSteps
-              const index = steps.indexOf(pixelsPerSecond as never)
-              onZoom(steps[Math.max(0, index - 1)] ?? steps[0])
-            }}
+            onClick={() => onZoom(clampZoom(pixelsPerSecond / ZOOM_BUTTON_FACTOR))}
           >
-            <Icon name="zoom-out" size={13} />
+            <Icon name="zoom-out" size={16} />
           </button>
           <input
             type="range"
             aria-label="时间轴缩放"
-            min={0}
-            max={TIMELINE_UI.pixelsPerSecondSteps.length - 1}
+            min={TIMELINE_UI.pixelsPerSecondMin}
+            max={TIMELINE_UI.pixelsPerSecondMax}
             step={1}
-            value={Math.max(0, TIMELINE_UI.pixelsPerSecondSteps.indexOf(pixelsPerSecond as never))}
+            value={Math.round(pixelsPerSecond)}
             onPointerDown={(event) => event.stopPropagation()}
-            onChange={(event) => {
-              const steps = TIMELINE_UI.pixelsPerSecondSteps
-              onZoom(steps[Number(event.target.value)] ?? pixelsPerSecond)
-            }}
+            onChange={(event) => onZoom(clampZoom(Number(event.target.value)))}
           />
           <button
             type="button"
             className="tl-zoom-step"
             aria-label="时间轴放大"
-            title="时间轴放大"
-            onClick={() => {
-              const steps = TIMELINE_UI.pixelsPerSecondSteps
-              const index = steps.indexOf(pixelsPerSecond as never)
-              onZoom(steps[Math.min(steps.length - 1, index + 1)] ?? steps[steps.length - 1])
-            }}
+            onClick={() => onZoom(clampZoom(pixelsPerSecond * ZOOM_BUTTON_FACTOR))}
           >
-            <Icon name="zoom-in" size={13} />
+            <Icon name="zoom-in" size={16} />
           </button>
         </span>
         {onToggleFullscreen ? (
@@ -706,7 +723,6 @@ function TimelineSurface({
                         data-media-id={clip.mediaId}
                         style={{ left: Math.round(left), width: Math.max(12, Math.round(width)) }}
                         onPointerDown={(event) => beginClipDrag(event, clip, 'move')}
-                        title={`${displayName} · ${formatTimecode(clip.durationMs)}`}
                       >
                         {clip.kind === 'image' && clip.mediaPath ? (
                           <span
@@ -765,61 +781,122 @@ function TimelineSurface({
 
 /**
  * 引用素材条（2026-11-03 用户裁决）：连线进来的图片/视频/音频先作为「引用」展示，
- * 不再自动铺到轨道。点一下追加到当前轨道末尾；长按 220ms 可拖到轨道任意位置。
+ * 不再自动铺到轨道。单击只选中（Ctrl/⌘ 多选、Shift 连选）；按住直接拖到目标轨道即落轨，
+ * 落点即开始位置（无需长按）。素材库使用同一套手势。
  */
-const REF_LONG_PRESS_MS = 220
-
 function TimelineRefStrip({
   assets,
   mediaTitles,
-  onAdd
+  surfaceRef,
+  onAddAssets
 }: {
   assets: TimelineEditorAsset[]
   mediaTitles: Record<string, string>
-  onAdd: (asset: TimelineEditorAsset, trackId?: string, startMs?: number) => void
+  surfaceRef?: React.RefObject<HTMLDivElement | null>
+  onAddAssets: (assets: TimelineEditorAsset[], trackId: string, startMs: number) => void
 }): React.JSX.Element | null {
-  const [ghost, setGhost] = useState<{ x: number; y: number; asset: TimelineEditorAsset } | null>(
-    null
-  )
+  const [ghost, setGhost] = useState<{
+    x: number
+    y: number
+    asset: TimelineEditorAsset
+    count: number
+  } | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [draggingIds, setDraggingIds] = useState<string[]>([])
   const pressRef = useRef<{
     asset: TimelineEditorAsset
+    drag: TimelineEditorAsset[]
     originX: number
     originY: number
     x: number
     y: number
     started: boolean
-    timer: ReturnType<typeof setTimeout> | null
   } | null>(null)
   if (assets.length === 0) return null
 
   const laneAt = (x: number, y: number): { trackId: string; startMs: number } | null => {
-    const element = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-timeline-lane]')
+    const scope = surfaceRef?.current ?? null
+    const lanes = scope
+      ? Array.from(scope.querySelectorAll<HTMLElement>('[data-timeline-lane]'))
+      : []
+    let element = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-timeline-lane]')
+    if (element && scope && !scope.contains(element)) element = null
+    // 兜底：落点稍微偏到刻度尺/行间隙时，取纵向最近的一条轨道，避免「拖到空白处没反应」。
+    if (!element && lanes.length > 0) {
+      element = lanes.reduce((best, lane) => {
+        const rect = lane.getBoundingClientRect()
+        const distance = y < rect.top ? rect.top - y : y > rect.bottom ? y - rect.bottom : 0
+        const bestRect = best.getBoundingClientRect()
+        const bestDistance =
+          y < bestRect.top ? bestRect.top - y : y > bestRect.bottom ? y - bestRect.bottom : 0
+        return distance < bestDistance ? lane : best
+      })
+    }
     if (!element) return null
     const trackId = element.dataset.timelineLane ?? ''
     const pps = Number(element.dataset.timelinePps ?? '0')
     if (!trackId || !pps) return null
     const rect = element.getBoundingClientRect()
-    return { trackId, startMs: Math.max(0, Math.round(((x - rect.left) / pps) * 1000)) }
+    const clampedX = Math.min(Math.max(x, rect.left), Math.max(rect.left, rect.right - 1))
+    return { trackId, startMs: Math.max(0, Math.round(((clampedX - rect.left) / pps) * 1000)) }
   }
 
+  /** 按选择顺序取出要一起拖动的素材；按下的不是已选项时只拖它自己。 */
+  const assetsToDrag = (asset: TimelineEditorAsset): TimelineEditorAsset[] => {
+    if (!selectedIds.includes(asset.mediaId)) return [asset]
+    const picked = selectedIds
+      .map((id) => assets.find((item) => item.mediaId === id))
+      .filter((item): item is TimelineEditorAsset => Boolean(item))
+    return picked.length > 0 ? picked : [asset]
+  }
+
+  /** 单击选中（Ctrl/⌘ 切换，Shift 从最后一个选中项起连选），不再直接追加到轨道。 */
+  const applySelection = (event: PointerEvent, asset: TimelineEditorAsset): void => {
+    if (event.ctrlKey || event.metaKey) {
+      setSelectedIds((prev) =>
+        prev.includes(asset.mediaId) ? prev.filter((id) => id !== asset.mediaId) : [...prev, asset.mediaId]
+      )
+      return
+    }
+    if (event.shiftKey) {
+      const pool = assets.map((item) => item.mediaId)
+      setSelectedIds((prev) => {
+        const anchor = prev[prev.length - 1]
+        const from = anchor ? pool.indexOf(anchor) : -1
+        const to = pool.indexOf(asset.mediaId)
+        if (from < 0 || to < 0) return [asset.mediaId]
+        const range = pool.slice(Math.min(from, to), Math.max(from, to) + 1)
+        const next = [...prev]
+        for (const id of range) if (!next.includes(id)) next.push(id)
+        return next
+      })
+      return
+    }
+    setSelectedIds([asset.mediaId])
+  }
+
+  // 2026-11-03 用户裁决：不再长按等待——按下后直接拖动即可，单击（位移 ≤4px）仍是选中。
+  const DRAG_THRESHOLD_PX = 4
   const startPress = (event: React.PointerEvent, asset: TimelineEditorAsset): void => {
     if (event.button !== 0) return
     event.stopPropagation()
     const state = {
       asset,
+      drag: assetsToDrag(asset),
       originX: event.clientX,
       originY: event.clientY,
       x: event.clientX,
       y: event.clientY,
-      started: false,
-      timer: null as ReturnType<typeof setTimeout> | null
+      started: false
     }
     pressRef.current = state
-    state.timer = setTimeout(() => {
+    const beginDrag = (): void => {
       state.started = true
-      setGhost({ x: state.x, y: state.y, asset })
+      if (!selectedIds.includes(asset.mediaId)) setSelectedIds(state.drag.map((item) => item.mediaId))
+      setGhost({ x: state.x, y: state.y, asset, count: state.drag.length })
+      setDraggingIds(state.drag.map((item) => item.mediaId))
       document.body.classList.add('tl-asset-dragging')
-    }, REF_LONG_PRESS_MS)
+    }
     const cleanup = (): void => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
@@ -830,31 +907,33 @@ function TimelineRefStrip({
       if (!current) return
       current.x = moveEvent.clientX
       current.y = moveEvent.clientY
-      const moved =
-        Math.abs(moveEvent.clientX - current.originX) +
-          Math.abs(moveEvent.clientY - current.originY) >
-        6
-      if (!current.started && moved && current.timer) {
-        clearTimeout(current.timer)
-        current.timer = null
-        pressRef.current = null
-        cleanup()
-        return
+      if (!current.started) {
+        const moved =
+          Math.abs(moveEvent.clientX - current.originX) +
+            Math.abs(moveEvent.clientY - current.originY) >
+          DRAG_THRESHOLD_PX
+        if (!moved) return
+        beginDrag()
       }
       setGhost((prev) => (prev ? { ...prev, x: current.x, y: current.y } : prev))
     }
     const onUp = (upEvent: PointerEvent): void => {
       const current = pressRef.current
       pressRef.current = null
-      if (current?.timer) clearTimeout(current.timer)
       const dragging = Boolean(current?.started)
       if (dragging) {
         const target = laneAt(upEvent.clientX, upEvent.clientY)
-        if (target) onAdd(asset, target.trackId, target.startMs)
+        if (target) {
+          onAddAssets(current?.drag ?? [asset], target.trackId, target.startMs)
+          setSelectedIds([])
+        } else {
+          toast('没放到轨道上：请把素材拖到轨道的时间轴空白处')
+        }
       } else if (current) {
-        onAdd(asset)
+        applySelection(upEvent, asset)
       }
       setGhost(null)
+      setDraggingIds([])
       document.body.classList.remove('tl-asset-dragging')
       cleanup()
     }
@@ -871,10 +950,10 @@ function TimelineRefStrip({
           <button
             key={`${asset.mediaId}-${asset.mediaPath}`}
             type="button"
-            className={`tl-ref is-${asset.kind}`}
+            className={`tl-ref is-${asset.kind}${selectedIds.includes(asset.mediaId) ? ' is-selected' : ''}${draggingIds.includes(asset.mediaId) ? ' is-dragging' : ''}`}
             data-node-pointer="control"
             data-media-id={asset.mediaId}
-            title={`${mediaTitles[asset.mediaId] ?? asset.name} · 点击追加到轨道，长按拖到指定位置`}
+            aria-pressed={selectedIds.includes(asset.mediaId)}
             onPointerDown={(event) => startPress(event, asset)}
           >
             <span className="tl-ref-thumb">
@@ -890,21 +969,30 @@ function TimelineRefStrip({
           </button>
         ))}
       </div>
-      {ghost ? (
-        <div
-          className="tl-asset-ghost"
-          style={{ left: ghost.x + 14, top: ghost.y + 12 }}
-          aria-hidden="true"
-        >
-          <Icon
-            name={
-              ghost.asset.kind === 'video' ? 'video' : ghost.asset.kind === 'audio' ? 'audio' : 'image'
-            }
-            size={14}
-          />
-          {ghost.asset.name}
-        </div>
-      ) : null}
+      {ghost
+        ? createPortal(
+            <div
+              className="tl-asset-ghost"
+              style={{ left: ghost.x, top: ghost.y }}
+              aria-hidden="true"
+            >
+              <span className="tl-asset-ghost-thumb">
+                {ghost.asset.kind === 'image' ? (
+                  <img src={mediaUrl(ghost.asset.mediaPath)} alt="" draggable={false} />
+                ) : ghost.asset.kind === 'video' ? (
+                  <VideoThumb path={ghost.asset.mediaPath} />
+                ) : (
+                  <Icon name="audio" size={16} />
+                )}
+              </span>
+              <span className="tl-asset-ghost-name">{ghost.asset.name}</span>
+              {ghost.count > 1 ? (
+                <span className="tl-asset-ghost-count">{ghost.count}</span>
+              ) : null}
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   )
 }
@@ -922,8 +1010,10 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
   const [fullscreen, setFullscreen] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [snapEnabled, setSnapEnabled] = useState(true)
-  // 全屏编辑时时间轴占的高度（可拖动分隔条调整）（2026-11-03 用户裁决）。
-  const [timelinePct, setTimelinePct] = useState(40)
+  // 全屏编辑时时间轴区的高度（像素）：默认三条轨道，可拖动分隔条调整（2026-11-03 用户裁决）。
+  const [timelineHeightPx, setTimelineHeightPx] = useState<number>(
+    TIMELINE_UI.fullscreenPaneHeight
+  )
   const providers = useGatewayStore((store) => store.providers)
   const loadProviders = useGatewayStore((store) => store.load)
 
@@ -987,7 +1077,8 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
     }
   }
 
-  // 素材库 → 轨道：点击追加到当前轨道末尾，拖拽则按落点插入。
+  // 素材库/引用素材 → 轨道：按住直接拖到目标轨道才落轨（2026-11-03 用户裁决），
+  // activeTrackId 仅用于「添加素材到这条轨道」按钮与工具栏既有入口。
   const activeTrackId =
     (selectedClipId ? findClip(data, selectedClipId)?.trackId : undefined) ?? data.tracks[0]?.id ?? ''
   // 成片分辨率标签（全屏预览角标）：读节点 config 的 render 配置，缺省 1920×1080。
@@ -1007,7 +1098,7 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
    * 素材库 → 轨道（支持多选，按传入顺序依次落位）。
    * 2026-11-03 用户裁决：一次框选多个素材时，先选中的排前面，后选中的依次跟在后面。
    */
-  /** 从本地导入到「引用素材」池（不自动铺轨，由用户点选/长按拖入轨道）。 */
+  /** 从本地导入到「引用素材」池（不自动铺轨，由用户拖入轨道）。 */
   const importLocalReferences = async (): Promise<void> => {
     if (!project) return toast('项目未就绪')
     try {
@@ -1104,7 +1195,7 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
         })
         if (probe.ok && probe.data?.durationMs) durationMs = probe.data.durationMs
       }
-      const added = addClip(next, {
+      const input = {
         trackId: targetTrackId,
         kind: asset.kind,
         mediaId: asset.mediaId,
@@ -1112,7 +1203,19 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
         name: asset.name,
         sourceDurationMs: durationMs,
         startMs: cursor
-      })
+      }
+      const duration = resolveClipDurationMs(input)
+      // 吸附开启：磁吸到最近的片段边缘（首尾相连）；关闭：保持落点，只避开重叠。
+      const placeStart = snapEnabled
+        ? snapDropStartMs({
+            data: next,
+            trackId: targetTrackId,
+            rawStartMs: cursor,
+            durationMs: duration,
+            kind: asset.kind
+          })
+        : freeStartMsFor(next, targetTrackId, cursor, duration, asset.kind)
+      const added = addClip(next, { ...input, startMs: placeStart })
       if (!added.ok) {
         toast(added.reason)
         continue
@@ -1120,7 +1223,7 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
       next = added.data
       if (!firstClipId) firstClipId = added.clipId ?? null
       const placed = findClip(next, added.clipId ?? '')
-      cursor += placed?.durationMs ?? 0
+      cursor = placeStart + (placed?.durationMs ?? 0)
     }
     if (next === data) return
     commit(next, 'timeline-add-asset')
@@ -1318,17 +1421,18 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [fullscreen])
 
-  // 全屏编辑：拖动分隔条调整时间轴高度（提高轨道区高度）。
+  // 全屏编辑：拖动分隔条调整时间轴高度（默认正好三条轨道，范围 1 条轨道 ~ 视口的 62%）。
   const beginTimelineResize = (event: React.PointerEvent<HTMLDivElement>): void => {
     event.preventDefault()
     event.stopPropagation()
     const modal = event.currentTarget.closest('.tl-modal')
     if (!modal) return
     const rect = modal.getBoundingClientRect()
+    const minHeight = TIMELINE_UI.rulerHeight + TIMELINE_UI.trackHeight + TIMELINE_UI.toolbarHeight
+    const maxHeight = rect.height * 0.62
     const onMove = (moveEvent: PointerEvent): void => {
-      const paneBottom = rect.bottom - 8
-      const pct = ((paneBottom - moveEvent.clientY) / rect.height) * 100
-      setTimelinePct(Math.min(62, Math.max(22, pct)))
+      const next = rect.bottom - 8 - moveEvent.clientY
+      setTimelineHeightPx(Math.round(Math.min(maxHeight, Math.max(minHeight, next))))
     }
     const cleanup = (): void => {
       window.removeEventListener('pointermove', onMove)
@@ -1389,7 +1493,10 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
         <TimelineRefStrip
           assets={allRefs}
           mediaTitles={mediaTitles}
-          onAdd={(asset, trackId, startMs) => void addAssetsToTrack([asset], trackId, startMs)}
+          surfaceRef={surfaceRef}
+          onAddAssets={(assets, trackId, startMs) =>
+            void addAssetsToTrack(assets, trackId, startMs)
+          }
         />
       )}
       {fullscreen ? null : surface}
@@ -1401,7 +1508,23 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
                 if (event.target === event.currentTarget) setFullscreen(false)
               }}
             >
-              <div className="tl-modal" onPointerDown={(event) => event.stopPropagation()}>
+              <div
+                className="tl-modal"
+                onPointerDown={(event) => event.stopPropagation()}
+                // 全屏区域内任意位置 Ctrl/⌘ + 滚轮都能细调时间轴缩放
+                onWheelCapture={(event) => {
+                  if (!event.ctrlKey && !event.metaKey) return
+                  if (event.defaultPrevented) return
+                  event.preventDefault()
+                  const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12
+                  setPixelsPerSecond((current) =>
+                    Math.min(
+                      TIMELINE_UI.pixelsPerSecondMax,
+                      Math.max(TIMELINE_UI.pixelsPerSecondMin, Math.round(current * factor))
+                    )
+                  )
+                }}
+              >
                 <TimelineEditorStage
                   projectId={project?.id ?? ''}
                   data={data}
@@ -1419,14 +1542,8 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
                   onClose={() => setFullscreen(false)}
                   exporting={exporting}
                 />
-                <div
-                  className="tl-timeline-splitter"
-                  role="separator"
-                  aria-label="调整时间轴高度"
-                  title="上下拖动调整时间轴高度"
-                  onPointerDown={beginTimelineResize}
-                />
-                <div className="tl-timeline-pane" style={{ height: `${timelinePct}%` }}>
+                <div className="tl-timeline-splitter" role="separator" aria-label="调整时间轴高度" onPointerDown={beginTimelineResize} />
+                <div className="tl-timeline-pane" style={{ height: `${timelineHeightPx}px` }}>
                   {surface}
                 </div>
               </div>

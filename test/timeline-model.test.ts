@@ -9,14 +9,19 @@ import {
   createEmptyTimeline,
   findClip,
   formatTimecode,
+  freeStartMsFor,
   moveClip,
   moveTrack,
   normalizeTimeline,
   overlappingClips,
+  padTimelineTracks,
   parseTimeline,
   removeClip,
   removeTrack,
   removeReference,
+  resolveClipDurationMs,
+  resolveMoveStartMs,
+  snapDropStartMs,
   rulerStepMs,
   serializeTimeline,
   splitClip,
@@ -77,15 +82,26 @@ function withAudio(data: TimelineData, startMs = 0, durationMs = 5000): {
 }
 
 describe('轨道线数据模型 · 解析与规整', () => {
-  it('空卡片是正常空态：默认两条通用轨道', () => {
+  it('空卡片是正常空态：默认三条通用轨道（2026-11-03 用户裁决）', () => {
     const parsed = parseTimeline('')
     expect(parsed.ok).toBe(true)
     if (parsed.ok) {
       expect(parsed.empty).toBe(true)
-      expect(parsed.data.tracks).toHaveLength(2)
-      expect(parsed.data.tracks.map((track) => track.name)).toEqual(['轨道 1', '轨道 2'])
+      expect(parsed.data.tracks).toHaveLength(3)
+      expect(parsed.data.tracks.map((track) => track.name)).toEqual(['轨道 1', '轨道 2', '轨道 3'])
       expect(parsed.data.clips).toEqual([])
     }
+  })
+
+  it('旧项目只有两条轨道时补齐到三条，不删除已有轨道', () => {
+    const legacy = createEmptyTimeline()
+    legacy.tracks = legacy.tracks.slice(0, 2)
+    const padded = padTimelineTracks(legacy, 3)
+    expect(padded.added).toBe(1)
+    expect(padded.data.tracks).toHaveLength(3)
+    expect(padded.data.tracks[2].name).toBe('轨道 3')
+    // 已经是三条时不重复补
+    expect(padTimelineTracks(padded.data, 3).added).toBe(0)
   })
 
   it('轨道没有类型字段：旧数据里的 kind 读入后被丢弃，不做任何限制', () => {
@@ -418,17 +434,19 @@ describe('轨道线数据模型 · 移动 / 裁剪 / 分割 / 删除', () => {
     const dropped = removeTrack(withClips.data, trackA(withClips.data))
     expect(dropped.ok).toBe(true)
     if (dropped.ok) {
-      expect(dropped.data.tracks).toHaveLength(1)
+      expect(dropped.data.tracks).toHaveLength(2)
       expect(dropped.data.clips).toHaveLength(0)
     }
   })
 
   it('不能删掉最后一条轨道', () => {
     let data = base()
-    const first = removeTrack(data, trackB(data))
-    expect(first.ok).toBe(true)
-    if (!first.ok) return
-    data = first.data
+    while (data.tracks.length > 1) {
+      const next = removeTrack(data, data.tracks[data.tracks.length - 1].id)
+      if (!next.ok) break
+      data = next.data
+    }
+    expect(data.tracks).toHaveLength(1)
     expect(removeTrack(data, data.tracks[0].id).ok).toBe(false)
   })
 
@@ -437,8 +455,8 @@ describe('轨道线数据模型 · 移动 / 裁剪 / 分割 / 删除', () => {
     const added = addTrack(data)
     expect(added.ok).toBe(true)
     if (!added.ok) return
-    expect(added.data.tracks).toHaveLength(3)
-    expect(added.data.tracks[2].name).toBe('轨道 3')
+    expect(added.data.tracks).toHaveLength(4)
+    expect(added.data.tracks[3].name).toBe('轨道 4')
     data = added.data
     while (data.tracks.length < TIMELINE_LIMITS.maxTracks) {
       const next = addTrack(data)
@@ -464,5 +482,151 @@ describe('轨道线数据模型 · 刻度与时间码', () => {
   it('片段末端 = 起点 + 时长', () => {
     const first = withVideo(base(), 3000, 1500)
     expect(clipEndMs(findClip(first.data, first.clipId)!)).toBe(4500)
+  })
+})
+
+describe('轨道线数据模型 · 落轨避让（2026-11-03 用户反馈）', () => {
+  it('拖到已被占用的位置时顺延到后方空档，而不是拒绝落轨', () => {
+    const first = withVideo(base(), 10_000)
+    const trackId = trackA(first.data)
+    // 期望起点 5000 落在 0..10000 的片段里 → 顺延到 10000
+    expect(freeStartMsFor(first.data, trackId, 5000, 4000, 'video')).toBe(10_000)
+    // 期望起点 12000 已经在空档里 → 原样保留
+    expect(freeStartMsFor(first.data, trackId, 12_000, 4000, 'video')).toBe(12_000)
+    // 片段从 5000 开始：起点 0 位于它之前的空档里 → 原样保留
+    const late = withVideo(base(), 4000, 5000)
+    expect(freeStartMsFor(late.data, trackA(late.data), 0, 4000, 'image')).toBe(0)
+  })
+
+  it('后方放不下时继续顺延到所有片段之后', () => {
+    const first = withVideo(base(), 4000)
+    let data = first.data
+    const second = addClip(data, {
+      trackId: trackA(data),
+      kind: 'video',
+      mediaId: 'm2',
+      mediaPath: 'p2',
+      name: '视频2',
+      sourceDurationMs: 4000,
+      startMs: 6000
+    })
+    expect(second.ok).toBe(true)
+    if (!second.ok) return
+    data = second.data
+    // 期望 3000 落在第一段里；第一段后只有 4000..6000 的 2s 空档，放不下 4000 → 顺延到 10000
+    expect(freeStartMsFor(data, trackA(data), 3000, 4000, 'video')).toBe(10_000)
+  })
+
+  it('音频允许叠放，不做避让', () => {
+    const first = withVideo(base(), 5000)
+    expect(freeStartMsFor(first.data, trackA(first.data), 1000, 3000, 'audio')).toBe(1000)
+  })
+
+  it('落轨时长与 addClip 内部分配一致', () => {
+    const input = {
+      trackId: 't',
+      kind: 'video' as const,
+      mediaId: 'm',
+      mediaPath: 'p',
+      name: 'n',
+      sourceDurationMs: 8000
+    }
+    expect(resolveClipDurationMs(input)).toBe(8000)
+    expect(
+      resolveClipDurationMs({ ...input, startMs: 0, durationMs: 20_000 })
+    ).toBe(8000)
+    expect(
+      resolveClipDurationMs({ ...input, kind: 'image', sourceDurationMs: 0 })
+    ).toBe(TIMELINE_LIMITS.defaultImageClipMs)
+  })
+})
+
+describe('轨道线数据模型 · 拖动吸附（2026-11-03 用户反馈「开了吸附却贴不上」）', () => {
+  const moveStart = (
+    data: TimelineData,
+    clipId: string,
+    rawStartMs: number,
+    durationMs: number,
+    snapEnabled = true,
+    thresholdMs = 300
+  ): number => {
+    const trackId = findClip(data, clipId)!.trackId
+    const points = clipsOfTrack(data, trackId)
+      .filter((clip) => clip.id !== clipId)
+      .flatMap((clip) => [clip.startMs, clip.startMs + clip.durationMs])
+    return resolveMoveStartMs({
+      data,
+      trackId,
+      clipId,
+      rawStartMs,
+      durationMs,
+      snapPointsMs: points,
+      thresholdMs,
+      snapEnabled
+    })
+  }
+
+  it('起点贴到相邻片段末端（首尾相连）', () => {
+    const first = withVideo(base(), 4000)
+    const second = withVideo(first.data, 2000, 10_000)
+    // 原始起点 4020 距离 4000 只有 20ms → 吸附到 4000
+    expect(moveStart(second.data, second.clipId, 4020, 2000)).toBe(4000)
+  })
+
+  it('末端也会贴到相邻片段起点（从右往左接）', () => {
+    const first = withVideo(base(), 2000, 0)
+    // 右侧邻居：8000..12000；被拖片段先放在 20000（时长 2000）
+    const neighbor = withVideo(first.data, 4000, 8000)
+    const movable = withVideo(neighbor.data, 2000, 20_000)
+    // 原始起点 5990 → 末端 7990 距离 8000 只有 10ms → 起点吸到 6000
+    expect(moveStart(movable.data, movable.clipId, 5990, 2000)).toBe(6000)
+  })
+
+  it('拖到片段内部时自动贴到最近的合法边缘，而不是报重叠', () => {
+    const first = withVideo(base(), 4000)
+    const second = withVideo(first.data, 2000, 10_000)
+    // 原始起点 1000 深埋在 0..4000 里 → 贴到 4000
+    expect(moveStart(second.data, second.clipId, 1000, 2000)).toBe(4000)
+  })
+
+  it('关掉吸附时保留原始位置', () => {
+    const first = withVideo(base(), 4000)
+    const second = withVideo(first.data, 2000, 10_000)
+    expect(moveStart(second.data, second.clipId, 4020, 2000, false)).toBe(4020)
+  })
+})
+
+describe('轨道线数据模型 · 落轨磁吸（2026-11-03 用户反馈「拖进来没连在一起」）', () => {
+  const dropStart = (data: TimelineData, trackId: string, rawStartMs: number, durationMs: number, kind: 'video' | 'audio' = 'video') =>
+    snapDropStartMs({ data, trackId, rawStartMs, durationMs, kind })
+
+  it('拖到已占用轨道任意位置都吸到最近的片段边缘', () => {
+    const first = withVideo(base(), 4000)
+    const trackId = trackA(first.data)
+    // 拖到片段内部 → 接到片段末尾
+    expect(dropStart(first.data, trackId, 1000, 2000)).toBe(4000)
+    // 拖到片段后方的空白 → 依然接到片段末尾（首尾相连）
+    expect(dropStart(first.data, trackId, 6000, 2000)).toBe(4000)
+  })
+
+  it('落在两个片段之间时吸到最近的合法边缘', () => {
+    const first = withVideo(base(), 4000)
+    const second = withVideo(first.data, 4000, 10_000)
+    const trackId = trackA(second.data)
+    // 两个片段之间（4000..10000），放 2000 的片段：最近边缘是 4000（间隔 1000）
+    expect(dropStart(second.data, trackId, 5000, 2000)).toBe(4000)
+    // 更靠近第二个片段 → 往前插到 8000
+    expect(dropStart(second.data, trackId, 9000, 2000)).toBe(8000)
+  })
+
+  it('空轨道保持落点原样', () => {
+    const data = base()
+    expect(dropStart(data, trackA(data), 12_000, 3000)).toBe(12_000)
+  })
+
+  it('音频不参与磁吸（允许叠放）', () => {
+    const first = withVideo(base(), 4000)
+    const trackId = trackA(first.data)
+    expect(dropStart(first.data, trackId, 1000, 2000, 'audio')).toBe(1000)
   })
 })

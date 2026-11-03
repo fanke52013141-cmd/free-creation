@@ -7,6 +7,7 @@ import {
   portCompatible,
   portOffsets,
   needsNodeSizeMigration,
+  needsTimelineHeightMigration,
   registerNodeType,
   getNodeType,
   getNodePorts,
@@ -112,6 +113,14 @@ describe('needsNodeSizeMigration · 旧快照尺寸迁移', () => {
   it('对未知节点类型的超大尺寸仍兜底迁移（宽>900 或 高>1300）', () => {
     expect(needsNodeSizeMigration('unknown', 1000, 500)).toBe(true)
     expect(needsNodeSizeMigration('unknown', 500, 1400)).toBe(true)
+  })
+
+  it('轨道线旧默认高度 210/230 升到当前默认；自定义高度不动', () => {
+    expect(needsTimelineHeightMigration('timeline', 210)).toBe(true)
+    expect(needsTimelineHeightMigration('timeline', 230)).toBe(true)
+    expect(needsTimelineHeightMigration('timeline', 286)).toBe(false)
+    expect(needsTimelineHeightMigration('timeline', 300)).toBe(false)
+    expect(needsTimelineHeightMigration('text', 210)).toBe(false)
   })
 })
 

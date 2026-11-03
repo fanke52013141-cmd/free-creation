@@ -277,6 +277,17 @@ export function needsNodeSizeMigration(type: string, w: number, h: number): bool
   return w > 900 || h > MAX_AUTO_NODE_HEIGHT + 100
 }
 
+/** 轨道线的旧默认高度：210（两轨时代）、230（两轨 + 引用条时代）。 */
+export const LEGACY_TIMELINE_HEIGHTS = [210, 230] as const
+
+/**
+ * 轨道线默认高度升档迁移：旧默认高度（210 / 230）升到当前默认（286，三条轨道完整可见）。
+ * 用户手动调过的高度保持不动。
+ */
+export function needsTimelineHeightMigration(type: string, h: number): boolean {
+  return type === 'timeline' && (LEGACY_TIMELINE_HEIGHTS as readonly number[]).includes(h)
+}
+
 /** 同侧端口在卡片上的纵向落点（px，相对卡片顶部） */
 export function portOffsets(count: number, cardH: number): number[] {
   if (count <= 0) return []

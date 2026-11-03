@@ -50,7 +50,9 @@ import { assetNodeTypeFor } from './asset-node-type'
 import type { AiProcessConfig } from '../engine/executors/aiProcess'
 import { markUndoPoint } from './history'
 import { collapseSelection } from './stack-collapse'
-import { getNodeType, allNodeTypes, needsNodeSizeMigration, nodeIconColor } from '../nodes/registry'
+import { getNodeType, allNodeTypes, needsNodeSizeMigration, needsTimelineHeightMigration, nodeIconColor } from '../nodes/registry'
+import { TIMELINE_UI } from './node-ui-tokens'
+import { padTimelineTracks, parseTimeline, serializeTimeline } from '@shared/timeline'
 import {
   registerBaseNodeTypes,
   registerScriptNodeType,
@@ -173,7 +175,22 @@ function migrateLegacyNodeSizes(editor: Editor): number {
     .filter((shape): shape is typeof shape & { type: 'node-card' } => shape.type === 'node-card')
     .flatMap((shape) => {
       const spec = getNodeType(shape.props.nodeType)
-      if (!spec || !needsNodeSizeMigration(shape.props.nodeType, shape.props.w, shape.props.h)) {
+      if (!spec) return []
+      // 轨道线：旧默认高度（210/230）升到当前默认（286），并把旧的默认两轨补齐到三轨。
+      if (shape.props.nodeType === 'timeline') {
+        const props: { w?: number; h?: number; text?: string } = {}
+        if (needsTimelineHeightMigration(shape.props.nodeType, shape.props.h)) {
+          props.h = spec.defaultSize.h
+        }
+        const parsed = parseTimeline(shape.props.text)
+        if (parsed.ok) {
+          const padded = padTimelineTracks(parsed.data, TIMELINE_UI.trackCount)
+          if (padded.added > 0) props.text = serializeTimeline(padded.data)
+        }
+        if (Object.keys(props).length === 0) return []
+        return [{ id: shape.id, type: 'node-card' as const, props }]
+      }
+      if (!needsNodeSizeMigration(shape.props.nodeType, shape.props.w, shape.props.h)) {
         return []
       }
       return [

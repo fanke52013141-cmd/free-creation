@@ -97,8 +97,8 @@ export function timelineId(prefix: string): string {
 }
 
 export function createEmptyTimeline(): TimelineData {
-  // 2026-11-02 用户裁决：默认两条通用轨道（可放任何素材），高度按两条轨道算。
-  const tracks: TimelineTrack[] = [1, 2].map((index) => ({
+  // 2026-11-03 用户裁决：默认三条通用轨道（可放任何素材），高度按三条轨道预留。
+  const tracks: TimelineTrack[] = [1, 2, 3].map((index) => ({
     id: timelineId('t'),
     name: `轨道 ${index}`,
     muted: false,
@@ -112,6 +112,29 @@ export function createEmptyTimeline(): TimelineData {
     clips: [],
     references: []
   }
+}
+
+/**
+ * 旧默认两条轨道 → 当前默认三条（只补空轨道，不删除任何轨道/片段）。
+ * 用于打开旧项目时的一次性迁移；返回 added 让调用方决定是否需要落盘。
+ */
+export function padTimelineTracks(
+  data: TimelineData,
+  minCount: number
+): { data: TimelineData; added: number } {
+  const missing = Math.max(0, Math.round(minCount) - data.tracks.length)
+  if (missing === 0) return { data, added: 0 }
+  const tracks = [...data.tracks]
+  for (let index = 0; index < missing; index += 1) {
+    tracks.push({
+      id: timelineId('t'),
+      name: `轨道 ${tracks.length + 1}`,
+      muted: false,
+      locked: false,
+      visible: true
+    })
+  }
+  return { data: { ...data, tracks }, added: missing }
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -423,6 +446,159 @@ export function availableSourceMs(kind: TimelineClipKind, inMs: number, sourceDu
   return Math.max(0, sourceDurationMs - inMs)
 }
 
+/**
+ * 落轨时最终使用的片段时长（与 addClip 内部同一算法）。
+ * 拖放避让需要在调用 addClip 之前就知道长度，因此抽成公共函数，避免两处算法漂移。
+ */
+export function resolveClipDurationMs(input: AddClipInput): number {
+  const sourceDurationMs = Math.max(0, Math.round(input.sourceDurationMs))
+  const inMs = Math.max(0, Math.round(input.inMs ?? 0))
+  const available = availableSourceMs(input.kind, inMs, sourceDurationMs)
+  // 源时长未知（未探测到）时不能把片段长度算成 Infinity：给一个可编辑的占位长度，
+  // 用户之后可以裁剪；探测到真实时长后 addClip 会按源尾截断。
+  const fallbackMs = input.kind === 'image' ? TIMELINE_LIMITS.defaultImageClipMs : 5000
+  const requested = input.durationMs ?? (Number.isFinite(available) ? available : fallbackMs)
+  const bounded = Number.isFinite(requested) ? requested : fallbackMs
+  return Math.max(
+    TIMELINE_LIMITS.minClipMs,
+    Math.round(Number.isFinite(available) ? Math.min(bounded, available) : bounded)
+  )
+}
+
+/**
+ * 画面片段落轨避让（2026-11-03 用户反馈）：从期望起点向右找第一个能完整放下
+ * durationMs 的空档；音频允许叠放，直接返回期望起点。
+ * 拖到已占用的位置时由调用方顺延到该空档，而不是直接拒绝落轨。
+ */
+export function freeStartMsFor(
+  data: TimelineData,
+  trackId: string,
+  requestedStartMs: number,
+  durationMs: number,
+  kind?: TimelineClipKind
+): number {
+  const start = Math.max(0, Math.round(requestedStartMs))
+  if (kind && !isVisualKind(kind)) return start
+  const length = Math.max(1, Math.round(durationMs))
+  let cursor = start
+  for (const clip of clipsOfTrack(data, trackId)) {
+    if (!isVisualKind(clip.kind)) continue
+    if (cursor + length <= clip.startMs) break
+    if (cursor < clipEndMs(clip)) cursor = clipEndMs(clip)
+  }
+  return cursor
+}
+
+export interface ClipMoveSnapInput {
+  data: TimelineData
+  trackId: string
+  clipId: string
+  rawStartMs: number
+  durationMs: number
+  /** 吸附参考点：同轨其它片段两端、时间线起点、播放头。 */
+  snapPointsMs: number[]
+  thresholdMs: number
+  snapEnabled: boolean
+}
+
+/**
+ * 拖动片段时的落点吸附（2026-11-03 用户反馈「开了自动吸附却贴不上」）：
+ * 1) 起点或末端对齐参考点，取位移更小的一种；
+ * 2) 若落点仍与同轨画面片段重叠，直接贴到最近的重叠片段前/后边缘，保证首尾相连；
+ * 3) 关掉吸附时保留原始位置。
+ */
+export function resolveMoveStartMs(input: ClipMoveSnapInput): number {
+  const raw = Math.max(0, Math.round(input.rawStartMs))
+  if (!input.snapEnabled) return raw
+  const clip = findClip(input.data, input.clipId)
+  const kind = clip?.kind
+  const duration = Math.max(1, Math.round(input.durationMs))
+  const overlapsAt = (startMs: number): TimelineClip[] =>
+    overlappingClips(
+      input.data,
+      { trackId: input.trackId, startMs, durationMs: duration, kind },
+      input.clipId
+    )
+  const points = [0, ...input.snapPointsMs]
+  let best = raw
+  let bestDistance = Math.max(0, input.thresholdMs)
+  for (const point of points) {
+    for (const candidate of [point, point - duration]) {
+      if (candidate < 0) continue
+      const distance = Math.abs(candidate - raw)
+      if (distance <= bestDistance) {
+        best = candidate
+        bestDistance = distance
+      }
+    }
+  }
+  if (overlapsAt(best).length === 0) return Math.max(0, Math.round(best))
+  const attachCandidates: number[] = []
+  for (const other of overlapsAt(best)) {
+    attachCandidates.push(other.startMs + other.durationMs)
+    attachCandidates.push(other.startMs - duration)
+  }
+  let attached: number | null = null
+  let attachedDistance = Number.POSITIVE_INFINITY
+  for (const candidate of attachCandidates) {
+    if (candidate < 0) continue
+    if (overlapsAt(candidate).length > 0) continue
+    const distance = Math.abs(candidate - raw)
+    if (distance < attachedDistance) {
+      attached = candidate
+      attachedDistance = distance
+    }
+  }
+  return Math.max(0, Math.round(attached ?? best))
+}
+
+export interface SnapDropInput {
+  data: TimelineData
+  trackId: string
+  rawStartMs: number
+  durationMs: number
+  kind: TimelineClipKind
+}
+
+/**
+ * 素材落轨的磁吸（2026-11-03 用户反馈「开着吸附，拖进来却没和前面的片段连在一起」）：
+ * 轨道上已有画面片段时，落点吸到最近的合法边缘——片段末尾（往后接）或片段开头减时长（往前插），
+ * 保证片段首尾相连；空轨保持落点原样，音频允许叠放不参与磁吸。
+ */
+export function snapDropStartMs(input: SnapDropInput): number {
+  const raw = Math.max(0, Math.round(input.rawStartMs))
+  const duration = Math.max(1, Math.round(input.durationMs))
+  if (!isVisualKind(input.kind)) {
+    return freeStartMsFor(input.data, input.trackId, raw, duration, input.kind)
+  }
+  const visual = clipsOfTrack(input.data, input.trackId).filter((clip) => isVisualKind(clip.kind))
+  if (visual.length === 0) return raw
+  const overlapsAt = (startMs: number): TimelineClip[] =>
+    overlappingClips(input.data, {
+      trackId: input.trackId,
+      startMs,
+      durationMs: duration,
+      kind: input.kind
+    })
+  const candidates = new Set<number>([0])
+  for (const clip of visual) {
+    candidates.add(clip.startMs + clip.durationMs)
+    candidates.add(clip.startMs - duration)
+  }
+  let best = raw
+  let bestDistance = Number.POSITIVE_INFINITY
+  for (const candidate of candidates) {
+    if (candidate < 0) continue
+    if (overlapsAt(candidate).length > 0) continue
+    const distance = Math.abs(candidate - raw)
+    if (distance < bestDistance) {
+      best = candidate
+      bestDistance = distance
+    }
+  }
+  return Math.max(0, Math.round(best))
+}
+
 export function addClip(data: TimelineData, input: AddClipInput): TimelineEditResult {
   if (data.clips.length >= TIMELINE_LIMITS.maxClips) {
     return { ok: false, reason: `最多 ${TIMELINE_LIMITS.maxClips} 个片段` }
@@ -434,18 +610,7 @@ export function addClip(data: TimelineData, input: AddClipInput): TimelineEditRe
   if (input.kind !== 'image' && sourceDurationMs > 0 && inMs >= sourceDurationMs) {
     return { ok: false, reason: '源内起点超出素材时长' }
   }
-  const available = availableSourceMs(input.kind, inMs, sourceDurationMs)
-  // 源时长未知（未探测到）时不能把片段长度算成 Infinity：给一个可编辑的占位长度，
-  // 用户之后可以裁剪；探测到真实时长后 addClip 会按源尾截断。
-  const fallbackMs = input.kind === 'image' ? TIMELINE_LIMITS.defaultImageClipMs : 5000
-  const requested =
-    input.durationMs ??
-    (Number.isFinite(available) ? available : fallbackMs)
-  const bounded = Number.isFinite(requested) ? requested : fallbackMs
-  const durationMs = Math.max(
-    TIMELINE_LIMITS.minClipMs,
-    Math.round(Number.isFinite(available) ? Math.min(bounded, available) : bounded)
-  )
+  const durationMs = resolveClipDurationMs(input)
   const startMs =
     input.startMs !== undefined
       ? Math.max(0, Math.round(input.startMs))

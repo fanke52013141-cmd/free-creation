@@ -756,15 +756,17 @@
   gap: 6px;
 }
 
+/* 导出成片：与顶栏「运行」按钮同一套主按钮材质（2026-11-03 用户裁决）。 */
 .tl-editor-export {
   display: inline-flex;
   height: 30px;
   align-items: center;
   gap: 6px;
-  padding: 0 12px;
-  border: 1px solid rgb(35 154 211 / 60%);
-  border-radius: 8px;
-  background: #239ad3;
+  padding: 0 13px;
+  border: 1px solid rgba(105, 208, 255, 0.34);
+  border-radius: 9px;
+  background: linear-gradient(180deg, #4fc4fb, #2faeea);
+  box-shadow: 0 5px 14px rgba(47, 174, 234, 0.16);
   color: #04121a;
   font-size: 12px;
   font-weight: 600;
@@ -772,7 +774,9 @@
 }
 
 .tl-editor-export:hover:not(:disabled) {
-  background: #37aee6;
+  border-color: rgba(180, 231, 255, 0.5);
+  background: linear-gradient(180deg, #60ccff, #3bb7ef);
+  box-shadow: 0 7px 18px rgba(47, 174, 234, 0.22);
 }
 
 .tl-editor-export:disabled {
@@ -996,6 +1000,8 @@
 .tl-preview {
   display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
   min-width: 0;
   min-height: 0;
   padding: 8px;
@@ -1041,20 +1047,17 @@
   letter-spacing: 0.02em;
 }
 
+/* 播放条（2026-11-03 用户裁决）：独立占位在视频下方，不再悬浮遮挡画面。 */
 .tl-transport {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  left: 12px;
   display: flex;
-  height: 36px;
+  flex: 0 0 auto;
+  height: 44px;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 0 10px;
-  border: 1px solid rgb(255 255 255 / 10%);
+  border: 1px solid rgb(255 255 255 / 8%);
   border-radius: 10px;
-  background: rgb(12 15 20 / 88%);
-  backdrop-filter: blur(6px);
+  background: rgb(255 255 255 / 4%);
 }
 
 .tl-transport-play {
@@ -1197,35 +1200,6 @@
   position: relative;
 }
 
-.tl-bin-footer {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 8px;
-}
-
-.tl-bin-footer .tl-bin-hint {
-  flex: 1 1 auto;
-}
-
-.tl-bin-append {
-  flex: 0 0 auto;
-  height: 26px;
-  padding: 0 10px;
-  border: 1px solid rgb(35 154 211 / 55%);
-  border-radius: 7px;
-  background: rgb(35 154 211 / 16%);
-  color: #84cfff;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.tl-bin-append:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-}
-
 /* 预览画框：按所选比例居中，媒体铺满画框 */
 .tl-preview-frame {
   position: relative;
@@ -1318,7 +1292,8 @@
   color: #e6edf7;
 }
 
-/* 长按拖动中的浮层预览 */
+/* 长按拖动中的浮层预览：portal 到 body 并跟随指针（画布有 transform，fixed 在节点内会偏）。
+   2026-11-03 二次裁决：浮层中心必须与指针重合，不再悬在指针上方。 */
 .tl-asset-ghost {
   position: fixed;
   z-index: 1400;
@@ -1326,7 +1301,7 @@
   max-width: 220px;
   align-items: center;
   gap: 6px;
-  padding: 6px 9px;
+  padding: 4px 9px 4px 4px;
   overflow: hidden;
   border: 1px solid rgb(35 154 211 / 55%);
   border-radius: 8px;
@@ -1336,6 +1311,49 @@
   pointer-events: none;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transform: translate(-50%, -50%);
+  /* 略微透明，避免完全挡住指针下的轨道落点 */
+  opacity: 0.92;
+}
+
+.tl-asset-ghost-thumb {
+  display: inline-flex;
+  width: 44px;
+  height: 30px;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 5px;
+  background: rgb(0 0 0 / 45%);
+  color: #8a97a8;
+}
+
+.tl-asset-ghost-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tl-asset-ghost-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tl-asset-ghost-count {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #239ad3;
+  color: #04121a;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+/* 拖动中源素材淡出成「虚影」，提示它正被拖走；松手即恢复 */
+.tl-asset.is-dragging,
+.tl-ref.is-dragging {
+  opacity: 0.35;
 }
 
 body.tl-asset-dragging {
@@ -1422,6 +1440,12 @@ body.tl-asset-dragging {
   background: rgb(35 154 211 / 10%);
 }
 
+/* 引用素材选中态：与素材库 .tl-asset.is-selected 同色，提示「长按可拖」。 */
+.tl-ref.is-selected {
+  border-color: #239ad3;
+  background: rgb(35 154 211 / 16%);
+}
+
 .tl-ref-thumb {
   display: inline-flex;
   width: 26px;
@@ -1456,7 +1480,7 @@ body.tl-asset-dragging {
   width: 100%;
 }
 
-/* ���� 2026-11-03 �ڶ��������������̬�ָ���Ź��ᡢ�ָ�������֡���� ���� */
+/* ── 2026-11-03 第二批：轨道排序、三态分割、缩放滚轴、分隔条、首帧封面 ── */
 .tl-row-header {
   cursor: grab;
 }
@@ -1473,29 +1497,34 @@ body.tl-asset-dragging {
 .tl-zoom {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  margin-left: 6px;
-  color: #8a97a8;
+  gap: 6px;
+  margin-left: 8px;
+  color: #9aa6b4;
 }
 
 .tl-zoom input[type='range'] {
-  width: 96px;
-  height: 14px;
+  width: 110px;
+  height: 16px;
   accent-color: #239ad3;
   cursor: pointer;
 }
 
 .tl-zoom-step {
   display: inline-flex;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   background: transparent;
   color: inherit;
   cursor: pointer;
+}
+
+.tl-zoom-step svg {
+  width: 16px;
+  height: 16px;
 }
 
 .tl-zoom-step:hover {
@@ -1513,29 +1542,34 @@ body.tl-asset-dragging {
   pointer-events: none;
 }
 
-/* ȫ���ָ������϶�������Ԥ��/ʱ���᡹�߶ȱ��� */
+/* 全屏分隔条：拖动调整「预览/时间轴」高度比例 */
 .tl-timeline-splitter {
   position: relative;
   flex: 0 0 auto;
-  height: 10px;
-  margin: 2px 0;
-  border-radius: 5px;
+  /* 2026-11-03 用户裁决：视觉上只留一条线，命中区压缩到 8px，不再占一大块高度。 */
+  height: 8px;
+  margin: 0;
   cursor: ns-resize;
+  touch-action: none;
+  z-index: 3;
 }
 
 .tl-timeline-splitter::before {
   content: '';
   position: absolute;
-  top: 4px;
-  right: 45%;
-  left: 45%;
-  height: 3px;
+  top: 50%;
+  right: 8px;
+  left: 8px;
+  height: 1px;
   border-radius: 999px;
-  background: rgb(255 255 255 / 14%);
+  background: rgb(255 255 255 / 10%);
+  transform: translateY(-50%);
 }
 
-.tl-timeline-splitter:hover::before {
-  background: rgb(35 154 211 / 75%);
+.tl-timeline-splitter:hover::before,
+.tl-timeline-splitter:active::before {
+  height: 2px;
+  background: rgb(35 154 211 / 85%);
 }
 
 .tl-timeline-pane {
@@ -1558,7 +1592,7 @@ body.tl-asset-dragging {
   max-height: none;
 }
 
-/* ��������������������� */
+/* 播放条：比例下拉、间距 */
 .tl-transport-spacer {
   flex: 1 1 auto;
 }
@@ -1585,7 +1619,7 @@ body.tl-asset-dragging {
   color: #e6edf7;
 }
 
-/* ��������˵����ӱ��ص��� / �ӻ������루2026-11-03 �û��þ��� */
+/* 导入二级菜单：从本地导入 / 从画布导入（2026-11-03 用户裁决） */
 .tl-bin-import-wrap {
   position: relative;
   flex: 0 0 auto;
@@ -1619,8 +1653,4 @@ body.tl-asset-dragging {
 
 .tl-import-menu button:hover {
   background: rgb(35 154 211 / 18%);
-}
-
-.tl-bin-footer {
-  justify-content: flex-end;
 }

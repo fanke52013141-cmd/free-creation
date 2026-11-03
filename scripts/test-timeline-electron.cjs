@@ -9,11 +9,10 @@
 // 做法：启动真实 Electron（隔离 CANVAS_DATA_DIR），把主进程的文件选择对话框
 // 替换成固定返回值，其余全部走真实链路（media IPC、ffprobe 探测、ffmpeg 合成、
 // tldraw 指针交互）。截图落在 qa/timeline-electron-<时间戳>/。
-const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { execFileSync } = require('node:child_process')
+const { execFileSync, spawnSync } = require('node:child_process')
 const { _electron: electron } = require('playwright')
 
 const ROOT = path.resolve(__dirname, '..')
@@ -35,6 +34,17 @@ function ffprobeJson(file) {
     { encoding: 'utf8' }
   )
   return JSON.parse(out)
+}
+
+/** 音轨平均电平（dB）。静音轨约 -91 dB；用来抓「有音轨但整条静音」。 */
+function meanVolumeDb(file) {
+  const res = spawnSync(
+    'ffmpeg',
+    ['-hide_banner', '-nostats', '-i', file, '-map', '0:a:0?', '-af', 'volumedetect', '-f', 'null', '-'],
+    { encoding: 'utf8' }
+  )
+  const match = /mean_volume:\s*(-?[\d.]+) dB/.exec(`${res.stderr ?? ''}`)
+  return match ? Number(match[1]) : null
 }
 
 function makeFixtures(dir) {
@@ -146,7 +156,7 @@ async function main() {
       w: el.offsetWidth,
       h: el.offsetHeight
     }))
-    check('默认尺寸按两条轨道高度（880×210）', size.w === 880 && size.h === 210, `${size.w}×${size.h}`)
+    check('默认尺寸按三条轨道完整可见（880×286）', size.w === 880 && size.h === 286, `${size.w}×${size.h}`)
 
     const resized = await page.evaluate(async () => {
       const el = document.querySelector('.node-card-wrap .node-card')
@@ -174,7 +184,7 @@ async function main() {
     // ── 需求 2/9：增加轨道 ──
     const trackRows = card.locator('.tl-row')
     const beforeTracks = await trackRows.count()
-    check('默认自带两条通用轨道', beforeTracks === 2, `${beforeTracks} 条`)
+    check('默认自带三条通用轨道', beforeTracks === 3, `${beforeTracks} 条`)
     await card.getByRole('button', { name: '轨道', exact: true }).click()
     await page.waitForTimeout(300)
     const afterTracks = await trackRows.count()
@@ -370,14 +380,14 @@ async function main() {
     const beforeArtifacts = await page.locator('.node-card-wrap:has(.type-video-asset)').count()
     await card.locator('.node-run-btn').click()
     await page.waitForFunction(
-      (before) =>
-        document.querySelectorAll('.node-card-wrap .type-video-asset').length > 0 ||
-        document.querySelectorAll('.node-card-wrap').length > before,
+      (before) => document.querySelectorAll('.node-card-wrap:has(.type-video-asset)').length > before,
       beforeArtifacts,
       // 28 秒、9 个片段的合成要重新编码全部素材并混音，给足 7 分钟。
       { timeout: 420_000 }
     ).catch(() => undefined)
-    await page.waitForTimeout(1500)
+    // 成片节点可能在画布右侧视野外：先把节点框进视野再统计，避免 tldraw 裁剪导致漏数。
+    await page.keyboard.press('Shift+Alt+f')
+    await page.waitForTimeout(600)
     const artifactNodes = await page.locator('.node-card-wrap:has(.type-video-asset)').count()
     check('运行后生成独立视频资产节点（emitArtifact）', artifactNodes > beforeArtifacts, `${artifactNodes} 个视频资产节点`)
     await shot('10-composed-artifact')
@@ -402,17 +412,20 @@ async function main() {
         duration: Number(info.format?.duration || 0),
         width: video?.width,
         height: video?.height,
-        hasAudio: Boolean(audio)
+        hasAudio: Boolean(audio),
+        meanDb: meanVolumeDb(file)
       }
     })
     const composed = probed.find((item) => item.duration >= 5)
     check(
-      `成片落盘且时长与轨道线一致（时间线 ${totalCode} / 1920×1080 / 带音轨）`,
+      `成片落盘且时长与轨道线一致（时间线 ${totalCode} / 1920×1080 / 带音轨且不静音）`,
       Boolean(composed) &&
         Math.abs(composed.duration * 1000 - expectedMs) <= 1200 &&
         composed.width === 1920 &&
         composed.height === 1080 &&
-        composed.hasAudio,
+        composed.hasAudio &&
+        composed.meanDb !== null &&
+        composed.meanDb > -50,
       JSON.stringify(composed ?? probed)
     )
 
@@ -422,11 +435,14 @@ async function main() {
       return list.ok ? list.data.find((p) => p.name === name)?.id : null
     }, PROJECT_NAME)
     check('项目已持久化', Boolean(projectId), projectId || '')
-    // ── 引用素材（2026-11-03 用户裁决）：连线只做引用，不自动铺轨；点选/长按拖入轨道 ──
+    // ── 引用素材（2026-11-03 用户裁决）：连线只做引用，不自动铺轨；点选/直接拖入轨道 ──
     await page.getByRole('button', { name: '展开视频创作节点', exact: true }).click()
     await page.getByRole('button', { name: '添加视频素材节点', exact: true }).click()
     await page.waitForTimeout(400)
     await page.keyboard.press('Escape')
+    // 画布可能已经平移过：先把新节点框进视野，避免画布裁剪导致定位不到。
+    await page.keyboard.press('Shift+Alt+f')
+    await page.waitForTimeout(400)
     const sourceWrap = page
       .locator('.node-card-wrap:has(.type-video-asset)')
       .filter({ has: page.getByRole('button', { name: '导入视频', exact: true }) })
@@ -481,20 +497,18 @@ async function main() {
       `${clipsBeforeConnect} → ${await card.locator('.tl-clip').count()}`
     )
 
-    // 点击引用素材：追加到当前轨道
+    // 单击引用素材只选中，不再直接追加（2026-11-03 二次裁决：两处统一为拖拽落轨）
     await card.locator('.tl-ref').first().click()
-    await page.waitForTimeout(900)
+    await page.waitForTimeout(300)
+    const refSelected = await card.locator('.tl-ref.is-selected').count()
     const clipsAfterRefClick = await card.locator('.tl-clip').count()
-    const refToast = await page.evaluate(
-      () => document.querySelector('.toast, .toast-item, [role="status"]')?.textContent?.trim() ?? ''
-    )
     check(
-      '点击引用素材可追加到轨道',
-      clipsAfterRefClick > clipsBeforeConnect,
-      `${clipsBeforeConnect} → ${clipsAfterRefClick} / toast: ${refToast}`
+      '单击引用素材只选中，不直接追加到轨道',
+      refSelected === 1 && clipsAfterRefClick === clipsBeforeConnect,
+      `选中 ${refSelected} / 片段 ${clipsBeforeConnect} → ${clipsAfterRefClick}`
     )
 
-    // 长按引用素材拖到轨道指定位置：先把缩放复位，落到第 1 条轨道靠后的空白处
+    // 直接拖动引用素材到轨道指定位置：先把缩放复位，落到第 1 条轨道靠后的空白处
     const zoomReset = page.locator('.tl-zoom input[type="range"]')
     await zoomReset.focus()
     await zoomReset.press('Home')
@@ -504,7 +518,13 @@ async function main() {
     const refLane = await card.locator('.tl-row').nth(0).boundingBox()
     await page.mouse.move(refBox.x + refBox.width / 2, refBox.y + refBox.height / 2)
     await page.mouse.down()
-    await page.waitForTimeout(320)
+    // 2026-11-03 用户裁决：不再长按等待，按下后移动 4px 即进入拖动。
+    await page.mouse.move(refBox.x + refBox.width / 2 + 8, refBox.y + refBox.height / 2 + 8)
+    await page.waitForTimeout(120)
+    check(
+      '按下即拖动：源素材淡出成虚影（无需长按）',
+      (await card.locator('.tl-ref.is-dragging').count()) === 1
+    )
     const refDropX = refLane.x + 132 + (refLane.width - 132) * 0.85
     const refDropY = refLane.y + refLane.height / 2
     for (let step = 1; step <= 8; step += 1) {
@@ -514,6 +534,16 @@ async function main() {
       )
       await page.waitForTimeout(30)
     }
+    const refGhostBox = await page.locator('.tl-asset-ghost').boundingBox()
+    const refGhostCx = refGhostBox ? refGhostBox.x + refGhostBox.width / 2 : -999
+    const refGhostCy = refGhostBox ? refGhostBox.y + refGhostBox.height / 2 : -999
+    check(
+      '拖动浮层中心与鼠标重合（不再悬在上方）',
+      Boolean(refGhostBox) &&
+        Math.abs(refGhostCx - refDropX) <= 6 &&
+        Math.abs(refGhostCy - refDropY) <= 6,
+      `浮层中心 (${Math.round(refGhostCx)}, ${Math.round(refGhostCy)}) / 鼠标 (${Math.round(refDropX)}, ${Math.round(refDropY)})`
+    )
     await page.mouse.up()
     await page.waitForFunction(
       (before) => document.querySelectorAll('.node-card.type-timeline .tl-clip').length > before,
@@ -521,7 +551,7 @@ async function main() {
       { timeout: 20_000 }
     )
     check(
-      '长按引用素材可拖到轨道指定位置',
+      '按下即拖动引用素材到轨道指定位置',
       true,
       `${clipsBeforeRefDrag} → ${await card.locator('.tl-clip').count()}`
     )
@@ -557,7 +587,50 @@ async function main() {
       await page.locator('.tl-transport-time').innerText()
     )
     check('视频片段显示首帧封面', (await page.locator('.tl-modal .tl-clip-thumb-img').count()) > 0)
-    check('全屏时间轴可拖动分隔条', (await page.locator('.tl-timeline-splitter').count()) === 1)
+    // 默认时间轴区 = 三条轨道高度；分隔条压缩成一条可拖的线（8px 命中区）
+    const paneBox = await page.locator('.tl-timeline-pane').boundingBox()
+    check(
+      '默认时间轴区高度按三条轨道预留',
+      paneBox.height >= 210 && paneBox.height <= 320,
+      `${Math.round(paneBox.height)}px`
+    )
+    const splitterBox = await page.locator('.tl-timeline-splitter').boundingBox()
+    check(
+      '全屏分隔条压缩成一条线（命中区 ≤12px）',
+      splitterBox.height <= 12,
+      `${Math.round(splitterBox.height)}px`
+    )
+    const paneBefore = paneBox.height
+    await page.mouse.move(splitterBox.x + splitterBox.width / 2, splitterBox.y + splitterBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(splitterBox.x + splitterBox.width / 2, splitterBox.y - 90, { steps: 6 })
+    await page.mouse.up()
+    await page.waitForTimeout(350)
+    const paneAfter = (await page.locator('.tl-timeline-pane').boundingBox()).height
+    check(
+      '分隔条拖动可调整时间轴高度',
+      paneAfter > paneBefore + 40,
+      `时间轴 ${Math.round(paneBefore)} → ${Math.round(paneAfter)}px`
+    )
+    // Ctrl+滚轮：细粒度缩放（连续、每档约 1.12 倍）
+    const zoomBefore = await page.evaluate(
+      () => document.querySelector('.tl-modal .tl-clip')?.getBoundingClientRect().width ?? 0
+    )
+    const paneCenter = await page.locator('.tl-timeline-pane').boundingBox()
+    await page.keyboard.down('Control')
+    await page.mouse.move(paneCenter.x + paneCenter.width / 2, paneCenter.y + 60)
+    await page.mouse.wheel(0, -120)
+    await page.mouse.wheel(0, -120)
+    await page.keyboard.up('Control')
+    await page.waitForTimeout(350)
+    const zoomAfter = await page.evaluate(
+      () => document.querySelector('.tl-modal .tl-clip')?.getBoundingClientRect().width ?? 0
+    )
+    check(
+      'Ctrl+滚轮可细粒度缩放时间轴',
+      zoomBefore > 0 && zoomAfter > zoomBefore + 2,
+      `片段宽 ${Math.round(zoomBefore)} → ${Math.round(zoomAfter)}px`
+    )
     check(
       '时间轴工具栏有撤销/重做/左右裁剪/自动吸附',
       (await page.locator('.tl-toolbar .tl-btn').count()) >= 8 &&
@@ -627,6 +700,11 @@ async function main() {
         .sort((a, b) => a.order - b.order)
     )
     const stateIds = await page.locator('.tl-modal .tl-bin').getAttribute('data-selected-ids')
+    check(
+      '素材库选中态与 data-selected-ids 一致',
+      stateIds === selectedOrder.map((item) => item.id).join(','),
+      `data-selected-ids=${stateIds ?? ''}`
+    )
 
     const clipGeometry = async () =>
       page.evaluate(() =>
@@ -638,43 +716,13 @@ async function main() {
           }))
         )
       )
-    const beforeAppendClips = await clipGeometry()
-    const clipsBeforeAppend = beforeAppendClips.length
-    await page.locator('.tl-bin-append').click()
-    await page.waitForFunction(
-      (before) => document.querySelectorAll('.tl-modal .tl-clip').length >= before + 2,
-      clipsBeforeAppend,
-      { timeout: 30_000 }
-    )
-    const beforeKeys = new Set(beforeAppendClips.map((item) => item.key))
-    const newClips = (await clipGeometry())
-      .filter((item) => !beforeKeys.has(item.key))
-      .sort((a, b) => a.row - b.row || Number.parseFloat(a.key.split(':')[1]) - Number.parseFloat(b.key.split(':')[1]))
     check(
-      '加入轨道按选择顺序追加（先选在前）',
-      newClips.length === 2 &&
-        newClips[0].id === selectedOrder[0].id &&
-        newClips[1].id === selectedOrder[1].id,
-      `选择 ${selectedOrder.map((i) => `${i.name}#${i.id}`).join(' → ')} / 新增 ${newClips
-        .map((i) => `${i.id}@${i.key}`)
-        .join(' → ')}`
+      '素材库不再提供「加入轨道」按钮（统一为拖拽落轨）',
+      (await page.locator('.tl-bin-append, .tl-bin-footer').count()) === 0
     )
-    const appended = await page.evaluate(() => {
-      const row = document.querySelectorAll('.tl-modal .tl-row')[0]
-      if (!row) return []
-      return Array.from(row.querySelectorAll('.tl-clip')).map((el) => ({
-        id: el.dataset.mediaId ?? '',
-        name: (el.querySelector('.tl-clip-name') || {}).textContent?.trim() ?? ''
-      }))
-    })
-    const tileList = await page.evaluate(() =>
-      Array.from(document.querySelectorAll('.tl-modal .tl-asset')).map((el) => ({
-        id: el.dataset.mediaId ?? '',
-        name: (el.querySelector('.tl-asset-name') || {}).textContent?.trim() ?? ''
-      }))
-    )
-    // 长按素材拖到空轨道（第 3 条）：按住 300ms 后移动到轨道中部松手
-    const clipsBeforeLongPress = await page.locator('.tl-modal .tl-clip').count()
+    const beforeDragClips = await clipGeometry()
+    const clipsBeforeDragAll = beforeDragClips.length
+    // 拖动多选素材到空轨道（第 3 条）：落点即起点，先选在前
     const tileBox = await tile1.boundingBox()
     const emptyLane = page.locator('.tl-modal .tl-lane').nth(2)
     const laneBox = await emptyLane.boundingBox()
@@ -690,23 +738,129 @@ async function main() {
       )
       await page.waitForTimeout(30)
     }
-    check('长按素材出现拖动浮层', (await page.locator('.tl-asset-ghost').count()) === 1)
+    check('拖动素材出现浮层', (await page.locator('.tl-asset-ghost').count()) === 1)
+    check(
+      '拖动时源磁贴淡出成虚影（多选两个）',
+      (await page.locator('.tl-modal .tl-asset.is-dragging').count()) === 2
+    )
+    const tileGhostBox = await page.locator('.tl-asset-ghost').boundingBox()
+    const tileGhostCx = tileGhostBox ? tileGhostBox.x + tileGhostBox.width / 2 : -999
+    const tileGhostCy = tileGhostBox ? tileGhostBox.y + tileGhostBox.height / 2 : -999
+    check(
+      '素材库浮层中心与鼠标重合',
+      Boolean(tileGhostBox) &&
+        Math.abs(tileGhostCx - dropX) <= 6 &&
+        Math.abs(tileGhostCy - dropY) <= 6,
+      `浮层中心 (${Math.round(tileGhostCx)}, ${Math.round(tileGhostCy)}) / 鼠标 (${Math.round(dropX)}, ${Math.round(dropY)})`
+    )
     await page.mouse.up()
     await page.waitForFunction(
-      (before) => document.querySelectorAll('.tl-modal .tl-clip').length > before,
-      clipsBeforeLongPress,
+      (before) => document.querySelectorAll('.tl-modal .tl-clip').length >= before + 2,
+      clipsBeforeDragAll,
       { timeout: 20_000 }
     )
     check(
-      '长按拖动能把素材放到轨道落点',
+      '拖动能把多选素材一起放到轨道落点',
       true,
-      `${clipsBeforeLongPress} → ${await page.locator('.tl-modal .tl-clip').count()}`
+      `${clipsBeforeDragAll} → ${await page.locator('.tl-modal .tl-clip').count()}`
+    )
+    const beforeKeys = new Set(beforeDragClips.map((item) => item.key))
+    const newClips = (await clipGeometry())
+      .filter((item) => !beforeKeys.has(item.key))
+      .sort((a, b) => a.row - b.row || Number.parseFloat(a.key.split(':')[1]) - Number.parseFloat(b.key.split(':')[1]))
+    check(
+      '落轨顺序与选择顺序一致（先选在前）',
+      newClips.length === 2 &&
+        newClips[0].id === selectedOrder[0].id &&
+        newClips[1].id === selectedOrder[1].id,
+      `选择 ${selectedOrder.map((i) => `${i.name}#${i.id}`).join(' → ')} / 新增 ${newClips
+        .map((i) => `${i.id}@${i.key}`)
+        .join(' → ')}`
+    )
+    check(
+      '落轨后素材库清空选中',
+      (await page.locator('.tl-modal .tl-asset.is-selected').count()) === 0
+    )
+
+    // 拖到已被占用的位置：自动顺延到后方空档，不再报「该位置已有片段」（2026-11-03 用户反馈）
+    const occupiedRow = page.locator('.tl-modal .tl-row').nth(2)
+    const occupiedBox = await occupiedRow.locator('.tl-clip').first().boundingBox()
+    const clipsBeforeShift = await page.locator('.tl-modal .tl-clip').count()
+    const tile2Box = await page.locator('.tl-modal .tl-asset').nth(1).boundingBox()
+    await page.mouse.move(tile2Box.x + tile2Box.width / 2, tile2Box.y + tile2Box.height / 2)
+    await page.mouse.down()
+    await page.waitForTimeout(320)
+    for (let step = 1; step <= 8; step += 1) {
+      await page.mouse.move(
+        tile2Box.x + tile2Box.width / 2 + ((occupiedBox.x + occupiedBox.width / 2 - tile2Box.x - tile2Box.width / 2) * step) / 8,
+        tile2Box.y + tile2Box.height / 2 + ((occupiedBox.y + occupiedBox.height / 2 - tile2Box.y - tile2Box.height / 2) * step) / 8
+      )
+      await page.waitForTimeout(30)
+    }
+    await page.mouse.up()
+    await page.waitForFunction(
+      (before) => document.querySelectorAll('.tl-modal .tl-clip').length > before,
+      clipsBeforeShift,
+      { timeout: 20_000 }
+    )
+    const shiftToast = await page.evaluate(
+      () => document.querySelector('.toast, .toast-item, [role="status"]')?.textContent?.trim() ?? ''
+    )
+    check(
+      '拖到已占用位置自动顺延落轨（不报「已有片段」）',
+      !shiftToast.includes('已有片段'),
+      `片段 ${clipsBeforeShift} → ${await page.locator('.tl-modal .tl-clip').count()} / toast: ${shiftToast}`
+    )
+
+    // 吸附开启：拖入的新片段自动贴到已有片段边缘（首尾相连），不会留缝
+    const magnetRowIndex = 2
+    const magnetEdges = await page.evaluate((rowIndex) => {
+      const row = document.querySelectorAll('.tl-modal .tl-row')[rowIndex]
+      if (!row) return { lefts: [], edges: [] }
+      const rects = Array.from(row.querySelectorAll('.tl-clip')).map((el) => el.getBoundingClientRect())
+      return { lefts: rects.map((r) => r.left), edges: rects.flatMap((r) => [r.left, r.right]) }
+    }, magnetRowIndex)
+    const magnetTileBox = await page.locator('.tl-modal .tl-asset').nth(0).boundingBox()
+    const magnetRowBox = await page.locator('.tl-modal .tl-row').nth(magnetRowIndex).boundingBox()
+    const clipsBeforeMagnet = await page.locator('.tl-modal .tl-clip').count()
+    await page.mouse.move(magnetTileBox.x + magnetTileBox.width / 2, magnetTileBox.y + magnetTileBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(magnetTileBox.x + magnetTileBox.width / 2 + 10, magnetTileBox.y + magnetTileBox.height / 2 + 10)
+    const magnetX = magnetRowBox.x + magnetRowBox.width * 0.93
+    const magnetY = magnetRowBox.y + magnetRowBox.height / 2
+    for (let step = 1; step <= 8; step += 1) {
+      await page.mouse.move(
+        magnetTileBox.x + magnetTileBox.width / 2 + ((magnetX - magnetTileBox.x - magnetTileBox.width / 2) * step) / 8,
+        magnetTileBox.y + magnetTileBox.height / 2 + ((magnetY - magnetTileBox.y - magnetTileBox.height / 2) * step) / 8
+      )
+      await page.waitForTimeout(30)
+    }
+    await page.mouse.up()
+    await page.waitForFunction(
+      (before) => document.querySelectorAll('.tl-modal .tl-clip').length > before,
+      clipsBeforeMagnet,
+      { timeout: 20_000 }
+    )
+    const magnetResult = await page.evaluate(({ rowIndex, previousLefts, previousEdges }) => {
+      const row = document.querySelectorAll('.tl-modal .tl-row')[rowIndex]
+      const lefts = Array.from(row.querySelectorAll('.tl-clip')).map((el) => el.getBoundingClientRect().left)
+      const fresh = lefts.find((left) => !previousLefts.some((old) => Math.abs(old - left) <= 1)) ?? null
+      const attached = fresh !== null && previousEdges.some((edge) => Math.abs(edge - fresh) <= 2)
+      return { fresh, attached }
+    }, { rowIndex: magnetRowIndex, previousLefts: magnetEdges.lefts, previousEdges: magnetEdges.edges })
+    check(
+      '吸附开启时拖入片段自动首尾相连（贴已有边缘）',
+      magnetResult.attached,
+      `新片段左缘 ${magnetResult.fresh === null ? '-' : Math.round(magnetResult.fresh)}`
     )
 
     // 自动吸附：把最后一段拖到前一段右边缘附近（+6px），应精确贴合
+    // 多选落轨落在第 3 条轨道，吸附验证也在这条轨道上做（第 1 条轨道已有其他片段）。
+    const snapRowIndex = 2
+    const snapRow = page.locator('.tl-modal .tl-row').nth(snapRowIndex)
     const geom = async () =>
-      page.evaluate(() => {
-        const row = document.querySelectorAll('.tl-modal .tl-row')[0]
+      page.evaluate((rowIndex) => {
+        const row = document.querySelectorAll('.tl-modal .tl-row')[rowIndex]
         if (!row) return []
         return Array.from(row.querySelectorAll('.tl-clip'))
           .map((el) => {
@@ -714,16 +868,17 @@ async function main() {
             return { left: Math.round(rect.left), right: Math.round(rect.right) }
           })
           .sort((a, b) => a.left - b.left)
-      })
+      }, snapRowIndex)
     const beforeSnap = await geom()
     const last = beforeSnap[beforeSnap.length - 1]
     const prev = beforeSnap[beforeSnap.length - 2]
     if (last && prev) {
       const shiftPx = prev.right + 6 - last.left
-      await page.mouse.move(last.left + 6, (await page.locator('.tl-modal .tl-row').first().boundingBox()).y + 20)
+      const rowY = (await snapRow.boundingBox()).y + 20
+      await page.mouse.move(last.left + 6, rowY)
       await page.mouse.down()
-      await page.mouse.move(last.left + 6 + shiftPx / 2, (await page.locator('.tl-modal .tl-row').first().boundingBox()).y + 20)
-      await page.mouse.move(last.left + 6 + shiftPx, (await page.locator('.tl-modal .tl-row').first().boundingBox()).y + 20)
+      await page.mouse.move(last.left + 6 + shiftPx / 2, rowY)
+      await page.mouse.move(last.left + 6 + shiftPx, rowY)
       await page.mouse.up()
       await page.waitForTimeout(300)
       const afterSnap = await geom()

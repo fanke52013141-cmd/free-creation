@@ -3,11 +3,13 @@
 // 视觉规范来自 Stitch「Calibrated Studio Workspace」：画布 #0E1116 / 面板 #191D24 /
 // 描边 rgb(255 255 255 / 7%) / 强调 #239AD3 / 8px 网格 / 面板 12px、片段 4px 圆角。
 //
-// 交互要点（2026-11-03 用户裁决）：
-// - 素材库支持多选（Ctrl/⌘+点击、Shift+点击范围），**先选中的排前面**，按顺序落轨；
-// - 素材长按（或直接拖）到轨道上可按落点插入；长按 220ms 起拖，带浮层预览；
+// 交互要点（2026-11-03 用户裁决，同日二次裁决统一为拖拽落轨）：
+// - 素材库支持多选（Ctrl/⌘+点击、Shift+点击范围），**先选中的排前面**；
+// - 单击只选中，**不直接落轨**：按住直接拖到目标轨道，按落点插入，带浮层预览；
+// - 已移除「加入轨道」按钮与双击追加，引用素材条使用同一套手势；
 // - 预览支持播放/暂停、比例切换、音量、全屏播放；导出成片走节点运行链路。
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { stopEventPropagation } from 'tldraw'
 
 import {
@@ -19,6 +21,7 @@ import {
 } from '@shared/timeline'
 import { Icon } from '../../../components/Icon'
 import { mediaUrl } from '../../registry'
+import { toast } from '../../../stores/toast'
 import { clipCovers, type TimelineEditorAsset } from './timeline-editor-shared'
 import { VideoThumb } from './media-thumbnail'
 
@@ -41,9 +44,6 @@ const ASPECTS: ReadonlyArray<{ id: string; label: string; ratio: string }> = [
   { id: '1:1', label: '1:1', ratio: '1 / 1' },
   { id: '4:3', label: '4:3', ratio: '4 / 3' }
 ]
-
-/** 长按起拖的判定时间（毫秒）。 */
-const LONG_PRESS_MS = 220
 
 /** 播放条时间码：HH:MM:SS（与剪映一致）。 */
 function formatClock(ms: number): string {
@@ -111,25 +111,21 @@ export function TimelineEditorStage({
   const [volume, setVolume] = useState(80)
   const [layout, setLayout] = useState<'left' | 'right' | 'hidden'>('left')
   const [importMenuOpen, setImportMenuOpen] = useState(false)
-  const [ghost, setGhost] = useState<{ x: number; y: number; asset: TimelineEditorAsset } | null>(
-    null
-  )
+  const [draggingIds, setDraggingIds] = useState<string[]>([])
+  const [ghost, setGhost] = useState<{
+    x: number
+    y: number
+    asset: TimelineEditorAsset
+    count: number
+  } | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const stageRef = useRef<HTMLDivElement | null>(null)
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const ghostRef = useRef<{ x: number; y: number; assets: TimelineEditorAsset[] } | null>(null)
   const playStartedAtRef = useRef(0)
   const playBaseRef = useRef(0)
 
   const importedAssets = references
   const visible = filter === 'all' ? importedAssets : importedAssets.filter((a) => a.kind === filter)
-  const selectedAssets = useMemo(
-    () =>
-      selectedIds
-        .map((id) => importedAssets.find((asset) => asset.mediaId === id))
-        .filter((asset): asset is TimelineEditorAsset => Boolean(asset)),
-    [selectedIds, importedAssets]
-  )
   const totalMs = timelineDurationMs(data)
   const clip = visualClipAtPlayhead(data, playheadMs)
   const previewUrl = clip?.mediaPath ? mediaUrl(clip.mediaPath) : null
@@ -217,54 +213,68 @@ export function TimelineEditorStage({
     x: number,
     y: number
   ): { trackId: string; startMs: number } | null => {
-    const element = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-timeline-lane]')
+    const scope = document.querySelector<HTMLElement>('.tl-modal')
+    const lanes = Array.from(
+      (scope ?? document).querySelectorAll<HTMLElement>('[data-timeline-lane]')
+    )
+    let element = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-timeline-lane]')
+    if (element && scope && !scope.contains(element)) element = null
+    // 兜底：落点偏到刻度尺/行间隙时取纵向最近的一条轨道，避免「拖到空白处没反应」。
+    if (!element && lanes.length > 0) {
+      element = lanes.reduce((best, lane) => {
+        const rect = lane.getBoundingClientRect()
+        const distance = y < rect.top ? rect.top - y : y > rect.bottom ? y - rect.bottom : 0
+        const bestRect = best.getBoundingClientRect()
+        const bestDistance =
+          y < bestRect.top ? bestRect.top - y : y > bestRect.bottom ? y - bestRect.bottom : 0
+        return distance < bestDistance ? lane : best
+      })
+    }
     if (!element) return null
     const trackId = element.dataset.timelineLane ?? ''
     const pps = Number(element.dataset.timelinePps ?? '0')
     if (!trackId || !pps) return null
     const rect = element.getBoundingClientRect()
-    return { trackId, startMs: Math.max(0, Math.round(((x - rect.left) / pps) * 1000)) }
+    const clampedX = Math.min(Math.max(x, rect.left), Math.max(rect.left, rect.right - 1))
+    return { trackId, startMs: Math.max(0, Math.round(((clampedX - rect.left) / pps) * 1000)) }
   }
 
-  const beginLongPressDrag = (event: React.PointerEvent, asset: TimelineEditorAsset): void => {
+  // 2026-11-03 用户裁决：不再长按等待——按下后直接拖动即可，单击（位移 ≤4px）仍是选中。
+  const beginAssetDrag = (event: React.PointerEvent, asset: TimelineEditorAsset): void => {
     if (event.button !== 0) return
     const assetsToDrop = assetsToDrag(asset)
     const origin = { x: event.clientX, y: event.clientY }
     ghostRef.current = { ...origin, assets: assetsToDrop }
-    longPressTimerRef.current = setTimeout(() => {
-      setGhost({ ...origin, asset })
-      document.body.classList.add('tl-asset-dragging')
-    }, LONG_PRESS_MS)
     const onMove = (moveEvent: PointerEvent): void => {
-      const moved =
-        Math.abs(moveEvent.clientX - origin.x) + Math.abs(moveEvent.clientY - origin.y) > 6
       if (!ghostRef.current) return
-      ghostRef.current = { ...ghostRef.current, x: moveEvent.clientX, y: moveEvent.clientY }
+      const moved =
+        Math.abs(moveEvent.clientX - origin.x) + Math.abs(moveEvent.clientY - origin.y) > 4
       const started = document.body.classList.contains('tl-asset-dragging')
-      if (longPressTimerRef.current) {
-        // 未到长按时长就移动：视为滚动/点选，取消起拖。
-        if (moved && !started) {
-          clearTimeout(longPressTimerRef.current)
-          longPressTimerRef.current = null
-          ghostRef.current = null
-          cleanup()
-          return
+      if (!started) {
+        if (!moved) return
+        if (!selectedIds.includes(asset.mediaId)) {
+          setSelectedIds(assetsToDrop.map((item) => item.mediaId))
         }
+        setGhost({ x: moveEvent.clientX, y: moveEvent.clientY, asset, count: assetsToDrop.length })
+        setDraggingIds(assetsToDrop.map((item) => item.mediaId))
+        document.body.classList.add('tl-asset-dragging')
       }
       setGhost((prev) => (prev ? { ...prev, x: moveEvent.clientX, y: moveEvent.clientY } : prev))
     }
     const onUp = (upEvent: PointerEvent): void => {
-      if (longPressTimerRef.current) {
-        clearTimeout(longPressTimerRef.current)
-        longPressTimerRef.current = null
-      }
       const dropping = ghostRef.current && document.body.classList.contains('tl-asset-dragging')
       if (dropping) {
         const target = laneFromPoint(upEvent.clientX, upEvent.clientY)
-        if (target) onAddAssets(ghostRef.current!.assets, target.trackId, target.startMs)
+        if (target) {
+          onAddAssets(ghostRef.current!.assets, target.trackId, target.startMs)
+          setSelectedIds([])
+        } else {
+          toast('没放到轨道上：请把素材拖到下方时间轴的空白处')
+        }
       }
       ghostRef.current = null
       setGhost(null)
+      setDraggingIds([])
       document.body.classList.remove('tl-asset-dragging')
       cleanup()
     }
@@ -389,7 +399,7 @@ export function TimelineEditorStage({
           <div className="tl-bin-grid">
             {visible.length === 0 ? (
               <p className="tl-bin-empty">
-                还没有引用素材：点「导入」从本地或画布添加
+                还没有引用素材：先点「导入」添加，再直接拖到轨道
               </p>
             ) : (
               visible.map((asset) => {
@@ -398,21 +408,16 @@ export function TimelineEditorStage({
                   <button
                     key={`${asset.mediaId}-${asset.mediaPath}`}
                     type="button"
-                    className={`tl-asset is-${asset.kind}${order >= 0 ? ' is-selected' : ''}`}
+                    className={`tl-asset is-${asset.kind}${order >= 0 ? ' is-selected' : ''}${draggingIds.includes(asset.mediaId) ? ' is-dragging' : ''}`}
                     data-media-id={asset.mediaId}
                     data-node-pointer="control"
-                    title={`${mediaTitles[asset.mediaId] ?? asset.name} · ${KIND_LABEL[asset.kind]}（点击追加；Ctrl/⌘ 多选，长按拖到轨道）`}
                     onPointerDown={(event) => {
                       stopEventPropagation(event)
-                      beginLongPressDrag(event, asset)
+                      beginAssetDrag(event, asset)
                     }}
                     onClick={(event) => {
                       event.stopPropagation()
                       toggleSelect(event, asset.mediaId)
-                    }}
-                    onDoubleClick={(event) => {
-                      event.stopPropagation()
-                      onAddAssets([asset])
                     }}
                   >
                     {order >= 0 ? <span className="tl-asset-order">{order + 1}</span> : null}
@@ -434,20 +439,6 @@ export function TimelineEditorStage({
                 )
               })
             )}
-          </div>
-          <div className="tl-bin-footer">
-            <button
-              type="button"
-              className="tl-bin-append"
-              data-node-pointer="control"
-              disabled={selectedAssets.length === 0}
-              onClick={() => {
-                onAddAssets(selectedAssets.length > 0 ? selectedAssets : [])
-                setSelectedIds([])
-              }}
-            >
-              加入轨道{selectedAssets.length > 0 ? `（${selectedAssets.length}）` : ''}
-            </button>
           </div>
         </aside>
 
@@ -476,7 +467,9 @@ export function TimelineEditorStage({
               )}
             </div>
             <span className="tl-preview-badge">{resolution}</span>
-            <div className="tl-transport">
+          </div>
+          {/* 播放条独立占位在视频下方（2026-11-03 用户裁决：不要浮在画面上挡住视频） */}
+          <div className="tl-transport">
               <button
                 type="button"
                 className="tl-transport-play"
@@ -540,24 +533,34 @@ export function TimelineEditorStage({
               >
                 <Icon name="fullscreen" size={13} />
               </button>
-            </div>
           </div>
         </section>
       </div>
 
-      {ghost ? (
-        <div
-          className="tl-asset-ghost"
-          style={{ left: ghost.x + 14, top: ghost.y + 12 }}
-          aria-hidden="true"
-        >
-          <Icon
-            name={ghost.asset.kind === 'video' ? 'video' : ghost.asset.kind === 'audio' ? 'audio' : 'image'}
-            size={14}
-          />
-          {ghost.asset.name}
-        </div>
-      ) : null}
+      {ghost
+        ? createPortal(
+            <div
+              className="tl-asset-ghost"
+              style={{ left: ghost.x, top: ghost.y }}
+              aria-hidden="true"
+            >
+              <span className="tl-asset-ghost-thumb">
+                {ghost.asset.kind === 'image' ? (
+                  <img src={mediaUrl(ghost.asset.mediaPath)} alt="" draggable={false} />
+                ) : ghost.asset.kind === 'video' ? (
+                  <VideoThumb path={ghost.asset.mediaPath} />
+                ) : (
+                  <Icon name="audio" size={16} />
+                )}
+              </span>
+              <span className="tl-asset-ghost-name">{ghost.asset.name}</span>
+              {ghost.count > 1 ? (
+                <span className="tl-asset-ghost-count">{ghost.count}</span>
+              ) : null}
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   )
 }
