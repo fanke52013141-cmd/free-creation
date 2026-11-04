@@ -124,16 +124,16 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
     return (
       <div className="agent-flow-body">
         <NodeIdentity>
-          <div className="agent-flow-summary">
+          {instance && <div className="agent-flow-summary">
             当前阶段：{currentState}
             {instance ? `（修订 ${instance.revision}）` : '（未启动）'}
-          </div>
+          </div>}
           {pendingSubmission ? (
             <p className="agent-flow-pending" role="status">
               已提交事件「{pendingSubmission.event}」（基于修订 {pendingSubmission.expectedRevision}
               ），运行节点后生效
             </p>
-          ) : (
+          ) : instance ? (
             <p className="agent-flow-pending">
               {instance
                 ? legalEvents.length > 0
@@ -141,8 +141,8 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
                   : '当前阶段没有声明的出边事件，可在设置中添加转换'
                 : '运行节点即按初始阶段启动状态机任务'}
             </p>
-          )}
-          {issue && (
+          ) : null}
+          {instance && issue && (
             <p className="agent-flow-pending" role="status">
               {issue}
             </p>

@@ -116,7 +116,7 @@ interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
 const PATHS: Record<IconName, React.ReactNode> = {
   text: (
     <>
-      <path d="M3 6h18M3 12h18M3 18h18" />
+      <path d="M4 5h16M12 5v14M8 19h8" />
     </>
   ),
   image: (
@@ -137,11 +137,9 @@ const PATHS: Record<IconName, React.ReactNode> = {
   // 与 grid 的四个独立方块区分开。
   'image-split': (
     <>
-      <rect x="3" y="3" width="7" height="7" rx="1.5" />
-      <rect x="3" y="13.5" width="7" height="7" rx="1.5" />
-      <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
-      <rect x="15" y="1.8" width="7" height="7" rx="1.5" />
-      <line x1="12" y1="12" x2="14.5" y2="9.5" strokeDasharray="1.5 1.5" strokeWidth="1.3" />
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M12 3v18M3 12h18" strokeDasharray="2 2" />
+      <path d="m5 9 2-2 3 3M15 18l2-2 2 2" />
     </>
   ),
   // P图：相框 + 斜向画笔，区别于“生图”的图+星，也区别于动作铅笔 edit。
@@ -174,10 +172,10 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   'image-gen': (
     <>
-      <rect x="3" y="5" width="16" height="13" rx="2" />
-      <circle cx="7.5" cy="9" r="1.3" />
-      <path d="M6 16l3.5-3.5L12 15l2.5-2.5L19 16" />
-      <path d="M18.5 2.5l.8 1.8 1.8.8-1.8.8-.8 1.8-.8-1.8-1.8-.8 1.8-.8.8-1.8Z" />
+      <rect x="2.5" y="8" width="14" height="12" rx="2" />
+      <circle cx="6.5" cy="11.5" r="1.2" />
+      <path d="m4.5 18 3-3 2.5 2 2.5-2.5 4 3.5" />
+      <path d="M20 2l.7 1.6 1.6.7-1.6.7L20 6.6 19.3 5l-1.6-.7 1.6-.7L20 2Z" strokeWidth="1.4" />
     </>
   ),
   // 网址节点：链接卡片（对象），不再用外链箭头（动作）。
@@ -194,8 +192,9 @@ const PATHS: Record<IconName, React.ReactNode> = {
   // 2026-11-03 用户裁决：去掉下方箭头，视频框按高度撑满（18×17）+ 居中播放三角。
   video: (
     <>
-      <rect x="3" y="3.5" width="18" height="17" rx="2.5" />
-      <path d="M10 8.25 16 12l-6 3.75z" />
+      <rect x="2.5" y="8" width="14" height="12" rx="2" />
+      <path d="m8 11 4.5 3L8 17z" />
+      <path d="M20 2l.7 1.6 1.6.7-1.6.7L20 6.6 19.3 5l-1.6-.7 1.6-.7L20 2Z" strokeWidth="1.4" />
     </>
   ),
   // 2026-11-03 用户裁决：轨道线用铁轨表达——两条钢轨 + 枕木，不再画时间尺/播放头。
@@ -223,7 +222,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <rect x="3" y="6.5" width="18" height="11" rx="1.5" />
       <path d="M6 6.5v2M9 6.5v2M15 6.5v2M18 6.5v2M6 15.5v2M9 15.5v2M15 15.5v2M18 15.5v2" />
-      <path d="M12 3v18" />
+      <path d="M12 3v18" strokeDasharray="2 2" />
     </>
   ),
   // 视频截取：片段块 + 左右 [ ] 修剪把手，表达入点/出点，不再复用播放卡片。
@@ -231,7 +230,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <rect x="3" y="6.5" width="18" height="11" rx="1.5" />
       <path d="M6 6.5v2M9 6.5v2M15 6.5v2M18 6.5v2M6 15.5v2M9 15.5v2M15 15.5v2M18 15.5v2" />
-      <path d="M8 3v18M16 3v18" />
+      <path d="M8 3v18M16 3v18" strokeDasharray="2 2" />
     </>
   ),
   // 深度视频：两帧沿 Z 轴错位叠放 + 向下的深度箭头，表达逐帧深度。
@@ -282,11 +281,11 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="m15 13 3 3-3 3" />
     </>
   ),
-  // 数据处理：左侧三行输入 → 中间变换块 → 右侧两行输出，表达一次取数/转换/输出。
+  // 数据处理：0 → 1。
   processor: (
     <>
-      <ellipse cx="7.5" cy="12" rx="3.5" ry="6" />
-      <path d="M16 7v10M16 7l3-1.2M14.5 17h4.5" />
+      <rect x="2" y="7" width="5" height="10" rx="2.5" />
+      <path d="M9 12h5m-2-2 2 2-2 2M18 9l2-2v10M18 17h4" />
     </>
   ),
   json: (
@@ -298,12 +297,9 @@ const PATHS: Record<IconName, React.ReactNode> = {
   // 结构数据：大括号内是带缩进的字段树（父行 + 两条子行），和 json 的平铺字段区分。
   structured: (
     <>
-      <path d="M3 6a1 1 0 0 1 1-1h3l1.2 1.5H11a1 1 0 0 1 1 1V10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6Z" />
-      <path d="M14 7h7" />
-      <path d="M5 11v8.5M5 14.1h2M5 18.9h2" />
-      <rect x="7" y="12.8" width="2.6" height="2.6" rx="0.6" />
-      <rect x="7" y="17.6" width="2.6" height="2.6" rx="0.6" />
-      <path d="M12 14.1h8M12 18.9h6" />
+      <path d="M6 3H3v18h3M18 3h3v18h-3" />
+      <rect x="8" y="8" width="3" height="8" rx="1.5" />
+      <path d="m14 10 2-2v8M14 16h4" />
     </>
   ),
   code: (
@@ -313,8 +309,8 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   storyboard: (
     <>
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <path d="M3 9h18M3 15h18M9 3v18" />
+      <rect x="3" y="9" width="18" height="11" rx="1.5" />
+      <path d="M3 9V6l16-4 1 4L3 10M7 5l3 3M13 3.5l3 3" />
     </>
   ),
   // 3D 预演台：摄影机 + 透视地面网格 = 机位与空间，不再和深度视频共用菱形叠层。
@@ -725,8 +721,8 @@ const PATHS: Record<IconName, React.ReactNode> = {
   // 语音合成：左侧文本行 → 变换箭头 → 右侧声波，表达“文字变成声音”。
   speech: (
     <>
-      <path d="M3 9v6M6 7v10M9 9v6M12 7v10M15 9v6" />
-      <path d="M18.5 3l.8 1.8 1.8.8-1.8.8-.8 1.8-.8-1.8-1.8-.8 1.8-.8.8-1.8Z" />
+      <path d="M3 11v4M6 8v10M9 6v14M12 8v10M15 11v4" />
+      <path d="M20 2l.7 1.6 1.6.7-1.6.7L20 6.6 19.3 5l-1.6-.7 1.6-.7L20 2Z" strokeWidth="1.4" />
     </>
   ),
   // 语音克隆：两个并排人形轮廓 = 双胞胎，右侧三条声波柱 = 复刻后的声音
@@ -745,6 +741,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <path d="M3 9v6M6 7v10M9 9v6M12 7v10" />
       <path d="m15 19.5 6-6-2-2-6 6-1 3 3-1Z" />
+      <path d="M20 2l.7 1.6 1.6.7-1.6.7L20 6.6 19.3 5l-1.6-.7 1.6-.7L20 2Z" strokeWidth="1.4" />
     </>
   ),
   // 人声分离（退役）：左侧短声波柱向右分叉为两支
@@ -773,7 +770,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
   // AI 处理：魔杖 + 大小两颗四角星 = 对输入做一次模型处理
   'ai-process': (
     <>
-      <path d="M4 20 14.6 8.9" />
+      <path d="M4 20 13 10.5" />
       <path d="M17.4 4.4 18.14 6.06 19.8 6.8 18.14 7.54 17.4 9.2 16.66 7.54 15 6.8 16.66 6.06Z" />
       <path d="M19.2 11.9 19.66 12.94 20.7 13.4 19.66 13.86 19.2 14.9 18.74 13.86 17.7 13.4 18.74 12.94Z" />
     </>
@@ -788,12 +785,10 @@ const PATHS: Record<IconName, React.ReactNode> = {
   // 状态机：两个状态圆 + 带箭头的迁移曲线 = 状态与迁移，不是矩形流程图
   'state-machine': (
     <>
-      <path d="M11 6.5h10M12 12h9M10 17.5h11" />
-      <rect x="2" y="4" width="5" height="5" rx="1" />
-      <path d="m3.2 6.5 1.3 1.3 2.2-2.4" />
-      <rect x="2" y="10.5" width="5" height="5" rx="1" />
-      <path d="m3.2 13 1.3 1.3 2.2-2.4" />
-      <rect x="2" y="17" width="5" height="5" rx="1" />
+      <circle cx="5" cy="12" r="3" />
+      <circle cx="19" cy="6" r="3" />
+      <circle cx="19" cy="18" r="3" />
+      <path d="M8 11 15 7M8 13l7 4M12.5 6.7l2.5.3-.6 2.4M12.5 17.3l2.5-.3-.6-2.4" />
     </>
   ),
   // 循环：三条递减横线 + 回绕箭头

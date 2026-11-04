@@ -56,6 +56,20 @@
   flex: 1 1 auto;
   min-height: 96px;
 }
+.node-card.type-ai-review .node-standard-scroll,
+.node-card.type-ai-review .node-standard-scroll > .node-body,
+.node-card.type-ai-review .node-standard-scroll > .node-body > .node-body-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+}
+.node-card.type-ai-review .node-standard-shell .node-body-content > .agent-flow-body,
+.node-card.type-ai-review .agent-flow-text,
+.node-card.type-ai-review .agent-flow-text textarea {
+  flex: 1 1 auto;
+  min-height: 0;
+}
 .agent-flow-settings textarea {
   min-height: 72px;
   resize: vertical;

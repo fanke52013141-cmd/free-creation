@@ -854,3 +854,18 @@
 .node-card .node-body .agent-flow-text .node-textarea {
   border-radius: 8px;
 }
+
+/* Identity stays centered while its explanatory text appears below. */
+.node-card.type-video .node-standard-identity:has(> .gen-empty-model-hint) .node-standard-identity-icon {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + (var(--node-standard-action-height) - var(--node-standard-padding)) / 2);
+  transform: translate(-50%, -50%);
+}
+.node-card.type-video .node-standard-identity:has(> .gen-empty-model-hint) > .gen-empty-model-hint {
+  position: absolute;
+  top: calc(50% + (var(--node-standard-action-height) - var(--node-standard-padding)) / 2 + 44px);
+  left: 12px;
+  right: 12px;
+  text-align: center;
+}

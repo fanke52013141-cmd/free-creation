@@ -176,7 +176,7 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
         </div>
       )}
       <div className="structured-footer">
-        <span>{option.hint}</span>
+        {option.hint !== '任意 JSON 数据' && <span>{option.hint}</span>}
         <NodePrimaryButton
           className="btn-ghost small"
           onPointerDown={(event) => stopEventPropagation(event)}

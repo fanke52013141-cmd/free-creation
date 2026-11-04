@@ -59,9 +59,6 @@ export function WebsiteBody({ shape }: NodeBodyProps): React.JSX.Element {
         window.open(link.url, '_blank', 'noreferrer')
       }}
     >
-      <span className="website-node-icon">
-        <Icon name="external" size={24} />
-      </span>
       <strong>{link.name}</strong>
       <span className="website-node-url">{link.url}</span>
       {/* 与文件节点「导入文件」同一套按钮材质：btn-ghost 白字描边，图标在左。
