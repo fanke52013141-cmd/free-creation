@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { GenerationLoadingOverlay } from './GenerationLoadingOverlay'
 
 type TimelineEntry = import('@shared/observability').DiagnosticsEvent
 
@@ -46,7 +47,7 @@ export function RunTimeline({ traceId }: { traceId: string }): React.JSX.Element
   if (current === null) {
     return (
       <div className="run-timeline">
-        <small>读取诊断事件…</small>
+        <GenerationLoadingOverlay title="正在读取诊断事件" compact />
       </div>
     )
   }

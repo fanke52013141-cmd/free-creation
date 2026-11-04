@@ -8,6 +8,7 @@ import { ProjectCreateDialog } from '../components/ProjectCreateDialog'
 import { ResourceLibraryPage } from '../library/ResourceLibraryPage'
 import freeCreationLogo from '../assets/free-creation-logo.png'
 import './project-list-page.css'
+import { GenerationLoadingOverlay } from '../canvas/GenerationLoadingOverlay'
 
 function formatDate(ts: number): string {
   const date = new Date(ts)
@@ -278,7 +279,7 @@ export function ProjectListPage(): React.JSX.Element {
 
         <main className="project-home-workspace">
           <div className="project-home-grid">
-            {loading && <div className="project-home-empty">加载中…</div>}
+            {loading && <GenerationLoadingOverlay title="正在加载项目" />}
             {!loading && projects.length === 0 && !creating && (
               <div className="project-home-empty">还没有项目，点击右上角新建一个开始创作</div>
             )}

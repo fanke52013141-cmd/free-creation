@@ -1,4 +1,5 @@
 import { Icon } from '../components/Icon'
+import './generation-loading-field.css'
 
 interface GenerationLoadingOverlayProps {
   title: string
@@ -6,6 +7,7 @@ interface GenerationLoadingOverlayProps {
   progress?: number
   remainingMs?: number
   waiting?: boolean
+  compact?: boolean
 }
 
 function formatRemainingTime(milliseconds: number): string {
@@ -22,7 +24,8 @@ export function GenerationLoadingOverlay({
   description,
   progress,
   remainingMs,
-  waiting = false
+  waiting = false,
+  compact = false
 }: GenerationLoadingOverlayProps): React.JSX.Element {
   const normalizedProgress = progress === undefined ? undefined : Math.max(0, Math.min(99, Math.floor(progress)))
   const estimateLabel = waiting
@@ -32,14 +35,8 @@ export function GenerationLoadingOverlay({
       : remainingMs === undefined ? '' : formatRemainingTime(remainingMs)
 
   return (
-    <div className="generation-loading-card" role="status" aria-live="polite">
-      <div className="generation-loading-planet" aria-hidden="true">
-        <span className="generation-loading-glow" />
-        <span className="generation-loading-orbit generation-loading-orbit-back" />
-        <span className="generation-loading-satellite-orbit"><i /></span>
-        <span className="generation-loading-planet-core"><i /></span>
-        <span className="generation-loading-orbit generation-loading-orbit-front" />
-      </div>
+    <div className={compact ? "generation-loading-card generation-loading-card--compact" : "generation-loading-card"} role="status" aria-live="polite">
+      <div className="generation-loading-field" aria-hidden="true" />
       <div className="generation-loading-copy">
         <strong>{waiting ? '等待执行' : title}</strong>
         {description && <small>{description}</small>}
@@ -57,7 +54,7 @@ export function GenerationLoadingOverlay({
             </span>
           </span>
           <div className="generation-loading-meta">
-            <span>生成进度 <b>{normalizedProgress}%</b></span>
+            <span>预计进度 <b>{normalizedProgress}%</b></span>
             {remainingMs !== undefined && <span className="generation-loading-eta">
               <Icon name="reset" size={13} />
               <span>预估剩余</span>

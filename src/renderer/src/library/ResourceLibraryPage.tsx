@@ -1,3 +1,4 @@
+import { GenerationLoadingOverlay } from '../canvas/GenerationLoadingOverlay'
 import { useResourceInsertRequest } from './insertRequestStore'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LibraryPreset, LibraryResourceDetail, LibraryResourceSummary, LibraryBoard, LibraryBoardItem, CreateLibraryResourceInput, PublishLibraryRevisionInput } from '@shared/library/types'
@@ -503,7 +504,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
               <button className="library-back" onClick={() => setSelectedId(null)}>← 返回资源</button>
               <button className="library-icon-button" aria-label="关闭详情" onClick={() => setSelectedId(null)}><Icon name="close" size={17} /></button>
             </header>
-            {detailLoading || !detail ? <div className="library-detail-loading">正在读取资源…</div> : (
+            {detailLoading || !detail ? <GenerationLoadingOverlay title="正在读取资源" compact /> : (
               <>
                 <div className="library-detail-scroll">
                   <div className="library-detail-title"><span className="library-resource-type">{typeName(detail.formPreset, detail.category?.name)}</span><h2>{detail.selectedTitle}</h2><p>{detail.selectedDescription || '暂无说明'}</p><div className="library-detail-tags">{detail.tags.map((tag) => <span key={tag}>{tag}</span>)}</div></div>

@@ -76,7 +76,7 @@ export function estimateGenerationDuration(
   const providerSamples = providerKey
     ? operationSamples.filter((sample) => sample.providerKey === providerKey)
     : []
-  let comparable = modelSamples.length ? modelSamples : providerSamples.length ? providerSamples : operationSamples
+  let comparable = modelSamples.length ? modelSamples : providerKey ? providerSamples : operationSamples
   if (features?.mode) {
     const sameMode = comparable.filter((sample) => sample.mode === features.mode)
     if (sameMode.length >= 3) comparable = sameMode

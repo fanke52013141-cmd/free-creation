@@ -518,14 +518,17 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           }))
       })
       const exactModelRuns = configuredModelKey
-        ? runs.filter((run) => run.modelId === configuredModelKey)
+        ? runs.filter((run) =>
+            run.modelId === configuredModelKey &&
+            (!configuredProviderKey || run.providerId === configuredProviderKey)
+          )
         : []
       const exactProviderRuns = configuredProviderKey
         ? runs.filter((run) => run.providerId === configuredProviderKey)
         : []
       const matchingRuns = exactModelRuns.length
         ? exactModelRuns
-        : exactProviderRuns.length
+        : configuredProviderKey
           ? exactProviderRuns
           : runs
       const recentDurations = matchingRuns
