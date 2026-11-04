@@ -1322,17 +1322,17 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               <div className="node-empty">未知节点类型：{shape.props.nodeType}</div>
             </div>
           )}
-          {activeExecution && spec?.executor && (
-            <div className="node-execution-overlay">
-              <GenerationLoadingOverlay
-                title={executionTitle}
-                progress={executionProgress}
-                remainingMs={remainingEstimateMs}
-                waiting={nodeRun?.status !== 'running'}
-              />
-            </div>
-          )}
         </div>
+        {activeExecution && spec?.executor && (
+          <div className="node-execution-overlay">
+            <GenerationLoadingOverlay
+              title={executionTitle}
+              progress={executionProgress}
+              remainingMs={remainingEstimateMs}
+              waiting={nodeRun?.status !== 'running'}
+            />
+          </div>
+        )}
         {/* 输入端口（左侧）：out 方向拖线时按类型兼容高亮；从输入端口也可发起反向连线 */}
         {visibleInPorts.map((p) => {
           if (occludedPortKeys.has(`in:${p.id}`)) return null

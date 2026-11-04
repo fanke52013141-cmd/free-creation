@@ -35,3 +35,51 @@
 .generation-loading-card--compact .generation-loading-copy > strong {
   font-size: 12px;
 }
+
+/* Canvas execution occupies the full node footprint, with copy above the field. */
+.node-card-wrap > .node-execution-overlay {
+  display: block;
+  padding: 0;
+  border-radius: var(--node-radius, 12px);
+  overflow: hidden;
+  background: rgb(10 15 23 / 88%);
+  backdrop-filter: blur(3px);
+}
+
+.node-execution-overlay > .generation-loading-card {
+  width: 100%;
+  height: 100%;
+  justify-content: center;
+  padding: 16px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  box-shadow: none;
+}
+
+.node-execution-overlay .generation-loading-field {
+  inset: -8px;
+  background-size: 9px 9px;
+  mask-image: radial-gradient(ellipse at center, #000 20%, #0008 100%);
+}
+
+.node-execution-overlay .generation-loading-copy {
+  flex: 0 1 256px;
+  gap: 8px;
+  text-align: center;
+  text-shadow: 0 2px 8px #080c14;
+}
+
+.node-execution-overlay .generation-loading-copy > strong {
+  font-size: 15px;
+}
+
+.node-execution-overlay .generation-loading-meta {
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.node-execution-overlay .generation-loading-meta b,
+.node-execution-overlay .generation-loading-eta svg {
+  color: #b9d6ff;
+}
