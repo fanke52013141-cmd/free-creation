@@ -1,0 +1,118 @@
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
+const { launchQaBrowser } = require('./qa-browser.cjs')
+const { qaOutputPath } = require('./qa-output.cjs')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+
+;(async () => {
+  const output = qaOutputPath(`qa/generation-loading-${Date.now()}`)
+  fs.mkdirSync(output, { recursive: true })
+  const browser = await launchQaBrowser()
+  const page = await browser.newPage({ viewport: { width: 1500, height: 1160 } })
+  const errors = []
+  let phase='boot'
+  page.on('pageerror', error => errors.push({phase,message:error.message,stack:error.stack}))
+  try {
+    await page.goto(process.env.CANVAS_QA_URL || 'http://127.0.0.1:5196')
+    await page.waitForSelector('.tl-canvas')
+    await page.waitForFunction(async () => Boolean((await import('/src/stores/editor.ts')).useEditorStore.getState().editor))
+    phase = 'generation-loading'
+    await page.evaluate(async () => {
+      const { useEditorStore } = await import('/src/stores/editor.ts')
+      const { getNodeType } = await import('/src/nodes/registry.tsx')
+      const editor = useEditorStore.getState().editor
+      editor.deleteShapes([...editor.getCurrentPageShapeIds()])
+      const spec = getNodeType('image-gen')
+      editor.createShape({
+        id: 'shape:qa-generation', type: 'node-card', x: 400, y: 200,
+        props: { nodeType: 'image-gen', title: spec.label, ...spec.defaultSize, exec: 'running' },
+        meta: { nodeRun: { runId: 'qa-generation', startedAt: Date.now() - 3600000, status: 'running', inputs: {} } }
+      })
+    })
+    const loadingCard = page.locator('.node-execution-overlay .generation-loading-card')
+    await loadingCard.waitFor({ state: 'visible' })
+    await loadingCard.locator('[role="progressbar"][aria-valuenow="99"]').waitFor()
+    const field = loadingCard.locator('.generation-loading-field')
+    assert.equal(await field.evaluate(node => getComputedStyle(node).animationName), 'generation-field-drift')
+    await page.screenshot({ path: path.join(output, 'image-generation-running.png') })
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    assert.equal(await field.evaluate(node => getComputedStyle(node).animationName), 'none')
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    await page.evaluate(async () => {
+      const { useEditorStore } = await import('/src/stores/editor.ts')
+      useEditorStore.getState().editor.updateShape({
+        id: 'shape:qa-generation', type: 'node-card', props: { exec: 'idle' }
+      })
+    })
+    await loadingCard.waitFor({ state: 'detached' })
+    const executableTypes = await page.evaluate(async () => {
+      const { getNodeType } = await import('/src/nodes/registry.tsx')
+      const { PALETTE_NODE_GROUPS } = await import('/src/canvas/palette-categories.ts')
+      return Object.values(PALETTE_NODE_GROUPS).flat().filter(type => getNodeType(type)?.executor)
+    })
+    assert.ok(executableTypes.length > 1)
+    for (const type of executableTypes) {
+      phase = 'loading:' + type
+      await page.evaluate(async type => {
+        const { useEditorStore } = await import('/src/stores/editor.ts')
+        const { getNodeType } = await import('/src/nodes/registry.tsx')
+        const editor = useEditorStore.getState().editor
+        const spec = getNodeType(type)
+        editor.updateShape({
+          id: 'shape:qa-generation', type: 'node-card',
+          props: { nodeType: type, title: spec.label, ...spec.defaultSize, config: spec.initialConfig || '', exec: 'running' }
+        })
+      }, type)
+      await loadingCard.waitFor({ state: 'visible' })
+      assert.equal(await field.evaluate(node => getComputedStyle(node).animationName), 'generation-field-drift')
+      await page.evaluate(async () => {
+        const { useEditorStore } = await import('/src/stores/editor.ts')
+        useEditorStore.getState().editor.updateShape({
+          id: 'shape:qa-generation', type: 'node-card', props: { exec: 'idle' }
+        })
+      })
+      await loadingCard.waitFor({ state: 'detached' })
+    }
+
+    console.log('Loading state verified for ' + executableTypes.length + ' executable node types')
+    phase = 'image-timing-through-executor'
+    const timing = await page.evaluate(async () => {
+      const { useEditorStore } = await import('/src/stores/editor.ts')
+      const { useAppStore } = await import('/src/stores/app.ts')
+      const { runNodeManually } = await import('/src/engine/executor.ts')
+      const editor = useEditorStore.getState().editor
+      const projectId = useAppStore.getState().currentProject.id
+      const saved = await window.api.gateway.saveProvider({
+        name: 'Timing QA', specId: 'relay', baseURL: 'https://example.com/v1',
+        apiKey: 'browser-fixture', models: [{ id: 'qa-image', modality: 'image' }]
+      })
+      if (!saved.ok) throw new Error(saved.error.message)
+      const providers = await window.api.gateway.listProviders()
+      if (!providers.ok) throw new Error(providers.error.message)
+      const providerKey = saved.data.id
+      const modelKey = providerKey + '::qa-image'
+      const id = 'shape:qa-generation'
+      editor.updateShape({
+        id, type: 'node-card',
+        props: { nodeType: 'image-gen', exec: 'idle', text: 'QA image', config: JSON.stringify({ providerKey, modelKey, count: 1 }) },
+        meta: { nodeRun: null }
+      })
+      const result = await runNodeManually(editor, projectId, providers.data, id)
+      return { result, providerKey, modelKey }
+    })
+    assert.equal(timing.result.status, 'done', JSON.stringify(timing.result))
+    await page.waitForFunction(async ({ providerKey, modelKey }) => {
+      const timings = await window.api.workspace.getImageGenerationTimings()
+      return timings.ok && timings.data.some(sample =>
+        sample.providerKey === providerKey && sample.modelKey === modelKey && sample.durationMs > 0)
+    }, timing)
+    assert.deepEqual(errors.filter(error => error.phase !== 'boot' || !['The source image cannot be decoded.', 'Failed to fetch'].includes(error.message)), [])
+    console.log('Generation loading passed: ' + output)
+  } finally {
+    await browser.close()
+  }
+})().catch(error => {
+  console.error(error)
+  process.exitCode = 1
+})
