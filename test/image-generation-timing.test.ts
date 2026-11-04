@@ -16,10 +16,34 @@ import {
   recordImageGenerationTiming
 } from '../src/main/store/workspace-state.repo'
 import { IPC } from '../src/shared/contracts'
+import { estimateImageGenerationDuration, imageGenerationProgressPercent } from '../src/renderer/src/canvas/image-generation-progress'
 
 beforeEach(() => settings.clear())
 
 describe('图片生成耗时统计契约', () => {
+  it('reuses persisted channel timings for subsequent estimated progress', () => {
+    for (const [index, providerKey, durationMs] of [
+      [1, 'a', 40_000],
+      [2, 'a', 60_000],
+      [3, 'b', 120_000]
+    ] as const) {
+      recordImageGenerationTiming({
+        runId: String(index),
+        providerKey,
+        modelKey: 'shared',
+        durationMs,
+        recordedAt: 1_700_000_000_000 + index
+      })
+    }
+
+    const samples = getImageGenerationTimings()
+    const estimate = estimateImageGenerationDuration(samples, 'a', 'shared')
+    expect(estimate).toBe(50_000)
+    expect(imageGenerationProgressPercent(25_000, estimate)).toBe(50)
+    expect(imageGenerationProgressPercent(120_000, estimate)).toBe(99)
+    expect(estimateImageGenerationDuration(samples, 'b', 'shared')).toBe(120_000)
+  })
+
   it('使用独立 workspace IPC 通道，读取原始受限样本供 renderer 聚合', () => {
     expect(IPC.workspace.recordImageGenerationTiming).toBe('workspace:image-generation-timing:record')
     expect(IPC.workspace.getImageGenerationTimings).toBe('workspace:image-generation-timings:get')
