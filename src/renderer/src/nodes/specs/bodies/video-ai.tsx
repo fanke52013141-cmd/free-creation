@@ -1,3 +1,4 @@
+import { GenerationLoadingOverlay } from '../../../canvas/GenerationLoadingOverlay'
 import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 import { Icon } from '../../../components/Icon'
 import { stopEventPropagation, useEditor } from 'tldraw'
@@ -173,10 +174,14 @@ function EngineSetup(): React.JSX.Element {
 
   return (
     <div className="video-ai-engine">
-      <div className={`video-ai-engine-state ${status?.ready ? 'is-ready' : ''}`}>
-        <span className="video-ai-state-dot" />
-        <span>{statusText(status)}</span>
-      </div>
+      {!status || status.installing ? (
+        <GenerationLoadingOverlay title={statusText(status)} compact />
+      ) : (
+        <div className={`video-ai-engine-state ${status.ready ? 'is-ready' : ''}`}>
+          <span className="video-ai-state-dot" />
+          <span>{status.message}</span>
+        </div>
+      )}
       {!status?.ready && !status?.installing && (
         <>
           <p>需要 Python 3.12、NVIDIA 显卡和 FFmpeg。首次安装会下载约 3.4 GB 的 CUDA 推理依赖与模型，建议预留 10 GB 磁盘空间；不会改系统 Python 环境。</p>
