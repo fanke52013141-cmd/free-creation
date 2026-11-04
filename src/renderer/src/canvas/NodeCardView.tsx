@@ -396,16 +396,17 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         ? configuredModelKey.split('::')[0]
         : ''
   const imageProviderKey =
+    imageRun?.estimateProviderKey ?? (
     typeof nodeConfig?.providerKey === 'string' && nodeConfig.providerKey
       ? nodeConfig.providerKey
       : typeof nodeConfig?.modelKey === 'string'
         ? nodeConfig.modelKey.split('::')[0]
-        : ''
-  const imageModelKey = typeof nodeConfig?.modelKey === 'string' ? nodeConfig.modelKey : ''
-  const imageCount =
+        : '')
+  const imageModelKey = imageRun?.estimateModelKey ?? (typeof nodeConfig?.modelKey === 'string' ? nodeConfig.modelKey : '')
+  const imageCount = imageRun?.estimateFeatures?.imageCount ?? (
     typeof nodeConfig?.count === 'number' && Number.isFinite(nodeConfig.count)
       ? Math.max(1, Math.min(9, Math.floor(nodeConfig.count)))
-      : 1
+      : 1)
   const [imageTimingEstimateMs, setImageTimingEstimateMs] = useState(
     DEFAULT_IMAGE_GENERATION_ESTIMATE_MS
   )
