@@ -57,7 +57,7 @@ export function GenerationLoadingOverlay({
             <span>预计进度 <b>{normalizedProgress}%</b></span>
             {remainingMs !== undefined && <span className="generation-loading-eta">
               <Icon name="reset" size={13} />
-              <span>预估剩余</span>
+              {!waiting && remainingMs >= 0 && <span>预估剩余</span>}
               <b>{estimateLabel}</b>
             </span>}
           </div>
