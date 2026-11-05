@@ -48,14 +48,21 @@
   border-color: var(--border-soft);
 }
 
-.skill-help-popover {
-  position: absolute;
-  top: 30px;
-  left: 10px;
-  z-index: 30;
-  width: min(420px, 86vw);
-  max-height: 320px;
+.skill-help-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.48);
+}
+.skill-help-dialog {
+  box-sizing: border-box;
+  width: min(540px, 100%);
+  max-height: calc(100vh - 32px);
   overflow: auto;
+  position: relative;
   padding: 10px 12px;
   border: 1px solid var(--border-soft);
   border-radius: 10px;
@@ -65,6 +72,9 @@
   font-size: 12px;
   line-height: 1.55;
 }
+.skill-help-popover { min-width: 0; }
+.skill-help-close { float: right; }
+.skill-help-copy { margin: 2px 8px 2px 0; }
 
 .skill-help-popover strong {
   display: block;

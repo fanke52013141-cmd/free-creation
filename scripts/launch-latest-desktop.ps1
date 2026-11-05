@@ -123,16 +123,22 @@ try {
   }
 
   # 4) 关闭正在运行的旧实例（等同点击窗口 ×，应用正常保存退出）
-  $mine = Get-Process canvas-studio, electron -ErrorAction SilentlyContinue | Where-Object {
-    $_.Path -and ($_.Path -like '*canvas-studio*')
+  function Get-CanvasMainProcesses {
+    $projectArgument = '(?i)(?:^|\s)"?' + [regex]::Escape($ProjectRoot) + '"?(?:\s|$)'
+    $packagedExe = Join-Path $ProjectRoot 'dist\current-source-release\win-unpacked\canvas-studio.exe'
+    $ids = @(Get-CimInstance Win32_Process -Filter "Name='electron.exe' OR Name='canvas-studio.exe'" |
+      Where-Object {
+        ($_.ExecutablePath -ieq $ElectronExe -and $_.CommandLine -match $projectArgument) -or
+        ($_.ExecutablePath -ieq $packagedExe)
+      } | Select-Object -ExpandProperty ProcessId)
+    if ($ids.Count -gt 0) { Get-Process -Id $ids -ErrorAction SilentlyContinue }
   }
+  $mine = @(Get-CanvasMainProcesses)
   if ($mine) {
     Write-Host '  [3/4] 检测到 Canvas Studio 正在运行，正在优雅关闭（等同点窗口 ×）...' -ForegroundColor Cyan
     $mine | ForEach-Object { $_.CloseMainWindow() | Out-Null }
     $mine | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue
-    $left = Get-Process canvas-studio, electron -ErrorAction SilentlyContinue | Where-Object {
-      $_.Path -and ($_.Path -like '*canvas-studio*')
-    }
+    $left = @(Get-CanvasMainProcesses)
     if ($left) {
       throw '旧实例未能退出（可能有未保存内容），请手动关闭后重试。'
     }

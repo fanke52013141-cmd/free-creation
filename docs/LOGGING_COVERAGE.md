@@ -594,3 +594,15 @@ Agent 手动启动的无模型预检在 `ensureCanvasSaved`、workflow/task admi
 专业 Agent 的恢复仍复用 `agent.desktop.started/completed/failed`；成功补呈现复用既有 `agent.runtime.resumed/completed`、`command.recovery.*`、`node/workflow` 与项目保存事件，不新增事件名或字段。reconcile 只核实持久化事实并将单一 committed 回执标为“固定成果待呈现”；restore 只允许单条、范围内、输出引用可解析且当前画布无冲突的命令，随后将同一 task 完成并返回固定资产引用。pending/unknown、多个 committed 回执、父/协调任务或不匹配的画布呈现不能补呈现；不会调用模型或派发命令。诊断继续只记录受控阶段、状态和稳定原因，不记录目标文本、输入/输出正文、模型响应、fixture URL 或隔离路径。
 
 69项命令台账定向回归通过，覆盖单条回执可恢复及多个 committed 输出保持 fail-closed；当前源码构建的正式 Windows 解包版两进程场景通过：A 强杀、B 重开、事实核对、显式补呈现后原 task 完成且同回执输出进入 Agent 节点。模型请求总数保持4、命令仍为1；真实供应商/付费/外部HTTP为0。两session 111条事件JSONL无坏行/重复eventId/固定输入输出与fixture路径标记，重开进程 desktop 生命周期配对通过，数据库只读完整性检查为 `ok`。Node typecheck 与 `verify:logging` 通过。证据及应用bundle/截图/数据库hash见 `qa/agent-comprehensive/run-20261018-rel02-m08-explicit-restore-v1/execution-manifest.json`。该子场景仅覆盖单一 committed 本地处理命令，不证明异步供应商已接受但无回执或完整 REL-02/M08。
+
+### 2026-11-05 桌面启动器旧实例识别
+
+- 范围：`scripts/launch-latest-desktop.ps1` 将源码 Electron 进程按程序路径和项目参数识别，打包进程按本项目路径识别；仅发送正常窗口关闭请求并等待，未退出则停止启动，不强制结束或处理其他 Electron 应用。
+- 日志影响：复用启动器原有控制台阶段与关闭失败提示；没有新增诊断事件或敏感字段。启动器不在统一诊断事件覆盖内，未扩大全链路覆盖；实际桌面关闭、保存与异常场景仍待验收。
+- Agent 接入：不改变外部接入操作、Schema、持久化或协议；不涉及。
+
+### 2026-11-05 技能设置说明和默认示例显示
+
+- 技能说明通过独立弹窗展示，提供复制说明及示例；未绑定的内置示例在选择列表隐藏，已绑定的固定快照仍可见并保留。技能安装、数据库、执行路径和节点配置结构不变；并未删除存储中的内置技能。
+- 日志影响：显示和复制操作不新增文件、技能安装或执行路径，不记录技能正文；沿用技能库已有诊断覆盖。外部 Agent 接口和 Schema 不变。弹窗可视、剪贴板和真实安装交互仍须桌面验收。
+- 目录上传修复：渲染端去掉浏览器添加的所选根目录前缀，再交给原有包解析器；跨根和嵌套目录仍拒绝。解析失败仍由界面报告，未新增诊断事件；安装阶段沿用现有 IPC 路径，不记录技能内容。渲染端本地解析失败的结构化诊断仍是现有盲区，尚未做真实桌面上传和日志脱敏验收。
