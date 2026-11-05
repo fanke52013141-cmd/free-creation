@@ -110,11 +110,21 @@
 .canvas-page .node-hover-spot {
   z-index: 0;
   opacity: 0;
+  /* 2026-11-06 平滑接续：(1 - r²)² 超高斯衰减，多段色标避免 42%/72% 两处斜率突变
+     在暗底上形成可见的同心环带（Mach band）；光在卡片边界内自然衰减到 0。 */
   background: radial-gradient(
     var(--node-spot-radius, 260px) circle at var(--node-mouse-x, 50%) var(--node-mouse-y, 50%),
     rgb(60 221 227 / 14%) 0%,
-    rgb(60 221 227 / 7%) 42%,
-    transparent 72%
+    rgb(60 221 227 / 13.86%) 10%,
+    rgb(60 221 227 / 13.37%) 20%,
+    rgb(60 221 227 / 12.47%) 30%,
+    rgb(60 221 227 / 10.98%) 40%,
+    rgb(60 221 227 / 8.86%) 50%,
+    rgb(60 221 227 / 6.27%) 60%,
+    rgb(60 221 227 / 3.49%) 70%,
+    rgb(60 221 227 / 1.24%) 80%,
+    rgb(60 221 227 / 0.15%) 90%,
+    transparent 100%
   );
   transition: opacity 280ms ease;
 }
@@ -192,10 +202,15 @@
   inset: 0;
   padding: 1px;
   border-radius: inherit;
+  /* 边缘光沿卡边平滑衰减，避免在 62% 处突然截断形成第二道环。 */
   background: radial-gradient(
-    calc(var(--node-spot-radius, 260px) * .62) circle at var(--node-mouse-x, 50%) var(--node-mouse-y, 50%),
-    rgb(120 232 238 / 55%),
-    transparent 62%
+    calc(var(--node-spot-radius, 260px) * .72) circle at var(--node-mouse-x, 50%) var(--node-mouse-y, 50%),
+    rgb(120 232 238 / 50%) 0%,
+    rgb(120 232 238 / 42%) 25%,
+    rgb(120 232 238 / 26%) 50%,
+    rgb(120 232 238 / 12%) 72%,
+    rgb(120 232 238 / 3%) 90%,
+    transparent 100%
   );
   mask:
     linear-gradient(#000 0 0) content-box,
