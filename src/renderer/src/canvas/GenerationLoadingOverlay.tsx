@@ -1,4 +1,5 @@
 import { Icon } from '../components/Icon'
+import { StarDustField } from './StarDustField'
 import './generation-loading-field.css'
 
 interface GenerationLoadingOverlayProps {
@@ -36,7 +37,7 @@ export function GenerationLoadingOverlay({
 
   return (
     <div className={compact ? "generation-loading-card generation-loading-card--compact" : "generation-loading-card"} role="status" aria-live="polite">
-      <div className="generation-loading-field" aria-hidden="true" />
+      <StarDustField compact={compact} progress={normalizedProgress} />
       <div className="generation-loading-copy">
         <strong>{waiting ? '等待执行' : title}</strong>
         {description && <small>{description}</small>}

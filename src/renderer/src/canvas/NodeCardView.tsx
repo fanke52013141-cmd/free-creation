@@ -648,6 +648,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         const meta = card.meta as Record<string, unknown> | undefined
         if (
           meta?.artifactProducerId === shape.id &&
+          meta.artifactLinkHidden !== true &&
           typeof meta.artifactProducerPortId === 'string'
         ) {
           outgoingPortIds.add(meta.artifactProducerPortId)
@@ -1071,6 +1072,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         }`}
         data-node-id={shape.id}
         style={{ width: shape.props.w, height: shape.props.h,
+          ['--node-spot-radius' as string]: Math.max(260, Math.hypot(shape.props.w, shape.props.h) * 0.55) + 'px',
           ['--node-header-h' as string]: `${NODE_UI.header.height}px`,
           ['--node-empty-icon-size' as string]: `${NODE_UI.identity.iconSize}px`,
           ['--node-port-outset' as string]: `${NODE_PORT_OUTSET}px`,
@@ -1413,7 +1415,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             居中渲染溯源圆点，让追溯连线精确落在圆连接点上。 */}
         {inPorts.length === 0 &&
           !occludedPortKeys.has('in:artifact') &&
-          Boolean((shape.meta as Record<string, unknown> | undefined)?.artifactProducerId) && (
+          shape.meta.artifactLinkHidden !== true &&
+          Boolean(artifactProducerId) && (
             <span
               key="artifact-in-provenance"
               className="port-dot in connected input-optional"

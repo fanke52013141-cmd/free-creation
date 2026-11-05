@@ -5411,14 +5411,15 @@ button {
   flex: 0 0 auto;
   align-self: center;
 }
-/* 文本字段使用低对比中性描边，不继承节点分类色。 */
+/* 文本字段使用中性描边（2026-11-06：取参考卡片的 --node-edge/#252b36，
+   hover #333b48，聚焦青色 50%，不继承节点分类色）。 */
 .node-card
   .node-standard-scroll
   :is(
     textarea,
     input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file'])
   ) {
-  border-color: #ffffff16;
+  border-color: var(--node-edge, #ffffff16);
   box-shadow: none !important;
 }
 .node-card
@@ -5426,8 +5427,16 @@ button {
   :is(
     textarea,
     input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file'])
+  ):hover:not(:disabled) {
+  border-color: var(--node-edge-hover, #ffffff26);
+}
+.node-card
+  .node-standard-scroll
+  :is(
+    textarea,
+    input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file'])
   ):focus {
-  border-color: #ffffff38;
+  border-color: var(--node-field-focus, rgb(60 221 227 / 50%));
   box-shadow: none !important;
   outline: none;
   outline-offset: 0;

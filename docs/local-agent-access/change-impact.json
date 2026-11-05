@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "Node refinement delivery: subdued controls, downward selects, copy feedback, crop 21:9 and action cleanup, adjacent placement including groups. Shared split output titles use concatenated 图N原图名 with no separator. Vidu duration starts at 4s and legacy values use shared normalization. Ports, operation versions and logging lifecycle are preserved. See NODE_UI_STANDARD and LOGGING_COVERAGE.",
+  "reason": "UI 视觉与加载动效调整，不改变操作/节点契约、Schema 与执行路径",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "97d2ffb5e2403b33a2d3ac8ab3eee8272f78cf948e4c73ab53cc662bd73a5a6f",
@@ -149,7 +149,7 @@
     "src/renderer/src/nodes/specs/bodies/tts.tsx": "a0caa20b013a5a8b91bf44aca682fe470473ca161d81600ca2197fc044423f14",
     "src/renderer/src/nodes/specs/bodies/video-ai.tsx": "4fb088a718ed9da5e2bb00b3f3f7984ccc07c8e070697b327c477b1a8941f076",
     "src/renderer/src/nodes/specs/bodies/video-transforms.tsx": "bd89d108717569f339145e0be229493e27350e605a83fc0f6b743749b94cee10",
-    "src/renderer/src/nodes/specs/bodies/video.tsx": "121665ef813d0cab77b9907927cc349f421e376affc9ddc195c4202757da74a6",
+    "src/renderer/src/nodes/specs/bodies/video.tsx": "54d7b5026940c54af685a007c82129a686b78c11a501fe3fcf3677a2d53bcfb3",
     "src/renderer/src/nodes/specs/bodies/vocal-separate.tsx": "c7b1675fdb44b9a84b1646ad0986140191f429987e1482b718085ea7a3834d63",
     "src/renderer/src/nodes/specs/bodies/voice-design.tsx": "1fabd4c80061822d07913b6518624c5a2ae7ea3cbb106c31978e79a746d9ad1a",
     "src/renderer/src/nodes/specs/bodies/website.tsx": "1ebe23d394926b903ec218c8d6381a92538c115ba30dbedefdc6e0fa5c6a1dfe",

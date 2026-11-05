@@ -102,7 +102,7 @@ function contrast(first, second) {
       const promptStyle = getComputedStyle(card.querySelector('.gen-prompt'))
       return {prompt: {left: prompt.left, right: prompt.right}, button: {left: button.left, right: button.right}, rows, border: promptStyle.borderColor, shadow: promptStyle.boxShadow}
     })
-    assert.equal(imageAlignment.border, 'rgba(255, 255, 255, 0.086)', '生图输入框使用低对比中性边框')
+    assert.equal(imageAlignment.border, 'rgb(37, 43, 54)', '生图输入框使用中性描边 var(--node-edge)')
     assert.equal(imageAlignment.shadow, 'none', '生图输入框无阴影')
     for (const item of [imageAlignment.button, ...imageAlignment.rows]) {
       assert.ok(Math.abs(item.left - imageAlignment.prompt.left) < 1 && Math.abs(item.right - imageAlignment.prompt.right) < 1, '生图输入框、下拉行和按钮左右对齐')

@@ -63,7 +63,9 @@ const path = require('node:path')
         const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
         const host = document.querySelector('.agent-flow-relation-layer').parentElement
         const offset = host.getBoundingClientRect()
-        const header = 28 * editor.getCamera().z
+        // 头部高度以 NODE_UI 为单一来源（v2.2 起为 36，旧断言硬编码 28 已过期）。
+        const { NODE_UI } = await import('/src/canvas/node-ui-tokens.ts')
+        const header = NODE_UI.header.height * editor.getCamera().z
         const nodeRect = (id) => {
           const bounds = editor.getShapePageBounds(id)
           const start = editor.pageToScreen({ x: bounds.x, y: bounds.y })

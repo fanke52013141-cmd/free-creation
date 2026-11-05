@@ -1842,10 +1842,7 @@ select:focus-visible {
   align-items: center;
   justify-content: center;
   padding: 8px;
-  background:
-    radial-gradient(circle at 50% 40%, rgba(32, 175, 159, 0.12), transparent 58%),
-    rgba(7, 11, 16, 0.76);
-  backdrop-filter: blur(4px);
+  background: #081113;
   pointer-events: none;
 }
 
@@ -1857,13 +1854,14 @@ select:focus-visible {
   gap: 10px;
   padding: 10px 12px;
   overflow: hidden;
-  border: 1px solid rgba(112, 218, 211, 0.2);
+  border: 1px solid rgba(60, 221, 227, 0.22);
   border-radius: 15px;
-  background: linear-gradient(112deg, rgba(12, 20, 27, 0.96), rgba(13, 23, 29, 0.93));
+  background: linear-gradient(112deg, rgba(8, 17, 19, 0.97), rgba(10, 23, 26, 0.94));
   box-shadow:
-    0 12px 38px rgba(0, 0, 0, 0.36),
-    inset 0 1px rgba(225, 255, 251, 0.035);
-  color: #e8f5f5;
+    0 12px 38px rgba(0, 0, 0, 0.42),
+    0 0 24px rgba(60, 221, 227, 0.06),
+    inset 0 1px rgba(134, 238, 243, 0.05);
+  color: #f0fdf9;
 }
 
 .generation-loading-copy {
@@ -1875,7 +1873,7 @@ select:focus-visible {
 
 .generation-loading-copy > strong {
   overflow: hidden;
-  color: #f2fffc;
+  color: #f0fdf9;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.25;
@@ -1892,7 +1890,7 @@ select:focus-visible {
 
 .generation-loading-copy > small {
   overflow: hidden;
-  color: rgba(197, 220, 221, 0.7);
+  color: #7d9690;
   font-size: 9px;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -1908,11 +1906,11 @@ select:focus-visible {
 
 .generation-loading-track {
   display: block;
-  height: 5px;
+  height: 4px;
   overflow: hidden;
-  border: 1px solid rgba(134, 193, 194, 0.16);
+  border: 1px solid rgba(60, 221, 227, 0.18);
   border-radius: 999px;
-  background: rgba(2, 8, 13, 0.8);
+  background: rgba(4, 12, 14, 0.9);
 }
 
 .generation-loading-track > span {
@@ -1921,8 +1919,8 @@ select:focus-visible {
   height: 100%;
   min-width: 2px;
   border-radius: inherit;
-  background: linear-gradient(90deg, #416cae 0%, #729de2 58%, #b9d6ff 100%);
-  box-shadow: 0 0 11px rgba(117, 166, 240, 0.38);
+  background: linear-gradient(90deg, #0fb4bd 0%, #3cdde3 55%, #86eef3 100%);
+  box-shadow: 0 0 12px rgba(60, 221, 227, 0.42);
   transition: width 420ms linear;
 }
 
@@ -1932,10 +1930,10 @@ select:focus-visible {
   background: linear-gradient(
     100deg,
     transparent 20%,
-    rgba(235, 255, 249, 0.65) 50%,
+    rgba(214, 255, 255, 0.62) 50%,
     transparent 80%
   );
-  animation: generation-loading-shimmer 1.7s ease-in-out infinite;
+  animation: generation-loading-shimmer 2.4s ease-in-out infinite;
 }
 
 .generation-loading-meta {
@@ -1944,13 +1942,13 @@ select:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  color: rgba(180, 207, 209, 0.72);
+  color: #7d9690;
   font-size: 8px;
   white-space: nowrap;
 }
 
 .generation-loading-meta b {
-  color: #78ecd1;
+  color: #5ce3ea;
   font-size: 9px;
   font-weight: 700;
 }
@@ -1964,7 +1962,7 @@ select:focus-visible {
 
 .generation-loading-eta svg {
   flex: 0 0 auto;
-  color: #56dcca;
+  color: #3cdde3;
   animation: generation-loading-clock 3.6s linear infinite;
 }
 

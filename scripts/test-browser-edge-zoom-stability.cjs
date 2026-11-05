@@ -12,7 +12,8 @@
 //   - 页面坐标 mask 仍必须逐条挖空节点卡片（这是本次改动的核心语义）；
 //   - 流光动画时长必须是 4.05s（基线 1.35s 的 1/3）；
 //   - 连线悬浮/选中/剪刀删除在低/中/高倍率都可用（命中层改成页面坐标后必须回归）；
-//   - 追溯线（artifact:）只可视化、不可交互，不得生成命中路径。
+//   - 追溯线（artifact:）自 2026-11-06 起可悬浮、可用剪刀隐藏（写 meta.artifactLinkHidden），
+//     命中路径只服务悬浮且保持 pointer-events:none，点击仍不可选中。
 //
 // 运行：先启动浏览器验收服务（pnpm dev:browser），再 node scripts/test-browser-edge-zoom-stability.cjs
 // 可用 CANVAS_QA_URL 指定地址；证据写入 qa/edge-zoom-flicker-2026-11-02/。
@@ -440,7 +441,8 @@ async function launchQaBrowser() {
       '缩放期间可见连线数量不得跳变，也不得为 0'
     )
 
-    // ── 4. 追溯线（artifact:）只可视化、不可交互 ──
+    // ── 4. 追溯线（artifact:）可悬浮出剪刀并隐藏，但仍不可点击选中 ──
+    let provenanceHidden = null
     const provenance = await page.evaluate(async (expectedEdges) => {
       const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
       const assetId = 'shape:edge-zoom-asset'
@@ -479,7 +481,7 @@ async function launchQaBrowser() {
       const provenancePath = document.querySelector(
         '[data-edge-id^="artifact:"] .data-edge-visible'
       )
-      const hitPaths = document.querySelectorAll('.data-edge-hit[data-edge-id^="artifact:"]').length
+      const hitPaths = document.querySelectorAll('.data-edge-hit[data-edge-id^="artifact:"]')
       let point = null
       if (provenancePath) {
         const middle = provenancePath.getPointAtLength(provenancePath.getTotalLength() / 2)
@@ -489,20 +491,37 @@ async function launchQaBrowser() {
       return {
         created: Boolean(provenancePath),
         visibleCount: document.querySelectorAll('.data-edge-visible').length,
-        hitPaths,
+        hitPathCount: hitPaths.length,
+        // 命中路径只用于 isPointInStroke 的几何判定，必须保持 pointer-events:none。
+        hitPointerEvents: hitPaths[0] ? getComputedStyle(hitPaths[0]).pointerEvents : null,
         point,
         assetId
       }
     }, fixture.edgeIds.length)
     assert.ok(provenance.created, '追溯线必须正常绘制')
-    assert.equal(provenance.hitPaths, 0, '追溯线不得注册命中路径（否则点击/框选会被吞）')
+    assert.equal(
+      provenance.hitPathCount,
+      1,
+      '追溯线必须注册命中路径（悬浮与剪刀依赖它），且只能有一条'
+    )
+    assert.equal(
+      provenance.hitPointerEvents,
+      'none',
+      '命中路径不得拦截 DOM 指针事件（否则画布框选/平移被吞）'
+    )
+    assert.ok(provenance.point, '必须能取到追溯线中段的屏幕坐标')
     if (provenance.point) {
       await page.mouse.move(provenance.point.x, provenance.point.y)
-      await page.waitForTimeout(200)
+      await page.waitForSelector('.data-edge-scissors', { timeout: 5000 })
       assert.equal(
         await page.locator('.data-edge-scissors').count(),
-        0,
-        '悬浮追溯线不得出现剪刀（不可删除）'
+        1,
+        '悬浮追溯线必须出现 1 个剪刀（可隐藏追溯关系）'
+      )
+      assert.equal(
+        await page.locator('.data-edge-scissors').getAttribute('aria-label'),
+        '隐藏追溯线',
+        '追溯线的剪刀必须表达“隐藏追溯线”，不能复用普通连线的“删除此连线”'
       )
       await page.evaluate(({ x, y }) => {
         window.dispatchEvent(
@@ -522,8 +541,38 @@ async function launchQaBrowser() {
       assert.equal(
         await page.locator('.data-edge.is-selected').count(),
         0,
-        '点击追溯线不得选中伪边 ID'
+        '点击追溯线不得选中伪边 ID（追溯线不可选中）'
       )
+      // 真实点击剪刀：隐藏追溯线（写 meta），不删除任何数据边。
+      await page.locator('.data-edge-scissors').click()
+      await page.waitForFunction(
+        (expected) => document.querySelectorAll('.data-edge-visible').length === expected,
+        fixture.edgeIds.length,
+        { timeout: 5000 }
+      )
+      const hidden = await page.evaluate(async (assetId) => {
+        const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
+        return {
+          artifactLinkHidden: editor.getShape(assetId)?.meta?.artifactLinkHidden === true,
+          artifactLines: document.querySelectorAll('[data-edge-id^="artifact:"] .data-edge-visible')
+            .length,
+          scissors: document.querySelectorAll('.data-edge-scissors').length,
+          dataEdgeGroups: document.querySelectorAll('.data-edge').length
+        }
+      }, provenance.assetId)
+      assert.equal(
+        hidden.artifactLinkHidden,
+        true,
+        '点剪刀后目标节点 meta.artifactLinkHidden 必须为 true（隐藏而非删除）'
+      )
+      assert.equal(hidden.artifactLines, 0, '隐藏后追溯线必须消失')
+      assert.equal(hidden.scissors, 0, '隐藏后剪刀必须消失')
+      assert.equal(
+        hidden.dataEdgeGroups,
+        fixture.edgeIds.length,
+        '隐藏追溯线不得删除任何普通数据边'
+      )
+      provenanceHidden = hidden
     }
     await page.evaluate(async (assetId) => {
       const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
@@ -625,13 +674,13 @@ async function launchQaBrowser() {
     fs.writeFileSync(
       path.join(OUT, 'evidence.json'),
       JSON.stringify(
-        { zooms: ZOOMS, alignment, maskCheck, cameraOnly, provenance, interaction, before, after },
+        { zooms: ZOOMS, alignment, maskCheck, cameraOnly, provenance, provenanceHidden, interaction, before, after },
         null,
         2
       )
     )
     console.log(
-      'PASS: 连线随相机同帧变换、逐条端点贴合端口、页面坐标 mask 仍挖空节点、缩放期间零几何/滤镜重写、流光 4.05s、低/中/高倍率悬浮/选中/删除可用'
+      'PASS: 连线随相机同帧变换、逐条端点贴合端口、页面坐标 mask 仍挖空节点、缩放期间零几何/滤镜重写、流光 4.05s、低/中/高倍率悬浮/选中/删除可用、追溯线可悬浮隐藏但不可选中'
     )
   } finally {
     await browser.close()

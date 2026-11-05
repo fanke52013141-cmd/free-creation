@@ -47,6 +47,7 @@ export function collectNodePortConnections(editor: Editor): Map<string, NodePort
     const meta = shape.meta as Record<string, unknown> | undefined
     if (
       typeof meta?.artifactProducerId === 'string' &&
+      meta.artifactLinkHidden !== true &&
       typeof meta.artifactProducerPortId === 'string'
     ) {
       forNode(meta.artifactProducerId).out.add(meta.artifactProducerPortId)

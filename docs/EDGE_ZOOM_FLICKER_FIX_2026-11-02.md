@@ -33,7 +33,7 @@
    - 光晕、线宽、虚线间隔改为页面单位（`filter: drop-shadow(0 0 5px currentColor)`、`stroke-width: 3` 等）。由于层坐标 = 页面坐标，它们在屏幕上的观感与旧的 `* zoom` 完全等价，但**不再随缩放变化**，滤镜过渡不再每帧重启。
    - `<mask>` 使用页面坐标，范围由节点边界并集外扩得到（`src/renderer/src/canvas/edge-visual-extents.ts`），只随文档变化。
    - 命中路径改页面坐标：`isPointInStroke` 的点由 `svg.getScreenCTM()` 反变换得到；容差用 `--edge-hit-width`（`14 / zoom`，由相机同步回调写入）保持屏幕空间恒定 14px。悬浮、选中、剪刀删除与端口 27px 优先级全部保留。
-   - 追溯线（`artifact:`）只可视化、不可交互：命中路径只对非 `provenance` 边渲染，`hitTest` 另加 `artifact:` 兜底（复核阶段发现的回归：追溯线误注册命中路径会吞掉点击/框选并写入伪选中 ID，已修复并有浏览器断言守护）。
+   - 追溯线（`artifact:`）只可视化、不可交互：命中路径只对非 `provenance` 边渲染，`hitTest` 另加 `artifact:` 兜底（复核阶段发现的回归：追溯线误注册命中路径会吞掉点击/框选并写入伪选中 ID，已修复并有浏览器断言守护）。**2026-11-06 修订：本节交互结论已被取代**——追溯线现可悬浮并悬浮出剪刀，剪刀写目标资产节点 `meta.artifactLinkHidden=true` 隐藏（不是删除数据边）；仍不可点击/右键选中。命中路径对所有边（含追溯线）统一注册，但保持 `pointer-events:none`、只服务 `isPointInStroke`，`pointerdown`/`contextmenu` 继续显式跳过 `artifact:`。隐藏只能通过撤销恢复，暂无 UI 恢复入口（已知缺口，见 `NODE_CANVAS_PRESENTATION_SPEC.md` §4.1 同日期修订）。
    - 用 `.data-edge-clip`（`inset: 0; overflow: hidden`）负责按画布视口裁剪——1×1 的镜像层自身无法裁剪。
 2. **CSS**：新增 `.data-edge-clip` / `.data-edge-frame` 层结构；`.data-edge-visible` 基色光晕改 `currentColor`；失效边虚线仍由组件 inline 给出（保持"单一来源"）；相机交互期间 `.data-edge-frame` 与节点层一起提升合成层（`will-change: transform`）。
 3. **`CanvasEditor.tsx`**：`DataEdgeLayer` 不再需要 `hostRef`。
@@ -82,7 +82,7 @@ npm run verify:logging
 - 4 个缩放档位（0.5 / 1 / 2 / 2.8）× 每一档的每一条连线都单独聚焦量测：端点与对应端口偏差 < 0.01px；镜像 transform 与 `.tl-shapes` 微任务级一致；命中宽度恒为 14/zoom；可见连线数量恒为 3。
 - 页面坐标 mask：每个节点都有一条 black 挖空矩形且与 `getShapePageBounds` 完全一致，mask 覆盖范围包含全部节点。
 - 只动相机的 36 帧扫描：`d` / filter / stroke-width 重写均为 0，文档变更 0，镜像 transform 每帧一致，流光 computed filter 只有一种取值，可见连线数不跳变（并断言精确条数，避免"数量为 0 也算稳定"）。
-- 追溯线：正常绘制、没有命中路径、悬浮无剪刀、点击不产生伪选中。
+- 追溯线：正常绘制、没有命中路径、悬浮无剪刀、点击不产生伪选中。**2026-11-06 修订：上述断言已被取代**——现行断言为存在 1 条 `artifact:` 命中路径且 computed style `pointer-events` 为 `none`，悬浮追溯线出现 1 个剪刀（`aria-label="隐藏追溯线"`），点击追溯线仍不产生 `.data-edge.is-selected`，点剪刀后追溯线消失且目标节点 `meta.artifactLinkHidden===true`、普通数据边一条不少。
 - 交互：0.7 / 1 / 2.8 三个倍率都验证"悬浮出剪刀 → 按下选中正确连线 → 移开剪刀消失"，中倍率再验证真实点击剪刀删除。
 
 定向 33 项单测通过；lint、node/web 类型检查、日志门禁、生产构建通过。证据目录 `qa/edge-zoom-flicker-2026-11-02/`（`evidence.json`、各档位截图、改动前后指标）。

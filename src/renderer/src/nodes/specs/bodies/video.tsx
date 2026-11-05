@@ -134,9 +134,21 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const promptRef = useRef<HTMLTextAreaElement>(null)
   // 视频的所有图片只占一个绿色端口；模式决定连接顺序的协议角色。
   const images = gatherUpstreamMediaList(editor, shape.id, 'in-images', 'image')
+  const [mention, setMention] = useState<{ start: number; end: number } | null>(null)
+  const insertImageMention = (index: number): void => {
+    if (!mention) return
+    const token = '@图' + (index + 1) + ' '
+    setDraft(draft.slice(0, mention.start) + token + draft.slice(mention.end))
+    setMention(null)
+    requestAnimationFrame(() => {
+      promptRef.current?.focus()
+      promptRef.current?.setSelectionRange(mention.start + token.length, mention.start + token.length)
+    })
+  }
+
   const motionReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-video', 'video')
   const audioReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-audio', 'audio')
-  // @-提及功能已按用户要求移除；图片引用仍通过首/尾帧与多参考模式传入
+  // 图片引用按多值输入端口的连接顺序传入，提示词使用相同顺序。
   const opt = options.find((o) => o.key === data.modelKey)
   // 兼容网关代理属于供应商接入事实，统一收在能力层；UI 只读取结构化能力。
   const gatewayProxy = Boolean(
@@ -511,14 +523,46 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           maxLength={capabilities?.maxPromptChars}
           placeholder="描述视频内容、镜头与氛围…"
           onChange={(e) => {
-            setDraft(e.target.value)
+            const { value, selectionStart } = e.currentTarget
+            setDraft(value)
+            const match = /@[^\s@]*$/.exec(value.slice(0, selectionStart))
+            setMention(match ? { start: match.index, end: selectionStart } : null)
           }}
-          onBlur={() => {
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setMention(null)
+          }}
+          onBlur={(event) => {
+            if (!(event.relatedTarget instanceof Element && event.relatedTarget.closest('.ref-mention-menu'))) {
+              setMention(null)
+            }
             update({ ...data, params })
             updateText(draft)
           }}
           onPointerDown={(e) => e.stopPropagation()}
         />
+        {mention && images.length > 0 && (
+          <div className="ref-mention-menu" role="group" aria-label="选择参考图片" onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setMention(null)
+          }}>
+            {images.map((image, index) => (
+              <button
+                type="button"
+                key={image.mediaId + ':' + index}
+                onPointerDown={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                }}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  insertImageMention(index)
+                }}
+              >
+                <img src={mediaUrl(image.mediaPath)} alt="" />
+                @图{index + 1}
+              </button>
+            ))}
+          </div>
+        )}
       </section>
       {capabilities && (
         <section className="video-gen-section video-output-settings" aria-label="视频输出参数">

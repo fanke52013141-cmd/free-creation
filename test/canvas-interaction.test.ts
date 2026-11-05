@@ -101,8 +101,12 @@ describe('画布创建节点交互', () => {
     expect(dataEdgeLayerSource).toContain('mask={`url(#${overlapMaskId})`}')
     expect(dataEdgeLayerSource).toContain('<rect key={index} {...rect} fill="black" />')
     expect(dataEdgeLayerSource).toContain('className="data-edge-visible"')
-    // 追溯线（artifact:）只可视化、不可交互：不得为它注册命中路径，否则点击/框选被吞。
-    expect(dataEdgeLayerSource).toContain('.filter((edge) => !edge.provenance)')
+    // 追溯线（artifact:）自 2026-11-06 起可悬浮、可在剪刀处隐藏，但仍不可点击选中。
+    // 因此新不变量是：所有边（含追溯线）都注册 .data-edge-hit，命中只服务悬浮与剪刀；
+    // window 捕获阶段的 pointerdown / contextmenu 必须继续显式跳过 artifact:。
+    expect(dataEdgeLayerSource).toContain('className="data-edge-hit"')
+    expect(dataEdgeLayerSource.match(/hit\.startsWith\('artifact:'\)/g)).toHaveLength(2)
+    expect(dataEdgeLayerSource).not.toContain('.filter((edge) => !edge.provenance)')
     expect(edgeSurfaceSource).not.toMatch(/\.data-edge-visible\s*\{[^}]*stroke-dasharray/m)
   })
 

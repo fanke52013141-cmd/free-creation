@@ -171,7 +171,7 @@ function collectEdges(editor: Editor, draftFrom: ConnectionFrom | null): PageEdg
   for (const asset of editor.getCurrentPageShapes()) {
     if (asset.type !== 'node-card') continue
     const producerId = (asset.meta as Record<string, unknown> | undefined)?.artifactProducerId
-    if (typeof producerId !== 'string') continue
+    if (typeof producerId !== 'string' || asset.meta.artifactLinkHidden === true) continue
     const producer = editor.getShape<NodeCardShape>(producerId as TLShapeId)
     if (!producer || producer.type !== 'node-card') continue
     const producerBounds = editor.getShapePageBounds(producer.id)
@@ -351,6 +351,7 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
   })
   const mask = edgeMaskExtents(nodeRects)
   const hoveredEdgeId = hoveredEdge?.id ?? null
+  const hoveredEdgeIsArtifact = hoveredEdge !== null && hoveredEdge.id.startsWith('artifact:')
 
   /** 判断屏幕坐标是否落在任一连线的可点击描边区域内。 */
   const hitTest = (clientX: number, clientY: number): TLShapeId | null => {
@@ -388,8 +389,7 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
     for (const path of svg.querySelectorAll<SVGPathElement>('.data-edge-hit')) {
       if (path.isPointInStroke(point)) {
         const edgeId = path.dataset.edgeId
-        // 追溯线（artifact:）不可选中/不可删除；防御性兜底，正常渲染也不会为它生成命中路径。
-        if (!edgeId || edgeId.startsWith('artifact:')) return null
+        if (!edgeId) return null
         return edgeId as TLShapeId
       }
     }
@@ -412,7 +412,7 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
       // 无法再从该端口拖出新连线，所有"一输出扇出多输入"的流程都会被阻断。
       if (event.target instanceof Element && event.target.closest('.node-card-wrap')) return
       const hit = hitTest(event.clientX, event.clientY)
-      if (!hit) return
+      if (!hit || hit.startsWith('artifact:')) return
       // 命中连线：选中并终止传播，画布不会开始框选/平移，已选连线也不会被清除。
       event.preventDefault()
       event.stopPropagation()
@@ -428,7 +428,7 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
       // 与 pointerdown 同理：落在节点/端口上的右键属于节点，交给节点侧处理。
       if (event.target instanceof Element && event.target.closest('.node-card-wrap')) return
       const hit = hitTest(event.clientX, event.clientY)
-      if (!hit) return
+      if (!hit || hit.startsWith('artifact:')) return
       // 右键落在连线上：选中该连线，且不让空白处的创建菜单弹出。
       event.preventDefault()
       event.stopPropagation()
@@ -469,12 +469,24 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
   }, [editor, select])
 
   const deleteHoveredEdge = (): void => {
-    if (!hoveredEdge || !editor.getShape(hoveredEdge.id)) return
-    markUndoPoint(editor, 'delete-connection')
-    editor.deleteShapes([hoveredEdge.id])
+    if (!hoveredEdge) return
+    // 追溯线（artifact:）不是可删除的数据边，剪刀只把产物节点标记为“已隐藏追溯线”；
+    // 普通数据边仍走真实删除。两者文案必须区分，不能把隐藏说成断线。
+    const isArtifactLink = hoveredEdge.id.startsWith('artifact:')
+    if (isArtifactLink) {
+      const edge = edges.find((item) => item.id === hoveredEdge.id && item.provenance)
+      const asset = edge && editor.getShape<NodeCardShape>(edge.targetId)
+      if (!asset || asset.type !== 'node-card') return
+      markUndoPoint(editor, 'hide-artifact-link')
+      editor.updateShape({ id: asset.id, type: 'node-card', meta: { artifactLinkHidden: true } })
+    } else {
+      if (!editor.getShape(hoveredEdge.id)) return
+      markUndoPoint(editor, 'delete-connection')
+      editor.deleteShapes([hoveredEdge.id])
+    }
     clearEdgeSelection()
     setHoveredEdge(null)
-    toast('已断开 1 条连线')
+    toast(isArtifactLink ? '已隐藏追溯线' : '已断开 1 条连线')
   }
 
   return (
@@ -506,7 +518,7 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
               <g mask={`url(#${overlapMaskId})`}>
                 {edges.map((edge) => {
                   if (edge.provenance) {
-                    // 追溯线只在节点之外可见且不可交互，但沿用普通连线的颜色和流动层级。
+                    // 追溯线只在节点之外可见，但沿用普通连线的颜色和流动层级。
                     return (
                       <g key={edge.id} data-edge-id={edge.id}>
                         <path
@@ -585,10 +597,7 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
                 })}
               </g>
             )}
-            {/* 追溯线（artifact:）只可视化、不可交互：不得注册命中路径，否则点击/框选会被吞掉。 */}
-            {edges
-              .filter((edge) => !edge.provenance)
-              .map((edge) => (
+            {edges.map((edge) => (
                 <path
                   className="data-edge-hit"
                   key={`hit-${edge.id}`}
@@ -599,11 +608,12 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
           </svg>
         </div>
       </div>
-      {hoveredEdge && !hoveredEdge.id.startsWith('artifact:') && (
+      {hoveredEdge && (
         <button
           className="data-edge-scissors"
           type="button"
-          aria-label="删除此连线"
+          aria-label={hoveredEdgeIsArtifact ? '隐藏追溯线' : '删除此连线'}
+          title={hoveredEdgeIsArtifact ? '隐藏追溯线' : '删除此连线'}
           style={{ left: hoveredEdge.clientX, top: hoveredEdge.clientY }}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {

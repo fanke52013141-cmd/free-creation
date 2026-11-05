@@ -34,10 +34,65 @@ const path = require('node:path')
     await loadingCard.waitFor({ state: 'visible' })
     await loadingCard.locator('[role="progressbar"][aria-valuenow="99"]').waitFor()
     const field = loadingCard.locator('.generation-loading-field')
-    assert.equal(await field.evaluate(node => getComputedStyle(node, "::after").animationName), 'generation-particle-wave')
+    const starCanvas = field.locator('canvas.generation-star-canvas')
+    await starCanvas.waitFor({ state: 'visible' })
+    // 星辰场：Canvas 2D 星尘，星星不再由进度逐颗激活，加载开始后 ≤600ms 全部出现。
+    const canvasSize = await starCanvas.evaluate(canvas => ({
+      width: canvas.width,
+      height: canvas.height,
+      cssWidth: canvas.clientWidth,
+      cssHeight: canvas.clientHeight
+    }))
+    assert.ok(
+      canvasSize.width > 0 && canvasSize.height > 0,
+      'star canvas has backing store ' + JSON.stringify(canvasSize)
+    )
+    assert.ok(
+      canvasSize.cssWidth > 0 && canvasSize.cssHeight > 0,
+      'star canvas is laid out ' + JSON.stringify(canvasSize)
+    )
+    await page.waitForFunction(() => {
+      const node = document.querySelector('.node-execution-overlay .generation-loading-field')
+      return node?.getAttribute('data-reveal') === 'done'
+    }, null, { timeout: 5000 })
+    const revealed = await field.evaluate(node => ({
+      total: Number(node.getAttribute('data-stars')),
+      visible: Number(node.getAttribute('data-star-visible')),
+      motion: node.getAttribute('data-motion'),
+      elapsedMs: Number(node.getAttribute('data-reveal-at')) - Number(node.getAttribute('data-mounted-at'))
+    }))
+    assert.ok(revealed.total > 0, 'star dust count > 0, got ' + revealed.total)
+    assert.equal(revealed.visible, revealed.total, 'all stars visible once revealed')
+    assert.ok(
+      revealed.elapsedMs <= 600,
+      'all stars visible within 600ms, got ' + revealed.elapsedMs + 'ms'
+    )
+    assert.equal(revealed.motion, 'on')
+    console.log(
+      'Star dust: ' + revealed.total + ' stars, all visible in ' + revealed.elapsedMs + 'ms'
+    )
+    const litPixels = async () => starCanvas.evaluate(canvas => {
+      const context = canvas.getContext('2d')
+      const { data } = context.getImageData(0, 0, canvas.width, canvas.height)
+      let lit = 0
+      for (let index = 3; index < data.length; index += 4) if (data[index] > 10) lit += 1
+      return lit
+    })
+    assert.ok(await litPixels() > 100, 'star dust is painted, not an empty field')
     await page.screenshot({ path: path.join(output, 'image-generation-running.png') })
     await page.emulateMedia({ reducedMotion: 'reduce' })
-    assert.equal(await field.evaluate(node => getComputedStyle(node, "::after").animationName), 'none')
+    await page.waitForFunction(() => {
+      const node = document.querySelector('.node-execution-overlay .generation-loading-field')
+      return node?.getAttribute('data-motion') === 'off'
+    }, null, { timeout: 5000 })
+    assert.ok(await litPixels() > 100, 'reduced motion still paints static stars')
+    const staticFrame = await starCanvas.evaluate(async canvas => {
+      const before = canvas.toDataURL()
+      await new Promise(resolve => setTimeout(resolve, 320))
+      return before === canvas.toDataURL()
+    })
+    assert.equal(staticFrame, true, 'reduced motion draws one static frame (no rAF animation)')
+    await page.screenshot({ path: path.join(output, 'image-generation-reduced-motion.png') })
     await page.emulateMedia({ reducedMotion: 'no-preference' })
     await page.evaluate(async () => {
       const { useEditorStore } = await import('/src/stores/editor.ts')
@@ -65,7 +120,13 @@ const path = require('node:path')
         })
       }, type)
       await loadingCard.waitFor({ state: 'visible' })
-      assert.equal(await field.evaluate(node => getComputedStyle(node, "::after").animationName), 'generation-particle-wave')
+      await page.waitForFunction(() => {
+        const node = document.querySelector('.node-execution-overlay .generation-loading-field')
+        const canvas = node?.querySelector('canvas.generation-star-canvas')
+        return Boolean(
+          canvas && canvas.width > 0 && canvas.height > 0 && Number(node.getAttribute('data-stars')) > 0
+        )
+      }, null, { timeout: 5000 })
       await page.evaluate(async () => {
         const { useEditorStore } = await import('/src/stores/editor.ts')
         useEditorStore.getState().editor.updateShape({

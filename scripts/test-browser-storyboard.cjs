@@ -78,6 +78,24 @@ async function main() {
     await card.locator('.storyboard-table tbody tr').first().waitFor()
     assert.equal(await card.locator('.storyboard-table tbody tr').count(), 2, '两个镜头都要显示为表格行')
 
+    // 分镜板按列数自适应宽度（5 列时约 1324px），会把右下角工具栏推到视口外；
+    // 用固定相机把整张卡居中放进 1707×900 视口后再继续交互。
+    await page.evaluate(async () => {
+      const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
+      const shape = editor.getCurrentPageShapes().find((s) => s.props.nodeType === 'storyboard')
+      const bounds = shape && editor.getShapePageBounds(shape.id)
+      if (!bounds) return
+      const zoom = 0.6
+      editor.setCamera(
+        {
+          x: bounds.x + bounds.w / 2 - window.innerWidth / (2 * zoom),
+          y: bounds.y + bounds.h / 2 - window.innerHeight / (2 * zoom),
+          z: zoom
+        },
+        { immediate: true }
+      )
+    })
+
     // 列契约：字段列按镜头键动态生成且 id 永不成为列；身份只由行 data-shot-id 承载，
     // th 的 title 是稳定字段名，可见表头走中文标题。
     for (const field of ['scene', 'dialogue', 'sound', 'camera', 'duration']) {

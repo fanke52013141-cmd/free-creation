@@ -38,7 +38,7 @@ const path = require('node:path')
         const { useNodePanelStore } = await import('/src/stores/nodePanel.ts')
         useNodePanelStore.getState().open('contract', `shape:skill-${type}`, 'settings')
       }, type)
-      await page.getByRole('button', { name: '上传并安装 Skill', exact: true }).waitFor()
+      await page.getByRole('button', { name: '上传技能文件（.md / .json）', exact: true }).waitFor()
       if (type === 'chat') {
         await page.getByLabel('上传技能文件', { exact: true }).setInputFiles({ name: 'SKILL.md', mimeType: 'text/markdown',
           buffer: Buffer.from('---\nname: 自动整理\ndescription: 按输入整理输出\nversion: v1\n---\n直接整理并检查结果。') })
@@ -71,7 +71,7 @@ const path = require('node:path')
       await page.evaluate(async () => (await import('/src/stores/nodePanel.ts')).useNodePanelStore.getState().close())
     }
     await page.getByRole('button', { name: '打开对话', exact: true }).click()
-    await page.getByRole('button', { name: '上传并安装 Skill', exact: true }).waitFor()
+    await page.getByRole('button', { name: '上传技能文件（.md / .json）', exact: true }).waitFor()
     await page.getByRole('button', { name: '对话设置', exact: true }).click()
     await page.getByRole('textbox', { name: '输入消息', exact: true }).fill('未发送的草稿')
     await page.getByRole('button', { name: '对话设置', exact: true }).click()

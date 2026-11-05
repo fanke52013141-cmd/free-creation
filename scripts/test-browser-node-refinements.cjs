@@ -52,7 +52,7 @@ const assert = require('node:assert/strict')
       const buttons=[...n.querySelectorAll('.node-standard-action-bar button')].map(b=>b.getBoundingClientRect().width)
       return {delta:Math.abs((summary.top+summary.bottom-body.top-body.bottom)/2),buttons}
     })
-    assert.equal(await page.locator('.video-gen-prompt').evaluate(n=>getComputedStyle(n).borderColor),'rgba(255, 255, 255, 0.086)')
+    assert.equal(await page.locator('.video-gen-prompt').evaluate(n=>getComputedStyle(n).borderColor),'rgb(37, 43, 54)')
     await page.screenshot({path:'qa/node-refinements-before.png'})
     assert.ok(alignment.delta<12,JSON.stringify(alignment))
     assert.ok(Math.abs(alignment.buttons[0]-alignment.buttons[1])<1)

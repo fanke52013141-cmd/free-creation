@@ -1,10 +1,12 @@
-/* Neutral controls stay subdued throughout idle, hover and editing states. */
+/* Neutral controls stay subdued throughout idle, hover and editing states.
+   2026-11-06: field hairlines follow the reference card material (#252b36 idle,
+   #333b48 hover, teal 50% on focus) instead of white-alpha overlays. */
 .canvas-page
   .node-card-wrap
   .node-card
   .node-body
   :is(input:not([type='checkbox']), textarea, [contenteditable='true']) {
-  border-color: #ffffff16;
+  border-color: var(--node-edge);
   outline: none;
   box-shadow: none;
 }
@@ -13,16 +15,31 @@
   .node-card
   .node-body
   :is(input:not([type='checkbox']), textarea, [contenteditable='true']):hover {
-  border-color: #ffffff26;
+  border-color: var(--node-edge-hover);
 }
 .canvas-page
   .node-card-wrap
   .node-card
   .node-body
   :is(input:not([type='checkbox']), textarea, [contenteditable='true']):focus {
-  border-color: #ffffff38;
+  border-color: rgb(60 221 227 / 50%);
   outline: none;
-  box-shadow: 0 0 0 1px #ffffff08;
+  box-shadow: none;
+}
+/* AppSelect triggers are <button>s and the global reset forces border:0 !important,
+   so the reference hairline has to be restored with the same importance. */
+.canvas-page .node-card-wrap .node-card .app-select-trigger {
+  border: 1px solid var(--node-edge) !important;
+  border-radius: 6px;
+}
+.canvas-page .node-card-wrap .node-card .app-select-trigger:hover:not(:disabled) {
+  border-color: var(--node-edge-hover) !important;
+}
+.canvas-page .node-card-wrap .node-card .app-select-trigger[data-state='open'],
+.canvas-page .node-card-wrap .node-card .app-select-trigger:focus-visible {
+  border-color: var(--node-field-focus) !important;
+  outline: none;
+  box-shadow: none;
 }
 .canvas-page
   .node-card-wrap
@@ -94,25 +111,29 @@
   z-index: 0;
   opacity: 0;
   background: radial-gradient(
-    240px circle at var(--node-mouse-x, 50%) var(--node-mouse-y, 50%),
-    #d4dce810,
-    transparent 65%
+    var(--node-spot-radius, 260px) circle at var(--node-mouse-x, 50%) var(--node-mouse-y, 50%),
+    rgb(60 221 227 / 14%) 0%,
+    rgb(60 221 227 / 7%) 42%,
+    transparent 72%
   );
-  transition: opacity 240ms ease;
+  transition: opacity 280ms ease;
 }
-.canvas-page .node-card-wrap:hover .node-hover-spot {
-  opacity: 1;
+@media (hover: hover) and (pointer: fine) {
+  .canvas-page .node-card-wrap:hover:not(:has(.port-dot:hover)) .node-hover-spot {
+    opacity: 1;
+  }
 }
 .canvas-page .node-selection-beam {
   z-index: 7;
   inset: -1px;
-  padding: 1px;
+  padding: 1.5px;
+  border-radius: calc(var(--node-radius, 12px) + 1px);
   opacity: 0;
   background: conic-gradient(
     from var(--node-beam-angle),
     transparent 0deg 235deg,
-    #c9c3df22 295deg,
-    #e7e1f5bb 348deg,
+    rgb(60 221 227 / 18%) 295deg,
+    rgb(120 232 238 / 70%) 348deg,
     transparent 358deg
   );
   mask:
@@ -130,10 +151,10 @@
   display: none;
 }
 .canvas-page .node-card-wrap.is-selected {
-  outline-color: #b8b5c455;
+  outline-color: rgb(60 221 227 / 75%);
 }
 .canvas-page .node-card-wrap.is-selected .node-selection-beam {
-  opacity: 0.85;
+  opacity: 0.8;
   animation: node-beam-flow 8s linear infinite;
 }
 @keyframes node-beam-flow {
@@ -172,9 +193,9 @@
   padding: 1px;
   border-radius: inherit;
   background: radial-gradient(
-    180px circle at var(--node-mouse-x, 50%) var(--node-mouse-y, 50%),
-    #e1e6f299,
-    transparent 65%
+    calc(var(--node-spot-radius, 260px) * .62) circle at var(--node-mouse-x, 50%) var(--node-mouse-y, 50%),
+    rgb(120 232 238 / 55%),
+    transparent 62%
   );
   mask:
     linear-gradient(#000 0 0) content-box,
