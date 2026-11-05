@@ -61,8 +61,8 @@
 
   .canvas-page .node-card-wrap:not(.is-selected):hover:not(:active):not(:has(.port-dot:hover)) {
     --node-hover-lift: -3px;
-    outline-color: var(--node-edge-hover);
-    box-shadow: 0 6px 18px rgb(0 0 0 / 45%), 0 2px 6px rgb(0 0 0 / 30%);
+    outline-color: #2f3541;
+    box-shadow: 0 14px 40px rgb(0 0 0 / 30%);
   }
 
   .canvas-page .node-card-wrap > .port-dot {

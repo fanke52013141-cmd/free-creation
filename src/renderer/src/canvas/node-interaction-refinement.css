@@ -110,23 +110,29 @@
 .canvas-page .node-hover-spot {
   z-index: 0;
   opacity: 0;
-  /* 2026-11-06 平滑接续：(1 - r²)² 超高斯衰减，多段色标避免 42%/72% 两处斜率突变
-     在暗底上形成可见的同心环带（Mach band）；光在卡片边界内自然衰减到 0。 */
+  transition: opacity 340ms ease;
+}
+/* 2026-11-06 三次修订（用户反馈"中心不明显、外面还是一圈一圈"）：
+   改为单一柔光斑——中心更亮、向外按一段连续曲线衰减；整层再做模糊，把 8-bit
+   量化台阶与色标接缝一并抹平；不再叠加 1px 边缘光硬环，避免"圈线"感。 */
+.canvas-page .node-hover-spot::before {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  border-radius: inherit;
   background: radial-gradient(
-    var(--node-spot-radius, 260px) circle at var(--node-mouse-x, 50%) var(--node-mouse-y, 50%),
-    rgb(60 221 227 / 14%) 0%,
-    rgb(60 221 227 / 13.86%) 10%,
-    rgb(60 221 227 / 13.37%) 20%,
-    rgb(60 221 227 / 12.47%) 30%,
-    rgb(60 221 227 / 10.98%) 40%,
-    rgb(60 221 227 / 8.86%) 50%,
-    rgb(60 221 227 / 6.27%) 60%,
-    rgb(60 221 227 / 3.49%) 70%,
-    rgb(60 221 227 / 1.24%) 80%,
-    rgb(60 221 227 / 0.15%) 90%,
+    calc(var(--node-spot-radius, 260px) * .85) circle at var(--node-mouse-x, 50%) var(--node-mouse-y, 50%),
+    rgb(60 221 227 / 50%) 0%,
+    rgb(60 221 227 / 42%) 18%,
+    rgb(60 221 227 / 28%) 40%,
+    rgb(60 221 227 / 12%) 64%,
+    rgb(60 221 227 / 3%) 84%,
     transparent 100%
   );
-  transition: opacity 280ms ease;
+  filter: blur(calc(var(--node-spot-radius, 260px) * .07));
+}
+.canvas-page .node-hover-spot::after {
+  content: none;
 }
 @media (hover: hover) and (pointer: fine) {
   .canvas-page .node-card-wrap:hover:not(:has(.port-dot:hover)) .node-hover-spot {
@@ -196,26 +202,10 @@
   overflow-wrap: anywhere;
 }
 
+/* 2026-11-06 三次修订：不再绘制 1px 边缘光硬环（用户反馈有"圈线"），
+   卡边只保留柔光溢出；需要边缘提亮时由柔光斑自身的衰减承担。 */
 .canvas-page .node-hover-spot::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  padding: 1px;
-  border-radius: inherit;
-  /* 边缘光沿卡边平滑衰减，避免在 62% 处突然截断形成第二道环。 */
-  background: radial-gradient(
-    calc(var(--node-spot-radius, 260px) * .72) circle at var(--node-mouse-x, 50%) var(--node-mouse-y, 50%),
-    rgb(120 232 238 / 50%) 0%,
-    rgb(120 232 238 / 42%) 25%,
-    rgb(120 232 238 / 26%) 50%,
-    rgb(120 232 238 / 12%) 72%,
-    rgb(120 232 238 / 3%) 90%,
-    transparent 100%
-  );
-  mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  mask-composite: exclude;
+  content: none;
 }
 .canvas-page.canvas-theme-light
   .node-card-wrap
