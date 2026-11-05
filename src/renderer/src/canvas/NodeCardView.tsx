@@ -1,3 +1,4 @@
+import { toast } from '../stores/toast'
 import { checkModelAvailability, providerAvailabilityKey } from './model-availability'
 import type { ModelOperation } from '@free-creation/model-contracts'
 import { nodePageIndex } from './node-page-index'
@@ -163,23 +164,24 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   } | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
+  const [headerActions, setHeaderActions] = useState<HTMLSpanElement | null>(null)
   const [portFollow, setPortFollow] = useState<PortFollowPosition | null>(null)
   const portFollowRef = useRef<PortFollowPosition | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLDivElement>(null)
   const titleEditable = true
 
-  /** 圆点只在节点外侧的半圆命中区内随鼠标移动。 */
+  /** Follow within the detached hit area, in canvas-local pixels. */
   const updatePortFollow = (
     event: React.PointerEvent<HTMLSpanElement>,
-    key: string,
-    side: 'in' | 'out'
+    key: string
   ): void => {
     const rect = event.currentTarget.getBoundingClientRect()
-    let x = event.clientX - (rect.left + rect.width / 2)
-    let y = event.clientY - (rect.top + rect.height / 2)
-    x = side === 'out' ? Math.max(0, x) : Math.min(0, x)
-    const radius = 16
+    if (event.pointerType !== 'mouse' || event.buttons !== 0) return
+    const zoom = rect.width / NODE_PORT_SIZE || 1
+    let x = (event.clientX - (rect.left + rect.width / 2)) / zoom
+    let y = (event.clientY - (rect.top + rect.height / 2)) / zoom
+    const radius = NODE_PORT_SIZE / 2
     const length = Math.hypot(x, y)
     if (length > radius) {
       const ratio = radius / length
@@ -218,9 +220,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   ): { x: number; y: number } => {
     const rect = event.currentTarget.getBoundingClientRect()
     const follow = portFollowRef.current?.key === key ? portFollowRef.current : null
+    const zoom = rect.width / NODE_PORT_SIZE || 1
     return {
-      x: rect.left + rect.width / 2 + (follow?.x ?? 0),
-      y: rect.top + rect.height / 2 + (follow?.y ?? 0)
+      x: rect.left + rect.width / 2 + (follow?.x ?? 0) * zoom,
+      y: rect.top + rect.height / 2 + (follow?.y ?? 0) * zoom
     }
   }
 
@@ -887,7 +890,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           return
         }
         // 旧尺寸迁移：超过上限（视频生成节点用专用上限）才回收，不碰合法档位。
-        const clamped = Math.max(NODE_UI.height.min, Math.min(heightCap, current))
+        const minimum = metadata.nodeHeightMode === 'manual' ? 260 : NODE_UI.height.min
+        const clamped = Math.max(minimum, Math.min(heightCap, current))
         if (clamped !== current) {
           editor.run(
             () =>
@@ -898,7 +902,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 meta: {
                   ...metadata,
                   nodeOriginalHeight: metadata.nodeOriginalHeight ?? current,
-                  nodeHeightMode: metadata.nodeHeightMode ?? 'manual'
+                  nodeHeightMode: metadata.nodeHeightMode ?? (current === 260 ? 'auto' : 'manual')
                 }
               }),
             { history: 'ignore' }
@@ -906,7 +910,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           return
         }
         if (metadata.nodeHeightMode === 'manual') return
-        if (!metadata.nodeHeightMode && resolveNodeHeight(current, heightCap) !== current) {
+        if (!metadata.nodeHeightMode && current !== 260 && resolveNodeHeight(current, heightCap) !== current) {
           editor.run(
             () =>
               editor.updateShape({
@@ -944,6 +948,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           : body.scrollHeight
         const references = body.querySelector<HTMLElement>('.connected-inputs')?.offsetHeight ?? 0
         const required =
+          NODE_UI.header.height +
           (scroll.parentElement?.querySelector<HTMLElement>('.node-standard-action-bar')
             ?.offsetHeight || NODE_UI.actionBar.bottomInset) +
           NODE_UI.content.padding +
@@ -1065,7 +1070,18 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             : ''
         }`}
         data-node-id={shape.id}
-        style={{ width: shape.props.w, height: shape.props.h }}
+        style={{ width: shape.props.w, height: shape.props.h,
+          ['--node-header-h' as string]: `${NODE_UI.header.height}px`,
+          ['--node-empty-icon-size' as string]: `${NODE_UI.identity.iconSize}px`,
+          ['--node-port-outset' as string]: `${NODE_PORT_OUTSET}px`,
+          ['--node-port-hit' as string]: `${NODE_PORT_SIZE}px`
+        }}
+        onPointerMove={(event) => {
+          if (event.pointerType !== 'mouse') return
+          const rect = event.currentTarget.getBoundingClientRect()
+          event.currentTarget.style.setProperty('--node-mouse-x', String((event.clientX - rect.left) / rect.width * 100) + '%')
+          event.currentTarget.style.setProperty('--node-mouse-y', String((event.clientY - rect.top) / rect.height * 100) + '%')
+        }}
         onPointerDown={handleCardPointerDown}
         onPointerDownCapture={(event) => {
           if (
@@ -1160,9 +1176,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           {/* 标题行布局：左侧依次为 序号 → 图标 → 名称 → 可选字数 → 查看输入输出说明；
                 状态灯保留在标题行，运行动作独立浮在卡片右上角，避免挤压标题。 */}
           <span className="node-seq" title={`节点序号 ${seq}`}>
-            {seq}
+            {String(seq).padStart(2, '0')}
           </span>
-          <span className="node-icon" style={{ color: nodeIconColor(nodePortColor) }}>
+          <span className="node-icon" style={{ color: nodeIconColor(spec?.color ?? nodePortColor) }}>
             {/* JSX 尺寸与 ui-surfaces 对 .node-icon svg 的强制 17px 保持一致 */}
             {spec ? <Icon name={spec.icon} size={17} /> : <Icon name="help" size={17} />}
           </span>
@@ -1191,7 +1207,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           {shape.props.nodeType === 'text' && shape.props.text && (
             <span className="node-text-count">{formatCharCount(shape.props.text.length)}</span>
           )}
-          {/* info 按钮（查看输入输出说明）：紧跟节点名称，点击显式打开右侧契约面板。
+          <span className="node-header-spacer" />
+          <span ref={setHeaderActions} className="node-header-file-actions" />
+          {/* info 按钮（查看输入输出说明）：点击显式打开右侧契约面板。
               对话节点也必须能查看与其他节点相同的输入输出契约。标题必须和 openNodePanel 的
               去向一致——预演台从卡片按钮进，这里写「打开 3D 预演台」会是假提示。
               折叠组合的首位卡不提供单节点属性入口，组合级操作在右上角图标。 */}
@@ -1211,7 +1229,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           )}
           {/* 弹性占位：运行与状态都固定在标题行的右侧。
               折叠组合的首位卡隐藏单节点状态与运行入口，组合级运行在右上角图标。 */}
-          <span className="node-header-spacer" />
           {!comboTop && (
             <>
               {shape.meta.nodeHeightMode === 'manual' && (
@@ -1264,6 +1281,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             </>
           )}
         </div>
+        <span className="node-hover-spot" aria-hidden="true" />
+        <span className="node-selection-beam" aria-hidden="true" />
         <div
           className={`node-card type-${shape.props.nodeType}`}
           data-node-type={shape.props.nodeType}
@@ -1283,6 +1302,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             <NodeCardShell
               spec={spec}
               busy={activeExecution}
+              header={headerActions}
               openDescription={() =>
                 useNodePanelStore.getState().open('contract', shape.id, 'overview')
               }
@@ -1364,8 +1384,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 ...portFollowStyle(portKey)
               }}
               aria-label={portHint(p)}
-              onPointerEnter={(event) => updatePortFollow(event, portKey, 'in')}
-              onPointerMove={(event) => updatePortFollow(event, portKey, 'in')}
+              onPointerEnter={(event) => updatePortFollow(event, portKey)}
+              onPointerMove={(event) => updatePortFollow(event, portKey)}
               onPointerLeave={() => clearPortFollow(portKey)}
               onPointerDown={(e) => {
                 stopEventPropagation(e)
@@ -1435,8 +1455,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 ...portFollowStyle(portKey)
               }}
               aria-label={portHint(p)}
-              onPointerEnter={(event) => updatePortFollow(event, portKey, 'out')}
-              onPointerMove={(event) => updatePortFollow(event, portKey, 'out')}
+              onPointerEnter={(event) => updatePortFollow(event, portKey)}
+              onPointerMove={(event) => updatePortFollow(event, portKey)}
               onPointerLeave={() => clearPortFollow(portKey)}
               onPointerDown={(e) => {
                 stopEventPropagation(e)
@@ -1506,6 +1526,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                     onClick={(e) => {
                       e.stopPropagation()
                       void window.api.copyMediaPath(shape.props.mediaId)
+            .then((result) => toast(result.ok && result.data ? '复制成功' : '复制失败，请重试'))
+            .catch(() => toast('复制失败，请重试'))
                     }}
                   >
                     <Icon name="copy" size={14} />

@@ -6,7 +6,7 @@ import { registerAgentFlowNodeTypes } from './agentFlow'
 import { DEFAULT_VIDEO_CLAY_CONFIG, serializeVideoClayConfig } from '@shared/video-conversion'
 import { NODE_ACCENTS, registerNodeType, unregisterNodeType } from '../registry'
 import { readNodeConfig } from '../../canvas/node-persistence'
-import { STORYBOARD_UI, TIMELINE_UI } from '../../canvas/node-ui-tokens'
+import { NODE_UI, STORYBOARD_UI, TIMELINE_UI } from '../../canvas/node-ui-tokens'
 import {
   parseSpeechConfig,
   VOLC_REFERENCE_AUDIO_MAX_BYTES,
@@ -280,7 +280,7 @@ export function registerBaseNodeTypes(): void {
     label: '文本',
     icon: 'text',
     color: NODE_ACCENTS.text,
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '可编辑的原始文本。上游文本在运行时并入正文，再经 out-text 输出。',
     category: 'input',
     ports: {
@@ -302,7 +302,7 @@ export function registerBaseNodeTypes(): void {
     label: '网址节点',
     icon: 'website',
     color: NODE_ACCENTS.website,
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '保存网页名称与链接；点击打开，也可连接输出。',
     category: 'input',
     ports: {
@@ -325,7 +325,7 @@ export function registerBaseNodeTypes(): void {
     label: '图片',
     icon: 'image',
     color: NODE_ACCENTS.image,
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '图片资产节点，只负责保存和输出一张已导入的图片，不承担生成逻辑。',
     category: 'input',
     ports: {
@@ -343,7 +343,7 @@ export function registerBaseNodeTypes(): void {
     label: '裁剪',
     icon: 'crop',
     color: NODE_ACCENTS['image-crop'],
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '对上游图片做矩形或透视裁剪；每次运行产出新图片，原图不变。',
     category: 'image',
     ports: {
@@ -366,7 +366,7 @@ export function registerBaseNodeTypes(): void {
     icon: 'image-split',
     color: NODE_ACCENTS['image-split'],
     // 结果网格在卡片内限高滚动（见 .media-result-grid），不通过放大默认卡片容纳内容。
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '把一张上游图片按行列拆成多张；输出当前图与图片集合。',
     category: 'image',
     ports: {
@@ -399,7 +399,7 @@ export function registerBaseNodeTypes(): void {
     label: '生图',
     icon: 'image-gen',
     color: NODE_ACCENTS['image-gen'],
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '根据提示词和有序参考图片生成图片；所有参考图统一连入一个多值图片端口。',
     category: 'input',
     ports: {
@@ -436,7 +436,7 @@ export function registerBaseNodeTypes(): void {
     label: 'P图',
     icon: 'image-edit',
     color: NODE_ACCENTS['image-edit'],
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '以一张上游图片为原图，结合标注与文字说明生成新的图片；原图保持不变。',
     category: 'image',
     ports: {
@@ -460,7 +460,7 @@ export function registerBaseNodeTypes(): void {
     label: '视频生成',
     icon: 'video',
     color: NODE_ACCENTS.video,
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '由文本与参考素材生成视频；所有参考必须经端口连入。',
     category: 'input',
     ports: {
@@ -511,7 +511,7 @@ export function registerBaseNodeTypes(): void {
     label: '视频素材',
     icon: 'video-asset',
     color: NODE_ACCENTS['video-asset'],
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '视频资产节点：导入本地视频，只负责预览、替换和向下游输出。',
     category: 'input',
     ports: { in: [], out: [output('out-video', '视频', 'video', '不可变的视频资产引用。')] },
@@ -529,7 +529,7 @@ export function registerBaseNodeTypes(): void {
     label: '抽帧',
     icon: 'frame',
     color: NODE_ACCENTS['video-frame'],
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '提取上游视频首帧/尾帧/指定时刻画面为新图片。',
     category: 'video',
     ports: {
@@ -547,7 +547,7 @@ export function registerBaseNodeTypes(): void {
     label: '视频截取',
     icon: 'clip',
     color: NODE_ACCENTS['video-clip'],
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '按起止毫秒截取视频，可选择画面或音频；提取音频时可在同次操作中提取人声。',
     category: 'video',
     ports: {
@@ -572,7 +572,7 @@ export function registerBaseNodeTypes(): void {
     label: '深度视频',
     icon: 'depth',
     color: NODE_ACCENTS['video-depth'],
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '使用本地 CUDA 推理将视频转换为灰度深度视频；源音频可选保留。',
     category: 'video',
     ports: {
@@ -591,7 +591,7 @@ export function registerBaseNodeTypes(): void {
     label: '白模视频',
     icon: 'clay',
     color: NODE_ACCENTS['video-clay'],
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '以连续深度生成哑光白模视频，支持光照预设、质量选择和时间稳定处理。',
     category: 'video',
     ports: {
@@ -609,7 +609,7 @@ export function registerBaseNodeTypes(): void {
     label: '截音频',
     icon: 'video-audio',
     color: NODE_ACCENTS['video-audio'],
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description:
       '已退役：功能并入「视频截取」。历史画布中的本节点仍可正常执行与连线，但不能再新建。',
     category: 'video',
@@ -629,7 +629,7 @@ export function registerBaseNodeTypes(): void {
     label: '人声分离',
     icon: 'vocal-separate',
     color: NODE_ACCENTS['vocal-separate'],
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '已退役：新视频操作直接提取人声；历史画布中的节点仍可运行。',
     category: 'audio',
     creatable: false,
@@ -657,7 +657,7 @@ export function registerBaseNodeTypes(): void {
     label: '音频',
     icon: 'audio',
     color: NODE_ACCENTS.audio,
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '音频资产节点：导入本地音频，只负责保存、预览和输出资产。',
     category: 'input',
     ports: {
@@ -678,7 +678,7 @@ export function registerBaseNodeTypes(): void {
     label: '声音调整',
     icon: 'sound-adjust',
     color: NODE_ACCENTS['sound-adjust'],
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '按倍率或目标时长调整音频/视频速度与声量。',
     category: 'audio',
     ports: {
@@ -710,7 +710,7 @@ export function registerBaseNodeTypes(): void {
     label: '文件',
     icon: 'document',
     color: NODE_ACCENTS.file,
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '文件资产节点：导入 Excel / Word / PDF 等文档并输出。',
     category: 'input',
     ports: {
@@ -736,7 +736,7 @@ export function registerBaseNodeTypes(): void {
     label: '语音合成',
     icon: 'speech',
     color: NODE_ACCENTS.speech,
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '按所选供应商和语音参数，把文本合成为音频。供应商相关输入输出规则见“输入输出”。',
     category: 'audio',
     ports: speechStaticPorts(),
@@ -752,7 +752,7 @@ export function registerBaseNodeTypes(): void {
     label: '语音克隆',
     icon: 'voice-clone',
     color: NODE_ACCENTS.tts,
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '根据参考语音登记可复用音色 ID，连接语音合成节点使用。',
     category: 'audio',
     ports: {
@@ -774,7 +774,7 @@ export function registerBaseNodeTypes(): void {
     label: '音色设计',
     icon: 'voice-design',
     color: NODE_ACCENTS['voice-design'],
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '用文字描述设计音色，产出试听音频与可复用的音色 ID。',
     category: 'audio',
     ports: {
@@ -804,7 +804,7 @@ export function registerBaseNodeTypes(): void {
     label: 'AI 对话',
     icon: 'chat',
     color: NODE_ACCENTS.chat,
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '与文本模型对话。上游文本会成为本轮输入，最后一条助手回复作为文本输出。',
     category: 'audio',
     ports: {
@@ -844,7 +844,7 @@ export function registerScriptNodeType(): void {
     label: '脚本',
     icon: 'script',
     color: NODE_ACCENTS.script,
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '旧版复合脚本节点，仅兼容保留；新流程用「文本 → 处理 → JSON」。',
     category: 'data',
     creatable: false,
@@ -881,7 +881,7 @@ export function registerExtendedNodeTypes(): void {
     label: '数据处理',
     icon: 'processor',
     color: NODE_ACCENTS.processor,
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '单值透传并保持原类型；也可从 JSON 取字段或转成文本模板。',
     category: 'data',
     ports: PROCESSOR_PORTS,
@@ -895,7 +895,7 @@ export function registerExtendedNodeTypes(): void {
     label: 'JSON',
     icon: 'json',
     color: NODE_ACCENTS.json,
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '解析并格式化通用 JSON，支持手工编辑；多条 JSON 连线会汇总成数组。',
     category: 'data',
     ports: {
@@ -929,7 +929,7 @@ export function registerExtendedNodeTypes(): void {
     label: '结构数据',
     icon: 'structured',
     color: NODE_ACCENTS.structured,
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '按 Schema 校验 JSON 正文，运行时可插入连线值占位符。',
     category: 'data',
     ports: {
@@ -987,7 +987,7 @@ export function registerExtendedNodeTypes(): void {
     label: '代码',
     icon: 'code',
     color: NODE_ACCENTS.code,
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '本地运行 JavaScript，支持具名输入和多字段输出。',
     category: 'data',
     ports: {
@@ -1098,7 +1098,7 @@ export function registerExtendedNodeTypes(): void {
     label: 'AI 处理',
     icon: 'ai-process',
     color: NODE_ACCENTS['ai-process'],
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '把上游文本/JSON 交给文本模型，产出文本、Markdown 或 JSON。',
     category: 'ai',
     ports: {
@@ -1132,7 +1132,7 @@ export function registerExtendedNodeTypes(): void {
     label: '循环',
     icon: 'iterate',
     color: NODE_ACCENTS.iterate,
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '按顺序逐项运行循环体，并汇总结果。',
     category: 'data',
     ports: {
@@ -1173,7 +1173,7 @@ export function registerExtendedNodeTypes(): void {
     label: '3D 预演台',
     icon: 'director',
     color: NODE_ACCENTS.director,
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
     description: '3D 白模预演台；发布后帧、视频与机位才成为下游输入。',
     category: 'video',
     executionMode: 'manual-publish',

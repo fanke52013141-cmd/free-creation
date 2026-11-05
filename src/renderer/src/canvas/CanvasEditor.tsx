@@ -176,10 +176,10 @@ function migrateLegacyNodeSizes(editor: Editor): number {
     .flatMap((shape) => {
       const spec = getNodeType(shape.props.nodeType)
       if (!spec) return []
-      // 轨道线：旧默认高度（210/230）升到当前默认（286），并把旧的默认两轨补齐到三轨。
+      // 轨道线：迁移旧默认高度，并把旧的默认两轨补齐到三轨。
       if (shape.props.nodeType === 'timeline') {
         const props: { w?: number; h?: number; text?: string } = {}
-        if (needsTimelineHeightMigration(shape.props.nodeType, shape.props.h)) {
+        if (shape.meta?.nodeHeightMode !== 'manual' && needsTimelineHeightMigration(shape.props.nodeType, shape.props.h)) {
           props.h = spec.defaultSize.h
         }
         const parsed = parseTimeline(shape.props.text)

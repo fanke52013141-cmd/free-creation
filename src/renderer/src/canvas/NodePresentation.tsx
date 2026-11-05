@@ -22,6 +22,7 @@ interface PresentationContext {
   spec: NodeTypeSpec
   busy: boolean
   footer: HTMLDivElement | null
+  header: HTMLSpanElement | null
   registerAction: (delta: number) => void
   registerIdentity: (delta: number) => void
   openDescription: () => void
@@ -96,7 +97,7 @@ export function NodeIdentity({ children }: { children?: ReactNode }): React.JSX.
       data-icon-only={iconOnly ? 'true' : undefined}
     >
       <span className="node-standard-identity-icon">
-        <Icon name={context.spec.icon} size={NODE_UI.identity.iconSize} strokeWidth={2} />
+        <Icon name={context.spec.icon} size={NODE_UI.identity.iconSize} strokeWidth={1.65} />
       </span>
       {children}
     </div>
@@ -195,6 +196,16 @@ export function NodeFooterActions({ children }: { children: ReactNode }): React.
     : null
 }
 
+/** Move the same controls and callbacks into the shared header, without copying their state. */
+export function NodeHeaderActions({ children }: { children: ReactNode }): React.JSX.Element | null {
+  const context = useContext(Context)
+  if (!context) return <>{children}</>
+  return context.header ? createPortal(
+    <fieldset className="node-header-action-group" disabled={context.busy} aria-label="节点文件操作">
+      {children}
+    </fieldset>, context.header) : null
+}
+
 export function NodeActionBar({
   footerRef,
   children
@@ -212,11 +223,13 @@ export function NodeActionBar({
 export function NodeCardShell({
   spec,
   busy,
+  header = null,
   children,
   openDescription
 }: {
   spec: NodeTypeSpec
   busy: boolean
+  header?: HTMLSpanElement | null
   children: ReactNode
   openDescription: () => void
 }): React.JSX.Element {
@@ -236,8 +249,8 @@ export function NodeCardShell({
     []
   )
   const context = useMemo(
-    () => ({ spec, busy, footer, registerAction, registerIdentity, openDescription }),
-    [spec, busy, footer, registerAction, registerIdentity, openDescription]
+    () => ({ spec, busy, footer, header, registerAction, registerIdentity, openDescription }),
+    [spec, busy, footer, header, registerAction, registerIdentity, openDescription]
   )
   return (
     <Context.Provider value={context}>

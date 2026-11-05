@@ -203,11 +203,12 @@ export function findContinuationPlacement(
     if (!start || start.toId !== source.id || !end || end.toId === source.id) continue
     const child = editor.getShape<NodeCardShape>(end.toId)
     if (!child || child.type !== 'node-card') continue
-    preferredX = Math.min(preferredX ?? Number.POSITIVE_INFINITY, child.x)
+    const childBounds = editor.getShapePageBounds(child)
+    preferredX = Math.min(preferredX ?? Number.POSITIVE_INFINITY, childBounds?.x ?? child.x)
   }
   return findNodeContinuationPlacement({
-    source: { x: source.x, y: source.y, w: source.props.w, h: source.props.h },
-    existing: existingInColumn.map((shape) => ({
+    source: editor.getShapePageBounds(source) ?? { x: source.x, y: source.y, w: source.props.w, h: source.props.h },
+    existing: existingInColumn.map((shape) => editor.getShapePageBounds(shape) ?? ({
       x: shape.x,
       y: shape.y,
       w: shape.props.w,
@@ -352,8 +353,6 @@ export function ImageContinuationActions({
             {actionButtons}
             {extra}
           </div>
-          <span className="media-action-divider" aria-hidden="true" />
-          <MediaFileActions shape={shape} />
         </>
       ) : (
         <>
@@ -635,6 +634,8 @@ export function MediaFileActions({
         onClick={(e) => {
           e.stopPropagation()
           void window.api.copyMediaPath(shape.props.mediaId)
+            .then((result) => toast(result.ok && result.data ? '复制成功' : '复制失败，请重试'))
+            .catch(() => toast('复制失败，请重试'))
         }}
       >
         <Icon name="copy" size={11} />
@@ -973,10 +974,10 @@ export function expandSplitResults(
         y: position.y,
         props: {
           nodeType: 'image',
-          // 与主进程/执行器命名一致：「图N+原始命名」；优先用资产落盘名（即原始图名）。
+          // 与主进程/执行器命名一致：「图N原始命名」；优先用资产落盘名（即原始图名）。
           title:
             useMediaStore.getState().assets.find((asset) => asset.id === item.mediaId)?.name ||
-            `图${index + 1}+${source.props.title || '图片拆分'}`,
+            `图${index + 1}${source.props.title || '图片拆分'}`,
           mediaId: item.mediaId,
           mediaPath: item.mediaPath,
           mediaMime: item.mime,

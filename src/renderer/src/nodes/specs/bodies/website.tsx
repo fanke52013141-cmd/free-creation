@@ -59,18 +59,22 @@ export function WebsiteBody({ shape }: NodeBodyProps): React.JSX.Element {
         window.open(link.url, '_blank', 'noreferrer')
       }}
     >
-      <strong>{link.name}</strong>
-      <span className="website-node-url">{link.url}</span>
-      {/* 与文件节点「导入文件」同一套按钮材质：btn-ghost 白字描边，图标在左。
-          单击穿透给画布（选中节点），双击沿卡片逻辑打开网址，不在此处拦截事件。 */}
-      <NodePrimaryButton
-        className="btn-ghost website-node-open"
-        title="打开网址"
-        onClick={() => window.open(link.url, '_blank', 'noreferrer')}
-      >
-        <Icon name="external" size={14} />
-        打开网址
-      </NodePrimaryButton>
+      <div className="website-node-summary">
+        <strong>{link.name}</strong>
+        <span className="website-node-url">{link.url}</span>
+      </div>
+      <div className="website-node-actions">
+        <NodePrimaryButton onClick={() => useNodePanelStore.getState().open('contract', shape.id, 'settings')}>
+          修改网址
+        </NodePrimaryButton>
+        <NodePrimaryButton
+          className="btn-ghost website-node-open"
+          title="打开网址"
+          onClick={() => window.open(link.url, '_blank', 'noreferrer')}
+        >
+          打开网址
+        </NodePrimaryButton>
+      </div>
     </div>
   )
 }

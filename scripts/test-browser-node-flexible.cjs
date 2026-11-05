@@ -47,7 +47,7 @@ const fs = require('node:fs')
     const inspect = () =>
       page.locator('.node-card').evaluateAll((cards) =>
         cards.map((card) => {
-          const r = card.getBoundingClientRect(),
+          const r = card.closest('.node-card-wrap').getBoundingClientRect(),
             scroll = card.querySelector('.node-standard-scroll'),
             prompt = card.querySelector('.gen-prompt'),
             button = card.querySelector('.node-standard-action-bar button')
@@ -64,7 +64,7 @@ const fs = require('node:fs')
               h: prompt.getBoundingClientRect().height,
               gap: button.getBoundingClientRect().top - prompt.getBoundingClientRect().bottom
             },
-            bottom: button && r.bottom - button.getBoundingClientRect().bottom
+            bottom: button && r.bottom - (button.closest('.media-action-toolbar') || button).getBoundingClientRect().bottom
           }
         })
       )
@@ -76,13 +76,13 @@ const fs = require('node:fs')
       assert.equal(node.description, 0)
       assert.ok(!node.buttons.some((t) => /^配置(图片|裁剪|拆分)$/.test(t)))
       if (node.type !== 'image-gen') {
-        assert.equal(node.h, 260)
+        assert.equal(node.h, 300)
         assert.ok(node.overflow <= 1, JSON.stringify(node))
       }
       if (node.bottom !== null) assert.ok(Math.abs(node.bottom - 8) < 1.1, JSON.stringify(node))
     }
     const gen = layout.find((n) => n.type === 'image-gen')
-    assert.equal(gen.h,320,'实际引用在默认高度上增加空间')
+    assert.equal(gen.h,360,'实际引用在默认高度上增加空间')
     assert.ok(gen.prompt.w >= 314)
     assert.ok(gen.prompt.h > 72)
     assert.ok(Math.abs(gen.prompt.gap - 8) < 1.1, JSON.stringify(gen))
@@ -125,7 +125,7 @@ const fs = require('node:fs')
       editor.updateShape({
         id: 'shape:flex-image-gen',
         type: 'node-card',
-        props: { h: 440 },
+        props: { h: 480 },
         meta: { nodeHeightMode: 'manual' }
       })
     })
@@ -143,7 +143,7 @@ const fs = require('node:fs')
     })
     await page.waitForTimeout(300)
     assert.equal(await page.locator('[data-node-type="image-gen"] .connected-inputs').count(), 0)
-    assert.equal((await inspect()).find(n=>n.type==='image-gen').h,260,'移除引用后恢复默认高度')
+    assert.equal((await inspect()).find(n=>n.type==='image-gen').h,300,'移除引用后恢复默认高度')
     await page.screenshot({ path: `${output}/light-no-reference.png` })
     // 已有视频只能提供缩略预览，竖屏固有比例不得触发自动高度或滚动。
     await page.evaluate(async () => {
@@ -171,16 +171,16 @@ const fs = require('node:fs')
     const videos = await page.locator('.node-card:is(.type-video-asset,.type-video)').evaluateAll((nodes) =>
       nodes.map((node) => {
         const scroll = node.querySelector('.node-standard-scroll')
-        return { height: node.getBoundingClientRect().height, scroll: scroll.scrollHeight, client: scroll.clientHeight }
+        return { height: node.closest('.node-card-wrap').getBoundingClientRect().height, scroll: scroll.scrollHeight, client: scroll.clientHeight }
       })
     )
     assert.equal(videos.length, 2)
     for (const video of videos) {
-      assert.equal(video.height, 260)
+      assert.equal(video.height, 300)
       assert.ok(video.scroll <= video.client + 1, JSON.stringify(video))
     }
     console.log(
-      `按需说明、零/多动作、260px 预览无滚动、真实后续连线、输入框填满与 8px 间距通过：${output}`
+      `按需说明、零/多动作、300px外壳预览无滚动、真实后续连线、输入框填满与8px间距通过：${output}`
     )
   } finally {
     await browser.close()

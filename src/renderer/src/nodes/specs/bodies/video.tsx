@@ -533,6 +533,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
                 <span>画幅</span>
                 <AppSelect
                   className="gen-select"
+                  aria-label="视频画幅"
                   value={params.ratio ?? capabilities.defaultRatio}
                   onPointerDown={(e) => e.stopPropagation()}
                   onChange={(e) =>
@@ -554,6 +555,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
               <AppSelect
                 className="gen-select"
                 title="时长按秒计费，超出模型支持范围的取值会自动回到最短档"
+                aria-label="视频时长"
                 value={String(params.duration ?? capabilities.defaultDuration)}
                 onPointerDown={(e) => e.stopPropagation()}
                 onChange={(e) =>
@@ -572,6 +574,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
               <AppSelect
                 className="gen-select"
                 title="分辨率按档位计费，默认已选该模型最低档；要成片质量再手动调高"
+                aria-label="视频分辨率"
                 value={params.resolution ?? capabilities.defaultResolution}
                 onPointerDown={(e) => e.stopPropagation()}
                 onChange={(e) =>

@@ -57,9 +57,9 @@ export async function transformImageSplit(input: ImageSplitTransformInput): Prom
       const output = renderRect(image, {
         rect: tile.rect
       })
-      // 拆分格统一命名「图N+原始命名」：连接顺序即 N，下游（视频参考、资源库）都按此显示。
+      // 拆分格统一命名「图N原始命名」：连接顺序即 N，下游（视频参考、资源库）都按此显示。
       created.push(
-        await saveBufferAsset(input.projectId, output, '.png', `图${index + 1}+${sourceName}`)
+        await saveBufferAsset(input.projectId, output, '.png', `图${index + 1}${sourceName}`)
       )
     }
     return created

@@ -5328,6 +5328,63 @@ button {
   backdrop-filter: none;
 }
 
+/* 画布导航与顶栏快捷操作沿用底部工具栏的无底座悬浮图标。 */
+.canvas-theme-dark .dock-controls,
+.canvas-page.canvas-theme-dark .canvas-topbar :is(.engine-controls, .topbar-actions) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.canvas-theme-dark .dock-controls {
+  gap: 4px;
+  padding: 3px;
+}
+
+.canvas-theme-dark .dock-tool-group {
+  width: auto;
+}
+
+.canvas-theme-dark .dock-zoom {
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.canvas-theme-dark .dock-btn,
+.canvas-page.canvas-theme-dark .canvas-topbar :is(.topbar-shortcut, .canvas-transfer-button, .undo-redo-btn, .search-trigger) {
+  border: 0;
+  background: transparent;
+  color: #c9d1da;
+  box-shadow: none;
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), color 150ms ease;
+}
+
+.canvas-theme-dark .dock-btn:hover,
+.canvas-page.canvas-theme-dark .canvas-topbar :is(.topbar-shortcut, .canvas-transfer-button, .undo-redo-btn, .search-trigger):hover:not(:disabled) {
+  background: transparent;
+  color: #f2f7fb;
+  transform: translateY(-2px) scale(1.18);
+}
+
+.canvas-theme-dark .dock-btn:active,
+.canvas-page.canvas-theme-dark .canvas-topbar :is(.topbar-shortcut, .canvas-transfer-button, .undo-redo-btn, .search-trigger):active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-theme-dark .dock-btn,
+  .canvas-page.canvas-theme-dark .canvas-topbar :is(.topbar-shortcut, .canvas-transfer-button, .undo-redo-btn, .search-trigger) {
+    transition: none;
+  }
+  .canvas-theme-dark .dock-btn:hover,
+  .canvas-page.canvas-theme-dark .canvas-topbar :is(.topbar-shortcut, .canvas-transfer-button, .undo-redo-btn, .search-trigger):hover:not(:disabled) {
+    transform: none;
+  }
+}
+
 /* 节点表单与单个主操作共用正文宽度；多项控件按行分配空间。 */
 .node-card .node-standard-scroll .gen-row {
   width: 100%;
@@ -5354,14 +5411,14 @@ button {
   flex: 0 0 auto;
   align-self: center;
 }
-/* 文本字段使用统一中性白色描边，不继承节点分类色。 */
+/* 文本字段使用低对比中性描边，不继承节点分类色。 */
 .node-card
   .node-standard-scroll
   :is(
     textarea,
     input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file'])
   ) {
-  border-color: rgb(255 255 255 / 65%) !important;
+  border-color: #ffffff16;
   box-shadow: none !important;
 }
 .node-card
@@ -5370,8 +5427,8 @@ button {
     textarea,
     input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file'])
   ):focus {
-  border-color: #fff !important;
+  border-color: #ffffff38;
   box-shadow: none !important;
-  outline: 1px solid #fff;
+  outline: none;
   outline-offset: 0;
 }

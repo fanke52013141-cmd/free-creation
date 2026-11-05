@@ -278,10 +278,10 @@ export function needsNodeSizeMigration(type: string, w: number, h: number): bool
 }
 
 /** 轨道线的旧默认高度：210（两轨时代）、230（两轨 + 引用条时代）。 */
-export const LEGACY_TIMELINE_HEIGHTS = [210, 230] as const
+export const LEGACY_TIMELINE_HEIGHTS = [210, 230, 255, 286] as const
 
 /**
- * 轨道线默认高度升档迁移：旧默认高度（210 / 230）升到当前默认（286，三条轨道完整可见）。
+ * 将历史默认高度迁移到当前三轨默认高度。
  * 用户手动调过的高度保持不动。
  */
 export function needsTimelineHeightMigration(type: string, h: number): boolean {

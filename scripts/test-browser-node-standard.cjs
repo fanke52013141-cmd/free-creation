@@ -20,6 +20,7 @@ function contrast(first, second) {
     const page = await browser.newPage({ viewport: { width: 2700, height: 2750 } })
     await page.goto(process.env.CANVAS_QA_URL || 'http://127.0.0.1:5196')
     await page.waitForSelector('.tl-canvas')
+    const UI = await page.evaluate(async () => (await import('/src/canvas/node-ui-tokens.ts')).NODE_UI)
     const columns = await page.evaluate(async () => Math.max(...Object.values((await import('/src/canvas/palette-categories.ts')).PALETTE_NODE_GROUPS).map(ids => ids.length)))
     await page.setViewportSize({ width: 210 + columns * 355 + 60, height: 2750 })
     // vite 依赖重优化会在两次 evaluate 之间整页重载，重载后的新页面注册表为空；
@@ -56,7 +57,7 @@ function contrast(first, second) {
     assert.ok(created, '未能为全部分组节点创建形状（页面重载后注册未就绪）')
     await page.waitForTimeout(1200)
     const geometry = await page.locator('.node-card').evaluateAll((cards) => cards.map((card) => {
-      const bounds = card.getBoundingClientRect()
+      const bounds = card.closest('.node-card-wrap').getBoundingClientRect()
       const buttons = [...card.querySelectorAll('.node-standard-action-bar > button')].map((button) => {
         const rect = button.getBoundingClientRect()
         return { label: button.textContent.trim(), width: rect.width, height: rect.height, bottom: bounds.bottom - rect.bottom, disabled: button.disabled }
@@ -80,16 +81,16 @@ function contrast(first, second) {
     }))
     assert.deepEqual(clipped,[],'身份图标和说明不能被私有容器裁掉')
     for (const node of geometry) {
-      assert.ok(node.height >= 260 && (node.type === 'storyboard' || node.height <= 440), `${node.type} height ${node.height}`)
+      assert.ok(node.height >= UI.height.default && (node.type === 'storyboard' || node.height <= UI.height.autoMax), `${node.type} height ${node.height}`)
       assert.ok(node.buttons.length <= (['agent','ai-review','storyboard','tts'].includes(node.type) ? 2 : 1), `${node.type} explicit primary actions`)
       for (const button of node.buttons) {
       // v1.5 卡片有 1px 外框：可用正文宽度 = 卡宽 - 2(border) - 24(左右内边距)。
-      assert.equal(button.width, node.buttons.length === 1 ? node.width - 26 : (node.width - 26 - 8) / 2, `${node.type} width`)
+      assert.equal(button.width, node.buttons.length === 1 ? node.width - 24 : (node.width - 24 - 8) / 2, `${node.type} width`)
       assert.equal(button.height, 32, `${node.type} height`)
       assert.ok(Math.abs(button.bottom - 8) < 1.1, `${node.type} inset ${button.bottom}`)
       }
       assert.equal(node.descriptions, 0, `${node.type} no automatic description`)
-      if (node.icon) { assert.equal(node.icon.box, 72); assert.equal(node.icon.svg, 72) }
+      if (node.icon) { assert.equal(node.icon.box, UI.identity.iconSize); assert.equal(node.icon.svg, UI.identity.iconSize) }
     }
     const imageAlignment = await page.locator('[data-node-type="image-gen"]').evaluate(card => {
       const prompt = card.querySelector('.gen-prompt').getBoundingClientRect()
@@ -101,7 +102,7 @@ function contrast(first, second) {
       const promptStyle = getComputedStyle(card.querySelector('.gen-prompt'))
       return {prompt: {left: prompt.left, right: prompt.right}, button: {left: button.left, right: button.right}, rows, border: promptStyle.borderColor, shadow: promptStyle.boxShadow}
     })
-    assert.equal(imageAlignment.border, 'rgba(255, 255, 255, 0.65)', '生图输入框使用中性白色边框')
+    assert.equal(imageAlignment.border, 'rgba(255, 255, 255, 0.086)', '生图输入框使用低对比中性边框')
     assert.equal(imageAlignment.shadow, 'none', '生图输入框无阴影')
     for (const item of [imageAlignment.button, ...imageAlignment.rows]) {
       assert.ok(Math.abs(item.left - imageAlignment.prompt.left) < 1 && Math.abs(item.right - imageAlignment.prompt.right) < 1, '生图输入框、下拉行和按钮左右对齐')
@@ -123,14 +124,14 @@ function contrast(first, second) {
       editor.updateShape({ id:'shape:standard-text', type:'node-card', props:{text:Array.from({length:200},(_,i)=>`第 ${i+1} 行完整文本`).join('\n')} })
     })
     await page.waitForTimeout(350)
-    assert.equal(await textCard.evaluate(el=>el.getBoundingClientRect().height),440)
+    assert.equal(await textCard.evaluate(el=>el.closest('.node-card-wrap').getBoundingClientRect().height),UI.height.autoMax)
     const scrolling = await textCard.locator('.node-standard-scroll').evaluate(el=>{el.scrollTop=el.scrollHeight;return {max:el.scrollHeight-el.clientHeight,top:el.scrollTop}})
     assert.ok(scrolling.max > 1000 && scrolling.top > 1000)
     await textCard.locator('.node-standard-action-bar button').click()
     await textCard.locator('textarea').fill('回落到一行')
     await textCard.locator('textarea').press('Control+Enter')
     await page.waitForTimeout(350)
-    assert.equal(await textCard.evaluate(el=>el.getBoundingClientRect().height),260)
+    assert.equal(await textCard.evaluate(el=>el.closest('.node-card-wrap').getBoundingClientRect().height),UI.height.default)
     const resized = await page.evaluate(async () => {
       const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
       const shape = editor.getShape('shape:standard-text')
@@ -140,12 +141,12 @@ function contrast(first, second) {
       editor.updateShape({id:shape.id,type:'node-card',...large})
       return {small:small.props.h,large:large.props.h,mode:large.meta.nodeHeightMode,group:util.onResize(shape,{mode:'scale_shape'})}
     })
-    assert.deepEqual(resized,{small:260,large:440,mode:'manual',group:undefined})
+    assert.deepEqual(resized,{small:UI.height.min,large:UI.height.manualMax,mode:'manual',group:undefined})
     await page.waitForTimeout(150)
-    assert.equal(await textCard.evaluate(el=>el.getBoundingClientRect().height),440)
+    assert.equal(await textCard.evaluate(el=>el.closest('.node-card-wrap').getBoundingClientRect().height),UI.height.autoMax)
     await page.locator('[data-node-id="shape:standard-text"]').getByRole('button',{name:'恢复自动高度'}).click()
     await page.waitForTimeout(250)
-    assert.equal(await textCard.evaluate(el=>el.getBoundingClientRect().height),260)
+    assert.equal(await textCard.evaluate(el=>el.closest('.node-card-wrap').getBoundingClientRect().height),UI.height.default)
     const migration = await page.evaluate(async () => {
       const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
       editor.updateShape({id:'shape:standard-text',type:'node-card',props:{h:900},meta:{nodeHeightMode:'manual'}})
@@ -159,7 +160,7 @@ function contrast(first, second) {
       editor.store.loadStoreSnapshot(document)
       return {height:saved.props.h,original:saved.meta.nodeOriginalHeight,text:editor.getShape(saved.id).props.text,mode:editor.getShape(saved.id).meta.nodeHeightMode}
     })
-    assert.deepEqual(migrated,{height:440,original:900,text:'回落到一行',mode:'manual'})
+    assert.deepEqual(migrated,{height:UI.height.manualMax,original:900,text:'回落到一行',mode:'manual'})
     await page.evaluate(async () => {
       const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor
       const {createEdge}=await import('/src/canvas/graph.ts')
@@ -169,7 +170,7 @@ function contrast(first, second) {
     const processCard=page.locator('[data-node-type="ai-process"]')
     assert.equal(await processCard.getByRole('textbox',{name:'完整处理结果'}).textContent(),'完整历史结果\n'.repeat(200)+'结束标记')
     await page.waitForTimeout(350)
-    assert.equal(await processCard.evaluate(el=>el.getBoundingClientRect().height),440)
+    assert.equal(await processCard.evaluate(el=>el.closest('.node-card-wrap').getBoundingClientRect().height),UI.height.autoMax)
     assert.equal(await processCard.locator('.connected-inputs').count(),0)
     await processCard.getByRole('textbox',{name:'完整处理结果'}).click()
     const cameraBefore=await page.evaluate(async()=>{const e=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;return {...e.getCamera()}})
@@ -205,7 +206,7 @@ function contrast(first, second) {
       editor.updateShape({id:'shape:standard-ai-process',type:'node-card',meta:{nodeRun:{runId:'qa-short',status:'success',startedAt:1,inputs:{}},nodeResult:JSON.stringify({kind:'text',text:'短结果直接显示'})}})
     })
     await page.waitForTimeout(300)
-    assert.equal(await processCard.evaluate(el=>el.getBoundingClientRect().height),260)
+    assert.equal(await processCard.evaluate(el=>el.closest('.node-card-wrap').getBoundingClientRect().height),UI.height.default)
     assert.equal(await processCard.getByRole('textbox',{name:'完整处理结果'}).textContent(),'短结果直接显示')
     await page.evaluate(async () => {
       const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor

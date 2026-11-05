@@ -55,7 +55,7 @@ function contrast(a, b) {
       const colors = await page.evaluate(() => [...document.querySelectorAll('.node-card-wrap')].map((wrap) => {
         const icon = wrap.querySelector('.node-icon'), card = wrap.querySelector('.node-card')
         const bodyIcon = card.querySelector('.node-standard-identity-icon, .node-empty-icon, .asset-empty > svg, .audio-empty-icon, .sound-adjust-body-icon, .website-node-icon')
-        return { id: card.dataset.nodeType, color: getComputedStyle(icon).color, opacity: getComputedStyle(icon).opacity, stroke: getComputedStyle(icon.querySelector('svg')).stroke, background: getComputedStyle(wrap.closest('.canvas-host')).getPropertyValue('--bg').trim(), cardBackground: getComputedStyle(card).backgroundColor, bodyColor: bodyIcon && getComputedStyle(bodyIcon).color, bodyBackground: bodyIcon && getComputedStyle(bodyIcon).backgroundColor, sectionIcons: [...card.querySelectorAll('.tts-section-label svg')].map((el) => getComputedStyle(el).color) }
+        return { id: card.dataset.nodeType, color: getComputedStyle(icon).color, opacity: getComputedStyle(icon).opacity, stroke: getComputedStyle(icon.querySelector('svg')).stroke, background: getComputedStyle(wrap.closest('.canvas-host')).getPropertyValue('--bg').trim(), cardBackground: getComputedStyle(wrap).backgroundColor, bodyColor: bodyIcon && getComputedStyle(bodyIcon).color, bodyBackground: bodyIcon && getComputedStyle(bodyIcon).backgroundColor, sectionIcons: [...card.querySelectorAll('.tts-section-label svg')].map((el) => getComputedStyle(el).color) }
       }))
       assert.equal(colors.length, nodes.length)
       for (const node of colors) {

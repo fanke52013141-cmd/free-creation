@@ -60,7 +60,7 @@ const assert = require('node:assert/strict')
       assert.equal(result.restored.h, result.height)
       if (nodeType === 'storyboard') assert.ok(result.height > 900, 'storyboard must exceed ordinary height limit')
       else {
-        assert.equal(result.height, 440, 'ordinary card height must stop at 440')
+        assert.equal(result.height, 480, 'ordinary card height must stop at 480')
         await card.locator('.node-card').click({ position: { x: 8, y: 8 } })
         const lowerHandle = await corner.boundingBox()
         await page.mouse.move(lowerHandle.x + lowerHandle.width / 2, lowerHandle.y + lowerHandle.height / 2)
@@ -68,7 +68,7 @@ const assert = require('node:assert/strict')
         await page.mouse.move(lowerHandle.x + lowerHandle.width / 2, lowerHandle.y + lowerHandle.height / 2 - 350, { steps: 15 })
         await page.mouse.up()
         const smallHeight = await page.evaluate(async () => (await import('/src/stores/editor.ts')).useEditorStore.getState().editor.getShape('shape:resize-probe').props.h)
-        assert.equal(smallHeight, 260, 'ordinary card height must not shrink below 260')
+        assert.equal(smallHeight, 300, 'ordinary card height must not shrink below 300')
       }
       console.log(`PASS ${nodeType}: pointer resize, manual mode, dimension boundaries, snapshot restore`)
     }

@@ -31,7 +31,7 @@ describe('canvas interaction details', () => {
   })
 
   it('lets connector dots follow the pointer within a bounded outer semicircle', () => {
-    expect(nodeCardSource).toContain('const radius = 16')
+    expect(nodeCardSource).toContain('const radius = NODE_PORT_SIZE / 2')
     expect(nodeCardSource).toContain('portFollowRef.current')
     expect(nodeCardSource).toContain('portCenter(e, portKey)')
     expect(foundationSource).toContain(

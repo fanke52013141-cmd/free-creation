@@ -9,10 +9,10 @@ import type { NodeCardShape } from './NodeCardShape'
 import { readConnectedNodeInputs, type ConnectedNodeInput } from './graph'
 import { referenceLayout } from './reference-layout'
 import { NODE_UI } from './node-ui-tokens'
+import { nodePageIndex } from './node-page-index'
+import { referenceIdentity } from './reference-identity'
 
 type OpenPreview = (next: { url: string; kind: 'image' | 'video' | 'audio'; title: string }) => void
-/** 上方可读空间的最小值：低于该值浮层才回退到缩略图下方展开。 */
-const REFERENCE_FALLBACK_BELOW_SPACE = 140
 const keyOf = (input: ConnectedNodeInput): string =>
   `${input.targetPortId}:${input.sourceNodeId}:${input.sourcePortId}:${input.order}`
 const isMediaThumb = (input: ConnectedNodeInput): boolean =>
@@ -68,7 +68,7 @@ function iconOf(input: ConnectedNodeInput): IconName {
       return 'text'
   }
 }
-function ReferenceVisual({ input }: { input: ConnectedNodeInput }): React.JSX.Element {
+function ReferenceVisual({ input, sequence }: { input: ConnectedNodeInput; sequence: number | undefined }): React.JSX.Element {
   const [failed, setFailed] = useState(false)
   const value = input.value
   if (value?.kind === 'image' || value?.kind === 'video')
@@ -97,9 +97,8 @@ function ReferenceVisual({ input }: { input: ConnectedNodeInput }): React.JSX.El
     )
   return (
     <>
-      <Icon name={iconOf(input)} size={16} />
-      <span className="connected-input-target">{input.targetPortName}</span>
-      <span className="connected-input-value">{summary(input)}</span>
+      <span className="reference-source-index">{sequence === undefined ? '—' : String(sequence).padStart(2, '0')}</span>
+      <Icon name={iconOf(input)} size={15} />
     </>
   )
 }
@@ -206,14 +205,19 @@ export function ConnectedInputPreview({
     [editor, shape.id]
   )
   const resolved = inputs.filter((input) => input.value !== null)
+  const sequence = useValue('reference source sequences', () => nodePageIndex(editor).sequence, [editor])
   const row = useRef<HTMLDivElement>(null)
   const panel = useRef<HTMLDivElement>(null)
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [width, setWidth] = useState(NODE_UI.width - NODE_UI.content.padding * 2)
   const [detail, setDetail] = useState<DetailState | null>(null)
-  const [position, setPosition] = useState<CSSProperties>({ left: 8, top: 8 })
-  const layout = referenceLayout(resolved.map(isMediaThumb), width)
+  const [position, setPosition] = useState<CSSProperties & { '--ref-fullview-max'?: string }>({
+    visibility: 'hidden'
+  })
+  const layout = referenceLayout(resolved.map(isMediaThumb), width,
+    resolved.map(input => Math.max(NODE_UI.reference.textMinWidth,
+      referenceIdentity(input, sequence.get(input.sourceNodeId)).length * 8 + 24)))
   const visible = resolved.slice(0, layout.widths.length)
   const active = detail?.key ? resolved.find((input) => keyOf(input) === detail.key) : undefined
   const showing = Boolean(detail && (detail.key === null ? layout.hidden > 0 : active))
@@ -238,7 +242,6 @@ export function ConnectedInputPreview({
       const anchor = detail.anchor.isConnected ? detail.anchor.getBoundingClientRect() : detail.rect
       const box = panel.current?.getBoundingClientRect()
       const panelWidth = box?.width ?? 480
-      const panelHeight = box?.height ?? 340
       const theme = getComputedStyle(row.current ?? detail.anchor)
       const colors = Object.fromEntries(
         ['--bg', '--line', '--txt', '--muted', '--brand'].map((name) => [
@@ -246,20 +249,15 @@ export function ConnectedInputPreview({
           theme.getPropertyValue(name)
         ])
       )
-      // 2026-11-02 用户裁决：浮层向上展开（贴缩略图上方），不再向下遮挡节点正文；
-      // 上方空间不足时通过 --ref-fullview-max 压缩浮层高度，只有上方小到无法阅读时才回退到下方。
-      const spaceAbove = anchor.top - 16
-      const maxHeight =
-        spaceAbove >= REFERENCE_FALLBACK_BELOW_SPACE ? `${Math.round(spaceAbove)}px` : undefined
-      const top =
-        maxHeight !== undefined
-          ? Math.max(8, anchor.top - panelHeight - 8)
-          : Math.max(8, Math.min(anchor.bottom + 8, window.innerHeight - panelHeight - 8))
+      // Anchor the bottom edge so asynchronously loaded media always grows upward.
+      const bottomEdge = Math.min(anchor.top - 8, window.innerHeight - 8)
+      const spaceAbove = Math.max(0, bottomEdge - 8)
       setPosition({
         ...colors,
-        ...(maxHeight ? { '--ref-fullview-max': maxHeight } : {}),
+        '--ref-fullview-max': `${Math.min(420, spaceAbove)}px`,
+        visibility: spaceAbove >= 20 ? 'visible' : 'hidden',
         left: Math.max(8, Math.min(anchor.left, window.innerWidth - panelWidth - 8)),
-        top
+        bottom: window.innerHeight - bottomEdge
       })
     }
     const observer = new ResizeObserver(place)
@@ -324,7 +322,8 @@ export function ConnectedInputPreview({
                 : `connected-input-item connected-input-${input.value?.kind}`
             }
             style={{ width: layout.widths[index] }}
-            aria-label={`${input.targetPortName}：${summary(input)}，来源 ${input.sourceNodeName}`}
+            data-reference-code={referenceIdentity(input, sequence.get(input.sourceNodeId))}
+            aria-label={`${referenceIdentity(input, sequence.get(input.sourceNodeId))}，${input.targetPortName}：${summary(input)}，来源 ${input.sourceNodeName}`}
             aria-haspopup="dialog"
             aria-expanded={showing && detail?.key === keyOf(input)}
             onPointerDown={(event) => event.stopPropagation()}
@@ -346,7 +345,7 @@ export function ConnectedInputPreview({
               } else show(event.currentTarget, keyOf(input))
             }}
           >
-            <ReferenceVisual key={`${keyOf(input)}:${summary(input)}`} input={input} />
+            <ReferenceVisual key={`${keyOf(input)}:${summary(input)}`} input={input} sequence={sequence.get(input.sourceNodeId)} />
           </button>
         ))}
         {layout.hidden > 0 && (

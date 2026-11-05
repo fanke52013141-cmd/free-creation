@@ -28,6 +28,7 @@
     "test:model": "npm --prefix packages/model-runtime run test",
     "test:browser-ui": "node scripts/test-browser-node-ui.cjs",
     "test:browser-node-standard": "node scripts/test-browser-node-standard.cjs",
+    "test:browser-node-visual-system": "node scripts/test-browser-node-visual-system.cjs",
     "test:browser-node-colors": "node scripts/test-browser-node-colors.cjs",
     "test:browser-agent-flow-relations": "node scripts/test-browser-agent-flow-relation-anchors.cjs",
     "test:library-electron": "node scripts/test-library-electron.cjs",

@@ -118,7 +118,7 @@ describe('needsNodeSizeMigration · 旧快照尺寸迁移', () => {
   it('轨道线旧默认高度 210/230 升到当前默认；自定义高度不动', () => {
     expect(needsTimelineHeightMigration('timeline', 210)).toBe(true)
     expect(needsTimelineHeightMigration('timeline', 230)).toBe(true)
-    expect(needsTimelineHeightMigration('timeline', 286)).toBe(false)
+    expect(needsTimelineHeightMigration('timeline', 286)).toBe(true)
     expect(needsTimelineHeightMigration('timeline', 300)).toBe(false)
     expect(needsTimelineHeightMigration('text', 210)).toBe(false)
   })
@@ -218,7 +218,7 @@ describe('registerNodeType · 注册时硬校验门禁', () => {
   it('拒绝可创建节点使用非标准初始尺寸', () => {
     expect(() =>
       registerNodeType(validSpec({ creatable: true, defaultSize: { w: 360, h: 260 } }))
-    ).toThrow(/defaultSize 必须为 340 × 260/)
+    ).toThrow(/defaultSize 必须为 340 × 300/)
   })
 
   it('拒绝错误的端口 ID 前缀（输入必须 in- 开头）', () => {

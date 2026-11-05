@@ -103,19 +103,8 @@ const path = require('node:path')
         if (!await field.isVisible() || !await field.isEnabled() || await field.getAttribute('readonly') !== null) continue
         await field.scrollIntoViewIfNeeded()
         await field.click()
-        assert.equal(await field.evaluate(element => document.activeElement === element), false, `${type}/${index}: single click must not edit`)
-        await create(type)
-        const dragField = page.locator('.node-body input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), .node-body textarea').nth(index)
-        await dragField.scrollIntoViewIfNeeded()
-        const rect = await dragField.boundingBox()
-        await exercise({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }, `${type}/input-${index}`)
-        await create(type)
-        const editable = page.locator('.node-body input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), .node-body textarea').nth(index)
-        await editable.dblclick()
-        await page.waitForFunction(index => {
-          const fields = document.querySelectorAll('.node-body input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), .node-body textarea')
-          return document.activeElement === fields[index]
-        }, index)
+        assert.equal(await field.evaluate(element => document.activeElement === element), true, `${type}/${index}: single click must focus the field`)
+        const editable = field
         const inputValue = await editable.getAttribute('type') === 'number' ? '2' : 'qa_value'
         await editable.fill(inputValue)
         assert.equal(await editable.inputValue(), inputValue, `${type}/${index}: editing accepts input`)
@@ -171,7 +160,7 @@ const path = require('node:path')
     assert.ok((await state()).selected.includes('shape:pointer-audit'))
     await page.screenshot({ path: path.join(out, 'processor.png') })
     fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ passed: true, findings }, null, 2))
-    console.log(`PASS ${types.length} nodes: body/icon/name/field labels select and drag; inputs single-click select, double-click edit; JSON/structured double-click; dropdown preserved`)
+    console.log(`PASS ${types.length} nodes: card surfaces select and drag, inputs focus on click, JSON/structured edit on double-click, dropdowns preserved`)
   } catch (error) {
     fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ passed: false, findings, error: error.message }, null, 2))
     throw error

@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 import { needsNodeSizeMigration, getNodeType, allNodeTypes } from '@renderer/nodes/registry'
-import { TIMELINE_UI } from '@renderer/canvas/node-ui-tokens'
+import { NODE_UI, TIMELINE_UI } from '@renderer/canvas/node-ui-tokens'
 import type { NodeTypeId } from '@shared/types'
 
 beforeAll(() => {
@@ -81,7 +81,7 @@ describe('节点默认尺寸稳定性（统一 340×260 规范）', () => {
       // sizePolicy 为 content/free 的节点在各自令牌里声明尺寸（分镜板 / 时间线），
       // 统一规范只约束 standard 节点。
       if ((spec.sizePolicy ?? 'standard') !== 'standard') continue
-      expect(spec.defaultSize, `${spec.type} 默认尺寸异常`).toEqual({ w: 340, h: 260 })
+      expect(spec.defaultSize, `${spec.type} 默认尺寸异常`).toEqual({ w: NODE_UI.width, h: NODE_UI.height.default })
     }
   })
 
@@ -109,7 +109,7 @@ describe('节点默认尺寸稳定性（统一 340×260 规范）', () => {
 
   it('script（兼容节点）也保持统一默认尺寸', () => {
     const spec = getNodeType('script')
-    expect(spec?.defaultSize).toEqual({ w: 340, h: 260 })
+    expect(spec?.defaultSize).toEqual({ w: NODE_UI.width, h: NODE_UI.height.default })
   })
 })
 

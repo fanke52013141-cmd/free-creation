@@ -1,4 +1,4 @@
-import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
+import { NodePrimaryButton } from '../../../canvas/NodePresentation'
 // 代码节点 Body（路线图 R6：bodies.tsx 拆分）
 // 支持 Coze 风格 async function main(args) 写法，可用本地工具 `_` 和 `dayjs`
 // 支持自定义参数端口：用户在 UI 表格中声明额外输入参数
@@ -538,20 +538,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
         >
           <HighlightedCode code={text} />
         </pre>
-      ) : (
-        <div
-          className="node-hint center"
-          data-node-interactive="double-click-content"
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onDoubleClick={(e) => {
-            e.stopPropagation()
-            setDraft(CODE_TEMPLATE)
-            setEditing(true)
-          }}
-        >
-          <NodeIdentity />
-        </div>
-      )}
+      ) : null}
       {resultDisplay && (
         <>
           <div className={`code-result ${resultDisplay.kind === 'error' ? 'error' : 'success'}`}>

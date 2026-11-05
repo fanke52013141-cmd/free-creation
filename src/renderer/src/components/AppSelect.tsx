@@ -109,6 +109,7 @@ export function AppSelect({
   const [open, setOpen] = useState(false)
   const owner = useRef(Symbol('app-select'))
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const closeOnTriggerClick = useRef(false)
   const contentRef = useRef<HTMLDivElement>(null)
   const selectedValue = value === undefined ? uncontrolledValue : value
   const selectedOption = options.find((option) => option.value === selectedValue)
@@ -130,12 +131,19 @@ export function AppSelect({
 
   // 画布与节点外壳会在 pointerdown 冒泡路径上 stopPropagation，Radix 的 document 级
   // dismiss 监听（冒泡阶段）收不到外部点击，下拉会一直悬着。这里改用捕获阶段监听，
-  // 统一保证“点击下拉外部（画布空白、其他节点、面板）即关闭”；触发器自身的开合仍交给 Radix。
+  // 统一保证点击外部即关闭；触发器的第二次点击由自身处理。
   useEffect(() => {
     if (!open) return
     const handlePointerDown = (event: PointerEvent): void => {
       if (!(event.target instanceof Node)) return
-      if (triggerRef.current?.contains(event.target)) return
+      if (triggerRef.current?.contains(event.target)) {
+        if (event.button !== 0) return
+        closeOnTriggerClick.current = true
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        closeSelect()
+        return
+      }
       if (contentRef.current?.contains(event.target)) return
       closeSelect()
     }
@@ -170,6 +178,20 @@ export function AppSelect({
       <Select.Trigger
         ref={triggerRef}
         {...triggerProps}
+        style={open ? { ...triggerProps.style, pointerEvents: 'auto' } : triggerProps.style}
+        onPointerDownCapture={(event) => {
+          triggerProps.onPointerDownCapture?.(event)
+          closeOnTriggerClick.current = open && event.button === 0 && !event.defaultPrevented
+        }}
+        onClickCapture={(event) => {
+          triggerProps.onClickCapture?.(event)
+          const shouldClose = closeOnTriggerClick.current
+          closeOnTriggerClick.current = false
+          if (!shouldClose || event.defaultPrevented) return
+          event.preventDefault()
+          event.stopPropagation()
+          closeSelect()
+        }}
         className={`app-select app-select-trigger ${className}`.trim()}
         aria-haspopup="listbox"
       >
@@ -189,10 +211,15 @@ export function AppSelect({
           className="app-select-content"
           position="popper"
           side="bottom"
+          avoidCollisions={false}
           align="start"
           sideOffset={4}
           collisionPadding={8}
           sticky="partial"
+          onPointerDownOutside={(event) => {
+            if (event.target instanceof Node && triggerRef.current?.contains(event.target))
+              event.preventDefault()
+          }}
           onPointerDown={(event) => event.stopPropagation()}
           onPointerUp={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}

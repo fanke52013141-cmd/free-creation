@@ -46,8 +46,8 @@ const fs = require('node:fs')
     await settings.getByRole('group', { name: '审核对象来源', exact: true }).locator('input[type="checkbox"]').check()
     await save()
     await open('state')
-    // P2-A：状态机卡片展示权威实例状态；未运行时显示初始阶段（未启动）。
-    assert.equal(await page.locator('[data-node-id="shape:flow-state"]').getByText('当前阶段：draft（未启动）', { exact: true }).isVisible(), true)
+    // P2-A：状态机卡片只在已有运行实例时展示当前阶段。
+    assert.equal(await page.locator('[data-node-id="shape:flow-state"]').getByText(/当前阶段：/).count(), 0)
     await settings.getByRole('group', { name: '观察的节点', exact: true }).getByLabel('主控 Agent · Agent', { exact: true }).check()
     await settings.getByRole('group', { name: '观察的节点', exact: true }).getByLabel('质量审核 · AI 审核', { exact: true }).check()
     await settings.getByRole('button', { name: '添加转换', exact: true }).click()

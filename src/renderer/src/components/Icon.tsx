@@ -116,7 +116,7 @@ interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
 const PATHS: Record<IconName, React.ReactNode> = {
   text: (
     <>
-      <path d="M4 5h16M12 5v14M8 19h8" />
+      <path d="M4 5h16M12 5v14" />
     </>
   ),
   image: (
@@ -132,14 +132,11 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M18 22V8a2 2 0 0 0-2-2H2" />
     </>
   ),
-  // 图片拆分：源图用虚线外框，四块实线小图表示切分结果。
-  // 图片拆分：一张图片被虚线切成四格，表达“从一张图切出多张”，
-  // 与 grid 的四个独立方块区分开。
+  // 宫格是拆分的识别轮廓；避免小尺寸下再叠山景，和单张图片明确区分。
   'image-split': (
     <>
       <rect x="3" y="3" width="18" height="18" rx="2" />
-      <path d="M12 3v18M3 12h18" strokeDasharray="2 2" />
-      <path d="m5 9 2-2 3 3M15 18l2-2 2 2" />
+      <path d="M9 3v18M15 3v18M3 9h18M3 15h18" strokeWidth="1.4" />
     </>
   ),
   // P图：相框 + 斜向画笔，区别于“生图”的图+星，也区别于动作铅笔 edit。
@@ -220,17 +217,17 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   frame: (
     <>
-      <rect x="3" y="6.5" width="18" height="11" rx="1.5" />
-      <path d="M6 6.5v2M9 6.5v2M15 6.5v2M18 6.5v2M6 15.5v2M9 15.5v2M15 15.5v2M18 15.5v2" />
-      <path d="M12 3v18" strokeDasharray="2 2" />
+      <rect x="2.5" y="4" width="14" height="11" rx="1.5" />
+      <path d="M5.5 4v11M13.5 4v3M13.5 12v3" strokeDasharray="1.5 2" />
+      <rect x="9" y="10" width="12.5" height="10" rx="1.5" />
     </>
   ),
   // 视频截取：片段块 + 左右 [ ] 修剪把手，表达入点/出点，不再复用播放卡片。
   clip: (
     <>
       <rect x="3" y="6.5" width="18" height="11" rx="1.5" />
-      <path d="M6 6.5v2M9 6.5v2M15 6.5v2M18 6.5v2M6 15.5v2M9 15.5v2M15 15.5v2M18 15.5v2" />
-      <path d="M8 3v18M16 3v18" strokeDasharray="2 2" />
+      <path d="M7 3v18M17 3v18" strokeDasharray="2 2" />
+      <path d="m10 10 4 2-4 2Z" strokeWidth="1.5" />
     </>
   ),
   // 深度视频：两帧沿 Z 轴错位叠放 + 向下的深度箭头，表达逐帧深度。

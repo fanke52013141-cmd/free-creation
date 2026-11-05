@@ -156,7 +156,7 @@ async function main() {
       w: el.offsetWidth,
       h: el.offsetHeight
     }))
-    check('默认尺寸按三条轨道完整可见（880×286）', size.w === 880 && size.h === 286, `${size.w}×${size.h}`)
+    check('默认尺寸按三条轨道完整可见（880×255）', size.w === 880 && size.h === 255, `${size.w}×${size.h}`)
 
     const resized = await page.evaluate(async () => {
       const el = document.querySelector('.node-card-wrap .node-card')

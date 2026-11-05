@@ -21,9 +21,9 @@ const assert = require('node:assert/strict')
     })
     const modern = page.locator('[data-node-id="shape:clay-2"]')
     const legacy = page.locator('[data-node-id="shape:clay-1"]')
-    await modern.locator('label', { hasText: '白模效果' }).getByRole('combobox').click()
+    await modern.getByRole('combobox', { name: '白模效果' }).click()
     await page.getByRole('option', { name: '立体白模', exact: true }).click()
-    await modern.locator('label', { hasText: '质量' }).getByRole('combobox').click()
+    await modern.getByRole('combobox', { name: '质量' }).click()
     await page.getByRole('option', { name: '精细', exact: true }).click()
     const read = () => page.evaluate(async () => {
       const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor

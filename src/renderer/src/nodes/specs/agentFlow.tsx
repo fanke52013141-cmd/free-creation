@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- Node spec registration, like specs/index.tsx. */
 import { useState, useEffect } from 'react'
+import { NODE_UI } from '../../canvas/node-ui-tokens'
 import { useEditor, useValue } from 'tldraw'
 import type { PortDecl, PortType } from '@shared/types'
 import {
@@ -881,7 +882,7 @@ export function registerAgentFlowNodeTypes(): void {
       label: review ? 'AI 审核' : state ? '状态机' : 'Agent',
       icon: review ? 'ai-review' : state ? 'state-machine' : 'agent',
       color: NODE_ACCENTS[type],
-      defaultSize: { w: 340, h: 260 },
+      defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
       category: 'ai',
       initialConfig: JSON.stringify(defaults[type]),
       description: review

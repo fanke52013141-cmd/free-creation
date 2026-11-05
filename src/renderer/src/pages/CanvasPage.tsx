@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ProjectFile } from '@shared/types'
 import type { WorkspaceProfile } from '@shared/workspace-profile'
 import { useAppStore } from '../stores/app'
@@ -20,6 +20,7 @@ interface CanvasPageProps {
 }
 
 export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
+  const pageRef = useRef<HTMLDivElement>(null)
   const [file, setFile] = useState<ProjectFile | null>(null)
   const [loading, setLoading] = useState(true)
   const [recoveryPrompt, setRecoveryPrompt] = useState(false)
@@ -47,6 +48,27 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   const [showErrors, setShowErrors] = useState(true)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showWorkspaceDialog, setShowWorkspaceDialog] = useState(false)
+
+  useEffect(() => {
+    const page = pageRef.current
+    const controls = page?.querySelector<HTMLElement>('.engine-controls')
+    const host = page?.querySelector<HTMLElement>('.canvas-host')
+    if (!page || !controls || !host) return
+    const align = (): void => {
+      const width = host.getBoundingClientRect().right - controls.getBoundingClientRect().left
+      page.style.setProperty('--side-panel-width', `${Math.max(0, width)}px`)
+    }
+    const observer = new ResizeObserver(align)
+    observer.observe(page)
+    observer.observe(controls)
+    observer.observe(host)
+    window.addEventListener('resize', align)
+    align()
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', align)
+    }
+  }, [file, loading, recoveryPrompt])
 
   // Ctrl+K 唤起搜索面板
   useEffect(() => {
@@ -232,7 +254,7 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   }
 
   return (
-    <div className="canvas-page canvas-theme-dark" data-local-agent-project={projectId}>
+    <div ref={pageRef} className="canvas-page canvas-theme-dark" data-local-agent-project={projectId}>
       <div className="canvas-topbar">
         {/* 左侧：项目菜单（撤销/重做已移到画布右侧历史簇） */}
         <ProjectMenu

@@ -4,7 +4,7 @@
 // 2026-11-02 用户裁决：分镜板默认尺寸与其他节点一致（340×260），宽高随内容自适应增长，无上限。
 export const STORYBOARD_UI = {
   width: 340,
-  height: 260,
+  height: 300,
   columnWidth: 220,
   tableChromeWidth: 224
 } as const
@@ -20,12 +20,11 @@ export const STORYBOARD_UI = {
 export const TIMELINE_UI = {
   width: 880,
   /**
-   * 默认高度按「三条轨道完整可见」算（2026-11-03 用户裁决：默认三轨，下方预留三条轨道高度）：
-   * 工具栏 36 + 刻度尺 24 + 3×56 轨 = 228，加引用素材条 31 与卡片内边距后需要 286。
+   * 默认显示三条轨道；素材引用条按需显示，额外内容可在轨道区滚动查看。
    */
-  height: 286,
+  height: 291,
   minWidth: 560,
-  minHeight: 188,
+  minHeight: 224,
   /** 默认轨道数（2026-11-03 用户裁决：默认三条通用轨道，打开旧项目时补齐到这个数）。 */
   trackCount: 3,
   /** 轨道头固定宽度（不随时间轴滚动）；要放得下「视频 1 / 音频 1」全名 + 两个小按钮 */
@@ -53,31 +52,31 @@ export const TIMELINE_UI = {
 export const NODE_UI = {
   width: 340,
   height: {
-    min: 260,
+    min: 300,
     /** H0 默认档：所有可创建节点的初始尺寸 */
-    default: 260,
+    default: 300,
     /** H1 扩展档：增加引用区、结果工具栏或较多配置 */
-    expanded: 320,
+    expanded: 360,
     /** H2 富内容档：引用 + 结果 + 操作同时存在 */
-    rich: 380,
+    rich: 420,
     /** H3 自动上限：多媒体集合等密集内容；超过后内容内部滚动 */
-    autoMax: 440,
+    autoMax: 480,
     /** 视频生成节点上限：引用缩略图 + 三段配置 + 主操作，引用多图时不得裁掉输出参数 */
-    autoMaxVideoGen: 560,
+    autoMaxVideoGen: 600,
     /** v1.2：手动与自动高度共用上限 */
-    manualMax: 440,
+    manualMax: 480,
     /** 历史兼容保护值：仅用于旧项目异常尺寸迁移判断，不属于 UI 规范 */
     legacyGuard: 1200
   },
-  header: { height: 28 },
+  header: { height: 36 },
   radius: 12,
   identity: {
     /** 空态居中大图标尺寸（2026-11-02 裁决：无框、不重复节点名称；
      *  同日裁决：放大两倍后按 96px 的 75% 回调至 72px，并正居中于节点卡片中心）
      *  2026-11-03 用户裁决：身份区只保留图标的实际占位，不再固定 178px；
      *  有配置行的节点（白模视频等）因此能保持 260px 初始高度。 */
-    iconSize: 72,
-    minHeight: 72
+    iconSize: 64,
+    minHeight: 64
   },
   description: { height: 36, maxLines: 2 },
   content: { padding: 12 },
@@ -89,8 +88,8 @@ export const NODE_UI = {
     height: 36,
     gap: 6,
     bottomGap: 8,
-    textMinWidth: 80,
-    textMaxWidth: 200,
+    textMinWidth: 56,
+    textMaxWidth: 56,
     moreMinWidth: 36,
     /** 图片引用缩略图尺寸（呈现规范 §11） */
     imageWidth: 48,

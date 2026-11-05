@@ -621,7 +621,7 @@ function resolveTargetInputPort(
   const compatible = targetPorts.in.filter((port) => portPairCompatible(sourcePort, port))
   if (compatible.length === 0) {
     return {
-      error: `类型或 Schema 不兼容：${sourcePort.type} 输出无法接入 ${targetSpec.label} 节点`
+      error: `输入和输出格式不匹配，无法连接到「${targetSpec.label}」。`
     }
   }
   const usable = compatible.filter(
@@ -630,7 +630,7 @@ function resolveTargetInputPort(
       !inputPortOccupied(editor, { shapeId: target.id, portId: port.id })
   )
   if (usable.length === 0) {
-    return { error: `${targetSpec.label} 的兼容输入均为单值端口且已有连线，请先断开原连线` }
+    return { error: `「${targetSpec.label}」能接收这份内容的连接点已被占用。请先断开原连线。` }
   }
 
   // 落点最近端口（不限兼容性）：仅用于解释改连，不影响选口结果。
@@ -789,7 +789,7 @@ function resolveSourceOutputPort(
   const sourcePorts = getNodePorts(sourceSpec, source)
   const compatible = sourcePorts.out.filter((port) => portPairCompatible(port, inputPort))
   if (compatible.length === 0) {
-    return { error: `${sourceSpec.label} 没有可接入「${inputPort.name}」的兼容输出端口` }
+    return { error: `「${sourceSpec.label}」无法提供「${inputPort.name}」需要的内容，请换一个来源节点。` }
   }
   let port: PortDecl = compatible[0]
   if (preferredSourcePortId) {

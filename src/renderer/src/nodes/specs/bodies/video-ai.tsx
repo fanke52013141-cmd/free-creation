@@ -101,8 +101,8 @@ function ClayOptions({ config, onChange }: {
     </NodePrimaryButton>
   )
   return <div className="video-clay-options">
-    <label className="settings-field">白模效果
-      <AppSelect className="gen-select" value={config.preset} onChange={(event) => {
+    <div className="settings-field">
+      <AppSelect aria-label="白模效果" className="gen-select" value={config.preset} onChange={(event) => {
         const preset = event.currentTarget.value as VideoClayConfig['preset']
         onChange({ preset, ...VIDEO_CLAY_PRESETS[preset] })
       }}>
@@ -110,9 +110,9 @@ function ClayOptions({ config, onChange }: {
         <option value="studio">立体白模</option>
         <option value="structure">结构白模</option>
       </AppSelect>
-    </label>
-    <label className="settings-field">质量
-      <AppSelect className="gen-select" value={config.quality} onChange={(event) => {
+    </div>
+    <div className="settings-field">
+      <AppSelect aria-label="质量" className="gen-select" value={config.quality} onChange={(event) => {
         const quality = event.currentTarget.value as VideoClayConfig['quality']
         onChange({ quality, maxResolution: quality === 'fast' ? 512 : quality === 'fine' ? 1024 : 768 })
       }}>
@@ -120,7 +120,7 @@ function ClayOptions({ config, onChange }: {
         <option value="standard">标准</option>
         <option value="fine">精细</option>
       </AppSelect>
-    </label>
+    </div>
   </div>
 }
 

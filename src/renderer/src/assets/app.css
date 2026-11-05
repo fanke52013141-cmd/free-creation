@@ -1254,7 +1254,7 @@ select:focus-visible {
   font-weight: 700;
   line-height: 1;
   pointer-events: auto;
-  cursor: crosshair;
+  cursor: default;
   transform: translate(13px, -50%);
   scale: 1;
   animation: canvas-selection-batch-breathe 2.8s ease-in-out infinite;
@@ -3867,7 +3867,7 @@ select:focus-visible {
 /* ── 全局 toast（挂在 body 下，fixed 定位不受画布 transform 影响） ── */
 .global-toast {
   position: fixed;
-  bottom: 40px;
+  top: calc(var(--canvas-topbar-height, 48px) + 12px);
   left: 50%;
   transform: translateX(-50%);
   background: var(--card);
@@ -3880,9 +3880,7 @@ select:focus-visible {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   pointer-events: none;
   max-width: 70vw;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 /* ── 左下角停靠簇：弹出小地图 + 画布整理 + 缩放（LibTV 26-7-7） ── */
@@ -10241,6 +10239,11 @@ select:focus-visible {
   gap: 4px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--line);
+}
+
+.node-card.type-code .code-params-section,
+.node-card.type-code .code-toolbar {
+  border: 0;
 }
 
 .code-params-header {

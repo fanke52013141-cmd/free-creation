@@ -45,6 +45,7 @@ const COMMON_ASPECT_RATIOS: readonly ImageCropAspectRatio[] = [
   'free',
   '1:1',
   '16:9',
+  '21:9',
   '9:16',
   '4:3',
   '3:4'
@@ -53,7 +54,6 @@ const COMMON_ASPECT_RATIOS: readonly ImageCropAspectRatio[] = [
 const EXTRA_ASPECT_RATIOS: readonly ImageCropAspectRatio[] = [
   '3:2',
   '2:3',
-  '21:9',
   '9:21',
   '5:4',
   '4:5'
@@ -391,16 +391,6 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
         <NodeFooterActions>
           <div className="crop-inline-actions">
             <button
-              className="btn-ghost small"
-              onPointerDown={stopEventPropagation}
-              onClick={(event) => {
-                stopEventPropagation(event)
-                openSettings()
-              }}
-            >
-              <Icon name="edit" size={13} /> 精细框选
-            </button>
-            <button
               className="btn-primary small"
               onPointerDown={stopEventPropagation}
               onClick={(event) => {
@@ -408,7 +398,7 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
                 void runCrop()
               }}
             >
-              <Icon name="crop" size={13} /> 裁剪图片
+              裁剪图片
             </button>
           </div>
         </NodeFooterActions>

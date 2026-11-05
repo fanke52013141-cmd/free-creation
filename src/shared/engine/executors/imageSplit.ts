@@ -65,8 +65,8 @@ export const imageSplitExecutor = async (
         mediaPath: asset.path,
         mime: asset.mime,
         portId: 'out-images',
-        // 与主进程落盘命名一致：「图N+原始命名」，N 为拆分顺序（行优先）。
-        title: `图${index + 1}+${sourceName}`
+        // 与主进程落盘命名一致：「图N原始命名」，N 为拆分顺序（行优先）。
+        title: `图${index + 1}${sourceName}`
       })
     })
     return { status: 'done' }

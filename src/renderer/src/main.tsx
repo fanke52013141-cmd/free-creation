@@ -3,6 +3,8 @@ import './assets/ui-foundation.css'
 import './assets/ui-surfaces.css'
 import './assets/scrollbars.css'
 import './assets/window-chrome.css'
+import './canvas/node-visual-system.css'
+import './canvas/node-interaction-refinement.css'
 
 import { createRoot } from 'react-dom/client'
 import App from './App'

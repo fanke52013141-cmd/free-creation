@@ -1,0 +1,197 @@
+/* Neutral controls stay subdued throughout idle, hover and editing states. */
+.canvas-page
+  .node-card-wrap
+  .node-card
+  .node-body
+  :is(input:not([type='checkbox']), textarea, [contenteditable='true']) {
+  border-color: #ffffff16;
+  outline: none;
+  box-shadow: none;
+}
+.canvas-page
+  .node-card-wrap
+  .node-card
+  .node-body
+  :is(input:not([type='checkbox']), textarea, [contenteditable='true']):hover {
+  border-color: #ffffff26;
+}
+.canvas-page
+  .node-card-wrap
+  .node-card
+  .node-body
+  :is(input:not([type='checkbox']), textarea, [contenteditable='true']):focus {
+  border-color: #ffffff38;
+  outline: none;
+  box-shadow: 0 0 0 1px #ffffff08;
+}
+.canvas-page
+  .node-card-wrap
+  .node-card.type-file
+  :is(.file-asset, .file-asset-head, .file-asset-icon) {
+  background: transparent;
+  box-shadow: none;
+}
+.canvas-page .node-card-wrap .node-card.type-file :is(.file-asset-icon, .file-asset-sub) {
+  color: var(--muted);
+}
+.canvas-page .node-card.type-file .file-asset-head .icon-btn {
+  background: transparent;
+}
+.canvas-page .node-card.type-website .website-node-link {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.canvas-page .website-node-summary {
+  flex: 1;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+.canvas-page .website-node-actions {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.canvas-page .website-node-actions > button {
+  flex: 1 1 0;
+  width: 0;
+  margin: 0;
+}
+.canvas-page .crop-inline-actions > button {
+  width: 100%;
+}
+.global-toast {
+  top: 58px;
+  bottom: auto;
+  left: 50%;
+  max-width: min(640px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  border: 1px solid #ffffff16;
+  border-radius: 12px;
+  background: #202328f5;
+  color: #e4e7eb;
+  box-shadow: 0 10px 28px #0005;
+  pointer-events: none;
+}
+.canvas-page .node-card-wrap .port-core {
+  width: 12px;
+  height: 12px;
+}
+.canvas-page .node-hover-spot,
+.canvas-page .node-selection-beam {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.canvas-page .node-hover-spot {
+  z-index: 0;
+  opacity: 0;
+  background: radial-gradient(
+    240px circle at var(--node-mouse-x, 50%) var(--node-mouse-y, 50%),
+    #d4dce810,
+    transparent 65%
+  );
+  transition: opacity 240ms ease;
+}
+.canvas-page .node-card-wrap:hover .node-hover-spot {
+  opacity: 1;
+}
+.canvas-page .node-selection-beam {
+  z-index: 7;
+  inset: -1px;
+  padding: 1px;
+  opacity: 0;
+  background: conic-gradient(
+    from var(--node-beam-angle),
+    transparent 0deg 235deg,
+    #c9c3df22 295deg,
+    #e7e1f5bb 348deg,
+    transparent 358deg
+  );
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  transition: opacity 250ms ease;
+}
+@property --node-beam-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+.canvas-page .node-card-wrap.is-selected::after {
+  display: none;
+}
+.canvas-page .node-card-wrap.is-selected {
+  outline-color: #b8b5c455;
+}
+.canvas-page .node-card-wrap.is-selected .node-selection-beam {
+  opacity: 0.85;
+  animation: node-beam-flow 8s linear infinite;
+}
+@keyframes node-beam-flow {
+  to {
+    --node-beam-angle: 360deg;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .canvas-page .node-card-wrap.is-selected .node-selection-beam {
+    animation: none;
+  }
+}
+
+.canvas-page .node-card.type-website .node-standard-scroll,
+.canvas-page .node-card.type-website .node-standard-scroll > .node-body,
+.canvas-page .node-card.type-website .node-standard-scroll > .node-body > .node-body-content,
+.canvas-page .node-card.type-website .node-body-content > .website-node-link {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+}
+.canvas-page .website-node-summary > strong {
+  font-size: 15px;
+  font-weight: 650;
+}
+.canvas-page .website-node-summary > .website-node-url {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.canvas-page .node-hover-spot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: radial-gradient(
+    180px circle at var(--node-mouse-x, 50%) var(--node-mouse-y, 50%),
+    #e1e6f299,
+    transparent 65%
+  );
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+.canvas-page.canvas-theme-light
+  .node-card-wrap
+  .node-card
+  .node-body
+  :is(input:not([type='checkbox']), textarea, [contenteditable='true']) {
+  border-color: #00000020;
+}
+.canvas-page.canvas-theme-light
+  .node-card-wrap
+  .node-card
+  .node-body
+  :is(input:not([type='checkbox']), textarea, [contenteditable='true']):focus {
+  border-color: #00000040;
+}

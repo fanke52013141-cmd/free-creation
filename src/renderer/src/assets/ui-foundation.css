@@ -743,7 +743,7 @@ body {
   justify-content: center;
   border: none;
   background: transparent;
-  cursor: crosshair;
+  cursor: default;
   opacity: 1;
   transition: opacity 140ms ease;
 }

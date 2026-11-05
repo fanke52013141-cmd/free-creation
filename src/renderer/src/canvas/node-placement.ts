@@ -37,7 +37,12 @@ export function findNodeContinuationPlacement({
   gapY = 24,
   preferredX
 }: ContinuationPlacementOptions): { x: number; y: number } {
-  const x = preferredX ?? source.x + source.w + gapX
+  const adjacentX = source.x + source.w + gapX
+  const adjacent = { x: adjacentX, y: source.y, w: targetW, h: targetH }
+  if (!existing.some((shape) => intersects(adjacent, shape))) {
+    return { x: adjacentX, y: source.y }
+  }
+  const x = preferredX !== undefined && preferredX >= adjacentX ? preferredX : adjacentX
   const rowStep = targetH + gapY + HEADER_OVERHANG + CARD_GAP
   const columnNodes = existing.filter(
     (shape) => x < shape.x + shape.w && x + targetW > shape.x

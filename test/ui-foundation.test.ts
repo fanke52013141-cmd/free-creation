@@ -117,19 +117,20 @@ describe('统一画布视觉基础', () => {
   })
 
   it('节点高度按固定档位跳档，autoMax 封顶后内部滚动（呈现规范 §3）', () => {
-    expect(resolveNodeHeight(100)).toBe(260)
-    expect(resolveNodeHeight(260)).toBe(260)
-    expect(resolveNodeHeight(261)).toBe(320)
-    expect(resolveNodeHeight(320)).toBe(320)
-    expect(resolveNodeHeight(321)).toBe(380)
-    expect(resolveNodeHeight(380)).toBe(380)
-    expect(resolveNodeHeight(381)).toBe(440)
+    const height = NODE_UI.height
+    expect(resolveNodeHeight(100)).toBe(height.default)
+    expect(resolveNodeHeight(height.default)).toBe(height.default)
+    expect(resolveNodeHeight(height.default + 1)).toBe(height.expanded)
+    expect(resolveNodeHeight(height.expanded)).toBe(height.expanded)
+    expect(resolveNodeHeight(height.expanded + 1)).toBe(height.rich)
+    expect(resolveNodeHeight(height.rich)).toBe(height.rich)
+    expect(resolveNodeHeight(height.rich + 1)).toBe(height.autoMax)
     expect(resolveNodeHeight(900)).toBe(NODE_UI.height.autoMax)
     // 视频生成节点专用档：引用多图时输出参数不得被 440 上限裁掉。
     expect(
       resolveNodeHeight(500, NODE_UI.height.autoMaxVideoGen)
     ).toBe(NODE_UI.height.autoMaxVideoGen)
-    expect(resolveNodeHeight(440, NODE_UI.height.autoMaxVideoGen)).toBe(440)
+    expect(resolveNodeHeight(height.autoMax, height.autoMaxVideoGen)).toBe(height.autoMax)
     expect(resolveNodeHeight(900, NODE_UI.height.autoMaxVideoGen)).toBe(NODE_UI.height.autoMax)
     // 超档内容在 node-body 内部滚动，不再撑高卡片。
     expect(foundation).toMatch(/\.node-body\s*\{[^}]*overflow-y:\s*auto/)

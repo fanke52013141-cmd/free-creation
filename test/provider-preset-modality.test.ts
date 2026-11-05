@@ -30,11 +30,12 @@ function providerFromSpec(specId: ProviderSpecId): ProviderSummary {
 
 /** 与配音节点 acceptsProvider 同一契约：协议与供应商实例强绑定。 */
 function acceptsSpeechProvider(backend: SpeechBackend, specId: ProviderSpecId): boolean {
+  if (backend === 'indextts') return false
   if (backend === 'minimax') return specId === 'minimax'
   return specId === 'volc-speech'
 }
 
-const EXPECTED_AUDIO_MODEL: Record<SpeechBackend, string> = {
+const EXPECTED_AUDIO_MODEL: Record<Exclude<SpeechBackend, 'indextts'>, string> = {
   minimax: DEFAULT_SPEECH_CONFIG.modelId,
   volc: 'seed-audio-1.0'
 }
@@ -74,6 +75,11 @@ describe('供应商预设的模态与语音模型可选性', () => {
 
   it('每个语音通道都能列出自己的语音模型', () => {
     for (const backend of SPEECH_BACKENDS.map((item) => item.value)) {
+      if (backend === 'indextts') {
+        // Local IndexTTS has no cloud provider/model; it must not borrow Volc's fallback.
+        expect(audioModelsOf(backend)).toEqual([])
+        continue
+      }
       expect(audioModelsOf(backend), `${backend} 通道按模板建好供应商后没有可选语音模型`).toContain(
         EXPECTED_AUDIO_MODEL[backend]
       )

@@ -1,5 +1,6 @@
 import {
   NodeFooterActions,
+  NodeHeaderActions,
   NodeIdentity,
   NodePrimaryButton
 } from '../../../canvas/NodePresentation'
@@ -7,7 +8,7 @@ import {
 import { useEditor } from 'tldraw'
 import { stopEventPropagation } from 'tldraw'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
-import { ImageContinuationActions, pickImportedAsset, useClickGuard } from './shared'
+import { ImageContinuationActions, MediaFileActions, pickImportedAsset, useClickGuard } from './shared'
 import { useAppStore } from '../../../stores/app'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
@@ -69,6 +70,7 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
 
   return (
     <div className="node-media-wrap">
+      <NodeHeaderActions><MediaFileActions shape={shape} /></NodeHeaderActions>
       <div
         className="node-media"
         data-node-interactive="media-preview"

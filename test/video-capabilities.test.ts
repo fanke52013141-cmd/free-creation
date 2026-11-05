@@ -12,6 +12,14 @@ import {
 } from '@shared/video-capabilities'
 
 describe('视频供应商能力描述', () => {
+  it('Vidu creation starts at four seconds and normalizes legacy one-second settings', () => {
+    for (const model of ['3.2', '3.4']) {
+      const caps = videoCapabilitiesFor('vidu', model)
+      expect(caps.durations).toEqual([4, 5, 6, 7, 8, 9, 10])
+      expect(normalizeVideoGenParams(caps, { duration: 1 }).duration).toBe(4)
+    }
+  })
+
   it('统一模型标识并在模型切换后回退到已声明的安全配置', () => {
     expect(canonicalVideoModelId(' MiniMax_H3 ')).toBe('minimax-h3')
     const params = normalizeVideoGenParams(videoCapabilitiesFor('minimax', 'MiniMax_H3'), {
