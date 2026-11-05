@@ -236,6 +236,14 @@ function createWindow(): BrowserWindow {
     minHeight: 640,
     show: false,
     autoHideMenuBar: true,
+    ...(process.platform === 'win32' ? {
+      titleBarStyle: 'hidden' as const,
+      titleBarOverlay: {
+        color: '#0d0d0d',
+        symbolColor: '#aeb5c0',
+        height: 46
+      }
+    } : {}),
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

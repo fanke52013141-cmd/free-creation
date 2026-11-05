@@ -1,0 +1,38 @@
+/* Windows native caption buttons occupy the final 138 CSS pixels. */
+.desktop-window-overlay {
+  --window-caption-width: 138px;
+  --window-caption-height: 46px;
+}
+
+.desktop-window-overlay body::before {
+  content: '';
+  position: fixed;
+  z-index: 999;
+  inset: 0 0 auto;
+  height: var(--window-caption-height);
+  background: #0d0d0d;
+  -webkit-app-region: drag;
+}
+
+.desktop-window-overlay .canvas-topbar {
+  height: var(--window-caption-height);
+  min-height: var(--window-caption-height);
+  padding-right: calc(var(--window-caption-width) + 12px);
+  -webkit-app-region: drag;
+}
+
+.desktop-window-overlay .canvas-topbar :is(button, input, a, select, textarea, [role='button'], [role='menu'], [role='dialog']) {
+  -webkit-app-region: no-drag;
+}
+
+.desktop-window-overlay .project-home-content {
+  padding-top: calc(var(--window-caption-height) + 24px);
+}
+
+.desktop-window-overlay .boot-screen {
+  padding-top: var(--window-caption-height);
+}
+
+.desktop-window-overlay .canvas-topbar .canvas-title {
+  -webkit-app-region: no-drag;
+}
