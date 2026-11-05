@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { FixedSkill, SkillPackage } from '@shared/agent-flow/runtime-contracts'
 import {
   parseSkillBundleUpload,
@@ -14,22 +15,56 @@ import { NumberStepper } from '../../../components/NumberStepper'
 import { parseJsonObj } from '@shared/engine/helpers'
 import type { NodeSettingsProps } from '../../registry'
 
-/** 技能格式与校验说明（与 shared/skill-agent.ts、runtime-contracts.ts 的规则同步）。 */
-function SkillHelpPopover(): React.JSX.Element {
-  return (
-    <div className="skill-help-popover" role="note">
-      <strong>支持的格式</strong>
-      <ul>
-        <li>单个文件：SKILL.md 或 .json 技能包，不超过 128 KiB</li>
-        <li>技能目录：根部 1 个 SKILL.md + 至多 16 个同名根级 .md 参考（不嵌套子目录）</li>
-      </ul>
-      <strong>SKILL.md 写法</strong>
-      <pre>{`---
+const SKILL_EXAMPLE = `---
 name: 我的技能
 description: 一句话说明
 version: 1.0.0
 ---
-正文写技能指令：做什么、按什么步骤、输出什么格式。`}</pre>
+正文写技能指令：做什么、按什么步骤、输出什么格式。`
+
+/** 技能格式与校验说明（与 shared/skill-agent.ts、runtime-contracts.ts 的规则同步）。 */
+function SkillHelpPopover(): React.JSX.Element {
+  const [copyStatus, setCopyStatus] = useState('')
+  const helpRef = useRef<HTMLDivElement>(null)
+  return (
+    <div className="skill-help-popover" role="note" ref={helpRef}>
+      <button
+        type="button"
+        className="skill-help-copy"
+        onClick={() => {
+          const text = (helpRef.current?.innerText ?? '')
+            .split('\n')
+            .filter((line) => !['复制说明', '复制示例', copyStatus].includes(line.trim()))
+            .join('\n')
+          void navigator.clipboard.writeText(text).then(
+            () => setCopyStatus('已复制说明'),
+            () => setCopyStatus('复制失败，请手动选择说明')
+          )
+        }}
+      >
+        复制说明
+      </button>
+      <strong>支持的格式</strong>
+      <ul>
+        <li>单个文件：SKILL.md 或 .json 技能包，不超过 128 KiB</li>
+        <li>技能目录：根部 1 个 SKILL.md + 至多 16 个根级 .md 参考（不嵌套子目录）</li>
+        <li>暂不支持 ZIP 压缩包；请先解压后选择目录</li>
+      </ul>
+      <strong>SKILL.md 写法</strong>
+      <button
+        type="button"
+        className="skill-help-copy"
+        onClick={() => {
+          void navigator.clipboard.writeText(SKILL_EXAMPLE).then(
+            () => setCopyStatus('已复制'),
+            () => setCopyStatus('复制失败，请手动选择示例')
+          )
+        }}
+      >
+        复制示例
+      </button>
+      <span role="status">{copyStatus}</span>
+      <pre>{SKILL_EXAMPLE}</pre>
       <ul>
         <li>元数据可省略；仅支持单行 name / description / version，工具依赖请用 JSON 技能包</li>
       </ul>
@@ -42,14 +77,6 @@ version: 1.0.0
           再上传，否则报「该技能版本已存在」
         </li>
         <li>生效方式：上传后勾选绑定到节点，运行时 Agent 按指令执行，可只读参考 .md</li>
-      </ul>
-      <strong>内置技能</strong>
-      <ul>
-        <li>
-          「内容分析」「内容整理」「材料分析」「JSON
-          整理」「结果检查」为出厂示例（标「内置」），随应用自动装入，无需上传
-        </li>
-        <li>后三个需要 node.execute 工具，当前节点不支持，故标「缺少必需工具」不可勾选</li>
       </ul>
     </div>
   )
@@ -149,9 +176,13 @@ export function SkillAgentSettings({
         skill = parseSkillUpload(file.name, await file.text())
       } else {
         // 目录包：受控解析（根部 SKILL.md + 扁平 .md 资源，路径与预算校验）。
+        const root = list[0].webkitRelativePath.split('/')[0]
+        if (!root || list.some((file) => !file.webkitRelativePath.startsWith(`${root}/`))) {
+          throw new Error('技能文件必须来自同一个目录')
+        }
         const entries = await Promise.all(
           list.map(async (file) => ({
-            path: file.webkitRelativePath || file.name,
+            path: file.webkitRelativePath.slice(root.length + 1),
             content: await file.text()
           }))
         )
@@ -173,7 +204,7 @@ export function SkillAgentSettings({
       setBusy(false)
     }
   }
-  const entries = [...library.map(packageOf)]
+  const entries = [...library.filter((skill) => !BUILTIN_SKILL_IDS.has(skill.id)).map(packageOf)]
   for (const skill of selected)
     if (!entries.some((item) => item.id === skill.id && item.version === skill.version))
       entries.push(skill)
@@ -190,7 +221,28 @@ export function SkillAgentSettings({
         >
           <Icon name="help" size={14} />
         </button>
-        {helpOpen && <SkillHelpPopover />}
+        {helpOpen &&
+          createPortal(
+            <div className="skill-help-backdrop" onClick={() => setHelpOpen(false)}>
+              <div
+                className="skill-help-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-label="技能格式与校验说明"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  className="skill-help-close"
+                  onClick={() => setHelpOpen(false)}
+                >
+                  关闭
+                </button>
+                <SkillHelpPopover />
+              </div>
+            </div>,
+            document.body
+          )}
       </legend>
       <p className="contract-settings-hint">
         绑定技能后自动执行、检查并输出，无需再次确认。支持内容技能和参考资源读取。
@@ -225,7 +277,7 @@ export function SkillAgentSettings({
         disabled={busy}
         onClick={() => fileInput.current?.click()}
       >
-        {busy ? '安装中…' : '上传并安装 Skill'}
+        {busy ? '安装中…' : '上传技能文件（.md / .json）'}
       </button>
       <button
         type="button"
