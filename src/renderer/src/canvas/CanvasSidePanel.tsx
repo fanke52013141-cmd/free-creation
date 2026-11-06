@@ -31,6 +31,7 @@ import { useHistorySnapshots, type HistorySnapshot } from '../stores/history-sna
 import { Icon, type IconName } from '../components/Icon'
 import { AppSelect } from '../components/AppSelect'
 import { AssetsPanel } from './side-panel/AssetsPanel'
+import { useDragToCanvas } from './drag-to-canvas'
 
 export type SidePanelTab = 'assets' | 'workflow' | 'history' | 'runs'
 
@@ -87,10 +88,13 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
     void wfLoad().catch((error) => toast(`加载节点库失败：${String(error)}`))
   }, [wfLoad])
 
-  // 将节点库条目添加到画布视角中心
-  const handleApply = (tmpl: WorkflowTemplate): void => {
+  // 将节点库条目添加到画布：点击放在视口中心，拖拽则落在光标位置。
+  const handleApply = (
+    tmpl: WorkflowTemplate,
+    dropScreen?: { x: number; y: number }
+  ): void => {
     if (!editor) return
-    const { skippedEdges } = addNodeLibraryEntry(editor, tmpl)
+    const { skippedEdges } = addNodeLibraryEntry(editor, tmpl, true, dropScreen)
     toast(
       skippedEdges > 0
         ? `已从节点库添加「${tmpl.name}」，${skippedEdges} 条旧连线因端口不明确未恢复`
@@ -113,9 +117,10 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
 
   return (
     <div className="side-panel-body workflow-panel" ref={scrollRef}>
-      <label className="wf-search">
-        <Icon name="search" size={16} />
+      <label className="assets-search-row">
+        <Icon name="search" size={14} />
         <input
+          className="assets-search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="搜索节点库"
@@ -129,37 +134,65 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
       ) : visibleTemplates.length === 0 ? (
         <div className="side-panel-empty">没有找到匹配的节点库条目。</div>
       ) : (
-        <div className="wf-template-list">
+        <div className="assets-grid">
           {visibleTemplates.map((tmpl) => (
-            <div key={tmpl.id} className="wf-template-card">
-              <div className="wf-template-info">
-                <strong className="wf-template-name">{tmpl.name}</strong>
-                <span className="wf-template-meta">
-                  {tmpl.nodeCount} 个节点 · {tmpl.edges.length} 条连线 ·{' '}
-                  {formatTime(tmpl.createdAt)}
-                </span>
-              </div>
-              <div className="wf-template-actions">
-                <button
-                  className="wf-action-btn apply"
-                  aria-label={`从节点库添加 ${tmpl.name} 到画布`}
-                  onClick={() => handleApply(tmpl)}
-                >
-                  <Icon name="add" size={16} />
-                </button>
-                <button
-                  className="wf-action-btn delete"
-                  aria-label={`删除节点库条目 ${tmpl.name}`}
-                  onClick={() => void handleRemoveTemplate(tmpl)}
-                >
-                  <Icon name="trash" size={16} />
-                </button>
-              </div>
-            </div>
+            <WorkflowCard
+              key={tmpl.id}
+              template={tmpl}
+              onApply={(dropScreen) => handleApply(tmpl, dropScreen)}
+              onRemove={() => void handleRemoveTemplate(tmpl)}
+            />
           ))}
         </div>
       )}
     </div>
+  )
+}
+
+/** 节点库卡片：与项目素材共用 .asset-card 材质；只显示名称，点击/拖拽到画布即用。 */
+function WorkflowCard({
+  template,
+  onApply,
+  onRemove
+}: {
+  template: WorkflowTemplate
+  onApply: (dropScreen?: { x: number; y: number }) => void
+  onRemove: () => void
+}): React.JSX.Element {
+  const { startDrag, handleClick } = useDragToCanvas()
+  return (
+    <article
+      className="asset-card"
+      title="点击添加到画布，或直接拖到画布"
+      onPointerDown={(e) =>
+        startDrag(e, { label: template.name, icon: 'node-library' }, (x, y) =>
+          onApply({ x, y })
+        )
+      }
+      onClick={() => handleClick(() => onApply())}
+    >
+      <div className="asset-thumb kind-workflow">
+        <span className="asset-thumb-icon">
+          <Icon name="node-library" size={24} />
+        </span>
+      </div>
+      <div className="asset-info">
+        <span className="asset-name" title={template.name}>
+          {template.name}
+        </span>
+      </div>
+      <button
+        type="button"
+        className="asset-delete"
+        aria-label={`删除节点库条目 ${template.name}`}
+        onClick={(e) => {
+          e.stopPropagation()
+          onRemove()
+        }}
+      >
+        <Icon name="trash" size={12} />
+      </button>
+    </article>
   )
 }
 

@@ -7139,7 +7139,7 @@ select:focus-visible {
 
 .assets-advanced-filters {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -7180,11 +7180,18 @@ select:focus-visible {
   color: var(--txt);
 }
 
-/* 窄抽屉（浏览器演示或小窗口）：三个高级筛选竖排，完整显示文字，避免挤压成“全.”。 */
-@container (max-width: 320px) {
-  .assets-advanced-filters {
-    grid-template-columns: 1fr;
-  }
+/* 2026-11-07 用户裁决：三个高级筛选固定一行，不再按侧栏宽度竖排。 */
+.assets-advanced-filters .app-select-trigger.assets-filter-select {
+  width: 100%;
+  min-width: 0;
+  padding: 0 4px;
+  gap: 2px;
+  font-size: 10.5px;
+}
+
+.assets-advanced-filters .app-select-trigger.assets-filter-select .app-select-chevron {
+  width: 10px;
+  flex-basis: 10px;
 }
 
 .assets-grid {
@@ -7279,11 +7286,29 @@ select:focus-visible {
   opacity: 0.82;
 }
 
-.asset-thumb img {
+.asset-thumb img,
+.asset-thumb video {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* 节点库缩略图：无封面，用统一图标占位。 */
+.asset-thumb.kind-workflow {
+  background:
+    radial-gradient(130% 100% at 50% 0%, rgba(66, 185, 245, 0.1), transparent 62%),
+    linear-gradient(180deg, #1d232c, #131720);
+}
+
+/* 节点库面板：卡片网格随侧栏整体滚动，不再嵌套滚动条。 */
+.workflow-panel {
+  gap: 8px;
+}
+
+.workflow-panel .assets-grid {
+  flex: 0 0 auto;
+  overflow: visible;
 }
 
 /* 视频角标：半透明深色圆底，安静地点明这是视频，不抢封面。 */
@@ -7338,8 +7363,11 @@ select:focus-visible {
 }
 
 .asset-meta {
+  overflow: hidden;
   font-size: 10px;
   color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .asset-locate,
@@ -7576,11 +7604,11 @@ select:focus-visible {
 
 @media (max-width: 460px) {
   .assets-advanced-filters {
-    grid-template-columns: 1fr 1fr;
+    gap: 4px;
   }
 
-  .assets-advanced-filters select:first-child {
-    grid-column: 1 / -1;
+  .assets-advanced-filters .asset-filter-select {
+    font-size: 10px;
   }
 }
 

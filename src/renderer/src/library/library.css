@@ -1551,10 +1551,16 @@
 }
 .library-picker {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  gap: 10px;
-  min-height: 200px;
-  padding: 12px;
+  gap: 8px;
+  min-height: 0;
+  /* 与项目素材面板对齐：外层 side-panel-body 已有 16px 内边距，不再叠加。 */
+  padding: 0;
+}
+.library-picker .assets-grid {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .library-picker-search {
   display: flex;

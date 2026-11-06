@@ -3,8 +3,10 @@ import type { Editor } from 'tldraw'
 import type { LibraryResourceSummary } from '@shared/library/types'
 import { Icon } from '../components/Icon'
 import { mediaUrl } from '../nodes/registry'
+import { useConfirmStore } from '../stores/confirm'
 import { useToastStore } from '../stores/toast'
 import { insertResource } from './insertResource'
+import { libraryVersionLabel } from './value-type-labels'
 import { useDragToCanvas } from '../canvas/drag-to-canvas'
 
 interface LibraryResourcePickerProps {
@@ -14,6 +16,14 @@ interface LibraryResourcePickerProps {
 
 const SEARCH_DEBOUNCE_MS = 160
 const SEARCH_LIMIT = 100
+
+function formatTime(ts: number): string {
+  const d = new Date(ts)
+  return `${d.getMonth() + 1}/${d.getDate()} ${d
+    .getHours()
+    .toString()
+    .padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+}
 
 export function LibraryResourcePicker({
   projectId,
@@ -73,20 +83,25 @@ export function LibraryResourcePicker({
     }
   }
 
-  // 资源库没有硬删除，归档后默认搜索不再返回，可在归档视图恢复。
-  const handleArchive = async (resource: LibraryResourceSummary): Promise<void> => {
+  // 与资源库页一致：删除是硬删除，必须二次确认。
+  const handleDelete = async (resource: LibraryResourceSummary): Promise<void> => {
+    const confirmed = await useConfirmStore.getState().confirm({
+      title: `删除资源「${resource.title}」？`,
+      message: '会同时删除该资源的全部版本与内容，删除后无法恢复。',
+      confirmText: '删除',
+      cancelText: '取消',
+      danger: true
+    })
+    if (!confirmed) return
     setBusyId(resource.id)
     try {
-      const result = await window.api.archiveLibraryResource({
-        resourceId: resource.id,
-        archived: true
-      })
+      const result = await window.api.deleteLibraryResource({ resourceId: resource.id })
       if (!result.ok) throw new Error(result.error.message)
       setResources((current) => current.filter((item) => item.id !== resource.id))
-      useToastStore.getState().show('资源已移除，可在归档中恢复')
+      useToastStore.getState().show(`已删除资源「${resource.title}」`)
     } catch (error) {
       useToastStore.getState().show(
-        `移除失败：${error instanceof Error ? error.message : String(error)}`
+        `删除失败：${error instanceof Error ? error.message : String(error)}`
       )
     } finally {
       setBusyId(null)
@@ -95,9 +110,10 @@ export function LibraryResourcePicker({
 
   return (
     <div className="library-picker">
-      <label className="library-picker-search">
+      <label className="assets-search-row">
         <Icon name="search" size={14} />
         <input
+          className="assets-search"
           value={keyword}
           placeholder="搜索资源库"
           onChange={(e) => setKeyword(e.currentTarget.value)}
@@ -108,10 +124,10 @@ export function LibraryResourcePicker({
         <div className="side-panel-empty">正在加载资源…</div>
       ) : resources.length === 0 ? (
         <div className="side-panel-empty">
-          资源库还没有内容，在项目素材里保存素材后会出现在这里。
+          资源库还没有内容，在项目素材里保存素材，或到资源库页面新建资源。
         </div>
       ) : (
-        <div className="library-picker-grid">
+        <div className="assets-grid">
           {resources.map((resource) => (
             <LibraryCard
               key={resource.id}
@@ -119,7 +135,7 @@ export function LibraryResourcePicker({
               busy={busyId === resource.id}
               onAdd={() => void addResource(resource)}
               onDrop={(x, y) => void addResource(resource, { x, y })}
-              onArchive={() => void handleArchive(resource)}
+              onDelete={() => void handleDelete(resource)}
             />
           ))}
         </div>
@@ -133,57 +149,58 @@ function LibraryCard({
   busy,
   onAdd,
   onDrop,
-  onArchive
+  onDelete
 }: {
   resource: LibraryResourceSummary
   busy: boolean
   onAdd: () => void
   onDrop: (x: number, y: number) => void
-  onArchive: () => void
+  onDelete: () => void
 }): React.JSX.Element {
   const { startDrag, handleClick } = useDragToCanvas()
 
   return (
     <article
-      className="library-card"
+      className="asset-card"
       onPointerDown={(e) =>
         startDrag(
           e,
           {
             label: resource.title,
-            ...(resource.coverPath
-              ? { image: mediaUrl(resource.coverPath) }
-              : { icon: 'layers' })
+            ...(resource.coverPath ? { image: mediaUrl(resource.coverPath) } : { icon: 'layers' })
           },
           onDrop
         )
       }
       onClick={() => handleClick(onAdd)}
     >
-      <div className="library-card-cover">
+      <div className={`asset-thumb${resource.coverPath ? '' : ' kind-file'}`}>
         {resource.coverPath ? (
           <img src={mediaUrl(resource.coverPath)} alt={resource.title} loading="lazy" />
         ) : (
-          <span className="library-card-cover-icon">
+          <span className="asset-thumb-icon">
             <Icon name="layers" size={24} />
           </span>
         )}
       </div>
 
-      <div className="library-card-info">
-        <span className="library-card-name" title={resource.title}>
+      <div className="asset-info">
+        <span className="asset-name" title={resource.title}>
           {resource.title}
+        </span>
+        <span className="asset-meta">
+          {formatTime(resource.updatedAt)} · {libraryVersionLabel(resource.revisionNumber)}
         </span>
       </div>
 
       <button
         type="button"
-        className="library-card-delete"
-        aria-label="从资源库移除"
+        className="asset-delete"
+        aria-label="删除资源"
         disabled={busy}
         onClick={(e) => {
           e.stopPropagation()
-          onArchive()
+          onDelete()
         }}
       >
         <Icon name="trash" size={12} />

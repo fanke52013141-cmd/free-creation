@@ -9,9 +9,13 @@ import { templateNodeProps, type WorkflowTemplate } from '../stores/workflow'
 export function addNodeLibraryEntry(
   editor: Editor,
   entry: WorkflowTemplate,
-  markHistory = true
+  markHistory = true,
+  dropScreen?: { x: number; y: number }
 ): { nodeIds: TLShapeId[]; skippedEdges: number } {
-  const center = editor.getViewportPageBounds().center
+  // 拖拽落点优先；没有落点时仍放在视口中心（搜索面板、加号按钮沿用）。
+  const center = dropScreen
+    ? editor.screenToPage({ x: dropScreen.x, y: dropScreen.y })
+    : editor.getViewportPageBounds().center
   const nodeIds: TLShapeId[] = []
   let skippedEdges = 0
 

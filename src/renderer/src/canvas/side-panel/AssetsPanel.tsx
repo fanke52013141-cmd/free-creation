@@ -300,9 +300,11 @@ export function AssetsPanel({
           onChange={(e) => setSourceNodeId(e.currentTarget.value)}
           title="按来源节点筛选"
         >
-          <option value="all">全部来源</option>
+          <option value="all" data-trigger-label="来源">
+            全部来源
+          </option>
           {sourceOptions.map((option) => (
-            <option key={option.nodeId} value={option.nodeId}>
+            <option key={option.nodeId} value={option.nodeId} data-trigger-label={option.nodeTitle}>
               {option.nodeTitle}
             </option>
           ))}
@@ -314,7 +316,11 @@ export function AssetsPanel({
           title="按运行状态筛选"
         >
           {RUN_STATUS_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
+            <option
+              key={option.value}
+              value={option.value}
+              data-trigger-label={option.value === 'all' ? '状态' : option.label}
+            >
               {option.label}
             </option>
           ))}
@@ -326,7 +332,19 @@ export function AssetsPanel({
           title="按时间筛选"
         >
           {TIME_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
+            <option
+              key={option.value}
+              value={option.value}
+              data-trigger-label={
+                option.value === 'all'
+                  ? '时间'
+                  : option.value === '7d'
+                    ? '7 天'
+                    : option.value === '30d'
+                      ? '30 天'
+                      : option.label
+              }
+            >
               {option.label}
             </option>
           ))}
@@ -442,7 +460,14 @@ function AssetCard({
         )}
         {asset.kind === 'video' && (
           <>
-            <img src={mediaUrl(asset.path)} alt={asset.name} loading="lazy" />
+            {/* 视频不能用 <img>：指向 mp4 的图片请求必然裂图。用静音 video 抽首帧当封面。 */}
+            <video
+              src={`${mediaUrl(asset.path)}#t=0.1`}
+              muted
+              playsInline
+              preload="metadata"
+              aria-label={asset.name}
+            />
             <span className="asset-play-badge">
               <Icon name="play" size={11} />
             </span>
