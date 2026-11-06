@@ -1,4 +1,7 @@
 import { useState } from 'react'
+// 先加载库级基础样式，再加载本表单的局部视觉层，保证同权重规则以局部样式收口。
+import './library.css'
+import './library-forms.css'
 import { acceptsValue, type LibraryCategory, type LibraryNodeSlot } from '@shared/library/blueprint'
 import { LIBRARY_NODE_ADAPTERS } from '@shared/library/blueprint'
 import type {
@@ -409,9 +412,9 @@ export function LibraryResourceForm({
 
   return (
     <div className="library-form-mask" onMouseDown={(event) => event.target === event.currentTarget && !busy && onCancel()}>
-      <section className="library-form-dialog" role="dialog" aria-modal="true" aria-label={detail ? '编辑资源新版本' : '新建资源'}>
+      <section className="library-form-dialog library-resource-form-dialog" role="dialog" aria-modal="true" aria-label={detail ? '编辑资源新版本' : '新建资源'}>
         <header className="library-form-header">
-          <div><span className="library-eyebrow">RESOURCE</span><h2>{detail ? '发布资源新版本' : '新建资源'}</h2></div>
+          <h2>{detail ? '发布资源新版本' : '新建资源'}</h2>
           <button className="library-icon-button" aria-label="关闭" disabled={busy} onClick={onCancel}><Icon name="close" size={17} /></button>
         </header>
         <div className="library-form-scroll">
@@ -421,7 +424,6 @@ export function LibraryResourceForm({
               {availableCategories.map((category) => <option key={categoryKey(category)} value={categoryKey(category)}>{category.name}</option>)}
             </select>
             {detail && selectedCategory && <small>本次保存会记录当前资源内容；之后可在详情中查看和对比每次迭代。</small>}
-            {!selectedCategory && <small>可以直接组合图片、音频、视频、文件和文本；未分类资源可在“未分类”中找到，也能之后再指定分类。</small>}
           </label>
           <label className="library-form-field"><span>资源名称</span><input autoFocus maxLength={180} value={title} onChange={(event) => setTitle(event.currentTarget.value)} placeholder="例如：主角设定" /></label>
           <label className="library-form-field"><span>说明</span><textarea value={description} maxLength={20000} onChange={(event) => setDescription(event.currentTarget.value)} placeholder="记录用途、来源或使用建议" /></label>
@@ -485,7 +487,7 @@ export function LibraryResourceForm({
           )}
 
           {detail && <label className="library-form-field"><span>本次修改说明</span><input maxLength={1000} value={changeNote} onChange={(event) => setChangeNote(event.currentTarget.value)} placeholder="例如：补充侧面参考图并调整人物描述" /></label>}
-          {error && <div className="library-form-error" role="alert">{error}</div>}
+          {error && <div className="library-form-error" role="alert"><Icon name="warning" size={14} /><span>{error}</span></div>}
         </div>
         <footer className="library-form-footer">
           <span>{detail ? `基于 v${detail.selectedRevisionNumber} 编辑，发布为新版本` : selectedCategory?.name ?? '自由组合'}</span>

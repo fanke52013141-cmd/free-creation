@@ -70,9 +70,37 @@
   padding-top: 20px;
 }
 
-/* 资源库页头同样要避开原生标题栏，否则左上角“返回项目”被窗口拖拽层盖住。 */
+/* 资源库页头与原生标题栏同排：资源库顶栏占据标题栏行，右侧给系统按钮预留 138px。 */
 .desktop-window-overlay .resource-library-page {
-  padding-top: var(--window-caption-height);
+  padding-top: 0;
+}
+
+.desktop-window-overlay .library-page-header {
+  height: var(--window-caption-height);
+  min-height: var(--window-caption-height);
+  padding-right: calc(var(--window-caption-width) + 12px);
+  -webkit-app-region: drag;
+}
+
+.desktop-window-overlay .library-page-header::after {
+  position: absolute;
+  top: 50%;
+  right: var(--window-caption-width);
+  width: 1px;
+  height: 18px;
+  content: '';
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.13);
+  pointer-events: none;
+}
+
+.desktop-window-overlay .library-page-header :is(button, input, a, [role='button']) {
+  -webkit-app-region: no-drag;
+}
+
+/* 详情抽屉从资源库顶栏下方展开，不遮挡系统按钮。 */
+.desktop-window-overlay .library-detail-mask {
+  top: var(--window-caption-height);
 }
 
 .desktop-window-overlay .boot-screen {
@@ -81,11 +109,4 @@
 
 .desktop-window-overlay .canvas-topbar .canvas-title {
   -webkit-app-region: no-drag;
-}
-
-
-/* 2026-11-06 用户裁决：资源库资产详情侧栏从原生最小化/最大化/关闭按钮下方展开，
-   不再压住窗口标题栏的三个系统按钮。 */
-.desktop-window-overlay .library-detail-mask {
-  top: var(--window-caption-height);
 }

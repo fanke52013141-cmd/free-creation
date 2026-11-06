@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "Removed the resource-library board feature (UI, IPC, repo, types, package import/export) and adjusted project/home window chrome and resource-library back navigation; no node, port, schema, transport, persistence or logging contract changes.",
+  "reason": "资源库封面回退与页面/抽屉/表单视觉调整，不改变操作契约、Schema 与执行路径",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "97d2ffb5e2403b33a2d3ac8ab3eee8272f78cf948e4c73ab53cc662bd73a5a6f",
@@ -93,7 +93,7 @@
     "src/main/model-host/sqlite-model-host.ts": "6607e01b8f3e743fc21c7f7071a4f4c7c15f35a57d3c444333eb81d8cf0d2060",
     "src/main/store/db-migrations.ts": "394767de3ca7a19bb5e9ac3193fdc39d0cc6736d851379d95546055c8d5b4211",
     "src/main/store/db.ts": "00d4366589b48881808f9669330ea040dab7ff049e7d5d160145ee6dc8f5598f",
-    "src/main/store/library.repo.ts": "790df409c34c03cdb3341cb387a64f0e15d5b35824b7e951dd5b83b032a9434b",
+    "src/main/store/library.repo.ts": "7ad00f9694e7c5e8797548e09a08fae107a98ccd6a08e8704d0d190829aaa4ef",
     "src/main/store/process-lock.ts": "ad98b5d869a954ba0e3a83e4a52fe12c40e3d9921b4379a5df81b7fa64038dfd",
     "src/main/store/projects.repo.ts": "31dd64b9febbb7844a718521e6e2e65bad8c77f415ba47962982b656b152e42d",
     "src/main/store/transfer.ts": "9bb2c234482ddb97a70fbaee3ebd28a38f975f23fa5647239d1da17b42f0d4da",

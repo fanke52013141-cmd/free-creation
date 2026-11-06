@@ -1,0 +1,376 @@
+/* ============================================================
+   资源库表单弹窗局部视觉层（LibraryResourceForm / LibraryCategoryEditor 专用）
+   ------------------------------------------------------------
+   依赖 library.css 提供的基础骨架；本文件由上述两个组件在
+   library.css 之后 import（并在选择器上保持更高特异性），
+   因此不会影响复用 .library-form-* 的其它弹窗：
+     - ResourceInsertRequest.tsx（.library-form-dialog，无本文件作用域类名）
+     - WorkflowSaveDialog.tsx（.library-form-dialog.workflow-save-dialog）
+   材质沿用画布节点卡片：底 #151922、卡面 #1b202b、描边 #252b36、
+   控件底 #0f131a；青色 #3cdde3 只用于主按钮与聚焦态。
+   ============================================================ */
+
+/* ── 1. 弹窗材质、宽度与头部 ─────────────────────────────── */
+.library-form-dialog.library-resource-form-dialog,
+.library-form-dialog.library-category-dialog {
+  background: #151922;
+  border: 1px solid #252b36;
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+}
+.library-form-dialog.library-category-dialog {
+  width: min(720px, 100%);
+}
+.library-form-dialog.library-resource-form-dialog .library-form-header,
+.library-form-dialog.library-category-dialog .library-form-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #252b36;
+}
+.library-form-dialog.library-resource-form-dialog .library-form-header h2,
+.library-form-dialog.library-category-dialog .library-form-header h2 {
+  margin: 0;
+  color: #f1f4f7;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* ── 2. 表单控件：统一圆角 8px / 深色底 / 细描边 ─────────── */
+.library-form-dialog.library-resource-form-dialog .library-form-scroll,
+.library-form-dialog.library-category-dialog .library-form-scroll {
+  padding: 18px 20px 20px;
+}
+.library-form-dialog.library-resource-form-dialog :is(input:not([type='checkbox']), textarea, select),
+.library-form-dialog.library-category-dialog :is(input:not([type='checkbox']), textarea, select) {
+  color: #f1f4f7;
+  background: #0f131a;
+  border: 1px solid #252b36;
+  border-radius: 8px;
+}
+.library-form-dialog.library-resource-form-dialog :is(input, textarea)::placeholder,
+.library-form-dialog.library-category-dialog :is(input, textarea)::placeholder {
+  color: #5f6b7a;
+}
+.library-form-dialog.library-resource-form-dialog :is(input:not([type='checkbox']), textarea, select):focus,
+.library-form-dialog.library-category-dialog :is(input:not([type='checkbox']), textarea, select):focus {
+  border-color: rgba(60, 221, 227, 0.5);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(60, 221, 227, 0.16);
+}
+.library-form-dialog.library-resource-form-dialog select option,
+.library-form-dialog.library-category-dialog select option {
+  color: #f1f4f7;
+  background: #0f131a;
+}
+
+/* 分区标题（ResourceForm「资源内容」等）与说明的层级 */
+.library-form-dialog.library-resource-form-dialog .library-form-components-head {
+  align-items: flex-start;
+  margin: 20px 0 12px;
+  padding-top: 16px;
+  border-top: 1px solid #252b36;
+}
+.library-form-dialog.library-resource-form-dialog .library-form-components-head h3 {
+  color: #f1f4f7;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.library-form-dialog.library-resource-form-dialog .library-form-components-head p {
+  margin-top: 5px;
+  color: #737f8e;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+/* ── 3. 底部按钮区：取消在左、主按钮在右，间距 10px ─────── */
+:is(.library-form-dialog.library-resource-form-dialog, .library-form-dialog.library-category-dialog)
+  .library-form-footer {
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 20px;
+  background: #12161d;
+  border-top: 1px solid #252b36;
+}
+.library-form-dialog.library-resource-form-dialog .library-form-footer > span {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-right: auto;
+  overflow: hidden;
+  color: #737f8e;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.library-form-mask
+  :is(.library-form-dialog.library-resource-form-dialog, .library-form-dialog.library-category-dialog)
+  .library-form-footer > button:is(.library-form-secondary, .library-form-primary) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 34px;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+:is(.library-form-dialog.library-resource-form-dialog, .library-form-dialog.library-category-dialog)
+  .library-form-footer > button.library-form-secondary {
+  color: #9aa4b2;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px #252b36;
+}
+:is(.library-form-dialog.library-resource-form-dialog, .library-form-dialog.library-category-dialog)
+  .library-form-footer > button.library-form-secondary:hover:not(:disabled) {
+  color: #f1f4f7;
+  background: rgba(255, 255, 255, 0.08);
+}
+:is(.library-form-dialog.library-resource-form-dialog, .library-form-dialog.library-category-dialog)
+  .library-form-footer > button.library-form-primary {
+  color: #06283d;
+  background: #3cdde3;
+  box-shadow: 0 4px 12px rgba(60, 221, 227, 0.22);
+}
+:is(.library-form-dialog.library-resource-form-dialog, .library-form-dialog.library-category-dialog)
+  .library-form-footer > button.library-form-primary:hover:not(:disabled) {
+  background: #63e9ef;
+}
+
+/* ── 4. 错误行更醒目 ─────────────────────────────────────── */
+:is(.library-form-dialog.library-resource-form-dialog, .library-form-dialog.library-category-dialog)
+  .library-form-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 9px 11px;
+  color: #ff9a9a;
+  background: rgba(255, 92, 92, 0.1);
+  border: 1px solid rgba(255, 92, 92, 0.32);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+:is(.library-form-dialog.library-resource-form-dialog, .library-form-dialog.library-category-dialog)
+  .library-form-error svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #ff7b7b;
+}
+.library-form-dialog.library-resource-form-dialog .library-form-error {
+  margin-top: 12px;
+}
+
+/* ── 5. 分类编辑器：三组卡片式区块 ───────────────────────── */
+.library-form-dialog.library-category-dialog .library-form-scroll {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+.library-form-dialog.library-category-dialog .library-form-group {
+  padding: 16px;
+  background: linear-gradient(180deg, #1b202b 0%, #171c25 100%);
+  border: 1px solid #252b36;
+  border-radius: 10px;
+}
+.library-form-dialog.library-category-dialog .library-form-group-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.library-form-dialog.library-category-dialog .library-form-group-index {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: #9aa4b2;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px #2b323d;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+.library-form-dialog.library-category-dialog .library-form-group-title {
+  min-width: 0;
+}
+.library-form-dialog.library-category-dialog .library-form-group-title h3 {
+  margin: 0;
+  color: #f1f4f7;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.library-form-dialog.library-category-dialog .library-form-group-title p {
+  margin: 5px 0 0;
+  color: #737f8e;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.library-form-dialog.library-category-dialog .library-form-group-head .library-form-group-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  min-height: 30px;
+  margin-left: auto;
+  padding: 0 11px;
+  color: #9aa4b2;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px #252b36;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+.library-form-dialog.library-category-dialog .library-form-group-head .library-form-group-action:hover:not(:disabled) {
+  color: #f1f4f7;
+  background: rgba(255, 255, 255, 0.08);
+}
+.library-form-dialog.library-category-dialog .library-form-group-head .library-form-group-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.library-form-dialog.library-category-dialog .library-form-group-body {
+  display: grid;
+  gap: 12px;
+}
+.library-form-dialog.library-category-dialog .library-form-group-body .library-form-field {
+  margin-top: 0;
+}
+/* 展示与封面：三项并排，窄屏回落单列 */
+.library-form-dialog.library-category-dialog .library-category-display-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.library-form-dialog.library-category-dialog .library-category-display-grid > label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: #9aa4b2;
+  font-size: 12px;
+}
+
+/* ── 6. 节点槽位卡片：紧凑三行 + 右上角图标按钮 ─────────── */
+.library-form-dialog.library-category-dialog .library-category-slot {
+  padding: 12px;
+  background: #141922;
+  border: 1px solid #252b36;
+  border-radius: 9px;
+}
+.library-form-dialog.library-category-dialog .library-category-slot .library-component-edit-head {
+  margin-bottom: 10px;
+}
+.library-form-dialog.library-category-dialog .library-category-slot .library-component-edit-head strong {
+  color: #f1f4f7;
+  font-size: 12px;
+  font-weight: 600;
+}
+.library-form-dialog.library-category-dialog .library-category-slot-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.library-form-dialog.library-category-dialog .library-category-slot-tools .library-slot-icon {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: #737f8e;
+  background: transparent;
+  border-radius: 7px;
+}
+.library-form-dialog.library-category-dialog .library-category-slot-tools .library-slot-icon:hover:not(:disabled) {
+  color: #f1f4f7;
+  background: rgba(255, 255, 255, 0.07);
+}
+.library-form-dialog.library-category-dialog
+  .library-category-slot-tools
+  .library-slot-icon.library-slot-remove:hover:not(:disabled) {
+  color: #ff5c5c;
+  background: rgba(255, 92, 92, 0.12);
+}
+.library-form-dialog.library-category-dialog .library-category-slot-tools .library-slot-icon:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.library-form-dialog.library-category-dialog .library-category-slot .library-form-grid {
+  gap: 10px;
+}
+.library-form-dialog.library-category-dialog .library-category-slot .library-slot-options {
+  margin: 10px 0 0;
+  gap: 14px;
+}
+.library-form-dialog.library-category-dialog .library-category-slot .library-slot-options label {
+  color: #9aa4b2;
+  font-size: 12px;
+}
+.library-form-dialog.library-category-dialog .library-category-slot .library-form-field {
+  margin-top: 0;
+}
+.library-form-dialog.library-category-dialog .library-category-slot > small {
+  display: block;
+  margin-top: 7px;
+  color: #737f8e;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+/* ── 7. 展开预览：保留功能但视觉弱化 ────────────────────── */
+.library-form-dialog.library-category-dialog .library-category-preview {
+  margin-top: 0;
+  padding: 12px;
+  background: #0f131a;
+  border: 1px solid #252b36;
+  border-radius: 8px;
+}
+.library-form-dialog.library-category-dialog .library-category-preview > strong {
+  color: #9aa4b2;
+  font-size: 11px;
+  font-weight: 500;
+}
+.library-form-dialog.library-category-dialog .library-category-preview .library-blueprint-nodes {
+  margin-top: 9px;
+  gap: 8px;
+}
+.library-form-dialog.library-category-dialog .library-category-preview .library-blueprint-nodes > span {
+  min-width: 110px;
+  padding: 8px 9px;
+  color: #737f8e;
+  background: transparent;
+  border: 1px dashed #2b323d;
+  border-radius: 7px;
+  font-size: 10px;
+}
+.library-form-dialog.library-category-dialog .library-category-preview .library-blueprint-nodes b {
+  margin-top: 5px;
+  color: #9aa4b2;
+  font-size: 11px;
+  font-weight: 500;
+}
+.library-form-dialog.library-category-dialog .library-category-preview .library-blueprint-nodes small {
+  margin-top: 4px;
+  color: #5f6b7a;
+  font-size: 10px;
+}
+.library-form-dialog.library-category-dialog .library-category-note {
+  margin: 0;
+  color: #737f8e;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* ── 8. 窄屏 ─────────────────────────────────────────────── */
+@media (max-width: 690px) {
+  .library-form-dialog.library-category-dialog .library-category-display-grid {
+    grid-template-columns: 1fr;
+  }
+  .library-form-dialog.library-category-dialog .library-form-group-head {
+    flex-wrap: wrap;
+  }
+}

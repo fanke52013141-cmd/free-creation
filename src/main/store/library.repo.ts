@@ -143,8 +143,14 @@ function allFolderPaths(): string[][] {
 
 function resourceSummary(row: ResourceRow): LibraryResourceSummary {
   const category = revisionCategory(row.latest_revision_id)
-  const cover = category?.coverSlotId ? readComponents(row.latest_revision_id).find((component) =>
-    component.metadata.librarySlotId === category.coverSlotId && component.valueType === 'image')?.blobPath : row.cover_path
+  const components = readComponents(row.latest_revision_id)
+  const coverSlotCover = category?.coverSlotId
+    ? components.find((component) =>
+        component.metadata.librarySlotId === category.coverSlotId && component.valueType === 'image')?.blobPath
+    : undefined
+  // 2026-11-06：没有封面槽位/持久化封面的资源（例如组合资产）优先用第一张图片作为卡片背景。
+  const firstImageCover = components.find((component) => component.valueType === 'image')?.blobPath
+  const cover = coverSlotCover ?? row.cover_path ?? firstImageCover
   return {
     id: row.id,
     formPreset: row.form_preset,

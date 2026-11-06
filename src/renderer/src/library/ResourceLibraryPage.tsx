@@ -34,10 +34,6 @@ function ResourceCard({ resource, onOpen, onDragStart }: { resource: LibraryReso
       <div className="library-resource-card-body">
         <div className="library-resource-card-title"><strong>{resource.title}</strong><span>v{resource.revisionNumber}</span></div>
         <p>{resource.description || (resource.formPreset === 'prompt' ? '提示词资源' : '暂无说明')}</p>
-        <div className="library-resource-card-meta">
-          <span>{resource.componentCount} 个组件</span>
-          {resource.tags.slice(0, 2).map((tag) => <i key={tag}>{tag}</i>)}
-        </div>
       </div>
     </button>
   )
@@ -151,6 +147,8 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
   const [projects, setProjects] = useState<ProjectMeta[]>([])
   const [categories, setCategories] = useState<LibraryCategory[]>([])
   const [categoryId, setCategoryId] = useState('legacy')
+  const [showArchived, setShowArchived] = useState(false)
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false)
   const [categoryEditor, setCategoryEditor] = useState<{ initial?: LibraryCategory } | null>(null)
   const [query, setQuery] = useState('')
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -193,14 +191,34 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
   }, [])
 
   const loadResources = useCallback(async (cursor?: string, append = false): Promise<void> => {
-    const result = await window.api.searchLibrary({ query, categoryId: categoryId || undefined, cursor, limit: 48 })
+    // 2026-11-06：归档资源默认不出现在列表；「已归档」视图通过 includeArchived 取回后再过滤，
+    // 这样用户能明确知道归档去哪了、并可在同一处恢复。
+    const result = await window.api.searchLibrary({
+      query,
+      categoryId: showArchived ? undefined : categoryId || undefined,
+      includeArchived: showArchived,
+      cursor,
+      limit: 48
+    })
     if (!result.ok) {
       useToastStore.getState().show(`资源库读取失败：${result.error.message}`)
       return
     }
-    setResources((current) => append ? [...current, ...result.data.items] : result.data.items)
+    const items = result.data.items.filter((item) => (showArchived ? Boolean(item.archivedAt) : !item.archivedAt))
+    setResources((current) => append ? [...current, ...items] : items)
     setNextCursor(result.data.nextCursor)
-  }, [categoryId, query])
+  }, [categoryId, query, showArchived])
+
+  useEffect(() => {
+    if (!categoryMenuOpen) return undefined
+    const close = (event: PointerEvent): void => {
+      if (!(event.target instanceof Element) || !event.target.closest('.library-category-manage')) {
+        setCategoryMenuOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [categoryMenuOpen])
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void loadPageData() }, 0)
@@ -259,7 +277,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     setDetail(null)
     setSelectedId(null)
     await loadResources()
-    useToastStore.getState().show(archived ? '资源已归档' : '资源已恢复')
+    useToastStore.getState().show(archived ? '资源已移入归档，可在「已归档」中恢复' : '资源已恢复')
   }
 
   const copyText = async (text: string): Promise<void> => {
@@ -329,23 +347,76 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
           <span className="library-header-label"><Icon name="assets" size={15} />资源库</span>
         </div>
         <div className="library-page-actions">
-          <label className="library-search library-header-search"><Icon name="search" size={15} /><input ref={searchInputRef} aria-label="搜索资源" value={query} placeholder="搜索资源名称、说明或标签…" onChange={(event) => setQuery(event.currentTarget.value)} /><kbd>Ctrl K</kbd></label>
-          <span className="library-header-divider" aria-hidden="true" />
-          <button className="library-secondary" onClick={() => void importLibrary()}><Icon name="upload" size={15} />导入资产包</button>
-          <button className="library-secondary" onClick={() => void exportLibrary()}><Icon name="download" size={15} />导出资产包</button>
-          <button className="library-header-category" onClick={() => setCategoryEditor({})} title="新建自定义分类"><Icon name="add" size={14} />新建分类</button>
+          <label className="library-search library-header-search"><Icon name="search" size={15} /><input ref={searchInputRef} aria-label="搜索资源" value={query} placeholder="搜索资源" onChange={(event) => setQuery(event.currentTarget.value)} /></label>
+          <div className="library-tool-group" role="group" aria-label="资源库工具">
+            <button type="button" className="library-tool-btn" title="导入资产包" aria-label="导入资产包" onClick={() => void importLibrary()}><Icon name="upload" size={16} /></button>
+            <button type="button" className="library-tool-btn" title="导出资产包" aria-label="导出资产包" onClick={() => void exportLibrary()}><Icon name="download" size={16} /></button>
+            <button type="button" className="library-tool-btn" title="新建分类" aria-label="新建分类" onClick={() => setCategoryEditor({})}><Icon name="layers" size={16} /></button>
+          </div>
           <button className="library-primary" onClick={() => { setSelectedId(null); setFormOpen(true) }}><span className="library-primary-icon"><Icon name="add" size={14} /></span>新建资源</button>
         </div>
       </header>
 
       <nav className="library-filter-row" aria-label="资源分类">
         <div className="library-category-tabs">
-          <button className={!categoryId ? 'active' : ''} onClick={() => setCategoryId('')}>全部</button>
-          <button className={categoryId === 'legacy' ? 'active' : ''} onClick={() => setCategoryId('legacy')}>未分类</button>
-          {categories.map((category) => <span className="library-category-filter-item" key={category.id}>
-            <button className={categoryId === category.id ? 'active' : ''} onClick={() => setCategoryId(category.id)} title={`浏览分类：${category.name}`}>{category.name}</button>
-            <button className="library-category-edit" aria-label={`编辑分类 ${category.name}`} title={`编辑分类 ${category.name}`} onClick={() => setCategoryEditor({ initial: category })}><Icon name="edit" size={10} /></button>
-          </span>)}
+          <button className={!showArchived && !categoryId ? 'active' : ''} onClick={() => { setShowArchived(false); setCategoryId('') }}>全部</button>
+          <button className={!showArchived && categoryId === 'legacy' ? 'active' : ''} onClick={() => { setShowArchived(false); setCategoryId('legacy') }}>未分类</button>
+          {categories.map((category) => (
+            <button
+              key={category.id}
+              className={!showArchived && categoryId === category.id ? 'active' : ''}
+              onClick={() => { setShowArchived(false); setCategoryId(category.id) }}
+              title={`浏览分类：${category.name}`}
+            >
+              {category.name}
+            </button>
+          ))}
+        </div>
+        <span className="library-result-count">共 {resources.length} 项</span>
+        <button
+          className={`library-archive-tab${showArchived ? ' active' : ''}`}
+          onClick={() => setShowArchived((current) => !current)}
+          title="查看已归档资源"
+        >
+          <Icon name="history" size={14} />已归档
+        </button>
+        <div className="library-category-manage">
+          <button
+            className="library-category-manage-btn"
+            onClick={() => setCategoryMenuOpen((current) => !current)}
+            aria-haspopup="menu"
+            aria-expanded={categoryMenuOpen}
+            title="管理分类"
+          >
+            <Icon name="settings" size={14} />管理分类
+          </button>
+          {categoryMenuOpen && (
+            <div className="library-category-menu" role="menu" aria-label="分类管理">
+              {categories.map((category) => (
+                <button
+                  key={category.id}
+                  role="menuitem"
+                  onClick={() => {
+                    setCategoryMenuOpen(false)
+                    setCategoryEditor({ initial: category })
+                  }}
+                >
+                  <Icon name="edit" size={12} />
+                  <span>{category.name}</span>
+                </button>
+              ))}
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setCategoryMenuOpen(false)
+                  setCategoryEditor({})
+                }}
+              >
+                <Icon name="add" size={12} />
+                <span>新建分类</span>
+              </button>
+            </div>
+          )}
         </div>
       </nav>
 
@@ -358,9 +429,11 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
             ) : (
               <div className="library-empty-state">
                 <div className="library-empty-art" aria-hidden="true"><span className="library-empty-icon"><Icon name="assets" size={32} /></span></div>
-                <h2>{query.trim() ? '没有找到匹配的资源' : activeCategoryName ? `「${activeCategoryName}」分类下暂无资源` : '资源库还没有内容'}</h2>
-                <p>{query.trim() ? '试试其他关键词，或清除搜索条件。' : '可点击下方快速创建资源，或从顶部导入已有资产包。'}</p>
-                <div className="library-empty-actions"><button className="library-primary" onClick={() => { setSelectedId(null); setFormOpen(true) }}><span className="library-primary-icon"><Icon name="add" size={14} /></span>新建资源</button><button className="library-secondary" onClick={() => setCategoryEditor({})}>管理分类</button></div>
+                <h2>{query.trim() ? '没有找到匹配的资源' : showArchived ? '没有已归档的资源' : activeCategoryName ? `「${activeCategoryName}」分类下暂无资源` : '资源库还没有内容'}</h2>
+                <p>{query.trim() ? '试试其他关键词，或清除搜索条件。' : showArchived ? '资源归档后会出现在这里，可随时恢复。' : '可点击下方快速创建资源，或从顶部导入已有资产包。'}</p>
+                {!showArchived && (
+                  <div className="library-empty-actions"><button className="library-primary" onClick={() => { setSelectedId(null); setFormOpen(true) }}><span className="library-primary-icon"><Icon name="add" size={14} /></span>新建资源</button><button className="library-secondary" onClick={() => setCategoryEditor({})}>管理分类</button></div>
+                )}
               </div>
             )}
             {nextCursor && <button className="library-load-more" onClick={() => void loadResources(nextCursor, true)}>加载更多</button>}
@@ -376,7 +449,17 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
             {detailLoading || !detail ? <GenerationLoadingOverlay title="正在读取资源" compact /> : (
               <>
                 <div className="library-detail-scroll">
-                  <div className="library-detail-title"><span className="library-resource-type">{typeName(detail.formPreset, detail.category?.name)}</span><h2>{detail.selectedTitle}</h2><p>{detail.selectedDescription || '暂无说明'}</p><div className="library-detail-tags">{detail.tags.map((tag) => <span key={tag}>{tag}</span>)}</div></div>
+                  <div className="library-detail-title">
+                    <div className="library-detail-badges">
+                      <span className="library-resource-type">{typeName(detail.formPreset, detail.category?.name)}</span>
+                      <span className="library-version-badge">v{detail.selectedRevisionNumber}</span>
+                      {detail.archivedAt && <span className="library-archived-badge">已归档</span>}
+                    </div>
+                    <h2>{detail.selectedTitle}</h2>
+                    <p className="library-detail-meta">更新于 {new Date(detail.updatedAt).toLocaleDateString()} · {detail.componentCount} 个组件</p>
+                    <p>{detail.selectedDescription || '暂无说明'}</p>
+                    <div className="library-detail-tags">{detail.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
+                  </div>
                   <div className="library-detail-section">
                     <div className="library-detail-section-title"><h3>资源内容</h3><span>选择要复用的组件</span></div>
                     {detail.components.map((component) => (
@@ -406,7 +489,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
                         </button>
                       })}
                     </div>
-                    {detail.selectedRevisionId !== detail.latestRevisionId && <p className="library-old-version-hint">正在查看历史版本。可基于此版本发布为新的当前版本。</p>}
+                    {detail.selectedRevisionId !== detail.latestRevisionId && <p className="library-old-version-hint">正在查看历史版本；右下角「以 v{detail.selectedRevisionNumber} 为基础新建版本」会复制该版本内容并保存为新的最新版本。</p>}
                     {detail.revisions.length > 1 && (
                       <details className="library-version-compare">
                         <summary>比较两个版本</summary>
@@ -448,8 +531,18 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
                   </div>
                 </div>
                 <footer className="library-detail-actions">
-                  <button className="library-secondary" onClick={() => setFormOpen(true)}><Icon name="edit" size={14} />基于此版本编辑</button>
-                  <button className="library-detail-archive" onClick={() => void archive(!detail.archivedAt)}>{detail.archivedAt ? '恢复资源' : '归档'}</button>
+                  <button className="library-detail-archive" onClick={() => void archive(!detail.archivedAt)}>
+                    {detail.archivedAt ? '恢复资源' : '移入归档'}
+                  </button>
+                  <span className="library-detail-archive-hint">
+                    {detail.archivedAt ? '恢复后重新回到资源列表。' : '归档后可在「已归档」恢复。'}
+                  </span>
+                  <button className="library-primary" onClick={() => setFormOpen(true)}>
+                    <Icon name="edit" size={14} />
+                    {detail.selectedRevisionId === detail.latestRevisionId
+                      ? '编辑资源'
+                      : `以 v${detail.selectedRevisionNumber} 为基础新建版本`}
+                  </button>
                 </footer>
               </>
             )}

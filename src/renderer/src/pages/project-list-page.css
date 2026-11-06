@@ -250,7 +250,7 @@
     box-shadow 0.22s ease;
 }
 
-/* 悬浮柔光：与节点卡同一组颜色与衰减曲线，中心跟随指针（--project-card-mx/my）。 */
+/* 悬浮柔光：与节点卡同一组颜色与衰减曲线，但整体压得很淡（用户裁决：首页不宜过亮）。 */
 .project-home-card::before {
   position: absolute;
   z-index: 0;
@@ -258,18 +258,18 @@
   border-radius: inherit;
   background: radial-gradient(
     260px circle at var(--project-card-mx, 50%) var(--project-card-my, 50%),
-    rgb(60 221 227 / 18%) 0%,
-    rgb(60 221 227 / 17.3%) 8%,
-    rgb(60 221 227 / 15.5%) 16%,
-    rgb(60 221 227 / 12.8%) 24%,
-    rgb(60 221 227 / 9.8%) 32%,
-    rgb(60 221 227 / 7%) 40%,
-    rgb(60 221 227 / 4.6%) 48%,
-    rgb(60 221 227 / 2.8%) 56%,
-    rgb(60 221 227 / 1.6%) 64%,
-    rgb(60 221 227 / 0.85%) 72%,
-    rgb(60 221 227 / 0.4%) 80%,
-    rgb(60 221 227 / 0.19%) 88%,
+    rgb(60 221 227 / 8%) 0%,
+    rgb(60 221 227 / 7.7%) 8%,
+    rgb(60 221 227 / 6.9%) 16%,
+    rgb(60 221 227 / 5.7%) 24%,
+    rgb(60 221 227 / 4.4%) 32%,
+    rgb(60 221 227 / 3.1%) 40%,
+    rgb(60 221 227 / 2%) 48%,
+    rgb(60 221 227 / 1.25%) 56%,
+    rgb(60 221 227 / 0.7%) 64%,
+    rgb(60 221 227 / 0.38%) 72%,
+    rgb(60 221 227 / 0.18%) 80%,
+    rgb(60 221 227 / 0.08%) 88%,
     transparent 100%
   );
   content: '';
@@ -278,7 +278,7 @@
   transition: opacity 0.28s ease;
 }
 
-/* 1px 边缘光：与节点卡同一半径系数与颜色，只在卡边内环可见。 */
+/* 1px 边缘光：只在卡边内环，强度同样压淡。 */
 .project-home-card::after {
   position: absolute;
   z-index: 2;
@@ -287,7 +287,7 @@
   padding: 1px;
   background: radial-gradient(
     calc(260px * 0.62) circle at var(--project-card-mx, 50%) var(--project-card-my, 50%),
-    rgb(120 232 238 / 55%),
+    rgb(120 232 238 / 26%),
     transparent 62%
   );
   content: '';
@@ -302,11 +302,11 @@
 
 @media (hover: hover) and (pointer: fine) {
   .project-home-card:hover {
-    transform: translateY(-3px);
-    border-color: #333b48;
+    transform: translateY(-2px);
+    border-color: #2f3541;
     box-shadow:
-      0 6px 18px rgb(0 0 0 / 45%),
-      0 2px 6px rgb(0 0 0 / 30%);
+      0 4px 14px rgb(0 0 0 / 38%),
+      0 1px 4px rgb(0 0 0 / 24%);
   }
 
   .project-home-card:hover::before,

@@ -14,19 +14,20 @@
   flex-direction: column;
   overflow: hidden;
   color: var(--txt);
-  background: var(--bg);
+  /* 2026-11-06 用户裁决：资源库顶栏与内容区统一纯黑 #0d0d0d，与首页/画布一致。 */
+  background: #0d0d0d;
 }
 
-/* ── 顶部导航 ───────────────────────────────────────────── */
+/* ── 顶部导航（与画布顶栏/首页同高同色） ─────────────────── */
 .library-page-header {
-  flex: 0 0 56px;
-  min-height: 56px;
+  position: relative;
+  flex: 0 0 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 0 22px;
-  background: #161a20;
-  border-bottom: 1px solid var(--line);
+  padding: 0 14px;
+  background: #0d0d0d;
 }
 .library-header-context,
 .library-page-actions {
@@ -56,14 +57,50 @@
 }
 .library-header-label svg { color: var(--brand); }
 
+/* 顶部图标工具组：与首页/画布顶栏同一块深色玻璃材质。 */
+.library-tool-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid rgba(231, 238, 247, 0.1);
+  border-radius: 11px;
+  background: rgba(7, 10, 14, 0.24);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
+}
+
+.library-tool-btn {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  padding: 0;
+  background: transparent;
+  color: #c6cdd7;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.library-tool-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+.library-tool-btn:focus-visible {
+  outline: 2px solid rgba(66, 185, 245, 0.55);
+  outline-offset: 1px;
+}
+
 /* 搜索框 */
 .library-search {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 34px;
-  width: clamp(240px, 28vw, 380px);
-  flex: 0 1 380px;
+  height: 32px;
+  width: clamp(220px, 26vw, 340px);
+  flex: 0 1 340px;
   padding: 0 10px;
   color: var(--txt-dim);
   background: var(--sunk);
@@ -176,21 +213,20 @@
 
 /* ── 分类筛选行 ─────────────────────────────────────────── */
 .library-filter-row {
-  flex: 0 0 48px;
-  min-height: 48px;
+  position: relative;
+  flex: 0 0 46px;
+  min-height: 46px;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 22px;
-  background: #14171d;
-  border-bottom: 1px solid var(--line);
-  overflow-x: auto;
-  scrollbar-width: thin;
+  padding: 0 14px;
+  background: #0d0d0d;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.045);
 }
 .library-category-tabs {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   padding: 6px 0;
   overflow-x: auto;
   scrollbar-width: thin;
@@ -199,8 +235,9 @@
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
+  gap: 5px;
   min-height: 30px;
-  padding: 0 14px;
+  padding: 0 12px;
   color: var(--muted);
   background: transparent;
   border-radius: 8px;
@@ -212,10 +249,76 @@
   color: var(--txt);
   background: var(--card-hover);
 }
-.library-filter-row button.active {
+/* 分类选中态：文字变青 + 2px 下划线（与 Stitch 参考稿一致，不再整块填充）。 */
+.library-category-tabs button {
+  position: relative;
+  border-radius: 6px 6px 0 0;
+}
+.library-category-tabs button.active {
   color: #8bdcff;
-  background: rgba(66, 185, 245, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(66, 185, 245, 0.38);
+  background: transparent;
+  box-shadow: none;
+}
+.library-category-tabs button.active::after {
+  position: absolute;
+  right: 8px;
+  bottom: -4px;
+  left: 8px;
+  height: 2px;
+  content: '';
+  background: rgba(66, 185, 245, 0.85);
+  border-radius: 2px;
+}
+
+.library-result-count {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--txt-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 已归档入口：放在分类行最右侧，明确"归档在哪找、能恢复"。 */
+.library-archive-tab {
+  margin-left: 10px;
+  color: var(--txt-dim) !important;
+}
+.library-archive-tab.active {
+  color: #c8b27a !important;
+  background: rgba(224, 185, 112, 0.12) !important;
+  box-shadow: inset 0 0 0 1px rgba(224, 185, 112, 0.34) !important;
+}
+
+/* 分类管理入口：替换原先挂在每个分类右侧的小编辑按钮。 */
+.library-category-manage { position: relative; flex: 0 0 auto; }
+.library-category-manage-btn { min-height: 28px; color: var(--txt-dim) !important; }
+.library-category-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  gap: 2px;
+  width: 210px;
+  padding: 5px;
+  background: #1a1f28;
+  border: 1px solid #333b48;
+  border-radius: 10px;
+  box-shadow: 0 14px 34px rgb(0 0 0 / 55%);
+}
+.library-category-menu button {
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 9px;
+  border-radius: 7px;
+  color: #c6cdd7;
+  font-size: 12px;
+  text-align: left;
+}
+.library-category-menu button:hover {
+  color: #8bdcff;
+  background: rgba(66, 185, 245, 0.12);
 }
 
 .library-category-filter-item {
@@ -264,18 +367,18 @@
 }
 .library-resource-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(224px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 16px;
 }
 
-/* 资源卡片 */
+/* 资源卡片：与画布节点同款深色材质；封面固定 16:9，卡片整体更矮更紧凑。 */
 .library-resource-card {
   min-width: 0;
   padding: 0;
   overflow: hidden;
   color: inherit;
-  background: var(--card);
-  border: 1px solid var(--line);
+  background: linear-gradient(180deg, #1b202b, #151922 38%);
+  border: 1px solid #252b36;
   border-radius: 12px;
   text-align: left;
   cursor: pointer;
@@ -283,18 +386,19 @@
 }
 .library-resource-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(66, 185, 245, 0.45);
+  border-color: rgba(66, 185, 245, 0.35);
   box-shadow:
-    0 10px 20px -5px rgba(0, 0, 0, 0.42),
-    0 24px 44px -8px rgba(0, 0, 0, 0.5);
+    inset 0 0 0 1px rgba(66, 185, 245, 0.18),
+    0 4px 14px rgb(0 0 0 / 38%);
 }
 .library-resource-cover {
   position: relative;
-  height: 150px;
+  aspect-ratio: 16 / 9;
+  height: auto;
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: var(--sunk);
+  background: #0f131a;
 }
 .library-resource-cover img {
   width: 100%;
@@ -322,7 +426,7 @@
   border-radius: 999px;
   font-size: 11px;
 }
-.library-resource-card-body { padding: 13px 14px 14px; }
+.library-resource-card-body { padding: 11px 13px 12px; }
 .library-resource-card-title {
   display: flex;
   align-items: center;
@@ -337,33 +441,23 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.library-resource-card-title span { color: var(--brand); font-size: 11px; }
+.library-resource-card-title span {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  color: var(--brand);
+  background: rgba(66, 185, 245, 0.08);
+  border: 1px solid rgba(66, 185, 245, 0.22);
+  border-radius: 999px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+/* 说明只保留一行（用户裁决：不要组件数量/标签等第二行信息）。 */
 .library-resource-card-body p {
-  display: -webkit-box;
-  height: 34px;
-  margin: 7px 0 10px;
   overflow: hidden;
+  margin: 5px 0 0;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-.library-resource-card-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--txt-dim);
-  font-size: 11px;
-}
-.library-resource-card-meta i {
-  max-width: 90px;
-  overflow: hidden;
-  padding: 3px 8px;
-  color: var(--muted);
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 999px;
-  font-style: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -435,7 +529,7 @@
 /* ── 详情右侧抽屉 ───────────────────────────────────────── */
 .library-detail-mask {
   position: fixed;
-  inset: 0;
+  inset: 44px 0 0;
   z-index: 11000;
   display: flex;
   justify-content: flex-end;
@@ -443,13 +537,13 @@
   backdrop-filter: blur(5px);
 }
 .library-detail-panel {
-  width: min(460px, 96vw);
+  width: min(420px, 96vw);
   height: 100%;
   display: flex;
   flex-direction: column;
   color: var(--txt);
-  background: var(--panel);
-  border-left: 1px solid var(--line);
+  background: #151922;
+  border-left: 1px solid #252b36;
   box-shadow: -18px 0 48px rgba(0, 0, 0, 0.38);
 }
 .library-detail-header {
@@ -496,6 +590,34 @@
   background: rgba(66, 185, 245, 0.12);
   border: 0;
   border-radius: 999px;
+}
+.library-archived-badge {
+  display: inline-block;
+  margin-left: 0;
+  padding: 4px 10px;
+  color: #e5c88b;
+  background: rgba(224, 185, 112, 0.12);
+  border-radius: 999px;
+  font-size: 11px;
+}
+.library-detail-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.library-version-badge {
+  padding: 4px 10px;
+  color: var(--brand);
+  background: rgba(66, 185, 245, 0.1);
+  border: 1px solid rgba(66, 185, 245, 0.25);
+  border-radius: 999px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.library-detail-title p.library-detail-meta {
+  margin: 0 0 8px;
+  color: var(--txt-dim);
+  font-size: 11px;
 }
 .library-detail-title h2 {
   margin: 12px 0 7px;
@@ -576,7 +698,7 @@
 .library-component-preview video {
   display: block;
   max-width: 100%;
-  max-height: 280px;
+  max-height: 180px;
   margin: 0 auto;
   border-radius: 8px;
   object-fit: contain;
@@ -793,26 +915,41 @@
 .library-use-row button:hover { background: #5fc8fb; }
 .library-use-row button:disabled { opacity: 0.45; cursor: default; }
 
-/* 详情底部操作 */
+/* 详情底部操作：左侧归档（含说明），右侧主操作。 */
 .library-detail-actions {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 18px;
+  padding: 12px 16px;
   border-top: 1px solid var(--line);
+  background: #141820;
 }
-.library-detail-actions .library-secondary { flex: 1; }
 .library-detail-archive {
-  padding: 8px 10px;
+  flex: 0 0 auto;
+  padding: 7px 11px;
   color: var(--muted);
-  background: transparent;
-  border: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px var(--line);
   font-size: 12px;
   cursor: pointer;
-  transition: color 150ms ease;
+  transition: color 150ms ease, background-color 150ms ease;
 }
-.library-detail-archive:hover { color: #ff5c5c; }
+.library-detail-archive:hover { color: #e5c88b; background: rgba(224, 185, 112, 0.1); }
+.library-detail-archive-hint {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: var(--txt-dim);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.library-detail-actions .library-primary {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: 12px;
+}
 
 /* ── 弹窗（表单 / 分类 / 插入请求，共用） ───────────────── */
 .library-form-mask {
