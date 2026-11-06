@@ -115,26 +115,28 @@ const path = require('node:path')
       findings.find(item => item.type === type).inputFields = tested
       console.log(`Input fields passed: ${type} (${tested}/${count})`)
     }
-    for (const selector of ['.audio-asset-icon-wrap', '.audio-asset-name']) {
-      async function createAudio() {
-        await create('audio')
-        await page.evaluate(async () => {
-          const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
-          editor.updateShape({ id: 'shape:pointer-audit', type: 'node-card', props: {
-            title: '音频引用验收', mediaId: 'pointer-audio', mediaMime: 'audio/wav',
-            mediaPath: 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA='
-          } })
-        })
-        await page.locator('.audio-asset-name').waitFor()
-      }
+    async function createAudio() {
+      await create('audio')
+      await page.evaluate(async () => {
+        const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
+        editor.updateShape({ id: 'shape:pointer-audit', type: 'node-card', props: {
+          title: '音频引用验收', mediaId: 'pointer-audio', mediaMime: 'audio/wav',
+          mediaPath: 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA='
+        } })
+      })
+      await page.locator('.audio-asset-name').waitFor()
+    }
+    // 2026-11-06：音频资产头部改版后图标类名为 .audio-asset-mini-icon（原 .audio-asset-icon-wrap 已移除）；
+    // 双击预览由可交互的 .audio-asset-name 承载，不再挂在装饰图标上。
+    for (const selector of ['.audio-asset-mini-icon', '.audio-asset-name']) {
       await createAudio()
       const rect = await page.locator(selector).boundingBox()
       await exercise({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }, `audio/${selector}`)
-      await createAudio()
-      await page.locator(selector).dblclick()
-      await page.locator('.media-preview-audio').waitFor()
-      await page.keyboard.press('Escape')
     }
+    await createAudio()
+    await page.locator('.audio-asset-name').dblclick()
+    await page.locator('.media-preview-audio').waitFor()
+    await page.keyboard.press('Escape')
     console.log('Loaded audio icon/name select, drag and double-click preview passed')
     await create('json')
     await page.evaluate(async () => {
