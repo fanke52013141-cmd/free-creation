@@ -39,8 +39,35 @@
   -webkit-app-region: no-drag;
 }
 
+/* 2026-11-06 用户裁决：首页顶栏与原生最小化/最大化/关闭按钮同排——品牌与项目操作
+   移入标题栏行，右侧为系统按钮预留 138px，按钮区域不参与窗口拖拽。 */
+.desktop-window-overlay .project-home-topbar {
+  height: var(--window-caption-height);
+  min-height: var(--window-caption-height);
+  padding-right: calc(var(--window-caption-width) + 12px);
+  -webkit-app-region: drag;
+}
+
+.desktop-window-overlay .project-home-topbar::after {
+  position: absolute;
+  top: 50%;
+  right: var(--window-caption-width);
+  width: 1px;
+  height: 18px;
+  content: '';
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.13);
+  pointer-events: none;
+}
+
+.desktop-window-overlay .project-home-topbar :is(button, a, input, [role='button']) {
+  -webkit-app-region: no-drag;
+}
+
+/* 顶栏已占据标题栏行，项目区不再额外让出顶部高度。 */
 .desktop-window-overlay .project-home-content {
-  padding-top: calc(var(--window-caption-height) + 24px);
+  min-height: calc(100vh - var(--window-caption-height));
+  padding-top: 20px;
 }
 
 /* 资源库页头同样要避开原生标题栏，否则左上角“返回项目”被窗口拖拽层盖住。 */

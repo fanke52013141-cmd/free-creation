@@ -167,40 +167,53 @@ export function ProjectListPage(): React.JSX.Element {
 
   return (
     <div className="project-home">
-      <div className="project-home-ambient" aria-hidden="true" />
-      <div className="project-home-content">
-        <header className="project-home-header">
-          <div className="project-home-brand" aria-label="Free Creation">
-            <img src={freeCreationLogo} alt="" />
-            <h1>Free Creation</h1>
-          </div>
-          <div className="project-home-actions">
+      <header className="project-home-topbar">
+        <div className="project-home-brand" aria-label="Free Creation">
+          <img src={freeCreationLogo} alt="" />
+          <h1>Free Creation</h1>
+        </div>
+        <div className="project-home-topbar-actions">
+          {/* 2026-11-06 用户裁决：与画布顶栏一致——除新建项目保留品牌主按钮外，
+              资源库 / 模型设置 / 导入项目都用纯图标按钮。 */}
+          <div className="project-home-tool-group" role="group" aria-label="项目工具">
             <button
-              className="project-home-button project-home-button-quiet"
+              type="button"
+              className="project-home-tool-btn"
+              title="资源库"
+              aria-label="资源库"
               onClick={() => setShowLibrary(true)}
             >
-              <Icon name="assets" size={16} /> 资源库
+              <Icon name="assets" size={16} />
             </button>
             <button
-              className="project-home-button project-home-button-quiet"
+              type="button"
+              className="project-home-tool-btn"
+              title="模型设置"
+              aria-label="模型设置"
               onClick={openModelSettings}
             >
-              <Icon name="settings" size={16} /> 模型设置
+              <Icon name="settings" size={16} />
             </button>
             <button
-              className="project-home-button project-home-button-quiet"
+              type="button"
+              className="project-home-tool-btn"
+              title="导入项目"
+              aria-label="导入项目"
               onClick={() => void handleImport()}
             >
-              <Icon name="upload" size={16} /> 导入项目
-            </button>
-            <button
-              className="project-home-button project-home-button-primary"
-              onClick={() => setCreating(true)}
-            >
-              <Icon name="add" size={16} /> 新建项目
+              <Icon name="download" size={16} />
             </button>
           </div>
-        </header>
+          <button
+            type="button"
+            className="project-home-button project-home-button-primary"
+            onClick={() => setCreating(true)}
+          >
+            <Icon name="add" size={15} /> 新建项目
+          </button>
+        </div>
+      </header>
+      <div className="project-home-content">
 
         {projectOpenFailure && (
           <section
@@ -290,7 +303,22 @@ export function ProjectListPage(): React.JSX.Element {
               <div className="project-home-empty">还没有项目，点击右上角新建一个开始创作</div>
             )}
             {projects.map((p) => (
-              <article key={p.id} className="project-home-card">
+              <article
+                key={p.id}
+                className="project-home-card"
+                onPointerMove={(event) => {
+                  // 与画布节点一致：柔光跟随指针；只写 CSS 变量，不触发 React 重渲染。
+                  const rect = event.currentTarget.getBoundingClientRect()
+                  event.currentTarget.style.setProperty(
+                    '--project-card-mx',
+                    `${((event.clientX - rect.left) / rect.width) * 100}%`
+                  )
+                  event.currentTarget.style.setProperty(
+                    '--project-card-my',
+                    `${((event.clientY - rect.top) / rect.height) * 100}%`
+                  )
+                }}
+              >
                 {renamingId === p.id ? (
                   <div className="project-home-card-open">
                     <input
