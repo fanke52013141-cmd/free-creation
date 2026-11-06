@@ -29,3 +29,6 @@ qa/
 qa-fixtures/
 results/
 outputs/
+
+# 本地 UI 验收的临时脚本、截图与提交信息草稿，仅在开发机使用，不入库。
+.dsh-ops/
