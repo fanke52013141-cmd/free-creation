@@ -50,9 +50,11 @@ describe('处理工作台交互', () => {
   })
 
   it('两个工作台均允许点击遮罩背景关闭', () => {
-    for (const source of [imageEdit, video]) {
-      expect(source).toContain('if (event.target === event.currentTarget) onClose()')
-      expect(source).toContain('onPointerDown={(event) => stopEventPropagation(event)}')
-    }
+    expect(imageEdit).toContain('if (event.target === event.currentTarget) onClose()')
+    expect(imageEdit).toContain('onPointerDown={(event) => stopEventPropagation(event)}')
+    // 视频工作台：只在命中遮罩时关闭，子控件 pointerdown 不再 preventDefault。
+    expect(video).toContain('if (event.target === event.currentTarget) {')
+    expect(video).toContain('event.stopPropagation()')
+    expect(video).toContain('onClose()')
   })
 })

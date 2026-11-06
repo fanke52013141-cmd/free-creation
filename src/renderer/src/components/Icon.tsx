@@ -657,18 +657,14 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   fold: (
     <>
-      <path d="M4 14h6v6" />
-      <path d="M20 10h-6V4" />
-      <path d="m14 10 7-7" />
-      <path d="M3 21l7-7" />
+      <rect x="7.5" y="3.5" width="13" height="9" rx="2" />
+      <rect x="3.5" y="10.5" width="13" height="9" rx="2" />
     </>
   ),
   unfold: (
     <>
-      <path d="M15 3h6v6" />
-      <path d="M9 21H3v-6" />
-      <path d="m21 3-7 7" />
-      <path d="m3 21 7-7" />
+      <rect x="2.5" y="5.5" width="8.5" height="13" rx="2" />
+      <rect x="13" y="5.5" width="8.5" height="13" rx="2" />
     </>
   ),
   folder: <path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6Z" />,

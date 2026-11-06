@@ -92,12 +92,15 @@ export function collapseGroup(editor: Editor, groupId: TLShapeId, label?: string
     const topCard = cards[cards.length - 1]
     const base = cards[0]
     const members = cards.filter((card) => card.id !== topCard.id)
+    // 2026-11-06 用户裁决：堆叠总错位固定为 20px，节点再多也只在这段距离内插卡，
+    // 不再按成员数线性扩大堆叠范围。
+    const perCardStep = step / Math.max(1, cards.length - 1)
     editor.updateShapes([
       ...members.map((card, index) => ({
         id: card.id,
         type: 'node-card' as const,
-        x: base.x + (index + 1) * step,
-        y: base.y + (index + 1) * step,
+        x: base.x + (index + 1) * perCardStep,
+        y: base.y + (index + 1) * perCardStep,
         meta: {
           ...card.meta,
           stackRole: 'member',

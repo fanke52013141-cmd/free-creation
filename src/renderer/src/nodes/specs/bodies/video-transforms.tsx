@@ -570,8 +570,12 @@ function VideoTrimWorkbench({
       aria-modal="true"
       aria-label={`${title}工作台`}
       onPointerDown={(event) => {
-        stopEventPropagation(event)
-        if (event.target === event.currentTarget) onClose()
+        // 只有点在遮罩本身才关闭；子控件的 pointerdown 不能被 preventDefault，
+        // 否则下拉/标签页的 click 会被浏览器吞掉（用户反馈切换抽帧无效）。
+        if (event.target === event.currentTarget) {
+          event.stopPropagation()
+          onClose()
+        }
       }}
     >
       <div className="video-trim-workbench">
@@ -863,8 +867,12 @@ export function VideoOperationsWorkbench({
       aria-modal="true"
       aria-label="视频操作工作台"
       onPointerDown={(event) => {
-        stopEventPropagation(event)
-        if (event.target === event.currentTarget) onClose()
+        // 只有点在遮罩本身才关闭；子控件的 pointerdown 不能被 preventDefault，
+        // 否则下拉/标签页的 click 会被浏览器吞掉（用户反馈切换抽帧无效）。
+        if (event.target === event.currentTarget) {
+          event.stopPropagation()
+          onClose()
+        }
       }}
     >
       <div className="video-trim-workbench video-operations-dialog">
@@ -894,7 +902,6 @@ export function VideoOperationsWorkbench({
                 role="tab"
                 aria-selected={mode === value}
                 className={mode === value ? 'active' : ''}
-                onPointerDown={(event) => stopEventPropagation(event)}
                 onClick={() => setMode(value)}
               >
                 {label}

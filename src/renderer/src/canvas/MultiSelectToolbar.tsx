@@ -186,7 +186,8 @@ export function MultiSelectToolbar({
               <button
                 className="ms-btn ms-group"
                 data-tool="group"
-                aria-label="打组"
+                aria-label="组合"
+                title="组合所选节点"
                 onClick={handleGroup}
               >
                 <Icon name="group" size={16} />
@@ -216,8 +217,8 @@ export function MultiSelectToolbar({
             <button
               className="ms-btn ms-ungroup"
               data-tool="ungroup"
-              aria-label="拆分分组"
-              title="拆分分组"
+              aria-label="取消组合"
+              title="取消组合"
               onClick={handleUngroup}
             >
               <Icon name="ungroup" size={16} />

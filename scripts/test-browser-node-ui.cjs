@@ -364,7 +364,7 @@ async function main() {
     assert.ok(selectionPadding && Math.abs(selectionPadding.top - selectionPadding.bottom) < 2, '多选底框上下留白应一致')
     const iconSize = await page.locator('.multiselect-toolbar .ms-btn svg').first().evaluate((icon) => icon.getBoundingClientRect().width)
     assert.ok(Math.abs(iconSize - 16) < 1, '多选工具图标应与画布工具统一为 16px')
-    const groupButton = await page.getByRole('button', { name: '打组', exact: true }).boundingBox()
+    const groupButton = await page.getByRole('button', { name: '组合', exact: true }).boundingBox()
     await page.mouse.click(groupButton.x + groupButton.width / 2, groupButton.y + groupButton.height / 2)
     await page.locator('.canvas-group-outline').waitFor()
     await page.waitForTimeout(300)

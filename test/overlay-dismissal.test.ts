@@ -36,10 +36,12 @@ describe('覆盖层点击外部关闭', () => {
     const imageEdit = read('src/renderer/src/nodes/specs/bodies/image-edit.tsx')
     const video = read('src/renderer/src/nodes/specs/bodies/video-transforms.tsx')
     expect(media).toContain('if (event.target === event.currentTarget) setPreview(null)')
-    for (const source of [imageEdit, video]) {
-      expect(source).toContain('onPointerDown={(event) => stopEventPropagation(event)}')
-      expect(source).toContain('stopEventPropagation(event)')
-      expect(source).toContain('if (event.target === event.currentTarget) onClose()')
-    }
+    expect(imageEdit).toContain('onPointerDown={(event) => stopEventPropagation(event)}')
+    expect(imageEdit).toContain('if (event.target === event.currentTarget) onClose()')
+    // 2026-11-06：视频工作台遮罩不再对子控件 preventDefault（否则 tab 点击被吞），
+    // 只在命中遮罩本身时停冒泡并关闭。
+    expect(video).toContain('if (event.target === event.currentTarget) {')
+    expect(video).toContain('event.stopPropagation()')
+    expect(video).toContain('onClose()')
   })
 })

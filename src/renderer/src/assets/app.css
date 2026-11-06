@@ -1013,7 +1013,8 @@ select:focus-visible {
   position: absolute;
   border: 1px solid rgba(231, 238, 247, 0.18);
   border-radius: calc(18px * var(--group-zoom, 1));
-  background: rgba(231, 238, 247, 0.055);
+  /* 2026-11-06 用户裁决：分组容器补一层接近节点卡片的深色底，遮挡时能看清边界。 */
+  background: linear-gradient(180deg, rgba(27, 32, 43, 0.55), rgba(21, 25, 34, 0.55));
   box-shadow:
     inset 0 1px rgba(255, 255, 255, 0.025),
     0 12px 30px rgba(0, 0, 0, 0.08);
@@ -1043,18 +1044,34 @@ select:focus-visible {
   left: 0;
   top: calc(-26px * var(--group-zoom, 1));
   width: 180px;
-  padding: 0 6px;
-  /* 2026-10-31 用户裁决：分组重命名去掉蓝色边框，改为安静暗色描边（与项目重命名一致）。 */
+  height: 22px;
+  padding: 0 8px;
   border: 1px solid rgba(148, 163, 184, 0.42);
-  border-radius: 6px;
-  background: rgba(16, 21, 29, 0.96);
-  color: #e8eef7;
-  font-size: 13px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #1b202b, #151922 46%);
+  color: #eef2f7;
+  font-size: 12.5px;
   font-weight: 600;
-  line-height: 18px;
+  line-height: 20px;
   outline: none;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.45),
+    inset 0 1px rgba(255, 255, 255, 0.03);
   pointer-events: auto;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.canvas-group-name-input:focus {
+  border-color: rgba(60, 221, 227, 0.55);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.45),
+    0 0 0 2px rgba(60, 221, 227, 0.12);
+}
+.canvas-combo-name-input {
+  position: static;
+  left: auto;
+  top: auto;
+  width: min(240px, 60%);
+  height: 22px;
 }
 
 /* 分组折叠按钮：展开态分组的标签条右侧，点击重新收拢成堆叠。
@@ -1069,22 +1086,20 @@ select:focus-visible {
   width: calc(24px * var(--group-zoom, 1));
   height: calc(20px * var(--group-zoom, 1));
   padding: 0;
-  border: 1px solid rgba(231, 238, 247, 0.22);
+  border: 1px solid rgba(231, 238, 247, 0.16);
   border-radius: 6px;
-  background: rgba(16, 21, 29, 0.85);
-  color: rgba(218, 227, 237, 0.75);
+  /* 固定淡背景（与卡片同族），悬浮只换图标颜色，不再整块变亮。 */
+  background: rgba(18, 23, 31, 0.72);
+  color: rgba(203, 213, 225, 0.78);
   cursor: pointer;
   pointer-events: auto;
-  transition:
-    color 0.15s ease,
-    border-color 0.15s ease,
-    background 0.15s ease;
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
 
 .canvas-group-collapse-btn:hover {
-  border-color: rgba(93, 156, 236, 0.65);
-  background: rgba(26, 34, 46, 0.95);
-  color: #9cc2ec;
+  border-color: rgba(148, 197, 240, 0.45);
+  background: rgba(18, 23, 31, 0.72);
+  color: #cfe3f7;
 }
 
 /* 折叠组合外框（Stitch 设计稿规格）：细边框 + 微透明填充，
@@ -1093,14 +1108,15 @@ select:focus-visible {
   position: absolute;
   display: flex;
   flex-direction: column;
-  border: 1px solid rgba(140, 160, 190, 0.35);
+  border: 1px solid rgba(140, 160, 190, 0.3);
   border-radius: 14px;
-  background: rgba(140, 160, 190, 0.06);
+  /* 折叠组合外框：比画布亮一档、接近卡片材质的实底，堆叠遮挡时仍能读出边界。 */
+  background: linear-gradient(180deg, rgba(27, 32, 43, 0.92), rgba(21, 25, 34, 0.92));
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.35);
   pointer-events: none;
 }
 
-/* 2026-10-31 标题行收进框内顶部：可复用徽标在左，展开/运行在右，
-   固定屏幕像素（不再按 zoom 缩放），位置不随画布缩放漂移。 */
+/* 2026-11-06 标题行：左侧沿用原分组名（灰色、可双击改名），右侧展开/运行。 */
 .canvas-combo-frame .canvas-combo-header {
   display: flex;
   align-items: center;
@@ -1108,6 +1124,27 @@ select:focus-visible {
   height: 26px;
   padding: 0 8px;
   pointer-events: auto;
+}
+
+.canvas-combo-frame .canvas-combo-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  overflow: hidden;
+  max-width: 70%;
+  color: rgba(203, 213, 225, 0.75);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+.canvas-combo-frame .canvas-combo-title i {
+  color: rgba(148, 163, 184, 0.62);
+  font-style: normal;
+  font-weight: 500;
 }
 
 .canvas-combo-frame .canvas-combo-badge {
@@ -1142,32 +1179,29 @@ select:focus-visible {
   width: 24px;
   height: 20px;
   padding: 0;
-  border: 1px solid rgba(231, 238, 247, 0.22);
+  border: 1px solid rgba(231, 238, 247, 0.16);
   border-radius: 6px;
-  background: rgba(16, 21, 29, 0.9);
-  color: rgba(218, 227, 237, 0.75);
+  background: rgba(18, 23, 31, 0.72);
+  color: rgba(203, 213, 225, 0.8);
   cursor: pointer;
-  transition:
-    color 0.15s ease,
-    border-color 0.15s ease,
-    background 0.15s ease;
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
 
 .canvas-combo-frame .canvas-combo-btn:hover {
-  border-color: rgba(93, 156, 236, 0.65);
-  background: rgba(26, 34, 46, 0.95);
-  color: #9cc2ec;
+  border-color: rgba(148, 197, 240, 0.45);
+  background: rgba(18, 23, 31, 0.72);
+  color: #cfe3f7;
 }
 
 /* 展开在左、运行在右（标题行内顺序排列）。 */
 .canvas-combo-frame .canvas-combo-btn.canvas-combo-run {
-  border-color: rgba(103, 208, 146, 0.4);
+  border-color: rgba(103, 208, 146, 0.36);
   color: rgba(150, 222, 188, 0.9);
 }
 
 .canvas-combo-frame .canvas-combo-btn.canvas-combo-run:hover {
-  border-color: rgba(103, 208, 146, 0.7);
-  background: rgba(22, 38, 31, 0.95);
+  border-color: rgba(103, 208, 146, 0.6);
+  background: rgba(18, 23, 31, 0.72);
   color: #a5e8c8;
 }
 
@@ -4161,10 +4195,24 @@ select:focus-visible {
 
 .ms-group {
   color: var(--brand);
+  /* 2026-11-06：组合/取消组合给固定淡底，避免在深色画布上显得单薄。 */
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(231, 238, 247, 0.12);
 }
 
 .ms-group:hover {
   background: color-mix(in srgb, var(--brand) 22%, transparent);
+}
+
+.ms-ungroup {
+  color: #c6cdd7;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(231, 238, 247, 0.12);
+}
+
+.ms-ungroup:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #eef2f7;
 }
 
 .ms-divider {

@@ -50,6 +50,7 @@ interface CollapsedCombo {
   width: number
   height: number
   nodeCount: number
+  label: string
   zoom: number
 }
 
@@ -155,6 +156,7 @@ function combosEqual(left: CollapsedCombo[], right: CollapsedCombo[]): boolean {
         item.width === other.width &&
         item.height === other.height &&
         item.nodeCount === other.nodeCount &&
+        item.label === other.label &&
         item.zoom === other.zoom
       )
     })
@@ -226,6 +228,7 @@ export function GroupOutlineLayer({
             width: bottomRight.x - topLeft.x + sidePad * 2,
             height: bottomRight.y - topLeft.y + sidePad * 2 + COMBO_HEADER_H,
             nodeCount: collapsedGroupNodeIds(editor, shape.id).length,
+            label,
             zoom
           })
           continue
@@ -336,10 +339,24 @@ export function GroupOutlineLayer({
           return
         }
       }
+      // 折叠组合：标题行也可双击改名（组合名与展开态共用 group.meta.label）。
+      for (const combo of combos) {
+        const hit =
+          x >= combo.left &&
+          x <= combo.left + combo.width &&
+          y >= combo.top &&
+          y <= combo.top + COMBO_HEADER_H
+        if (hit) {
+          e.preventDefault()
+          e.stopPropagation()
+          setEditingId(combo.id)
+          return
+        }
+      }
     }
     window.addEventListener('dblclick', onDblClick, { capture: true })
     return () => window.removeEventListener('dblclick', onDblClick, { capture: true })
-  }, [outlines, editingId, hostRef])
+  }, [outlines, combos, editingId, hostRef])
 
   const commitGroupName = (id: TLShapeId, next: string): void => {
     const trimmed = next.trim()
@@ -436,12 +453,28 @@ export function GroupOutlineLayer({
             height: combo.height
           }}
         >
-          {/* 2026-10-31 标题行固定在框内顶部（badge + 展开/运行），尺寸不随缩放变化。 */}
+          {/* 2026-11-06：折叠态标题行沿用原分组名（可双击改名），不再显示「可复用」。 */}
           <div className="canvas-combo-header">
-            <span className="canvas-combo-badge" title={`可复用组合 · ${combo.nodeCount} 个节点`}>
-              <Icon name="layers" size={12} />
-              可复用
-            </span>
+            {editingId === combo.id ? (
+              <input
+                className="canvas-group-name-input canvas-combo-name-input"
+                aria-label="组合名称"
+                defaultValue={combo.label || '分组'}
+                autoFocus
+                onFocus={(e) => e.currentTarget.select()}
+                onBlur={(e) => commitGroupName(combo.id, e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  e.stopPropagation()
+                  if (e.key === 'Enter') commitGroupName(combo.id, e.currentTarget.value)
+                  else if (e.key === 'Escape') setEditingId(null)
+                }}
+              />
+            ) : (
+              <span className="canvas-combo-title" title="双击重命名组合">
+                {combo.label || '分组'}
+                <i>· {combo.nodeCount} 个节点</i>
+              </span>
+            )}
             <span className="canvas-combo-header-space" aria-hidden="true" />
             <button
               type="button"

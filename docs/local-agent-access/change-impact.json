@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "Vidu Q3 能力与视频节点 UI 调整，不改变外部操作契约语义",
+  "reason": "组合折叠图标与分组标题编辑态 UI 调整，不改变节点/操作契约语义",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "97d2ffb5e2403b33a2d3ac8ab3eee8272f78cf948e4c73ab53cc662bd73a5a6f",
@@ -150,7 +150,7 @@
     "src/renderer/src/nodes/specs/bodies/timeline.tsx": "e80ff4f79425b6845472f0c6c3f0e26415c01379986b0bc5d02026977b72f7ae",
     "src/renderer/src/nodes/specs/bodies/tts.tsx": "fc9b03d42680d0890cb6d980625e8064dc0c2211455e88fa3c43b2de44690495",
     "src/renderer/src/nodes/specs/bodies/video-ai.tsx": "4fb088a718ed9da5e2bb00b3f3f7984ccc07c8e070697b327c477b1a8941f076",
-    "src/renderer/src/nodes/specs/bodies/video-transforms.tsx": "c05d08a187882c0f38555b3a8df67d644afd93b68747266d4c70ac10c2429764",
+    "src/renderer/src/nodes/specs/bodies/video-transforms.tsx": "8658f024ad143cb621d93ebccf1b670f2ced932bf6c21fc214572a9da7c0eb15",
     "src/renderer/src/nodes/specs/bodies/video.tsx": "69307879bad296acb79cbc04722cba2c0c5cf4324197df61052386cfeac8d336",
     "src/renderer/src/nodes/specs/bodies/vocal-separate.tsx": "c7b1675fdb44b9a84b1646ad0986140191f429987e1482b718085ea7a3834d63",
     "src/renderer/src/nodes/specs/bodies/voice-design.tsx": "c4f85950343d6f4c829522078372273baacdbb5d71369c991fd553c5549ee354",
