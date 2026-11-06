@@ -214,7 +214,9 @@ describe('v1.2 §16.5 媒体后续动作按钮只放文字', () => {
     expect(block).not.toContain('截人声')
     // 截音频已并入「视频截取」，视频节点不再单独提供该入口
     expect(block).not.toContain('截音频')
-    expect(textActions).not.toContain('<Icon')
+    // 2026-11-06 用户新裁决：三个主操作允许配图标，但必须仍是文字按钮、且不再有复制节点。
+    expect(textActions).toContain('<Icon')
+    expect(block).not.toContain('复制节点')
     expect(video).not.toContain('一键提取人声')
   })
 

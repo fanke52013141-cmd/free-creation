@@ -63,17 +63,17 @@ function shareCanvas(width: number, height: number): HTMLCanvasElement {
   return canvas
 }
 
-/** 预渲染光点贴图：暖白核心 → 亮青 → 主题青光晕，避免每帧建径向渐变。 */
+/** 预渲染光点贴图：核心很小、外围极长渐隐，避免画成一颗颗明显的圆点。 */
 function createGlowSprite(): HTMLCanvasElement {
   const sprite = shareCanvas(GLOW_SPRITE_SIZE, GLOW_SPRITE_SIZE)
   const ctx = sprite.getContext('2d')
   if (!ctx) return sprite
   const radius = GLOW_SPRITE_SIZE / 2
   const gradient = ctx.createRadialGradient(radius, radius, 0, radius, radius, radius)
-  gradient.addColorStop(0, 'rgba(255, 252, 244, 0.98)')
-  gradient.addColorStop(0.18, 'rgba(238, 253, 255, 0.9)')
-  gradient.addColorStop(0.44, 'rgba(134, 238, 243, 0.46)')
-  gradient.addColorStop(0.74, 'rgba(60, 221, 227, 0.14)')
+  gradient.addColorStop(0, 'rgba(255, 252, 244, 0.72)')
+  gradient.addColorStop(0.06, 'rgba(238, 253, 255, 0.5)')
+  gradient.addColorStop(0.2, 'rgba(134, 238, 243, 0.16)')
+  gradient.addColorStop(0.48, 'rgba(60, 221, 227, 0.05)')
   gradient.addColorStop(1, 'rgba(60, 221, 227, 0)')
   ctx.fillStyle = gradient
   ctx.fillRect(0, 0, GLOW_SPRITE_SIZE, GLOW_SPRITE_SIZE)
@@ -91,7 +91,7 @@ function createStars(count: number, compact: boolean): Star[] {
       y,
       depth: Math.random(),
       seed: Math.random(),
-      size: compact ? 1.5 + Math.random() * 2.1 : 2.2 + Math.random() * 3.2,
+      size: compact ? 1.2 + Math.random() * 1.5 : 1.7 + Math.random() * 2.2,
       twinkleSpeed: 0.5 + Math.random() * 1.2,
       phase: Math.random() * Math.PI * 2,
       driftSpeed: 0.65 + Math.random() * 0.75,
@@ -181,8 +181,8 @@ export function StarDustField({ compact = false, progress }: StarDustFieldProps)
         const py = star.y + driftY + pointerY * parallax
         const sx = halfWidth + px * halfWidth * 0.94
         const sy = halfHeight + py * halfHeight * 0.94
-        const radius = (star.size * (0.6 + depth * 1.05) * (compact ? 0.86 : 1)) / 2
-        const alpha = (0.2 + depth * 0.62) * twinkle * reveal * (1 + progressValue * 0.18)
+        const radius = (star.size * (0.6 + depth * 1.05) * (compact ? 0.86 : 1)) / 2.4
+        const alpha = (0.14 + depth * 0.5) * twinkle * reveal * (1 + progressValue * 0.18)
         if (alpha <= 0.015) continue
         ctx.globalAlpha = Math.min(1, alpha)
         ctx.drawImage(sprite, sx - radius, sy - radius, radius * 2, radius * 2)

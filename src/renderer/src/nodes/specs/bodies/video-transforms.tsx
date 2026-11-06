@@ -569,8 +569,7 @@ function VideoTrimWorkbench({
       role="dialog"
       aria-modal="true"
       aria-label={`${title}工作台`}
-      onPointerDown={(event) => stopEventPropagation(event)}
-      onClick={(event) => {
+      onPointerDown={(event) => {
         stopEventPropagation(event)
         if (event.target === event.currentTarget) onClose()
       }}
@@ -586,7 +585,10 @@ function VideoTrimWorkbench({
           </div>
           <button
             className="btn-ghost small"
-            onPointerDown={stopEventPropagation}
+            onPointerDownCapture={(event) => {
+              stopEventPropagation(event)
+              onClose()
+            }}
             onClick={(event) => {
               stopEventPropagation(event)
               onClose()
@@ -860,8 +862,7 @@ export function VideoOperationsWorkbench({
       role="dialog"
       aria-modal="true"
       aria-label="视频操作工作台"
-      onPointerDown={(event) => stopEventPropagation(event)}
-      onClick={(event) => {
+      onPointerDown={(event) => {
         stopEventPropagation(event)
         if (event.target === event.currentTarget) onClose()
       }}
@@ -893,6 +894,7 @@ export function VideoOperationsWorkbench({
                 role="tab"
                 aria-selected={mode === value}
                 className={mode === value ? 'active' : ''}
+                onPointerDown={(event) => stopEventPropagation(event)}
                 onClick={() => setMode(value)}
               >
                 {label}
@@ -902,6 +904,10 @@ export function VideoOperationsWorkbench({
           <button
             className="btn-ghost small video-operations-close"
             aria-label="关闭工作台"
+            onPointerDownCapture={(event) => {
+              stopEventPropagation(event)
+              onClose()
+            }}
             onClick={onClose}
           >
             <Icon name="close" size={15} />

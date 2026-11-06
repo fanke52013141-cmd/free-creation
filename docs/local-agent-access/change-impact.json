@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "资源库新增硬删除 IPC 与页面视觉调整，不改变既有操作契约 Schema 与执行路径",
+  "reason": "Vidu Q3 能力与视频节点 UI 调整，不改变外部操作契约语义",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "97d2ffb5e2403b33a2d3ac8ab3eee8272f78cf948e4c73ab53cc662bd73a5a6f",
@@ -67,7 +67,7 @@
     "src/main/gateway/video-materialization.ts": "7109c33a35d971c5df5f6093334d5b4075e101180dfd8d95b0c20caf23e9e63d",
     "src/main/gateway/video-task-control.ts": "3743ef6f805d49f019ea119d605f3c313171a3cc729646711cfce1207cea9e5c",
     "src/main/gateway/video.ts": "0eeb305d45f862228345767f9cebeff124080348507830db46655193cfb19131",
-    "src/main/gateway/vidu-cli.ts": "8f8fa1239b5acd472eb4c9529395847df493a731d6da73904852172f8da5e89f",
+    "src/main/gateway/vidu-cli.ts": "a2da67d28fe097dc6f21774ed476a61bc500e7de7725202749e7df567c7dfe01",
     "src/main/gateway/voice.ts": "d50937abaa89e92a0d9f2baf4bddcf5708950fdf930e1ed347f5589ae148fb2c",
     "src/main/index.ts": "6a60136f044e78b70055b88bb61cc0ade2d5e679b0967e4a27e899295435575c",
     "src/main/ipc/flow-agents.ipc.ts": "17008091ad8518ced41462c3a6e1dcdbfde6a9062c214bbe943d40f17921a143",
@@ -150,8 +150,8 @@
     "src/renderer/src/nodes/specs/bodies/timeline.tsx": "e80ff4f79425b6845472f0c6c3f0e26415c01379986b0bc5d02026977b72f7ae",
     "src/renderer/src/nodes/specs/bodies/tts.tsx": "fc9b03d42680d0890cb6d980625e8064dc0c2211455e88fa3c43b2de44690495",
     "src/renderer/src/nodes/specs/bodies/video-ai.tsx": "4fb088a718ed9da5e2bb00b3f3f7984ccc07c8e070697b327c477b1a8941f076",
-    "src/renderer/src/nodes/specs/bodies/video-transforms.tsx": "bd89d108717569f339145e0be229493e27350e605a83fc0f6b743749b94cee10",
-    "src/renderer/src/nodes/specs/bodies/video.tsx": "5f71b490a23003d15dae1a4b1737f0b9fd111a11394cabb99e85776aae408d91",
+    "src/renderer/src/nodes/specs/bodies/video-transforms.tsx": "c05d08a187882c0f38555b3a8df67d644afd93b68747266d4c70ac10c2429764",
+    "src/renderer/src/nodes/specs/bodies/video.tsx": "69307879bad296acb79cbc04722cba2c0c5cf4324197df61052386cfeac8d336",
     "src/renderer/src/nodes/specs/bodies/vocal-separate.tsx": "c7b1675fdb44b9a84b1646ad0986140191f429987e1482b718085ea7a3834d63",
     "src/renderer/src/nodes/specs/bodies/voice-design.tsx": "c4f85950343d6f4c829522078372273baacdbb5d71369c991fd553c5549ee354",
     "src/renderer/src/nodes/specs/bodies/website.tsx": "1ebe23d394926b903ec218c8d6381a92538c115ba30dbedefdc6e0fa5c6a1dfe",

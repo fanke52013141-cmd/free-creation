@@ -1851,7 +1851,15 @@ select:focus-visible {
   justify-content: center;
   padding: 8px;
   background: #081113;
+  /* 2026-11-06 用户反馈：生成中仍能点开节点正文里的选择器。
+     遮罩必须吃掉正文点击；标题栏 z-index 更高仍可操作（停止/查看）。 */
+  pointer-events: auto;
+  cursor: default;
+}
+/* 生成中禁用底部操作条，避免打开截取/替换等工作台。 */
+.node-card:has(> .node-execution-overlay) .node-standard-action-bar {
   pointer-events: none;
+  opacity: 0.55;
 }
 
 .generation-loading-card {
@@ -2339,8 +2347,8 @@ select:focus-visible {
   overflow-x: auto;
 }
 
-/* 媒体后续动作行：按钮只放文字（用户 2026-09-18 拍板去图标），
-   这样在 340px 卡片里文字能真正居中，而不会被图标挤出按钮外。 */
+/* 媒体后续动作行：按钮以文字为主，2026-11-06 起允许配 13px 图标（视频节点三个主操作），
+   这样在 340px 卡片里文字仍能居中，不会被图标挤出按钮外。 */
 .node-media-next-actions button {
   min-width: 0;
   flex: 1 1 0;
@@ -2884,6 +2892,25 @@ select:focus-visible {
   max-height: 100%;
   object-fit: contain;
   display: block;
+}
+
+/* 2026-11-06：视频节点预览区固定 16:9，16:9 素材铺满、竖屏素材内部居中，
+   不再让整个正文被拉高后出现大黑边。 */
+.video-thumbnail-wrap .node-media {
+  flex: 0 0 auto;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #000;
+  border-radius: 8px;
+}
+
+.video-thumbnail-wrap .node-media video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
 }
 
 .asset-empty {

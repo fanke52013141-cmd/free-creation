@@ -64,7 +64,7 @@ export function registerModelIpc(host: SqliteModelHost, runtime: ModelRuntime): 
       required(input.connectionId, '连接 ID')
       const connection = await host.getConnection(input.connectionId)
       if (!connection) throw new Error('连接不存在')
-      if (connection.protocol === 'vidu-cli') return ok([{ id: '3.4', name: 'Vidu Q4（图片参考生视频）' }, { id: '3.2', name: 'Vidu Q3（首尾帧生视频）' }])
+      if (connection.protocol === 'vidu-cli') return ok([{ id: '3.4', name: 'Vidu Q4（图片参考生视频）' }, { id: '3.2', name: 'Vidu Q3（文生/首帧/首尾帧/参考生视频）' }])
       if (!['openai-compatible', 'openai', 'openrouter', 'toapis', 'custom'].includes(connection.protocol)) {
         throw new Error('此协议未提供统一的模型列表接口；请手动添加模型 ID')
       }

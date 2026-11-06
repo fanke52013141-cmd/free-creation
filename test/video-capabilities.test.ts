@@ -12,10 +12,10 @@ import {
 } from '@shared/video-capabilities'
 
 describe('视频供应商能力描述', () => {
-  it('Vidu creation starts at four seconds and normalizes legacy one-second settings', () => {
+  it('Vidu 按官方 CLI 支持 4–16 秒档位，默认仍为 4 秒', () => {
     for (const model of ['3.2', '3.4']) {
       const caps = videoCapabilitiesFor('vidu', model)
-      expect(caps.durations).toEqual([4, 5, 6, 7, 8, 9, 10])
+      expect(caps.durations).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
       expect(normalizeVideoGenParams(caps, { duration: 1 }).duration).toBe(4)
     }
   })

@@ -239,18 +239,32 @@ export function isSeedanceGatewayProxy(specId: ProviderSpecId, baseURL: string):
 
 function profileFor(specId: ProviderSpecId, modelId: string): VideoCapabilities {
   const model = canonicalVideoModelId(modelId)
-  if (specId === 'vidu') return {
-    ...FALLBACK,
-    ratios: [...VIDU_RATIOS],
-    resolutions: modelId === VIDU_Q4_MODEL ? [...VIDU_RESOLUTIONS] : modelId === VIDU_Q3_MODEL ? ['1080p'] : [],
-    durations: VIDU_MODELS.includes(modelId) ? range(4, 10) : [],
-    defaultDuration: 4,
-    defaultResolution: modelId === VIDU_Q3_MODEL ? '1080p' : '540p',
-    modes: modelId === VIDU_Q4_MODEL ? ['reference'] : modelId === VIDU_Q3_MODEL ? ['first-last-frame'] : [],
-    supportsFirstLastFrames: modelId === VIDU_Q3_MODEL,
-    supportsReferenceImages: modelId === VIDU_Q4_MODEL,
-    maxReferenceImages: modelId === VIDU_Q4_MODEL ? 7 : 0,
-    requiresVisualReference: true
+  if (specId === 'vidu') {
+    const isQ4 = modelId === VIDU_Q4_MODEL
+    const isQ3 = modelId === VIDU_Q3_MODEL
+    // 官方 vidu-cli 0.2.36 文档：
+    // - 3.2（Q3）支持 text2video / img2video（首帧）/ headtailimg2video（首尾帧）/
+    //   character2video（1–7 张参考图），时长 1–16s，分辨率 1080p；
+    // - 3.4（Q4）只开放 character2video（参考生视频，可带参考音频），540p–4k、1–16s。
+    return {
+      ...FALLBACK,
+      ratios: [...VIDU_RATIOS],
+      resolutions: isQ4 ? [...VIDU_RESOLUTIONS] : isQ3 ? ['1080p'] : [],
+      // 官方支持 1–16s；界面沿用既有最短 4s 的产品档位，避免默认时长跳变。
+      durations: VIDU_MODELS.includes(modelId) ? range(4, 16) : [],
+      defaultDuration: 4,
+      defaultResolution: isQ3 ? '1080p' : '540p',
+      modes: isQ4
+        ? ['reference']
+        : isQ3
+          ? ['text', 'first-frame', 'first-last-frame', 'reference']
+          : [],
+      supportsFirstLastFrames: isQ3,
+      supportsReferenceImages: isQ3 || isQ4,
+      maxReferenceImages: isQ3 || isQ4 ? 7 : 0,
+      // Q4 的 character2video 至少需要一个参考素材；Q3 允许纯文生视频。
+      requiresVisualReference: isQ4
+    }
   }
   if (specId === 'minimax') {
     if (model === 'minimax-h3-max') return H3_MAX

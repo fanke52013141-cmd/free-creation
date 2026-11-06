@@ -3,12 +3,27 @@ import { buildViduVideoArgs, classifyViduTask, parseViduOutput, ViduCliError } f
 import { videoCapabilitiesFor, videoCapabilityIssues } from '@shared/video-capabilities'
 
 describe('Vidu CLI task contract', () => {
-  it('Q4 reference video sends image references and caps duration at 10 seconds', () => {
-    const args = buildViduVideoArgs({ modelId: '3.4', mode: 'reference', prompt: 'move', duration: 10, resolution: '540p', ratio: '1:1', imagePaths: ['start.png'] })
+  it('Q4 reference video sends image references and supports 1–16 second durations', () => {
+    const args = buildViduVideoArgs({ modelId: '3.4', mode: 'reference', prompt: 'move', duration: 16, resolution: '540p', ratio: '1:1', imagePaths: ['start.png'] })
     expect(args[args.indexOf('--type') + 1]).toBe('character2video')
     expect(args).toContain('--image=start.png')
     expect(args).toContain('--duration')
+  })
+
+  it('Q3 first frame uses img2video, one ordered image and required transition', () => {
+    const args = buildViduVideoArgs({ modelId: '3.2', mode: 'first-frame', prompt: 'move', duration: 4, resolution: '1080p', imagePaths: ['first.png'] })
+    expect(args[args.indexOf('--type') + 1]).toBe('img2video')
+    expect(args).toContain('--image=first.png')
+    expect(args).toContain('--transition')
+    expect(args).not.toContain('--aspect-ratio')
+  })
+
+  it('Q3 text to video has no images and keeps the requested aspect ratio', () => {
+    const args = buildViduVideoArgs({ modelId: '3.2', mode: 'text', prompt: 'a cat', duration: 8, resolution: '1080p', ratio: '9:16', imagePaths: [] })
+    expect(args[args.indexOf('--type') + 1]).toBe('text2video')
+    expect(args).toContain('--aspect-ratio')
     expect(args).not.toContain('--transition')
+    expect(args.some((arg) => arg.startsWith('--image='))).toBe(false)
   })
 
   it('Q3 first/last frame uses ordered images, Q3 model and required transition', () => {
@@ -22,17 +37,19 @@ describe('Vidu CLI task contract', () => {
 
   it('rejects mode/model substitution and invalid resolutions, duration, and reference counts', () => {
     expect(() => buildViduVideoArgs({ modelId: '3.4', mode: 'first-last-frame', prompt: 'move', duration: 1, resolution: '1080p', imagePaths: ['a', 'b'] })).toThrow(ViduCliError)
-    expect(() => buildViduVideoArgs({ modelId: '3.2', mode: 'first-last-frame', prompt: 'move', duration: 11, resolution: '1080p', imagePaths: ['a', 'b'] })).toThrow(ViduCliError)
+    expect(() => buildViduVideoArgs({ modelId: '3.2', mode: 'first-last-frame', prompt: 'move', duration: 17, resolution: '1080p', imagePaths: ['a', 'b'] })).toThrow(ViduCliError)
     expect(() => buildViduVideoArgs({ modelId: '3.2', mode: 'first-last-frame', prompt: 'move', duration: 1, resolution: '540p', imagePaths: ['a', 'b'] })).toThrow(ViduCliError)
     expect(() => buildViduVideoArgs({ modelId: '3.4', mode: 'reference', prompt: 'move', duration: 1, resolution: '540p', imagePaths: [] })).toThrow(ViduCliError)
+    expect(() => buildViduVideoArgs({ modelId: '3.2', mode: 'first-frame', prompt: 'move', duration: 1, resolution: '1080p', imagePaths: ['a', 'b'] })).toThrow(ViduCliError)
+    expect(() => buildViduVideoArgs({ modelId: '3.2', mode: 'text', prompt: 'move', duration: 1, resolution: '1080p', imagePaths: ['a'] })).toThrow(ViduCliError)
   })
 
-  it('maps Q4 to reference only and Q3 to first/last only', () => {
+  it('maps Q4 to reference only and Q3 to text/first/last/reference', () => {
     expect(videoCapabilitiesFor('vidu', '3.4').modes).toEqual(['reference'])
     expect(videoCapabilitiesFor('vidu', '3.4').resolutions).toEqual(['540p', '720p', '1080p', '2k', '4k'])
-    expect(videoCapabilitiesFor('vidu', '3.2').modes).toEqual(['first-last-frame'])
+    expect(videoCapabilitiesFor('vidu', '3.2').modes).toEqual(['text', 'first-frame', 'first-last-frame', 'reference'])
     expect(videoCapabilitiesFor('vidu', '3.2').resolutions).toEqual(['1080p'])
-    const issues = videoCapabilityIssues(videoCapabilitiesFor('vidu', '3.2'), { mode: 'first-last-frame', hasFirstFrame: true, hasLastFrame: true, imageCount: 2, params: { duration: 10, resolution: '1080p' } })
+    const issues = videoCapabilityIssues(videoCapabilitiesFor('vidu', '3.2'), { mode: 'first-last-frame', hasFirstFrame: true, hasLastFrame: true, imageCount: 2, params: { duration: 16, resolution: '1080p' } })
     expect(issues).toEqual([])
   })
 

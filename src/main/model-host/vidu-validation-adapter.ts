@@ -18,7 +18,7 @@ export class ViduValidationAdapter implements ProviderAdapter {
   }
 
   async validate(request: ProviderValidationRequest): Promise<ProviderValidationFinding> {
-    if (!this.supports(request.operation, request.model)) return { status: 'unsupported', message: '当前 Vidu 仅支持 Q4（3.4）图片参考生视频与 Q3（3.2）首尾帧' }
+    if (!this.supports(request.operation, request.model)) return { status: 'unsupported', message: '当前 Vidu 仅支持 Q4（3.4）参考生视频与 Q3（3.2）文生/首帧/首尾帧/参考生视频' }
     const diag = { traceId: newTraceId(), spanId: newSpanId(), requestId: `vidu-${newSpanId()}` }
     const attributes = { providerId: request.connection.id, modelId: request.model.modelId, operation: 'video.generate' }
     const credentials = { baseURL: request.connection.baseUrl, apiKey: request.secret }

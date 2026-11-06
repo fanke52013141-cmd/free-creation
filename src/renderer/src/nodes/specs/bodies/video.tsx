@@ -369,6 +369,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
                 void chooseAsset()
               }}
             >
+              <Icon name="refresh" size={13} />
               替换
             </button>
             <button
@@ -381,6 +382,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
                 setVideoOperationsOpen(true)
               }}
             >
+              <Icon name="clip" size={13} />
               视频截取
             </button>
             <button
@@ -393,11 +395,12 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
                 setVideoOperationsOpen(true)
               }}
             >
+              <Icon name="frame" size={13} />
               抽帧
             </button>
           </div>
           <span className="media-action-divider" aria-hidden="true" />
-          {/* 定位/复制节点的图标入口沿用媒体文件操作的按钮材质，与图片节点同列。 */}
+          {/* 2026-11-06 用户裁决：去掉重复按钮，只保留定位；三个主操作等宽分布。 */}
           <span className="node-media-file-actions" role="group" aria-label="节点辅助操作">
             <button
               type="button"
@@ -417,24 +420,11 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             >
               <Icon name="target" size={16} />
             </button>
-            <button
-              type="button"
-              className="icon-btn media-file-action-btn"
-              title="复制节点"
-              aria-label="复制节点"
-              onPointerDown={stopEventPropagation}
-              onClick={(event) => {
-                stopEventPropagation(event)
-                markUndoPoint(editor, 'duplicate-video-node')
-                editor.duplicateShapes([shape.id])
-              }}
-            >
-              <Icon name="copy" size={16} />
-            </button>
           </span>
         </div>
         {videoOperationsOpen && (
           <VideoOperationsWorkbench
+            key={videoOperationsMode}
             source={shape}
             editor={editor}
             initialMode={videoOperationsMode}

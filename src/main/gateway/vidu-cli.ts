@@ -148,12 +148,17 @@ export async function pollVidu(credentials: ViduCredentials, taskId: string, sig
 export async function submitVideoWithVidu(provider: ProviderConfig, input: VideoSubmitInput): Promise<string> {
   try {
     if (input.referenceVideoMediaIds?.length || input.referenceVideoMediaId || input.referenceAudioMediaIds?.length)
-      throw new ViduCliError('INVALID_INPUT', '当前 Vidu 仅开放图片参考生视频')
+      throw new ViduCliError('INVALID_INPUT', '当前 Vidu 仅开放图片参考/首帧/首尾帧生视频')
+    // 官方 CLI 的任务类型由 mode 决定：首帧 1 张、首尾帧 2 张、参考 1–7 张、纯文生 0 张。
     const imageIds = input.mode === 'first-last-frame'
       ? [input.firstFrameMediaId, input.lastFrameMediaId]
-      : input.referenceImageMediaIds ?? []
+      : input.mode === 'first-frame'
+        ? [input.firstFrameMediaId]
+        : input.mode === 'reference'
+          ? input.referenceImageMediaIds ?? []
+          : []
     const imagePaths = imageIds.map((id) => {
-      if (!id) throw new ViduCliError('INVALID_INPUT', 'Vidu 首尾帧图片缺失')
+      if (!id) throw new ViduCliError('INVALID_INPUT', 'Vidu 图片缺失')
       const row = getDb().prepare('SELECT path, kind FROM media WHERE id = ?').get(id) as { path: string; kind: string } | undefined
       const path = row?.kind === 'image' ? getMediaAbsPath(row.path) : null
       if (!path || !existsSync(path)) throw new ViduCliError('MEDIA_NOT_FOUND', 'Vidu 参考图片不存在')
@@ -161,7 +166,7 @@ export async function submitVideoWithVidu(provider: ProviderConfig, input: Video
     })
     return await submitViduWithPaths(provider, {
       modelId: input.modelId, mode: input.mode ?? 'text', prompt: input.prompt,
-      duration: input.params?.duration ?? 1, resolution: input.params?.resolution ?? (input.modelId === '3.2' ? '1080p' : '540p'),
+      duration: input.params?.duration ?? 5, resolution: input.params?.resolution ?? (input.modelId === '3.2' ? '1080p' : '540p'),
       ratio: input.params?.ratio, imagePaths
     })
   } catch (error) {

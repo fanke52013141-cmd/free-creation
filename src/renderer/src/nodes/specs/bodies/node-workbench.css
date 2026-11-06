@@ -808,3 +808,122 @@
     padding: 0 8px;
   }
 }
+
+/* ── 2026-11-06 视频操作工作台：双栏布局，面板不再整体纵向滚动 ───────── */
+.video-operations-dialog {
+  height: min(860px, calc(100vh - 24px));
+}
+
+.video-operations-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 10px 12px;
+}
+
+.video-operations-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.video-operations-player {
+  flex: 1 1 auto;
+  min-height: 220px;
+}
+
+.video-operations-options {
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: none;
+}
+
+.video-operations-options::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+@media (max-width: 1000px) {
+  .video-operations-body {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+}
+
+/* ── 2026-11-06 视频操作工作台视觉对齐 Stitch 参考稿：青 #3cdde3、发丝线、无发光 ── */
+.video-operations-dialog {
+  --accent: #3cdde3;
+  border-color: #252b36;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #10151d 0%, #0b0f16 100%);
+  box-shadow: 0 24px 64px -20px rgba(0, 0, 0, 0.85);
+}
+
+.video-operations-head {
+  border-bottom: 1px solid #1c222c;
+  background: rgba(13, 17, 23, 0.92);
+}
+
+.video-operations-title > svg {
+  color: #3cdde3;
+}
+
+.video-operations-tabs {
+  border-color: #222935;
+  background: rgba(2, 6, 23, 0.55);
+  box-shadow: none;
+}
+
+.video-operations-tabs button.active {
+  border-color: rgba(60, 221, 227, 0.34);
+  background: rgba(60, 221, 227, 0.14);
+  color: #8bdcff;
+  box-shadow: none;
+}
+
+.video-operations-close {
+  color: #9aa6b5;
+}
+.video-operations-close:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+}
+
+.video-operations-workspace {
+  border-color: #222935;
+  border-radius: 12px;
+  background: #05070b;
+}
+
+.video-operations-player-frame {
+  border-color: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.video-operations-options {
+  border-color: #222935;
+  background: rgba(13, 17, 23, 0.72);
+  border-radius: 12px;
+}
+
+.video-operations-footer {
+  border-top: 1px solid #1c222c;
+  background: #0b0f16;
+}
+
+.video-operations-submit {
+  border: 1px solid rgba(60, 221, 227, 0.5);
+  border-radius: 9px;
+  background: #3cdde3;
+  box-shadow: none;
+  color: #06181c;
+  font-weight: 650;
+}
+
+.video-operations-submit:hover:not(:disabled) {
+  filter: brightness(1.05);
+  box-shadow: none;
+}

@@ -27,24 +27,46 @@ export interface ViduVideoArgs {
 
 export function buildViduVideoArgs(input: ViduVideoArgs): string[] {
   if (!VIDU_MODELS.includes(input.modelId))
-    throw new ViduCliError('VIDU_MODEL_UNSUPPORTED', '当前 Vidu 仅支持 Q4（3.4）参考生视频与 Q3（3.2）首尾帧')
-  const frames = input.modelId === VIDU_Q3_MODEL
-  if (input.mode !== (frames ? 'first-last-frame' : 'reference'))
-    throw new ViduCliError('INVALID_INPUT', frames ? 'Vidu Q3 仅开放首尾帧生视频' : 'Vidu Q4 官方 CLI 暂不支持首尾帧；请显式选择 Q3 首尾帧模型')
+    throw new ViduCliError('VIDU_MODEL_UNSUPPORTED', '当前 Vidu 仅支持 Q4（3.4）参考生视频与 Q3（3.2）文生/首帧/首尾帧/参考生视频')
+  const q4 = input.modelId === VIDU_Q4_MODEL
+  if (q4 && input.mode !== 'reference')
+    throw new ViduCliError('INVALID_INPUT', 'Vidu Q4 官方 CLI 仅开放参考生视频（character2video）；首帧/首尾帧请选 Q3')
   if (!input.prompt.trim()) throw new ViduCliError('INVALID_INPUT', '提示词不能为空')
-  if (!Number.isInteger(input.duration) || input.duration < 1 || input.duration > 10)
-    throw new ViduCliError('INVALID_INPUT', 'Vidu 视频时长必须为 1–10 秒的整数')
-  if (!(frames ? ['1080p'] : VIDU_RESOLUTIONS).includes(input.resolution))
+  if (!Number.isInteger(input.duration) || input.duration < 1 || input.duration > 16)
+    throw new ViduCliError('INVALID_INPUT', 'Vidu 视频时长必须为 1–16 秒的整数')
+  if (!(q4 ? VIDU_RESOLUTIONS : ['1080p']).includes(input.resolution))
     throw new ViduCliError('INVALID_INPUT', 'Vidu 清晰度无效')
   if (input.ratio && !VIDU_RATIOS.includes(input.ratio))
     throw new ViduCliError('INVALID_INPUT', 'Vidu 画幅无效')
-  if (frames ? input.imagePaths.length !== 2 : !input.imagePaths.length || input.imagePaths.length > 7)
-    throw new ViduCliError('INVALID_INPUT', frames ? 'Vidu 首尾帧需要按顺序连接 2 张图片' : 'Vidu 参考生视频需要 1–7 张图片')
+  const expectedImages =
+    input.mode === 'text' ? 0 : input.mode === 'first-frame' ? 1 : input.mode === 'first-last-frame' ? 2 : -1
+  if (expectedImages >= 0 ? input.imagePaths.length !== expectedImages : !input.imagePaths.length || input.imagePaths.length > 7)
+    throw new ViduCliError(
+      'INVALID_INPUT',
+      input.mode === 'text'
+        ? 'Vidu 文生视频不能连接图片'
+        : input.mode === 'first-frame'
+          ? 'Vidu 首帧生视频需要 1 张图片'
+          : input.mode === 'first-last-frame'
+            ? 'Vidu 首尾帧需要按顺序连接 2 张图片'
+            : 'Vidu 参考生视频需要 1–7 张图片'
+    )
+  const type =
+    input.mode === 'text'
+      ? 'text2video'
+      : input.mode === 'first-frame'
+        ? 'img2video'
+        : input.mode === 'first-last-frame'
+          ? 'headtailimg2video'
+          : 'character2video'
   return [
-    'task', 'submit', '--type', frames ? 'headtailimg2video' : 'character2video', '--model-version', input.modelId,
+    'task', 'submit', '--type', type, '--model-version', input.modelId,
     `--prompt=${input.prompt.trim()}`, '--duration', String(input.duration),
     '--resolution', input.resolution,
-    ...(frames ? ['--transition', 'pro'] : ['--aspect-ratio', input.ratio || '16:9']),
+    // 首帧/首尾帧按图片推导画幅；文生和参考模式显式传画幅。
+    ...(type === 'img2video' || type === 'headtailimg2video' ? [] : ['--aspect-ratio', input.ratio || '16:9']),
+    // 3.1/3.2 的图片类任务要求 transition，纯文生（3.2）也支持。
+    ...(type === 'text2video' ? [] : ['--transition', 'pro']),
     '--schedule-mode', 'normal', '--sample-count', '1', '--codec', 'h264',
     ...input.imagePaths.flatMap((path) => [`--image=${path}`])
   ]

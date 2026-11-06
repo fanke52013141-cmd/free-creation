@@ -4576,6 +4576,7 @@ button {
   flex: 1 1 0;
   align-items: center;
   justify-content: center;
+  gap: 5px;
   padding: 0 4px;
   border: 1px solid rgba(51, 65, 85, 0.72);
   border-radius: 8px;
