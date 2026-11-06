@@ -14,6 +14,7 @@ import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
 import { AppSelect } from '../../../components/AppSelect'
+import { Icon } from '../../../components/Icon'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import {
   SPEECH_BACKENDS,
@@ -44,6 +45,7 @@ import {
   useClickGuard
 } from './shared'
 import { parseNodeExtra } from '../../nodeValues'
+import './speech-parameter.css'
 
 interface SubtitleSentence {
   start_time: number
@@ -153,7 +155,6 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
     }, 0)
     return () => clearTimeout(timer)
     // 只在切到本地引擎时探测一次；用户装好后可用「重新检测」按钮刷新。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLocal])
 
   useEffect(() => {
@@ -268,7 +269,8 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
       // 供应商与协议强绑定：换协议必须重选，不能把 MiniMax 实例留给火山通道。
       providerId: '',
       // 本地引擎没有云模型，留空避免被当成「未绑定模型」。
-      modelId: backend === 'indextts' ? '' : backend === 'volc' ? 'seed-audio-1.0' : 'speech-2.8-hd',
+      modelId:
+        backend === 'indextts' ? '' : backend === 'volc' ? 'seed-audio-1.0' : 'speech-2.8-hd',
       // 两家供应商的音色 ID 不兼容，切换时清空以免把旧 ID 发给另一家。
       voiceId: ''
     })
@@ -435,7 +437,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
                   toggleReferencePlay()
                 }}
               >
-                {referencePlaying ? '暂停' : '试听'}
+                <Icon name={referencePlaying ? 'pause' : 'play'} size={15} />
               </button>
               <span className="tts-ref-name">{config.referenceAudioName || '参考音频'}</span>
               <button
@@ -476,15 +478,10 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
             </button>
           )}
           <small className="tts-upload-hint">
-            {isLocal ? 'WAV / MP3 / OGG / FLAC · ≤50 MB · 建议 5–10 秒' : 'WAV / MP3 / PCM / OGG OPUS · ≤10 MB'}
+            {isLocal
+              ? 'WAV / MP3 / OGG / FLAC · ≤50 MB · 建议 5–10 秒'
+              : 'WAV / MP3 / PCM / OGG OPUS · ≤10 MB'}
           </small>
-          {!isLocal && (
-            <span className={`node-wiring speech-reference-status ${referenceCount > 0 ? 'ok' : ''}`}>
-              {referenceCount > 0
-                ? `使用 ${incomingReferences} 段连线音频${uploadedReference ? '和 1 段本节点上传音频' : ''}`
-                : '未设置参考音频'}
-            </span>
-          )}
           {!isLocal && referenceCount > VOLC_REFERENCE_AUDIO_MAX_COUNT && (
             <div className="gen-capability-note error" role="alert">
               最多使用 {VOLC_REFERENCE_AUDIO_MAX_COUNT} 段参考音频，请减少连线数量。
@@ -519,14 +516,28 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
         <div className="tts-section speech-parameter-panel">
           <NodeSectionTitle>语音参数</NodeSectionTitle>
           <div className="tts-sliders">
-            <div className="tts-slider-row speech-range-row">
-              <div className="speech-range-labels">
-                <label className="opt-label">语速</label>
-                <output>{config.speed.toFixed(2)}x</output>
-              </div>
+            <div className="speech-range-row">
+              <label className="speech-range-label">语速</label>
               <input
                 type="range"
+                className="speech-range-input"
                 aria-label="语速"
+                min="0.5"
+                max="2"
+                step="0.05"
+                value={config.speed}
+                style={
+                  {
+                    '--fill': `${(((config.speed - 0.5) / 1.5) * 100).toFixed(2)}%`
+                  } as React.CSSProperties
+                }
+                onPointerDown={(e) => e.stopPropagation()}
+                onChange={(e) => updateConfig({ speed: Number(e.target.value) })}
+              />
+              <input
+                type="number"
+                className="speech-range-number"
+                aria-label="语速数值"
                 min="0.5"
                 max="2"
                 step="0.05"
@@ -535,14 +546,28 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
                 onChange={(e) => updateConfig({ speed: Number(e.target.value) })}
               />
             </div>
-            <div className="tts-slider-row speech-range-row">
-              <div className="speech-range-labels">
-                <label className="opt-label">音量</label>
-                <output>{config.volume.toFixed(2)}</output>
-              </div>
+            <div className="speech-range-row">
+              <label className="speech-range-label">音量</label>
               <input
                 type="range"
+                className="speech-range-input"
                 aria-label="音量"
+                min="0.01"
+                max="10"
+                step="0.01"
+                value={config.volume}
+                style={
+                  {
+                    '--fill': `${(((config.volume - 0.01) / 9.99) * 100).toFixed(2)}%`
+                  } as React.CSSProperties
+                }
+                onPointerDown={(e) => e.stopPropagation()}
+                onChange={(e) => updateConfig({ volume: Number(e.target.value) })}
+              />
+              <input
+                type="number"
+                className="speech-range-number"
+                aria-label="音量数值"
                 min="0.01"
                 max="10"
                 step="0.01"
@@ -551,14 +576,28 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
                 onChange={(e) => updateConfig({ volume: Number(e.target.value) })}
               />
             </div>
-            <div className="tts-slider-row speech-range-row">
-              <div className="speech-range-labels">
-                <label className="opt-label">音调</label>
-                <output>{config.pitch}</output>
-              </div>
+            <div className="speech-range-row">
+              <label className="speech-range-label">音调</label>
               <input
                 type="range"
+                className="speech-range-input"
                 aria-label="音调"
+                min="-12"
+                max="12"
+                step="1"
+                value={config.pitch}
+                style={
+                  {
+                    '--fill': `${(((config.pitch + 12) / 24) * 100).toFixed(2)}%`
+                  } as React.CSSProperties
+                }
+                onPointerDown={(e) => e.stopPropagation()}
+                onChange={(e) => updateConfig({ pitch: Number(e.target.value) })}
+              />
+              <input
+                type="number"
+                className="speech-range-number"
+                aria-label="音调数值"
                 min="-12"
                 max="12"
                 step="1"
@@ -605,14 +644,28 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
         <div className="tts-section speech-parameter-panel">
           <NodeSectionTitle>语音参数</NodeSectionTitle>
           <div className="tts-sliders">
-            <div className="tts-slider-row speech-range-row">
-              <div className="speech-range-labels">
-                <label className="opt-label">语速</label>
-                <output>{config.speechRate}</output>
-              </div>
+            <div className="speech-range-row">
+              <label className="speech-range-label">语速</label>
               <input
                 type="range"
+                className="speech-range-input"
                 aria-label="语速"
+                min="-50"
+                max="100"
+                step="1"
+                value={config.speechRate}
+                style={
+                  {
+                    '--fill': `${(((config.speechRate + 50) / 150) * 100).toFixed(2)}%`
+                  } as React.CSSProperties
+                }
+                onPointerDown={(e) => e.stopPropagation()}
+                onChange={(e) => updateConfig({ speechRate: Number(e.target.value) })}
+              />
+              <input
+                type="number"
+                className="speech-range-number"
+                aria-label="语速数值"
                 min="-50"
                 max="100"
                 step="1"
@@ -621,14 +674,28 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
                 onChange={(e) => updateConfig({ speechRate: Number(e.target.value) })}
               />
             </div>
-            <div className="tts-slider-row speech-range-row">
-              <div className="speech-range-labels">
-                <label className="opt-label">音量</label>
-                <output>{config.loudnessRate}</output>
-              </div>
+            <div className="speech-range-row">
+              <label className="speech-range-label">音量</label>
               <input
                 type="range"
+                className="speech-range-input"
                 aria-label="音量"
+                min="-50"
+                max="100"
+                step="1"
+                value={config.loudnessRate}
+                style={
+                  {
+                    '--fill': `${(((config.loudnessRate + 50) / 150) * 100).toFixed(2)}%`
+                  } as React.CSSProperties
+                }
+                onPointerDown={(e) => e.stopPropagation()}
+                onChange={(e) => updateConfig({ loudnessRate: Number(e.target.value) })}
+              />
+              <input
+                type="number"
+                className="speech-range-number"
+                aria-label="音量数值"
                 min="-50"
                 max="100"
                 step="1"
@@ -637,14 +704,28 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
                 onChange={(e) => updateConfig({ loudnessRate: Number(e.target.value) })}
               />
             </div>
-            <div className="tts-slider-row speech-range-row">
-              <div className="speech-range-labels">
-                <label className="opt-label">音调</label>
-                <output>{config.pitchRate}</output>
-              </div>
+            <div className="speech-range-row">
+              <label className="speech-range-label">音调</label>
               <input
                 type="range"
+                className="speech-range-input"
                 aria-label="音调"
+                min="-12"
+                max="12"
+                step="1"
+                value={config.pitchRate}
+                style={
+                  {
+                    '--fill': `${(((config.pitchRate + 12) / 24) * 100).toFixed(2)}%`
+                  } as React.CSSProperties
+                }
+                onPointerDown={(e) => e.stopPropagation()}
+                onChange={(e) => updateConfig({ pitchRate: Number(e.target.value) })}
+              />
+              <input
+                type="number"
+                className="speech-range-number"
+                aria-label="音调数值"
                 min="-12"
                 max="12"
                 step="1"

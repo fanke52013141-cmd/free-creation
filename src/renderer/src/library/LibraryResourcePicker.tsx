@@ -1,275 +1,193 @@
-import { useEffect, useState } from 'react'
-import type { LibraryResourceDetail, LibraryResourceSummary } from '@shared/library/types'
+import { useEffect, useRef, useState } from 'react'
 import type { Editor } from 'tldraw'
-import { insertResource } from './insertResource'
-import { legacyCategory, planResourceNodes } from '@shared/library/blueprint'
+import type { LibraryResourceSummary } from '@shared/library/types'
 import { Icon } from '../components/Icon'
 import { mediaUrl } from '../nodes/registry'
 import { useToastStore } from '../stores/toast'
-import './library.css'
-import { useConfirmStore } from '../stores/confirm'
-import { missingRecipeVariables, resourceReusePreview } from './reusePreview'
+import { insertResource } from './insertResource'
+import { useDragToCanvas } from '../canvas/drag-to-canvas'
+
+interface LibraryResourcePickerProps {
+  projectId: string
+  editor: Editor | null
+}
+
+const SEARCH_DEBOUNCE_MS = 160
+const SEARCH_LIMIT = 100
 
 export function LibraryResourcePicker({
   projectId,
   editor
-}: {
-  projectId: string
-  editor: Editor | null
-}): React.JSX.Element {
-  const [query, setQuery] = useState('')
+}: LibraryResourcePickerProps): React.JSX.Element {
+  const [keyword, setKeyword] = useState('')
   const [resources, setResources] = useState<LibraryResourceSummary[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [detail, setDetail] = useState<LibraryResourceDetail | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [selectedComponents, setSelectedComponents] = useState<string[]>([])
-  const [recipeValues, setRecipeValues] = useState<Record<string, Record<string, string>>>({})
+  const [loading, setLoading] = useState(true)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const debounceRef = useRef<number | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    const timer = window.setTimeout(() => {
-      void window.api.searchLibrary({ query, limit: 32 }).then((result) => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    debounceRef.current = window.setTimeout(() => {
+      void (async (): Promise<void> => {
+        // loading 在异步回调里更新，避免在 effect 同步体触发级联渲染。
+        setLoading(true)
+        const result = await window.api.searchLibrary({
+          query: keyword.trim() || undefined,
+          limit: SEARCH_LIMIT
+        })
         if (cancelled) return
         if (result.ok) setResources(result.data.items)
-        else useToastStore.getState().show(`资源搜索失败：${result.error.message}`)
-      })
-    }, 160)
+        setLoading(false)
+      })()
+    }, SEARCH_DEBOUNCE_MS)
     return () => {
       cancelled = true
-      window.clearTimeout(timer)
+      if (debounceRef.current) window.clearTimeout(debounceRef.current)
     }
-  }, [query])
+  }, [keyword])
 
-  useEffect(() => {
-    if (!selectedId) return
-    let cancelled = false
-    void window.api.getLibraryResource({ resourceId: selectedId }).then((result) => {
-      if (cancelled) return
-      if (result.ok) setDetail(result.data)
-      else useToastStore.getState().show(`读取资源失败：${result.error.message}`)
-    })
-    return () => {
-      cancelled = true
+  // 点击添加：整份资源加入；拖拽添加时携带光标落点。
+  const addResource = async (
+    resource: LibraryResourceSummary,
+    dropScreen?: { x: number; y: number }
+  ): Promise<void> => {
+    if (!editor) {
+      useToastStore.getState().show('画布尚未就绪，无法添加资源')
+      return
     }
-  }, [selectedId])
-
-  const addComponents = async (componentIds: string[]): Promise<void> => {
-    if (!detail || detail.id !== selectedId || !editor || busy) return
-    setBusy(true)
+    setBusyId(resource.id)
     try {
-      const missing = missingRecipeVariables(detail, componentIds, recipeValues)
-      if (missing.length) {
-        const first = missing[0]
-        const input = [
-          ...document.querySelectorAll<HTMLInputElement>('[data-recipe-variable]')
-        ].find(
-          (element) =>
-            element.dataset.recipeVariable === first.name &&
-            element.dataset.componentId === first.componentId
-        )
-        input?.focus()
-        throw new Error(`请填写变量：${missing.map((item) => item.name).join('、')}`)
-      }
-      const preview = resourceReusePreview(detail, componentIds, recipeValues)
-      const files = await window.api.previewLibraryFiles({
-        resourceId: detail.id,
-        revisionId: detail.selectedRevisionId,
-        componentIds
-      })
-      if (!files.ok) throw new Error('资源文件预检失败，尚未创建节点')
-      if (files.data.missingComponentIds.length)
-        throw new Error(
-          `资源缺少 ${files.data.missingComponentIds.length} 个文件，整组未加入；请修复资源文件后重试`
-        )
-      const confirmed = await useConfirmStore.getState().confirm({
-        title: '预览复用内容',
-        message: `资源「${detail.selectedTitle}」v${preview.revision}：将创建 ${preview.nodes.length} 个节点，复制 ${preview.fileCount} 个文件；不新增连线，不自动运行。节点：${preview.nodes.map((node) => node.title).join('、')}。文件将在提交时检查，缺失时整组停止。配方仅生成提示词文本，模型参数仅供参考。`,
-        confirmText: '确认加入画布'
-      })
-      if (!confirmed) return
-      await insertResource(editor, projectId, detail, componentIds, recipeValues)
-      useToastStore.getState().show(`已将 ${componentIds.length} 项内容加入画布，可一次撤销`)
-    } catch (cause) {
-      useToastStore.getState().show(cause instanceof Error ? cause.message : String(cause))
+      const detailResult = await window.api.getLibraryResource({ resourceId: resource.id })
+      if (!detailResult.ok) throw new Error(detailResult.error.message)
+      const detail = detailResult.data
+      if (!detail) throw new Error('资源详情不存在或已被删除')
+      const componentIds = detail.components.map((item) => item.id)
+      await insertResource(editor, projectId, detail, componentIds, {}, dropScreen)
+    } catch (error) {
+      useToastStore.getState().show(
+        `添加失败：${error instanceof Error ? error.message : String(error)}`
+      )
     } finally {
-      setBusy(false)
+      setBusyId(null)
     }
   }
-  const nodeLabel = (componentId: string): string => {
-    if (!detail) return ''
+
+  // 资源库没有硬删除，归档后默认搜索不再返回，可在归档视图恢复。
+  const handleArchive = async (resource: LibraryResourceSummary): Promise<void> => {
+    setBusyId(resource.id)
     try {
-      const category = detail.category ?? legacyCategory(detail.formPreset, detail.components)
-      const plan = planResourceNodes(
-        category,
-        detail.components,
-        detail.selectedTitle,
-        [componentId],
-        recipeValues
+      const result = await window.api.archiveLibraryResource({
+        resourceId: resource.id,
+        archived: true
+      })
+      if (!result.ok) throw new Error(result.error.message)
+      setResources((current) => current.filter((item) => item.id !== resource.id))
+      useToastStore.getState().show('资源已移除，可在归档中恢复')
+    } catch (error) {
+      useToastStore.getState().show(
+        `移除失败：${error instanceof Error ? error.message : String(error)}`
       )
-      return plan[0]?.title ?? ''
-    } catch {
-      return '填写内容后可加入对应节点'
+    } finally {
+      setBusyId(null)
     }
   }
 
   return (
     <div className="library-picker">
-      <div className="library-picker-intro">
-        <strong>从资源库添加</strong>
-        <p>按分类蓝图整组加入，或选择部分内容。加入时会创建真实节点，不会自动运行。</p>
-      </div>
       <label className="library-picker-search">
         <Icon name="search" size={14} />
         <input
-          value={query}
-          placeholder="搜索图片、提示词、人物和风格"
-          onChange={(event) => setQuery(event.currentTarget.value)}
+          value={keyword}
+          placeholder="搜索资源库"
+          onChange={(e) => setKeyword(e.currentTarget.value)}
         />
       </label>
-      <div className="library-picker-list">
-        {resources.length === 0 && (
-          <div className="library-picker-empty">
-            没有找到资源。可以先在项目首页的资源库里创建或收藏。
-          </div>
-        )}
-        {resources.map((resource) => (
-          <article
-            className={`library-picker-resource${selectedId === resource.id ? ' selected' : ''}`}
-            key={resource.id}
-          >
-            <button
-              className="library-picker-resource-head"
-              disabled={busy}
-              onClick={() => {
-                setSelectedId((current) => (current === resource.id ? null : resource.id))
-                setSelectedComponents([])
-              }}
-            >
-              {resource.coverPath ? (
-                <img src={mediaUrl(resource.coverPath)} alt="" />
-              ) : (
-                <span className="library-picker-icon">
-                  <Icon name="assets" size={15} />
-                </span>
-              )}
-              <span>
-                <strong>{resource.title}</strong>
-                <small>
-                  {resource.category?.name ?? '旧版资源'} · v{resource.revisionNumber} ·{' '}
-                  {resource.componentCount} 个组件
-                </small>
-              </span>
-              <Icon name={selectedId === resource.id ? 'close' : 'add'} size={14} />
-            </button>
-            {selectedId === resource.id && detail?.id === resource.id && (
-              <div className="library-picker-components">
-                <div className="library-picker-batch">
-                  <button
-                    disabled={busy || !editor}
-                    onClick={() => void addComponents(detail.components.map((item) => item.id))}
-                  >
-                    整份加入画布（{detail.components.length} 个节点）
-                  </button>
-                  <button
-                    disabled={busy || !editor || !selectedComponents.length}
-                    onClick={() => void addComponents(selectedComponents)}
-                  >
-                    加入所选（{selectedComponents.length}）
-                  </button>
-                </div>
-                <small>按这份资源保存时的节点组合展开并加入画布。</small>
-                {detail.components.map((component) => (
-                  <div className="library-picker-component" key={component.id}>
-                    <label>
-                      <input
-                        type="checkbox"
-                        disabled={busy}
-                        checked={selectedComponents.includes(component.id)}
-                        onChange={(e) =>
-                          setSelectedComponents((ids) =>
-                            e.target.checked
-                              ? [...ids, component.id]
-                              : ids.filter((id) => id !== component.id)
-                          )
-                        }
-                      />
-                      <strong>{component.role}</strong>
-                      <span>{component.valueType}</span>
-                    </label>
-                    <small>{nodeLabel(component.id)}</small>
-                    {component.valueType === 'recipe' && component.text !== undefined
-                      ? (() => {
-                          const detected = [
-                            ...component.text.matchAll(
-                              /\{\{\s*([A-Za-z_][A-Za-z0-9_-]{0,63})\s*\}\}/g
-                            )
-                          ].map((match) => match[1])
-                          const declared = Array.isArray(component.metadata.variables)
-                            ? component.metadata.variables.filter(
-                                (value): value is string => typeof value === 'string'
-                              )
-                            : []
-                          const variables = [...new Set([...declared, ...detected])]
-                          const values = recipeValues[component.id] ?? {}
-                          const preview = component.text!.replace(
-                            /\{\{\s*([A-Za-z_][A-Za-z0-9_-]{0,63})\s*\}\}/g,
-                            (_match, name: string) => values[name] || `{{${name}}}`
-                          )
-                          return (
-                            <>
-                              {variables.map((name) => (
-                                <label className="library-picker-variable" key={name}>
-                                  <span>{name}</span>
-                                  <input
-                                    data-recipe-variable={name}
-                                    data-component-id={component.id}
-                                    value={values[name] ?? ''}
-                                    placeholder={`填写 ${name}`}
-                                    onChange={(event) =>
-                                      setRecipeValues((current) => ({
-                                        ...current,
-                                        [component.id]: {
-                                          ...current[component.id],
-                                          [name]: event.currentTarget.value
-                                        }
-                                      }))
-                                    }
-                                  />
-                                </label>
-                              ))}
-                              <p className="library-picker-recipe-preview">
-                                {preview.slice(0, 240) || '（空提示词）'}
-                              </p>
-                            </>
-                          )
-                        })()
-                      : component.text !== undefined && (
-                          <p>{component.text.slice(0, 160) || '（空文本）'}</p>
-                        )}
-                    {component.valueType === 'image' && component.blobPath && (
-                      <img
-                        className="library-picker-preview"
-                        src={mediaUrl(component.blobPath)}
-                        alt={component.role}
-                      />
-                    )}
-                    <button
-                      disabled={busy || !editor}
-                      onClick={() => void addComponents([component.id])}
-                    >
-                      {busy
-                        ? '添加中…'
-                        : component.valueType === 'recipe'
-                          ? '生成提示词文本'
-                          : '预览并加入画布'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </article>
-        ))}
-      </div>
+
+      {loading && resources.length === 0 ? (
+        <div className="side-panel-empty">正在加载资源…</div>
+      ) : resources.length === 0 ? (
+        <div className="side-panel-empty">
+          资源库还没有内容，在项目素材里保存素材后会出现在这里。
+        </div>
+      ) : (
+        <div className="library-picker-grid">
+          {resources.map((resource) => (
+            <LibraryCard
+              key={resource.id}
+              resource={resource}
+              busy={busyId === resource.id}
+              onAdd={() => void addResource(resource)}
+              onDrop={(x, y) => void addResource(resource, { x, y })}
+              onArchive={() => void handleArchive(resource)}
+            />
+          ))}
+        </div>
+      )}
     </div>
+  )
+}
+
+function LibraryCard({
+  resource,
+  busy,
+  onAdd,
+  onDrop,
+  onArchive
+}: {
+  resource: LibraryResourceSummary
+  busy: boolean
+  onAdd: () => void
+  onDrop: (x: number, y: number) => void
+  onArchive: () => void
+}): React.JSX.Element {
+  const { startDrag, handleClick } = useDragToCanvas()
+
+  return (
+    <article
+      className="library-card"
+      onPointerDown={(e) =>
+        startDrag(
+          e,
+          {
+            label: resource.title,
+            ...(resource.coverPath
+              ? { image: mediaUrl(resource.coverPath) }
+              : { icon: 'layers' })
+          },
+          onDrop
+        )
+      }
+      onClick={() => handleClick(onAdd)}
+    >
+      <div className="library-card-cover">
+        {resource.coverPath ? (
+          <img src={mediaUrl(resource.coverPath)} alt={resource.title} loading="lazy" />
+        ) : (
+          <span className="library-card-cover-icon">
+            <Icon name="layers" size={24} />
+          </span>
+        )}
+      </div>
+
+      <div className="library-card-info">
+        <span className="library-card-name" title={resource.title}>
+          {resource.title}
+        </span>
+      </div>
+
+      <button
+        type="button"
+        className="library-card-delete"
+        aria-label="从资源库移除"
+        disabled={busy}
+        onClick={(e) => {
+          e.stopPropagation()
+          onArchive()
+        }}
+      >
+        <Icon name="trash" size={12} />
+      </button>
+    </article>
   )
 }

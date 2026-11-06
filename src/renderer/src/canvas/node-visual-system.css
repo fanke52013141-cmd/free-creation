@@ -140,7 +140,8 @@
   gap: 7px;
   display: flex;
   align-items: center;
-  border-bottom: 1px solid var(--node-divider);
+  /* 2026-11-06 裁决：隐藏标题与内容之间的分隔横线，消除割裂感。 */
+  border-bottom: 0;
   border-radius: 12px 12px 0 0;
   background: transparent;
   line-height: 20px;

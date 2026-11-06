@@ -1,9 +1,14 @@
-import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
+import {
+  NodeHeaderActions,
+  NodeIdentity,
+  NodePrimaryButton
+} from '../../../canvas/NodePresentation'
 // 音频资产节点 Body：导入本地音频、预览、输出资产。
 //
 // 通用配音（speech）已拆到 bodies/speech.tsx——它是模型驱动节点，参数分组与端口
 // 随所选协议变化，和「导入一段音频素材」不是同一种职责，共用 Body 只会让两边的
 // 语义继续分叉（历史遗留的 mode: 'upload' | 'generate' 双形态已删除）。
+import './audio-player.css'
 import { useEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
@@ -212,48 +217,26 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         />
 
         <div className="audio-asset-heading">
+          <span className="audio-asset-mini-icon" aria-hidden="true">
+            <Icon name="audio" size={17} />
+          </span>
           <button
             type="button"
-            className="audio-asset-icon-wrap"
+            className="audio-asset-name"
             data-node-pointer="surface"
             data-node-interactive="media-preview"
-            title="双击打开大窗播放器"
-            aria-label="打开音频预览"
+            title="双击打开音频预览"
             onPointerDown={(event) => stopEventPropagation(event)}
             onDoubleClick={(event) => guard.onDoubleClick(event, openAudioPreview)}
             onClick={(event) => event.stopPropagation()}
           >
-            <span className="audio-asset-icon-glow" />
-            <Icon name="audio" size={24} />
+            {shape.props.title || '音频文件'}
           </button>
-          <div className="audio-asset-heading-copy">
-            <div className="audio-asset-track-line">
-              <button
-                type="button"
-                className="audio-asset-name"
-                data-node-pointer="surface"
-                data-node-interactive="media-preview"
-                title="双击打开音频预览"
-                onPointerDown={(event) => stopEventPropagation(event)}
-                onDoubleClick={(event) => guard.onDoubleClick(event, openAudioPreview)}
-                onClick={(event) => event.stopPropagation()}
-              >
-                {shape.props.title || '音频文件'}
-              </button>
-              <span className="audio-asset-timecode" aria-label="当前播放时间与总时长">
-                <span>{formatAudioTime(currentTime)}</span>
-                <span className="audio-asset-time-divider">/</span>
-                <span className="audio-asset-duration">{formatAudioTime(duration)}</span>
-              </span>
-            </div>
-            <span
-              className={`audio-asset-status ${playing ? 'is-playing' : ''}`}
-              aria-label={playing ? '正在播放' : '音频已就绪'}
-            >
-              <span className="audio-asset-status-dot" />
-              <span>{playing ? '正在播放' : '音频已就绪'}</span>
-            </span>
-          </div>
+          <span className="audio-asset-timecode" aria-label="当前播放时间与总时长">
+            <span>{formatAudioTime(currentTime)}</span>
+            <span className="audio-asset-time-divider">/</span>
+            <span className="audio-asset-duration">{formatAudioTime(duration)}</span>
+          </span>
         </div>
 
         <div className="audio-playback-panel">
@@ -302,16 +285,7 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             </div>
             <span className="audio-waveform-playhead" style={{ left: progressPercent }}>
               <span className="audio-waveform-playhead-cap" />
-              <span className="audio-waveform-playhead-tail" />
             </span>
-          </div>
-
-          <div
-            className="audio-playback-progress"
-            aria-hidden="true"
-            style={{ ['--audio-progress' as string]: progressPercent }}
-          >
-            <span />
           </div>
 
           <div className="audio-playback-controls">
@@ -370,21 +344,21 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           </div>
         </div>
 
-        <div className="audio-asset-footer">
-          <button
-            type="button"
-            className="audio-replace-button"
-            title="替换音频文件"
-            onPointerDown={(event) => stopEventPropagation(event)}
-            onClick={(event) => {
-              event.stopPropagation()
-              void uploadAudio()
-            }}
-          >
-            替换音频
-          </button>
+        <NodeHeaderActions>
           <MediaFileActions shape={shape} />
-        </div>
+        </NodeHeaderActions>
+
+        <NodePrimaryButton
+          className="audio-replace-button"
+          title="替换音频文件"
+          onPointerDown={(event) => stopEventPropagation(event)}
+          onClick={(event) => {
+            event.stopPropagation()
+            void uploadAudio()
+          }}
+        >
+          替换
+        </NodePrimaryButton>
         <MediaResultGrid
           shape={shape}
           kind="audio"

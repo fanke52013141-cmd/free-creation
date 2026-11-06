@@ -1,0 +1,300 @@
+/* 音频资产节点播放器（2026-11-06 视觉重设计）
+ * 依据 NODE_UI_STANDARD §20/§23 与 NODE_COLOR_SPEC：
+ * - 卡内一律中性材质，身份色（淡紫 #E7CBFA）仅保留在标题小图标；
+ * - 波形本身承担进度表达与 seek，删除重复的独立进度条；
+ * - 去掉全部彩色 glow / 渐变 / 发光，按钮复用公共 action 渐变面。
+ * 选择器统一带 .node-card.type-audio 前缀，以覆盖 app.css 历史规则。
+ */
+
+/* 让 scroll → body → body-content 这条公共链在音频节点里拉伸到滚动区全高，
+ * 否则播放器的 flex 填充会参照未撑开的中间层而失效。
+ * 注意：.node-body 用 min-height 相对 block 型 scroll 撑开；其下改用 flex 拉伸，
+ * 避免百分比高度依赖父级显式 height（min-height 撑出的高度不被百分比参照）。 */
+.node-card.type-audio .node-standard-scroll > .node-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.node-card.type-audio .node-body > .node-body-content {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.node-card.type-audio .node-body-content > .audio-asset-player {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  /* 拉伸到滚动区可用高度，让播放面板向下延伸，消除与底部「替换」按钮之间的空隙。 */
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  background-image: none;
+  box-shadow: none;
+}
+
+/* ── 顶部紧凑信息行：小图标 + 名称 + 时间码 ─────────────────────── */
+.node-card.type-audio .audio-asset-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 2px;
+}
+
+.node-card.type-audio .audio-asset-mini-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--node-identity-accent, var(--node-edge-strong));
+}
+
+.node-card.type-audio .audio-asset-mini-icon svg {
+  display: block;
+  width: 17px;
+  height: 17px;
+}
+
+.node-card.type-audio .audio-asset-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--node-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.node-card.type-audio .audio-asset-timecode {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: baseline;
+  gap: 3px;
+  color: var(--node-text-muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+}
+
+.node-card.type-audio .audio-asset-timecode .audio-asset-time-divider,
+.node-card.type-audio .audio-asset-timecode .audio-asset-duration {
+  color: var(--node-text-disabled);
+}
+
+/* ── 播放面板：中性深底容器，无彩色描边与渐变 ───────────────────── */
+.node-card.type-audio .audio-playback-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--node-edge);
+  border-radius: 10px;
+  background: var(--node-input-bg);
+  background-image: none;
+  box-shadow: none;
+}
+
+/* ── 波形：已播放白色高亮、未播放中性灰，无发光 ─────────────────── */
+.node-card.type-audio .audio-waveform-track {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 54px;
+  border-radius: 4px;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.node-card.type-audio .audio-waveform-bars {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  padding: 0 2px;
+  pointer-events: none;
+}
+
+.node-card.type-audio .audio-waveform-bars span {
+  display: block;
+  flex: 1 1 0;
+  min-width: 1px;
+  max-width: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--node-text-muted) 55%, transparent);
+  opacity: 1;
+  box-shadow: none;
+  transition: background-color 0.12s ease;
+}
+
+.node-card.type-audio .audio-waveform-bars span.is-played {
+  background: var(--node-text);
+  box-shadow: none;
+  opacity: 1;
+}
+
+.node-card.type-audio .audio-waveform-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  transform: translateX(-50%);
+  border-radius: 3px;
+  /* 采用右上角「运行」按钮主题色（--run-accent #22d3ee），强化播放头。 */
+  background: var(--run-accent, #22d3ee);
+  box-shadow: 0 0 9px rgb(34 211 238 / 70%);
+  pointer-events: none;
+}
+
+.node-card.type-audio .audio-waveform-playhead-cap {
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  width: 15px;
+  height: 15px;
+  transform: translateX(-50%);
+  border: 2px solid var(--node-input-bg);
+  border-radius: 50%;
+  background: var(--run-accent, #22d3ee);
+  box-shadow:
+    0 0 0 1px rgb(34 211 238 / 85%),
+    0 0 10px rgb(34 211 238 / 65%),
+    0 2px 6px rgb(0 0 0 / 55%);
+}
+
+/* ── 控制行：播放钮 + 音量 ─────────────────────────────────────── */
+.node-card.type-audio .audio-playback-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.node-card.type-audio .audio-playback-toggle {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  padding: 0;
+  /* 全局 button reset 为 border:0 !important，必须用 !important 恢复公共发丝边。 */
+  border: 1px solid var(--node-action-border) !important;
+  border-radius: 50%;
+  background: var(--node-action-surface);
+  color: var(--node-text);
+  box-shadow: none;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.node-card.type-audio .audio-playback-toggle svg {
+  width: 15px;
+  height: 15px;
+}
+
+.node-card.type-audio .audio-playback-toggle:hover {
+  background: var(--node-action-hover);
+  box-shadow: 0 6px 16px rgb(0 0 0 / 35%);
+  transform: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .node-card.type-audio .audio-playback-toggle:active {
+    transform: scale(0.985);
+  }
+}
+
+.node-card.type-audio .audio-volume-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(52%, 176px);
+  min-width: 92px;
+}
+
+.node-card.type-audio .audio-mute-toggle {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--node-text-muted);
+  cursor: pointer;
+}
+
+.node-card.type-audio .audio-mute-toggle svg {
+  width: 15px;
+  height: 15px;
+}
+
+.node-card.type-audio .audio-mute-toggle:hover {
+  background: var(--node-control-bg);
+  color: var(--node-text);
+}
+
+.node-card.type-audio .audio-volume-slider {
+  flex: 1;
+  width: 100%;
+  min-width: 48px;
+  height: 4px;
+  padding: 0;
+  appearance: none;
+  border: 0;
+  border-radius: 99px;
+  outline: none;
+  background: linear-gradient(
+    to right,
+    var(--node-text) 0,
+    var(--node-text) var(--audio-volume, 75%),
+    rgb(255 255 255 / 14%) var(--audio-volume, 75%),
+    rgb(255 255 255 / 14%) 100%
+  );
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.node-card.type-audio .audio-volume-slider::-webkit-slider-thumb {
+  width: 11px;
+  height: 11px;
+  appearance: none;
+  border: 0;
+  border-radius: 50%;
+  background: var(--node-text);
+  box-shadow: none;
+}
+
+.node-card.type-audio .audio-volume-slider::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--node-text);
+  box-shadow: none;
+}

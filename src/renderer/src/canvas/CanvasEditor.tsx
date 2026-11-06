@@ -31,6 +31,7 @@ import { DataEdgeLayer } from './DataEdgeLayer'
 import { AgentFlowRelationLayer } from './AgentFlowRelationLayer'
 import { FlowBuildPreviewLayer } from './FlowBuildPreviewLayer'
 import { useDockMagnify } from './useDockMagnify'
+import { useDragGhostStore } from './drag-to-canvas'
 import {
   setConnectionFinishHandler,
   teardownConnectionDrag,
@@ -2328,13 +2329,11 @@ export function CanvasEditor({
             void useMediaStore.getState().refresh(project.id)
           })
         }}
-        onAddToCanvas={(asset) => {
-          const editor = editorRef.current
-          if (!editor) return
-          const screen = editor.pageToScreen(editor.getViewportPageBounds().center)
-          createMediaNodes([asset], screen.x, screen.y)
+        onDropMedia={(asset, clientX, clientY) => {
+          if (!editorRef.current) return
+          // 以光标落点为中心创建媒体节点，与节点面板拖拽落点一致。
+          createMediaNodes([asset], clientX, clientY)
         }}
-        onOpenRuns={() => setPanelTab('runs')}
       />
       {!panelTab && editorInstance && nodePanelKind === 'contract' && nodePanelShapeId && (
         <NodeContractPanel
@@ -2368,6 +2367,7 @@ export function CanvasEditor({
           {getNodeType(nodeDrag.type)?.label}
         </div>
       )}
+      <DragToCanvasGhost />
       {dragOver && dropPoint && (
         <div
           className="drop-hint"
@@ -2435,6 +2435,24 @@ export function CanvasEditor({
           onClose={closeMenu}
         />
       )}
+    </div>
+  )
+}
+
+// 资产/资源库拖拽到画布时的全局跟随预览：深色精致小卡片，避免实心品牌色药丸。
+function DragToCanvasGhost(): React.JSX.Element | null {
+  const ghost = useDragGhostStore((s) => s.ghost)
+  if (!ghost) return null
+  return (
+    <div className="drag-to-canvas-ghost" style={{ left: ghost.x + 14, top: ghost.y + 14 }}>
+      {ghost.image ? (
+        <img className="drag-to-canvas-ghost-thumb" src={ghost.image} alt="" />
+      ) : ghost.icon ? (
+        <span className="drag-to-canvas-ghost-icon">
+          <Icon name={ghost.icon} size={13} />
+        </span>
+      ) : null}
+      <span className="drag-to-canvas-ghost-label">{ghost.label}</span>
     </div>
   )
 }

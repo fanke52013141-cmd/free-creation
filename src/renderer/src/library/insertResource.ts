@@ -12,7 +12,8 @@ export async function insertResource(
   projectId: string,
   detail: LibraryResourceDetail,
   componentIds: string[],
-  variables: Record<string, Record<string, string>> = {}
+  variables: Record<string, Record<string, string>> = {},
+  dropScreen?: { x: number; y: number }
 ): Promise<void> {
   const category = detail.category ?? legacyCategory(detail.formPreset, detail.components)
   const plans = resourceReusePreview(detail, componentIds, variables).nodes
@@ -35,7 +36,10 @@ export async function insertResource(
   try {
     if (editor.isDisposed || editor.getCurrentPageId() !== pageId)
       throw new Error('画布已关闭或切换，请在目标画布重新添加')
-    const center = editor.getViewportPageBounds().center
+    // 拖拽添加时以光标落点为中心，点击添加时回退到视口中心。
+    const center = dropScreen
+      ? editor.screenToPage(dropScreen)
+      : editor.getViewportPageBounds().center
     const columns = category.blueprint.layout === 'row' ? nodes.length : Math.min(3, nodes.length)
     const width = columns * 390 - 50
     const height = Math.ceil(nodes.length / columns) * 310 - 50

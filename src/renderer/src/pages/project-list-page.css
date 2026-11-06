@@ -4,11 +4,6 @@
   min-height: 100vh;
   overflow-y: auto;
   background-color: #080a0f;
-  background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.028) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
-  background-size: 32px 32px;
-  background-position: center center;
   color: #e2e8f0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -205,12 +200,14 @@
 }
 
 .project-home-card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(34, 211, 238, 0.3);
+  /* 2026-11-06：对齐节点卡片悬浮——轻抬 2px、分层阴影 + 类型色微光，不再用亮边框。 */
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.13);
   box-shadow:
-    0 16px 36px -12px rgba(0, 0, 0, 0.6),
-    0 0 20px -4px rgba(34, 211, 238, 0.12),
-    inset 0 1px 1px rgba(255, 255, 255, 0.12);
+    0 10px 20px -5px rgba(0, 0, 0, 0.42),
+    0 28px 52px -8px rgba(0, 0, 0, 0.54),
+    0 0 26px rgba(34, 211, 238, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .project-home-card-open {

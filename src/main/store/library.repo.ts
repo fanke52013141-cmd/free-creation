@@ -13,8 +13,6 @@ import type {
   CreateLibraryResourceInput,
   CaptureProjectMediaInput,
   CaptureProjectNodesInput,
-  LibraryBoard,
-  LibraryBoardItem,
   LibraryCollection,
   LibraryFolder,
   LibraryComponentInput,
@@ -24,7 +22,6 @@ import type {
   LibraryResourceSummary,
   LibrarySearchInput,
   PublishLibraryRevisionInput,
-  SaveLibraryBoardInput,
   SetLibraryCollectionsInput
 } from '../../shared/library/types'
 import { getDataDir, getDb } from './db'
@@ -861,69 +858,6 @@ export function setResourceCollections(input: SetLibraryCollectionsInput): boole
   return true
 }
 
-export function createBoard(input: { title: string; description?: string }): LibraryBoard {
-  const title = cleanText(input?.title, 120)
-  if (!title) throw new Error('展板名称不能为空')
-  const id = nanoid(12)
-  const now = Date.now()
-  const description = cleanText(input.description, 2000)
-  getDb().prepare(
-    'INSERT INTO library_boards (id, title, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
-  ).run(id, title, description, now, now)
-  return { id, title, description, createdAt: now, updatedAt: now }
-}
-
-export function listBoards(): LibraryBoard[] {
-  return (getDb().prepare(
-    'SELECT id, title, description, created_at, updated_at FROM library_boards ORDER BY updated_at DESC'
-  ).all() as Array<{ id: string; title: string; description: string; created_at: number; updated_at: number }>).map((row) => ({
-    id: row.id, title: row.title, description: row.description, createdAt: row.created_at, updatedAt: row.updated_at
-  }))
-}
-
-export function getBoardItems(boardId: string): LibraryBoardItem[] {
-  return (getDb().prepare(
-    `SELECT id, resource_id, revision_id, x, y, width, height, note, sort_index
-     FROM library_board_items WHERE board_id = ? ORDER BY sort_index ASC`
-  ).all(boardId) as Array<{
-    id: string; resource_id: string; revision_id: string; x: number; y: number;
-    width: number; height: number; note: string; sort_index: number
-  }>).map((row) => ({
-    id: row.id, resourceId: row.resource_id, revisionId: row.revision_id,
-    x: row.x, y: row.y, width: row.width, height: row.height, note: row.note, order: row.sort_index
-  }))
-}
-
-export function saveBoard(input: SaveLibraryBoardInput): boolean {
-  if (!Array.isArray(input.items) || input.items.length > 1000) throw new Error('展板条目数量无效')
-  const exists = getDb().prepare('SELECT id FROM library_boards WHERE id = ?').get(input.boardId)
-  if (!exists) return false
-  const database = getDb()
-  database.transaction(() => {
-    database.prepare('DELETE FROM library_board_items WHERE board_id = ?').run(input.boardId)
-    const insert = database.prepare(
-      `INSERT INTO library_board_items
-        (id, board_id, resource_id, revision_id, x, y, width, height, note, sort_index)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    input.items.forEach((item, index) => {
-      const revision = database.prepare(
-        'SELECT id FROM library_revisions WHERE id = ? AND resource_id = ?'
-      ).get(item.revisionId, item.resourceId)
-      if (!revision) throw new Error('展板引用的资源版本不存在')
-      insert.run(
-        item.id || nanoid(12), input.boardId, item.resourceId, item.revisionId,
-        Number.isFinite(item.x) ? item.x : 0,
-        Number.isFinite(item.y) ? item.y : 0,
-        Math.max(120, Math.min(1200, Number.isFinite(item.width) ? item.width : 260)),
-        Math.max(100, Math.min(1200, Number.isFinite(item.height) ? item.height : 280)),
-        cleanText(item.note, 2000), index
-      )
-    })
-    database.prepare('UPDATE library_boards SET updated_at = ? WHERE id = ?').run(Date.now(), input.boardId)
-  })()
-  return true
-}
 
 
 export function exportLibrarySnapshot(resourceIds?: string[]): {
@@ -1045,28 +979,6 @@ export function exportResourcePackage(destination: string, requestedIds?: string
       revisions: packagedRevisions
     })
   }
-  const exportedResourceIds = new Set(resources.map((resource) => String(resource.id)))
-  const boards = (database.prepare(
-    'SELECT id, title, description FROM library_boards ORDER BY updated_at DESC'
-  ).all() as Array<{ id: string; title: string; description: string }>).flatMap((board) => {
-    const items = (database.prepare(
-      `SELECT resource_id AS resourceId, revision_id AS revisionId, x, y, width, height, note, sort_index AS orderIndex
-       FROM library_board_items WHERE board_id = ? ORDER BY sort_index ASC`
-    ).all(board.id) as Array<{
-      resourceId: string; revisionId: string; x: number; y: number; width: number;
-      height: number; note: string; orderIndex: number
-    }>).filter((item) => exportedResourceIds.has(item.resourceId)).map((item) => ({
-      resourceId: item.resourceId,
-      revisionId: item.revisionId,
-      x: item.x,
-      y: item.y,
-      width: item.width,
-      height: item.height,
-      note: item.note,
-      order: item.orderIndex
-    }))
-    return hasResourceFilter && items.length === 0 ? [] : [{ title: board.title, description: board.description, items }]
-  })
   const manifest = {
     format: LIBRARY_PACKAGE_FORMAT,
     version: LIBRARY_PACKAGE_VERSION,
@@ -1075,8 +987,7 @@ export function exportResourcePackage(destination: string, requestedIds?: string
     folders: hasResourceFilter
       ? [...new Map(resources.flatMap((resource) => (resource.folders as string[][]).map((path) => [JSON.stringify(path), path] as const))).values()]
       : allFolderPaths(),
-    categories: exportCategoryVersions().filter((category) => !hasResourceFilter || exportedCategoryIds.has(category.id)),
-    boards
+    categories: exportCategoryVersions().filter((category) => !hasResourceFilter || exportedCategoryIds.has(category.id))
   }
   const manifestBytes = Buffer.from(JSON.stringify(manifest), 'utf8')
   if (manifestBytes.byteLength > 50 * 1024 * 1024) throw new Error('资源包清单超过 50 MB 限制')
@@ -1125,21 +1036,6 @@ interface PackageResource {
   revisions: PackageRevision[]
 }
 
-interface PackageBoard {
-  title: string
-  description: string
-  items: Array<{
-    resourceId: string
-    revisionId: string
-    x: number
-    y: number
-    width: number
-    height: number
-    note: string
-    order: number
-  }>
-}
-
 function isPackageResource(value: unknown): value is PackageResource {
   if (!value || typeof value !== 'object') return false
   const raw = value as Partial<PackageResource>
@@ -1148,17 +1044,6 @@ function isPackageResource(value: unknown): value is PackageResource {
     Array.isArray(raw.revisions) && Array.isArray(raw.tags) && Array.isArray(raw.collections) &&
     (raw.folders === undefined || (Array.isArray(raw.folders) && raw.folders.length <= 1000 && raw.folders.every((path) =>
       Array.isArray(path) && path.length > 0 && path.length <= 256 && path.every((name) => typeof name === 'string' && name.trim().length > 0 && name.length <= 100))))
-}
-
-function isPackageBoard(value: unknown): value is PackageBoard {
-  if (!value || typeof value !== 'object') return false
-  const board = value as Partial<PackageBoard>
-  return typeof board.title === 'string' && typeof board.description === 'string' &&
-    Array.isArray(board.items) && board.items.length <= 1000 && board.items.every((item) =>
-      Boolean(item) && typeof item.resourceId === 'string' && typeof item.revisionId === 'string' &&
-      Number.isFinite(item.x) && Number.isFinite(item.y) && Number.isFinite(item.width) &&
-      Number.isFinite(item.height) && typeof item.note === 'string' && Number.isFinite(item.order)
-    )
 }
 
 export function importResourcePackage(filePath: string): number {
@@ -1185,7 +1070,7 @@ export function importResourcePackage(filePath: string): number {
     throw new Error('资源包清单不是有效 JSON')
   }
   if (!manifest || typeof manifest !== 'object') throw new Error('资源包清单无效')
-  const raw = manifest as { format?: unknown; version?: unknown; resources?: unknown; folders?: unknown; boards?: unknown; categories?: unknown }
+  const raw = manifest as { format?: unknown; version?: unknown; resources?: unknown; folders?: unknown; categories?: unknown }
   if (raw.format !== LIBRARY_PACKAGE_FORMAT || (raw.version !== 1 && raw.version !== LIBRARY_PACKAGE_VERSION) || !Array.isArray(raw.resources)) {
     throw new Error('资源包格式或版本不受支持')
   }
@@ -1200,13 +1085,7 @@ export function importResourcePackage(filePath: string): number {
   }
   const packagedRevisionIds = packagedResources.flatMap((resource) => resource.revisions.map((revision) => revision.id))
   if (new Set(packagedRevisionIds).size !== packagedRevisionIds.length) throw new Error('资源包包含重复版本 ID')
-  const packagedRevisionOwners = new Map(
-    packagedResources.flatMap((resource) => resource.revisions.map((revision) => [revision.id, resource.id] as const))
-  )
   if (raw.categories !== undefined && (!Array.isArray(raw.categories) || raw.categories.length > 10000)) throw new Error('资源包分类列表无效')
-  if (raw.boards !== undefined && (!Array.isArray(raw.boards) || raw.boards.length > 1000 || !raw.boards.every(isPackageBoard))) {
-    throw new Error('资源包展板数据无效')
-  }
   const zipEntries = new Map<string, (typeof entries)[number]>()
   for (const entry of entries) zipEntries.set(entry.entryName, entry)
   const database = getDb()
@@ -1363,33 +1242,6 @@ export function importResourcePackage(filePath: string): number {
           'INSERT OR IGNORE INTO library_resource_folders (folder_id, resource_id, added_at) VALUES (?, ?, ?)'
         ).run(folderId, resourceId, now)
       }
-    }
-    for (const board of (raw.boards ?? []) as PackageBoard[]) {
-      const boardId = nanoid(12)
-      const now = Date.now()
-      database.prepare(
-        'INSERT INTO library_boards (id, title, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
-      ).run(boardId, cleanText(board.title, 180) || '导入展板', cleanText(board.description, 2000), now, now)
-      const insertBoardItem = database.prepare(
-        `INSERT INTO library_board_items
-          (id, board_id, resource_id, revision_id, x, y, width, height, note, sort_index)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      board.items.forEach((item, index) => {
-        const resourceId = resourceIdMap.get(item.resourceId)
-        const revisionId = revisionIdMap.get(item.revisionId)
-        if (!resourceId || !revisionId || packagedRevisionOwners.get(item.revisionId) !== item.resourceId) {
-          throw new Error('资源包展板引用了未导出的资源版本')
-        }
-        insertBoardItem.run(
-          nanoid(12), boardId, resourceId, revisionId,
-          Number.isFinite(item.x) ? item.x : 0,
-          Number.isFinite(item.y) ? item.y : 0,
-          Math.max(120, Math.min(1200, item.width)),
-          Math.max(100, Math.min(1200, item.height)),
-          cleanText(item.note, 2000), Number.isFinite(item.order) ? Math.max(0, Math.floor(item.order)) : index
-        )
-      })
     }
     database.prepare(
       'INSERT INTO library_imports (package_sha256, imported_at, resource_count) VALUES (?, ?, ?)'

@@ -3885,6 +3885,52 @@ select:focus-visible {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
 }
 
+/* 资产/资源库拖拽预览：深色精致小卡片，替代实心品牌色药丸。 */
+.drag-to-canvas-ghost {
+  position: fixed;
+  z-index: var(--z-floating);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 200px;
+  padding: 5px 11px 5px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9px;
+  background: rgba(16, 20, 27, 0.92);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.42);
+  color: var(--txt);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.drag-to-canvas-ghost-thumb {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.drag-to-canvas-ghost-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--txt-dim);
+}
+
+.drag-to-canvas-ghost-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ── 全局 toast（挂在 body 下，fixed 定位不受画布 transform 影响） ── */
 .global-toast {
   position: fixed;
@@ -6746,6 +6792,7 @@ select:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  container-type: inline-size;
 }
 
 /* 资产面板与其它侧栏同宽：宽度统一由 --side-panel-width 决定（2026-11-03 对齐顶栏） */
@@ -6754,36 +6801,6 @@ select:focus-visible {
 }
 
 /* 头部多选开关：安静的幽灵药丸，激活时泛品牌色 */
-.assets-selection-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 26px;
-  padding: 0 10px;
-  border: 1px solid var(--border-soft);
-  border-radius: 99px;
-  background: transparent;
-  color: var(--txt-dim);
-  font-size: 11px;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    color 140ms ease,
-    border-color 140ms ease,
-    background-color 140ms ease;
-}
-
-.assets-selection-toggle:hover {
-  color: #c1edff;
-  border-color: rgba(105, 208, 255, 0.35);
-}
-
-.assets-selection-toggle[aria-pressed='true'] {
-  border-color: rgba(98, 199, 246, 0.28);
-  background: rgba(66, 185, 245, 0.12);
-  color: #c1edff;
-}
-
 /* 搜索行：整行安静输入域 */
 .assets-search-row {
   display: flex;
@@ -6842,9 +6859,34 @@ select:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 0 10px;
+  padding: 0 12px;
   font-size: 11px;
   white-space: nowrap;
+  border: 1px solid var(--border-soft) !important;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--txt-dim);
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+
+.assets-toolbar-btn:hover:not(:disabled) {
+  color: var(--txt);
+  border-color: rgba(105, 208, 255, 0.4) !important;
+}
+
+.assets-toolbar-btn.active {
+  border-color: rgba(98, 199, 246, 0.3) !important;
+  background: rgba(66, 185, 245, 0.13);
+  color: #c1edff;
+}
+
+.assets-toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .assets-search {
@@ -6928,8 +6970,10 @@ select:focus-visible {
 }
 
 /* ── 多选导出模式 ── */
+.assets-panel-selection-mode .asset-card {
+  cursor: pointer;
+}
 .assets-panel-selection-mode .asset-locate,
-.assets-panel-selection-mode .asset-run,
 .assets-panel-selection-mode .asset-library-save,
 .assets-panel-selection-mode .asset-delete {
   display: none;
@@ -7030,6 +7074,44 @@ select:focus-visible {
   font-size: 11px;
 }
 
+/* 侧栏抽屉较窄，Radix AppSelect 需紧凑化，避免文字竖排换行。 */
+.assets-advanced-filters .app-select-trigger.assets-filter-select {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 7px;
+  gap: 4px;
+  font-size: 11px;
+  border-radius: 7px;
+  white-space: nowrap;
+  background: var(--sunk);
+  border-color: var(--border-soft);
+  color: var(--txt-dim);
+}
+
+.assets-advanced-filters .app-select-trigger.assets-filter-select > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assets-advanced-filters .app-select-trigger.assets-filter-select .app-select-chevron {
+  width: 12px;
+  flex-basis: 12px;
+}
+
+.assets-advanced-filters .app-select-trigger.assets-filter-select:hover:not(:disabled) {
+  border-color: var(--brand);
+  color: var(--txt);
+}
+
+/* 窄抽屉（浏览器演示或小窗口）：三个高级筛选竖排，完整显示文字，避免挤压成“全.”。 */
+@container (max-width: 320px) {
+  .assets-advanced-filters {
+    grid-template-columns: 1fr;
+  }
+}
+
 .assets-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -7051,54 +7133,18 @@ select:focus-visible {
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
-  cursor: pointer;
+  cursor: grab;
+  user-select: none;
   transition:
     border-color 0.15s ease,
     transform 0.1s ease;
   background: var(--card);
 }
 
-.asset-card.recipe-open {
-  grid-column: 1 / -1;
+.asset-card:active {
+  cursor: grabbing;
 }
-.asset-recipe {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  background: var(--sunk);
-  overflow-wrap: anywhere;
-  cursor: text;
-}
-.asset-recipe p {
-  margin: 4px 0;
-  color: var(--txt-dim);
-  font-size: 11px;
-}
-.asset-recipe label {
-  display: block;
-  margin: 8px 0;
-  color: var(--muted);
-  font-size: 10px;
-}
-.asset-recipe textarea {
-  display: block;
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 80px;
-  margin-top: 4px;
-  padding: 6px 8px;
-  resize: vertical;
-  border: 1px solid var(--border-soft);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--txt);
-  font: inherit;
-  font-size: 11px;
-}
-.asset-recipe small {
-  color: var(--txt-dim);
-}
+
 .asset-card:hover {
   border-color: var(--brand);
   transform: translateY(-1px);
@@ -7165,6 +7211,23 @@ select:focus-visible {
   object-fit: cover;
 }
 
+/* 视频角标：半透明深色圆底，安静地点明这是视频，不抢封面。 */
+.asset-play-badge {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(10, 14, 18, 0.66);
+  backdrop-filter: blur(6px);
+  color: #e8f1f8;
+  pointer-events: none;
+}
+
 .asset-thumb-icon {
   display: inline-flex;
   flex-direction: column;
@@ -7190,46 +7253,6 @@ select:focus-visible {
   gap: 4px;
 }
 
-.asset-info-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.asset-info-head .asset-name {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-/* 生成来源：安静的小徽标，替代原先无样式的灰色大按钮 */
-.asset-recipe-chip {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  height: 18px;
-  padding: 0 7px;
-  border: 1px solid var(--border-soft);
-  border-radius: 99px;
-  background: transparent;
-  color: var(--txt-dim);
-  font-size: 10px;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    color 140ms ease,
-    border-color 140ms ease,
-    background-color 140ms ease;
-}
-
-.asset-recipe-chip:hover,
-.asset-recipe-chip[aria-expanded='true'] {
-  border-color: rgba(105, 208, 255, 0.4);
-  background: rgba(66, 185, 245, 0.1);
-  color: #c1edff;
-}
-
 .asset-name {
   font-size: 11px;
   font-weight: 500;
@@ -7244,39 +7267,7 @@ select:focus-visible {
   color: var(--muted);
 }
 
-.asset-source {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  width: fit-content;
-  max-width: 100%;
-  padding: 1px 7px;
-  border: 1px solid var(--border-soft);
-  border-radius: 99px;
-  color: var(--txt-dim);
-  font-size: 10px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.asset-source.success {
-  border-color: rgba(95, 200, 154, 0.3);
-  color: var(--success, #5fc89a);
-}
-
-.asset-source.failed {
-  border-color: rgba(232, 121, 121, 0.3);
-  color: var(--danger, #e87979);
-}
-
-.asset-source.running {
-  border-color: rgba(105, 208, 255, 0.3);
-  color: var(--brand);
-}
-
 .asset-locate,
-.asset-run,
 .asset-library-save,
 .asset-delete {
   width: 22px;
@@ -7304,17 +7295,6 @@ select:focus-visible {
 }
 
 .asset-locate:hover {
-  background: var(--brand);
-  border-color: transparent;
-}
-
-.asset-run {
-  position: absolute;
-  top: 4px;
-  left: 30px;
-}
-
-.asset-run:hover {
   background: var(--brand);
   border-color: transparent;
 }
@@ -7348,21 +7328,12 @@ select:focus-visible {
 }
 
 .asset-card:hover .asset-locate,
-.asset-card:hover .asset-run,
 .asset-card:hover .asset-library-save,
 .asset-card:hover .asset-delete,
 .asset-locate:focus-visible,
-.asset-run:focus-visible,
 .asset-library-save:focus-visible,
 .asset-delete:focus-visible {
   opacity: 1;
-}
-
-.assets-footer {
-  text-align: center;
-  font-size: 11px;
-  color: var(--muted);
-  padding: 4px 0;
 }
 
 /* ── 运行中心 ── */

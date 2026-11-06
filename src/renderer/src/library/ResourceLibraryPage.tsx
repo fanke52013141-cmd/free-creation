@@ -1,7 +1,7 @@
 import { GenerationLoadingOverlay } from '../canvas/GenerationLoadingOverlay'
 import { useResourceInsertRequest } from './insertRequestStore'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { LibraryPreset, LibraryResourceDetail, LibraryResourceSummary, LibraryBoard, LibraryBoardItem, CreateLibraryResourceInput, PublishLibraryRevisionInput } from '@shared/library/types'
+import type { LibraryPreset, LibraryResourceDetail, LibraryResourceSummary, CreateLibraryResourceInput, PublishLibraryRevisionInput } from '@shared/library/types'
 import type { LibraryCategory } from '@shared/library/blueprint'
 import type { ProjectMeta } from '@shared/types'
 import { Icon } from '../components/Icon'
@@ -162,18 +162,8 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
   const [formOpen, setFormOpen] = useState(false)
   const [targetProjectId, setTargetProjectId] = useState('')
   const [selectedComponents, setSelectedComponents] = useState<Set<string>>(new Set())
-  const [view, setView] = useState<'resources' | 'boards'>('resources')
-  const [boards, setBoards] = useState<LibraryBoard[]>([])
-  const [boardId, setBoardId] = useState('')
-  const [boardItems, setBoardItems] = useState<LibraryBoardItem[]>([])
-  const [boardDetails, setBoardDetails] = useState<Record<string, LibraryResourceDetail>>({})
-  const [loadedBoardId, setLoadedBoardId] = useState('')
-  const [boardName, setBoardName] = useState('')
-  const boardCanvasRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const openProject = useAppStore((state) => state.openProject)
-  const currentBoardItems = loadedBoardId === boardId ? boardItems : []
-  const currentBoardDetails = loadedBoardId === boardId ? boardDetails : {}
   const activeCategoryName = categoryId === 'legacy'
     ? '未分类'
     : categories.find((category) => category.id === categoryId)?.name
@@ -191,18 +181,13 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     ? compareDetail
     : null
   const loadPageData = useCallback(async (): Promise<void> => {
-    const [projectResult, boardResult, categoryResult] = await Promise.all([
+    const [projectResult, categoryResult] = await Promise.all([
       window.api.listProjects(),
-      window.api.listLibraryBoards(),
       window.api.listLibraryCategories()
     ])
     if (projectResult.ok) {
       setProjects(projectResult.data)
       setTargetProjectId((current) => current || projectResult.data[0]?.id || '')
-    }
-    if (boardResult.ok) {
-      setBoards(boardResult.data)
-      setBoardId((current) => current || boardResult.data[0]?.id || '')
     }
     if (categoryResult.ok) setCategories(categoryResult.data)
   }, [])
@@ -252,29 +237,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     return () => { cancelled = true }
   }, [selectedId, selectedRevisionId, compareRevisionId, detail?.id, detail?.selectedRevisionId])
 
-  useEffect(() => {
-    if (!boardId) return
-    let cancelled = false
-    void (async () => {
-      const result = await window.api.getLibraryBoardItems(boardId)
-      if (!result.ok || cancelled) return
-      setBoardItems(result.data)
-      const pairs = await Promise.all(result.data.map(async (item) => {
-        const resource = await window.api.getLibraryResource({ resourceId: item.resourceId, revisionId: item.revisionId })
-        return [`${item.resourceId}:${item.revisionId}`, resource.ok && resource.data ? resource.data : null] as const
-      }))
-      const details: Record<string, LibraryResourceDetail> = {}
-      for (const [key, detail] of pairs) {
-        if (detail) details[key] = detail
-      }
-      if (!cancelled) {
-        setBoardDetails(details)
-        setLoadedBoardId(boardId)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [boardId])
-
   const saveResource = async (input: CreateLibraryResourceInput | PublishLibraryRevisionInput): Promise<void> => {
     const isRevision = 'resourceId' in input
     const result = isRevision
@@ -316,58 +278,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     useResourceInsertRequest.getState().set({ projectId: project.id, resourceId: detail.id,
       revisionId: detail.selectedRevisionId, componentIds: [...selectedComponents] })
     openProject(project)
-  }
-
-  const addToBoard = async (summary: LibraryResourceSummary): Promise<void> => {
-    if (!boardId) return useToastStore.getState().show('请先创建或选择一个展板')
-    const index = currentBoardItems.length
-    const next = [...currentBoardItems, {
-      id: crypto.randomUUID(), resourceId: summary.id, revisionId: summary.latestRevisionId,
-      x: 24 + (index % 3) * 300, y: 24 + Math.floor(index / 3) * 350,
-      width: 270, height: 310, note: '', order: index
-    }]
-    setBoardItems(next)
-    const result = await window.api.saveLibraryBoard({ boardId, items: next })
-    if (!result.ok) useToastStore.getState().show(`展板保存失败：${result.error.message}`)
-  }
-
-  const dropOnBoard = async (event: React.DragEvent<HTMLDivElement>): Promise<void> => {
-    event.preventDefault()
-    const resourceId = event.dataTransfer.getData('application/x-canvas-library-resource')
-    if (!resourceId || !boardCanvasRef.current || !boardId) return
-    const summary = resources.find((resource) => resource.id === resourceId)
-    if (!summary || currentBoardItems.some((item) => item.resourceId === resourceId)) return
-    const rect = boardCanvasRef.current.getBoundingClientRect()
-    const next = [...currentBoardItems, {
-      id: crypto.randomUUID(), resourceId, revisionId: summary.latestRevisionId,
-      x: Math.max(0, event.clientX - rect.left - 120), y: Math.max(0, event.clientY - rect.top - 60),
-      width: 270, height: 310, note: '', order: currentBoardItems.length
-    }]
-    setBoardItems(next)
-    const result = await window.api.saveLibraryBoard({ boardId, items: next })
-    if (!result.ok) useToastStore.getState().show(`展板保存失败：${result.error.message}`)
-  }
-
-  const moveBoardItem = async (event: React.DragEvent<HTMLElement>, item: LibraryBoardItem): Promise<void> => {
-    event.preventDefault()
-    if (!boardCanvasRef.current) return
-    const rect = boardCanvasRef.current.getBoundingClientRect()
-    const next = currentBoardItems.map((current) => current.id === item.id
-      ? { ...current, x: Math.max(0, event.clientX - rect.left - 130), y: Math.max(0, event.clientY - rect.top - 20) }
-      : current)
-    setBoardItems(next)
-    const result = await window.api.saveLibraryBoard({ boardId, items: next })
-    if (!result.ok) useToastStore.getState().show(`展板保存失败：${result.error.message}`)
-  }
-
-  const createBoard = async (): Promise<void> => {
-    if (!boardName.trim()) return
-    const result = await window.api.createLibraryBoard({ title: boardName.trim() })
-    if (!result.ok) return useToastStore.getState().show(`创建展板失败：${result.error.message}`)
-    setBoards((items) => [result.data, ...items])
-    setBoardId(result.data.id)
-    setBoardName('')
-    setView('boards')
   }
 
   const exportLibrary = async (): Promise<void> => {
@@ -414,7 +324,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     <div className="resource-library-page">
       <header className="library-page-header">
         <div className="library-header-context">
-          <button className="library-back" onClick={onBack} title="返回项目（Esc）"><Icon name="home" size={15} />返回项目</button>
+          <button className="library-back" onClick={onBack} title="返回（Esc）"><Icon name="home" size={15} />返回</button>
           <span className="library-header-divider" aria-hidden="true" />
           <span className="library-header-label"><Icon name="assets" size={15} />资源库</span>
         </div>
@@ -437,14 +347,9 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
             <button className="library-category-edit" aria-label={`编辑分类 ${category.name}`} title={`编辑分类 ${category.name}`} onClick={() => setCategoryEditor({ initial: category })}><Icon name="edit" size={10} /></button>
           </span>)}
         </div>
-        <div className="library-view-switch" role="group" aria-label="资源库视图">
-          <button className={view === 'resources' ? 'active' : ''} onClick={() => setView('resources')}><Icon name="assets" size={13} />资源</button>
-          <button className={view === 'boards' ? 'active' : ''} onClick={() => setView('boards')}><Icon name="image" size={13} />展板</button>
-        </div>
       </nav>
 
-      {view === 'resources' ? (
-        <div className="library-workspace">
+      <div className="library-workspace">
           <main className="library-resource-browser">
             {resources.length ? (
               <div className="library-resource-grid">
@@ -461,42 +366,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
             {nextCursor && <button className="library-load-more" onClick={() => void loadResources(nextCursor, true)}>加载更多</button>}
           </main>
         </div>
-      ) : (
-        <div className="library-board-view">
-          <aside className="library-board-list">
-            <strong>我的展板</strong>
-            {boards.map((board) => <button key={board.id} className={board.id === boardId ? 'active' : ''} onClick={() => setBoardId(board.id)}>{board.title}</button>)}
-            <div className="library-board-create"><input value={boardName} placeholder="展板名称" maxLength={120} onChange={(event) => setBoardName(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void createBoard() }} /><button disabled={!boardName.trim()} onClick={() => void createBoard()}><Icon name="add" size={14} /></button></div>
-            <p>从资源卡片拖到展板，或打开资源详情加入。展板会固定加入时的资源版本。</p>
-          </aside>
-          <div className="library-board-canvas-scroll">
-            {boardId ? (
-              <div className="library-board-canvas" ref={boardCanvasRef} onDragOver={(event) => event.preventDefault()} onDrop={(event) => void dropOnBoard(event)}>
-                {currentBoardItems.map((item) => {
-                  const resource = currentBoardDetails[`${item.resourceId}:${item.revisionId}`]
-                  return (
-                    <article key={item.id} className="library-board-card" style={{ left: item.x, top: item.y, width: item.width, minHeight: item.height }} draggable onDragStart={(event) => event.dataTransfer.setData('application/x-canvas-library-board-item', item.id)} onDragEnd={(event) => void moveBoardItem(event, item)} onDrop={(event) => event.stopPropagation()}>
-                      {resource ? <button className="library-board-resource-open" onClick={() => { setSelectedId(resource.id); setSelectedRevisionId(item.revisionId) }}>
-                        {resource.components.find((component) => component.valueType === 'image' && component.blobPath) ? <img src={mediaUrl(resource.components.find((component) => component.valueType === 'image' && component.blobPath)!.blobPath!)} alt="" /> : <span className="library-board-no-image"><Icon name="assets" size={20} /></span>}
-                        <strong>{resource.selectedTitle}</strong><small>固定版本 v{resource.selectedRevisionNumber}</small>
-                        {resource.revisionNumber > resource.selectedRevisionNumber && <em>已有新版本 v{resource.revisionNumber}</em>}
-                      </button> : <div className="library-board-missing">资源已不可用</div>}
-                      <textarea value={item.note} placeholder="写下对照观察或灵感…" onChange={(event) => setBoardItems((items) => items.map((current) => current.id === item.id ? { ...current, note: event.currentTarget.value } : current))} onBlur={() => void window.api.saveLibraryBoard({ boardId, items: currentBoardItems })} />
-                      <button className="library-board-remove" aria-label="从展板移除" onClick={() => {
-                        const next = currentBoardItems.filter((current) => current.id !== item.id)
-                        setBoardItems(next)
-                        void window.api.saveLibraryBoard({ boardId, items: next })
-                      }}><Icon name="close" size={13} /></button>
-                    </article>
-                  )
-                })}
-                {currentBoardItems.length === 0 && <div className="library-board-empty">打开资源详情，点击“加入展板”，开始整理你的风格参考。</div>}
-              </div>
-            ) : <div className="library-empty-state"><h2>创建一个展板</h2><p>展板可固定资源版本，便于并排观察图片、设定和灵感。</p></div>}
-          </div>
-        </div>
-      )}
-
       {selectedId && (
         <div className="library-detail-mask" onMouseDown={(event) => event.target === event.currentTarget && setSelectedId(null)}>
           <aside className="library-detail-panel" role="dialog" aria-modal="true" aria-label="资源详情">
@@ -576,10 +445,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
                       <button disabled={!targetProjectId || selectedComponents.size === 0} onClick={() => void materialize()}>打开画布并创建节点</button>
                     </div>
                     <p className="library-use-hint">打开目标项目后预览节点名称、填写配方变量，再将所选内容一次加入画布。</p>
-                    {view === 'boards' && boardId && <button className="library-detail-board-add" onClick={() => {
-                      const summary = resources.find((item) => item.id === detail.id) ?? detail
-                      void addToBoard(summary)
-                    }}><Icon name="add" size={14} />加入当前展板（固定最新版本）</button>}
                   </div>
                 </div>
                 <footer className="library-detail-actions">

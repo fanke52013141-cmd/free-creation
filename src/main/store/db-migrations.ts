@@ -234,18 +234,6 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
       );
       CREATE INDEX IF NOT EXISTS idx_library_usages_project
         ON library_usages(project_id, last_used_at DESC);
-      CREATE TABLE IF NOT EXISTS library_boards (
-        id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
-        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS library_board_items (
-        id TEXT PRIMARY KEY, board_id TEXT NOT NULL, resource_id TEXT NOT NULL,
-        revision_id TEXT NOT NULL, x REAL NOT NULL, y REAL NOT NULL,
-        width REAL NOT NULL, height REAL NOT NULL, note TEXT NOT NULL DEFAULT '',
-        sort_index INTEGER NOT NULL DEFAULT 0
-      );
-      CREATE INDEX IF NOT EXISTS idx_library_board_items_board
-        ON library_board_items(board_id, sort_index);
       CREATE TABLE IF NOT EXISTS library_imports (
         package_sha256 TEXT PRIMARY KEY, imported_at INTEGER NOT NULL, resource_count INTEGER NOT NULL
       );

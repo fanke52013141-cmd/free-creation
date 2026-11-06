@@ -165,28 +165,3 @@ export interface SetLibraryCollectionsInput {
   resourceId: string
   collectionIds: string[]
 }
-
-export interface LibraryBoard {
-  id: string
-  title: string
-  description: string
-  createdAt: number
-  updatedAt: number
-}
-
-export interface LibraryBoardItem {
-  id: string
-  resourceId: string
-  revisionId: string
-  x: number
-  y: number
-  width: number
-  height: number
-  note: string
-  order: number
-}
-
-export interface SaveLibraryBoardInput {
-  boardId: string
-  items: LibraryBoardItem[]
-}

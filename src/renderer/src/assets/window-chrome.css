@@ -15,10 +15,24 @@
 }
 
 .desktop-window-overlay .canvas-topbar {
+  position: relative;
   height: var(--window-caption-height);
   min-height: var(--window-caption-height);
   padding-right: calc(var(--window-caption-width) + 12px);
   -webkit-app-region: drag;
+}
+
+/* 2026-11-06 用户裁决：在应用按钮与系统最小化/关闭按钮之间加一条竖线，避免误触。 */
+.desktop-window-overlay .canvas-topbar::after {
+  position: absolute;
+  top: 50%;
+  right: var(--window-caption-width);
+  width: 1px;
+  height: 18px;
+  content: '';
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.13);
+  pointer-events: none;
 }
 
 .desktop-window-overlay .canvas-topbar :is(button, input, a, select, textarea, [role='button'], [role='menu'], [role='dialog']) {
@@ -29,10 +43,22 @@
   padding-top: calc(var(--window-caption-height) + 24px);
 }
 
+/* 资源库页头同样要避开原生标题栏，否则左上角“返回项目”被窗口拖拽层盖住。 */
+.desktop-window-overlay .resource-library-page {
+  padding-top: var(--window-caption-height);
+}
+
 .desktop-window-overlay .boot-screen {
   padding-top: var(--window-caption-height);
 }
 
 .desktop-window-overlay .canvas-topbar .canvas-title {
   -webkit-app-region: no-drag;
+}
+
+
+/* 2026-11-06 用户裁决：资源库资产详情侧栏从原生最小化/最大化/关闭按钮下方展开，
+   不再压住窗口标题栏的三个系统按钮。 */
+.desktop-window-overlay .library-detail-mask {
+  top: var(--window-caption-height);
 }

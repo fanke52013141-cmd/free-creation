@@ -1,4 +1,3 @@
-import { GenerationLoadingOverlay } from './canvas/GenerationLoadingOverlay'
 import { DiagnosticsProducer, newProducerId, newTraceId, newSpanId } from '@shared/observability'
 import { emitDiagnosticsEvent } from './engine/diagnosticsReporter'
 import { Component, useEffect, useState, type ReactNode } from 'react'
@@ -175,11 +174,7 @@ function Content(): React.JSX.Element {
   }, [openProject, setProjectOpenFailure])
 
   if (bootState.kind === 'loading') {
-    return (
-      <div className="boot-screen">
-        <GenerationLoadingOverlay title="正在打开本地创作空间" />
-      </div>
-    )
+    return <div className="boot-screen" aria-busy="true" />
   }
   if (bootState.kind === 'failed') return <StartupFailure message={bootState.message} />
 

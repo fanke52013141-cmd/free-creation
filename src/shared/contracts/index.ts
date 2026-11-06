@@ -29,15 +29,12 @@ import type {
   CreateLibraryResourceInput,
   CaptureProjectMediaInput,
   CaptureProjectNodesInput,
-  LibraryBoard,
-  LibraryBoardItem,
   LibraryCollection,
   LibraryFolder,
   LibraryResourceDetail,
   LibraryResourceSummary,
   LibrarySearchInput,
   PublishLibraryRevisionInput,
-  SaveLibraryBoardInput,
   SetLibraryCollectionsInput
 } from '../library/types'
 import type {
@@ -186,10 +183,6 @@ export const IPC = {
     renameFolder: 'library:folders:rename',
     deleteFolder: 'library:folders:delete',
     setResourceFolder: 'library:folders:set-resource',
-    listBoards: 'library:boards:list',
-    createBoard: 'library:boards:create',
-    getBoardItems: 'library:boards:items',
-    saveBoard: 'library:boards:save',
     materialize: 'library:materialize',
     export: 'library:export',
     import: 'library:import'
@@ -532,15 +525,12 @@ export type {
   CreateLibraryResourceInput,
   CaptureProjectMediaInput,
   CaptureProjectNodesInput,
-  LibraryBoard,
-  LibraryBoardItem,
   LibraryCollection,
   LibraryFolder,
   LibraryResourceDetail,
   LibraryResourceSummary,
   LibrarySearchInput,
   PublishLibraryRevisionInput,
-  SaveLibraryBoardInput,
   SetLibraryCollectionsInput
 }
 

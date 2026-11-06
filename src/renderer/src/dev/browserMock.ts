@@ -274,11 +274,6 @@ export function installBrowserMock(): void {
         error: { code: 'MOCK', message: '浏览器演示不支持收藏集写入' }
       }),
     setLibraryCollections: () => Promise.resolve({ ok: true, data: false }),
-    listLibraryBoards: () => Promise.resolve({ ok: true, data: [] }),
-    createLibraryBoard: () =>
-      Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持展板写入' } }),
-    getLibraryBoardItems: () => Promise.resolve({ ok: true, data: [] }),
-    saveLibraryBoard: () => Promise.resolve({ ok: true, data: false }),
     materializeLibraryResource: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持资源物化' } }),
     exportLibrary: () =>

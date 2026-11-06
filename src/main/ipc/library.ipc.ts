@@ -303,40 +303,6 @@ export function registerLibraryIpc(): void {
       }
     }
   )
-  ipcMain.handle(IPC.library.listBoards, () => {
-    try {
-      return ok(library.listBoards())
-    } catch (error) {
-      return err('READ_FAILED', error)
-    }
-  })
-  ipcMain.handle(
-    IPC.library.createBoard,
-    (_event, input: { title: string; description?: string }) => {
-      try {
-        return ok(library.createBoard(input))
-      } catch (error) {
-        return err('CREATE_FAILED', error)
-      }
-    }
-  )
-  ipcMain.handle(IPC.library.getBoardItems, (_event, boardId: string) => {
-    if (!boardId) return err('INVALID_INPUT', '展板 ID 不完整')
-    try {
-      return ok(library.getBoardItems(boardId))
-    } catch (error) {
-      return err('READ_FAILED', error)
-    }
-  })
-  ipcMain.handle(IPC.library.saveBoard, (_event, input) => {
-    if (!input?.boardId || !Array.isArray(input.items))
-      return err('INVALID_INPUT', '展板内容不完整')
-    try {
-      return ok(library.saveBoard(input))
-    } catch (error) {
-      return err('SAVE_FAILED', error)
-    }
-  })
   ipcMain.handle(IPC.library.materialize, async (_event, input) => {
     if (
       !input?.projectId ||

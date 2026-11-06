@@ -73,13 +73,10 @@ import type {
   CreateLibraryCollectionInput,
   CreateLibraryResourceInput,
   CaptureProjectMediaInput,
-  LibraryBoard,
-  LibraryBoardItem,
   LibraryCollection,
   LibraryFolder,
   LibraryResourceDetail,
   PublishLibraryRevisionInput,
-  SaveLibraryBoardInput,
   SetLibraryCollectionsInput,
   SaveProviderInput,
   SaveWorkflowTemplateInput,
@@ -348,16 +345,6 @@ const api = {
     resourceId: string
     folderId?: string | null
   }): Promise<IpcEnvelope<boolean>> => ipcRenderer.invoke(IPC.library.setResourceFolder, input),
-  listLibraryBoards: (): Promise<IpcEnvelope<LibraryBoard[]>> =>
-    ipcRenderer.invoke(IPC.library.listBoards),
-  createLibraryBoard: (input: {
-    title: string
-    description?: string
-  }): Promise<IpcEnvelope<LibraryBoard>> => ipcRenderer.invoke(IPC.library.createBoard, input),
-  getLibraryBoardItems: (boardId: string): Promise<IpcEnvelope<LibraryBoardItem[]>> =>
-    ipcRenderer.invoke(IPC.library.getBoardItems, boardId),
-  saveLibraryBoard: (input: SaveLibraryBoardInput): Promise<IpcEnvelope<boolean>> =>
-    ipcRenderer.invoke(IPC.library.saveBoard, input),
   materializeLibraryResource: (
     input: LibraryMaterializeInput
   ): Promise<IpcEnvelope<LibraryMaterializeResult>> =>

@@ -40,8 +40,7 @@ interface CanvasSidePanelProps {
   editor: Editor | null
   onClose: () => void
   onImport: () => void
-  onAddToCanvas: (asset: MediaAsset) => void
-  onOpenRuns: () => void
+  onDropMedia: (asset: MediaAsset, x: number, y: number) => void
 }
 
 const TAB_META: Record<SidePanelTab, { title: string; icon: IconName }> = {
@@ -583,12 +582,10 @@ export function CanvasSidePanel({
   editor,
   onClose,
   onImport,
-  onAddToCanvas,
-  onOpenRuns
+  onDropMedia
 }: CanvasSidePanelProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [runFocus, setRunFocus] = useState<RunFocus>(null)
-  const [assetSelectionMode, setAssetSelectionMode] = useState(false)
 
   useEffect(() => {
     if (!tab) return
@@ -611,17 +608,6 @@ export function CanvasSidePanel({
           <Icon name={meta.icon} size={17} />
         </span>
         <strong className="side-panel-title">{meta.title}</strong>
-        {tab === 'assets' && (
-          <button
-            type="button"
-            className="assets-selection-toggle"
-            aria-pressed={assetSelectionMode}
-            onClick={() => setAssetSelectionMode((enabled) => !enabled)}
-          >
-            <Icon name="check" size={14} />
-            {assetSelectionMode ? '退出多选' : '多选导出'}
-          </button>
-        )}
         <button className="side-panel-close" aria-label="关闭面板" onClick={onClose}>
           <Icon name="close" size={15} />
         </button>
@@ -632,12 +618,7 @@ export function CanvasSidePanel({
           projectId={projectId}
           editor={editor}
           onImport={onImport}
-          onAddToCanvas={onAddToCanvas}
-          selectionMode={assetSelectionMode}
-          onOpenRun={(nodeId, runId) => {
-            setRunFocus({ nodeId, runId })
-            onOpenRuns()
-          }}
+          onDropMedia={onDropMedia}
         />
       )}
       {tab === 'workflow' && <WorkflowPanel editor={editor} />}

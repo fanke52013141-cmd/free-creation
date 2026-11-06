@@ -535,6 +535,12 @@ body {
   font-size: max(11px, 0.76rem);
 }
 
+/* 全局取消所有文本域右下角的 resize 拖动手柄（用户裁决 2026-11-06）。
+   !important 用于覆盖 app.css / library.css 中带类选择器的 resize:vertical。 */
+textarea {
+  resize: none !important;
+}
+
 .node-card :is(.node-hint, .node-empty, .node-media-source, .node-status-label) {
   color: var(--txt-dim);
 }

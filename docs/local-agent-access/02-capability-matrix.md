@@ -81,7 +81,7 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 | 创建资源与文件夹   | `library.create_resource` / `library.create_folder`     | A2          | planned      | 文本及元数据结构校验；媒体只能走受控接入                                      | 幂等、失败不留半成品         |
 | 采集项目节点/媒体  | `library.capture_project_asset`                         | A2          | planned      | 固定来源 project/revision/media；不复制密钥                                   | 来源可追溯、源项目不变       |
 | 发布/归档资源修订  | `library.publish_revision` / `library.archive_revision` | A4          | planned      | 版本不可变；归档含确认                                                        | 修订冲突、回读一致           |
-| 集合/展板维护      | `library.save_collection` / `library.save_board`        | A2          | planned      | 仅 ID 引用；不把项目图复制为第二拓扑                                          | 顺序/引用校验、保存重开      |
+| 集合维护           | `library.save_collection`                               | A2          | planned      | 仅 ID 引用；不把项目图复制为第二拓扑                                          | 顺序/引用校验、保存重开      |
 | 导出资源包         | `library.export_package`                                | A1 可选扩展 | planned      | 与用户明确要求的project.export分开；复用现有 transfer；不含 API Key，路径受控 | 包往返、脱敏、缺失引用报告   |
 | 导入资源包         | `library.import_package`                                | A4          | planned      | 非本轮必须项，待单独安全设计；与项目导入不同                                  | 重映射、事务回滚、恶意包拒绝 |
 

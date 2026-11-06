@@ -5045,16 +5045,15 @@ button {
   height: 56px;
   align-items: center;
   gap: 2px;
+  /* 2026-11-06 裁决：去掉厚重的深色胶囊底座，图标透明悬浮，与底部「上传/资产」
+   * 及顶栏的无底座图标语言一致，靠中性图标 + 克制的 hover 点亮营造高级感。 */
   padding: 9px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 0;
   border-radius: 16px;
-  background: rgba(22, 25, 34, 0.95);
-  box-shadow:
-    0 20px 40px -10px rgba(0, 0, 0, 0.7),
-    0 0 1px 1px rgba(255, 255, 255, 0.06);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-  animation: ms-toolbar-float 5.5s ease-in-out 800ms infinite;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 .multiselect-toolbar .ms-btn {
