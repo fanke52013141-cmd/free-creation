@@ -6,6 +6,7 @@ import { legacyCategory, planResourceNodes } from '@shared/library/blueprint'
 import { insertResource } from './insertResource'
 import { resourceReusePreview } from './reusePreview'
 import { useConfirmStore } from '../stores/confirm'
+import { Icon } from '../components/Icon'
 
 export function ResourceInsertRequest({
   editor,
@@ -96,8 +97,8 @@ export function ResourceInsertRequest({
       >
         <header className="library-form-header">
           <h2>将「{current?.selectedTitle ?? '资源'}」加入画布</h2>
-          <button disabled={busy} onClick={clear}>
-            关闭
+          <button className="library-icon-button" disabled={busy} aria-label="关闭" onClick={clear}>
+            <Icon name="close" size={17} />
           </button>
         </header>
         <div className="library-form-scroll">

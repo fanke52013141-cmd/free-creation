@@ -6,6 +6,7 @@ import {
   type LibraryNodeSlot,
   type LibraryNodeType
 } from '@shared/library/blueprint'
+import { Icon } from '../components/Icon'
 
 const newSlot = (nodeType: LibraryNodeType = 'image'): LibraryNodeSlot => ({
   id: `slot-${crypto.randomUUID()}`,
@@ -77,8 +78,8 @@ export function LibraryCategoryEditor({
       >
         <header className="library-form-header">
           <h2>{initial ? '编辑分类' : '新建资源分类'}</h2>
-          <button disabled={busy} onClick={onClose}>
-            关闭
+          <button className="library-icon-button" disabled={busy} aria-label="关闭" onClick={onClose}>
+            <Icon name="close" size={17} />
           </button>
         </header>
         <div className="library-form-scroll">

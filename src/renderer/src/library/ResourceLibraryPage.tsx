@@ -357,7 +357,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
               </div>
             ) : (
               <div className="library-empty-state">
-                <div className="library-empty-art" aria-hidden="true"><span className="library-empty-orbit library-empty-orbit-one" /><span className="library-empty-orbit library-empty-orbit-two" /><span className="library-empty-crystal"><Icon name="assets" size={34} /></span></div>
+                <div className="library-empty-art" aria-hidden="true"><span className="library-empty-icon"><Icon name="assets" size={32} /></span></div>
                 <h2>{query.trim() ? '没有找到匹配的资源' : activeCategoryName ? `「${activeCategoryName}」分类下暂无资源` : '资源库还没有内容'}</h2>
                 <p>{query.trim() ? '试试其他关键词，或清除搜索条件。' : '可点击下方快速创建资源，或从顶部导入已有资产包。'}</p>
                 <div className="library-empty-actions"><button className="library-primary" onClick={() => { setSelectedId(null); setFormOpen(true) }}><span className="library-primary-icon"><Icon name="add" size={14} /></span>新建资源</button><button className="library-secondary" onClick={() => setCategoryEditor({})}>管理分类</button></div>
@@ -370,7 +370,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
         <div className="library-detail-mask" onMouseDown={(event) => event.target === event.currentTarget && setSelectedId(null)}>
           <aside className="library-detail-panel" role="dialog" aria-modal="true" aria-label="资源详情">
             <header className="library-detail-header">
-              <button className="library-back" onClick={() => setSelectedId(null)}>← 返回资源</button>
+              <span className="library-detail-header-title">资源详情</span>
               <button className="library-icon-button" aria-label="关闭详情" onClick={() => setSelectedId(null)}><Icon name="close" size={17} /></button>
             </header>
             {detailLoading || !detail ? <GenerationLoadingOverlay title="正在读取资源" compact /> : (
