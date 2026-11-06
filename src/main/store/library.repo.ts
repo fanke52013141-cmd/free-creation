@@ -734,6 +734,51 @@ export function archiveResource(id: string, archived: boolean): boolean {
   return result.changes > 0
 }
 
+/**
+ * 2026-11-06 用户裁决：资源库不用归档，删除即彻底删除。
+ * 事务内清理组件 / 版本 / 蓝图 / 标签 / 集合与目录归属 / 使用记录，随后清理不再被
+ * 任何组件引用的 blob 文件；文件清理失败不影响数据库删除结果。
+ */
+export function deleteResource(id: string): boolean {
+  const database = getDb()
+  const exists = database.prepare('SELECT id FROM library_resources WHERE id = ?').get(id)
+  if (!exists) return false
+  const revisionIds = (database.prepare('SELECT id FROM library_revisions WHERE resource_id = ?').all(id) as Array<{ id: string }>)
+    .map((row) => row.id)
+  const blobIds = revisionIds.length
+    ? (database.prepare(
+        `SELECT DISTINCT blob_id FROM library_components WHERE revision_id IN (${revisionIds.map(() => '?').join(',')}) AND blob_id IS NOT NULL`
+      ).all(...revisionIds) as Array<{ blob_id: string }>).map((row) => row.blob_id)
+    : []
+  database.transaction(() => {
+    if (revisionIds.length) {
+      const marks = revisionIds.map(() => '?').join(',')
+      database.prepare(`DELETE FROM library_components WHERE revision_id IN (${marks})`).run(...revisionIds)
+      database.prepare(`DELETE FROM library_revision_blueprints WHERE revision_id IN (${marks})`).run(...revisionIds)
+    }
+    database.prepare('DELETE FROM library_revisions WHERE resource_id = ?').run(id)
+    database.prepare('DELETE FROM library_tags WHERE resource_id = ?').run(id)
+    database.prepare('DELETE FROM library_collection_items WHERE resource_id = ?').run(id)
+    database.prepare('DELETE FROM library_resource_folders WHERE resource_id = ?').run(id)
+    database.prepare('DELETE FROM library_usages WHERE resource_id = ?').run(id)
+    database.prepare('DELETE FROM library_resources WHERE id = ?').run(id)
+  })()
+  for (const blobId of blobIds) {
+    const stillUsed = database.prepare('SELECT 1 FROM library_components WHERE blob_id = ? LIMIT 1').get(blobId)
+    if (stillUsed) continue
+    const blob = database.prepare('SELECT path FROM library_blobs WHERE id = ?').get(blobId) as { path: string } | undefined
+    database.prepare('DELETE FROM library_blobs WHERE id = ?').run(blobId)
+    if (blob?.path) {
+      try {
+        rmSync(blob.path, { force: true })
+      } catch {
+        // 清理失败不改变删除结果；孤儿文件留给后续清理。
+      }
+    }
+  }
+  return true
+}
+
 export function listCollections(): LibraryCollection[] {
   return (getDb().prepare(
     `SELECT c.id, c.name, c.description, c.created_at, c.updated_at, COUNT(i.resource_id) AS resource_count

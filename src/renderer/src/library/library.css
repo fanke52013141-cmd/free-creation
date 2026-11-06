@@ -21,6 +21,8 @@
 /* ── 顶部导航（与画布顶栏/首页同高同色） ─────────────────── */
 .library-page-header {
   position: relative;
+  /* 必须高于窗口拖拽层（body::before z-index 999），否则桌面版顶栏会被遮住。 */
+  z-index: var(--z-topbar, 1000);
   flex: 0 0 44px;
   min-height: 44px;
   display: flex;
@@ -91,6 +93,39 @@
 .library-tool-btn:focus-visible {
   outline: 2px solid rgba(66, 185, 245, 0.55);
   outline-offset: 1px;
+}
+
+/* 顶栏最右侧的固定返回入口：始终可见，不依赖左侧返回按钮。 */
+.library-home-btn {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  margin-left: 2px;
+  place-items: center;
+  border: 1px solid rgba(231, 238, 247, 0.12);
+  border-radius: 9px;
+  padding: 0;
+  background: rgba(7, 10, 14, 0.35);
+  color: #c6cdd7;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+
+.library-home-btn:hover {
+  border-color: rgba(66, 185, 245, 0.4);
+  background: rgba(66, 185, 245, 0.12);
+  color: #8bdcff;
+}
+
+/* 新建分类：分类行右侧的显式入口。 */
+.library-new-category-btn {
+  min-height: 28px;
+  color: var(--txt-dim) !important;
+  box-shadow: inset 0 0 0 1px rgba(231, 238, 247, 0.12);
+}
+.library-new-category-btn:hover {
+  color: #8bdcff !important;
+  background: rgba(66, 185, 245, 0.1) !important;
 }
 
 /* 搜索框 */
@@ -920,6 +955,7 @@
   flex: 0 0 auto;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   padding: 12px 16px;
   border-top: 1px solid var(--line);
@@ -1684,4 +1720,84 @@
   .library-form-header,
   .library-form-scroll,
   .library-form-footer { padding-left: 16px; padding-right: 16px; }
+}
+
+/* ── 2026-11-06 追加：魔方默认封面 / 抽屉组件头 / 删除按钮 ─────────── */
+.library-cover-cube {
+  display: grid;
+  place-items: center;
+  width: min(40%, 124px);
+  aspect-ratio: 1;
+}
+.library-cover-cube svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.cube-face {
+  stroke: rgba(60, 221, 227, 0.26);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.cube-top { fill: rgba(60, 221, 227, 0.1); }
+.cube-left { fill: #0f172a; }
+.cube-right { fill: #0a1018; }
+.cube-grid line {
+  stroke: rgba(60, 221, 227, 0.2);
+  stroke-width: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+.cube-highlight {
+  fill: none;
+  stroke: #3cdde3;
+  stroke-width: 1.1;
+  stroke-linejoin: round;
+  opacity: 0.62;
+  vector-effect: non-scaling-stroke;
+}
+.cube-vertex { fill: #b8f7f9; opacity: 0.85; }
+
+.library-detail-component-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.library-detail-component-head small {
+  color: var(--txt-dim);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.library-version-entry-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.library-version-date {
+  margin-left: auto;
+  color: var(--txt-dim);
+  font-size: 10px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.library-detail-delete {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  color: #d99a9a;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(237, 142, 142, 0.28);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+.library-detail-delete:hover {
+  color: #ffb4ab;
+  background: rgba(237, 142, 142, 0.12);
 }

@@ -237,6 +237,14 @@ export function registerLibraryIpc(): void {
       }
     }
   )
+  ipcMain.handle(IPC.library.delete, (_event, input: { resourceId: string }) => {
+    if (!input?.resourceId) return err('INVALID_INPUT', '资源 ID 不完整')
+    try {
+      return ok(library.deleteResource(input.resourceId))
+    } catch (error) {
+      return err('DELETE_FAILED', error)
+    }
+  })
   ipcMain.handle(IPC.library.listCollections, () => {
     try {
       return ok(library.listCollections())

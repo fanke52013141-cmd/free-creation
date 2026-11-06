@@ -325,6 +325,8 @@ const api = {
     ipcRenderer.invoke(IPC.library.publishRevision, input),
   archiveLibraryResource: (input: LibraryArchiveInput): Promise<IpcEnvelope<boolean>> =>
     ipcRenderer.invoke(IPC.library.archive, input),
+  deleteLibraryResource: (input: { resourceId: string }): Promise<IpcEnvelope<boolean>> =>
+    ipcRenderer.invoke(IPC.library.delete, input),
   listLibraryCollections: (): Promise<IpcEnvelope<LibraryCollection[]>> =>
     ipcRenderer.invoke(IPC.library.listCollections),
   createLibraryCollection: (

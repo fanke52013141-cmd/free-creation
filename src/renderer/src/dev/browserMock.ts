@@ -267,6 +267,7 @@ export function installBrowserMock(): void {
         error: { code: 'MOCK', message: '浏览器演示不支持资源库写入' }
       }),
     archiveLibraryResource: () => Promise.resolve({ ok: true, data: false }),
+    deleteLibraryResource: () => Promise.resolve({ ok: true, data: false }),
     listLibraryCollections: () => Promise.resolve({ ok: true, data: [] }),
     createLibraryCollection: () =>
       Promise.resolve({

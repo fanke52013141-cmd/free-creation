@@ -175,6 +175,7 @@ export const IPC = {
     captureProjectNodes: 'library:capture-project-nodes',
     publishRevision: 'library:publish-revision',
     archive: 'library:archive',
+    delete: 'library:delete',
     listCollections: 'library:collections:list',
     createCollection: 'library:collections:create',
     setCollections: 'library:collections:set',

@@ -1,15 +1,14 @@
 import { GenerationLoadingOverlay } from '../canvas/GenerationLoadingOverlay'
-import { useResourceInsertRequest } from './insertRequestStore'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LibraryPreset, LibraryResourceDetail, LibraryResourceSummary, CreateLibraryResourceInput, PublishLibraryRevisionInput } from '@shared/library/types'
 import type { LibraryCategory } from '@shared/library/blueprint'
-import type { ProjectMeta } from '@shared/types'
 import { Icon } from '../components/Icon'
 import { mediaUrl } from '../nodes/registry'
-import { useAppStore } from '../stores/app'
+import { useConfirmStore } from '../stores/confirm'
 import { useToastStore } from '../stores/toast'
 import { LibraryResourceForm } from './LibraryResourceForm'
 import { LibraryCategoryEditor } from './LibraryCategoryEditor'
+import { libraryValueTypeLabel } from './value-type-labels'
 import './library.css'
 
 function typeName(preset: LibraryPreset, categoryName?: string): string {
@@ -17,6 +16,60 @@ function typeName(preset: LibraryPreset, categoryName?: string): string {
   if (preset === 'image') return '图片资产'
   if (preset === 'prompt') return '文本资产'
   return '组合资产'
+}
+
+type Point = [number, number]
+
+/**
+ * 资源卡片默认封面：等距立体魔方（按 Stitch 参考稿 assets/243d105b 落地）。
+ * 30° 真等距、h=s 正立方体比例、青灰单色三面明暗与 3×3 细线分格，无渐变/光晕。
+ */
+function CubeCover(): React.JSX.Element {
+  const s = 40
+  const cx = 60
+  const cy = 52
+  const dx = 0.866 * s
+  const dy = 0.5 * s
+  const top: Point = [cx, cy - s]
+  const topLeft: Point = [cx - dx, cy - dy]
+  const topRight: Point = [cx + dx, cy - dy]
+  const center: Point = [cx, cy]
+  const bottomLeft: Point = [cx - dx, cy - dy + s]
+  const bottomRight: Point = [cx + dx, cy - dy + s]
+  const bottom: Point = [cx, cy + s]
+  const lerp = (a: Point, b: Point, t: number): Point => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
+  const polygon = (points: Point[]): string => points.map((point) => point.join(',')).join(' ')
+  const faceGrid = (p0: Point, p1: Point, p2: Point, p3: Point): React.JSX.Element[] => {
+    const lines: React.JSX.Element[] = []
+    for (const t of [1 / 3, 2 / 3]) {
+      const a = lerp(p0, p3, t)
+      const b = lerp(p1, p2, t)
+      lines.push(<line key={`u${t}`} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} />)
+      const c = lerp(p0, p1, t)
+      const d = lerp(p3, p2, t)
+      lines.push(<line key={`v${t}`} x1={c[0]} y1={c[1]} x2={d[0]} y2={d[1]} />)
+    }
+    return lines
+  }
+  return (
+    <span className="library-cover-cube" aria-hidden="true">
+      <svg viewBox="0 0 120 120" role="presentation">
+        <polygon className="cube-face cube-top" points={polygon([top, topLeft, center, topRight])} />
+        <polygon className="cube-face cube-left" points={polygon([topLeft, center, bottom, bottomLeft])} />
+        <polygon className="cube-face cube-right" points={polygon([topRight, center, bottom, bottomRight])} />
+        <g className="cube-grid">
+          {faceGrid(top, topRight, center, topLeft)}
+          {faceGrid(topLeft, center, bottom, bottomLeft)}
+          {faceGrid(topRight, center, bottom, bottomRight)}
+        </g>
+        <path
+          className="cube-highlight"
+          d={`M ${top[0]} ${top[1]} L ${topLeft[0]} ${topLeft[1]} L ${center[0]} ${center[1]} L ${topRight[0]} ${topRight[1]}`}
+        />
+        <circle className="cube-vertex" cx={top[0]} cy={top[1]} r={1.4} />
+      </svg>
+    </span>
+  )
 }
 
 function ResourceCard({ resource, onOpen, onDragStart }: { resource: LibraryResourceSummary; onOpen: () => void; onDragStart?: React.DragEventHandler<HTMLButtonElement> }): React.JSX.Element {
@@ -27,7 +80,7 @@ function ResourceCard({ resource, onOpen, onDragStart }: { resource: LibraryReso
         {resource.coverPath && !failed ? (
           <img src={mediaUrl(resource.coverPath)} alt="" loading="lazy" onError={() => setFailed(true)} />
         ) : (
-          <span className="library-resource-placeholder"><Icon name={resource.formPreset === 'image' || resource.formPreset === 'style' ? 'image' : 'assets'} size={27} /></span>
+          <CubeCover />
         )}
         <span className="library-resource-type">{typeName(resource.formPreset, resource.category?.name)}</span>
       </div>
@@ -67,11 +120,10 @@ function RecipePreview({ component, onCopy }: { component: LibraryResourceDetail
 
 function ComponentPreview({ component, onCopy }: { component: LibraryResourceDetail['components'][number]; onCopy: (text: string) => void }): React.JSX.Element {
   if (component.valueType === 'recipe') {
-    return <article className="library-component-preview"><div className="library-component-preview-head"><strong>{component.role}</strong><span>提示词配方</span></div><RecipePreview component={component} onCopy={onCopy} /></article>
+    return <article className="library-component-preview"><RecipePreview component={component} onCopy={onCopy} /></article>
   }
   return (
     <article className="library-component-preview">
-      <div className="library-component-preview-head"><strong>{component.role}</strong><span>{component.valueType}</span></div>
       {component.valueType === 'image' && component.blobPath ? (
         <img className="library-preview-image" src={mediaUrl(component.blobPath)} alt={component.role} />
       ) : component.valueType === 'audio' && component.blobPath ? (
@@ -144,10 +196,8 @@ function comparisonValue(component: LibraryResourceDetail['components'][number] 
 
 export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.JSX.Element {
   const [resources, setResources] = useState<LibraryResourceSummary[]>([])
-  const [projects, setProjects] = useState<ProjectMeta[]>([])
   const [categories, setCategories] = useState<LibraryCategory[]>([])
   const [categoryId, setCategoryId] = useState('legacy')
-  const [showArchived, setShowArchived] = useState(false)
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false)
   const [categoryEditor, setCategoryEditor] = useState<{ initial?: LibraryCategory } | null>(null)
   const [query, setQuery] = useState('')
@@ -158,10 +208,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
   const [compareRevisionSelection, setCompareRevisionSelection] = useState('')
   const [compareDetail, setCompareDetail] = useState<LibraryResourceDetail | null>(null)
   const [formOpen, setFormOpen] = useState(false)
-  const [targetProjectId, setTargetProjectId] = useState('')
-  const [selectedComponents, setSelectedComponents] = useState<Set<string>>(new Set())
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const openProject = useAppStore((state) => state.openProject)
   const activeCategoryName = categoryId === 'legacy'
     ? '未分类'
     : categories.find((category) => category.id === categoryId)?.name
@@ -179,35 +226,20 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     ? compareDetail
     : null
   const loadPageData = useCallback(async (): Promise<void> => {
-    const [projectResult, categoryResult] = await Promise.all([
-      window.api.listProjects(),
-      window.api.listLibraryCategories()
-    ])
-    if (projectResult.ok) {
-      setProjects(projectResult.data)
-      setTargetProjectId((current) => current || projectResult.data[0]?.id || '')
-    }
+    const categoryResult = await window.api.listLibraryCategories()
     if (categoryResult.ok) setCategories(categoryResult.data)
   }, [])
 
   const loadResources = useCallback(async (cursor?: string, append = false): Promise<void> => {
-    // 2026-11-06：归档资源默认不出现在列表；「已归档」视图通过 includeArchived 取回后再过滤，
-    // 这样用户能明确知道归档去哪了、并可在同一处恢复。
-    const result = await window.api.searchLibrary({
-      query,
-      categoryId: showArchived ? undefined : categoryId || undefined,
-      includeArchived: showArchived,
-      cursor,
-      limit: 48
-    })
+    const result = await window.api.searchLibrary({ query, categoryId: categoryId || undefined, cursor, limit: 48 })
     if (!result.ok) {
       useToastStore.getState().show(`资源库读取失败：${result.error.message}`)
       return
     }
-    const items = result.data.items.filter((item) => (showArchived ? Boolean(item.archivedAt) : !item.archivedAt))
+    const items = result.data.items.filter((item) => !item.archivedAt)
     setResources((current) => append ? [...current, ...items] : items)
     setNextCursor(result.data.nextCursor)
-  }, [categoryId, query, showArchived])
+  }, [categoryId, query])
 
   useEffect(() => {
     if (!categoryMenuOpen) return undefined
@@ -236,7 +268,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
       if (cancelled) return
       if (result.ok) {
         setDetail(result.data)
-        setSelectedComponents(new Set(result.data?.components.map((component) => component.id) ?? []))
       } else {
         useToastStore.getState().show(`读取资源详情失败：${result.error.message}`)
       }
@@ -270,14 +301,23 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     useToastStore.getState().show(isRevision ? `已发布「${result.data.title}」v${result.data.revisionNumber}` : `已保存资源「${result.data.title}」`)
   }
 
-  const archive = async (archived: boolean): Promise<void> => {
+  /** 2026-11-06 用户裁决：资源库不做归档，确认后彻底删除（含全部版本）。 */
+  const deleteResource = async (): Promise<void> => {
     if (!detail) return
-    const result = await window.api.archiveLibraryResource({ resourceId: detail.id, archived })
-    if (!result.ok) return useToastStore.getState().show(`更新资源失败：${result.error.message}`)
+    const confirmed = await useConfirmStore.getState().confirm({
+      title: `删除资源「${detail.title}」？`,
+      message: '会同时删除该资源的全部版本与内容，删除后无法恢复。',
+      confirmText: '删除',
+      cancelText: '取消',
+      danger: true
+    })
+    if (!confirmed) return
+    const result = await window.api.deleteLibraryResource({ resourceId: detail.id })
+    if (!result.ok) return useToastStore.getState().show(`删除失败：${result.error.message}`)
     setDetail(null)
     setSelectedId(null)
     await loadResources()
-    useToastStore.getState().show(archived ? '资源已移入归档，可在「已归档」中恢复' : '资源已恢复')
+    useToastStore.getState().show(`已删除资源「${detail.title}」`)
   }
 
   const copyText = async (text: string): Promise<void> => {
@@ -287,15 +327,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     } catch {
       useToastStore.getState().show('无法访问剪贴板，请手动选择文本复制')
     }
-  }
-
-  const materialize = async (): Promise<void> => {
-    if (!detail || !targetProjectId || selectedComponents.size === 0) return
-    const project = projects.find((item) => item.id === targetProjectId)
-    if (!project) return
-    useResourceInsertRequest.getState().set({ projectId: project.id, resourceId: detail.id,
-      revisionId: detail.selectedRevisionId, componentIds: [...selectedComponents] })
-    openProject(project)
   }
 
   const exportLibrary = async (): Promise<void> => {
@@ -354,18 +385,22 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
             <button type="button" className="library-tool-btn" title="新建分类" aria-label="新建分类" onClick={() => setCategoryEditor({})}><Icon name="layers" size={16} /></button>
           </div>
           <button className="library-primary" onClick={() => { setSelectedId(null); setFormOpen(true) }}><span className="library-primary-icon"><Icon name="add" size={14} /></span>新建资源</button>
+          {/* 2026-11-06 用户反馈：进入资源库后找不到返回入口——在系统窗口按钮左侧再放一个固定返回图标。 */}
+          <button type="button" className="library-home-btn" title="返回项目列表" aria-label="返回项目列表" onClick={onBack}>
+            <Icon name="home" size={16} />
+          </button>
         </div>
       </header>
 
       <nav className="library-filter-row" aria-label="资源分类">
         <div className="library-category-tabs">
-          <button className={!showArchived && !categoryId ? 'active' : ''} onClick={() => { setShowArchived(false); setCategoryId('') }}>全部</button>
-          <button className={!showArchived && categoryId === 'legacy' ? 'active' : ''} onClick={() => { setShowArchived(false); setCategoryId('legacy') }}>未分类</button>
+          <button className={!categoryId ? 'active' : ''} onClick={() => setCategoryId('')}>全部</button>
+          <button className={categoryId === 'legacy' ? 'active' : ''} onClick={() => setCategoryId('legacy')}>未分类</button>
           {categories.map((category) => (
             <button
               key={category.id}
-              className={!showArchived && categoryId === category.id ? 'active' : ''}
-              onClick={() => { setShowArchived(false); setCategoryId(category.id) }}
+              className={categoryId === category.id ? 'active' : ''}
+              onClick={() => setCategoryId(category.id)}
               title={`浏览分类：${category.name}`}
             >
               {category.name}
@@ -373,12 +408,8 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
           ))}
         </div>
         <span className="library-result-count">共 {resources.length} 项</span>
-        <button
-          className={`library-archive-tab${showArchived ? ' active' : ''}`}
-          onClick={() => setShowArchived((current) => !current)}
-          title="查看已归档资源"
-        >
-          <Icon name="history" size={14} />已归档
+        <button className="library-new-category-btn" onClick={() => setCategoryEditor({})} title="新建分类">
+          <Icon name="add" size={13} />新建分类
         </button>
         <div className="library-category-manage">
           <button
@@ -386,9 +417,9 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
             onClick={() => setCategoryMenuOpen((current) => !current)}
             aria-haspopup="menu"
             aria-expanded={categoryMenuOpen}
-            title="管理分类"
+            title="编辑分类"
           >
-            <Icon name="settings" size={14} />管理分类
+            <Icon name="settings" size={14} />编辑分类
           </button>
           {categoryMenuOpen && (
             <div className="library-category-menu" role="menu" aria-label="分类管理">
@@ -429,11 +460,9 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
             ) : (
               <div className="library-empty-state">
                 <div className="library-empty-art" aria-hidden="true"><span className="library-empty-icon"><Icon name="assets" size={32} /></span></div>
-                <h2>{query.trim() ? '没有找到匹配的资源' : showArchived ? '没有已归档的资源' : activeCategoryName ? `「${activeCategoryName}」分类下暂无资源` : '资源库还没有内容'}</h2>
-                <p>{query.trim() ? '试试其他关键词，或清除搜索条件。' : showArchived ? '资源归档后会出现在这里，可随时恢复。' : '可点击下方快速创建资源，或从顶部导入已有资产包。'}</p>
-                {!showArchived && (
-                  <div className="library-empty-actions"><button className="library-primary" onClick={() => { setSelectedId(null); setFormOpen(true) }}><span className="library-primary-icon"><Icon name="add" size={14} /></span>新建资源</button><button className="library-secondary" onClick={() => setCategoryEditor({})}>管理分类</button></div>
-                )}
+                <h2>{query.trim() ? '没有找到匹配的资源' : activeCategoryName ? `「${activeCategoryName}」分类下暂无资源` : '资源库还没有内容'}</h2>
+                <p>{query.trim() ? '试试其他关键词，或清除搜索条件。' : '可点击下方快速创建资源，或从顶部导入已有资产包。'}</p>
+                <div className="library-empty-actions"><button className="library-primary" onClick={() => { setSelectedId(null); setFormOpen(true) }}><span className="library-primary-icon"><Icon name="add" size={14} /></span>新建资源</button><button className="library-secondary" onClick={() => setCategoryEditor({})}>管理分类</button></div>
               </div>
             )}
             {nextCursor && <button className="library-load-more" onClick={() => void loadResources(nextCursor, true)}>加载更多</button>}
@@ -453,43 +482,40 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
                     <div className="library-detail-badges">
                       <span className="library-resource-type">{typeName(detail.formPreset, detail.category?.name)}</span>
                       <span className="library-version-badge">v{detail.selectedRevisionNumber}</span>
-                      {detail.archivedAt && <span className="library-archived-badge">已归档</span>}
                     </div>
                     <h2>{detail.selectedTitle}</h2>
-                    <p className="library-detail-meta">更新于 {new Date(detail.updatedAt).toLocaleDateString()} · {detail.componentCount} 个组件</p>
                     <p>{detail.selectedDescription || '暂无说明'}</p>
                     <div className="library-detail-tags">{detail.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
                   </div>
                   <div className="library-detail-section">
-                    <div className="library-detail-section-title"><h3>资源内容</h3><span>选择要复用的组件</span></div>
+                    <div className="library-detail-section-title"><h3>资源内容</h3></div>
                     {detail.components.map((component) => (
                       <div className="library-detail-component-row" key={component.id}>
-                        <label><input type="checkbox" checked={selectedComponents.has(component.id)} onChange={() => setSelectedComponents((current) => {
-                          const next = new Set(current)
-                          if (next.has(component.id)) next.delete(component.id)
-                          else next.add(component.id)
-                          return next
-                        })} /><span>{component.role}</span></label>
+                        <div className="library-detail-component-head">
+                          <span>{component.role}</span>
+                          <small>{libraryValueTypeLabel(component.valueType)}</small>
+                        </div>
                         <ComponentPreview component={component} onCopy={(text) => void copyText(text)} />
                       </div>
                     ))}
                   </div>
                   <div className="library-detail-section">
-                    <div className="library-detail-section-title"><h3>资源版本记录</h3><span>{detail.revisions.length} 次迭代</span></div>
+                    <div className="library-detail-section-title"><h3>版本记录</h3></div>
                     <div className="library-version-history" role="group" aria-label="资源版本历史">
                       {detail.revisions.map((revision) => {
                         const selected = revision.id === detail.selectedRevisionId
-                        const latest = revision.id === detail.latestRevisionId
                         return <button type="button" aria-pressed={selected} key={revision.id} className={`library-version-entry${selected ? ' selected' : ''}`} onClick={() => { setCompareRevisionSelection(''); setSelectedRevisionId(revision.id) }}>
                           <span className="library-version-entry-marker" />
-                          <span className="library-version-entry-body"><span className="library-version-entry-title"><strong>v{revision.revisionNumber} · {revision.title}</strong>{latest && <i>最新</i>}{selected && <i className="selected-tag">查看中</i>}</span>
-                            <small>{new Date(revision.createdAt).toLocaleString()} · {revision.componentCount} 个组件</small>
-                            <span className="library-version-entry-note">{revision.changeNote || '未填写版本说明'}</span>
+                          <span className="library-version-entry-body">
+                            <span className="library-version-entry-title">
+                              <strong>v{revision.revisionNumber}</strong>
+                              <i className="library-version-date">{new Date(revision.createdAt).toLocaleDateString()}</i>
+                            </span>
+                            {revision.changeNote && <span className="library-version-entry-note">{revision.changeNote}</span>}
                           </span>
                         </button>
                       })}
                     </div>
-                    {detail.selectedRevisionId !== detail.latestRevisionId && <p className="library-old-version-hint">正在查看历史版本；右下角「以 v{detail.selectedRevisionNumber} 为基础新建版本」会复制该版本内容并保存为新的最新版本。</p>}
                     {detail.revisions.length > 1 && (
                       <details className="library-version-compare">
                         <summary>比较两个版本</summary>
@@ -519,24 +545,11 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
                       </details>
                     )}
                   </div>
-                  <div className="library-detail-section">
-                    <div className="library-detail-section-title"><h3>放入项目</h3><span>素材复制到项目并保留版本来源</span></div>
-                    <div className="library-use-row">
-                      <select value={targetProjectId} onChange={(event) => setTargetProjectId(event.currentTarget.value)}>
-                        <option value="">选择项目…</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
-                      </select>
-                      <button disabled={!targetProjectId || selectedComponents.size === 0} onClick={() => void materialize()}>打开画布并创建节点</button>
-                    </div>
-                    <p className="library-use-hint">打开目标项目后预览节点名称、填写配方变量，再将所选内容一次加入画布。</p>
-                  </div>
                 </div>
                 <footer className="library-detail-actions">
-                  <button className="library-detail-archive" onClick={() => void archive(!detail.archivedAt)}>
-                    {detail.archivedAt ? '恢复资源' : '移入归档'}
+                  <button className="library-detail-delete" onClick={() => void deleteResource()} title="删除资源">
+                    <Icon name="trash" size={14} />删除资源
                   </button>
-                  <span className="library-detail-archive-hint">
-                    {detail.archivedAt ? '恢复后重新回到资源列表。' : '归档后可在「已归档」恢复。'}
-                  </span>
                   <button className="library-primary" onClick={() => setFormOpen(true)}>
                     <Icon name="edit" size={14} />
                     {detail.selectedRevisionId === detail.latestRevisionId

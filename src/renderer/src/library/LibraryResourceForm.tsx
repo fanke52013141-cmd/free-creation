@@ -12,6 +12,7 @@ import type {
 } from '@shared/library/types'
 import { Icon } from '../components/Icon'
 import { mediaUrl } from '../nodes/registry'
+import { libraryValueTypeLabel } from './value-type-labels'
 
 interface ComponentDraft {
   key: string
@@ -372,7 +373,7 @@ export function LibraryResourceForm({
   const renderComponent = (component: ComponentDraft, index: number, slot?: LibraryNodeSlot): React.JSX.Element => (
     <article className="library-component-edit" key={component.key}>
       <div className="library-component-edit-head">
-        <span>内容 {index + 1} · {component.valueType}</span>
+        <span>内容 {index + 1} · {libraryValueTypeLabel(component.valueType)}</span>
         <button type="button" aria-label={`移除${component.role}`} onClick={() => removeComponent(component.key)}>
           <Icon name="trash" size={13} />
         </button>
@@ -412,9 +413,9 @@ export function LibraryResourceForm({
 
   return (
     <div className="library-form-mask" onMouseDown={(event) => event.target === event.currentTarget && !busy && onCancel()}>
-      <section className="library-form-dialog library-resource-form-dialog" role="dialog" aria-modal="true" aria-label={detail ? '编辑资源新版本' : '新建资源'}>
+      <section className="library-form-dialog library-resource-form-dialog" role="dialog" aria-modal="true" aria-label={detail ? '编辑资源' : '新建资源'}>
         <header className="library-form-header">
-          <h2>{detail ? '发布资源新版本' : '新建资源'}</h2>
+          <h2>{detail ? '编辑资源' : '新建资源'}</h2>
           <button className="library-icon-button" aria-label="关闭" disabled={busy} onClick={onCancel}><Icon name="close" size={17} /></button>
         </header>
         <div className="library-form-scroll">
@@ -423,13 +424,12 @@ export function LibraryResourceForm({
               <option value="">{detail ? '未分类自由组合' : '不选分类，保存为自由组合'}</option>
               {availableCategories.map((category) => <option key={categoryKey(category)} value={categoryKey(category)}>{category.name}</option>)}
             </select>
-            {detail && selectedCategory && <small>本次保存会记录当前资源内容；之后可在详情中查看和对比每次迭代。</small>}
           </label>
           <label className="library-form-field"><span>资源名称</span><input autoFocus maxLength={180} value={title} onChange={(event) => setTitle(event.currentTarget.value)} placeholder="例如：主角设定" /></label>
           <label className="library-form-field"><span>说明</span><textarea value={description} maxLength={20000} onChange={(event) => setDescription(event.currentTarget.value)} placeholder="记录用途、来源或使用建议" /></label>
 
           <div className="library-form-components-head">
-            <div><h3>资源内容</h3><p>{selectedCategory ? '每个内容槽位都映射到分类定义的画布节点，可按需添加多项。' : '自由组合：可添加任意文本、图片、音频、视频或文件。'}</p></div>
+            <div><h3>资源内容</h3></div>
             {!selectedCategory && <div className="library-component-add-actions">
               <button type="button" onClick={addUnmappedTextComponent}><Icon name="text" size={14} /> 添加文本</button>
               <label><Icon name="upload" size={14} /> 添加文件<input type="file" multiple onChange={(event) => { addUnmappedFiles(event.currentTarget.files); event.currentTarget.value = '' }} /></label>
@@ -490,9 +490,8 @@ export function LibraryResourceForm({
           {error && <div className="library-form-error" role="alert"><Icon name="warning" size={14} /><span>{error}</span></div>}
         </div>
         <footer className="library-form-footer">
-          <span>{detail ? `基于 v${detail.selectedRevisionNumber} 编辑，发布为新版本` : selectedCategory?.name ?? '自由组合'}</span>
           <button type="button" className="library-form-secondary" disabled={busy} onClick={onCancel}>取消</button>
-          <button type="button" className="library-form-primary" disabled={busy} onClick={() => void submit()}>{busy ? '保存中…' : detail ? '发布新版本' : '保存资源'}</button>
+          <button type="button" className="library-form-primary" disabled={busy} onClick={() => void submit()}>{busy ? '保存中…' : detail ? '保存为新版本' : '保存资源'}</button>
         </footer>
       </section>
     </div>
