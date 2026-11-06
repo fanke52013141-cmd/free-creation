@@ -15,3 +15,8 @@ export const LIBRARY_VALUE_TYPE_LABELS: Record<LibraryValueType, string> = {
 export function libraryValueTypeLabel(valueType: LibraryValueType): string {
   return LIBRARY_VALUE_TYPE_LABELS[valueType] ?? valueType
 }
+
+/** 版本号显示统一为 1.0 / 2.0 这种形式（用户裁决：不要 v1）。 */
+export function libraryVersionLabel(revisionNumber: number): string {
+  return `${revisionNumber}.0`
+}

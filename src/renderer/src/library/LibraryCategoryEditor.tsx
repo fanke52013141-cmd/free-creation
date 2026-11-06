@@ -18,7 +18,7 @@ const newSlot = (nodeType: LibraryNodeType = 'image'): LibraryNodeSlot => ({
   contractVersion: LIBRARY_NODE_ADAPTERS[nodeType].contractVersion,
   required: false,
   multiple: true,
-  titleTemplate: '{resource} · {slot} {index}'
+  titleTemplate: '{slot} {index}'
 })
 
 export function LibraryCategoryEditor({
@@ -151,66 +151,6 @@ export function LibraryCategoryEditor({
                 2
               </span>
               <div className="library-form-group-title">
-                <h3>展示与封面</h3>
-              </div>
-            </header>
-            <div className="library-form-group-body library-category-display-grid">
-              <label>
-                <span>展示样式</span>
-                <select
-                  value={draft.presentation}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      presentation: e.target.value as LibraryCategory['presentation']
-                    })
-                  }
-                >
-                  <option value="gallery">图片卡片</option>
-                  <option value="profile">档案卡片</option>
-                  <option value="list">内容列表</option>
-                </select>
-              </label>
-              <label>
-                <span>封面内容</span>
-                <select
-                  value={draft.coverSlotId ?? ''}
-                  onChange={(e) => setDraft({ ...draft, coverSlotId: e.target.value || undefined })}
-                >
-                  <option value="">第一张图片</option>
-                  {draft.blueprint.slots
-                    .filter((slot) => slot.nodeType === 'image')
-                    .map((slot) => (
-                      <option key={slot.id} value={slot.id}>
-                        {slot.label}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label>
-                <span>加入画布后的排列</span>
-                <select
-                  value={draft.blueprint.layout}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      blueprint: { ...draft.blueprint, layout: e.target.value as 'row' | 'grid' }
-                    })
-                  }
-                >
-                  <option value="grid">网格排列</option>
-                  <option value="row">横向排列</option>
-                </select>
-              </label>
-            </div>
-          </section>
-
-          <section className="library-form-group">
-            <header className="library-form-group-head">
-              <span className="library-form-group-index" aria-hidden="true">
-                3
-              </span>
-              <div className="library-form-group-title">
                 <h3>包含的节点</h3>
                 <p>每项内容有明确的节点类型；开启“允许多项”后，每份内容分别创建节点。</p>
               </div>
@@ -314,45 +254,11 @@ export function LibraryCategoryEditor({
                       允许多项
                     </label>
                   </div>
-                  <label className="library-form-field">
-                    <span>节点名称模板</span>
-                    <input
-                      value={slot.titleTemplate}
-                      maxLength={180}
-                      onChange={(e) => updateSlot(slot.id, { titleTemplate: e.target.value })}
-                    />
-                  </label>
-                  <small>{'{resource} = 资源名称，{slot} = 内容名称，{index} = 序号'}</small>
                 </article>
               ))}
             </div>
           </section>
 
-          <div className={`library-blueprint-preview library-category-preview presentation-${draft.presentation}`}>
-            <strong>{draft.name || '分类名称'} · 展开预览</strong>
-            <div className={`library-blueprint-nodes layout-${draft.blueprint.layout}`}>
-              {draft.blueprint.slots.map((slot) => (
-                <span key={slot.id}>
-                  {LIBRARY_NODE_ADAPTERS[slot.nodeType].label}
-                  <b>
-                    {slot.titleTemplate
-                      .replaceAll('{resource}', '示例资源')
-                      .replaceAll('{slot}', slot.label)
-                      .replaceAll('{index}', '1')}
-                  </b>
-                  <small>
-                    {slot.required ? '必填' : '可选'}
-                    {slot.multiple ? ' · 可多项' : ' · 单项'}
-                  </small>
-                </span>
-              ))}
-            </div>
-          </div>
-          {initial && (
-            <p className="library-category-note">
-              保存分类配置后，新建资源会使用更新后的节点组合；已有资源内容保持不变。
-            </p>
-          )}
           {error && (
             <div className="library-form-error" role="alert">
               <Icon name="warning" size={14} />

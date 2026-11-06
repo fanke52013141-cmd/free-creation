@@ -8,7 +8,7 @@ import { useConfirmStore } from '../stores/confirm'
 import { useToastStore } from '../stores/toast'
 import { LibraryResourceForm } from './LibraryResourceForm'
 import { LibraryCategoryEditor } from './LibraryCategoryEditor'
-import { libraryValueTypeLabel } from './value-type-labels'
+import { libraryValueTypeLabel, libraryVersionLabel } from './value-type-labels'
 import './library.css'
 
 function typeName(preset: LibraryPreset, categoryName?: string): string {
@@ -85,7 +85,7 @@ function ResourceCard({ resource, onOpen, onDragStart }: { resource: LibraryReso
         <span className="library-resource-type">{typeName(resource.formPreset, resource.category?.name)}</span>
       </div>
       <div className="library-resource-card-body">
-        <div className="library-resource-card-title"><strong>{resource.title}</strong><span>v{resource.revisionNumber}</span></div>
+        <div className="library-resource-card-title"><strong>{resource.title}</strong><span>{libraryVersionLabel(resource.revisionNumber)}</span></div>
         <p>{resource.description || (resource.formPreset === 'prompt' ? '提示词资源' : '暂无说明')}</p>
       </div>
     </button>
@@ -298,7 +298,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     setSelectedRevisionId(result.data.latestRevisionId)
     await loadResources()
     await loadPageData()
-    useToastStore.getState().show(isRevision ? `已发布「${result.data.title}」v${result.data.revisionNumber}` : `已保存资源「${result.data.title}」`)
+    useToastStore.getState().show(isRevision ? `已保存「${result.data.title}」为 ${libraryVersionLabel(result.data.revisionNumber)}` : `已保存资源「${result.data.title}」`)
   }
 
   /** 2026-11-06 用户裁决：资源库不做归档，确认后彻底删除（含全部版本）。 */
@@ -338,17 +338,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     useToastStore.getState().show(`资产包已导出到 ${result.data.path}`)
   }
 
-  const importLibrary = async (): Promise<void> => {
-    const result = await window.api.importLibrary()
-    if (!result.ok) {
-      if (result.error.code !== 'CANCELLED') useToastStore.getState().show(`导入失败：${result.error.message}`)
-      return
-    }
-    await loadResources()
-    await loadPageData()
-    useToastStore.getState().show(`已导入 ${result.data.imported} 份资源`)
-  }
-
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'n') {
@@ -373,16 +362,45 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     <div className="resource-library-page">
       <header className="library-page-header">
         <div className="library-header-context">
-          <button className="library-back" onClick={onBack} title="返回（Esc）"><Icon name="home" size={15} />返回</button>
-          <span className="library-header-divider" aria-hidden="true" />
           <span className="library-header-label"><Icon name="assets" size={15} />资源库</span>
         </div>
         <div className="library-page-actions">
           <label className="library-search library-header-search"><Icon name="search" size={15} /><input ref={searchInputRef} aria-label="搜索资源" value={query} placeholder="搜索资源" onChange={(event) => setQuery(event.currentTarget.value)} /></label>
           <div className="library-tool-group" role="group" aria-label="资源库工具">
-            <button type="button" className="library-tool-btn" title="导入资产包" aria-label="导入资产包" onClick={() => void importLibrary()}><Icon name="upload" size={16} /></button>
             <button type="button" className="library-tool-btn" title="导出资产包" aria-label="导出资产包" onClick={() => void exportLibrary()}><Icon name="download" size={16} /></button>
-            <button type="button" className="library-tool-btn" title="新建分类" aria-label="新建分类" onClick={() => setCategoryEditor({})}><Icon name="layers" size={16} /></button>
+          </div>
+          <button type="button" className="library-header-text-btn" onClick={() => setCategoryEditor({})}>
+            <Icon name="add" size={13} />新建分类
+          </button>
+          <div className="library-category-manage">
+            <button
+              type="button"
+              className="library-header-text-btn"
+              onClick={() => setCategoryMenuOpen((current) => !current)}
+              aria-haspopup="menu"
+              aria-expanded={categoryMenuOpen}
+              title="编辑分类"
+            >
+              <Icon name="settings" size={13} />编辑分类
+            </button>
+            {categoryMenuOpen && (
+              <div className="library-category-menu" role="menu" aria-label="分类编辑">
+                {categories.length === 0 && <span className="library-category-menu-empty">还没有自定义分类</span>}
+                {categories.map((category) => (
+                  <button
+                    key={category.id}
+                    role="menuitem"
+                    onClick={() => {
+                      setCategoryMenuOpen(false)
+                      setCategoryEditor({ initial: category })
+                    }}
+                  >
+                    <Icon name="edit" size={12} />
+                    <span>{category.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <button className="library-primary" onClick={() => { setSelectedId(null); setFormOpen(true) }}><span className="library-primary-icon"><Icon name="add" size={14} /></span>新建资源</button>
           {/* 2026-11-06 用户反馈：进入资源库后找不到返回入口——在系统窗口按钮左侧再放一个固定返回图标。 */}
@@ -406,48 +424,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
               {category.name}
             </button>
           ))}
-        </div>
-        <span className="library-result-count">共 {resources.length} 项</span>
-        <button className="library-new-category-btn" onClick={() => setCategoryEditor({})} title="新建分类">
-          <Icon name="add" size={13} />新建分类
-        </button>
-        <div className="library-category-manage">
-          <button
-            className="library-category-manage-btn"
-            onClick={() => setCategoryMenuOpen((current) => !current)}
-            aria-haspopup="menu"
-            aria-expanded={categoryMenuOpen}
-            title="编辑分类"
-          >
-            <Icon name="settings" size={14} />编辑分类
-          </button>
-          {categoryMenuOpen && (
-            <div className="library-category-menu" role="menu" aria-label="分类管理">
-              {categories.map((category) => (
-                <button
-                  key={category.id}
-                  role="menuitem"
-                  onClick={() => {
-                    setCategoryMenuOpen(false)
-                    setCategoryEditor({ initial: category })
-                  }}
-                >
-                  <Icon name="edit" size={12} />
-                  <span>{category.name}</span>
-                </button>
-              ))}
-              <button
-                role="menuitem"
-                onClick={() => {
-                  setCategoryMenuOpen(false)
-                  setCategoryEditor({})
-                }}
-              >
-                <Icon name="add" size={12} />
-                <span>新建分类</span>
-              </button>
-            </div>
-          )}
         </div>
       </nav>
 
@@ -481,7 +457,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
                   <div className="library-detail-title">
                     <div className="library-detail-badges">
                       <span className="library-resource-type">{typeName(detail.formPreset, detail.category?.name)}</span>
-                      <span className="library-version-badge">v{detail.selectedRevisionNumber}</span>
+                      <span className="library-version-badge">{libraryVersionLabel(detail.selectedRevisionNumber)}</span>
                     </div>
                     <h2>{detail.selectedTitle}</h2>
                     <p>{detail.selectedDescription || '暂无说明'}</p>
@@ -508,7 +484,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
                           <span className="library-version-entry-marker" />
                           <span className="library-version-entry-body">
                             <span className="library-version-entry-title">
-                              <strong>v{revision.revisionNumber}</strong>
+                              <strong>{libraryVersionLabel(revision.revisionNumber)}</strong>
                               <i className="library-version-date">{new Date(revision.createdAt).toLocaleDateString()}</i>
                             </span>
                             {revision.changeNote && <span className="library-version-entry-note">{revision.changeNote}</span>}
@@ -523,15 +499,15 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
                           <select value={compareRevisionId} onChange={(event) => setCompareRevisionSelection(event.currentTarget.value)}>
                             <option value="">选择另一个版本</option>
                             {detail.revisions.filter((revision) => revision.id !== detail.selectedRevisionId).map((revision) => (
-                              <option key={revision.id} value={revision.id}>v{revision.revisionNumber} · {revision.changeNote || new Date(revision.createdAt).toLocaleDateString()}</option>
+                              <option key={revision.id} value={revision.id}>{libraryVersionLabel(revision.revisionNumber)} · {revision.changeNote || new Date(revision.createdAt).toLocaleDateString()}</option>
                             ))}
                           </select>
                         </label>
                         {currentCompareDetail && (
                           <div className="library-version-compare-body">
                             <div className="library-version-compare-heading">
-                              <span>v{detail.selectedRevisionNumber}（当前选择）</span>
-                              <span>v{currentCompareDetail.selectedRevisionNumber}（对比）</span>
+                              <span>{libraryVersionLabel(detail.selectedRevisionNumber)}（当前选择）</span>
+                              <span>{libraryVersionLabel(currentCompareDetail.selectedRevisionNumber)}（对比）</span>
                             </div>
                             {compareComponents(detail.components, currentCompareDetail.components).map((row) => (
                               <article key={row.key} className={`library-version-compare-row ${row.status}`}>
@@ -554,7 +530,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
                     <Icon name="edit" size={14} />
                     {detail.selectedRevisionId === detail.latestRevisionId
                       ? '编辑资源'
-                      : `以 v${detail.selectedRevisionNumber} 为基础新建版本`}
+                      : `以 ${libraryVersionLabel(detail.selectedRevisionNumber)} 为基础新建版本`}
                   </button>
                 </footer>
               </>
