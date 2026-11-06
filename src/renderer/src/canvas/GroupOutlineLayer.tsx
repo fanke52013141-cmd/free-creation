@@ -87,10 +87,7 @@ export function CanvasSelectionBackground({
   if (!selectedNodeBounds) return null
 
   const outset = SELECTION_FRAME_OUTSET_PX / zoom
-  // .node-header is positioned at top: -34px relative to the card. Include it in
-  // the multi-selection bounds, with the same 12px breathing room as other edges.
-  const headerOverhang = 34
-  const topOutset = outset + headerOverhang
+  // The current node header is inside the card bounds, so all sides use the same inset.
   return (
     <div
       className="canvas-selection-underlay"
@@ -98,8 +95,8 @@ export function CanvasSelectionBackground({
       draggable={false}
       style={{
         width: selectedNodeBounds.maxX - selectedNodeBounds.x + outset * 2,
-        height: selectedNodeBounds.maxY - selectedNodeBounds.y + topOutset + outset,
-        transform: `translate(${selectedNodeBounds.x}px, ${selectedNodeBounds.y}px) translate(${-outset}px, ${-topOutset}px)`
+        height: selectedNodeBounds.maxY - selectedNodeBounds.y + outset * 2,
+        transform: `translate(${selectedNodeBounds.x}px, ${selectedNodeBounds.y}px) translate(${-outset}px, ${-outset}px)`
       }}
     />
   )
@@ -164,8 +161,7 @@ function combosEqual(left: CollapsedCombo[], right: CollapsedCombo[]): boolean {
   )
 }
 
-// 分组框要越过悬浮在卡片上方 34px 的 node-header，再留出固定屏幕边距。
-const OUTLINE_HEADER_OVERHANG = 34
+// 节点标题已在卡片内部，四边均使用固定屏幕边距。
 const OUTLINE_TOP_PAD = 12
 const OUTLINE_SIDE_PAD = 12
 // 标签条带：显示在分组框上边缘外，双击进入重命名（window 捕获命中带，不拦截常规画布交互）
@@ -201,7 +197,7 @@ export function GroupOutlineLayer({
       // 线框定位在屏幕覆盖层中，节点 page bounds 先转成屏幕坐标；留白使用固定屏幕像素，
       // 不再乘画布 zoom，避免缩放时框与节点之间的距离跟着变化。
       const sidePad = OUTLINE_SIDE_PAD
-      const topPad = OUTLINE_HEADER_OVERHANG * zoom + OUTLINE_TOP_PAD
+      const topPad = OUTLINE_TOP_PAD
       const next: GroupOutline[] = []
       const nextCombos: CollapsedCombo[] = []
 

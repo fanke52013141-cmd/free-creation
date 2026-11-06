@@ -103,7 +103,7 @@ describe('browserMock · 补齐的桩成员', () => {
   it('gateway 补齐的三个入口：两个供应商列表可用，导入导出为可读错误', async () => {
     const list = await window.api.gateway.listExecutableProviders()
     expect(list.ok).toBe(true)
-    const exp = await window.api.gateway.exportProviders({ password: '' })
+    const exp = await window.api.gateway.exportProviders({ password: '', providerIds: [] })
     expect(exp.ok).toBe(false)
     const imp = await window.api.gateway.importProviders({ password: '' })
     expect(imp.ok).toBe(false)

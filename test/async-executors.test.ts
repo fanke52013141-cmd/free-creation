@@ -692,7 +692,7 @@ describe('chat / audio / video executors with a mocked gateway', () => {
       'video',
       JSON.stringify({ modelKey: 'provider-1::MiniMax-H3', params: {} }),
       [minimaxVideoProvider()],
-      '跟随人物移动'
+      '跟随 @视频2 的人物移动，保留 @视频3'
     )
     ;(ctx.inputs as Map<string, NodeValuePacket[]>).set(
       'in-reference-video',
@@ -715,7 +715,10 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     await pending
 
     expect(videoSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({ referenceVideoMediaIds: ['previs-1', 'previs-2'] })
+      expect.objectContaining({
+        prompt: '跟随 第2段参考视频 的人物移动，保留 @视频3',
+        referenceVideoMediaIds: ['previs-1', 'previs-2']
+      })
     )
   })
 

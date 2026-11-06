@@ -39,7 +39,6 @@ export function ChatSettings({ shape, editor }: NodeSettingsProps): React.JSX.El
   const providers = useGatewayStore((state) => state.providers)
   const loaded = useGatewayStore((state) => state.loaded)
   const loadProviders = useGatewayStore((state) => state.load)
-  const openSettings = useGatewayStore((state) => state.openSettings)
   const data = parseChat(shape.props.text)
   const options = modelsByModality(providers, 'text')
 
@@ -59,7 +58,7 @@ export function ChatSettings({ shape, editor }: NodeSettingsProps): React.JSX.El
     return (
       <section className="node-settings chat-node-settings">
         <ChatSkillAgentSettings shape={shape} editor={editor} />
-        <NoModelHint onOpen={() => openSettings()} />
+        <NoModelHint />
       </section>
     )
   }

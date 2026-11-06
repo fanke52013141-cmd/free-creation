@@ -6,7 +6,7 @@ import { useEffect, useRef } from 'react'
  * 参考桌面样例「生成中」的 3D 星尘：中心亮核 + 青色光晕、近大远小、缓慢漂浮、
  * 呼吸闪烁。与样例的关键差异在节奏：样例用 14 秒进度逐圈激活，前期几乎全暗；
  * 这里改为「加载开始后 ≤600ms 星星全部出现」（四组按中心向外错峰淡入），
- * 之后只保留缓慢漂浮与闪烁，进度仅做轻微亮度扫光，不决定星星是否出现。
+ * 星星从出现时就开始漂浮，并随预计进度加速。闪烁与淡入各自保持原有节奏。
  *
  * 可测性：state 通过 data-* 暴露在 .generation-loading-field 上，
  * 浏览器验收脚本据此断言星数、出现时长、reduced-motion 静态帧。
@@ -94,8 +94,8 @@ function createStars(count: number, compact: boolean): Star[] {
       size: compact ? 1.5 + Math.random() * 2.1 : 2.2 + Math.random() * 3.2,
       twinkleSpeed: 0.5 + Math.random() * 1.2,
       phase: Math.random() * Math.PI * 2,
-      driftSpeed: 0.12 + Math.random() * 0.24,
-      driftAmplitude: 0.008 + Math.random() * 0.022,
+      driftSpeed: 0.65 + Math.random() * 0.75,
+      driftAmplitude: 0.035 + Math.random() * 0.065,
       // 中心先亮、向外蔓延；四组在 600ms 内全部点亮（与样例 14 秒进度无关）。
       group: Math.min(REVEAL_GROUPS - 1, Math.floor(radial * REVEAL_GROUPS))
     })
@@ -133,7 +133,9 @@ export function StarDustField({ compact = false, progress }: StarDustFieldProps)
     let height = 0
     let dpr = 1
     let elapsedMs = 0
-    // 星星出现计时用真实墙钟活跃时长；漂浮/闪烁节奏用可钳制的 elapsedMs，卡顿时不跳变。
+    let driftMs = 0
+    let driftRate = 1
+    // 淡入按可见时长计时，漂浮与闪烁限制每帧时间增量，避免卡顿后跳变。
     let revealedMs = 0
     let lastFrame = 0
     let rafId = 0
@@ -152,14 +154,16 @@ export function StarDustField({ compact = false, progress }: StarDustFieldProps)
     field.dataset.stars = '0'
     field.dataset.starVisible = '0'
 
-    const drawFrame = (seconds: number, revealMs: number): void => {
+    const drawFrame = (): void => {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       ctx.clearRect(0, 0, width, height)
       if (!stars.length || width === 0 || height === 0) return
 
       const halfWidth = width / 2
       const halfHeight = height / 2
-      const revealClock = reduced ? REVEAL_TOTAL_MS : revealMs
+      const revealClock = reduced ? REVEAL_TOTAL_MS : revealedMs
+      const seconds = reduced ? 0 : elapsedMs / 1000
+      const driftSeconds = reduced ? 0 : driftMs / 1000
       const progressValue = reduced ? 0 : clamp((progressRef.current ?? 0) / 100, 0, 1)
       let lit = 0
 
@@ -169,9 +173,9 @@ export function StarDustField({ compact = false, progress }: StarDustFieldProps)
         if (reveal <= 0) continue
         const depth = star.depth
         const twinkle = 0.74 + 0.26 * Math.sin(seconds * star.twinkleSpeed + star.phase)
-        const driftX = Math.sin(seconds * star.driftSpeed + star.phase) * star.driftAmplitude
+        const driftX = Math.sin(driftSeconds * star.driftSpeed + star.phase) * star.driftAmplitude
         const driftY =
-          Math.cos(seconds * star.driftSpeed * 0.82 + star.phase * 1.27) * star.driftAmplitude
+          Math.cos(driftSeconds * star.driftSpeed * 0.82 + star.phase * 1.27) * star.driftAmplitude
         const parallax = reduced ? 0 : 0.014 + depth * 0.052
         const px = star.x + driftX + pointerX * parallax
         const py = star.y + driftY + pointerY * parallax
@@ -185,7 +189,7 @@ export function StarDustField({ compact = false, progress }: StarDustFieldProps)
         if (reveal >= 0.999) lit += 1
       }
 
-      // 进度只做轻微扫光：一条极淡的青绿光带随进度从左向右扫过。
+      // 一条极淡的青绿光带随进度从左向右扫过。
       if (progressRef.current !== undefined) {
         const sweep = -0.25 + progressValue * 1.5
         const gradient = ctx.createLinearGradient(
@@ -217,12 +221,18 @@ export function StarDustField({ compact = false, progress }: StarDustFieldProps)
       if (!running) return
       const delta = Math.max(0, now - lastFrame)
       lastFrame = now
-      elapsedMs += clamp(delta, 0, 64)
+      const frameMs = Math.min(delta, 64)
+      const progressRatio = clamp((progressRef.current ?? 0) / 100, 0, 1)
+      const targetDriftRate = 1 + 2.8 * progressRatio
+      // 逐帧积分速度，进度跳变也不会让星星瞬移。
+      driftRate += (targetDriftRate - driftRate) * (1 - Math.exp(-frameMs / 240))
+      driftMs += frameMs * driftRate
+      elapsedMs += frameMs
       revealedMs += delta
       const ease = 0.08
       pointerX += (pointerTargetX - pointerX) * ease
       pointerY += (pointerTargetY - pointerY) * ease
-      drawFrame(elapsedMs / 1000, revealedMs)
+      drawFrame()
       rafId = requestAnimationFrame(tick)
     }
 
@@ -241,8 +251,7 @@ export function StarDustField({ compact = false, progress }: StarDustFieldProps)
     }
 
     const drawStaticFrame = (): void => {
-      elapsedMs = REVEAL_TOTAL_MS
-      drawFrame(0, REVEAL_TOTAL_MS)
+      drawFrame()
       if (field.dataset.reveal !== 'done') {
         field.dataset.reveal = 'done'
         field.dataset.revealAt = String(Math.round(performance.now()))
@@ -280,7 +289,7 @@ export function StarDustField({ compact = false, progress }: StarDustFieldProps)
         stars = createStars(count, compact)
         field.dataset.stars = String(count)
       }
-      drawFrame(elapsedMs / 1000, revealedMs)
+      drawFrame()
     }
 
     const onPointerMove = (event: PointerEvent): void => {

@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react'
 import type { ProjectMeta } from '@shared/types'
 import { useAppStore } from '../stores/app'
 import { useConfirmStore } from '../stores/confirm'
-import { useGatewayStore } from '../stores/gateway'
 import { Icon } from '../components/Icon'
 import freeCreationLogo from '../assets/free-creation-logo.png'
 
@@ -17,7 +16,6 @@ export function ProjectMenu({ project, onCreateProject, onConfigureWorkspace }: 
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const setHome = useAppStore((s) => s.setHome)
-  const openSettings = useGatewayStore((s) => s.openSettings)
 
   useEffect(() => {
     if (!open) return
@@ -107,18 +105,6 @@ export function ProjectMenu({ project, onCreateProject, onConfigureWorkspace }: 
             <span>工作台节点设置</span>
           </button>
           <div className="node-menu-divider" />
-          <button
-            className="node-menu-item"
-            onClick={() => {
-              setOpen(false)
-              openSettings()
-            }}
-          >
-            <span className="item-icon">
-              <Icon name="settings" size={17} />
-            </span>
-            <span>模型供应商设置</span>
-          </button>
           <button className="node-menu-item danger" onClick={() => void removeCurrent()}>
             <span className="item-icon">
               <Icon name="trash" size={17} />

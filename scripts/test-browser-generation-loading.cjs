@@ -15,6 +15,13 @@ const path = require('node:path')
   page.on('pageerror', error => errors.push({phase,message:error.message,stack:error.stack}))
   try {
     await page.goto(process.env.CANVAS_QA_URL || 'http://127.0.0.1:5196')
+    await page.evaluate(async () => {
+      const { useAppStore } = await import('/src/stores/app.ts')
+      if (useAppStore.getState().currentProject) return
+      const projects = await window.api.listProjects()
+      if (!projects.ok) throw new Error(projects.error.message)
+      useAppStore.getState().openProject(projects.data.find(project => project.id === 'demo'))
+    })
     await page.waitForSelector('.tl-canvas')
     await page.waitForFunction(async () => Boolean((await import('/src/stores/editor.ts')).useEditorStore.getState().editor))
     phase = 'generation-loading'
@@ -27,12 +34,11 @@ const path = require('node:path')
       editor.createShape({
         id: 'shape:qa-generation', type: 'node-card', x: 400, y: 200,
         props: { nodeType: 'image-gen', title: spec.label, ...spec.defaultSize, exec: 'running' },
-        meta: { nodeRun: { runId: 'qa-generation', startedAt: Date.now() - 3600000, status: 'running', inputs: {} } }
+        meta: { nodeRun: { runId: 'qa-generation', startedAt: Date.now(), status: 'running', inputs: {} } }
       })
     })
     const loadingCard = page.locator('.node-execution-overlay .generation-loading-card')
     await loadingCard.waitFor({ state: 'visible' })
-    await loadingCard.locator('[role="progressbar"][aria-valuenow="99"]').waitFor()
     const field = loadingCard.locator('.generation-loading-field')
     const starCanvas = field.locator('canvas.generation-star-canvas')
     await starCanvas.waitFor({ state: 'visible' })
@@ -79,6 +85,66 @@ const path = require('node:path')
       return lit
     })
     assert.ok(await litPixels() > 100, 'star dust is painted, not an empty field')
+    const driftSpeed = () => starCanvas.evaluate(async canvas => {
+      const context = canvas.getContext('2d')
+      const drawImage = context.drawImage
+      const points = []
+      const frames = []
+      context.drawImage = function (sprite, x, y, width, height) {
+        points.push([x + width / 2, y + height / 2])
+        drawImage.call(this, sprite, x, y, width, height)
+      }
+      try {
+        await new Promise(resolve => {
+          const start = performance.now()
+          const sample = now => {
+            if (points.length) frames.push({ now, points: points.splice(0) })
+            if (now - start < 420) requestAnimationFrame(sample)
+            else resolve()
+          }
+          requestAnimationFrame(sample)
+        })
+      } finally {
+        context.drawImage = drawImage
+      }
+      const first = frames[0]
+      const last = frames.at(-1)
+      if (!first || first === last || first.points.length !== last.points.length) return 0
+      const distance = first.points.reduce((total, [x, y], index) => {
+        const [nextX, nextY] = last.points[index]
+        return total + Math.hypot(x - nextX, y - nextY)
+      }, 0)
+      return (distance * 1000) / ((last.now - first.now) * first.points.length)
+    })
+    const earlySpeed = await driftSpeed()
+    await page.evaluate(async () => {
+      const { useEditorStore } = await import('/src/stores/editor.ts')
+      const editor = useEditorStore.getState().editor
+      const shape = editor.getShape('shape:qa-generation')
+      editor.updateShape({
+        id: shape.id,
+        type: shape.type,
+        meta: { nodeRun: { ...shape.meta.nodeRun, startedAt: Date.now() - 3600000 } }
+      })
+    })
+    await loadingCard.locator('[role="progressbar"][aria-valuenow="99"]').waitFor()
+    await page.waitForTimeout(850)
+    const lateSpeed = await driftSpeed()
+    assert.ok(earlySpeed > 2, 'stars move as soon as generation starts: ' + earlySpeed)
+    assert.ok(lateSpeed > earlySpeed * 1.8, 'stars accelerate from ' + earlySpeed + ' to ' + lateSpeed)
+    const dots = loadingCard.locator('.generation-loading-dots > span')
+    const dotOrder = await dots.evaluateAll(elements => {
+      const animations = elements.map(element => element.getAnimations()[0])
+      animations.forEach(animation => animation.pause())
+      const brightest = [144, 324, 504].map(time => {
+        animations.forEach(animation => { animation.currentTime = time })
+        const opacity = elements.map(element => Number(getComputedStyle(element).opacity))
+        return opacity.indexOf(Math.max(...opacity))
+      })
+      animations.forEach(animation => animation.play())
+      return brightest
+    })
+    assert.deepEqual(dotOrder, [0, 1, 2], 'the dots brighten from left to right')
     await page.screenshot({ path: path.join(output, 'image-generation-running.png') })
     await page.emulateMedia({ reducedMotion: 'reduce' })
     await page.waitForFunction(() => {
@@ -86,6 +152,11 @@ const path = require('node:path')
       return node?.getAttribute('data-motion') === 'off'
     }, null, { timeout: 5000 })
     assert.ok(await litPixels() > 100, 'reduced motion still paints static stars')
+    assert.deepEqual(
+      await dots.evaluateAll(elements => elements.map(element => [element.getAnimations().length, getComputedStyle(element).opacity])),
+      [[0, '1'], [0, '1'], [0, '1']],
+      'reduced motion keeps all three dots static'
+    )
     const staticFrame = await starCanvas.evaluate(async canvas => {
       const before = canvas.toDataURL()
       await new Promise(resolve => setTimeout(resolve, 320))

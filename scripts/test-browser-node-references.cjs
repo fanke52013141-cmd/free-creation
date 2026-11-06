@@ -8,6 +8,13 @@ const fs = require('node:fs')
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
     await page.goto(process.env.CANVAS_QA_URL || 'http://127.0.0.1:5194')
+    await page.evaluate(async () => {
+      const { useAppStore } = await import('/src/stores/app.ts')
+      if (useAppStore.getState().currentProject) return
+      const projects = await window.api.listProjects()
+      if (!projects.ok) throw new Error(projects.error.message)
+      useAppStore.getState().openProject(projects.data.find(project => project.id === 'demo'))
+    })
     await page.waitForSelector('.tl-canvas')
     await page.evaluate(async () => {
       const e = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
@@ -125,6 +132,92 @@ const fs = require('node:fs')
     assert.equal(await page.locator('.reference-markdown strong').textContent(),'加粗内容')
     assert.equal(await page.locator('.reference-markdown li').textContent(),'列表项')
     assert.equal(await page.evaluate(()=>Boolean(window.referenceUnsafe)),false)
+    await page.keyboard.press('Escape')
+    await page.evaluate(async (motion) => {
+      const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
+      const { createEdge } = await import('/src/canvas/graph.ts')
+      editor.deleteShapes([...editor.getCurrentPageShapeIds()])
+      const image = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="800"><rect width="400" height="800" fill="#569677"/></svg>')
+      editor.createShape({ id: 'shape:mention-source', type: 'node-card', x: -900, y: 0, props: {
+        nodeType: 'image', title: '引用测试图片', mediaId: 'mention-image', mediaPath: image, mediaMime: 'image/svg+xml'
+      } })
+      editor.createShape({ id: 'shape:mention-image', type: 'node-card', x: 210, y: 395, props: { nodeType: 'image-gen' } })
+      editor.createShape({ id: 'shape:mention-video', type: 'node-card', x: 650, y: 395, props: {
+        nodeType: 'video', config: JSON.stringify({ modelKey: 'mock-seedance::Seedance-2.0' })
+      } })
+      editor.createShape({ id: 'shape:mention-motion', type: 'node-card', x: -900, y: 400, props: {
+        nodeType: 'video-asset', title: '镜头素材', mediaId: 'mention-video', mediaPath: motion, mediaMime: 'video/mp4'
+      } })
+      if (!createEdge(editor, { shapeId: 'shape:mention-motion', portId: 'out-video' }, { shapeId: 'shape:mention-video', portId: 'in-reference-video' })) {
+        throw new Error('视频艾特测试连线失败')
+      }
+      for (const id of ['shape:mention-image', 'shape:mention-video']) {
+        if (!createEdge(editor, { shapeId: 'shape:mention-source', portId: 'out-image' }, { shapeId: id, portId: 'in-images' })) {
+          throw new Error('图片艾特测试连线失败')
+        }
+      }
+      editor.setCamera({ x: 0, y: 0, z: 1 }, { immediate: true })
+    }, 'data:video/mp4;base64,' + fs.readFileSync('test/fixtures/agent-video.mp4').toString('base64'))
+    const video = page.locator('[data-node-type="video"]')
+    await card.locator('.reference-thumb').hover()
+    const imageDetail = page.locator('.reference-fullview--image')
+    await imageDetail.waitFor()
+    assert.equal(await imageDetail.evaluate(panel => panel.offsetWidth), 360)
+    const previewImage = imageDetail.locator('img.reference-detail-media')
+    await previewImage.waitFor()
+    await previewImage.evaluate(image => image.decode())
+    assert.equal(await previewImage.evaluate(image => image.offsetHeight), 240)
+    await page.keyboard.press('Escape')
+    for (const [node, token, unresolved] of [[card, '@图片 1', '@图片 10'], [video, '@图1', '@图10']]) {
+      const textarea = node.locator('textarea.gen-prompt')
+      await textarea.fill('生成一只小猫@引用测试')
+      await node.locator('.ref-mention-menu button').first().click()
+      const mark = node.locator('.image-mention-mirror mark')
+      await mark.waitFor({ state: 'attached' })
+      assert.deepEqual(await mark.allTextContents(), [token])
+      assert.equal(await textarea.inputValue(), '生成一只小猫' + token + ' ')
+      await textarea.fill('生成一只小猫' + token + ' 普通文字 ' + unresolved)
+      assert.deepEqual(await mark.allTextContents(), [token], '缺失的图片编号不高亮')
+      assert.equal(await mark.evaluate(element => getComputedStyle(element).getPropertyValue('--run-accent').trim()), '#22d3ee')
+      await textarea.fill('外部提示词 @图片1 和 @引用测试图片。未知 @不存在')
+      assert.deepEqual(await mark.allTextContents(), ['@图片1', '@引用测试图片'])
+      await textarea.blur()
+      assert.equal(await textarea.inputValue(), '外部提示词 ' + token + ' 和 ' + token + '。未知 @不存在')
+    }
+    const videoPrompt = video.locator('textarea.gen-prompt')
+    await videoPrompt.fill('@镜头')
+    const videoCandidate = video.locator('.ref-mention-menu button')
+    await videoCandidate.locator('video').waitFor()
+    await videoCandidate.locator('.reference-video-mark').waitFor()
+    await videoCandidate.click()
+    assert.equal(await videoPrompt.inputValue(), '@视频1 ')
+    assert.equal(await video.locator('.image-mention-mirror mark').textContent(), '@视频1')
+    await videoPrompt.fill('镜头描述\n'.repeat(30) + '@图1')
+    await videoPrompt.evaluate(textarea => { textarea.scrollTop = textarea.scrollHeight })
+    await page.waitForFunction(() => {
+      const textarea = document.querySelector('textarea.video-gen-prompt')
+      const mirror = textarea?.nextElementSibling
+      return textarea?.scrollTop > 0 && mirror?.scrollTop === textarea.scrollTop
+    })
+    await page.evaluate(async () => {
+      const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
+      editor.deleteShape('shape:mention-source')
+    })
+    await page.locator('.image-mention-mirror mark').first().waitFor({ state: 'detached' })
+    assert.equal(await page.locator('.image-mention-mirror mark').count(), 0, '断线后取消高亮')
+    assert.ok((await card.locator('textarea.gen-prompt').inputValue()).includes('@图片 1'))
+    assert.ok((await video.locator('textarea.gen-prompt').inputValue()).includes('@图1'))
+    const title = page.locator('.node-card-wrap:has([data-node-type="image-gen"]) .node-title')
+    const originalName = await title.textContent()
+    await title.dblclick()
+    await page.waitForFunction(() => document.activeElement?.matches('.node-title[contenteditable="true"]'))
+    const copiedName = await title.evaluate(element => {
+      const clipboardData = new DataTransfer()
+      element.dispatchEvent(new ClipboardEvent('copy', { bubbles: true, cancelable: true, clipboardData }))
+      return { text: clipboardData.getData('text/plain'), types: [...clipboardData.types] }
+    })
+    assert.deepEqual(copiedName, { text: originalName, types: ['text/plain'] })
     console.log('引用单排、多项折叠、真实连线、悬浮全文、移入、键盘关闭、缩放、高度回落、JSON 空值及音色 Schema 通过')
+    console.log('图片悬浮 3/4 尺寸、生图与生视频引用高亮、断线清除高亮通过')
   } finally { await browser.close() }
 })().catch(error=>{console.error(error);process.exitCode=1})

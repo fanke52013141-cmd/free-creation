@@ -73,9 +73,7 @@ const normalizeModelsForSpec = (
   const allowed = modalitiesForSpec(specId)
   // 即梦只保留白名单内的型号：切换规格或加载历史配置时直接剔除已禁用项。
   const scoped =
-    specId === 'dreamina'
-      ? models.filter((model) => isDreaminaModelSupported(model.id))
-      : models
+    specId === 'dreamina' ? models.filter((model) => isDreaminaModelSupported(model.id)) : models
   return scoped.map((model) =>
     allowed.includes(model.modality) ? model : { ...model, modality: allowed[0] }
   )
@@ -127,6 +125,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
   const [transferMode, setTransferMode] = useState<'import' | 'export' | null>(null)
   const [transferPassword, setTransferPassword] = useState('')
   const [transferPasswordConfirm, setTransferPasswordConfirm] = useState('')
+  const [transferProviderIds, setTransferProviderIds] = useState<Set<string>>(new Set())
   const [transferError, setTransferError] = useState('')
   const [transferBusy, setTransferBusy] = useState(false)
   /** 即梦本机 CLI 的设备流登录：pending 时持有授权材料并轮询 checklogin。 */
@@ -493,6 +492,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     setTransferMode(mode)
     setTransferPassword('')
     setTransferPasswordConfirm('')
+    setTransferProviderIds(new Set())
     setTransferError('')
   }
 
@@ -500,6 +500,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     setTransferMode(null)
     setTransferPassword('')
     setTransferPasswordConfirm('')
+    setTransferProviderIds(new Set())
     setTransferError('')
   }
 
@@ -514,11 +515,18 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
       setTransferError('两次输入的密码不一致')
       return
     }
+    if (transferMode === 'export' && transferProviderIds.size === 0) {
+      setTransferError('请选择需要导出的 API 密钥')
+      return
+    }
     setTransferBusy(true)
     setTransferError('')
     try {
       if (transferMode === 'export') {
-        const result = await window.api.gateway.exportProviders({ password: transferPassword })
+        const result = await window.api.gateway.exportProviders({
+          password: transferPassword,
+          providerIds: [...transferProviderIds]
+        })
         if (!result.ok) {
           if (result.error.code === 'CANCELLED') return finishProviderTransfer()
           setTransferError(result.error.message)
@@ -536,7 +544,9 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
         finishProviderTransfer()
         await loadSettingsProviders()
         void useGatewayStore.getState().load()
-        toast(`已导入 ${result.data.count} 个供应商（新增 ${result.data.added}，更新 ${result.data.updated}）`)
+        toast(
+          `已导入 ${result.data.count} 个供应商（新增 ${result.data.added}，更新 ${result.data.updated}）`
+        )
       }
     } catch (error) {
       setTransferError(error instanceof Error ? error.message : String(error))
@@ -874,77 +884,78 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
 
                 {testMsg && <div className="gw-test-msg">{testMsg}</div>}
 
-                {isProviderProtocolProbeEnabled() && driverForSpec(draft!.specId) !== 'openai-compatible' && (
-                  <div className="gw-probe">
-                    <div className="gw-probe-head">
-                      <span className="gw-label">协议自检</span>
-                      <button
-                        className="btn-ghost small"
-                        disabled={probing !== null}
-                        onClick={() => void runProbe()}
-                      >
-                        {probing === 'free' ? '自检中…' : '免费自检（不提交生成）'}
-                      </button>
-                    </div>
-                    <p className="gw-probe-hint">
-                      该协议没有模型列表可拉取。自检会用与真实生成完全相同的请求构造器拼出将要发送的
-                      地址与字段，并对只读查询端点做一次零计费探测，用来区分「密钥被拒绝」与「端点可达」。
-                    </p>
-                    {probe && (
-                      <>
-                        <div
-                          className={`gw-probe-summary ${
-                            probe!.items.some((item) => item.probe?.status === 'fail')
-                              ? 'danger'
-                              : ''
-                          }`}
+                {isProviderProtocolProbeEnabled() &&
+                  driverForSpec(draft!.specId) !== 'openai-compatible' && (
+                    <div className="gw-probe">
+                      <div className="gw-probe-head">
+                        <span className="gw-label">协议自检</span>
+                        <button
+                          className="btn-ghost small"
+                          disabled={probing !== null}
+                          onClick={() => void runProbe()}
                         >
-                          {probe!.summary}
-                        </div>
-                        {probe!.items.map((item) => (
-                          <div className="gw-probe-item" key={item.id}>
-                            <button
-                              className="gw-probe-title"
-                              onClick={() => setExpanded(expanded === item.id ? null : item.id)}
-                            >
-                              <span className={`gw-probe-dot ${item.probe?.status ?? 'idle'}`} />
-                              <span className="gw-probe-name">{item.label}</span>
-                              <span className="gw-probe-method">{item.method}</span>
-                              <span className="gw-probe-tag">
-                                {item.cost === 'free' ? '只读' : '计费'}
-                              </span>
-                            </button>
-                            {item.probe && (
-                              <div className={`gw-probe-outcome ${item.probe.status}`}>
-                                {item.probe.detail}
-                              </div>
-                            )}
-                            {item.missing.map((reason) => (
-                              <div className="gw-probe-missing" key={reason}>
-                                还缺：{reason}
-                              </div>
-                            ))}
-                            {expanded === item.id && (
-                              <>
-                                <div className="gw-probe-url">{item.url}</div>
-                                {item.body && <pre className="gw-probe-body">{item.body}</pre>}
-                              </>
-                            )}
-                            {item.cost === 'paid' && !item.missing.length && (
-                              <button
-                                className="btn-ghost small danger-text"
-                                disabled={probing !== null}
-                                onClick={() => void runPaidProbe(item)}
-                              >
-                                {probing === item.id ? '调用中…' : '真实调用一次（会计费）'}
-                              </button>
-                            )}
+                          {probing === 'free' ? '自检中…' : '免费自检（不提交生成）'}
+                        </button>
+                      </div>
+                      <p className="gw-probe-hint">
+                        该协议没有模型列表可拉取。自检会用与真实生成完全相同的请求构造器拼出将要发送的
+                        地址与字段，并对只读查询端点做一次零计费探测，用来区分「密钥被拒绝」与「端点可达」。
+                      </p>
+                      {probe && (
+                        <>
+                          <div
+                            className={`gw-probe-summary ${
+                              probe!.items.some((item) => item.probe?.status === 'fail')
+                                ? 'danger'
+                                : ''
+                            }`}
+                          >
+                            {probe!.summary}
                           </div>
-                        ))}
-                      </>
-                    )}
-                  </div>
-                )}
+                          {probe!.items.map((item) => (
+                            <div className="gw-probe-item" key={item.id}>
+                              <button
+                                className="gw-probe-title"
+                                onClick={() => setExpanded(expanded === item.id ? null : item.id)}
+                              >
+                                <span className={`gw-probe-dot ${item.probe?.status ?? 'idle'}`} />
+                                <span className="gw-probe-name">{item.label}</span>
+                                <span className="gw-probe-method">{item.method}</span>
+                                <span className="gw-probe-tag">
+                                  {item.cost === 'free' ? '只读' : '计费'}
+                                </span>
+                              </button>
+                              {item.probe && (
+                                <div className={`gw-probe-outcome ${item.probe.status}`}>
+                                  {item.probe.detail}
+                                </div>
+                              )}
+                              {item.missing.map((reason) => (
+                                <div className="gw-probe-missing" key={reason}>
+                                  还缺：{reason}
+                                </div>
+                              ))}
+                              {expanded === item.id && (
+                                <>
+                                  <div className="gw-probe-url">{item.url}</div>
+                                  {item.body && <pre className="gw-probe-body">{item.body}</pre>}
+                                </>
+                              )}
+                              {item.cost === 'paid' && !item.missing.length && (
+                                <button
+                                  className="btn-ghost small danger-text"
+                                  disabled={probing !== null}
+                                  onClick={() => void runPaidProbe(item)}
+                                >
+                                  {probing === item.id ? '调用中…' : '真实调用一次（会计费）'}
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )}
 
                 <div className="gw-foot">
                   <button
@@ -1084,11 +1095,11 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
               <h2 id="gw-transfer-title">
                 {transferMode === 'export' ? '导出供应商配置' : '导入供应商配置'}
               </h2>
-              <p>
-                {transferMode === 'export'
-                  ? '配置文件包含 API Key，会用此密码加密。请在另一台设备上使用同一密码导入。'
-                  : '选择加密配置文件并输入导出时设置的密码。已有同 ID 的供应商将更新，其余配置保留。'}
-              </p>
+              {transferMode === 'import' && (
+                <p>
+                  选择加密配置文件并输入导出时设置的密码。已有同 ID 的供应商将更新，其余配置保留。
+                </p>
+              )}
               <form onSubmit={(event) => void submitProviderTransfer(event)}>
                 <label className="gw-transfer-field">
                   <span>{transferMode === 'export' ? '设置加密密码' : '文件密码'}</span>
@@ -1117,7 +1128,39 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                     />
                   </label>
                 )}
-                {transferError && <div className="gw-transfer-error" role="alert">{transferError}</div>}
+                {transferMode === 'export' && (
+                  <fieldset className="gw-transfer-selection">
+                    <legend>选择导出的 API 密钥</legend>
+                    {providers
+                      .filter((provider) => provider.hasApiKey)
+                      .map((provider) => (
+                        <label key={provider.id} className="gw-transfer-option">
+                          <input
+                            type="checkbox"
+                            checked={transferProviderIds.has(provider.id)}
+                            onChange={(event) => {
+                              setTransferProviderIds((current) => {
+                                const next = new Set(current)
+                                if (event.target.checked) next.add(provider.id)
+                                else next.delete(provider.id)
+                                return next
+                              })
+                              setTransferError('')
+                            }}
+                          />
+                          <span>{provider.name}</span>
+                        </label>
+                      ))}
+                    {!providers.some((provider) => provider.hasApiKey) && (
+                      <span>暂无可导出的 API 密钥</span>
+                    )}
+                  </fieldset>
+                )}
+                {transferError && (
+                  <div className="gw-transfer-error" role="alert">
+                    {transferError}
+                  </div>
+                )}
                 <div className="gw-transfer-actions">
                   <button
                     type="button"
@@ -1129,8 +1172,12 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                   </button>
                   <button type="submit" className="btn-primary" disabled={transferBusy}>
                     {transferBusy
-                      ? transferMode === 'export' ? '加密中…' : '导入中…'
-                      : transferMode === 'export' ? '加密导出' : '选择文件并导入'}
+                      ? transferMode === 'export'
+                        ? '加密中…'
+                        : '导入中…'
+                      : transferMode === 'export'
+                        ? '加密导出'
+                        : '选择文件并导入'}
                   </button>
                 </div>
               </form>

@@ -120,7 +120,6 @@ export function AiProcessSettings({ shape, editor }: NodeSettingsProps): React.J
   const providers = useGatewayStore((state) => state.providers)
   const loaded = useGatewayStore((state) => state.loaded)
   const loadProviders = useGatewayStore((state) => state.load)
-  const openSettings = useGatewayStore((state) => state.openSettings)
   const config = parseAiProcess(readNodeConfig(shape))
   const options = modelsByModality(providers, 'text')
   const mode = modeOption(config.mode)
@@ -141,7 +140,7 @@ export function AiProcessSettings({ shape, editor }: NodeSettingsProps): React.J
     return (
       <section className="node-settings ai-process-settings">
         <SkillAgentSettings value={config.agent} onChange={(agent) => save({ agent })} />
-        <NoModelHint onOpen={() => openSettings()} />
+        <NoModelHint />
       </section>
     )
   }

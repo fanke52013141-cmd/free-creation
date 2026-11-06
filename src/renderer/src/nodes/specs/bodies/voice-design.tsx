@@ -46,7 +46,6 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
   const providers = useGatewayStore((s) => s.providers)
   const providersLoaded = useGatewayStore((s) => s.loaded)
   const loadProviders = useGatewayStore((s) => s.load)
-  const openSettings = useGatewayStore((s) => s.openSettings)
   const config = parseVoiceDesignConfig(readNodeConfig(shape))
   const [draft, setDraft] = useState(shape.props.text)
   const [busy, setBusy] = useState(false)
@@ -161,17 +160,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
           ))}
         </AppSelect>
         {providersLoaded && !minimaxProviders.length && (
-          <button
-            className="btn-ghost small"
-            data-purpose="config-model-button"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              void openSettings()
-            }}
-          >
-            去配置 MiniMax 供应商
-          </button>
+          <span>请前往项目首页的模型设置配置 MiniMax 供应商</span>
         )}
       </div>
 

@@ -276,7 +276,12 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const beginTitleEditing = (): void => {
     if (!titleEditable) return
     setEditing(true)
-    requestAnimationFrame(() => titleRef.current?.focus())
+    requestAnimationFrame(() => {
+      const title = titleRef.current
+      if (!title?.isContentEditable) return
+      title.focus()
+      window.getSelection()?.selectAllChildren(title)
+    })
   }
 
   // 双击标题进入编辑模式。原生 CustomEvent 是画布捕获指针后的可靠桥接，
@@ -960,13 +965,14 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           ['image', 'image-split', 'image-crop', 'video-asset'].includes(latest.props.nodeType) ||
           (latest.props.nodeType === 'video' && Boolean(latest.props.mediaPath))
         const prompt = body.querySelector<HTMLElement>('.gen-prompt')
+        const promptLayout = prompt?.closest('.image-mention-prompt') ?? prompt
         const formMinimum =
           latest.props.nodeType === 'image-gen' && prompt
             ? required -
               natural +
-              Array.from(prompt.parentElement?.children ?? []).reduce(
+              Array.from(promptLayout?.parentElement?.children ?? []).reduce(
                 (height, child) =>
-                  child instanceof HTMLElement && child !== prompt
+                  child instanceof HTMLElement && child !== promptLayout
                     ? height + child.offsetHeight + 8
                     : height,
                 0
@@ -1195,7 +1201,18 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             onDoubleClick={handleTitleDoubleClick}
             onBlur={handleTitleBlur}
             onPointerDown={handleTitlePointerDown}
+            onCopy={(event) => {
+              if (!editing) return
+              const selection = window.getSelection()
+              const text = selection && event.currentTarget.contains(selection.anchorNode) &&
+                event.currentTarget.contains(selection.focusNode) ? selection.toString() : ''
+              event.clipboardData.setData('text/plain', text || event.currentTarget.textContent || '')
+              event.preventDefault()
+              event.stopPropagation()
+            }}
             onKeyDown={(e) => {
+              if (editing && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c')
+                e.stopPropagation()
               if (e.key === 'Enter') {
                 e.preventDefault()
                 ;(e.currentTarget as HTMLDivElement).blur()

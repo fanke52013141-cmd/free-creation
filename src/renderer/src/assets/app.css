@@ -309,6 +309,7 @@ select:focus-visible {
 
 /* ── 画布页 ── */
 .canvas-page {
+  --run-accent: #22d3ee;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -1710,8 +1711,9 @@ select:focus-visible {
 }
 .reference-video-mark {
   position: absolute;
-  right: 2px;
-  bottom: 2px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   color: #fff;
   background: #19212c;
   border-radius: 3px;
@@ -1750,6 +1752,9 @@ select:focus-visible {
 .reference-detail {
   position: relative;
   min-width: 0;
+}
+.reference-fullview--image {
+  width: min(360px, calc(100vw - 16px));
 }
 .reference-detail + .reference-detail {
   border-top: 1px solid var(--line);
@@ -1808,6 +1813,9 @@ select:focus-visible {
   max-height: min(320px, calc(var(--ref-fullview-max, 420px) - 52px));
   object-fit: contain;
   cursor: pointer;
+}
+.reference-fullview--image .reference-detail-media {
+  max-height: min(240px, calc(var(--ref-fullview-max, 315px) - 52px));
 }
 .reference-detail audio {
   width: 100%;
@@ -1881,11 +1889,23 @@ select:focus-visible {
   white-space: nowrap;
 }
 
-.generation-loading-copy > strong::after {
+.generation-loading-dots {
   display: inline-block;
-  width: 1.3em;
-  content: '...';
-  animation: generation-loading-dots 1.5s steps(4, end) infinite;
+  margin-inline-start: 0.18em;
+  letter-spacing: 0.04em;
+}
+
+.generation-loading-dots > span {
+  opacity: 0.24;
+  animation: generation-loading-dot 1.2s ease-in-out infinite both;
+}
+
+.generation-loading-dots > span:nth-child(2) {
+  animation-delay: 180ms;
+}
+
+.generation-loading-dots > span:nth-child(3) {
+  animation-delay: 360ms;
 }
 
 .generation-loading-copy > small {
@@ -1981,23 +2001,26 @@ select:focus-visible {
   }
 }
 
-@keyframes generation-loading-dots {
-  0% {
-    opacity: 0.2;
-  }
-  50% {
+@keyframes generation-loading-dot {
+  12% {
     opacity: 1;
   }
+  0%,
+  32%,
   100% {
-    opacity: 0.2;
+    opacity: 0.24;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .generation-loading-track > span i,
   .generation-loading-eta svg,
-  .generation-loading-copy > strong::after {
+  .generation-loading-dots > span {
     animation: none;
+  }
+
+  .generation-loading-dots > span {
+    opacity: 1;
   }
 
   .generation-loading-track > span {
@@ -8152,9 +8175,17 @@ select:focus-visible {
   background: rgba(66, 185, 245, 0.16);
 }
 
-.ref-mention-menu img {
+.ref-mention-thumb {
+  position: relative;
+  flex: 0 0 auto;
   width: 22px;
   height: 18px;
+}
+
+.ref-mention-thumb :is(img, video) {
+  display: block;
+  width: 100%;
+  height: 100%;
   border-radius: 3px;
   object-fit: cover;
 }
@@ -9371,6 +9402,23 @@ select:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+.gw-transfer-selection {
+  min-width: 0;
+  max-height: min(220px, 30vh);
+  overflow: auto;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--txt);
+}
+.gw-transfer-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  overflow-wrap: anywhere;
 }
 
 .gw-transfer-field {

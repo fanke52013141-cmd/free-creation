@@ -1,7 +1,7 @@
 import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 // 视频节点 Body（路线图 R6：bodies.tsx 拆分）
-import { useEffect, useRef, useState } from 'react'
-import { stopEventPropagation, useEditor } from 'tldraw'
+import { useEffect, useState } from 'react'
+import { stopEventPropagation, useEditor, useValue } from 'tldraw'
 import type { VideoGenerationMode, VideoGenParams } from '@shared/types'
 import {
   isSeedanceGatewayProxy,
@@ -14,13 +14,15 @@ import {
 import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
-import { gatherUpstreamMediaList } from '../../../canvas/graph'
+import { gatherUpstreamMediaList, gatherUpstreamMediaSources } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
+import { ImageMentionPrompt } from './ImageMentionPrompt'
+import { canonicalizeMediaMentions, type PromptMediaReference } from './media-mentions'
 import {
   MediaResultGrid,
   removeMediaResultFromShape,
@@ -94,7 +96,6 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const providers = useGatewayStore((s) => s.providers)
   const loaded = useGatewayStore((s) => s.loaded)
   const loadProviders = useGatewayStore((s) => s.load)
-  const openSettings = useGatewayStore((s) => s.openSettings)
   const isAssetNode = shape.props.nodeType === 'video-asset'
   const [videoOperationsMode, setVideoOperationsMode] = useState<'clip' | 'frame'>('clip')
   const [videoOperationsOpen, setVideoOperationsOpen] = useState(false)
@@ -131,22 +132,12 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const data = parseVideoGen(readNodeConfig(shape))
   const [draft, setDraft] = useState(shape.props.text)
   const [submitting, setSubmitting] = useState(false)
-  const promptRef = useRef<HTMLTextAreaElement>(null)
   // 视频的所有图片只占一个绿色端口；模式决定连接顺序的协议角色。
-  const images = gatherUpstreamMediaList(editor, shape.id, 'in-images', 'image')
-  const [mention, setMention] = useState<{ start: number; end: number } | null>(null)
-  const insertImageMention = (index: number): void => {
-    if (!mention) return
-    const token = '@图' + (index + 1) + ' '
-    setDraft(draft.slice(0, mention.start) + token + draft.slice(mention.end))
-    setMention(null)
-    requestAnimationFrame(() => {
-      promptRef.current?.focus()
-      promptRef.current?.setSelectionRange(mention.start + token.length, mention.start + token.length)
-    })
-  }
+  const images = useValue('video prompt references',
+    () => gatherUpstreamMediaSources(editor, shape.id, 'in-images', 'image'), [editor, shape.id])
 
-  const motionReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-video', 'video')
+  const motionReferences = useValue('video prompt motion references',
+    () => gatherUpstreamMediaSources(editor, shape.id, 'in-reference-video', 'video'), [editor, shape.id])
   const audioReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-audio', 'audio')
   // 图片引用按多值输入端口的连接顺序传入，提示词使用相同顺序。
   const opt = options.find((o) => o.key === data.modelKey)
@@ -166,6 +157,15 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       })
     : null
   const mode = modeResolution?.mode
+  const mentionImageCount = mode === 'reference'
+    ? Math.min(images.length, capabilities?.maxReferenceImages ?? 0)
+    : mode === 'first-frame' || mode === 'first-last-frame' ? images.length : 0
+  const references: PromptMediaReference[] = [
+    ...images.slice(0, mentionImageCount)
+      .map(({ source, value }, index) => ({ ...value, title: source.props.title, token: `@图${index + 1}` })),
+    ...(mode === 'reference' ? motionReferences.slice(0, capabilities?.maxReferenceVideos ?? 0) : [])
+      .map(({ source, value }, index) => ({ ...value, title: source.props.title, token: `@视频${index + 1}` }))
+  ]
   const firstFrame = mode === 'first-frame' || mode === 'first-last-frame' ? images[0] : undefined
   const lastFrame = mode === 'first-last-frame' ? images[1] : undefined
   const framesDetermineRatio = Boolean(
@@ -264,7 +264,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       mode,
       params: normalizeVideoGenParams(capabilities, data.params, { framesDetermineRatio })
     })
-    updateText(draft)
+    updateText(canonicalizeMediaMentions(draft, references))
     setSubmitting(true)
     try {
       await runNodeManually(editor, project.id, providers, shape.id)
@@ -446,7 +446,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   }
 
   if (!options.length)
-    return <NoModelHint onOpen={openSettings} />
+    return <NoModelHint />
 
   return (
     <div className="gen-panel video-gen-panel">
@@ -514,55 +514,22 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             </span>
           )}
         </div>
-        <textarea
-          ref={promptRef}
+        <ImageMentionPrompt
           className="gen-prompt video-gen-prompt"
+          references={references}
           value={draft}
           rows={5}
           spellCheck={false}
           maxLength={capabilities?.maxPromptChars}
           placeholder="描述视频内容、镜头与氛围…"
-          onChange={(e) => {
-            const { value, selectionStart } = e.currentTarget
-            setDraft(value)
-            const match = /@[^\s@]*$/.exec(value.slice(0, selectionStart))
-            setMention(match ? { start: match.index, end: selectionStart } : null)
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') setMention(null)
-          }}
-          onBlur={(event) => {
-            if (!(event.relatedTarget instanceof Element && event.relatedTarget.closest('.ref-mention-menu'))) {
-              setMention(null)
-            }
+          onValueChange={setDraft}
+          onCommit={(text) => {
+            setDraft(text)
             update({ ...data, params })
-            updateText(draft)
+            updateText(text)
           }}
           onPointerDown={(e) => e.stopPropagation()}
         />
-        {mention && images.length > 0 && (
-          <div className="ref-mention-menu" role="group" aria-label="选择参考图片" onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget)) setMention(null)
-          }}>
-            {images.map((image, index) => (
-              <button
-                type="button"
-                key={image.mediaId + ':' + index}
-                onPointerDown={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                }}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  insertImageMention(index)
-                }}
-              >
-                <img src={mediaUrl(image.mediaPath)} alt="" />
-                @图{index + 1}
-              </button>
-            ))}
-          </div>
-        )}
       </section>
       {capabilities && (
         <section className="video-gen-section video-output-settings" aria-label="视频输出参数">

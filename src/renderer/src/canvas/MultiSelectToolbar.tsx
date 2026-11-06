@@ -139,7 +139,7 @@ export function MultiSelectToolbar({
                 aria-label="左对齐"
                 onClick={() => applyAlign('left')}
               >
-                <Icon name="align-left" size={18} />
+                <Icon name="align-left" size={16} />
               </button>
               <button
                 className="ms-btn"
@@ -147,7 +147,7 @@ export function MultiSelectToolbar({
                 aria-label="右对齐"
                 onClick={() => applyAlign('right')}
               >
-                <Icon name="align-right" size={18} />
+                <Icon name="align-right" size={16} />
               </button>
               <button
                 className="ms-btn"
@@ -155,7 +155,7 @@ export function MultiSelectToolbar({
                 aria-label="水平居中"
                 onClick={() => applyAlign('center-h')}
               >
-                <Icon name="align-horizontal" size={18} />
+                <Icon name="align-horizontal" size={16} />
               </button>
               <button
                 className="ms-btn"
@@ -163,7 +163,7 @@ export function MultiSelectToolbar({
                 aria-label="垂直居中"
                 onClick={() => applyAlign('center-v')}
               >
-                <Icon name="align-vertical" size={18} />
+                <Icon name="align-vertical" size={16} />
               </button>
               <span className="ms-divider" />
               <button
@@ -172,7 +172,7 @@ export function MultiSelectToolbar({
                 aria-label="横向均分"
                 onClick={() => applyAlign('distribute-h')}
               >
-                <Icon name="distribute-horizontal" size={18} />
+                <Icon name="distribute-horizontal" size={16} />
               </button>
               <button
                 className="ms-btn"
@@ -180,7 +180,7 @@ export function MultiSelectToolbar({
                 aria-label="纵向均分"
                 onClick={() => applyAlign('distribute-v')}
               >
-                <Icon name="distribute-vertical" size={18} />
+                <Icon name="distribute-vertical" size={16} />
               </button>
               <span className="ms-divider" />
               <button
@@ -189,7 +189,7 @@ export function MultiSelectToolbar({
                 aria-label="打组"
                 onClick={handleGroup}
               >
-                <Icon name="group" size={18} />
+                <Icon name="group" size={16} />
               </button>
               <span className="ms-divider" />
               <button
@@ -198,7 +198,7 @@ export function MultiSelectToolbar({
                 aria-label="运行所选节点及依赖"
                 onClick={() => onRunFlow(selectedIds)}
               >
-                <Icon name="play" size={18} />
+                <Icon name="play" size={16} />
               </button>
             </>
           )}
@@ -209,7 +209,7 @@ export function MultiSelectToolbar({
               aria-label="保存为可复用内容"
               onClick={() => onSaveWorkflow(selectedIds)}
             >
-              <Icon name="workflow" size={18} />
+              <Icon name="node-library" size={16} />
             </button>
           )}
           {selectedGroupIds.length > 0 && (
@@ -220,7 +220,7 @@ export function MultiSelectToolbar({
               title="拆分分组"
               onClick={handleUngroup}
             >
-              <Icon name="ungroup" size={18} />
+              <Icon name="ungroup" size={16} />
             </button>
           )}
         </div>

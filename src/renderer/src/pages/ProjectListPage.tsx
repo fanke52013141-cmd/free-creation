@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ProjectMeta } from '@shared/types'
 import { useAppStore } from '../stores/app'
+import { useGatewayStore } from '../stores/gateway'
 import { useConfirmStore } from '../stores/confirm'
 import { useToastStore } from '../stores/toast'
 import { Icon } from '../components/Icon'
@@ -29,6 +30,7 @@ export function ProjectListPage(): React.JSX.Element {
   const [renameValue, setRenameValue] = useState('')
   const [exportingDiagnostics, setExportingDiagnostics] = useState(false)
   const openProject = useAppStore((s) => s.openProject)
+  const openModelSettings = useGatewayStore((s) => s.openSettings)
   const projectOpenFailure = useAppStore((s) => s.projectOpenFailure)
   const clearProjectOpenFailure = useAppStore((s) => s.clearProjectOpenFailure)
 
@@ -179,6 +181,12 @@ export function ProjectListPage(): React.JSX.Element {
               onClick={() => setShowLibrary(true)}
             >
               <Icon name="assets" size={16} /> 资源库
+            </button>
+            <button
+              className="project-home-button project-home-button-quiet"
+              onClick={openModelSettings}
+            >
+              <Icon name="settings" size={16} /> 模型设置
             </button>
             <button
               className="project-home-button project-home-button-quiet"

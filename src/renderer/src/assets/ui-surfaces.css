@@ -957,7 +957,7 @@
   border: 0;
   border-radius: 9px;
   /* 2026-10-31 用户裁决：运行按钮改用主页「新建项目」同款主色调（青色渐变+深色字） */
-  background: linear-gradient(100deg, #22d3ee, #5eead4 52%, #38bdf8);
+  background: linear-gradient(100deg, var(--run-accent, #22d3ee), #5eead4 52%, #38bdf8);
   box-shadow: 0 2px 14px rgba(34, 211, 238, 0.3);
   color: #080a0f;
   font-weight: 650;
@@ -5374,12 +5374,31 @@ button {
   transform: scale(0.96);
 }
 
+/* 多选工具图标与画布底栏和顶栏保持同一颜色及悬浮反馈。 */
+.canvas-theme-dark .multiselect-toolbar .ms-btn {
+  color: #c9d1da;
+}
+.canvas-theme-dark .multiselect-toolbar .ms-btn:hover:not(:disabled) {
+  background: transparent;
+  color: #f2f7fb;
+  transform: translateY(-2px) scale(1.18);
+}
+.canvas-theme-dark .multiselect-toolbar .ms-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.canvas-theme-dark .multiselect-toolbar .ms-btn:hover > svg {
+  transform: none;
+  animation: none;
+  filter: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .canvas-theme-dark .dock-btn,
   .canvas-page.canvas-theme-dark .canvas-topbar :is(.topbar-shortcut, .canvas-transfer-button, .undo-redo-btn, .search-trigger) {
     transition: none;
   }
   .canvas-theme-dark .dock-btn:hover,
+  .canvas-theme-dark .multiselect-toolbar .ms-btn:hover:not(:disabled),
   .canvas-page.canvas-theme-dark .canvas-topbar :is(.topbar-shortcut, .canvas-transfer-button, .undo-redo-btn, .search-trigger):hover:not(:disabled) {
     transform: none;
   }

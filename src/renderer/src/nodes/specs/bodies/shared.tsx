@@ -15,7 +15,7 @@ import { readNodeConfig } from '../../../canvas/node-persistence'
 import { getNodeType, mediaUrl } from '../../registry'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
-import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
+import { NodeIdentity } from '../../../canvas/NodePresentation'
 import { toast } from '../../../stores/toast'
 import { useConfirmStore } from '../../../stores/confirm'
 import { useMediaStore } from '../../../stores/media'
@@ -157,22 +157,12 @@ export function ModelSelect({
 
 // 未配置任何对应模态模型时的占位引导（2026-11-02 裁决：统一空态身份块，
 // 不再展示供应商预设清单，主操作进底部操作条与其他节点一致）
-export function NoModelHint({ onOpen }: { onOpen: () => void }): React.JSX.Element {
+export function NoModelHint(): React.JSX.Element {
   return (
     <>
       <NodeIdentity>
-        <span className="gen-empty-model-hint">尚未配置可用模型</span>
+        <span className="gen-empty-model-hint">尚未配置可用模型，请前往项目首页的模型设置</span>
       </NodeIdentity>
-      <NodePrimaryButton
-        onPointerDown={(e) => stopEventPropagation(e)}
-        onClick={(e) => {
-          e.stopPropagation()
-          onOpen()
-        }}
-      >
-        <Icon name="settings" size={14} />
-        打开模型设置
-      </NodePrimaryButton>
     </>
   )
 }

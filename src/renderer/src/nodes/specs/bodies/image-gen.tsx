@@ -2,7 +2,7 @@ import { NodePrimaryButton } from '../../../canvas/NodePresentation'
 // 生图节点 Body（路线图 R6：bodies.tsx 拆分）
 // 多供应商级联：选中哪个供应商，就按其能力表呈现参数页（画幅/分辨率），默认 ToAPIS 优先。
 import { useEffect, useRef, useState } from 'react'
-import { stopEventPropagation, useEditor } from 'tldraw'
+import { stopEventPropagation, useEditor, useValue } from 'tldraw'
 import {
   imageCapabilitiesFor,
   IMAGE_GENERATION_ASPECT_RATIOS,
@@ -13,15 +13,17 @@ import {
   type ImageResolution
 } from '@shared/image-capabilities'
 import { defaultImageProviderId } from '@shared/engine/models'
-import { mediaUrl, type NodeBodyProps } from '../../registry'
+import type { NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
-import { gatherUpstreamMediaList } from '../../../canvas/graph'
+import { gatherUpstreamMediaSources } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
+import { ImageMentionPrompt } from './ImageMentionPrompt'
+import { canonicalizeMediaMentions, type PromptMediaReference } from './media-mentions'
 import { ModelSelect, NoModelHint, parseJsonProp } from './shared'
 import './node-workbench.css'
 
@@ -58,7 +60,6 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const providers = useGatewayStore((s) => s.providers)
   const loaded = useGatewayStore((s) => s.loaded)
   const loadProviders = useGatewayStore((s) => s.load)
-  const openSettings = useGatewayStore((s) => s.openSettings)
   const options = modelsByModality(providers, 'image')
   const data = parseImageGen(readNodeConfig(shape))
   // 供应商解析：显式 providerKey > modelKey 反推 > 默认供应商（ToAPIS 实例优先）。
@@ -132,35 +133,24 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
   }
 
   // 所有图片都使用同一个多值端口，连接顺序就是 @图片 1…N 的顺序；N 的上限来自能力表。
-  const referenceImages = gatherUpstreamMediaList(editor, shape.id, 'in-images', 'image')
-  const mentionMatch = draft.match(/@([^\s]*)$/)
-  const showMentionMenu = referenceImages.length > 0 && mentionMatch !== null
-
-  const insertReferenceMention = (index: number): void => {
-    const textarea = promptRef.current
-    const caret = textarea?.selectionStart ?? draft.length
-    const before = draft.slice(0, caret)
-    const after = draft.slice(textarea?.selectionEnd ?? caret)
-    const match = before.match(/@([^\s]*)$/)
-    const replacement = `@图片 ${index + 1} `
-    const next = match
-      ? `${before.slice(0, before.length - match[0].length)}${match[0].startsWith(' ') ? ' ' : ''}${replacement}${after}`
-      : `${before}${replacement}${after}`
-    setDraft(next)
-    requestAnimationFrame(() => {
-      if (!textarea) return
-      const position = before.length - (match?.[0].length ?? 0) + replacement.length
-      textarea.focus()
-      textarea.setSelectionRange(position, position)
+  const references = useValue('image prompt references', (): PromptMediaReference[] => {
+    const connected = gatherUpstreamMediaSources(editor, shape.id, 'in-images', 'image')
+    const seen = new Set<string>()
+    return connected.filter(({ value }) => {
+      if (seen.has(value.mediaId)) return false
+      seen.add(value.mediaId)
+      return true
     })
-  }
+      .slice(0, capabilities.maxReferenceImages)
+      .map(({ source, value }, index) => ({ ...value, title: source.props.title, token: `@图片 ${index + 1}` }))
+  }, [editor, shape.id, capabilities.maxReferenceImages])
 
   const generate = async (): Promise<void> => {
     if (!project) return toast('项目未就绪')
     if (!selected) return toast('未选择可用图片模型')
     // 先提交包含默认供应商/模型解析的完整配置，再由统一运行器读取节点配置和真实上游端口输入。
     update({ ...config, modelKey: selected.key, providerKey: selected.provider.id })
-    updateText(draft)
+    updateText(canonicalizeMediaMentions(draft, references))
     setBusy(true)
     try {
       await runNodeManually(editor, project.id, providers, shape.id)
@@ -169,7 +159,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
     }
   }
 
-  if (!options.length) return <NoModelHint onOpen={openSettings} />
+  if (!options.length) return <NoModelHint />
 
   return (
     <div className="gen-panel">
@@ -292,36 +282,18 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
           </label>
         )}
       </div>
-      <textarea
+      <ImageMentionPrompt
         ref={promptRef}
         className="gen-prompt"
+        references={references}
         rows={4}
         value={draft}
         spellCheck={false}
         placeholder="描述要生成的画面…"
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => updateText(draft)}
+        onValueChange={setDraft}
+        onCommit={(text) => { setDraft(text); updateText(text) }}
         onPointerDown={(e) => e.stopPropagation()}
       />
-      {showMentionMenu && (
-        <div className="ref-mention-menu" role="listbox" aria-label="选择参考图片">
-          {referenceImages.slice(0, capabilities.maxReferenceImages).map((image, index) => (
-            <button
-              type="button"
-              key={image.mediaId}
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onClick={(e) => {
-                e.stopPropagation()
-                insertReferenceMention(index)
-              }}
-            >
-              <img src={mediaUrl(image.mediaPath)} alt="" />
-              @图片 {index + 1}
-              <Icon name="attach" size={13} />
-            </button>
-          ))}
-        </div>
-      )}
       <NodePrimaryButton
         className="btn-primary small gen-go"
         disabled={busy || engineBusy}

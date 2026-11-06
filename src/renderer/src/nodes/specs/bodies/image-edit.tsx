@@ -441,7 +441,6 @@ function ImageEditEditorCore({
   const options = modelsByModality(providers, 'image')
   const loaded = useGatewayStore((s) => s.loaded)
   const load = useGatewayStore((s) => s.load)
-  const openProviderSettings = useGatewayStore((s) => s.openSettings)
   useEffect(() => {
     if (!loaded) void load()
   }, [loaded, load])
@@ -1013,7 +1012,7 @@ function ImageEditEditorCore({
       />
       {invalid && <p className="crop-invalid">{invalid}</p>}
       {!options.length && (
-        <NoModelHint onOpen={openProviderSettings} />
+        <NoModelHint />
       )}
       <button
         className="btn-primary small gen-go"

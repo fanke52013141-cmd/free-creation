@@ -39,7 +39,14 @@ export function GenerationLoadingOverlay({
     <div className={compact ? "generation-loading-card generation-loading-card--compact" : "generation-loading-card"} role="status" aria-live="polite">
       <StarDustField compact={compact} progress={normalizedProgress} />
       <div className="generation-loading-copy">
-        <strong>{waiting ? '等待执行' : title}</strong>
+        <strong>
+          {waiting ? '等待执行' : title}
+          <span className="generation-loading-dots" aria-hidden="true">
+            <span>.</span>
+            <span>.</span>
+            <span>.</span>
+          </span>
+        </strong>
         {description && <small>{description}</small>}
         {normalizedProgress !== undefined && <div
           className="generation-loading-progress"

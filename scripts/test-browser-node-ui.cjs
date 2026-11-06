@@ -352,6 +352,18 @@ async function main() {
     // 两个已连接节点分组后，数据边必须继续存在。
     await source.locator('.node-card').click()
     await destination.locator('.node-card').click({ modifiers: ['Shift'] })
+    const selectionPadding = await page.evaluate(() => {
+      const frame = document.querySelector('.canvas-selection-underlay')?.getBoundingClientRect()
+      const cards = Array.from(document.querySelectorAll('.node-card-wrap:has(.type-text)')).map((card) => card.getBoundingClientRect())
+      if (!frame || cards.length < 2) return null
+      return {
+        top: Math.min(...cards.map((rect) => rect.top)) - frame.top,
+        bottom: frame.bottom - Math.max(...cards.map((rect) => rect.bottom))
+      }
+    })
+    assert.ok(selectionPadding && Math.abs(selectionPadding.top - selectionPadding.bottom) < 2, '多选底框上下留白应一致')
+    const iconSize = await page.locator('.multiselect-toolbar .ms-btn svg').first().evaluate((icon) => icon.getBoundingClientRect().width)
+    assert.ok(Math.abs(iconSize - 16) < 1, '多选工具图标应与画布工具统一为 16px')
     const groupButton = await page.getByRole('button', { name: '打组', exact: true }).boundingBox()
     await page.mouse.click(groupButton.x + groupButton.width / 2, groupButton.y + groupButton.height / 2)
     await page.locator('.canvas-group-outline').waitFor()
@@ -367,7 +379,9 @@ async function main() {
         const minLeft = Math.min(...cardRects.map((rect) => rect.left))
         return {
           zoom: Number(getComputedStyle(group).getPropertyValue('--group-zoom')),
-          horizontalPadding: minLeft - groupRect.left
+          horizontalPadding: minLeft - groupRect.left,
+          topPadding: Math.min(...cardRects.map((rect) => rect.top)) - groupRect.top,
+          bottomPadding: groupRect.bottom - Math.max(...cardRects.map((rect) => rect.bottom))
         }
       })
     const groupBeforeZoom = await readGroupGeometry()
@@ -375,6 +389,8 @@ async function main() {
     await page.waitForTimeout(280)
     const groupAfterZoom = await readGroupGeometry()
     assert.ok(groupBeforeZoom && groupAfterZoom, '分组线框应保留可读的几何信息')
+    assert.ok(Math.abs(groupBeforeZoom.topPadding - groupBeforeZoom.bottomPadding) < 2, '分组框上下留白应一致')
+    assert.ok(Math.abs(groupAfterZoom.topPadding - groupAfterZoom.bottomPadding) < 2, '缩放后分组框上下留白应一致')
     assert.ok(groupAfterZoom.zoom < groupBeforeZoom.zoom, '分组线框必须感知画布缩小')
     assert.ok(
       Math.abs(groupAfterZoom.horizontalPadding - groupBeforeZoom.horizontalPadding) < 1,

@@ -168,7 +168,6 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
   const providers = useGatewayStore((state) => state.providers)
   const loaded = useGatewayStore((state) => state.loaded)
   const loadProviders = useGatewayStore((state) => state.load)
-  const openSettings = useGatewayStore((state) => state.openSettings)
   const options = modelsByModality(providers, 'text')
   const imageOptions = modelsByModality(providers, 'image').filter(
     (option) => !option.model.operations || option.model.operations.includes('image.generate')
@@ -594,10 +593,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
             ))}
           </AppSelect>
         ) : (
-          <button type="button" onClick={() => openSettings()}>
-            配置对话模型
-            <Icon name="settings" size={13} />
-          </button>
+          <span>请前往项目首页的模型设置配置对话模型</span>
         )}
       </label>
       {shape && <ChatSkillAgentSettings shape={shape} editor={editor} disabled={running} />}

@@ -81,7 +81,6 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
   const providers = useGatewayStore((s) => s.providers)
   const providersLoaded = useGatewayStore((s) => s.loaded)
   const loadProviders = useGatewayStore((s) => s.load)
-  const openSettings = useGatewayStore((s) => s.openSettings)
   const config = parseSpeechConfig(readNodeConfig(shape))
   const [draft, setDraft] = useState(shape.props.text)
   const [busy, setBusy] = useState(false)
@@ -398,16 +397,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
               </AppSelect>
             </div>
             {providersLoaded && options.length === 0 && (
-              <button
-                className="btn-ghost small"
-                onPointerDown={(e) => stopEventPropagation(e)}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  void openSettings()
-                }}
-              >
-                去配置该协议的供应商
-              </button>
+              <span>请前往项目首页的模型设置配置供应商</span>
             )}
           </>
         )}

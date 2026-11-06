@@ -220,6 +220,7 @@ export function ConnectedInputPreview({
       referenceIdentity(input, sequence.get(input.sourceNodeId)).length * 8 + 24)))
   const visible = resolved.slice(0, layout.widths.length)
   const active = detail?.key ? resolved.find((input) => keyOf(input) === detail.key) : undefined
+  const imagePreview = active?.value?.kind === 'image'
   const showing = Boolean(detail && (detail.key === null ? layout.hidden > 0 : active))
 
   useEffect(() => {
@@ -241,7 +242,7 @@ export function ConnectedInputPreview({
     const place = (): void => {
       const anchor = detail.anchor.isConnected ? detail.anchor.getBoundingClientRect() : detail.rect
       const box = panel.current?.getBoundingClientRect()
-      const panelWidth = box?.width ?? 480
+      const panelWidth = box?.width ?? (imagePreview ? 360 : 480)
       const theme = getComputedStyle(row.current ?? detail.anchor)
       const colors = Object.fromEntries(
         ['--bg', '--line', '--txt', '--muted', '--brand'].map((name) => [
@@ -254,7 +255,7 @@ export function ConnectedInputPreview({
       const spaceAbove = Math.max(0, bottomEdge - 8)
       setPosition({
         ...colors,
-        '--ref-fullview-max': `${Math.min(420, spaceAbove)}px`,
+        '--ref-fullview-max': `${Math.min(imagePreview ? 315 : 420, spaceAbove)}px`,
         visibility: spaceAbove >= 20 ? 'visible' : 'hidden',
         left: Math.max(8, Math.min(anchor.left, window.innerWidth - panelWidth - 8)),
         bottom: window.innerHeight - bottomEdge
@@ -288,7 +289,7 @@ export function ConnectedInputPreview({
       window.removeEventListener('resize', place)
       window.removeEventListener('scroll', place, true)
     }
-  }, [showing, detail])
+  }, [showing, detail, imagePreview])
   const keep = (): void => {
     if (closeTimer.current) clearTimeout(closeTimer.current)
   }
@@ -372,7 +373,7 @@ export function ConnectedInputPreview({
         createPortal(
           <div
             ref={panel}
-            className="reference-fullview"
+            className={imagePreview ? 'reference-fullview reference-fullview--image' : 'reference-fullview'}
             role="dialog"
             aria-label="引用详情"
             style={position}

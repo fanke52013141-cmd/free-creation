@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'fs'
 import type { GatewayModelInfo, ProviderConfig } from '../../shared/types'
 import { PROVIDER_SPECS } from '../../shared/types'
 import { getDb } from '../store/db'
-import { getProvider, listProviders, saveProvider } from './providers.repo'
+import { getProvider, saveProvider } from './providers.repo'
 
 const FORMAT = 'canvas-studio-providers'
 const VERSION = 1
@@ -46,19 +46,25 @@ function deriveKey(password: string, salt: Buffer): Buffer {
   return scryptSync(password, salt, 32, { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 })
 }
 
-function exportableProviders(): PortableProvider[] {
-  const byId = new Map<string, ProviderConfig>()
-  for (const summary of listProviders()) {
-    const provider = getProvider(summary.id)
-    if (provider) byId.set(provider.id, provider)
-  }
-  const providers = [...byId.values()]
-  if (!providers.length) throw new Error('当前没有可导出的供应商')
-  const missingKeys = providers.filter((provider) => !provider.apiKey)
+function exportableProviders(providerIds: string[]): PortableProvider[] {
+  if (
+    !Array.isArray(providerIds) ||
+    !providerIds.length ||
+    providerIds.length > MAX_PROVIDERS ||
+    providerIds.some((id) => typeof id !== 'string' || !/^[\w-]{1,128}$/.test(id)) ||
+    new Set(providerIds).size !== providerIds.length
+  )
+    throw new Error('请选择需要导出的供应商')
+  const providers = providerIds.map((id) => getProvider(id))
+  if (providers.some((provider) => !provider)) throw new Error('所选供应商不可用，请刷新列表后重试')
+  const selected = providers as ProviderConfig[]
+  const missingKeys = selected.filter((provider) => !provider.apiKey)
   if (missingKeys.length) {
-    throw new Error(`这些供应商的 API Key 当前无法读取，请先重新填写密钥：${missingKeys.map((p) => p.name).join('、')}`)
+    throw new Error(
+      `这些供应商的 API Key 当前无法读取，请先重新填写密钥：${missingKeys.map((p) => p.name).join('、')}`
+    )
   }
-  return providers.map(({ id, name, specId, baseURL, apiKey, models }) => ({
+  return selected.map(({ id, name, specId, baseURL, apiKey, models }) => ({
     id,
     name,
     specId,
@@ -69,8 +75,8 @@ function exportableProviders(): PortableProvider[] {
 }
 
 /** Export supplier IDs, endpoints, model selections and API Keys into a password-encrypted file. */
-export function exportProviders(filePath: string, password: string): number {
-  const providers = exportableProviders()
+export function exportProviders(filePath: string, password: string, providerIds: string[]): number {
+  const providers = exportableProviders(providerIds)
   const payload: ProviderTransferPayload = {
     format: FORMAT,
     version: VERSION,
@@ -81,10 +87,7 @@ export function exportProviders(filePath: string, password: string): number {
   const iv = randomBytes(12)
   const cipher = createCipheriv('aes-256-gcm', deriveKey(password, salt), iv)
   cipher.setAAD(AAD)
-  const ciphertext = Buffer.concat([
-    cipher.update(JSON.stringify(payload), 'utf8'),
-    cipher.final()
-  ])
+  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(payload), 'utf8'), cipher.final()])
   const envelope: ProviderTransferEnvelope = {
     format: FORMAT,
     version: VERSION,
@@ -119,11 +122,21 @@ function parseModels(value: unknown, providerName: string): GatewayModelInfo[] {
     throw new Error(`供应商「${providerName}」的模型列表无效`)
   }
   return value.map((entry) => {
-    if (!isRecord(entry) || typeof entry.id !== 'string' || !entry.id.trim() || entry.id.length > 512) {
+    if (
+      !isRecord(entry) ||
+      typeof entry.id !== 'string' ||
+      !entry.id.trim() ||
+      entry.id.length > 512
+    ) {
       throw new Error(`供应商「${providerName}」包含无效模型`)
     }
     const modality = entry.modality
-    if (modality !== 'text' && modality !== 'image' && modality !== 'video' && modality !== 'audio') {
+    if (
+      modality !== 'text' &&
+      modality !== 'image' &&
+      modality !== 'video' &&
+      modality !== 'audio'
+    ) {
       throw new Error(`供应商「${providerName}」包含无效模型类型`)
     }
     return {
@@ -156,11 +169,19 @@ function parsePayload(value: unknown): ProviderTransferPayload {
     if (!isRecord(entry)) throw new Error('供应商配置文件内容无效')
     const { id, name, specId, baseURL, apiKey } = entry
     if (
-      typeof id !== 'string' || !/^[\w-]{1,128}$/.test(id) ||
-      typeof name !== 'string' || !name.trim() || name.length > 200 ||
-      typeof specId !== 'string' || !allowedSpecs.has(specId as ProviderConfig['specId']) ||
-      typeof baseURL !== 'string' || !baseURL.trim() || baseURL.length > 4096 ||
-      typeof apiKey !== 'string' || !apiKey.trim() || apiKey.length > 10000
+      typeof id !== 'string' ||
+      !/^[\w-]{1,128}$/.test(id) ||
+      typeof name !== 'string' ||
+      !name.trim() ||
+      name.length > 200 ||
+      typeof specId !== 'string' ||
+      !allowedSpecs.has(specId as ProviderConfig['specId']) ||
+      typeof baseURL !== 'string' ||
+      !baseURL.trim() ||
+      baseURL.length > 4096 ||
+      typeof apiKey !== 'string' ||
+      !apiKey.trim() ||
+      apiKey.length > 10000
     ) {
       throw new Error('供应商配置文件包含无效配置')
     }
@@ -180,7 +201,10 @@ function parsePayload(value: unknown): ProviderTransferPayload {
 }
 
 /** Decrypt and atomically upsert imported suppliers; existing IDs are updated in place. */
-export function importProviders(filePath: string, password: string): {
+export function importProviders(
+  filePath: string,
+  password: string
+): {
   added: number
   updated: number
   count: number

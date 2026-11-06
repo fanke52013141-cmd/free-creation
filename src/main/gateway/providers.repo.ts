@@ -72,9 +72,10 @@ function catalogModels(row: CatalogRow): GatewayModelInfo[] {
   return [...byModality.entries()].map(([modality, verifiedOperations]) => ({ id: row.model_id, name: row.model_name, modality, operations: verifiedOperations }))
 }
 
-function catalogConfigs(): ProviderConfig[] {
+function catalogConfigs(onlyId?: string): ProviderConfig[] {
   const grouped = new Map<string, ProviderConfig>()
   for (const row of catalogRows()) {
+    if (onlyId && row.connection_id !== onlyId) continue
     const models = catalogModels(row)
     if (!models.length) continue
     const current = grouped.get(row.connection_id)
@@ -300,7 +301,7 @@ export function listVerifiedProviders(): ProviderSummary[] {
 export function getProvider(id: string): ProviderConfig | null {
   // 节点只允许使用已验证目录中的模型，运行时必须取同一连接的 URL 和密钥。
   // 旧 providers 表可能碰巧有同 ID 的残留行，不能让它覆盖目录连接。
-  const catalog = catalogConfigs().find((provider) => provider.id === id)
+  const catalog = catalogConfigs(id).find((provider) => provider.id === id)
   if (catalog) return catalog
   const row = getDb().prepare('SELECT * FROM providers WHERE id = ?').get(id) as
     ProviderRow | undefined

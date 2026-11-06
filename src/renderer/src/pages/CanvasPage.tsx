@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import type { ProjectFile } from '@shared/types'
 import type { WorkspaceProfile } from '@shared/workspace-profile'
 import { useAppStore } from '../stores/app'
-import { useGatewayStore } from '../stores/gateway'
 import { useEngineStore } from '../engine/store'
 import { ResourceQueuePanel } from '../engine/ResourceQueuePanel'
 import { CanvasEditor } from '../canvas/CanvasEditor'
@@ -31,7 +30,6 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   const setProjectOpenFailure = useAppStore((s) => s.setProjectOpenFailure)
   const openProject = useAppStore((s) => s.openProject)
   const currentProject = useAppStore((s) => s.currentProject)
-  const openSettings = useGatewayStore((s) => s.openSettings)
 
   // 执行引擎状态：phase 控制按钮形态，done/total 显示进度
   const enginePhase = useEngineStore((s) => s.phase)
@@ -53,14 +51,16 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
     const page = pageRef.current
     const controls = page?.querySelector<HTMLElement>('.engine-controls')
     const host = page?.querySelector<HTMLElement>('.canvas-host')
-    if (!page || !controls || !host) return
+    const anchor = page?.querySelector<HTMLElement>('[data-side-panel-anchor]')
+    if (!page || !controls || !host || !anchor) return
     const align = (): void => {
-      const width = host.getBoundingClientRect().right - controls.getBoundingClientRect().left
+      const width = host.getBoundingClientRect().right - anchor.getBoundingClientRect().left
       page.style.setProperty('--side-panel-width', `${Math.max(0, width)}px`)
     }
     const observer = new ResizeObserver(align)
     observer.observe(page)
     observer.observe(controls)
+    observer.observe(anchor)
     observer.observe(host)
     window.addEventListener('resize', align)
     align()
@@ -68,7 +68,7 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
       observer.disconnect()
       window.removeEventListener('resize', align)
     }
-  }, [file, loading, recoveryPrompt])
+  }, [file, loading, recoveryPrompt, isRunning, isPaused, enginePhase])
 
   // Ctrl+K 唤起搜索面板
   useEffect(() => {
@@ -344,6 +344,7 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
               <Tooltip label={isPaused ? '继续工作流' : '在当前原子任务结束后暂停'}>
                 <button
                   className={`run-btn ${enginePhase === 'stopping' ? 'running' : ''}`}
+                  data-side-panel-anchor
                   disabled={enginePhase === 'stopping'}
                   onClick={() => (isPaused ? engineResume?.() : enginePause?.())}
                 >
@@ -360,6 +361,7 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
             <Tooltip label="运行工作流">
               <button
                 className="run-btn"
+                data-side-panel-anchor
                 onClick={() => {
                   // 由用户发起新一轮运行时立即恢复错误面板；不在 effect 内同步 setState。
                   setShowErrors(true)
@@ -374,12 +376,6 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
 
         <div className="topbar-actions">
           <CanvasTransferMenu project={currentProject ?? file.meta} />
-          {/* 模型供应商设置：常驻顶栏快捷按钮 */}
-          <Tooltip label="模型供应商设置">
-            <button className="topbar-shortcut" aria-label="模型供应商设置" onClick={openSettings}>
-              <Icon name="settings" size={16} />
-            </button>
-          </Tooltip>
           {/* 回到主页：常驻顶栏快捷按钮 */}
           <Tooltip label="回到主页">
             <button

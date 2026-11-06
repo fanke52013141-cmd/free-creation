@@ -546,6 +546,7 @@ const api = {
       ipcRenderer.invoke(IPC.gateway.saveProvider, input),
     exportProviders: (input: {
       password: string
+      providerIds: string[]
     }): Promise<IpcEnvelope<{ path: string; count: number }>> =>
       ipcRenderer.invoke(IPC.gateway.exportProviders, input),
     importProviders: (input: {

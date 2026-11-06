@@ -654,7 +654,8 @@ describe('v1.2 §16.16 媒体 / 剧本节点：判据是真实连线，不是卡
   })
 
   it('@图片 引用上限跟随能力表，而不是写死 4 张', () => {
-    expect(imageGen).toContain('referenceImages.slice(0, capabilities.maxReferenceImages)')
+    expect(imageGen).toContain('.slice(0, capabilities.maxReferenceImages)')
+    expect(imageGen).toContain('references={references}')
     expect(stripComments(imageGen)).not.toContain('slice(0, 4)')
   })
 
@@ -1257,15 +1258,15 @@ describe('2026-11-02 空模型引导统一身份块', () => {
   const bodySource = (name: string): string =>
     read(`src/renderer/src/nodes/specs/bodies/${name}.tsx`)
 
-  // 2026-11-02 用户裁决：空模型引导不再点名供应商预设，主操作进底部操作条。
-  it('NoModelHint 不再展示预设清单，按钮走底部操作条', () => {
+  // 2026-11-06 用户裁决：模型设置只在项目首页提供。
+  it('NoModelHint 指引项目首页，不在画布打开模型设置', () => {
     const hint = sharedBodies.slice(sharedBodies.indexOf('export function NoModelHint'))
     const hintBody = hint.slice(0, hint.indexOf('\n}\n'))
     expect(hintBody).not.toContain('presetIds')
     expect(hintBody).not.toContain('gen-empty-presets')
     expect(hintBody).toContain('<NodeIdentity>')
-    expect(hintBody).toContain('<NodePrimaryButton')
-    expect(hintBody).toContain('打开模型设置')
+    expect(hintBody).not.toContain('<NodePrimaryButton')
+    expect(hintBody).toContain('项目首页的模型设置')
   })
 
   it('各节点调用点不再传 presetIds', () => {

@@ -27,6 +27,8 @@ import {
   saveProvider
 } from '../gateway/providers.repo'
 import { exportProviders, importProviders } from '../gateway/provider-transfer'
+import { emitGatewayEvent } from '../diagnostics/gateway-events'
+import { newTraceId, newSpanId } from '../../shared/observability'
 import {
   cancelVideoTask,
   getVideoTask,
@@ -77,21 +79,60 @@ export function registerGatewayIpc(win: BrowserWindow): void {
     IPC.gateway.exportProviders,
     async (
       _e,
-      input: { password: string }
+      input: { password: string; providerIds: string[] }
     ): Promise<IpcEnvelope<{ path: string; count: number }>> => {
+      const diagnostics = { traceId: newTraceId(), spanId: newSpanId() }
+      emitGatewayEvent('provider.export.started', '开始导出供应商配置', diagnostics, {
+        phase: 'validation'
+      })
       if (typeof input?.password !== 'string' || input.password.length < 8) {
+        emitGatewayEvent('provider.export.failed', '供应商导出校验失败', diagnostics, {
+          phase: 'validation',
+          attributes: { code: 'INVALID_PASSWORD' }
+        })
         return err('INVALID_INPUT', '加密密码至少需要 8 个字符')
       }
-      const result = await dialog.showSaveDialog(win, {
-        title: '导出加密的供应商配置',
-        defaultPath: 'Canvas Studio 供应商配置.canvasproviders',
-        filters: [{ name: 'Canvas Studio 供应商配置（已加密）', extensions: ['canvasproviders'] }]
-      })
-      if (result.canceled || !result.filePath) return err('CANCELLED', '已取消导出')
-      return wrap(() => ({
-        path: result.filePath,
-        count: exportProviders(result.filePath, input.password)
-      }))
+      if (
+        !Array.isArray(input.providerIds) ||
+        input.providerIds.length === 0 ||
+        input.providerIds.length > 500 ||
+        input.providerIds.some((id) => typeof id !== 'string' || !/^[\w-]{1,128}$/.test(id)) ||
+        new Set(input.providerIds).size !== input.providerIds.length
+      ) {
+        emitGatewayEvent('provider.export.failed', '供应商导出校验失败', diagnostics, {
+          phase: 'validation',
+          attributes: { code: 'INVALID_SELECTION' }
+        })
+        return err('INVALID_INPUT', '请选择需要导出的供应商')
+      }
+      try {
+        const result = await dialog.showSaveDialog(win, {
+          title: '导出加密的供应商配置',
+          defaultPath: 'Canvas Studio 供应商配置.canvasproviders',
+          filters: [{ name: 'Canvas Studio 供应商配置（已加密）', extensions: ['canvasproviders'] }]
+        })
+        if (result.canceled || !result.filePath) {
+          emitGatewayEvent('provider.export.cancelled', '已取消供应商导出', diagnostics, {
+            phase: 'destination'
+          })
+          return err('CANCELLED', '已取消导出')
+        }
+        const output = {
+          path: result.filePath,
+          count: exportProviders(result.filePath, input.password, input.providerIds)
+        }
+        emitGatewayEvent('provider.export.completed', '供应商导出完成', diagnostics, {
+          phase: 'write',
+          attributes: { count: output.count }
+        })
+        return ok(output)
+      } catch {
+        emitGatewayEvent('provider.export.failed', '供应商导出失败', diagnostics, {
+          phase: 'export',
+          attributes: { code: 'EXPORT_FAILED' }
+        })
+        return err('EXPORT_FAILED', '导出失败，请检查所选供应商密钥和目标位置后重试')
+      }
     }
   )
 

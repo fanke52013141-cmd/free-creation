@@ -38,6 +38,18 @@ const MODEL_ATTRS = {
 
 export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Object.fromEntries(
   [
+    ...['started', 'completed', 'failed', 'cancelled'].map((stage) =>
+      def(
+        `provider.export.${stage}`,
+        stage === 'failed' ? 'error' : 'info',
+        'main/ipc/gateway.ipc',
+        {
+          phase: 'short',
+          code: 'short',
+          count: 'int'
+        }
+      )
+    ),
     def('project.watch.failed', 'warn', 'main/ipc/project-watcher', {
       phase: 'short',
       code: 'short'

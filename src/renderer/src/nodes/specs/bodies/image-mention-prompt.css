@@ -1,0 +1,25 @@
+.image-mention-prompt {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.image-mention-mirror {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border-style: solid;
+  border-color: transparent;
+  overflow: auto;
+  color: transparent;
+  pointer-events: none;
+}
+
+.image-mention-mirror mark {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--run-accent, #22d3ee) 28%, transparent);
+  color: transparent;
+  box-decoration-break: clone;
+}

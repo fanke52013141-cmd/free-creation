@@ -24,14 +24,15 @@ import {
 } from '@shared/video-capabilities'
 
 /**
- * @图N 引用协议：提示词里的 `@图N`（N 从 1 起）指第 N 张连接图片（in-images 端口
- * 的连接顺序）。提交前把有效引用替换为面向模型的「第N张参考图」；没有对应图片的
- * 引用保持原文，不静默改写用户没写对的部分。
+ * 图片和视频编号分别按各自输入端口的连接顺序解析，从 1 开始。
+ * 提交前将有效编号转换成面向模型的参考素材描述，无效编号保留原文。
  */
-export function resolveVideoPromptReferences(prompt: string, imageCount: number): string {
-  return prompt.replace(/@图\s*(\d{1,3})/g, (token, digits: string) => {
+export function resolveVideoPromptReferences(prompt: string, imageCount: number, videoCount = 0): string {
+  return prompt.replace(/@(图片|图|视频)\s*(\d{1,3})(?!\d)/g, (token, type: string, digits: string) => {
     const n = Number(digits)
-    return n >= 1 && n <= imageCount ? `第${n}张参考图` : token
+    const video = type === '视频'
+    if (n < 1 || n > (video ? videoCount : imageCount)) return token
+    return video ? `第${n}段参考视频` : `第${n}张参考图`
   })
 }
 
@@ -53,9 +54,9 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
   // 视频节点只有一个图片多值端口：连接顺序即语义。第一张是主图/首帧，
   // 后续图片是有序参考图，避免在画布边缘摆出多个同色、同类型端口。
   const images = inputMedia(ctx.inputs, 'in-images', 'image')
-  // @图N 在校验与提交前统一解析：模型看到的是「第N张参考图」，图片本身已按连接顺序上传。
-  const prompt = resolveVideoPromptReferences(merged, images.length)
+  // 提交前解析编号，图片和视频仍按各自的连接顺序上传。
   const motionReferences = inputMedia(ctx.inputs, 'in-reference-video', 'video')
+  const prompt = resolveVideoPromptReferences(merged, images.length, motionReferences.length)
   const audioReferences = inputMedia(ctx.inputs, 'in-reference-audio', 'audio')
   const capabilities = videoCapabilitiesFor(option.provider.specId, option.model.id, {
     gatewayProxy: isSeedanceGatewayProxy(option.provider.specId, option.provider.baseURL)

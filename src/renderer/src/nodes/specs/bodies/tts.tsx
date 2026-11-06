@@ -21,7 +21,6 @@ export function TtsBody({ shape }: NodeBodyProps): React.JSX.Element {
   const providers = useGatewayStore((state) => state.providers)
   const loaded = useGatewayStore((state) => state.loaded)
   const loadProviders = useGatewayStore((state) => state.load)
-  const openCatalog = useGatewayStore((state) => state.openCatalog)
   const config = parseTtsConfig(readNodeConfig(shape))
   const [busy, setBusy] = useState(false)
   const [playing, setPlaying] = useState(false)
@@ -96,7 +95,7 @@ export function TtsBody({ shape }: NodeBodyProps): React.JSX.Element {
         const next = models.find((option) => option.key === event.target.value)
         if (next) updateConfig({ providerId: next.provider.id, modelId: next.model.id })
       }}><option value="">选择 MiniMax 模型…</option>{models.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</AppSelect>
-      {loaded && !models.length && <button className="btn-ghost small node-inline-action" onPointerDown={stopEventPropagation} onClick={(event) => { event.stopPropagation(); openCatalog() }}>添加 MiniMax 模型</button>}
+      {loaded && !models.length && <span>请前往项目首页的模型设置添加 MiniMax 模型</span>}
       <input className="gen-input" aria-label="自定义音色 ID" placeholder="可选：自定义音色 ID" value={config.voiceId} onPointerDown={(event) => event.stopPropagation()} onChange={(event) => updateConfig({ voiceId: event.target.value })} />
       {invalidId && <small className="gen-capability-note error">音色 ID 需 8～256 位，以字母开头，末位不能是 - 或 _。</small>}
       <input className="gen-input" aria-label="参考语音原文" placeholder="可选：参考语音原文，用于内容校验" value={config.textValidation} onPointerDown={(event) => event.stopPropagation()} onChange={(event) => updateConfig({ textValidation: event.target.value.slice(0, 200) })} />
