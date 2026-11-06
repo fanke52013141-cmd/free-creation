@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LibraryPreset, LibraryResourceDetail, LibraryResourceSummary, CreateLibraryResourceInput, PublishLibraryRevisionInput } from '@shared/library/types'
 import type { LibraryCategory } from '@shared/library/blueprint'
 import { Icon } from '../components/Icon'
+import { AppSelect } from '../components/AppSelect'
 import { mediaUrl } from '../nodes/registry'
 import { useConfirmStore } from '../stores/confirm'
 import { useToastStore } from '../stores/toast'
@@ -18,55 +19,51 @@ function typeName(preset: LibraryPreset, categoryName?: string): string {
   return '组合资产'
 }
 
-type Point = [number, number]
+/* 星光：中心簇 + 四散微尘（按 Stitch 参考稿 qa/stitch-library-v2/star-cover.png 落地）。 */
+const STAR_CLUSTER: Array<[number, number, number]> = [
+  [80, 40, 4.6], [70, 36, 3.2], [90, 36, 3.4], [62, 44, 2.6], [98, 46, 2.8],
+  [76, 52, 3], [86, 48, 2.2], [72, 30, 1.8], [94, 30, 1.9]
+]
+
+const STAR_DUST: Array<[number, number, number, number]> = [
+  [34, 22, 0.7, 0.35], [46, 14, 0.6, 0.3], [58, 24, 0.8, 0.4], [70, 12, 0.6, 0.28],
+  [84, 20, 0.7, 0.34], [98, 14, 0.6, 0.3], [112, 22, 0.8, 0.38], [126, 16, 0.6, 0.28],
+  [140, 26, 0.7, 0.32], [28, 44, 0.6, 0.28], [44, 52, 0.7, 0.32], [58, 64, 0.6, 0.26],
+  [74, 70, 0.8, 0.34], [92, 68, 0.6, 0.26], [108, 60, 0.7, 0.3], [124, 56, 0.6, 0.26],
+  [138, 64, 0.7, 0.3], [150, 48, 0.6, 0.24], [20, 58, 0.6, 0.24], [36, 76, 0.6, 0.22],
+  [56, 82, 0.6, 0.22], [80, 80, 0.7, 0.26], [104, 78, 0.6, 0.22], [128, 80, 0.6, 0.22],
+  [148, 74, 0.6, 0.2], [24, 30, 0.5, 0.2], [152, 34, 0.5, 0.2]
+]
+
+function sparkPath(cx: number, cy: number, radius: number): string {
+  const waist = radius * 0.1
+  return `M ${cx} ${cy - radius} L ${cx + waist} ${cy - waist} L ${cx + radius} ${cy} L ${cx + waist} ${cy + waist} L ${cx} ${cy + radius} L ${cx - waist} ${cy + waist} L ${cx - radius} ${cy} L ${cx - waist} ${cy - waist} Z`
+}
 
 /**
- * 资源卡片默认封面：等距立体魔方（按 Stitch 参考稿 assets/243d105b 落地）。
- * 30° 真等距、h=s 正立方体比例、青灰单色三面明暗与 3×3 细线分格，无渐变/光晕。
+ * 资源卡片默认封面：星光。
+ * 深蓝黑底 + 中心星簇（长芒四角星 + 光核 + 微晕）+ 四散微尘，青白冷光；
+ * 无魔方、无插画、无大面积彩色光斑。
  */
-function CubeCover(): React.JSX.Element {
-  const s = 40
-  const cx = 60
-  const cy = 52
-  const dx = 0.866 * s
-  const dy = 0.5 * s
-  const top: Point = [cx, cy - s]
-  const topLeft: Point = [cx - dx, cy - dy]
-  const topRight: Point = [cx + dx, cy - dy]
-  const center: Point = [cx, cy]
-  const bottomLeft: Point = [cx - dx, cy - dy + s]
-  const bottomRight: Point = [cx + dx, cy - dy + s]
-  const bottom: Point = [cx, cy + s]
-  const lerp = (a: Point, b: Point, t: number): Point => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
-  const polygon = (points: Point[]): string => points.map((point) => point.join(',')).join(' ')
-  const faceGrid = (p0: Point, p1: Point, p2: Point, p3: Point): React.JSX.Element[] => {
-    const lines: React.JSX.Element[] = []
-    for (const t of [1 / 3, 2 / 3]) {
-      const a = lerp(p0, p3, t)
-      const b = lerp(p1, p2, t)
-      lines.push(<line key={`u${t}`} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} />)
-      const c = lerp(p0, p1, t)
-      const d = lerp(p3, p2, t)
-      lines.push(<line key={`v${t}`} x1={c[0]} y1={c[1]} x2={d[0]} y2={d[1]} />)
-    }
-    return lines
-  }
+function StarCover(): React.JSX.Element {
   return (
-    <span className="library-cover-cube" aria-hidden="true">
-      <svg viewBox="0 0 120 120" role="presentation">
-        <polygon className="cube-face cube-top" points={polygon([top, topLeft, center, topRight])} />
-        <polygon className="cube-face cube-left" points={polygon([topLeft, center, bottom, bottomLeft])} />
-        <polygon className="cube-face cube-right" points={polygon([topRight, center, bottom, bottomRight])} />
-        <g className="cube-grid">
-          {faceGrid(top, topRight, center, topLeft)}
-          {faceGrid(topLeft, center, bottom, bottomLeft)}
-          {faceGrid(topRight, center, bottom, bottomRight)}
+    <span className="library-cover-stars" aria-hidden="true">
+      <svg viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice" role="presentation">
+        <g className="library-star-dust">
+          {STAR_DUST.map(([x, y, r, opacity]) => (
+            <circle key={`dust-${x}-${y}`} cx={x} cy={y} r={r} opacity={opacity} />
+          ))}
         </g>
-        <path
-          className="cube-highlight"
-          d={`M ${top[0]} ${top[1]} L ${topLeft[0]} ${topLeft[1]} L ${center[0]} ${center[1]} L ${topRight[0]} ${topRight[1]}`}
-        />
-        <circle className="cube-vertex" cx={top[0]} cy={top[1]} r={1.4} />
+        <g className="library-star-cluster">
+          {STAR_CLUSTER.map(([x, y, size]) => (
+            <g key={`star-${x}-${y}`}>
+              <circle className="library-star-halo" cx={x} cy={y} r={size * 2.1} opacity={0.07} />
+              <circle className="library-star-halo" cx={x} cy={y} r={size * 1.2} opacity={0.12} />
+              <path className="library-star-ray" d={sparkPath(x, y, size * 2.2)} />
+              <circle className="library-star-core" cx={x} cy={y} r={Math.max(0.7, size * 0.24)} />
+            </g>
+          ))}
+        </g>
       </svg>
     </span>
   )
@@ -80,9 +77,8 @@ function ResourceCard({ resource, onOpen, onDragStart }: { resource: LibraryReso
         {resource.coverPath && !failed ? (
           <img src={mediaUrl(resource.coverPath)} alt="" loading="lazy" onError={() => setFailed(true)} />
         ) : (
-          <CubeCover />
+          <StarCover />
         )}
-        <span className="library-resource-type">{typeName(resource.formPreset, resource.category?.name)}</span>
       </div>
       <div className="library-resource-card-body">
         <div className="library-resource-card-title"><strong>{resource.title}</strong><span>{libraryVersionLabel(resource.revisionNumber)}</span></div>
@@ -198,7 +194,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
   const [resources, setResources] = useState<LibraryResourceSummary[]>([])
   const [categories, setCategories] = useState<LibraryCategory[]>([])
   const [categoryId, setCategoryId] = useState('legacy')
-  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false)
   const [categoryEditor, setCategoryEditor] = useState<{ initial?: LibraryCategory } | null>(null)
   const [query, setQuery] = useState('')
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -240,17 +235,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     setResources((current) => append ? [...current, ...items] : items)
     setNextCursor(result.data.nextCursor)
   }, [categoryId, query])
-
-  useEffect(() => {
-    if (!categoryMenuOpen) return undefined
-    const close = (event: PointerEvent): void => {
-      if (!(event.target instanceof Element) || !event.target.closest('.library-category-manage')) {
-        setCategoryMenuOpen(false)
-      }
-    }
-    document.addEventListener('pointerdown', close)
-    return () => document.removeEventListener('pointerdown', close)
-  }, [categoryMenuOpen])
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void loadPageData() }, 0)
@@ -372,36 +356,22 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
           <button type="button" className="library-header-text-btn" onClick={() => setCategoryEditor({})}>
             <Icon name="add" size={13} />新建分类
           </button>
-          <div className="library-category-manage">
-            <button
-              type="button"
-              className="library-header-text-btn"
-              onClick={() => setCategoryMenuOpen((current) => !current)}
-              aria-haspopup="menu"
-              aria-expanded={categoryMenuOpen}
-              title="编辑分类"
-            >
-              <Icon name="settings" size={13} />编辑分类
-            </button>
-            {categoryMenuOpen && (
-              <div className="library-category-menu" role="menu" aria-label="分类编辑">
-                {categories.length === 0 && <span className="library-category-menu-empty">还没有自定义分类</span>}
-                {categories.map((category) => (
-                  <button
-                    key={category.id}
-                    role="menuitem"
-                    onClick={() => {
-                      setCategoryMenuOpen(false)
-                      setCategoryEditor({ initial: category })
-                    }}
-                  >
-                    <Icon name="edit" size={12} />
-                    <span>{category.name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <AppSelect
+            className="library-edit-category-select"
+            value=""
+            aria-label="编辑分类"
+            onChange={(event) => {
+              const category = categories.find((item) => item.id === event.target.value)
+              if (category) setCategoryEditor({ initial: category })
+            }}
+          >
+            <option value="">编辑分类</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </AppSelect>
           <button className="library-primary" onClick={() => { setSelectedId(null); setFormOpen(true) }}><span className="library-primary-icon"><Icon name="add" size={14} /></span>新建资源</button>
           {/* 2026-11-06 用户反馈：进入资源库后找不到返回入口——在系统窗口按钮左侧再放一个固定返回图标。 */}
           <button type="button" className="library-home-btn" title="返回项目列表" aria-label="返回项目列表" onClick={onBack}>
