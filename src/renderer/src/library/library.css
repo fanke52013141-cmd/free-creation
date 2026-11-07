@@ -1492,9 +1492,9 @@
 }
 .assets-source-switch button:hover { color: var(--txt); }
 .assets-source-switch button.active {
-  color: #8bdcff;
-  background: rgba(66, 185, 245, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(66, 185, 245, 0.25);
+  color: var(--txt);
+  background: var(--node-control-bg);
+  box-shadow: none;
 }
 .library-picker {
   display: flex;
@@ -1847,7 +1847,6 @@
   object-fit: cover;
 }
 
-.assets-source-switch button.active,
 .library-version-entry.selected {
   background: var(--node-surface);
   color: var(--txt);

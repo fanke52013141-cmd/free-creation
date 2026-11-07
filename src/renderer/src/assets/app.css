@@ -6907,7 +6907,9 @@ select:focus-visible {
 .assets-search-row .assets-search {
   flex: 1;
   min-width: 0;
-  height: auto;
+  height: 24px;
+  line-height: 20px;
+  font-family: inherit;
   padding: 0;
   border: 0;
   background: transparent;
