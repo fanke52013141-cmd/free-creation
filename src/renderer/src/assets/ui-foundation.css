@@ -6,6 +6,8 @@
  */
 
 :root {
+  --canvas-surface: #0d0d0d;
+  --canvas-drawer-shadow: -6px 3px 18px rgb(0 0 0 / 22%);
   --bg: #111419;
   --card: #20242a;
   --card-hover: #292e36;
@@ -72,7 +74,7 @@ body {
 /* 2026-10-31 视觉迭代：画布改为纯色 #0d0d0d，去掉点阵与氛围光晕（用户裁决）。
    纯色同样留在屏幕空间，不参与相机变换，缩放/平移依旧零重绘。 */
 .canvas-theme-dark.canvas-page {
-  background-color: #0d0d0d;
+  background-color: var(--canvas-surface);
   background-image: none;
 }
 

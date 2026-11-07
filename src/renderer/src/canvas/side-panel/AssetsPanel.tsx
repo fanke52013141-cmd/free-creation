@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Editor } from 'tldraw'
+import { DiagnosticsProducer, newProducerId, newSpanId, newTraceId } from '@shared/observability'
+import { emitDiagnosticsEvent } from '../../engine/diagnosticsReporter'
 import type { MediaAsset, MediaKind } from '@shared/types'
 import {
   buildMediaAssetIndex,
@@ -26,6 +28,11 @@ interface AssetsPanelProps {
   onDropMedia: (asset: MediaAsset, x: number, y: number) => void
 }
 
+const batchDiagnostics = new DiagnosticsProducer({
+  process: 'renderer',
+  producerId: newProducerId('renderer')
+})
+
 const TYPE_FILTERS: { key: MediaKind | 'all'; label: string }[] = [
   { key: 'all', label: '全部' },
   { key: 'image', label: '图片' },
@@ -48,20 +55,6 @@ const TIME_OPTIONS: { value: MediaTimeFilter; label: string }[] = [
   { value: '7d', label: '最近 7 天' },
   { value: '30d', label: '最近 30 天' }
 ]
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function formatTime(ts: number): string {
-  const d = new Date(ts)
-  return `${d.getMonth() + 1}/${d.getDate()} ${d
-    .getHours()
-    .toString()
-    .padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
-}
 
 function formatCount(n: number): string {
   if (n < 1000) return String(n)
@@ -109,6 +102,8 @@ export function AssetsPanel({
   const [libraryMode, setLibraryMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [exporting, setExporting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const deleteBusy = useRef(false)
 
   useEffect(() => {
     void load(projectId)
@@ -162,8 +157,77 @@ export function AssetsPanel({
       danger: true
     })
     if (!confirmed) return
-    await remove(projectId, asset.id)
-    useToastStore.getState().show('素材已删除')
+    const deleted = await remove(projectId, asset.id).catch(() => false)
+    useToastStore.getState().show(deleted ? '素材已删除' : '删除素材失败')
+  }
+
+  const handleBatchDelete = async (): Promise<void> => {
+    if (!selectedAssets.length || deleteBusy.current) return
+    deleteBusy.current = true
+    setDeleting(true)
+    const context = { projectId, traceId: newTraceId(), spanId: newSpanId() }
+    const count = selectedAssets.length
+    try {
+      const confirmed = await useConfirmStore.getState().confirm({
+        title: `删除所选的 ${count} 个素材？`,
+        message: '删除后，引用这些素材的节点会显示素材缺失，此操作不可撤销。',
+        confirmText: '删除所选',
+        danger: true
+      })
+      if (!confirmed) {
+        emitDiagnosticsEvent(
+          batchDiagnostics.build(
+            'media.batch_delete_cancelled',
+            undefined,
+            '已取消批量删除素材',
+            context,
+            { status: 'cancelled', attributes: { count } }
+          )
+        )
+        return
+      }
+      emitDiagnosticsEvent(
+        batchDiagnostics.build(
+          'media.batch_delete_started',
+          undefined,
+          '开始批量删除素材',
+          context,
+          { attributes: { count } }
+        )
+      )
+      const deletedIds = new Set<string>()
+      for (const asset of selectedAssets) {
+        if (await remove(projectId, asset.id).catch(() => false)) deletedIds.add(asset.id)
+      }
+      setSelectedIds((ids) => new Set([...ids].filter((id) => !deletedIds.has(id))))
+      const deleted = deletedIds.size
+      const failed = count - deleted
+      emitDiagnosticsEvent(
+        batchDiagnostics.build(
+          failed ? 'media.batch_delete_failed' : 'media.batch_delete_completed',
+          undefined,
+          failed ? '有素材删除失败' : '批量删除素材完成',
+          context,
+          failed
+            ? {
+                status: 'failed',
+                attributes: { count, deleted, failed },
+                normalizedError: {
+                  code: 'MEDIA_WRITE_FAILED',
+                  category: 'media',
+                  retryable: true
+                }
+              }
+            : { status: 'success', attributes: { count, deleted, failed } }
+        )
+      )
+      useToastStore
+        .getState()
+        .show(failed ? `已删除 ${deleted} 个，${failed} 个删除失败` : `已删除 ${deleted} 个素材`)
+    } finally {
+      deleteBusy.current = false
+      setDeleting(false)
+    }
   }
 
   const handleSaveToLibrary = async (asset: IndexedMediaAsset): Promise<void> => {
@@ -255,7 +319,7 @@ export function AssetsPanel({
       </label>
 
       <div className="assets-toolbar">
-        <button type="button" className="side-panel-primary" onClick={onImport}>
+        <button type="button" className="assets-toolbar-btn" onClick={onImport}>
           <Icon name="upload" size={14} />
           导入素材
         </button>
@@ -263,19 +327,21 @@ export function AssetsPanel({
           type="button"
           className={`assets-toolbar-btn${selectionMode ? ' active' : ''}`}
           aria-pressed={selectionMode}
+          disabled={deleting}
           onClick={toggleSelectionMode}
         >
           <Icon name="check" size={14} />
-          多选导出
+          批量操作
         </button>
         <button
           type="button"
           className="assets-toolbar-btn"
-          disabled={exporting}
+          disabled={exporting || deleting || visible.length === 0}
+          title="导出当前筛选结果"
           onClick={() => void handleBatchExport(visible)}
         >
           <Icon name="download" size={14} />
-          导出筛选
+          批量导出
         </button>
       </div>
 
@@ -285,6 +351,7 @@ export function AssetsPanel({
             key={tab.key}
             type="button"
             className={`asset-filter-tab${typeFilter === tab.key ? ' active' : ''}`}
+            aria-pressed={typeFilter === tab.key}
             onClick={() => setTypeFilter(tab.key)}
           >
             {tab.label}
@@ -304,7 +371,11 @@ export function AssetsPanel({
             全部来源
           </option>
           {sourceOptions.map((option) => (
-            <option key={option.nodeId} value={option.nodeId} data-trigger-label={option.nodeTitle}>
+            <option
+              key={option.nodeId}
+              value={option.nodeId}
+              data-trigger-label={option.nodeTitle}
+            >
               {option.nodeTitle}
             </option>
           ))}
@@ -357,7 +428,7 @@ export function AssetsPanel({
           <button
             type="button"
             className="assets-batch-btn"
-            disabled={selectedIds.size === 0 || exporting}
+            disabled={selectedAssets.length === 0 || exporting || deleting}
             onClick={() => void handleBatchExport(selectedAssets)}
           >
             <Icon name="download" size={12} />
@@ -365,7 +436,17 @@ export function AssetsPanel({
           </button>
           <button
             type="button"
+            className="assets-batch-btn"
+            disabled={selectedAssets.length === 0 || exporting || deleting}
+            onClick={() => void handleBatchDelete()}
+          >
+            <Icon name="trash" size={12} />
+            {deleting ? '删除中…' : '删除所选'}
+          </button>
+          <button
+            type="button"
             className="assets-batch-btn ghost"
+            disabled={deleting}
             onClick={() => setSelectedIds(new Set())}
           >
             清除
@@ -383,7 +464,9 @@ export function AssetsPanel({
               asset={asset}
               selectionMode={selectionMode}
               selected={selectedIds.has(asset.id)}
-              onToggleSelect={() => toggleSelect(asset.id)}
+              onToggleSelect={() => {
+                if (!deleting) toggleSelect(asset.id)
+              }}
               onLocate={() => locateSource(asset)}
               onSaveLibrary={() => void handleSaveToLibrary(asset)}
               onDelete={() => void handleDelete(asset)}
@@ -429,9 +512,7 @@ function AssetCard({
           e,
           {
             label: asset.name ?? '',
-            ...(isVisual
-              ? { image: mediaUrl(asset.path) }
-              : { icon: kindIcon(asset.kind) })
+            ...(isVisual ? { image: mediaUrl(asset.path) } : { icon: kindIcon(asset.kind) })
           },
           onDragDrop
         )
@@ -491,9 +572,6 @@ function AssetCard({
         <span className="asset-name" title={asset.name}>
           {asset.name}
         </span>
-        <span className="asset-meta">
-          {formatSize(asset.sizeBytes)} · {formatTime(asset.createdAt)}
-        </span>
       </div>
 
       <button
@@ -516,7 +594,7 @@ function AssetCard({
           onSaveLibrary()
         }}
       >
-        <Icon name="add" size={12} />
+        <Icon name="assets" size={12} />
       </button>
       <button
         type="button"

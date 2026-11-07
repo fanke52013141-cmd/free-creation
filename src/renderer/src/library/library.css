@@ -210,11 +210,12 @@
 }
 .library-search svg { flex: 0 0 auto; }
 .library-search:focus-within {
-  border-color: var(--brand);
-  box-shadow: 0 0 0 2px rgba(66, 185, 245, 0.16);
+  border-color: rgba(148, 163, 184, 0.55);
 }
 .library-search input {
   width: 100%;
+  min-width: 0;
+  padding: 0;
   height: 100%;
   color: var(--txt);
   background: transparent;
@@ -503,7 +504,7 @@
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: radial-gradient(circle at 50% 42%, #141b24 0%, #0d1117 72%);
+  background: transparent;
 }
 .library-resource-cover::after {
   position: absolute;
@@ -604,21 +605,6 @@
   padding: 30px 20px 60px;
   text-align: center;
 }
-.library-empty-art {
-  display: grid;
-  place-items: center;
-  margin-bottom: 18px;
-}
-.library-empty-icon {
-  display: grid;
-  place-items: center;
-  width: 72px;
-  height: 72px;
-  color: var(--brand);
-  background: rgba(66, 185, 245, 0.1);
-  border-radius: 16px;
-  box-shadow: inset 0 0 0 1px rgba(66, 185, 245, 0.26);
-}
 .library-empty-state h2 {
   margin: 0 0 8px;
   color: var(--txt);
@@ -659,9 +645,9 @@
   display: flex;
   flex-direction: column;
   color: var(--txt);
-  background: #151922;
-  border-left: 1px solid #252b36;
-  box-shadow: -18px 0 48px rgba(0, 0, 0, 0.38);
+  background: var(--canvas-surface);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--canvas-drawer-shadow);
 }
 .library-detail-header {
   flex: 0 0 52px;
@@ -672,10 +658,16 @@
   border-bottom: 1px solid var(--line);
 }
 .library-detail-header-title {
-  color: var(--muted);
-  font-size: 13px;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--txt);
+  font-size: 16px;
   font-weight: 600;
 }
+.library-detail-header .library-icon-button { flex-shrink: 0; }
 .library-icon-button {
   display: grid;
   place-items: center;
@@ -695,19 +687,6 @@
   overflow: auto;
   padding: 20px;
 }
-.library-detail-title {
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--line);
-}
-.library-detail-title .library-resource-type {
-  position: static;
-  display: inline-block;
-  padding: 4px 10px;
-  color: #8bdcff;
-  background: rgba(66, 185, 245, 0.12);
-  border: 0;
-  border-radius: 999px;
-}
 .library-archived-badge {
   display: inline-block;
   margin-left: 0;
@@ -716,38 +695,6 @@
   background: rgba(224, 185, 112, 0.12);
   border-radius: 999px;
   font-size: 11px;
-}
-.library-detail-badges {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.library-version-badge {
-  padding: 4px 10px;
-  color: var(--brand);
-  background: rgba(66, 185, 245, 0.1);
-  border: 1px solid rgba(66, 185, 245, 0.25);
-  border-radius: 999px;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-.library-detail-title p.library-detail-meta {
-  margin: 0 0 8px;
-  color: var(--txt-dim);
-  font-size: 11px;
-}
-.library-detail-title h2 {
-  margin: 12px 0 7px;
-  color: var(--txt);
-  font-size: 19px;
-  font-weight: 600;
-}
-.library-detail-title p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.65;
-  white-space: pre-wrap;
 }
 .library-detail-tags {
   display: flex;
@@ -1811,49 +1758,6 @@
 }
 
 /* ── 2026-11-06 追加：星光默认封面 / 抽屉组件头 / 删除按钮 ─────────── */
-.library-cover-stars {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-.library-cover-stars::before {
-  position: absolute;
-  inset: 0;
-  content: '';
-  background: radial-gradient(circle at 50% 44%, rgba(134, 238, 243, 0.16), transparent 62%);
-  pointer-events: none;
-}
-.library-cover-stars svg {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-.library-star-dust circle {
-  fill: #bff6fb;
-}
-.library-star-halo {
-  fill: #86eef3;
-}
-.library-star-ray {
-  fill: #e6fdff;
-}
-.library-star-core {
-  fill: #ffffff;
-}
-.library-star-cluster {
-  transform-origin: 50% 44%;
-  animation: library-star-twinkle 6.5s ease-in-out infinite;
-}
-@keyframes library-star-twinkle {
-  0%, 100% { opacity: 0.86; }
-  50% { opacity: 1; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .library-star-cluster { animation: none; }
-}
-
 .library-detail-component-head {
   display: flex;
   align-items: center;
@@ -1897,3 +1801,41 @@
   color: #ffb4ab;
   background: rgba(237, 142, 142, 0.12);
 }
+
+/* Resource library refinements */
+.library-default-cover { display: grid; place-items: center; color: #8bb3c5; }
+.library-category-tabs { scrollbar-width: none; }
+.library-category-tabs::-webkit-scrollbar { display: none; }
+.library-category-tabs button, .library-category-tabs button.active { border-radius: 6px 6px 0 0; }
+.library-resource-card { border-radius: 10px; background: #171b23; box-shadow: none; }
+.library-resource-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgb(0 0 0 / 24%); }
+.library-resource-card-body { padding: 14px 15px; }
+.library-detail-tags:empty { display: none; }
+.library-detail-actions { justify-content: flex-end; gap: 10px; }
+.library-detail-actions .library-detail-delete, .library-detail-actions .library-primary { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 0 14px; border-radius: 7px; line-height: 1; }
+.library-detail-actions .library-detail-delete { background: rgba(182, 75, 80, 0.08); box-shadow: inset 0 0 0 1px #714449; color: #e6a3a3; }
+.library-resource-form-dialog .library-form-field > .app-select { width: 100%; min-height: 38px; }
+
+.library-category-dialog .app-select { width: 100%; min-height: 36px; }
+
+/* Stitch 资源详情：用分区和一致的文字层级组织内容。 */
+.library-detail-scroll { display: flex; flex-direction: column; gap: 14px; }
+.library-detail-section { padding: 16px; border: 1px solid #2a303c; border-radius: 9px; background: #191d26; }
+.library-detail-section:last-child { border-bottom: 1px solid #2a303c; }
+.library-detail-section-title h3 { font-size: 14px; }
+.library-detail-component-row:last-child { margin-bottom: 0; }
+.library-detail-actions { background: #11151d; }
+.library-detail-actions .library-detail-delete:focus-visible,
+.library-detail-actions .library-primary:focus-visible { outline: 2px solid #67d6e9; outline-offset: 2px; }
+
+.library-resource-cover::after { display: none; }
+.library-detail-actions .library-detail-delete { background: transparent; box-shadow: none; color: #b5bfcc; }
+.library-detail-actions .library-detail-delete:hover { color: #f19a9a; background: rgba(231, 123, 123, 0.1); }
+
+.library-resource-card { display: flex; flex-direction: column; }
+.library-resource-cover { flex: 0 0 auto; width: 100%; }
+.library-resource-card-body { flex: 1 1 auto; width: 100%; box-sizing: border-box; }
+
+.asset-thumb.library-card-cover-compact { background: transparent; }
+
+.library-detail-description { margin: 0 0 10px; color: var(--txt-dim); white-space: pre-wrap; overflow-wrap: anywhere; }

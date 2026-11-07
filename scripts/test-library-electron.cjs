@@ -48,6 +48,7 @@ async function launchApp(dataDir) {
     timeout: 90_000
   })
   const page = await app.firstWindow()
+  await app.evaluate(({ BrowserWindow }) => { for (const window of BrowserWindow.getAllWindows()) window.setTitle('【测试】资源库验收') })
   page.setDefaultTimeout(20_000)
   await page.waitForLoadState('domcontentloaded')
   await page.getByRole('button', { name: '资源库', exact: true }).waitFor()
@@ -68,9 +69,11 @@ async function readAsset(page, id) {
 async function main() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'canvas-library-electron-'))
   const wav = makeWav()
+  const video = fs.readFileSync(path.join(ROOT, 'test/fixtures/agent-video.mp4'))
   const expected = new Map([
     ['回归图片.png', { bytes: PNG, mime: 'image/png', type: 'image' }],
-    ['回归声音.wav', { bytes: wav, mime: 'audio/wav', type: 'audio' }]
+    ['回归声音.wav', { bytes: wav, mime: 'audio/wav', type: 'audio' }],
+    ['回归视频.mp4', { bytes: video, mime: 'video/mp4', type: 'video' }]
   ])
   let app
 
@@ -87,15 +90,17 @@ async function main() {
     await dialog.getByLabel('资源名称', { exact: true }).fill('图片与音频上传回归资产')
     await dialog.locator('.library-component-add-actions input[type="file"]').setInputFiles([
       { name: '回归图片.png', mimeType: 'image/png', buffer: PNG },
-      { name: '回归声音.wav', mimeType: 'audio/wav', buffer: wav }
+      { name: '回归声音.wav', mimeType: 'audio/wav', buffer: wav },
+      { name: '回归视频.mp4', mimeType: 'video/mp4', buffer: video }
     ])
-    await assert.equal(await dialog.locator('.library-component-edit').count(), 2)
+    await assert.equal(await dialog.locator('.library-component-edit').count(), 3)
     await page.screenshot({ path: path.join(dataDir, 'asset-library-upload-ready.png'), fullPage: true })
     await dialog.getByRole('button', { name: '保存资源', exact: true }).click()
     await dialog.waitFor({ state: 'hidden' })
 
     const card = page.locator('.library-resource-card').filter({ hasText: '图片与音频上传回归资产' })
     await card.waitFor()
+    assert.equal(await card.locator('.library-default-cover').getAttribute('data-icon-kind'), 'video')
     // Saving selects the new resource and opens its details automatically.
     await page.getByRole('dialog', { name: '资源详情' }).waitFor()
     const resourceId = await page.evaluate(async () => {
@@ -110,8 +115,8 @@ async function main() {
     assert.ok(detail, 'new resource is immediately readable from SQLite')
     assert.equal(detail.selectedTitle, '图片与音频上传回归资产')
     assert.equal(detail.category, undefined, 'uncategorized/freeform creation is supported')
-    assert.equal(detail.components.length, 2)
-    assert.deepEqual(detail.components.map((component) => component.valueType).sort(), ['audio', 'image'])
+    assert.equal(detail.components.length, 3)
+    assert.deepEqual(detail.components.map((component) => component.valueType).sort(), ['audio', 'image', 'video'])
 
     for (const component of detail.components) {
       const fixture = expected.get(component.fileName)
@@ -124,6 +129,30 @@ async function main() {
       assert.deepEqual(storedBytes, fixture.bytes, `${component.fileName} bytes must be persisted intact`)
     }
     assert.ok(firstRead.search.data.items.some((item) => item.id === detail.id), 'saved resource is in the uncategorized filter')
+
+    for (const [kind, mime, bytes, extension] of [
+      ['image', 'image/png', PNG, 'png'],
+      ['audio', 'audio/wav', wav, 'wav'],
+      ['video', 'video/mp4', video, 'mp4'],
+      ['text', null, null, null]
+    ]) {
+      await page.getByRole('button', { name: '关闭详情' }).click()
+      await page.locator('.library-page-header .library-primary').click()
+      const form = page.getByRole('dialog', { name: '新建资源', exact: true })
+      await form.getByLabel('资源名称', { exact: true }).fill(`单类型 ${kind}`)
+      if (kind === 'text') {
+        await form.getByRole('button', { name: '添加文本' }).click()
+        await form.locator('.library-component-text').fill('测试文本')
+      } else {
+        await form.locator('.library-component-add-actions input[type="file"]').setInputFiles({ name: `fixture.${extension}`, mimeType: mime, buffer: bytes })
+      }
+      await form.getByRole('button', { name: '保存资源', exact: true }).click()
+      await form.waitFor({ state: 'hidden' })
+      await page.getByRole('dialog', { name: '资源详情' }).waitFor()
+      const single = page.locator('.library-resource-card').filter({ hasText: `单类型 ${kind}` })
+      await single.waitFor()
+      assert.equal(await single.locator('.library-default-cover').getAttribute('data-icon-kind'), kind)
+    }
     await app.close()
     app = undefined
 
@@ -139,9 +168,10 @@ async function main() {
     const reopened = await page.getByRole('dialog', { name: '资源详情' }).waitFor().then(async () => readAsset(page, detail.id))
     assert.equal(reopened.detail.data.selectedTitle, detail.selectedTitle)
     assert.deepEqual(reopened.detail.data.components.map((component) => component.contentHash).sort(), detail.components.map((component) => component.contentHash).sort())
-    assert.equal(reopened.detail.data.components.length, 2, 'both media components survive an Electron restart')
+    assert.equal(reopened.detail.data.components.length, 3, 'all media components survive an Electron restart')
+    assert.equal(await afterRestartCard.locator('.library-default-cover').getAttribute('data-icon-kind'), 'video')
 
-    console.log(`PASS: uploaded image + audio through Electron UI; saved, SHA-256 verified, and read back after restart. Test data: ${dataDir}`)
+    console.log(`PASS: uploaded separate and mixed image, audio, video and text through Electron UI; saved, SHA-256 verified, and read back after restart. Test data: ${dataDir}`)
   } finally {
     if (app) await app.close().catch(() => {})
     if (process.env.CANVAS_LIBRARY_TEST_KEEP !== '1') fs.rmSync(dataDir, { recursive: true, force: true })

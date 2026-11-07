@@ -309,6 +309,8 @@ select:focus-visible {
 
 /* ── 画布页 ── */
 .canvas-page {
+  --canvas-selection-edge: rgba(234, 242, 250, 0.24);
+  --canvas-selection-fill: rgba(223, 236, 249, 0.075);
   --run-accent: #22d3ee;
   position: relative;
   display: flex;
@@ -1261,9 +1263,9 @@ select:focus-visible {
 .canvas-selection-underlay {
   position: absolute;
   box-sizing: border-box;
-  border: 1px solid rgba(234, 242, 250, 0.24);
+  border: 1px solid var(--canvas-selection-edge);
   border-radius: 18px;
-  background: rgba(223, 236, 249, 0.075);
+  background: var(--canvas-selection-fill);
   box-shadow:
     inset 0 1px rgba(255, 255, 255, 0.055),
     0 10px 34px rgba(0, 0, 0, 0.12);
@@ -4242,7 +4244,6 @@ select:focus-visible {
   align-items: center;
   gap: 8px;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--line);
 }
 
 .side-panel-icon {
@@ -6856,10 +6857,6 @@ select:focus-visible {
     font-size: 10px;
   }
 
-  .side-panel,
-  .node-contract-panel {
-    width: min(var(--side-panel-width), 92vw);
-  }
 }
 
 /* ── 资产中心 ── */
@@ -6870,12 +6867,6 @@ select:focus-visible {
   container-type: inline-size;
 }
 
-/* 资产面板与其它侧栏同宽：宽度统一由 --side-panel-width 决定（2026-11-03 对齐顶栏） */
-.side-panel.assets-side-panel {
-  width: var(--side-panel-width);
-}
-
-/* 头部多选开关：安静的幽灵药丸，激活时泛品牌色 */
 /* 搜索行：整行安静输入域 */
 .assets-search-row {
   display: flex;
@@ -6892,7 +6883,7 @@ select:focus-visible {
 }
 
 .assets-search-row:focus-within {
-  border-color: rgba(105, 208, 255, 0.45);
+  border-color: rgba(148, 163, 184, 0.55);
   color: var(--txt-dim);
 }
 
@@ -6907,34 +6898,26 @@ select:focus-visible {
   color: var(--txt);
 }
 
-.assets-search-row .assets-search:focus {
-  border-color: transparent;
+:is(.assets-search-row, .library-search) input:focus {
+  border: 0;
+  outline: none;
+  box-shadow: none;
 }
 
-/* 操作行：主导入占主位，两个次级动作靠右，绝不换行挤压 */
+/* 三个素材操作共用同一尺寸与交互状态。 */
 .assets-toolbar {
-  display: flex;
-  gap: 6px;
-  align-items: stretch;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
 }
 
-.assets-toolbar .side-panel-primary {
-  flex: 1 1 auto;
+.assets-toolbar-btn {
   min-height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-.assets-toolbar-btn {
-  flex: 0 0 auto;
-  min-height: 32px;
-  display: inline-flex;
-  align-items: center;
   gap: 5px;
-  padding: 0 12px;
+  padding: 0 4px;
   font-size: 11px;
   white-space: nowrap;
   border: 1px solid var(--border-soft) !important;
@@ -6957,6 +6940,12 @@ select:focus-visible {
   border-color: rgba(98, 199, 246, 0.3) !important;
   background: rgba(66, 185, 245, 0.13);
   color: #c1edff;
+}
+
+@container (max-width: 230px) {
+  .assets-toolbar-btn > svg {
+    display: none;
+  }
 }
 
 .assets-toolbar-btn:disabled {
@@ -6982,14 +6971,12 @@ select:focus-visible {
 
 .assets-filters {
   display: flex;
-  gap: 4px;
-  flex-wrap: nowrap;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--sunk);
   overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.assets-filters::-webkit-scrollbar {
-  display: none;
 }
 
 .asset-filter-tab {
@@ -7030,7 +7017,6 @@ select:focus-visible {
   min-width: 15px;
   padding: 0 5px;
   border-radius: 99px;
-  background: rgba(255, 255, 255, 0.07);
   font-style: normal;
   font-size: 10px;
   line-height: 15px;
@@ -7040,11 +7026,10 @@ select:focus-visible {
 }
 
 .asset-filter-tab.active .asset-filter-count {
-  background: rgba(66, 185, 245, 0.2);
   color: #a5e2ff;
 }
 
-/* ── 多选导出模式 ── */
+/* ── 批量操作模式 ── */
 .assets-panel-selection-mode .asset-card {
   cursor: pointer;
 }
@@ -7085,6 +7070,7 @@ select:focus-visible {
 
 .assets-batch-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
@@ -7094,8 +7080,7 @@ select:focus-visible {
 }
 
 .assets-batch-count {
-  flex: 1;
-  min-width: 0;
+  flex: 1 0 auto;
   font-size: 11px;
   color: #c1edff;
 }
@@ -7311,20 +7296,19 @@ select:focus-visible {
   overflow: visible;
 }
 
-/* 视频角标：半透明深色圆底，安静地点明这是视频，不抢封面。 */
+/* 视频封面中心使用低对比度播放标记。 */
 .asset-play-badge {
   position: absolute;
-  right: 6px;
-  bottom: 6px;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
   border-radius: 50%;
-  background: rgba(10, 14, 18, 0.66);
-  backdrop-filter: blur(6px);
-  color: #e8f1f8;
+  background: rgba(10, 14, 18, 0.36);
+  color: rgba(232, 241, 248, 0.8);
   pointer-events: none;
 }
 
@@ -7441,24 +7425,36 @@ select:focus-visible {
 
 /* ── 运行中心 ── */
 .runs-panel {
+  container-type: inline-size;
+  padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
 .runs-toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 6px;
 }
 
-.runs-toolbar select {
-  max-width: 92px;
-  padding: 5px 7px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--bg);
+.runs-toolbar .runs-filter-select {
+  width: auto;
+  min-width: 0;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--border-soft);
+  background: var(--sunk);
+  font-size: 12px;
+}
+
+.side-panel-count {
+  margin-inline-start: 3px;
   color: var(--txt-dim);
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 400;
 }
 
 .runs-focus-note {
@@ -7491,23 +7487,10 @@ select:focus-visible {
 }
 
 .run-card {
-  padding: 8px;
+  padding: 10px;
   border: 1px solid var(--line);
-  border-left: 3px solid var(--muted);
   border-radius: 8px;
   background: var(--card);
-}
-
-.run-card.success {
-  border-left-color: var(--success, #5fc89a);
-}
-
-.run-card.failed {
-  border-left-color: var(--danger, #e87979);
-}
-
-.run-card.running {
-  border-left-color: var(--brand);
 }
 
 .run-card-head {
@@ -7527,7 +7510,7 @@ select:focus-visible {
 
 .run-card-head strong {
   color: var(--txt);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .run-card-head small,
@@ -7537,8 +7520,9 @@ select:focus-visible {
 .run-error {
   margin: 3px 0 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .run-id {
@@ -7553,12 +7537,21 @@ select:focus-visible {
 }
 
 .run-status {
+  display: inline-flex;
+  align-items: center;
   align-self: flex-start;
-  padding: 2px 5px;
-  border-radius: 4px;
-  background: var(--bg);
-  color: var(--muted);
-  font-size: 9px;
+  gap: 5px;
+  white-space: nowrap;
+  color: var(--txt-dim);
+  font-size: 11px;
+}
+
+.run-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .run-status.success {
@@ -7575,25 +7568,41 @@ select:focus-visible {
 
 .run-card-actions {
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 3px;
   margin-top: 7px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border-soft);
 }
 
 .run-card-actions button {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 7px;
-  border: 1px solid var(--line);
+  min-height: 26px;
+  padding: 4px 5px;
+  border: 1px solid transparent;
   border-radius: 5px;
+  white-space: nowrap;
   background: transparent;
   color: var(--txt-dim);
   cursor: pointer;
   font-size: 10px;
 }
 
-.run-card-actions button:hover:not(:disabled) {
-  border-color: var(--brand);
+@container (max-width: 235px) {
+  .run-card-actions button > svg {
+    display: none;
+  }
+}
+
+.run-card-actions button[aria-expanded] {
+  margin-inline-end: auto;
+}
+
+.run-card-actions button:hover:not(:disabled),
+.run-card-actions button[aria-expanded="true"] {
+  background: var(--card-hover);
   color: var(--txt);
 }
 
@@ -11225,100 +11234,69 @@ select:focus-visible {
 /* ── P1-4 搜索覆盖层 ── */
 .search-overlay {
   position: fixed;
-  inset: 0;
+  inset: var(--canvas-search-top, 50px) 0 0;
   z-index: var(--z-modal);
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 18px 24px 24px;
-  animation: search-fade-in 0.15s ease;
 }
-@keyframes search-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
+
 .search-panel {
-  width: min(1100px, calc(100vw - 48px));
-  max-width: 92vw;
-  background: var(--bg);
+  position: absolute;
+  left: clamp(8px, var(--canvas-search-left, 50vw), calc(100% - var(--canvas-search-width)));
+  --canvas-search-width: min(268px, max(208px, var(--side-panel-width)), calc(100vw - 16px));
+  width: var(--canvas-search-width);
   border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-  animation: search-slide-in 0.2s ease;
 }
-@keyframes search-slide-in {
-  from {
-    transform: translateY(-16px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
+
 .search-header {
   display: flex;
   align-items: center;
-  gap: 16px;
-  min-height: 112px;
-  padding: 14px 24px;
-  border-bottom: 1px solid var(--line);
+  gap: 6px;
+  height: 32px;
+  padding: 0 6px 0 8px;
 }
+
 .search-icon {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
   flex-shrink: 0;
+  color: var(--txt-dim);
 }
+
 .search-input {
   flex: 1;
   min-width: 0;
-  min-height: 76px;
-  padding: 0 20px;
+  padding: 0;
   background: transparent;
-  border: 2px solid transparent;
-  border-radius: 16px;
+  border: 0;
   outline: none;
   color: var(--txt);
-  font-size: 22px;
-  font-family: inherit;
+  font: inherit;
+  font-size: 12px;
 }
-.search-input:focus {
-  border-color: #62b8f3;
-}
+
 .search-input::placeholder {
-  color: var(--muted);
+  color: var(--txt-dim);
 }
+
 .search-close {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-size: 16px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--txt-dim);
   cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 4px;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease,
-    box-shadow 0.15s ease;
 }
+
 .search-close:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--card-hover);
   color: var(--txt);
 }
+
 .search-results {
-  max-height: 360px;
+  border-top: 1px solid var(--line);
+  max-height: min(360px, calc(100dvh - var(--canvas-search-top, 50px) - 48px));
   overflow-y: auto;
   padding: 4px;
 }
@@ -11649,6 +11627,9 @@ select:focus-visible {
   gap: 6px;
   align-items: center;
 }
+.history-toolbar .assets-toolbar-btn {
+  width: 100%;
+}
 .history-list {
   flex: 1;
   overflow-y: auto;
@@ -11660,7 +11641,7 @@ select:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--line);
@@ -11669,14 +11650,9 @@ select:focus-visible {
 .history-card:hover {
   border-color: rgba(9, 202, 245, 0.3);
 }
-.history-card-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  flex-shrink: 0;
-}
 .history-card-info {
+  display: grid;
+  gap: 3px;
   flex: 1;
   min-width: 0;
 }
@@ -11689,7 +11665,8 @@ select:focus-visible {
   text-overflow: ellipsis;
 }
 .history-card-meta {
-  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
   color: var(--muted);
 }
 .history-card-actions {
@@ -12752,9 +12729,14 @@ canvas.tl-canvas-indicators {
 
 /* ── L05 运行中心流程时间线 ── */
 .run-timeline {
-  margin: 6px 0 2px;
-  border-left: 2px solid var(--border, #d5d5d5);
-  padding-left: 10px;
+  margin-top: 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--sunk);
+  padding: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 .run-timeline ol {
   list-style: none;
@@ -12769,7 +12751,7 @@ canvas.tl-canvas-indicators {
   flex-direction: column;
 }
 .run-timeline-item small {
-  color: var(--text-secondary, #888);
+  color: var(--txt-dim);
   font-family: var(--font-mono, monospace);
 }
 .run-timeline-item.level-error span,

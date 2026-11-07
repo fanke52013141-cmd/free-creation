@@ -78,17 +78,33 @@ const path = require('node:path')
       window.__v22Image=canvas.toDataURL('image/png')
       window.__v22FileCalls=[]
       window.api.revealMedia=async id=>{window.__v22FileCalls.push(['locate',id]);return {ok:true,data:true}}
-      window.api.copyMediaPath=async id=>{window.__v22FileCalls.push(['copy',id]);return {ok:true,data:true}}
       editor.createShape({id:'shape:v22-asset',type:'node-card',x:290,y:150,props:{nodeType:'image',title:'图片',mediaId:'v22-image',mediaPath:window.__v22Image,mediaMime:'image/png'}})
       editor.setCamera({x:0,y:0,z:1},{immediate:true})
     })
     const asset=page.locator('[data-node-id="shape:v22-asset"]')
     assert.equal(await asset.locator('.media-action-primary button').count(),6)
-    assert.equal(await asset.locator('.node-header .media-file-action-btn').count(),2)
+    assert.equal(await asset.locator('.node-header .media-file-action-btn').count(),1)
     assert.equal(await asset.locator('.port-dot.in').count(),0)
     await asset.getByRole('button',{name:'在资源管理器中定位',exact:true}).click()
-    await asset.getByRole('button',{name:'复制文件路径',exact:true}).click()
-    assert.deepEqual(await page.evaluate(()=>window.__v22FileCalls),[['locate','v22-image'],['copy','v22-image']])
+    assert.equal(await asset.getByRole('button',{name:'复制文件路径',exact:true}).count(),0)
+    assert.deepEqual(await page.evaluate(()=>window.__v22FileCalls),[['locate','v22-image']])
+    for (const theme of ['dark', 'light']) {
+      await page.locator('.canvas-page').evaluate((node, selectedTheme) => {
+        node.classList.toggle('canvas-theme-dark', selectedTheme === 'dark')
+        node.classList.toggle('canvas-theme-light', selectedTheme === 'light')
+      }, theme)
+      for (const button of await asset.locator('.node-header :is(.node-info-btn, .node-run-btn, .media-file-action-btn):not(:disabled)').all()) {
+        await button.hover()
+        await page.waitForTimeout(250)
+        assert.equal(await button.evaluate(node=>getComputedStyle(node).backgroundColor), 'rgba(0, 0, 0, 0)', `${theme} 标题图标悬浮无背景`)
+      }
+      assert.equal(await asset.locator('.node-hover-spot').count(),0)
+    }
+    await page.locator('.canvas-page').evaluate(node => {
+      node.classList.add('canvas-theme-dark')
+      node.classList.remove('canvas-theme-light')
+    })
+
     await page.evaluate(async () => {
       const { useEditorStore } = await import('/src/stores/editor.ts')
       useEditorStore.getState().editor.selectNone()

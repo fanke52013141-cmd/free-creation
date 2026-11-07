@@ -27,10 +27,10 @@ describe('节点详情面板', () => {
   })
 
   it('tab 固定为概览→输入输出→设置→运行，协作 tab 覆盖全部 Agent 系节点', () => {
-    const overview = panelSource.indexOf("{ id: 'overview', label: '概览', icon: 'info' }")
-    const io = panelSource.indexOf("{ id: 'io', label: '输入输出', icon: 'node-library' }")
-    const settings = panelSource.indexOf("{ id: 'settings', label: '设置', icon: 'settings' }")
-    const run = panelSource.indexOf("{ id: 'run', label: '运行', icon: 'play' }")
+    const overview = panelSource.indexOf("{ id: 'overview', label: '概览' }")
+    const io = panelSource.indexOf("{ id: 'io', label: '输入输出' }")
+    const settings = panelSource.indexOf("{ id: 'settings', label: '设置' }")
+    const run = panelSource.indexOf("{ id: 'run', label: '运行' }")
     expect(overview).toBeGreaterThan(-1)
     expect(io).toBeGreaterThan(overview)
     expect(settings).toBeGreaterThan(io)

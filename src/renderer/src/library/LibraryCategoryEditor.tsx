@@ -10,6 +10,7 @@ import {
   type LibraryNodeType
 } from '@shared/library/blueprint'
 import { Icon } from '../components/Icon'
+import { AppSelect } from '../components/AppSelect'
 
 const newSlot = (nodeType: LibraryNodeType = 'image'): LibraryNodeSlot => ({
   id: `slot-${crypto.randomUUID()}`,
@@ -203,7 +204,8 @@ export function LibraryCategoryEditor({
                     </label>
                     <label>
                       <span>映射到节点</span>
-                      <select
+                      <AppSelect
+                        aria-label="映射到节点"
                         value={slot.nodeType}
                         onChange={(e) => {
                           const type = e.target.value as LibraryNodeType
@@ -233,7 +235,7 @@ export function LibraryCategoryEditor({
                             {adapter.label}
                           </option>
                         ))}
-                      </select>
+                      </AppSelect>
                     </label>
                   </div>
                   <div className="library-slot-options">

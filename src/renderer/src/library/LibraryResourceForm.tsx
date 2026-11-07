@@ -1,3 +1,4 @@
+import { AppSelect } from '../components/AppSelect'
 import { useState } from 'react'
 // 先加载库级基础样式，再加载本表单的局部视觉层，保证同权重规则以局部样式收口。
 import './library.css'
@@ -420,10 +421,10 @@ export function LibraryResourceForm({
         </header>
         <div className="library-form-scroll">
           <label className="library-form-field"><span>资源分类</span>
-            <select value={selectedCategoryKey} onChange={(event) => handleCategoryChange(event.currentTarget.value)}>
+            <AppSelect value={selectedCategoryKey} onChange={(event) => handleCategoryChange(event.currentTarget.value)} aria-label="资源分类">
               <option value="">{detail ? '未分类自由组合' : '不选分类，保存为自由组合'}</option>
               {availableCategories.map((category) => <option key={categoryKey(category)} value={categoryKey(category)}>{category.name}</option>)}
-            </select>
+            </AppSelect>
           </label>
           <label className="library-form-field"><span>资源名称</span><input autoFocus maxLength={180} value={title} onChange={(event) => setTitle(event.currentTarget.value)} placeholder="例如：主角设定" /></label>
           <label className="library-form-field"><span>说明</span><textarea value={description} maxLength={20000} onChange={(event) => setDescription(event.currentTarget.value)} placeholder="记录用途、来源或使用建议" /></label>

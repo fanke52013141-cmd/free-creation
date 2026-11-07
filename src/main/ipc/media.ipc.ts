@@ -566,11 +566,24 @@ export function registerMediaIpc(): void {
   ipcMain.handle(
     IPC.media.videoThumbnails,
     async (_e, input: VideoThumbnailsInput): Promise<IpcEnvelope<VideoThumbnailsResult>> => {
-      if (!input?.projectId || !input.sourceMediaId || !input.count)
+      const context = { traceId: newTraceId(), spanId: newSpanId(), projectId: input?.projectId }
+      const startedAt = Date.now()
+      emitGatewayEvent('media.video_thumbnails.started', '视频缩略图生成开始', context)
+      if (!input?.projectId || !input.sourceMediaId || !input.count) {
+        emitGatewayEvent('media.video_thumbnails.failed', '视频缩略图参数无效', context, { status: 'failed', phase: 'input' })
         return err('INVALID_INPUT', '缺少缩略图参数')
+      }
       try {
-        return ok(await generateVideoThumbnails(input))
+        const result = await generateVideoThumbnails(input)
+        emitGatewayEvent('media.video_thumbnails.completed', '视频缩略图生成完成', context, {
+          status: 'success', durationMs: Date.now() - startedAt,
+          attributes: { count: result.thumbnails.filter(Boolean).length }
+        })
+        return ok(result)
       } catch (error) {
+        emitGatewayEvent('media.video_thumbnails.failed', '视频缩略图生成失败', context, {
+          status: 'failed', phase: 'generate', durationMs: Date.now() - startedAt
+        })
         return err(
           'VIDEO_THUMBNAILS_FAILED',
           error instanceof Error ? error.message : String(error)

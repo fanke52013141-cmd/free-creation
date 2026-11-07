@@ -3,7 +3,7 @@ import { RunTimeline } from './RunTimeline'
 // 资产中心：项目级媒体库——导入/搜索/筛选/缩略图预览/点击拖到画布/删除
 // 节点库：列出用户保存的单节点或多节点组合，并允许搜索、添加和删除。
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { Editor, TLShapeId } from 'tldraw'
+import { useValue, type Editor, type TLShapeId } from 'tldraw'
 import type { MediaAsset } from '@shared/types'
 import type { NodeCardShape } from './NodeCardShape'
 import {
@@ -29,6 +29,8 @@ import { DiagnosticsProducer, newProducerId, newSpanId, newTraceId } from '@shar
 import { emitDiagnosticsEvent } from '../engine/diagnosticsReporter'
 import { useHistorySnapshots, type HistorySnapshot } from '../stores/history-snapshots'
 import { Icon, type IconName } from '../components/Icon'
+import { getNodeType } from '../nodes/registry'
+import { LibraryCardCover } from '../library/LibraryCardCover'
 import { AppSelect } from '../components/AppSelect'
 import { AssetsPanel } from './side-panel/AssetsPanel'
 import { useDragToCanvas } from './drag-to-canvas'
@@ -89,10 +91,7 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
   }, [wfLoad])
 
   // 将节点库条目添加到画布：点击放在视口中心，拖拽则落在光标位置。
-  const handleApply = (
-    tmpl: WorkflowTemplate,
-    dropScreen?: { x: number; y: number }
-  ): void => {
+  const handleApply = (tmpl: WorkflowTemplate, dropScreen?: { x: number; y: number }): void => {
     if (!editor) return
     const { skippedEdges } = addNodeLibraryEntry(editor, tmpl, true, dropScreen)
     toast(
@@ -129,7 +128,7 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
       </label>
       {templates.length === 0 ? (
         <div className="side-panel-empty">
-          节点库还是空的。右键点击画布节点，选择「保存为可复用内容」中的流程模板；也可以多选节点后使用浮动工具栏保存。
+          节点库还是空的。右键点击画布节点，选择「保存节点」中的流程模板；也可以多选节点后使用浮动工具栏保存。
         </div>
       ) : visibleTemplates.length === 0 ? (
         <div className="side-panel-empty">没有找到匹配的节点库条目。</div>
@@ -160,22 +159,24 @@ function WorkflowCard({
   onRemove: () => void
 }): React.JSX.Element {
   const { startDrag, handleClick } = useDragToCanvas()
+  const outputTypes = new Set(
+    template.nodes.flatMap(
+      (node) => getNodeType(node.nodeType)?.ports.out.map((port) => port.type) ?? []
+    )
+  )
+  const coverIcon =
+    (['video', 'image', 'audio', 'text'] as const).find((kind) => outputTypes.has(kind)) ??
+    (template.nodes.some((node) => node.text?.trim()) ? 'text' : 'node-library')
   return (
     <article
       className="asset-card"
       title="点击添加到画布，或直接拖到画布"
       onPointerDown={(e) =>
-        startDrag(e, { label: template.name, icon: 'node-library' }, (x, y) =>
-          onApply({ x, y })
-        )
+        startDrag(e, { label: template.name, icon: coverIcon }, (x, y) => onApply({ x, y }))
       }
       onClick={() => handleClick(() => onApply())}
     >
-      <div className="asset-thumb kind-workflow">
-        <span className="asset-thumb-icon">
-          <Icon name="node-library" size={24} />
-        </span>
-      </div>
+      <LibraryCardCover icon={coverIcon} compact />
       <div className="asset-info">
         <span className="asset-name" title={template.name}>
           {template.name}
@@ -198,7 +199,6 @@ function WorkflowCard({
 
 type RunFocus = { nodeId: string; runId: string } | null
 
-
 function runInputSummary(run: IndexedNodeRun): string {
   const items = Object.entries(run.inputs).flatMap(([targetPort, sources]) =>
     sources.map((source) => `${source.portId} → ${targetPort}`)
@@ -210,11 +210,13 @@ function runInputSummary(run: IndexedNodeRun): string {
 function RunsPanel({
   editor,
   projectId,
+  entries,
   focus,
   onClearFocus
 }: {
   editor: Editor | null
   projectId: string
+  entries: IndexedNodeRun[]
   focus: RunFocus
   onClearFocus: () => void
 }): React.JSX.Element {
@@ -239,15 +241,6 @@ function RunsPanel({
     }
   }
 
-  // 运行结束会更新 retrying 并触发重渲染，从持久化记录重建列表。
-  // 画布节点数量有限，避免为这份状态快照增加额外的同步副作用。
-  const entries = editor
-    ? buildRunIndex(
-        editor
-          .getCurrentPageShapes()
-          .filter((shape): shape is NodeCardShape => shape.type === 'node-card')
-      )
-    : []
   const visible = filterRunIndex(entries, {
     status,
     keyword,
@@ -278,15 +271,19 @@ function RunsPanel({
   return (
     <div className="side-panel-body runs-panel">
       <div className="runs-toolbar">
-        <input
-          className="assets-search"
-          placeholder="搜索节点、运行 ID 或端口…"
-          aria-label="搜索运行记录"
-          value={keyword}
-          onChange={(event) => setKeyword(event.target.value)}
-          onPointerDown={(event) => event.stopPropagation()}
-          onKeyDown={(event) => event.stopPropagation()}
-        />
+        <label className="assets-search-row">
+          <Icon name="search" size={14} />
+          <input
+            className="assets-search"
+            placeholder="搜索运行"
+            aria-label="搜索运行记录"
+            title="搜索节点、运行 ID 或端口"
+            value={keyword}
+            onChange={(event) => setKeyword(event.target.value)}
+            onPointerDown={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          />
+        </label>
         <AppSelect
           className="runs-filter-select"
           value={status}
@@ -313,73 +310,89 @@ function RunsPanel({
         </div>
       ) : (
         <div className="runs-list">
-          {visible.map((run) => (
-            <article className={`run-card ${run.status}`} key={`${run.nodeId}:${run.runId}`}>
-              <div className="run-card-head">
-                <div>
-                  <strong>{run.nodeTitle}</strong>
-                  <small>
-                    {run.nodeType} · {formatTime(run.startedAt)}
-                    {run.isLatest ? ' · 最近' : ''}
-                  </small>
-                </div>
-                <span className={`run-status ${run.status}`}>{statusText(run.status)}</span>
-              </div>
-              <small className="run-id">{run.runId}</small>
-              <p className="run-inputs">输入：{runInputSummary(run)}</p>
-              {run.outputPorts && (
-                <p className="run-outputs">输出：{run.outputPorts.join('、') || '无'}</p>
-              )}
-              {(() => {
-                const guidance = mapRunError(run.status, run.error)
-                return guidance ? (
-                  <div className="run-error">
-                    <p>
-                      {guidance.stage}：{guidance.reason}
-                    </p>
-                    <p className="run-error-action">{guidance.action}</p>
+          {visible.map((run) => {
+            const rowId = `${run.nodeId}:${run.runId}`
+            const expanded = timelineRunId === rowId
+            return (
+              <article className={`run-card ${run.status}`} key={rowId}>
+                <div className="run-card-head">
+                  <div>
+                    <strong>{run.nodeTitle}</strong>
+                    <small>
+                      {run.nodeType} · {formatTime(run.startedAt)}
+                      {run.isLatest ? ' · 最近' : ''}
+                    </small>
                   </div>
-                ) : null
-              })()}
-              {run.traceId && (
+                  <span className={`run-status ${run.status}`}>{statusText(run.status)}</span>
+                </div>
+                <small className="run-id">{run.runId}</small>
+                <p className="run-inputs">输入：{runInputSummary(run)}</p>
+                {run.outputPorts && (
+                  <p className="run-outputs">输出：{run.outputPorts.join('、') || '无'}</p>
+                )}
+                {(() => {
+                  const guidance = mapRunError(run.status, run.error)
+                  return guidance ? (
+                    <div className="run-error">
+                      <p>
+                        {guidance.stage}：{guidance.reason}
+                      </p>
+                      <p className="run-error-action">{guidance.action}</p>
+                    </div>
+                  ) : null
+                })()}
                 <div className="run-card-actions">
-                  <button
-                    onClick={() => setTimelineRunId(timelineRunId === run.runId ? null : run.runId)}
-                  >
-                    <Icon name="history" size={12} />
-                    {timelineRunId === run.runId ? '收起时间线' : '流程时间线'}
-                  </button>
-                  <button
-                    disabled={exporting}
-                    onClick={() => {
-                      if (run.traceId) void exportBundle(run.traceId)
-                    }}
-                  >
-                    <Icon name="download" size={12} />
-                    {exporting ? '导出中…' : '导出诊断包'}
+                  {run.traceId && (
+                    <>
+                      <button
+                        aria-expanded={expanded}
+                        title="查看本次运行各阶段的诊断事件"
+                        onClick={() => setTimelineRunId(expanded ? null : rowId)}
+                      >
+                        <Icon name="history" size={12} /> 运行详情
+                      </button>
+                      <button
+                        disabled={exporting}
+                        onClick={() => {
+                          if (run.traceId) void exportBundle(run.traceId)
+                        }}
+                      >
+                        <Icon name="download" size={12} />
+                        {exporting ? '导出中…' : '导出诊断包'}
+                      </button>
+                    </>
+                  )}
+                  <button onClick={() => locate(run)}>
+                    <Icon name="target" size={12} /> 回到节点
                   </button>
                 </div>
-              )}
-              {timelineRunId === run.runId && run.traceId && <RunTimeline traceId={run.traceId} />}
-              <div className="run-card-actions">
-                <button onClick={() => locate(run)}>
-                  <Icon name="target" size={12} /> 回到节点
-                </button>
                 {run.status === 'failed' && (
-                  <button disabled={retrying !== null} onClick={() => void retry(run)}>
-                    <Icon name="reset" size={12} />
-                    {retrying === run.runId ? '重试中…' : '重试节点'}
-                  </button>
+                  <div className="run-card-actions">
+                    <button disabled={retrying !== null} onClick={() => void retry(run)}>
+                      <Icon name="reset" size={12} />
+                      {retrying === run.runId ? '重试中…' : '重试节点'}
+                    </button>
+                  </div>
                 )}
-              </div>
-            </article>
-          ))}
+                {expanded && run.traceId && <RunTimeline traceId={run.traceId} />}
+              </article>
+            )
+          })}
         </div>
       )}
-      {entries.length > 0 && <div className="assets-footer">共 {visible.length} 条运行记录</div>}
     </div>
   )
 }
+
+const historyDate = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23'
+})
 
 // ── 历史版本面板 ──
 function HistoryPanel({
@@ -393,7 +406,6 @@ function HistoryPanel({
   const load = useHistorySnapshots((s) => s.load)
   const add = useHistorySnapshots((s) => s.add)
   const remove = useHistorySnapshots((s) => s.remove)
-  const [label, setLabel] = useState('')
   const [restoring, setRestoring] = useState(false)
   const restoreBusy = useRef(false)
   const restoreContext = useRef({ projectId, editor, mounted: true })
@@ -417,8 +429,7 @@ function HistoryPanel({
       if (s.type === 'node-card') nodeCount++
     }
     try {
-      await add(projectId, snapshot, nodeCount, label)
-      setLabel('')
+      await add(projectId, snapshot, nodeCount, '')
       toast(`已保存版本（${nodeCount} 节点）`)
     } catch (error) {
       toast(`保存版本失败：${String(error)}`)
@@ -545,20 +556,8 @@ function HistoryPanel({
   return (
     <div className="side-panel-body history-panel">
       <div className="history-toolbar">
-        <input
-          className="wf-name-input"
-          placeholder="版本名称（可选）…"
-          aria-label="版本名称（可选）"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          onPointerDown={(e) => e.stopPropagation()}
-          onKeyDown={(e) => {
-            e.stopPropagation()
-            if (e.key === 'Enter') void handleSave()
-          }}
-        />
         <button
-          className="side-panel-primary"
+          className="assets-toolbar-btn"
           onClick={() => void handleSave()}
           disabled={!editor || restoring}
         >
@@ -572,16 +571,16 @@ function HistoryPanel({
         <div className="side-panel-empty">暂无历史版本。点击「保存版本」记录当前画布状态。</div>
       ) : (
         <div className="history-list">
-          {snapshots.map((snap) => (
+          {snapshots.map((snap, index) => (
             <div key={snap.id} className="history-card">
-              <span className="history-card-icon">
-                <Icon name="history" size={16} />
-              </span>
-              <div className="history-card-info">
-                <span className="history-card-label">{snap.label}</span>
-                <span className="history-card-meta">
-                  {formatTime(snap.timestamp)} · {snap.nodeCount} 节点
-                </span>
+              <div className="history-card-info" title={snap.label}>
+                <span className="history-card-label">{snapshots.length - index}.0</span>
+                <time
+                  className="history-card-meta"
+                  dateTime={new Date(snap.timestamp).toISOString()}
+                >
+                  {historyDate.format(snap.timestamp).replaceAll('/', '-')}
+                </time>
               </div>
               <div className="history-card-actions">
                 <button
@@ -619,6 +618,18 @@ export function CanvasSidePanel({
 }: CanvasSidePanelProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [runFocus, setRunFocus] = useState<RunFocus>(null)
+  const runEntries = useValue(
+    'run center entries',
+    () =>
+      tab === 'runs' && editor
+        ? buildRunIndex(
+            editor
+              .getCurrentPageShapes()
+              .filter((shape): shape is NodeCardShape => shape.type === 'node-card')
+          )
+        : [],
+    [tab, editor]
+  )
 
   useEffect(() => {
     if (!tab) return
@@ -635,12 +646,15 @@ export function CanvasSidePanel({
   const meta = TAB_META[tab]
 
   return (
-    <div className={`side-panel${tab === 'assets' ? ' assets-side-panel' : ''}`} ref={ref}>
-      <div className={`side-panel-head${tab === 'assets' ? ' assets-panel-head' : ''}`}>
+    <div className={`side-panel side-panel--${tab}`} ref={ref}>
+      <div className="side-panel-head">
         <span className="side-panel-icon">
           <Icon name={meta.icon} size={17} />
         </span>
-        <strong className="side-panel-title">{meta.title}</strong>
+        <strong className="side-panel-title">
+          {meta.title}
+          {tab === 'runs' && <span className="side-panel-count">（{runEntries.length} 条）</span>}
+        </strong>
         <button className="side-panel-close" aria-label="关闭面板" onClick={onClose}>
           <Icon name="close" size={15} />
         </button>
@@ -660,6 +674,7 @@ export function CanvasSidePanel({
         <RunsPanel
           editor={editor}
           projectId={projectId}
+          entries={runEntries}
           focus={runFocus}
           onClearFocus={() => setRunFocus(null)}
         />

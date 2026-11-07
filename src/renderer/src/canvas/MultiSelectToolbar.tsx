@@ -196,7 +196,7 @@ export function MultiSelectToolbar({
               <button
                 className="ms-btn ms-run"
                 data-tool="run"
-                aria-label="运行所选节点及依赖"
+                aria-label="运行"
                 onClick={() => onRunFlow(selectedIds)}
               >
                 <Icon name="play" size={16} />
@@ -207,7 +207,7 @@ export function MultiSelectToolbar({
             <button
               className="ms-btn ms-template"
               data-tool="node-library"
-              aria-label="保存为可复用内容"
+              aria-label="保存节点"
               onClick={() => onSaveWorkflow(selectedIds)}
             >
               <Icon name="node-library" size={16} />

@@ -105,6 +105,7 @@ export interface LibraryResourceSummary {
   latestRevisionId: string
   revisionNumber: number
   componentCount: number
+  iconKind?: 'video' | 'image' | 'audio' | 'text'
   coverPath?: string
   tags: string[]
   collectionIds: string[]

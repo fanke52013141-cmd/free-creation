@@ -616,20 +616,6 @@ export function MediaFileActions({
       >
         <Icon name="target" size={11} />
       </button>
-      <button
-        type="button"
-        className="icon-btn media-file-action-btn"
-        aria-label="复制文件路径"
-        onPointerDown={(e) => stopEventPropagation(e)}
-        onClick={(e) => {
-          e.stopPropagation()
-          void window.api.copyMediaPath(shape.props.mediaId)
-            .then((result) => toast(result.ok && result.data ? '复制成功' : '复制失败，请重试'))
-            .catch(() => toast('复制失败，请重试'))
-        }}
-      >
-        <Icon name="copy" size={11} />
-      </button>
     </span>
   )
 }

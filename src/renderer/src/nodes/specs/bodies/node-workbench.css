@@ -39,18 +39,27 @@
   z-index: 10000;
 }
 
+.desktop-window-overlay .video-operations-mask {
+  top: var(--window-caption-height);
+  -webkit-app-region: no-drag;
+}
+
 .video-operations-dialog {
   --accent: #38bdf8;
   --line: rgba(148, 163, 184, 0.18);
-  --panel: #0b0f17;
+  --panel: #151c28;
+  --workbench-field: #111824;
+  --workbench-raised: #202b3b;
+  --workbench-selection: #b7d8ec;
+  --workbench-height: calc(100dvh - var(--window-caption-height, 0px) - 24px);
   --txt: #e2e8f0;
   --muted: #94a3b8;
   width: min(1152px, calc(100vw - 24px));
-  height: min(900px, calc(100vh - 24px));
-  max-height: calc(100vh - 24px);
+  height: min(900px, var(--workbench-height));
+  max-height: var(--workbench-height);
   border-color: rgba(255, 255, 255, 0.1);
   border-radius: 16px;
-  background: radial-gradient(120% 120% at 50% 0%, #151d2d 0%, #0c1018 100%);
+  background: var(--panel);
   box-shadow:
     0 25px 60px -15px rgba(0, 0, 0, 0.8),
     0 0 0 1px rgba(255, 255, 255, 0.08);
@@ -62,8 +71,7 @@
   min-height: 56px;
   padding: 8px 20px;
   border-bottom-color: rgba(255, 255, 255, 0.06);
-  background: rgba(15, 23, 42, 0.72);
-  backdrop-filter: blur(14px);
+  background: var(--panel);
 }
 
 .video-operations-title {
@@ -114,32 +122,31 @@
 }
 
 .video-operations-tabs {
-  display: inline-flex;
-  align-items: center;
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   justify-self: center;
-  gap: 4px;
-  padding: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 11px;
-  background: rgba(2, 6, 23, 0.78);
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--workbench-field);
 }
 
 .video-operations-tabs button {
-  min-height: 32px;
-  padding: 0 15px;
-  border: 0;
-  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 6px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
-  border: 1px solid transparent;
-  transition:
-    color 120ms ease,
-    background 120ms ease,
-    box-shadow 120ms ease;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .video-operations-tabs button:hover {
@@ -147,11 +154,9 @@
 }
 
 .video-operations-tabs button.active {
-  border-color: rgba(56, 189, 248, 0.32);
-  background: rgba(56, 189, 248, 0.18);
-  color: #7dd3fc;
-  font-weight: 650;
-  box-shadow: 0 0 12px rgba(56, 189, 248, 0.14);
+  background: var(--workbench-raised);
+  color: var(--txt);
+  box-shadow: inset 0 -2px var(--workbench-selection);
 }
 
 .video-operations-close {
@@ -163,11 +168,10 @@
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   min-height: 0;
   overflow-y: auto;
-  padding: 9px 12px 10px;
-  background: rgba(7, 9, 14, 0.34);
+  padding: 12px;
 }
 
 .video-operations-workspace {
@@ -199,9 +203,9 @@
 
 .video-operations-player {
   display: flex;
-  flex: 0 0 clamp(300px, 48vh, 460px);
+  flex: 0 0 clamp(200px, 36vh, 400px);
   flex-direction: column;
-  min-height: 280px;
+  min-height: 200px;
   overflow: hidden;
   background: #07090e;
 }
@@ -214,20 +218,7 @@
   width: 100%;
   min-height: 0;
   overflow: hidden;
-  background-color: #07090e;
-  background-image: radial-gradient(#1e293b 1px, transparent 1px);
-  background-size: 20px 20px;
-}
-
-.video-operations-preview-wrap.portrait {
-  background: #fff;
-}
-
-.video-operations-preview-wrap.landscape {
-  background-color: #07090e;
-  background-image:
-    linear-gradient(to top, rgba(7, 9, 14, 0.48), transparent 38%),
-    radial-gradient(#1e293b 1px, transparent 1px);
+  background: #090e16;
 }
 
 .video-operations-preview {
@@ -275,7 +266,8 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px 12px;
-  padding-top: 7px;
+  padding: 6px 12px;
+  background: var(--panel);
 }
 
 .video-operations-controls-main {
@@ -307,7 +299,7 @@
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  background: rgba(2, 6, 23, 0.62);
+  background: transparent;
   color: #cbd5e1;
   cursor: pointer;
   font: inherit;
@@ -316,9 +308,8 @@
 
 .video-operations-player-button.primary,
 .video-operations-player-button:hover:not(:disabled) {
-  border-color: rgba(56, 189, 248, 0.34);
-  background: rgba(56, 189, 248, 0.17);
-  color: #bae6fd;
+  background: var(--workbench-raised);
+  color: var(--txt);
 }
 
 .video-operations-player-button.video-operations-volume-button,
@@ -332,11 +323,12 @@
   color: #fff;
 }
 
-.video-operations-player-button.primary.with-time {
-  display: inline-flex;
-  width: auto;
+.video-operations-timecode {
+  display: flex;
+  align-items: center;
   gap: 6px;
-  padding: 0 8px;
+  padding-inline: 8px;
+  border-left: 1px solid var(--line);
 }
 
 .video-operations-player-button.step {
@@ -359,7 +351,7 @@
 }
 
 .video-operations-player-time.current {
-  color: #7dd3fc;
+  color: var(--txt);
   font-weight: 600;
 }
 
@@ -373,7 +365,7 @@
   width: 78px;
   height: 22px;
   margin: 0;
-  accent-color: #38bdf8;
+  accent-color: var(--workbench-selection);
   background: transparent;
   cursor: pointer;
 }
@@ -392,10 +384,10 @@
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px 12px 9px;
-  border-top: 1px solid rgba(255, 255, 255, 0.09);
-  background: rgba(15, 23, 42, 0.82);
+  gap: 10px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--workbench-field);
 }
 
 .video-operations-axes {
@@ -414,7 +406,7 @@
 
 .video-operations-axis-label {
   color: #8290a4;
-  font-size: 10px;
+  font-size: 11px;
   text-align: right;
   white-space: nowrap;
 }
@@ -427,58 +419,127 @@
   background: transparent;
 }
 
+.video-operations-ruler {
+  display: flex;
+  justify-content: space-between;
+  margin-left: 50px;
+  color: var(--muted);
+  font: 10px var(--font-mono, monospace);
+}
+
+.video-operations-ruler span::after {
+  display: block;
+  width: 1px;
+  height: 4px;
+  margin-top: 3px;
+  background: var(--line);
+  content: '';
+}
+
+.video-operations-ruler span:last-child::after {
+  margin-left: auto;
+}
+
 .video-operations-timeline .video-timeline-track {
-  height: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  background-color: #080b12;
-  background-image: repeating-linear-gradient(
-    to right,
-    transparent 0,
-    transparent calc(12.5% - 1px),
-    rgba(255, 255, 255, 0.08) calc(12.5% - 1px),
-    rgba(255, 255, 255, 0.08) 12.5%
-  );
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--workbench-raised);
   cursor: pointer;
 }
 
+.video-operations-timeline .video-timeline-thumbnails {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.video-operations-timeline .video-timeline-thumbnails img {
+  opacity: 0.86;
+}
+
+.video-operations-timeline .video-timeline-track::before {
+  top: 0;
+  bottom: 0;
+  border: 1px solid var(--workbench-selection);
+  background: transparent;
+}
+
+.video-operations-timeline .video-timeline-track[data-point]::before,
 .video-operations-timeline .video-timeline-track[data-playback-only]::before {
   display: none;
 }
 
-.video-operations-timeline .video-timeline-track::before {
-  top: 1px;
-  bottom: 1px;
-  background: linear-gradient(90deg, rgba(244, 63, 94, 0.3), rgba(236, 72, 153, 0.22));
-  box-shadow: inset 0 0 12px rgba(244, 63, 94, 0.16);
+.video-operations-timeline .video-timeline-track[data-playback-only] {
+  height: 14px;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(var(--workbench-raised), var(--workbench-raised)) center / 100% 3px no-repeat;
 }
 
 .video-operations-timeline .video-timeline-progress {
   position: absolute;
-  z-index: 0;
   top: 50%;
   left: 0;
   width: var(--played, 0%);
-  height: 4px;
+  height: 3px;
   transform: translateY(-50%);
-  border-radius: 999px;
-  background: linear-gradient(90deg, rgba(56, 189, 248, 0.62), rgba(103, 232, 249, 0.78));
+  background: var(--workbench-selection);
+  pointer-events: none;
+}
+
+.video-operations-playhead {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--workbench-selection);
   pointer-events: none;
 }
 
 .video-operations-timeline .video-timeline-handle {
-  top: -4px;
-  bottom: -4px;
+  top: -2px;
+  bottom: -2px;
   z-index: 5;
-  width: 11px;
-  border-color: rgba(255, 255, 255, 0.85);
-  border-radius: 5px;
-  background: #f43f9e;
-  box-shadow: 0 0 9px rgba(244, 63, 94, 0.58);
+  width: 12px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--workbench-selection);
+  box-shadow: none;
+}
+
+.video-operations-timeline .video-timeline-handle::after {
+  position: absolute;
+  inset: 36% 4px;
+  border-inline: 1px solid #40566b;
+  content: '';
 }
 
 .video-operations-timeline .video-timeline-handle:hover {
-  background: #fb7185;
+  background: #e5f3fc;
+}
+
+.video-operations-timeline [data-point] .video-timeline-handle {
+  width: 14px;
+  background: linear-gradient(var(--workbench-selection), var(--workbench-selection)) center / 2px 100% no-repeat;
+}
+
+.video-operations-timeline [data-point] .video-timeline-handle::after {
+  inset: 0 2px auto;
+  height: 8px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--workbench-selection);
+}
+
+.video-operations-time-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .video-operations-timeline .video-timeline-input {
@@ -489,7 +550,7 @@
   padding: 0 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  background: rgba(2, 6, 23, 0.62);
+  background: var(--panel);
   color: #94a3b8;
   font-size: 10px;
 }
@@ -515,10 +576,7 @@
   align-items: center;
   height: 30px;
   padding: 0 9px;
-  border: 1px solid rgba(244, 114, 182, 0.25);
-  border-radius: 8px;
-  background: rgba(244, 63, 94, 0.08);
-  color: #f9a8d4;
+  color: var(--muted);
   font-family: var(--font-mono, monospace);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
@@ -533,7 +591,8 @@
   padding: 10px 12px;
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 11px;
-  background: rgba(15, 23, 42, 0.42);
+  background: var(--workbench-field);
+  line-height: 1.45;
 }
 
 .video-operations-clip-options {
@@ -577,9 +636,9 @@
 }
 
 .video-operations-choice-row button.active {
-  border-color: rgba(56, 189, 248, 0.46);
-  background: rgba(56, 189, 248, 0.16);
-  color: #bae6fd;
+  background: var(--workbench-raised);
+  color: var(--txt);
+  box-shadow: inset 0 -1px var(--workbench-selection);
 }
 
 .video-operations-choice-row button:focus-visible,
@@ -666,7 +725,21 @@
   gap: 9px;
   padding: 10px 20px;
   border-top: 1px solid var(--line);
-  background: rgba(9, 13, 20, 0.94);
+  background: var(--panel);
+}
+
+.video-operations-cancel {
+  min-width: 64px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.video-operations-cancel:hover:not(:disabled) {
+  background: var(--workbench-raised);
+  color: var(--txt);
 }
 
 .video-operations-submit {
@@ -679,7 +752,7 @@
   border: 1px solid rgba(103, 232, 249, 0.42);
   border-radius: 10px;
   background: linear-gradient(100deg, #38bdf8 0%, #22d3ee 52%, #2dd4bf 100%);
-  box-shadow: 0 0 20px rgba(56, 189, 248, 0.24);
+  box-shadow: none;
   color: #071923;
   font-size: 12px;
   font-weight: 700;
@@ -687,7 +760,6 @@
 
 .video-operations-submit:hover:not(:disabled) {
   filter: brightness(1.08);
-  box-shadow: 0 0 24px rgba(56, 189, 248, 0.35);
 }
 
 .video-operations-submit:disabled {
@@ -704,8 +776,7 @@
 
   .video-operations-dialog {
     width: calc(100vw - 20px);
-    height: calc(100vh - 20px);
-    max-height: calc(100vh - 20px);
+    --workbench-height: calc(100dvh - var(--window-caption-height, 0px) - 20px);
   }
 
   .video-operations-head {
@@ -726,7 +797,6 @@
   }
 
   .video-operations-tabs button {
-    flex: 1;
     padding: 0 7px;
   }
 
@@ -807,123 +877,4 @@
   .video-operations-choice-row button {
     padding: 0 8px;
   }
-}
-
-/* ── 2026-11-06 视频操作工作台：双栏布局，面板不再整体纵向滚动 ───────── */
-.video-operations-dialog {
-  height: min(860px, calc(100vh - 24px));
-}
-
-.video-operations-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  grid-template-rows: minmax(0, 1fr);
-  gap: 10px;
-  min-height: 0;
-  overflow: hidden;
-  padding: 10px 12px;
-}
-
-.video-operations-workspace {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.video-operations-player {
-  flex: 1 1 auto;
-  min-height: 220px;
-}
-
-.video-operations-options {
-  overflow-y: auto;
-  min-height: 0;
-  scrollbar-width: none;
-}
-
-.video-operations-options::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-}
-
-@media (max-width: 1000px) {
-  .video-operations-body {
-    grid-template-columns: minmax(0, 1fr);
-    overflow-y: auto;
-  }
-}
-
-/* ── 2026-11-06 视频操作工作台视觉对齐 Stitch 参考稿：青 #3cdde3、发丝线、无发光 ── */
-.video-operations-dialog {
-  --accent: #3cdde3;
-  border-color: #252b36;
-  border-radius: 14px;
-  background: linear-gradient(180deg, #10151d 0%, #0b0f16 100%);
-  box-shadow: 0 24px 64px -20px rgba(0, 0, 0, 0.85);
-}
-
-.video-operations-head {
-  border-bottom: 1px solid #1c222c;
-  background: rgba(13, 17, 23, 0.92);
-}
-
-.video-operations-title > svg {
-  color: #3cdde3;
-}
-
-.video-operations-tabs {
-  border-color: #222935;
-  background: rgba(2, 6, 23, 0.55);
-  box-shadow: none;
-}
-
-.video-operations-tabs button.active {
-  border-color: rgba(60, 221, 227, 0.34);
-  background: rgba(60, 221, 227, 0.14);
-  color: #8bdcff;
-  box-shadow: none;
-}
-
-.video-operations-close {
-  color: #9aa6b5;
-}
-.video-operations-close:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
-  color: #e2e8f0;
-}
-
-.video-operations-workspace {
-  border-color: #222935;
-  border-radius: 12px;
-  background: #05070b;
-}
-
-.video-operations-player-frame {
-  border-color: rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  box-shadow: none;
-}
-
-.video-operations-options {
-  border-color: #222935;
-  background: rgba(13, 17, 23, 0.72);
-  border-radius: 12px;
-}
-
-.video-operations-footer {
-  border-top: 1px solid #1c222c;
-  background: #0b0f16;
-}
-
-.video-operations-submit {
-  border: 1px solid rgba(60, 221, 227, 0.5);
-  border-radius: 9px;
-  background: #3cdde3;
-  box-shadow: none;
-  color: #06181c;
-  font-weight: 650;
-}
-
-.video-operations-submit:hover:not(:disabled) {
-  filter: brightness(1.05);
-  box-shadow: none;
 }

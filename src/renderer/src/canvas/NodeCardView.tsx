@@ -1078,17 +1078,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         }`}
         data-node-id={shape.id}
         style={{ width: shape.props.w, height: shape.props.h,
-          ['--node-spot-radius' as string]: Math.max(260, Math.hypot(shape.props.w, shape.props.h) * 0.55) + 'px',
           ['--node-header-h' as string]: `${NODE_UI.header.height}px`,
           ['--node-empty-icon-size' as string]: `${NODE_UI.identity.iconSize}px`,
           ['--node-port-outset' as string]: `${NODE_PORT_OUTSET}px`,
           ['--node-port-hit' as string]: `${NODE_PORT_SIZE}px`
-        }}
-        onPointerMove={(event) => {
-          if (event.pointerType !== 'mouse') return
-          const rect = event.currentTarget.getBoundingClientRect()
-          event.currentTarget.style.setProperty('--node-mouse-x', String((event.clientX - rect.left) / rect.width * 100) + '%')
-          event.currentTarget.style.setProperty('--node-mouse-y', String((event.clientY - rect.top) / rect.height * 100) + '%')
         }}
         onPointerDown={handleCardPointerDown}
         onPointerDownCapture={(event) => {
@@ -1300,7 +1293,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             </>
           )}
         </div>
-        <span className="node-hover-spot" aria-hidden="true" />
         <span className="node-selection-beam" aria-hidden="true" />
         <div
           className={`node-card type-${shape.props.nodeType}`}

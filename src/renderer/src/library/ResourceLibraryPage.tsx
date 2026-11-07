@@ -1,88 +1,39 @@
 import { GenerationLoadingOverlay } from '../canvas/GenerationLoadingOverlay'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { LibraryPreset, LibraryResourceDetail, LibraryResourceSummary, CreateLibraryResourceInput, PublishLibraryRevisionInput } from '@shared/library/types'
+import type { LibraryResourceDetail, LibraryResourceSummary, CreateLibraryResourceInput, PublishLibraryRevisionInput } from '@shared/library/types'
 import type { LibraryCategory } from '@shared/library/blueprint'
 import { Icon } from '../components/Icon'
 import { AppSelect } from '../components/AppSelect'
 import { mediaUrl } from '../nodes/registry'
 import { useConfirmStore } from '../stores/confirm'
 import { useToastStore } from '../stores/toast'
+import { LibraryCardCover } from './LibraryCardCover'
 import { LibraryResourceForm } from './LibraryResourceForm'
 import { LibraryCategoryEditor } from './LibraryCategoryEditor'
 import { libraryValueTypeLabel, libraryVersionLabel } from './value-type-labels'
 import './library.css'
 
-function typeName(preset: LibraryPreset, categoryName?: string): string {
-  if (categoryName) return categoryName
-  if (preset === 'image') return '图片资产'
-  if (preset === 'prompt') return '文本资产'
-  return '组合资产'
-}
+const revisionDate = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23'
+})
 
-/* 星光：中心簇 + 四散微尘（按 Stitch 参考稿 qa/stitch-library-v2/star-cover.png 落地）。 */
-const STAR_CLUSTER: Array<[number, number, number]> = [
-  [80, 40, 4.6], [70, 36, 3.2], [90, 36, 3.4], [62, 44, 2.6], [98, 46, 2.8],
-  [76, 52, 3], [86, 48, 2.2], [72, 30, 1.8], [94, 30, 1.9]
-]
-
-const STAR_DUST: Array<[number, number, number, number]> = [
-  [34, 22, 0.7, 0.35], [46, 14, 0.6, 0.3], [58, 24, 0.8, 0.4], [70, 12, 0.6, 0.28],
-  [84, 20, 0.7, 0.34], [98, 14, 0.6, 0.3], [112, 22, 0.8, 0.38], [126, 16, 0.6, 0.28],
-  [140, 26, 0.7, 0.32], [28, 44, 0.6, 0.28], [44, 52, 0.7, 0.32], [58, 64, 0.6, 0.26],
-  [74, 70, 0.8, 0.34], [92, 68, 0.6, 0.26], [108, 60, 0.7, 0.3], [124, 56, 0.6, 0.26],
-  [138, 64, 0.7, 0.3], [150, 48, 0.6, 0.24], [20, 58, 0.6, 0.24], [36, 76, 0.6, 0.22],
-  [56, 82, 0.6, 0.22], [80, 80, 0.7, 0.26], [104, 78, 0.6, 0.22], [128, 80, 0.6, 0.22],
-  [148, 74, 0.6, 0.2], [24, 30, 0.5, 0.2], [152, 34, 0.5, 0.2]
-]
-
-function sparkPath(cx: number, cy: number, radius: number): string {
-  const waist = radius * 0.1
-  return `M ${cx} ${cy - radius} L ${cx + waist} ${cy - waist} L ${cx + radius} ${cy} L ${cx + waist} ${cy + waist} L ${cx} ${cy + radius} L ${cx - waist} ${cy + waist} L ${cx - radius} ${cy} L ${cx - waist} ${cy - waist} Z`
-}
-
-/**
- * 资源卡片默认封面：星光。
- * 深蓝黑底 + 中心星簇（长芒四角星 + 光核 + 微晕）+ 四散微尘，青白冷光；
- * 无魔方、无插画、无大面积彩色光斑。
- */
-function StarCover(): React.JSX.Element {
-  return (
-    <span className="library-cover-stars" aria-hidden="true">
-      <svg viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice" role="presentation">
-        <g className="library-star-dust">
-          {STAR_DUST.map(([x, y, r, opacity]) => (
-            <circle key={`dust-${x}-${y}`} cx={x} cy={y} r={r} opacity={opacity} />
-          ))}
-        </g>
-        <g className="library-star-cluster">
-          {STAR_CLUSTER.map(([x, y, size]) => (
-            <g key={`star-${x}-${y}`}>
-              <circle className="library-star-halo" cx={x} cy={y} r={size * 2.1} opacity={0.07} />
-              <circle className="library-star-halo" cx={x} cy={y} r={size * 1.2} opacity={0.12} />
-              <path className="library-star-ray" d={sparkPath(x, y, size * 2.2)} />
-              <circle className="library-star-core" cx={x} cy={y} r={Math.max(0.7, size * 0.24)} />
-            </g>
-          ))}
-        </g>
-      </svg>
-    </span>
-  )
+function formatRevisionDate(timestamp: number): string {
+  return revisionDate.format(timestamp).replaceAll('/', '-')
 }
 
 function ResourceCard({ resource, onOpen, onDragStart }: { resource: LibraryResourceSummary; onOpen: () => void; onDragStart?: React.DragEventHandler<HTMLButtonElement> }): React.JSX.Element {
-  const [failed, setFailed] = useState(false)
   return (
     <button className="library-resource-card" draggable={Boolean(onDragStart)} onDragStart={onDragStart} onClick={onOpen}>
-      <div className="library-resource-cover">
-        {resource.coverPath && !failed ? (
-          <img src={mediaUrl(resource.coverPath)} alt="" loading="lazy" onError={() => setFailed(true)} />
-        ) : (
-          <StarCover />
-        )}
-      </div>
+      {resource.iconKind && <LibraryCardCover icon={resource.iconKind} />}
       <div className="library-resource-card-body">
-        <div className="library-resource-card-title"><strong>{resource.title}</strong><span>{libraryVersionLabel(resource.revisionNumber)}</span></div>
-        <p>{resource.description || (resource.formPreset === 'prompt' ? '提示词资源' : '暂无说明')}</p>
+        <div className="library-resource-card-title"><strong>{resource.title}</strong></div>
+        {resource.description && <p>{resource.description}</p>}
       </div>
     </button>
   )
@@ -313,6 +264,17 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     }
   }
 
+  const importLibrary = async (): Promise<void> => {
+    const result = await window.api.importLibrary()
+    if (!result.ok) {
+      if (result.error.code !== 'CANCELLED') useToastStore.getState().show(`导入失败：${result.error.message}`)
+      return
+    }
+    await loadPageData()
+    await loadResources()
+    useToastStore.getState().show(`已导入 ${result.data.imported} 项资源`)
+  }
+
   const exportLibrary = async (): Promise<void> => {
     const result = await window.api.exportLibrary({})
     if (!result.ok) {
@@ -349,8 +311,9 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
           <span className="library-header-label"><Icon name="assets" size={15} />资源库</span>
         </div>
         <div className="library-page-actions">
-          <label className="library-search library-header-search"><Icon name="search" size={15} /><input ref={searchInputRef} aria-label="搜索资源" value={query} placeholder="搜索资源" onChange={(event) => setQuery(event.currentTarget.value)} /></label>
+          <label className="library-search library-header-search"><Icon name="search" size={15} /><input ref={searchInputRef} aria-label="搜索资源" value={query} onChange={(event) => setQuery(event.currentTarget.value)} /></label>
           <div className="library-tool-group" role="group" aria-label="资源库工具">
+            <button type="button" className="library-tool-btn" title="导入资产包" aria-label="导入资产包" onClick={() => void importLibrary()}><Icon name="upload" size={16} /></button>
             <button type="button" className="library-tool-btn" title="导出资产包" aria-label="导出资产包" onClick={() => void exportLibrary()}><Icon name="download" size={16} /></button>
           </div>
           <button type="button" className="library-header-text-btn" onClick={() => setCategoryEditor({})}>
@@ -405,7 +368,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
               </div>
             ) : (
               <div className="library-empty-state">
-                <div className="library-empty-art" aria-hidden="true"><span className="library-empty-icon"><Icon name="assets" size={32} /></span></div>
                 <h2>{query.trim() ? '没有找到匹配的资源' : activeCategoryName ? `「${activeCategoryName}」分类下暂无资源` : '资源库还没有内容'}</h2>
                 <p>{query.trim() ? '试试其他关键词，或清除搜索条件。' : '可点击下方快速创建资源，或从顶部导入已有资产包。'}</p>
                 <div className="library-empty-actions"><button className="library-primary" onClick={() => { setSelectedId(null); setFormOpen(true) }}><span className="library-primary-icon"><Icon name="add" size={14} /></span>新建资源</button><button className="library-secondary" onClick={() => setCategoryEditor({})}>管理分类</button></div>
@@ -418,23 +380,16 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
         <div className="library-detail-mask" onMouseDown={(event) => event.target === event.currentTarget && setSelectedId(null)}>
           <aside className="library-detail-panel" role="dialog" aria-modal="true" aria-label="资源详情">
             <header className="library-detail-header">
-              <span className="library-detail-header-title">资源详情</span>
+              <h2 className="library-detail-header-title" title={detail?.selectedTitle}>{detailLoading ? '资源详情' : detail?.selectedTitle ?? '资源详情'}</h2>
               <button className="library-icon-button" aria-label="关闭详情" onClick={() => setSelectedId(null)}><Icon name="close" size={17} /></button>
             </header>
             {detailLoading || !detail ? <GenerationLoadingOverlay title="正在读取资源" compact /> : (
               <>
                 <div className="library-detail-scroll">
-                  <div className="library-detail-title">
-                    <div className="library-detail-badges">
-                      <span className="library-resource-type">{typeName(detail.formPreset, detail.category?.name)}</span>
-                      <span className="library-version-badge">{libraryVersionLabel(detail.selectedRevisionNumber)}</span>
-                    </div>
-                    <h2>{detail.selectedTitle}</h2>
-                    <p>{detail.selectedDescription || '暂无说明'}</p>
-                    <div className="library-detail-tags">{detail.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
-                  </div>
                   <div className="library-detail-section">
                     <div className="library-detail-section-title"><h3>资源内容</h3></div>
+                    {detail.selectedDescription && <p className="library-detail-description">{detail.selectedDescription}</p>}
+                    <div className="library-detail-tags">{detail.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
                     {detail.components.map((component) => (
                       <div className="library-detail-component-row" key={component.id}>
                         <div className="library-detail-component-head">
@@ -455,7 +410,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
                           <span className="library-version-entry-body">
                             <span className="library-version-entry-title">
                               <strong>{libraryVersionLabel(revision.revisionNumber)}</strong>
-                              <i className="library-version-date">{new Date(revision.createdAt).toLocaleDateString()}</i>
+                              <time className="library-version-date" dateTime={new Date(revision.createdAt).toISOString()}>{formatRevisionDate(revision.createdAt)}</time>
                             </span>
                             {revision.changeNote && <span className="library-version-entry-note">{revision.changeNote}</span>}
                           </span>
@@ -469,7 +424,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
                           <select value={compareRevisionId} onChange={(event) => setCompareRevisionSelection(event.currentTarget.value)}>
                             <option value="">选择另一个版本</option>
                             {detail.revisions.filter((revision) => revision.id !== detail.selectedRevisionId).map((revision) => (
-                              <option key={revision.id} value={revision.id}>{libraryVersionLabel(revision.revisionNumber)} · {revision.changeNote || new Date(revision.createdAt).toLocaleDateString()}</option>
+                              <option key={revision.id} value={revision.id}>{libraryVersionLabel(revision.revisionNumber)} · {revision.changeNote || formatRevisionDate(revision.createdAt)}</option>
                             ))}
                           </select>
                         </label>

@@ -75,6 +75,8 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 
 资源库适配复用 [library.repo.ts](../../src/main/store/library.repo.ts) 和 [library.ipc.ts](../../src/main/ipc/library.ipc.ts) 的 repository/诊断边界。资源名称、说明和文件内容是用户内容，日志不可记录。
 
+2026-11-07：桌面资源摘要增加可选的 `iconKind`，根据最新修订组件按视频、图片、音频、文本顺序计算，文件归入文本。外部 `library.search` 仍经字段白名单输出原有摘要，输入输出 Schema 与版本不变，旧资源按已有组件读取，无迁移。视频工作台轨道复用本地缩略图 IPC，不新增 Agent 执行入口。节点库拖拽落点变更的桌面验证与边界见 [侧栏卡片记录](../SIDE_PANEL_CARDS_2026_11_07.md)。 后续侧栏优化只调整运行及历史记录的呈现。素材批量删除仍调用现有桌面媒体删除 IPC，未新增外部 Agent 操作、Schema 或存储格式。
+
 | 能力               | 建议 `operationId`                                      | 阶段        | 当前外部状态 | 风险与约束                                                                    | 验收                         |
 | ------------------ | ------------------------------------------------------- | ----------- | ------------ | ----------------------------------------------------------------------------- | ---------------------------- |
 | 搜索/列出/读取资源 | `library.search` / `library.get`                        | A1          | search摘要implemented；get planned      | 分页、字段白名单、正文按需读取                                                | 权限外路径不可泄露、分页稳定 |
@@ -214,3 +216,5 @@ A1.4首包接续：[查询交付台账](08-a1-4-read-only-queries.md)。`library
 - 资源库 IPC 与 repository：[library.ipc.ts](../../src/main/ipc/library.ipc.ts)、[library.repo.ts](../../src/main/store/library.repo.ts)
 - 原生 Agent Flow 边界：[节点协同规范](../canvas-agent-flow/05-node-coordination-standard.md)、[命令模式](../../src/shared/agent-flow/commands.ts)、[Flow target 适配](../../src/shared/agent-flow/video-adapter.ts)
 - 诊断与脱敏：[LOGGING_SPEC.md](../../LOGGING_SPEC.md)、[日志覆盖清单](../LOGGING_COVERAGE.md)
+
+2026-11-07 节点标题操作调整：移除节点内复制文件路径按钮及悬浮光效，外部操作、节点契约、媒体定位和诊断接口无变化。桌面视觉门禁验证节点标题与定位交互；当前外部能力状态沿用原表。

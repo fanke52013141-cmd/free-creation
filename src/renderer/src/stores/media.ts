@@ -24,7 +24,7 @@ interface MediaState {
   timeRange: MediaTimeFilter
   load: (projectId: string) => Promise<void>
   refresh: (projectId: string) => Promise<void>
-  remove: (projectId: string, mediaId: string) => Promise<void>
+  remove: (projectId: string, mediaId: string) => Promise<boolean>
   setFilter: (filter: MediaAsset['kind'] | 'all') => void
   setKeyword: (kw: string) => void
   setSourceNodeId: (nodeId: string | 'all') => void
@@ -50,9 +50,9 @@ export const useMediaStore = create<MediaState>((set, get) => ({
   },
   remove: async (_projectId, mediaId) => {
     const res = await window.api.deleteMedia(mediaId)
-    if (res.ok && res.data) {
-      set({ assets: get().assets.filter((a) => a.id !== mediaId) })
-    }
+    if (!res.ok || !res.data) return false
+    set({ assets: get().assets.filter((a) => a.id !== mediaId) })
+    return true
   },
   setFilter: (filter) => set({ filter }),
   setKeyword: (keyword) => set({ keyword }),

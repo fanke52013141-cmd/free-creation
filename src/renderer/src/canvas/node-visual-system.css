@@ -236,7 +236,7 @@
   height: 14px;
 }
 .canvas-page .node-header :is(.node-info-btn, .node-run-btn, .media-file-action-btn):hover:not(:disabled) {
-  background: var(--node-control-bg);
+  background: transparent;
   color: var(--node-text);
   opacity: 1;
   box-shadow: none;

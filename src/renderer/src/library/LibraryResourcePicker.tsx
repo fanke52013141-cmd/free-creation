@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Editor } from 'tldraw'
 import type { LibraryResourceSummary } from '@shared/library/types'
 import { Icon } from '../components/Icon'
-import { mediaUrl } from '../nodes/registry'
+import { LibraryCardCover } from './LibraryCardCover'
 import { useConfirmStore } from '../stores/confirm'
 import { useToastStore } from '../stores/toast'
 import { insertResource } from './insertResource'
@@ -167,22 +167,14 @@ function LibraryCard({
           e,
           {
             label: resource.title,
-            ...(resource.coverPath ? { image: mediaUrl(resource.coverPath) } : { icon: 'layers' })
+            icon: resource.iconKind ?? 'assets'
           },
           onDrop
         )
       }
       onClick={() => handleClick(onAdd)}
     >
-      <div className={`asset-thumb${resource.coverPath ? '' : ' kind-file'}`}>
-        {resource.coverPath ? (
-          <img src={mediaUrl(resource.coverPath)} alt={resource.title} loading="lazy" />
-        ) : (
-          <span className="asset-thumb-icon">
-            <Icon name="layers" size={24} />
-          </span>
-        )}
-      </div>
+      {resource.iconKind && <LibraryCardCover icon={resource.iconKind} compact />}
 
       <div className="asset-info">
         <span className="asset-name" title={resource.title}>

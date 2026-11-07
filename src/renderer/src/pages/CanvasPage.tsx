@@ -51,16 +51,21 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
     const page = pageRef.current
     const controls = page?.querySelector<HTMLElement>('.engine-controls')
     const host = page?.querySelector<HTMLElement>('.canvas-host')
-    const anchor = page?.querySelector<HTMLElement>('[data-side-panel-anchor]')
-    if (!page || !controls || !host || !anchor) return
+    const topbar = page?.querySelector<HTMLElement>('.canvas-topbar')
+    const anchor = controls?.querySelector<SVGSVGElement>('.search-trigger svg')
+    if (!page || !controls || !host || !topbar || !anchor) return
     const align = (): void => {
-      const width = host.getBoundingClientRect().right - anchor.getBoundingClientRect().left
+      const hostBounds = host.getBoundingClientRect()
+      const searchLeft = anchor.getBoundingClientRect().left
+      const width = hostBounds.right - searchLeft
       page.style.setProperty('--side-panel-width', `${Math.max(0, width)}px`)
+      page.style.setProperty('--canvas-search-top', `${topbar.getBoundingClientRect().bottom + 6}px`)
+      page.style.setProperty('--canvas-search-left', `${searchLeft}px`)
     }
     const observer = new ResizeObserver(align)
     observer.observe(page)
     observer.observe(controls)
-    observer.observe(anchor)
+    observer.observe(topbar)
     observer.observe(host)
     window.addEventListener('resize', align)
     align()
@@ -344,7 +349,6 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
               <Tooltip label={isPaused ? '继续工作流' : '在当前原子任务结束后暂停'}>
                 <button
                   className={`run-btn ${enginePhase === 'stopping' ? 'running' : ''}`}
-                  data-side-panel-anchor
                   disabled={enginePhase === 'stopping'}
                   onClick={() => (isPaused ? engineResume?.() : enginePause?.())}
                 >
@@ -361,7 +365,6 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
             <Tooltip label="运行工作流">
               <button
                 className="run-btn"
-                data-side-panel-anchor
                 onClick={() => {
                   // 由用户发起新一轮运行时立即恢复错误面板；不在 effect 内同步 setState。
                   setShowErrors(true)

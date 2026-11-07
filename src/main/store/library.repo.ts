@@ -144,6 +144,9 @@ function allFolderPaths(): string[][] {
 function resourceSummary(row: ResourceRow): LibraryResourceSummary {
   const category = revisionCategory(row.latest_revision_id)
   const components = readComponents(row.latest_revision_id)
+  const iconKind = (['video', 'image', 'audio'] as const).find((kind) =>
+    components.some((component) => component.valueType === kind)
+  ) ?? (components.length ? 'text' : undefined)
   const coverSlotCover = category?.coverSlotId
     ? components.find((component) =>
         component.metadata.librarySlotId === category.coverSlotId && component.valueType === 'image')?.blobPath
@@ -160,6 +163,7 @@ function resourceSummary(row: ResourceRow): LibraryResourceSummary {
     latestRevisionId: row.latest_revision_id,
     revisionNumber: row.revision_number,
     componentCount: row.component_count,
+    ...(iconKind ? { iconKind } : {}),
     ...(cover ? { coverPath: cover } : {}),
     tags: resourceTags(row.id),
     collectionIds: resourceCollections(row.id),

@@ -66,8 +66,8 @@ async function captureDesktop(app,file){
     check(duplicateExit===1,'SECOND_DESKTOP_OWNER_NOT_REJECTED')
     receipt.checks.push('second desktop on same data store rejected before creating a window')
     const nodeTypes=await runCli(directory,['node','type','list'])
-    check(nodeTypes.code===0&&nodeTypes.response.data.nodes.length===31,'CLI_NODE_DIRECTORY_FAILED')
-    receipt.checks.push('CLI node type list: 31 planned nodes')
+    check(nodeTypes.code===0&&nodeTypes.response.data.nodes.length===32,'CLI_NODE_DIRECTORY_FAILED')
+    receipt.checks.push('CLI node type list: 32 planned nodes')
     const repeated=await runCli(directory,['project','create'],{input:{name:'Agent vertical slice'},idempotencyKey:created.response.idempotencyKey})
     check(repeated.response.data.meta.id===projectId,'CREATE_DUPLICATED')
     const mcpEnv={...process.env,ELECTRON_RUN_AS_NODE:'1'}

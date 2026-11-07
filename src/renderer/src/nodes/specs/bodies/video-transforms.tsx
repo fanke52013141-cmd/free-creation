@@ -346,7 +346,7 @@ function MediaTimeline({
   return (
     <div className={`video-timeline ${integrated ? 'integrated' : ''}`} aria-label="媒体时间轴">
       {/* 缩略图条 */}
-      {thumbnails && thumbnails.length > 0 && (
+      {!integrated && thumbnails && thumbnails.length > 0 && (
         <div className="video-timeline-thumbnails">
           {thumbnails.map((src, i) => (
             <img key={i} src={src} alt="" draggable={false} />
@@ -390,11 +390,18 @@ function MediaTimeline({
         }
         onPointerDown={handleTrackPointerDown}
       >
+        {integrated && thumbnails && thumbnails.length > 0 && (
+          <div className="video-timeline-thumbnails" aria-hidden="true">
+            {thumbnails.map((src, index) => <img key={index} src={src} alt="" draggable={false} />)}
+          </div>
+        )}
         {integrated && typeof progressMs === 'number' && (
           <div className="video-timeline-progress" />
         )}
         {isPoint ? (
-          playbackOnly ? null : (
+          playbackOnly ? (
+            <span className="video-operations-playhead" style={{ left: percent(currentPoint) }} aria-hidden="true" />
+          ) : (
             <div
               className="video-timeline-handle"
               style={{ left: percent(currentPoint) }}
@@ -644,6 +651,7 @@ export function VideoOperationsWorkbench({
 
   const [mode, setMode] = useState<VideoOperationMode>(initialMode)
   const [durationMs, setDurationMs] = useState(0)
+  const [thumbnailResult, setThumbnailResult] = useState<{ sourceMediaId: string; projectId: string; thumbnails: string[] } | null>(null)
   const [currentTimeMs, setCurrentTimeMs] = useState(0)
   const [previewBounds, setPreviewBounds] = useState({ width: 0, height: 0 })
   const [fps, setFps] = useState<number | null>(null)
@@ -667,6 +675,10 @@ export function VideoOperationsWorkbench({
   const [submitting, setSubmitting] = useState(false)
 
   const max = Math.max(durationMs, clipCfg.endMs, frameCfg.timeMs + 1, 1000)
+  const thumbnails = thumbnailResult?.sourceMediaId === sourceMediaId && thumbnailResult.projectId === project?.id
+    ? thumbnailResult.thumbnails
+    : []
+  const hasVideoDuration = durationMs > 0
   const fittedPlayerWidth =
     videoAspectRatio && previewBounds.width > 0 && previewBounds.height > 0
       ? Math.min(previewBounds.width, previewBounds.height * videoAspectRatio)
@@ -751,6 +763,18 @@ export function VideoOperationsWorkbench({
       active = false
     }
   }, [project, sourceMediaId, syncDuration])
+
+  useEffect(() => {
+    if (!project?.id || !sourceMediaId || !hasVideoDuration) return
+    let active = true
+    const projectId = project.id
+    void window.api.generateVideoThumbnails({ projectId, sourceMediaId, count: 10 })
+      .then((result) => {
+        if (active && result.ok) setThumbnailResult({ projectId, sourceMediaId, thumbnails: result.data.thumbnails })
+      })
+      .catch(() => undefined)
+    return () => { active = false }
+  }, [project?.id, sourceMediaId, hasVideoDuration])
 
   const seek = (timeMs: number): void => {
     const safeTime = clamp(Math.round(timeMs), Math.max(0, durationMs))
@@ -875,7 +899,7 @@ export function VideoOperationsWorkbench({
         }
       }}
     >
-      <div className="video-trim-workbench video-operations-dialog">
+      <div className="video-trim-workbench video-operations-dialog" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
         <header className="video-trim-workbench-head video-operations-head">
           <div className="video-operations-title">
             <Icon name="video-asset" size={17} />
@@ -889,7 +913,21 @@ export function VideoOperationsWorkbench({
                   : 'FFmpeg 不可用'}
             </span>
           </div>
-          <div className="video-operations-tabs" role="tablist" aria-label="视频操作类型">
+          <div
+            className="video-operations-tabs"
+            role="tablist"
+            aria-label="视频操作类型"
+            onKeyDown={(event) => {
+              const { key } = event
+              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(key)) return
+              event.preventDefault()
+              event.stopPropagation()
+              const next =
+                key === 'Home' ? 'clip' : key === 'End' ? 'frame' : mode === 'clip' ? 'frame' : 'clip'
+              setMode(next)
+              event.currentTarget.querySelector<HTMLButtonElement>(`[data-mode="${next}"]`)?.focus()
+            }}
+          >
             {(
               [
                 ['clip', '视频截取'],
@@ -900,10 +938,15 @@ export function VideoOperationsWorkbench({
                 key={value}
                 type="button"
                 role="tab"
+                id={`video-operation-tab-${value}`}
+                data-mode={value}
+                tabIndex={mode === value ? 0 : -1}
+                aria-controls="video-operation-options"
                 aria-selected={mode === value}
                 className={mode === value ? 'active' : ''}
                 onClick={() => setMode(value)}
               >
+                <Icon name={value === 'clip' ? 'clip' : 'frame'} size={15} />
                 {label}
               </button>
             ))}
@@ -967,8 +1010,106 @@ export function VideoOperationsWorkbench({
               </div>
             </div>
 
+            <div className="video-operations-controls">
+              <div className="video-operations-controls-main">
+                <button
+                  type="button"
+                  className="video-operations-player-button primary"
+                  aria-label={isPlaying ? '暂停' : '播放'}
+                  title={isPlaying ? '暂停' : '播放'}
+                  disabled={!sourceMediaPath}
+                  onClick={togglePlayback}
+                >
+                  <Icon name={isPlaying ? 'pause' : 'play'} size={15} />
+                </button>
+                <button
+                  type="button"
+                  className="video-operations-player-button step"
+                  aria-label="后退 5 秒"
+                  title="后退 5 秒"
+                  disabled={durationMs <= 0}
+                  onClick={() => jumpBy(-5000)}
+                >
+                  −5s
+                </button>
+                <button
+                  type="button"
+                  className="video-operations-player-button step"
+                  aria-label="快进 5 秒"
+                  title="快进 5 秒"
+                  disabled={durationMs <= 0}
+                  onClick={() => jumpBy(5000)}
+                >
+                  +5s
+                </button>
+                <div className="video-operations-timecode">
+                  <span className="video-operations-player-time current">
+                    {playbackTime(currentTimeMs)}
+                  </span>
+                  <span className="video-operations-player-time-separator">/</span>
+                  <span className="video-operations-player-time">{playbackTime(durationMs)}</span>
+                </div>
+              </div>
+              <div className="video-operations-controls-secondary">
+                <div className="video-operations-volume-control">
+                  <button
+                    type="button"
+                    className="video-operations-player-button video-operations-volume-button"
+                    aria-label={isMuted ? '取消静音' : '静音'}
+                    disabled={!sourceMediaPath}
+                    onClick={toggleMute}
+                  >
+                    <Icon name={isMuted ? 'volume-off' : 'volume'} size={15} />
+                  </button>
+                  <input
+                    className="video-operations-player-volume"
+                    type="range"
+                    aria-label="音量"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={volume}
+                    disabled={!sourceMediaPath}
+                    onChange={(event) => {
+                      const nextVolume = Number(event.currentTarget.value)
+                      const video = videoRef.current
+                      if (!video) return
+                      video.volume = nextVolume
+                      setVolume(nextVolume)
+                    }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="video-operations-player-button"
+                  aria-label={isFullscreen ? '退出全屏' : '全屏'}
+                  title={isFullscreen ? '退出全屏' : '全屏'}
+                  disabled={!sourceMediaPath}
+                  onClick={toggleFullscreen}
+                >
+                  <Icon name={isFullscreen ? 'fullscreen-exit' : 'fullscreen'} size={15} />
+                </button>
+              </div>
+              <input
+                className="video-operations-progress-accessible"
+                type="range"
+                aria-label="播放进度"
+                min={0}
+                max={Math.max(1, durationMs)}
+                step={1}
+                value={Math.min(currentTimeMs, Math.max(1, durationMs))}
+                disabled={durationMs <= 0}
+                onChange={(event) => seek(Number(event.currentTarget.value))}
+              />
+            </div>
             <div className="video-operations-timeline">
               <div className="video-operations-axes">
+                <div className="video-operations-ruler" aria-hidden="true">
+                  {[0, 1, 2, 3, 4].map((step) => {
+                    const mark = Math.round((max * step) / 4)
+                    return <span key={step}>{max < 4000 ? timecode(mark) : playbackTime(mark)}</span>
+                  })}
+                </div>
                 <div className="video-operations-axis">
                   <span className="video-operations-axis-label">播放</span>
                   <MediaTimeline
@@ -997,6 +1138,7 @@ export function VideoOperationsWorkbench({
                             : frameCfg.timeMs
                       }
                       integrated
+                      thumbnails={thumbnails}
                       fps={fps}
                       onSeek={seek}
                       onPoint={savePoint}
@@ -1008,6 +1150,7 @@ export function VideoOperationsWorkbench({
                       startMs={clipCfg.startMs}
                       endMs={clipCfg.endMs}
                       integrated
+                      thumbnails={thumbnails}
                       fps={fps}
                       onSeek={seek}
                       onRange={saveRange}
@@ -1016,146 +1159,63 @@ export function VideoOperationsWorkbench({
                   )}
                 </div>
               </div>
-              <div className="video-operations-controls">
-                <div className="video-operations-controls-main">
-                  <button
-                    type="button"
-                    className="video-operations-player-button primary with-time"
-                    aria-label={isPlaying ? '暂停' : '播放'}
-                    title={isPlaying ? '暂停' : '播放'}
-                    disabled={!sourceMediaPath}
-                    onClick={togglePlayback}
-                  >
-                    <Icon name={isPlaying ? 'pause' : 'play'} size={15} />
-                    <span className="video-operations-player-time current">
-                      {playbackTime(currentTimeMs)}
-                    </span>
-                    <span className="video-operations-player-time-separator">/</span>
-                    <span className="video-operations-player-time">{playbackTime(durationMs)}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="video-operations-player-button step"
-                    aria-label="后退 5 秒"
-                    title="后退 5 秒"
-                    disabled={durationMs <= 0}
-                    onClick={() => jumpBy(-5000)}
-                  >
-                    −5s
-                  </button>
-                  <button
-                    type="button"
-                    className="video-operations-player-button step"
-                    aria-label="快进 5 秒"
-                    title="快进 5 秒"
-                    disabled={durationMs <= 0}
-                    onClick={() => jumpBy(5000)}
-                  >
-                    +5s
-                  </button>
-                  {mode === 'clip' ? (
-                    <>
-                      <TimeInput
-                        key={`integrated-start-${clipCfg.startMs}`}
-                        label="起始"
-                        valueMs={clipCfg.startMs}
-                        max={max}
-                        onCommit={(ms) => {
-                          const next = Math.min(ms, clipCfg.endMs - 1)
-                          saveRange(next, clipCfg.endMs)
-                          seek(next)
-                        }}
-                      />
-                      <TimeInput
-                        key={`integrated-end-${clipCfg.endMs}`}
-                        label="截止"
-                        valueMs={clipCfg.endMs}
-                        max={max}
-                        onCommit={(ms) => {
-                          const next = Math.max(ms, clipCfg.startMs + 1)
-                          saveRange(clipCfg.startMs, next)
-                          seek(next)
-                        }}
-                      />
-                      <span className="video-operations-duration-badge">
-                        时长 {((clipCfg.endMs - clipCfg.startMs) / 1000).toFixed(3)}s
-                      </span>
-                    </>
-                  ) : (
+              <div className="video-operations-time-fields">
+                {mode === 'clip' ? (
+                  <>
                     <TimeInput
-                      key={`integrated-point-${frameCfg.timeMs}`}
-                      label="取帧"
-                      valueMs={
-                        frameCfg.mode === 'first'
-                          ? 0
-                          : frameCfg.mode === 'last'
-                            ? max - 1
-                            : frameCfg.timeMs
-                      }
+                      key={`integrated-start-${clipCfg.startMs}`}
+                      label="起始"
+                      valueMs={clipCfg.startMs}
                       max={max}
                       onCommit={(ms) => {
-                        savePoint(ms)
-                        seek(ms)
+                        const next = Math.min(ms, clipCfg.endMs - 1)
+                        saveRange(next, clipCfg.endMs)
+                        seek(next)
                       }}
                     />
-                  )}
-                </div>
-                <div className="video-operations-controls-secondary">
-                  <div className="video-operations-volume-control">
-                    <button
-                      type="button"
-                      className="video-operations-player-button video-operations-volume-button"
-                      aria-label={isMuted ? '取消静音' : '静音'}
-                      disabled={!sourceMediaPath}
-                      onClick={toggleMute}
-                    >
-                      <Icon name={isMuted ? 'volume-off' : 'volume'} size={15} />
-                    </button>
-                    <input
-                      className="video-operations-player-volume"
-                      type="range"
-                      aria-label="音量"
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      value={volume}
-                      disabled={!sourceMediaPath}
-                      onChange={(event) => {
-                        const nextVolume = Number(event.currentTarget.value)
-                        const video = videoRef.current
-                        if (!video) return
-                        video.volume = nextVolume
-                        setVolume(nextVolume)
+                    <TimeInput
+                      key={`integrated-end-${clipCfg.endMs}`}
+                      label="截止"
+                      valueMs={clipCfg.endMs}
+                      max={max}
+                      onCommit={(ms) => {
+                        const next = Math.max(ms, clipCfg.startMs + 1)
+                        saveRange(clipCfg.startMs, next)
+                        seek(next)
                       }}
                     />
-                  </div>
-                  <button
-                    type="button"
-                    className="video-operations-player-button"
-                    aria-label={isFullscreen ? '退出全屏' : '全屏'}
-                    title={isFullscreen ? '退出全屏' : '全屏'}
-                    disabled={!sourceMediaPath}
-                    onClick={toggleFullscreen}
-                  >
-                    <Icon name={isFullscreen ? 'fullscreen-exit' : 'fullscreen'} size={15} />
-                  </button>
-                </div>
-                <input
-                  className="video-operations-progress-accessible"
-                  type="range"
-                  aria-label="播放进度"
-                  min={0}
-                  max={Math.max(1, durationMs)}
-                  step={1}
-                  value={Math.min(currentTimeMs, Math.max(1, durationMs))}
-                  disabled={durationMs <= 0}
-                  onChange={(event) => seek(Number(event.currentTarget.value))}
-                />
+                    <span className="video-operations-duration-badge">
+                      时长 {((clipCfg.endMs - clipCfg.startMs) / 1000).toFixed(3)}s
+                    </span>
+                  </>
+                ) : (
+                  <TimeInput
+                    key={`integrated-point-${frameCfg.timeMs}`}
+                    label="取帧"
+                    valueMs={
+                      frameCfg.mode === 'first'
+                        ? 0
+                        : frameCfg.mode === 'last'
+                          ? max - 1
+                          : frameCfg.timeMs
+                    }
+                    max={max}
+                    onCommit={(ms) => {
+                      savePoint(ms)
+                      seek(ms)
+                    }}
+                  />
+                )}
               </div>
             </div>
           </div>
 
-          <section className="video-operations-options">
+          <section
+            className="video-operations-options"
+            id="video-operation-options"
+            role="tabpanel"
+            aria-labelledby={`video-operation-tab-${mode}`}
+          >
             {ffmpegAvailable === false && (
               <div className="local-capability-alert" role="alert">
                 <strong>本机未检测到 FFmpeg</strong>
@@ -1364,7 +1424,7 @@ export function VideoOperationsWorkbench({
         </div>
 
         <footer className="video-operations-footer">
-          <button className="btn-ghost small" onClick={onClose} disabled={submitting}>
+          <button className="video-operations-cancel" onClick={onClose} disabled={submitting}>
             取消
           </button>
           <button

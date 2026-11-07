@@ -130,11 +130,11 @@
 .node-contract-panel,
 .chat-side-panel {
   border-left-color: rgba(231, 238, 247, 0.12);
-  background: linear-gradient(145deg, #2b313a, #171b21);
+  background: var(--canvas-surface);
   opacity: 1;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  box-shadow: -18px 0 44px rgba(0, 0, 0, 0.26);
+  box-shadow: var(--canvas-drawer-shadow);
 }
 
 .side-panel-head,
@@ -143,17 +143,16 @@
   min-height: 36px;
   height: 36px;
   padding: 0 12px;
-  border-bottom-color: rgba(231, 238, 247, 0.1);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), transparent);
+  flex-shrink: 0;
+  background: transparent;
 }
 
 .side-panel-icon {
-  width: 28px;
-  height: 28px;
-  border: 1px solid rgba(231, 238, 247, 0.1);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.045);
-  color: #aee4ff;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  background: transparent;
+  color: var(--txt-dim);
 }
 
 .side-panel-title,
@@ -365,7 +364,13 @@
   backdrop-filter: blur(18px);
 }
 
-.search-panel,
+.search-panel {
+  border-radius: 9px;
+  background: var(--canvas-surface);
+  box-shadow: 0 5px 16px rgb(0 0 0 / 22%);
+  backdrop-filter: none;
+}
+
 .gw-panel,
 .media-preview-box {
   border-radius: 14px;
@@ -472,7 +477,7 @@
 }
 
 /* ── P2: shared controls and result surfaces ───────────────────────────── */
-.side-panel :is(input:not([type='range']):not([type='checkbox']), select, textarea),
+.side-panel :is(input:not([type='range'], [type='checkbox'], .assets-search), select, textarea),
 .node-contract-panel :is(input:not([type='range']):not([type='checkbox']), select, textarea),
 .chat-side-panel :is(input:not([type='range']):not([type='checkbox']), select, textarea),
 .gw-panel :is(input:not([type='range']):not([type='checkbox']), select, textarea) {
@@ -495,7 +500,7 @@
   resize: vertical;
 }
 
-.side-panel :is(input, select, textarea):focus,
+.side-panel :is(input:not(.assets-search), select, textarea):focus,
 .node-contract-panel :is(input, select, textarea):focus,
 .chat-side-panel :is(input, select, textarea):focus,
 .gw-panel :is(input, select, textarea):focus {
@@ -575,18 +580,15 @@
     transform 140ms ease;
 }
 
-.asset-card:hover,
-.run-card:hover,
-.history-card:hover {
+.asset-card:hover {
   border-color: rgba(119, 207, 250, 0.32);
   background: rgba(66, 185, 245, 0.055);
   transform: translateY(-1px);
 }
 
-.run-card.success,
-.run-card.failed,
-.run-card.running {
-  border-left-width: 3px;
+.run-card:hover,
+.history-card:hover {
+  background: var(--card-hover);
 }
 
 .node-card-wrap {
@@ -1210,27 +1212,9 @@ button {
   isolation: isolate;
 }
 
-.side-panel-head,
-.contract-head,
-.csp-header {
-  position: relative;
-}
-
-.side-panel-head::after,
-.contract-head::after,
-.csp-header::after {
-  position: absolute;
-  right: 14px;
-  bottom: -1px;
-  left: 14px;
-  height: 1px;
-  content: '';
-  background: linear-gradient(90deg, transparent, rgba(162, 196, 221, 0.16), transparent);
-}
-
-/* 2026-11-03 用户裁决：概览/输入输出/设置/协作 上方不再画分隔线。 */
-.contract-head::after {
-  display: none;
+/* 实体详情标题与内容之间保留分隔；工具侧栏标题直接过渡到内容。 */
+.contract-head {
+  border-bottom: 1px solid var(--line);
 }
 
 .side-panel-body,
@@ -1697,9 +1681,6 @@ button {
 
 /* 契约抽屉本身就是节点的说明书，不能为了紧凑牺牲文字可读性。 */
 .node-contract-panel {
-  /* 2026-11-03 用户裁决：所有右侧面板与顶栏「运行中/排队」胶囊左边缘对齐，
-     宽度统一由 --side-panel-width（420px）决定，详情面板不再单独取值。 */
-  width: var(--side-panel-width);
   /* 抽屉延伸至画布底部；底部工具条改为全局居中显示，不再挤压内容。 */
   bottom: 0;
 }
@@ -1809,17 +1790,6 @@ button {
 /* 浅色模式必须完整切换右侧三个抽屉，不能残留深色底 + 深色字。 */
 .canvas-theme-light :is(.side-panel, .node-contract-panel, .chat-side-panel) {
   border-left-color: rgba(54, 69, 82, 0.15);
-  background: linear-gradient(145deg, #fffefb, #f4efe7);
-  box-shadow: -18px 0 44px rgba(73, 61, 45, 0.14);
-}
-
-.canvas-theme-light :is(.side-panel-head, .contract-head, .csp-header) {
-  border-bottom-color: rgba(54, 69, 82, 0.13);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.64), transparent);
-}
-
-.canvas-theme-light :is(.side-panel-head::after, .contract-head::after, .csp-header::after) {
-  background: linear-gradient(90deg, transparent, rgba(76, 96, 113, 0.22), transparent);
 }
 
 .canvas-theme-light .contract-head strong,
@@ -2850,15 +2820,8 @@ button {
   --txt: #18212d;
   --muted: #5f6b7a;
   width: min(420px, calc(100vw - 96px));
-  background: #fff;
   color: var(--txt);
   border-left: 1px solid #e2e6eb;
-  box-shadow: -8px 0 28px rgb(24 33 45 / 7%);
-}
-
-.canvas-theme-light .node-contract-panel .contract-head {
-  background: #fff;
-  border-bottom: 1px solid #e8ebef;
 }
 
 .canvas-theme-light .node-contract-panel .contract-tabs {
@@ -3438,7 +3401,9 @@ button {
 .canvas-theme-light,
 .canvas-page.canvas-theme-light {
   color-scheme: light;
-  --bg: #eef2f5;
+  --canvas-surface: #eef2f5;
+  --canvas-drawer-shadow: -6px 3px 18px rgb(24 33 45 / 12%);
+  --bg: var(--canvas-surface);
   --card: #ffffff;
   --card-hover: #f6f8fa;
   --sunk: #e5eaee;
@@ -3456,7 +3421,7 @@ button {
 }
 
 .canvas-theme-light .tl-background {
-  background-color: #eef2f5 !important;
+  background-color: var(--canvas-surface) !important;
   background-image:
     radial-gradient(circle at 1px 1px, rgba(74, 96, 112, 0.16) 0.68px, transparent 0.8px),
     radial-gradient(ellipse at 48% 36%, rgba(80, 153, 196, 0.055), transparent 52%) !important;
@@ -5046,12 +5011,10 @@ button {
   height: 56px;
   align-items: center;
   gap: 2px;
-  /* 2026-11-06 裁决：去掉厚重的深色胶囊底座，图标透明悬浮，与底部「上传/资产」
-   * 及顶栏的无底座图标语言一致，靠中性图标 + 克制的 hover 点亮营造高级感。 */
   padding: 9px 12px;
-  border: 0;
-  border-radius: 16px;
-  background: transparent;
+  border: 1px solid var(--canvas-selection-edge);
+  border-radius: 18px;
+  background: var(--canvas-selection-fill);
   box-shadow: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;

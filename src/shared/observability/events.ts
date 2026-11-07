@@ -300,6 +300,10 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
       ...MODEL_ATTRS,
       skillId: 'id'
     }),
+    def('media.batch_delete_started', 'info', 'renderer/canvas/side-panel/AssetsPanel.tsx', { count: 'int' }),
+    def('media.batch_delete_cancelled', 'info', 'renderer/canvas/side-panel/AssetsPanel.tsx', { count: 'int' }),
+    def('media.batch_delete_completed', 'info', 'renderer/canvas/side-panel/AssetsPanel.tsx', { count: 'int', deleted: 'int', failed: 'int' }),
+    def('media.batch_delete_failed', 'error', 'renderer/canvas/side-panel/AssetsPanel.tsx', { count: 'int', deleted: 'int', failed: 'int' }),
     def('media.export_started', 'info', 'main/ipc/media.ipc.ts', { projectId: 'id', count: 'int' }),
     def('media.export_completed', 'info', 'main/ipc/media.ipc.ts', {
       projectId: 'id',
@@ -349,6 +353,9 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     def('application.render_failed', 'error', 'renderer/App.tsx'),
     def('media.document_extract_failed', 'warn', 'main/media/document-text.ts'),
     def('media.read_failed', 'warn', 'main/store/media.repo.ts'),
+    def('media.video_thumbnails.started', 'info', 'main/ipc/media.ipc.ts', { count: 'int' }),
+    def('media.video_thumbnails.completed', 'info', 'main/ipc/media.ipc.ts', { count: 'int' }),
+    def('media.video_thumbnails.failed', 'error', 'main/ipc/media.ipc.ts', { phase: 'short' }),
     def('media.buffer_import.started', 'info', 'main/ipc/media.ipc.ts', {
       byteSize: 'int',
       mime: 'short'

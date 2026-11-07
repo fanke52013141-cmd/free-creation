@@ -127,6 +127,29 @@ const resourceInput = () => ({
   ]
 })
 
+describe('library card icon type', () => {
+  it('derives the highest-priority type from the latest revision, including mixed and file resources', () => {
+    const text = { role: '正文', valueType: 'text' as const, text: '内容' }
+    const file = { role: '文件', valueType: 'file' as const, data: new Uint8Array([1]), fileName: 'a.txt', mime: 'text/plain' }
+    const audio = { role: '声音', valueType: 'audio' as const, data: new Uint8Array([2]), fileName: 'a.wav', mime: 'audio/wav' }
+    const image = { role: '图片', valueType: 'image' as const, data: new Uint8Array([3]), fileName: 'a.png', mime: 'image/png' }
+    const video = { role: '视频', valueType: 'video' as const, data: new Uint8Array([4]), fileName: 'a.mp4', mime: 'video/mp4' }
+    const cases = [
+      { components: [file], expected: 'text' },
+      { components: [text, audio], expected: 'audio' },
+      { components: [audio, text, image], expected: 'image' },
+      { components: [image, audio, video, text], expected: 'video' }
+    ]
+    for (const [index, item] of cases.entries()) {
+      const resource = createResource({ title: `类型 ${index}`, formPreset: 'custom', components: item.components })
+      expect(searchResources({ query: resource.title }).items[0].iconKind).toBe(item.expected)
+    }
+    const changing = createResource({ title: '版本变更', formPreset: 'custom', components: [image] })
+    publishRevision({ resourceId: changing.id, baseRevisionId: changing.latestRevisionId, title: changing.title, formPreset: 'custom', components: [audio] })
+    expect(searchResources({ query: changing.title }).items[0].iconKind).toBe('audio')
+  })
+})
+
 describe('library category persistence and transfer', () => {
   it('pins an immutable schema per resource revision and rejects conflicting category updates', () => {
     const original = createResource(resourceInput())

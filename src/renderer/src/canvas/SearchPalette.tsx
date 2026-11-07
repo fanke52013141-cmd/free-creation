@@ -174,7 +174,7 @@ function SearchPaletteInner({
       <div className="search-panel" role="dialog" aria-modal="true" aria-label="搜索节点">
         <div className="search-header">
           <span className="search-icon">
-            <Icon name="search" size={22} />
+            <Icon name="search" size={14} />
           </span>
           <input
             ref={inputRef}
@@ -218,7 +218,7 @@ function SearchPaletteInner({
             }}
           />
           <button className="search-close" aria-label="关闭搜索" onClick={close}>
-            <Icon name="close" size={20} />
+            <Icon name="close" size={13} />
           </button>
         </div>
         {query.trim() && (

@@ -92,7 +92,7 @@ export function WorkflowSaveDialog({
         className="library-form-dialog workflow-save-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="保存为可复用内容"
+        aria-label="保存节点"
         onKeyDown={(event) => {
           event.stopPropagation()
           if (event.key === 'Escape' && !busy) onClose()
@@ -101,7 +101,7 @@ export function WorkflowSaveDialog({
       >
         <header className="library-form-header">
           <div>
-            <h2>保存为可复用内容</h2>
+            <h2>保存节点</h2>
           </div>
           <button
             type="button"
