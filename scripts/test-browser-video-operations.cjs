@@ -113,6 +113,11 @@ async function main() {
     const editedStart = Number(await start.getAttribute('aria-valuenow'))
     assert.ok(editedStart > startBefore)
     assert.equal(await timeline.locator('.video-operations-playhead').count(), 1)
+    const clipPointerStyle = await timeline.locator('.video-operations-playhead').evaluate((element) => {
+      const needle = getComputedStyle(element)
+      const grip = getComputedStyle(element, '::before')
+      return { needle: needle.backgroundSize, width: grip.width, height: grip.height, background: grip.backgroundImage, radius: grip.borderRadius }
+    })
     await dialog.getByRole('slider', { name: '播放进度' }).press('Home')
     assert.equal(Number(await start.getAttribute('aria-valuenow')), editedStart)
     for (let iteration = 0; iteration < 15; iteration++) {
@@ -145,6 +150,17 @@ async function main() {
     assert.equal(await dialog.getByRole('radio', { name: '指定时刻' }).isChecked(), true)
     const markerBox = await marker.boundingBox()
     assert.ok(markerBox.width >= 28)
+    const framePointerStyle = await marker.evaluate((element) => {
+      const needle = getComputedStyle(element)
+      const grip = getComputedStyle(element, '::after')
+      return { needle: needle.backgroundSize, width: grip.width, height: grip.height, background: grip.backgroundImage, radius: grip.borderRadius }
+    })
+    assert.equal(clipPointerStyle.width, clipPointerStyle.height, '播放针顶部使用等宽高圆点')
+    assert.equal(clipPointerStyle.radius, '50%')
+    assert.equal(clipPointerStyle.background, 'none', '播放针无中段双线拖柄')
+    assert.equal(framePointerStyle.needle, clipPointerStyle.needle)
+    assert.notEqual(framePointerStyle.background, 'none', '抽帧仍保留双线拖柄')
+    assert.ok(parseFloat(framePointerStyle.needle) <= 2, '针线保持纤细，拖动热区独立保留')
     const frameBeforeDrag = Number(await marker.getAttribute('aria-valuenow'))
     await page.mouse.move(markerBox.x + 2, markerBox.y + markerBox.height / 2)
     await page.mouse.down()

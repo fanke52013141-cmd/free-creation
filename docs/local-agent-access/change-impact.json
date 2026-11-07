@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "资源摘要增加可选视频预览路径供桌面封面使用，外部 library.search 仍经字段白名单过滤；节点侧栏、固定资产版本状态、跟随光和视频工作台调整呈现与交互，复用现有媒体与日志路径；外部操作 Schema 和项目存储格式不变。",
+  "reason": "对话弹窗与视频工作台仅调整样式及展示结构，复用现有执行、媒体和日志路径，外部契约与存储格式不变。",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "97d2ffb5e2403b33a2d3ac8ab3eee8272f78cf948e4c73ab53cc662bd73a5a6f",
@@ -101,7 +101,7 @@
     "src/renderer/src/App.tsx": "2c668996c4a04a85c27e9bedc3845c2265c6e0a90e64ad5efbd267b127e9e3d5",
     "src/renderer/src/canvas/CanvasEditor.tsx": "f39d999d36892f262429cb8e490e35bbbffdba671608e62c9329a850e36217bc",
     "src/renderer/src/canvas/CanvasSidePanel.tsx": "405dbf0159a56f52c9f634bb64f5a1c6547d9e66a4ee64b1ce099c67de8933f2",
-    "src/renderer/src/canvas/ChatSidePanel.tsx": "d91177be56a837d751d8a9dd7a6a0a599d213275f7beb2cdda0fe24bd5eb88f0",
+    "src/renderer/src/canvas/ChatSidePanel.tsx": "7008521b8d240f6a5b49c0c74aa5a6686c24038f7702bbcc2c91c058aba6073b",
     "src/renderer/src/canvas/RunTimeline.tsx": "c29fef7a5460a75a6f1d0dfb0f02afbd87d419014b6d0d7122949d5cfd4924a6",
     "src/renderer/src/canvas/flow-asset-actions.ts": "0dd4e5a53510d9566771618052954004bfdc17b31f8f94afe08c0d624554a94f",
     "src/renderer/src/canvas/snapshot-restore.ts": "b5acba9d82fc106e75afb88f59d080b92554ea6954460171fceaed47318592c6",

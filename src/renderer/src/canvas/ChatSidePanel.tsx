@@ -128,7 +128,6 @@ function ReasoningBlock({
           <span className="chat-dialog-reasoning-dot" aria-hidden="true" />
           <Icon name="spark" size={14} />
           <strong>{live ? '思考中' : '思考过程'}</strong>
-          {live && <span className="chat-dialog-reasoning-live-label">实时</span>}
         </span>
         <span className="chat-dialog-reasoning-toggle" aria-hidden="true">
           <span className="chat-dialog-reasoning-expand">点击展开</span>
@@ -573,7 +572,8 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
 
   const settings = showSettings ? (
     <section className="chat-dialog-settings" aria-label="对话设置">
-      <label>
+      <h2>对话设置</h2>
+      <label className="chat-dialog-text-model">
         文本模型
         {options.length ? (
           <AppSelect
@@ -595,6 +595,25 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
         ) : (
           <span>请前往项目首页的模型设置配置对话模型</span>
         )}
+      </label>
+      <label className="chat-dialog-system-prompt">
+        系统提示词
+        <textarea
+          defaultValue={data.system}
+          rows={4}
+          placeholder="人设、输出格式或创作要求…"
+          onCompositionStart={() => {
+            systemComposingRef.current = true
+          }}
+          onCompositionEnd={(event) => {
+            systemComposingRef.current = false
+            update({ ...data, system: event.currentTarget.value })
+          }}
+          onChange={(event) => {
+            if (!systemComposingRef.current) update({ ...data, system: event.currentTarget.value })
+          }}
+          onBlur={(event) => update({ ...data, system: event.currentTarget.value })}
+        />
       </label>
       {shape && <ChatSkillAgentSettings shape={shape} editor={editor} disabled={running} />}
       <fieldset className="chat-dialog-image-settings" disabled={running}>
@@ -634,25 +653,6 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
           </>
         )}
       </fieldset>
-      <label>
-        系统提示词
-        <textarea
-          defaultValue={data.system}
-          rows={4}
-          placeholder="人设、输出格式或创作要求…"
-          onCompositionStart={() => {
-            systemComposingRef.current = true
-          }}
-          onCompositionEnd={(event) => {
-            systemComposingRef.current = false
-            update({ ...data, system: event.currentTarget.value })
-          }}
-          onChange={(event) => {
-            if (!systemComposingRef.current) update({ ...data, system: event.currentTarget.value })
-          }}
-          onBlur={(event) => update({ ...data, system: event.currentTarget.value })}
-        />
-      </label>
       {selectedModelSupportsReasoning && (
         <label className="chat-dialog-toggle">
           <input
@@ -666,7 +666,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
         </label>
       )}
       <label>
-        温度 <output>{data.temperature.toFixed(2)}</output>
+        <span className="chat-dialog-parameter-name">温度 <output>{data.temperature.toFixed(2)}</output></span>
         <input
           type="range"
           min={0}
@@ -677,7 +677,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
         />
       </label>
       <label>
-        最大输出 <output>{data.maxTokens}</output>
+        <span className="chat-dialog-parameter-name">最大输出 <output>{data.maxTokens}</output></span>
         <input
           type="range"
           min={256}
@@ -764,9 +764,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
             </button>
           </div>
           <div className="chat-dialog-heading">
-            <span id="chat-dialog-title">
-              {selectedModel ? selectedModel.model.name || selectedModel.model.id : 'AI 对话'}
-            </span>
+            <span id="chat-dialog-title">AI 对话</span>
           </div>
           <div className="chat-dialog-actions">
             <button
@@ -819,6 +817,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                 return (
                   <article
                     className={`chat-dialog-message ${message.role}${isStreaming && message.content ? ' is-streaming' : ''}`}
+                    aria-label={message.role === 'user' ? '用户消息' : message.role === 'assistant' ? '助手消息' : '系统消息'}
                     key={`${index}-${message.content.slice(0, 24)}`}
                   >
                     <div className="chat-dialog-message-meta">
@@ -828,7 +827,6 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                         alt=""
                         aria-hidden="true"
                       />
-                      <span>{message.role === 'user' ? '你' : 'AI'}</span>
                     </div>
                     <div className="chat-dialog-bubble">
                       {editingIndex === index ? (
@@ -889,7 +887,6 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                 <article className="chat-dialog-message assistant" aria-label="正在生成">
                   <div className="chat-dialog-message-meta">
                     <img className="chat-dialog-avatar" src={aiAvatar} alt="" aria-hidden="true" />
-                    <span>AI</span>
                   </div>
                   <div className="chat-dialog-thinking">
                     <GenerationLoadingOverlay
@@ -943,6 +940,38 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                   ))}
                 </div>
               )}
+              <textarea
+                ref={inputRef}
+                aria-label="输入消息"
+                title="Enter 发送，Shift + Enter 换行"
+                value={draft}
+                rows={1}
+                placeholder={
+                  project
+                    ? sendMode === 'image'
+                      ? '描述想生成的图片，Enter 生图'
+                      : '输入消息…'
+                    : '项目未就绪'
+                }
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  event.stopPropagation()
+                  if (event.nativeEvent.isComposing) return
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault()
+                    void send()
+                  }
+                }}
+              />
+              <button
+                type="button"
+                aria-label="添加附件"
+                title="添加图片、文本或文档附件"
+                disabled={running || importingAttachments}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Icon name="attach" size={17} />
+              </button>
               <div className="chat-dialog-skill-controls">
                 <span className="chat-dialog-control-label">模式</span>
                 <AppSelect
@@ -1034,37 +1063,6 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                   </>
                 )}
               </div>
-              <button
-                type="button"
-                aria-label="添加附件"
-                title="添加图片、文本或文档附件"
-                disabled={running || importingAttachments}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Icon name="attach" size={17} />
-              </button>
-              <textarea
-                ref={inputRef}
-                aria-label="输入消息"
-                value={draft}
-                rows={1}
-                placeholder={
-                  project
-                    ? sendMode === 'image'
-                      ? '描述想生成的图片，Enter 生图'
-                      : '输入消息，Enter 发送，Shift + Enter 换行'
-                    : '项目未就绪'
-                }
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  event.stopPropagation()
-                  if (event.nativeEvent.isComposing) return
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault()
-                    void send()
-                  }
-                }}
-              />
               <button
                 type="button"
                 className="chat-dialog-send"
