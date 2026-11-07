@@ -139,6 +139,7 @@ export function installBrowserMock(): void {
     onLocalAgentDesktopRequest: () => () => {},
     replyLocalAgentDesktop: () => {},
     commitLocalAgentDesktop: async () => ({ ok: false }),
+    reportLocalAgentTask: () => {},
     buildFlowAgent: async () => notImplementedInDemo('画布建图'),
     reviewFlowAssets: async () => notImplementedInDemo('资产审核'),
     runFlowAgent: async () => notImplementedInDemo('画布 Agent 执行'),
@@ -195,7 +196,14 @@ export function installBrowserMock(): void {
         ok: false,
         error: { code: 'UNAVAILABLE', message: '诊断导出仅支持桌面端' }
       }),
-    bootstrap: () => Promise.resolve({ ok: true, data: { lastProjectId: 'demo' } }),
+    bootstrap: () =>
+      Promise.resolve({
+        ok: true,
+        data: {
+          lastProjectId: 'demo',
+          license: { state: 'active', capabilities: ['app.run'], term: 'permanent', expiresAt: null }
+        }
+      }),
     listProjects: () => Promise.resolve({ ok: true, data: projects }),
     createProject: ({
       name,
@@ -752,6 +760,16 @@ export function installBrowserMock(): void {
     },
     gateway: {
       listProviders: () => Promise.resolve({ ok: true, data: providers }),
+      // P2 密钥包：浏览器演示不提供发放入口
+      exportReceiveCredential: () =>
+        Promise.resolve({ ok: false as const, error: { code: 'DEMO_NOT_IMPLEMENTED', message: '浏览器演示不支持：导出接收凭证' } }),
+      listKeyConnections: () => Promise.resolve({ ok: true, data: [] }),
+      sealKeyPackage: () =>
+        Promise.resolve({ ok: false as const, error: { code: 'DEMO_NOT_IMPLEMENTED', message: '浏览器演示不支持：密钥包发放' } }),
+      previewKeyPackage: () =>
+        Promise.resolve({ ok: false as const, error: { code: 'DEMO_NOT_IMPLEMENTED', message: '浏览器演示不支持：密钥包导入' } }),
+      importKeyPackage: () =>
+        Promise.resolve({ ok: false as const, error: { code: 'DEMO_NOT_IMPLEMENTED', message: '浏览器演示不支持：密钥包导入' } }),
       // F16 补齐：演示环境与桌面同构的三个入口
       listExecutableProviders: () => Promise.resolve({ ok: true, data: providers }),
       exportProviders: () =>

@@ -73,7 +73,7 @@ import type { ConnectionFrom } from '../stores/connection'
 import { useGatewayStore } from '../stores/gateway'
 import { flowInitialConfig } from '@shared/agent-flow/model-defaults'
 import { useEngineStore } from '../engine/store'
-import { runWorkflow, runWorkflowForNodes, cancelFlowCommandExecution } from '../engine/executor'
+import { runWorkflow, runWorkflowForNodes, runNodeManually, cancelFlowCommandExecution, iterationBodyNodeIds, isDocumentOutputNode } from '../engine/executor'
 import {
   runPreparedFlowNodeCommand,
   reportFlowBridgeFailure,
@@ -943,6 +943,131 @@ export function CanvasEditor({
                   })),
                   counts: replanned.plan.counts
                 }
+              })
+              return
+            }
+            // ── F3 execute-nodes：受理回执立即返回；终态经任务报告通道异步回填 ──
+            if (request.action === 'execute-nodes') {
+              const replyFail = (code: string, detail?: string): void => {
+                window.api.replyLocalAgentDesktop({
+                  requestId: request.requestId,
+                  projectId: project.id,
+                  ok: false,
+                  validated: true,
+                  errorCode: code,
+                  ...(detail ? { errorDetail: detail.slice(0, 300) } : {})
+                })
+              }
+              const taskId = request.taskId ?? ''
+              const executeMode = request.mode ?? 'subgraph'
+              const executeNodeIds = request.nodeIds ?? []
+              if (!taskId || executeNodeIds.length === 0) {
+                replyFail('INVALID_INPUT')
+                return
+              }
+              if (useEngineStore.getState().phase !== 'idle') {
+                replyFail('ENGINE_BUSY')
+                return
+              }
+              const executeGraph = deriveGraph(editor)
+              const missing = executeNodeIds.filter(
+                (id) => !executeGraph.nodes.some((candidate) => candidate.id === id)
+              )
+              if (missing.length > 0) {
+                replyFail('NODE_NOT_FOUND', missing[0])
+                return
+              }
+              if (executeMode === 'subgraph') {
+                // 与 GUI 多选运行同一份重跑确认规则：付费上游需要显式确认，不静默计费。
+                const targets = new Set(executeNodeIds)
+                const required = new Set<string>(executeNodeIds)
+                const pending = [...executeNodeIds]
+                while (pending.length > 0) {
+                  const current = pending.pop()!
+                  for (const edgeItem of executeGraph.edges) {
+                    if (edgeItem.to.nodeId === current && !required.has(edgeItem.from.nodeId)) {
+                      required.add(edgeItem.from.nodeId)
+                      pending.push(edgeItem.from.nodeId)
+                    }
+                  }
+                }
+                const bodies = iterationBodyNodeIds(executeGraph)
+                const rerunPaid = [...required].filter((id) => {
+                  if (targets.has(id) || bodies.has(id)) return false
+                  const node = executeGraph.nodes.find((candidate) => candidate.id === id)
+                  return node !== undefined && !isDocumentOutputNode(node.type)
+                })
+                if (rerunPaid.length > 0 && !request.confirmPaidRerun) {
+                  replyFail('PAID_RERUN_CONFIRM_REQUIRED', `upstream=${rerunPaid.length}`)
+                  return
+                }
+              }
+              window.api.reportLocalAgentTask({
+                taskId,
+                projectId: project.id,
+                status: 'running'
+              })
+              let sawStopping = false
+              const unsubscribe = useEngineStore.subscribe((state) => {
+                if (state.phase === 'stopping') sawStopping = true
+              })
+              const reportTerminal = (
+                status: 'completed' | 'failed' | 'cancelled',
+                error?: string
+              ): void => {
+                unsubscribe()
+                window.api.reportLocalAgentTask({
+                  taskId,
+                  projectId: project.id,
+                  status,
+                  ...(error ? { error: error.slice(0, 500) } : {})
+                })
+              }
+              void (async () => {
+                try {
+                  if (executeMode === 'single') {
+                    const outcome = await runNodeManually(
+                      editor,
+                      project.id,
+                      providers,
+                      executeNodeIds[0] as TLShapeId
+                    )
+                    if (outcome.status === 'done') reportTerminal('completed')
+                    else if (sawStopping) reportTerminal('cancelled')
+                    else reportTerminal('failed', outcome.reason ?? '节点未执行')
+                  } else {
+                    await runWorkflowForNodes(
+                      editor,
+                      project.id,
+                      providers,
+                      executeNodeIds as TLShapeId[]
+                    )
+                    const after = useEngineStore.getState()
+                    if (sawStopping) reportTerminal('cancelled')
+                    else if (after.errors.length > 0)
+                      reportTerminal('failed', after.errors[0]?.reason ?? '子图执行失败')
+                    else reportTerminal('completed')
+                  }
+                } catch (error) {
+                  reportTerminal('failed', error instanceof Error ? error.message : '执行异常')
+                }
+              })()
+              window.api.replyLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                ok: true,
+                graphVersion: graphVersionRef.current
+              })
+              return
+            }
+            // ── F3 cancel-run：与顶栏停止按钮同一停止入口 ──
+            if (request.action === 'cancel-run') {
+              useEngineStore.getState().stop?.()
+              window.api.replyLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                ok: true,
+                graphVersion: graphVersionRef.current
               })
               return
             }

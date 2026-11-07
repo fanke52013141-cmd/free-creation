@@ -11,6 +11,12 @@ import {
   graphGroupDto,
   graphNodeDto
 } from './graph-ops'
+import {
+  NODE_EXECUTE_MAX_NODES,
+  RUN_WAIT_MAX_TIMEOUT_MS,
+  nodeRunTaskDto,
+  outputValueDto
+} from './run-ops'
 
 export const ACCESS_API_VERSION = 1
 export const ACCESS_MAX_BYTES = 1024 * 1024
@@ -112,6 +118,40 @@ export const ACCESS_OPERATIONS = {
     description:
       '向当前打开项目提交一批类型化画布编辑（建/改/删节点与连线）；整体校验后原子应用并保存；返回ID映射与保存版本',
     input: revision.extend({ ops: GraphPatchOpsSchema }).strict()
+  },
+  'node.execute': {
+    effect: 'execute',
+    description:
+      '向当前打开项目提交节点执行（single=仅该节点读取已持久化上游；subgraph=所选节点及其上游闭包）；返回持久任务ID，最终状态以 run.get 为准',
+    input: revision
+      .extend({
+        nodeIds: z.array(nodeId).min(1).max(NODE_EXECUTE_MAX_NODES),
+        mode: z.enum(['single', 'subgraph']).default('subgraph'),
+        confirmPaidRerun: z.boolean().default(false)
+      })
+      .strict()
+  },
+  'run.wait': {
+    effect: 'read',
+    description: '等待任务到达终态或超时；返回任务当前状态，不自动重放或取消任务',
+    input: project
+      .extend({
+        taskId: z.string().regex(/^[a-zA-Z0-9_:-]{1,160}$/),
+        timeoutMs: z.number().int().min(100).max(RUN_WAIT_MAX_TIMEOUT_MS).default(30000)
+      })
+      .strict()
+  },
+  'run.cancel': {
+    effect: 'write',
+    description:
+      '请求取消当前打开项目上的在途任务；取消请求与取消确认分开，最终状态以 run.get 为准',
+    input: project.extend({ taskId: z.string().regex(/^[a-zA-Z0-9_:-]{1,160}$/) }).strict()
+  },
+  'output.get': {
+    effect: 'read',
+    description:
+      '读取节点最近一次正式输出投影（确定性文本/JSON/processor/媒体引用等已登记类型）；运行事实来自真实运行记录，不可伪造',
+    input: project.extend({ nodeId }).strict()
   },
   'model.list': {
     effect: 'read',
@@ -387,21 +427,25 @@ export const ACCESS_OUTPUTS = {
       imageSha256: z.string().regex(/^[a-f0-9]{64}$/)
     })
     .strict(),
-  'run.get': z
-    .object({
-      projectId: identifier,
-      taskId: z.string().max(160),
-      source: z.literal('flow-agent-task'),
-      state: z.enum(['ready', 'running', 'waiting', 'blocked', 'completed', 'failed', 'cancelled']),
-      waitRevision: z.number().int().nonnegative(),
-      waitKind: z.enum(['human', 'reconcile']).nullable(),
-      reconcileRequired: z.boolean(),
-      stateReason: z
-        .enum(['HUMAN_REQUIRED', 'RECONCILE_REQUIRED', 'TASK_BLOCKED', 'TASK_FAILED'])
-        .nullable(),
-      allowedActions: z.array(z.never()).max(0)
-    })
-    .strict(),
+  'run.get': z.discriminatedUnion('source', [
+    // flow-agent-task 分支保持既有字段不变（旧客户端兼容）。
+    z
+      .object({
+        projectId: identifier,
+        taskId: z.string().max(160),
+        source: z.literal('flow-agent-task'),
+        state: z.enum(['ready', 'running', 'waiting', 'blocked', 'completed', 'failed', 'cancelled']),
+        waitRevision: z.number().int().nonnegative(),
+        waitKind: z.enum(['human', 'reconcile']).nullable(),
+        reconcileRequired: z.boolean(),
+        stateReason: z
+          .enum(['HUMAN_REQUIRED', 'RECONCILE_REQUIRED', 'TASK_BLOCKED', 'TASK_FAILED'])
+          .nullable(),
+        allowedActions: z.array(z.never()).max(0)
+      })
+      .strict(),
+    nodeRunTaskDto
+  ]),
   'diagnostics.summary': z
     .object({
       available: z.boolean(),
@@ -473,6 +517,37 @@ export const ACCESS_OUTPUTS = {
           edgeDeleted: z.number().int().nonnegative()
         })
         .strict()
+    })
+    .strict(),
+  'node.execute': z
+    .object({
+      projectId: identifier,
+      taskId: z.string().max(160),
+      accepted: z.literal(true),
+      mode: z.enum(['single', 'subgraph']),
+      nodeIds: z.array(z.string()).max(NODE_EXECUTE_MAX_NODES),
+      state: z.enum(['accepted', 'running'])
+    })
+    .strict(),
+  'run.wait': nodeRunTaskDto,
+  'run.cancel': z
+    .object({
+      projectId: identifier,
+      taskId: z.string().max(160),
+      state: z.enum(['cancel-requested', 'cancelled', 'completed', 'failed']),
+      /** false：任务已是终态，取消为无操作；true：已登记取消请求并通知宿主。 */
+      cancelRequested: z.boolean()
+    })
+    .strict(),
+  'output.get': z
+    .object({
+      projectId: identifier,
+      graphVersion: z.number().int().nonnegative(),
+      nodeId,
+      nodeType: z.string().max(60),
+      outputSource: z.enum(['document', 'run', 'manual-publish', 'display-only', 'unknown']),
+      outputs: z.array(outputValueDto).max(32),
+      projection: z.string().max(60)
     })
     .strict(),
   'node.type.list': z
@@ -636,7 +711,7 @@ export function validateAccessRegistry(
     if (
       !spec.input ||
       !spec.description ||
-      !['read', 'write', 'export', 'delete'].includes(spec.effect)
+      !['read', 'write', 'export', 'delete', 'execute'].includes(spec.effect)
     )
       errors.push(`INVALID_OPERATION:${id}`)
     if (id.includes('import')) errors.push(`EXCLUDED_OPERATION:${id}`)

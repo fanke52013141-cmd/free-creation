@@ -1212,22 +1212,38 @@
     "canvas.workflow.run-all": {
       "label": "运行整个工作流",
       "gui": "画布运行",
-      "phase": "F3"
+      "phase": "external",
+      "external": [
+        "node.execute"
+      ],
+      "note": "F3 新增：node.execute subgraph 模式覆盖画布级闭包执行；付费上游需 confirmPaidRerun（GUI 弹窗的委托等价）；真实桌面验收待里程碑"
     },
     "canvas.workflow.run-selection": {
       "label": "运行所选及上游",
       "gui": "多选运行",
-      "phase": "F3"
+      "phase": "external",
+      "external": [
+        "node.execute"
+      ],
+      "note": "F3 新增：node.execute subgraph 模式（多目标闭包，与 GUI runWorkflowForNodes 同一实现）"
     },
     "canvas.workflow.cancel": {
       "label": "取消运行",
       "gui": "运行时间线",
-      "phase": "F3"
+      "phase": "external",
+      "external": [
+        "run.cancel"
+      ],
+      "note": "F3 新增：取消请求与取消确认分离；宿主停止入口与顶栏停止按钮相同"
     },
     "canvas.node.run": {
       "label": "运行单节点",
       "gui": "节点运行按钮",
-      "phase": "F3"
+      "phase": "external",
+      "external": [
+        "node.execute"
+      ],
+      "note": "F3 新增：node.execute single 模式（读取已持久化上游，不重跑上游）"
     },
     "canvas.node.result-select": {
       "label": "选择结果版本",

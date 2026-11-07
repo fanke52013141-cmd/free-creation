@@ -502,7 +502,7 @@ function expandIterationBody(
 }
 
 /** 当前图中会由 iterate.out-item 驱动、因此不能再被主工作流重复执行的节点集合。 */
-function iterationBodyNodeIds(graph: { nodes: CanvasNode[]; edges: CanvasEdge[] }): Set<string> {
+export function iterationBodyNodeIds(graph: { nodes: CanvasNode[]; edges: CanvasEdge[] }): Set<string> {
   const body = new Set<string>()
   const iterateIds = new Set(
     graph.edges.filter((edge) => edge.from.portId === 'out-item').map((edge) => edge.from.nodeId)
@@ -1596,7 +1596,7 @@ async function runSubflowForIterate(
  * 与运行状态无关，重跑也不会产生费用。用于子图运行的上游重跑确认；
  * 具体输出可见性由 nodeValues.projectNodeOutputs 统一决定。
  */
-function isDocumentOutputNode(nodeType: string): boolean {
+export function isDocumentOutputNode(nodeType: string): boolean {
   return getNodeType(nodeType)?.outputSource === 'document'
 }
 

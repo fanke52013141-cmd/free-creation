@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 19
+export const DB_SCHEMA_VERSION = 21
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -430,6 +430,42 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
       idempotency_key TEXT PRIMARY KEY, intent_hmac TEXT NOT NULL,
       status TEXT NOT NULL, receipt_json TEXT, created_at INTEGER NOT NULL
     );`)
+  },
+  // M20: P2 设备绑定密钥库——密文与封装的内容密钥绑定 kind/id/origin/source/scope；
+  // key_imports 记录已导入的 .cskeys 包（重复导入识别）。不含任何明文材料。
+  (database) => {
+    database.exec(`CREATE TABLE secret_vault (
+      kind TEXT NOT NULL,
+      id TEXT NOT NULL,
+      origin TEXT NOT NULL,
+      credential_source TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      content_cipher TEXT NOT NULL,
+      content_nonce TEXT NOT NULL,
+      wrapped_ck TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY(kind, id)
+    );
+    CREATE TABLE key_imports (
+      package_id TEXT PRIMARY KEY,
+      imported_at INTEGER NOT NULL,
+      connection_ids TEXT NOT NULL
+    );`)
+  },
+  // M21: 外部节点执行任务账本（F3）。只存状态、范围与安全摘要；不存提示词/正文。
+  (database) => {
+    database.exec(`CREATE TABLE external_runs (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      mode TEXT NOT NULL,
+      node_ids TEXT NOT NULL,
+      status TEXT NOT NULL,
+      error TEXT,
+      run_id TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX idx_external_runs_project ON external_runs(project_id, status);`)
   }
 ]
 

@@ -48,6 +48,17 @@ import { SqliteModelHost } from '../model-host/sqlite-model-host'
 import { FlowTaskStore } from '../agent-flow/task-store'
 import type { DiagnosticsService } from '../diagnostics/service'
 import { accessDiagnosticsSummary, searchAccessLibrary } from './queries'
+import {
+  createExternalRun,
+  getExternalRun,
+  reportExternalRun,
+  requestExternalRunCancel
+} from './runs'
+import {
+  buildProjectionShape,
+  DETERMINISTIC_OUTPUT_SOURCES
+} from '../../shared/agent-access/run-ops'
+import { DETERMINISTIC_PROJECTIONS } from '../../shared/engine/deterministic-projections'
 
 class AccessFailure extends Error {
   constructor(
@@ -217,7 +228,9 @@ export class LocalAccessService {
         if (this.mutating) throw new AccessFailure('RESOURCE_BUSY', 'operation-occupancy')
         this.mutating = ownsMutation = true
       }
-      if (id && spec.effect !== 'read') this.assertNoActiveTasks(id)
+      // run.cancel 是对在途任务的控制操作，豁免占用检查（否则取消不了自己要停的任务）。
+      if (id && spec.effect !== 'read' && operationId !== 'run.cancel')
+        this.assertNoActiveTasks(id)
       const active = this.options.activeProjectId()
       // The desktop must never have its open canvas deleted from underneath it.
       if (operationId === 'project.delete' && id === active)
@@ -225,7 +238,75 @@ export class LocalAccessService {
       let result: unknown
       if (operationId === 'chat.skill.bind' && (id !== active || !this.options.desktop))
         throw new AccessFailure('ACTIVE_PROJECT_REQUIRED', 'desktop-ownership')
-      if (operationId === 'graph.patch') {
+      if (operationId === 'node.execute') {
+        // F3 执行准入：宿主驻留 + 目标存在 + 持久任务受理；最终状态只由 run.get 判定。
+        if (id !== active || !this.options.desktop)
+          throw new AccessFailure(
+            'ACTIVE_PROJECT_REQUIRED',
+            'desktop-ownership',
+            'project.open the target canvas first, then retry node.execute'
+          )
+        const executeFile = projects.openProject(id)
+        if (!executeFile) throw new AccessFailure('NOT_FOUND', 'read')
+        const executeNodeIds = input.nodeIds as string[]
+        for (const nodeId of executeNodeIds)
+          if (!executeFile.nodes.some((candidate) => candidate.id === nodeId))
+            throw new AccessFailure('NODE_NOT_FOUND', 'precheck', nodeId.slice(0, 60))
+        const run = createExternalRun({
+          projectId: id,
+          mode: (input.mode as 'single' | 'subgraph') ?? 'subgraph',
+          nodeIds: executeNodeIds
+        })
+        try {
+          await this.options.desktop.run({
+            action: 'execute-nodes',
+            projectId: id,
+            taskId: run.id,
+            mode: run.mode === 'single' ? 'single' : 'subgraph',
+            nodeIds: executeNodeIds,
+            confirmPaidRerun: input.confirmPaidRerun === true
+          })
+        } catch (error) {
+          if (error instanceof DesktopAccessError && !error.unknownOutcome) {
+            // 宿主明确拒绝（引擎忙/付费重跑未确认等）：任务从未开始。
+            reportExternalRun(run.id, 'failed', { error: error.code })
+            throw new AccessFailure(error.code, 'execute-handshake', error.detail)
+          }
+          // 超时/丢失：任务保持 accepted，由 run.get 核对，不盲目重发。
+          throw error
+        }
+        const after = getExternalRun(run.id)!
+        result = {
+          projectId: id,
+          taskId: run.id,
+          accepted: true,
+          mode: run.mode,
+          nodeIds: executeNodeIds,
+          state: after.status === 'running' ? 'running' : 'accepted'
+        }
+      } else if (operationId === 'run.cancel') {
+        const row = getExternalRun(input.taskId as string)
+        if (!row || row.project_id !== id)
+          throw new AccessFailure('NOT_FOUND', 'run-read', 'node-run task not found')
+        if (row.status === 'completed' || row.status === 'failed' || row.status === 'cancelled') {
+          result = { projectId: id, taskId: row.id, state: row.status, cancelRequested: false }
+        } else {
+          const updated = requestExternalRunCancel(row.id)!
+          if (id === active && this.options.desktop) {
+            try {
+              await this.options.desktop.run({ action: 'cancel-run', projectId: id, taskId: row.id })
+            } catch {
+              // 通知失败不改变取消请求登记；终态仍以宿主报告为准。
+            }
+          }
+          result = {
+            projectId: id,
+            taskId: row.id,
+            state: updated.status === 'cancel-requested' ? 'cancel-requested' : updated.status,
+            cancelRequested: true
+          }
+        }
+      } else if (operationId === 'graph.patch') {
         // F2 画布编辑走权威宿主：未打开的项目返回明确等待动作，不另建 headless 编辑路径。
         if (id !== active || !this.options.desktop)
           throw new AccessFailure(
@@ -459,6 +540,33 @@ export class LocalAccessService {
       .run(response.status, JSON.stringify(response), key)
   }
 
+  /** external_runs 行 → run.get / run.wait 的 node-run DTO。 */
+  private externalRunDto(
+    row: { id: string; project_id: string; mode: string; node_ids: string; status: string; error: string | null; created_at: number; updated_at: number },
+    hostResident: boolean
+  ): unknown {
+    let nodeIds: string[] = []
+    try {
+      const parsed: unknown = JSON.parse(row.node_ids)
+      if (Array.isArray(parsed)) nodeIds = parsed.filter((v): v is string => typeof v === 'string')
+    } catch {
+      nodeIds = []
+    }
+    return {
+      taskId: row.id,
+      projectId: row.project_id,
+      source: 'node-run',
+      state: row.status,
+      mode: row.mode === 'single' ? 'single' : 'subgraph',
+      nodeIds,
+      cancelRequested: row.status === 'cancel-requested' || row.status === 'cancelled',
+      error: row.error,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      hostResident
+    }
+  }
+
   private assertNoActiveTasks(id: string): void {
     if (projects.hasRecoveryCopy(id)) throw new AccessFailure('RESOURCE_BUSY', 'recovery-ownership')
     if (this.taskOccupied(id)) throw new AccessFailure('RESOURCE_BUSY', 'task-occupancy')
@@ -497,6 +605,11 @@ export class LocalAccessService {
       db
         .prepare(
           "SELECT 1 FROM tasks WHERE project_id=? AND status NOT IN ('completed','done','success','failed','cancelled') LIMIT 1"
+        )
+        .get(id) ||
+      db
+        .prepare(
+          "SELECT 1 FROM external_runs WHERE project_id=? AND status IN ('accepted','running','cancel-requested') LIMIT 1"
         )
         .get(id)
     )
@@ -851,9 +964,77 @@ export class LocalAccessService {
       }
       case 'run.get': {
         if (!projects.getProject(id)) throw new AccessFailure('NOT_FOUND', 'read')
+        // F3：external_runs 优先；flow 任务保持既有 DTO（source 区分，字段不重名）。
+        const external = getExternalRun(input.taskId as string)
+        if (external && external.project_id === id)
+          return this.externalRunDto(external, id === this.options.activeProjectId())
         const task = new FlowTaskStore(getDb()).summary(id, input.taskId as string)
         if (!task) throw new AccessFailure('NOT_FOUND', 'flow-task-read')
         return task
+      }
+      case 'run.wait': {
+        // 只等待 external_runs 任务；flow 任务用 run.get 轮询（终态拥有者不同）。
+        if (!projects.getProject(id)) throw new AccessFailure('NOT_FOUND', 'read')
+        const deadline = Date.now() + (input.timeoutMs as number)
+        for (;;) {
+          const row = getExternalRun(input.taskId as string)
+          if (!row || row.project_id !== id)
+            throw new AccessFailure('NOT_FOUND', 'run-read', 'node-run task not found')
+          if (
+            row.status === 'completed' ||
+            row.status === 'failed' ||
+            row.status === 'cancelled' ||
+            Date.now() >= deadline
+          )
+            return this.externalRunDto(row, id === this.options.activeProjectId())
+          await new Promise((resolve) => setTimeout(resolve, 400))
+        }
+      }
+      case 'output.get': {
+        const file = projects.openProject(id)
+        if (!file) throw new AccessFailure('NOT_FOUND', 'read')
+        const outputNode = file.nodes.find((candidate) => candidate.id === input.nodeId)
+        if (!outputNode) throw new AccessFailure('NODE_NOT_FOUND', 'read')
+        const projector = DETERMINISTIC_PROJECTIONS[outputNode.type]
+        const outputSource = DETERMINISTIC_OUTPUT_SOURCES[outputNode.type]
+        if (!projector || !outputSource)
+          throw new AccessFailure(
+            'UNSUPPORTED_CONTRACT',
+            'output-projection',
+            `${outputNode.type}: output projection lands with its node family package`
+          )
+        const shape = buildProjectionShape(file, outputNode.id)
+        if (!shape) throw new AccessFailure('STORAGE_INCONSISTENT', 'output-projection')
+        const projected = projector(shape as Parameters<typeof projector>[0])
+        return {
+          projectId: id,
+          graphVersion: file.meta.graphVersion,
+          nodeId: outputNode.id,
+          nodeType: outputNode.type,
+          outputSource,
+          outputs: Object.entries(projected)
+            .slice(0, 32)
+            .map(([portId, value]) => {
+              const v = value as Record<string, unknown>
+              const kind = String(v.kind)
+              if (kind === 'text' || kind === 'markdown')
+                return { portId, kind, text: String(v.text ?? '').slice(0, 20_000) }
+              if (kind === 'json' || kind === 'camera' || kind === 'any' || kind === 'iteration') {
+                const encoded = JSON.stringify(v.data ?? null) ?? 'null'
+                if (encoded.length > 100_000)
+                  throw new AccessFailure('OUTPUT_TOO_LARGE', 'output-projection', portId)
+                return { portId, kind, json: JSON.parse(encoded) as unknown }
+              }
+              return {
+                portId,
+                kind,
+                ...(typeof v.mediaId === 'string' ? { mediaId: v.mediaId } : {}),
+                ...(typeof v.mediaPath === 'string' ? { mediaPath: v.mediaPath } : {}),
+                ...(typeof v.mime === 'string' ? { mime: v.mime } : {})
+              }
+            }),
+          projection: 'deterministic@1'
+        }
       }
       case 'diagnostics.summary':
         return accessDiagnosticsSummary(this.options.diagnostics)
@@ -981,6 +1162,10 @@ export class LocalAccessService {
       }
       case 'graph.patch':
         // graph.patch 在 dispatch 中经权威宿主握手执行，不落在这里。
+        throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
+      case 'node.execute':
+      case 'run.cancel':
+        // 同上：执行与取消需要权威宿主握手，在 dispatch 分支处理。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
     }
     return unhandledOperation(operation)

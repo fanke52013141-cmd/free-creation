@@ -1,16 +1,27 @@
 import { z } from 'zod'
 import { SkillAgentConfigSchema } from '../skill-agent'
 import { GraphPatchOpsSchema, GRAPH_VIEW_MAX_NODES } from './graph-ops'
+import { NODE_EXECUTE_MAX_NODES } from './run-ops'
 
 export const ACCESS_DESKTOP_REQUEST = 'local-agent:desktop-request'
 export const ACCESS_DESKTOP_REPLY = 'local-agent:desktop-reply'
 export const ACCESS_DESKTOP_COMMIT = 'local-agent:desktop-commit'
+export const ACCESS_TASK_REPORT = 'local-agent:task-report'
 export const DesktopRequestSchema = z
   .object({
     requestId: z.string().uuid(),
     expiresAt: z.number().int().positive(),
     projectId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/),
-    action: z.enum(['open', 'flush', 'rename', 'bind-skills', 'graph-patch', 'read-graph']),
+    action: z.enum([
+      'open',
+      'flush',
+      'rename',
+      'bind-skills',
+      'graph-patch',
+      'read-graph',
+      'execute-nodes',
+      'cancel-run'
+    ]),
     nodeId: z.string().optional(),
     agent: SkillAgentConfigSchema.optional(),
     name: z.string().trim().min(1).max(200).optional(),
@@ -20,7 +31,12 @@ export const DesktopRequestSchema = z
     expectedGraphVersion: z.number().int().nonnegative().optional(),
     /** read-graph：latest 视图分页参数。 */
     offset: z.number().int().min(0).max(100000).optional(),
-    limit: z.number().int().min(1).max(GRAPH_VIEW_MAX_NODES).optional()
+    limit: z.number().int().min(1).max(GRAPH_VIEW_MAX_NODES).optional(),
+    /** execute-nodes：外部执行任务（账本已受理）。 */
+    taskId: z.string().max(160).optional(),
+    mode: z.enum(['single', 'subgraph']).optional(),
+    nodeIds: z.array(z.string().max(180)).min(1).max(NODE_EXECUTE_MAX_NODES).optional(),
+    confirmPaidRerun: z.boolean().optional()
   })
   .strict()
 export type DesktopRequest = z.infer<typeof DesktopRequestSchema>

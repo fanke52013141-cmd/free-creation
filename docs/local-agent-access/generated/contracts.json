@@ -2098,6 +2098,661 @@
       ]
     },
     {
+      "operationId": "node.execute",
+      "operationVersion": 1,
+      "effect": "execute",
+      "description": "向当前打开项目提交节点执行（single=仅该节点读取已持久化上游；subgraph=所选节点及其上游闭包）；返回持久任务ID，最终状态以 run.get 为准",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "expectedGraphVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "nodeIds": {
+            "minItems": 1,
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+            }
+          },
+          "mode": {
+            "default": "subgraph",
+            "type": "string",
+            "enum": [
+              "single",
+              "subgraph"
+            ]
+          },
+          "confirmPaidRerun": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projectId",
+          "expectedGraphVersion",
+          "nodeIds",
+          "mode",
+          "confirmPaidRerun"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "node.execute"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "taskId": {
+                "type": "string",
+                "maxLength": 160
+              },
+              "accepted": {
+                "type": "boolean",
+                "const": true
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "single",
+                  "subgraph"
+                ]
+              },
+              "nodeIds": {
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "accepted",
+                  "running"
+                ]
+              }
+            },
+            "required": [
+              "projectId",
+              "taskId",
+              "accepted",
+              "mode",
+              "nodeIds",
+              "state"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "run.wait",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "等待任务到达终态或超时；返回任务当前状态，不自动重放或取消任务",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "taskId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_:-]{1,160}$"
+          },
+          "timeoutMs": {
+            "default": 30000,
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 120000
+          }
+        },
+        "required": [
+          "projectId",
+          "taskId",
+          "timeoutMs"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "run.wait"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string"
+              },
+              "projectId": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "const": "node-run"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "accepted",
+                  "running",
+                  "cancel-requested",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "single",
+                  "subgraph"
+                ]
+              },
+              "nodeIds": {
+                "minItems": 1,
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "cancelRequested": {
+                "type": "boolean"
+              },
+              "error": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "createdAt": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "updatedAt": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "hostResident": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "taskId",
+              "projectId",
+              "source",
+              "state",
+              "mode",
+              "nodeIds",
+              "cancelRequested",
+              "error",
+              "createdAt",
+              "updatedAt",
+              "hostResident"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "run.cancel",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "请求取消当前打开项目上的在途任务；取消请求与取消确认分开，最终状态以 run.get 为准",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "taskId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_:-]{1,160}$"
+          }
+        },
+        "required": [
+          "projectId",
+          "taskId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "run.cancel"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "taskId": {
+                "type": "string",
+                "maxLength": 160
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "cancel-requested",
+                  "cancelled",
+                  "completed",
+                  "failed"
+                ]
+              },
+              "cancelRequested": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "projectId",
+              "taskId",
+              "state",
+              "cancelRequested"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "output.get",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "读取节点最近一次正式输出投影（确定性文本/JSON/processor/媒体引用等已登记类型）；运行事实来自真实运行记录，不可伪造",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "nodeId": {
+            "type": "string",
+            "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+          }
+        },
+        "required": [
+          "projectId",
+          "nodeId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "output.get"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "graphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "nodeId": {
+                "type": "string",
+                "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+              },
+              "nodeType": {
+                "type": "string",
+                "maxLength": 60
+              },
+              "outputSource": {
+                "type": "string",
+                "enum": [
+                  "document",
+                  "run",
+                  "manual-publish",
+                  "display-only",
+                  "unknown"
+                ]
+              },
+              "outputs": {
+                "maxItems": 32,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "portId": {
+                      "type": "string",
+                      "maxLength": 100
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "text",
+                        "markdown",
+                        "json",
+                        "media",
+                        "camera",
+                        "file",
+                        "any",
+                        "iteration"
+                      ]
+                    },
+                    "text": {
+                      "type": "string",
+                      "maxLength": 20000
+                    },
+                    "json": {},
+                    "mediaId": {
+                      "type": "string",
+                      "maxLength": 160
+                    },
+                    "mediaPath": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "mime": {
+                      "type": "string",
+                      "maxLength": 120
+                    }
+                  },
+                  "required": [
+                    "portId",
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "projection": {
+                "type": "string",
+                "maxLength": 60
+              }
+            },
+            "required": [
+              "projectId",
+              "graphVersion",
+              "nodeId",
+              "nodeType",
+              "outputSource",
+              "outputs",
+              "projection"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
       "operationId": "model.list",
       "operationVersion": 1,
       "effect": "read",
@@ -2657,90 +3312,176 @@
             "type": "string"
           },
           "data": {
-            "type": "object",
-            "properties": {
-              "projectId": {
-                "type": "string",
-                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
-              },
-              "taskId": {
-                "type": "string",
-                "maxLength": 160
-              },
-              "source": {
-                "type": "string",
-                "const": "flow-agent-task"
-              },
-              "state": {
-                "type": "string",
-                "enum": [
-                  "ready",
-                  "running",
-                  "waiting",
-                  "blocked",
-                  "completed",
-                  "failed",
-                  "cancelled"
-                ]
-              },
-              "waitRevision": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 9007199254740991
-              },
-              "waitKind": {
-                "anyOf": [
-                  {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+                  },
+                  "taskId": {
+                    "type": "string",
+                    "maxLength": 160
+                  },
+                  "source": {
+                    "type": "string",
+                    "const": "flow-agent-task"
+                  },
+                  "state": {
                     "type": "string",
                     "enum": [
-                      "human",
-                      "reconcile"
+                      "ready",
+                      "running",
+                      "waiting",
+                      "blocked",
+                      "completed",
+                      "failed",
+                      "cancelled"
                     ]
                   },
-                  {
-                    "type": "null"
+                  "waitRevision": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "waitKind": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "human",
+                          "reconcile"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reconcileRequired": {
+                    "type": "boolean"
+                  },
+                  "stateReason": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "HUMAN_REQUIRED",
+                          "RECONCILE_REQUIRED",
+                          "TASK_BLOCKED",
+                          "TASK_FAILED"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "allowedActions": {
+                    "maxItems": 0,
+                    "type": "array",
+                    "items": {
+                      "not": {}
+                    }
                   }
-                ]
+                },
+                "required": [
+                  "projectId",
+                  "taskId",
+                  "source",
+                  "state",
+                  "waitRevision",
+                  "waitKind",
+                  "reconcileRequired",
+                  "stateReason",
+                  "allowedActions"
+                ],
+                "additionalProperties": false
               },
-              "reconcileRequired": {
-                "type": "boolean"
-              },
-              "stateReason": {
-                "anyOf": [
-                  {
+              {
+                "type": "object",
+                "properties": {
+                  "taskId": {
+                    "type": "string"
+                  },
+                  "projectId": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "const": "node-run"
+                  },
+                  "state": {
                     "type": "string",
                     "enum": [
-                      "HUMAN_REQUIRED",
-                      "RECONCILE_REQUIRED",
-                      "TASK_BLOCKED",
-                      "TASK_FAILED"
+                      "accepted",
+                      "running",
+                      "cancel-requested",
+                      "completed",
+                      "failed",
+                      "cancelled"
                     ]
                   },
-                  {
-                    "type": "null"
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "single",
+                      "subgraph"
+                    ]
+                  },
+                  "nodeIds": {
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "cancelRequested": {
+                    "type": "boolean"
+                  },
+                  "error": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "createdAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "updatedAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "hostResident": {
+                    "type": "boolean"
                   }
-                ]
-              },
-              "allowedActions": {
-                "maxItems": 0,
-                "type": "array",
-                "items": {
-                  "not": {}
-                }
+                },
+                "required": [
+                  "taskId",
+                  "projectId",
+                  "source",
+                  "state",
+                  "mode",
+                  "nodeIds",
+                  "cancelRequested",
+                  "error",
+                  "createdAt",
+                  "updatedAt",
+                  "hostResident"
+                ],
+                "additionalProperties": false
               }
-            },
-            "required": [
-              "projectId",
-              "taskId",
-              "source",
-              "state",
-              "waitRevision",
-              "waitKind",
-              "reconcileRequired",
-              "stateReason",
-              "allowedActions"
-            ],
-            "additionalProperties": false
+            ]
           },
           "error": {
             "type": "object",

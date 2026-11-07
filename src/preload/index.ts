@@ -7,6 +7,7 @@ import {
   ACCESS_DESKTOP_REQUEST,
   ACCESS_DESKTOP_REPLY,
   ACCESS_DESKTOP_COMMIT,
+  ACCESS_TASK_REPORT,
   DesktopRequestSchema,
   type DesktopRequest
 } from '../shared/agent-access/desktop'
@@ -153,6 +154,12 @@ const api = {
     graphVersion: number
   }): Promise<{ ok: boolean; meta?: ProjectMeta }> =>
     ipcRenderer.invoke(ACCESS_DESKTOP_COMMIT, input),
+  reportLocalAgentTask: (input: {
+    taskId: string
+    projectId: string
+    status: 'running' | 'completed' | 'failed' | 'cancelled'
+    error?: string
+  }): void => ipcRenderer.send(ACCESS_TASK_REPORT, input),
   listSkills: (): Promise<
     IpcEnvelope<import('../shared/agent-flow/runtime-contracts').FixedSkill[]>
   > => ipcRenderer.invoke(IPC.skillLibrary.list),
