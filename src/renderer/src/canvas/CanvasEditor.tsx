@@ -887,7 +887,7 @@ export function CanvasEditor({
                 })
               }
               const bindings = useGatewayStore.getState().modelBindings
-              const planned = planGraphPatch(editor, request.ops, bindings)
+              const planned = planGraphPatch(editor, request.ops, bindings, request.mediaResolutions)
               if (!planned.ok) {
                 // 校验失败发生在任何变更之前：整批不留半图。
                 replyFail(true, planned.issue.code, planned.issue.detail)
@@ -926,7 +926,7 @@ export function CanvasEditor({
               )
                 throw new Error('PATCH_NOT_ADMITTED')
               // 准入与校验之间用户可能继续编辑：整批重新校验；此时失败按 unknown 核对。
-              const replanned = planGraphPatch(editor, request.ops, bindings)
+              const replanned = planGraphPatch(editor, request.ops, bindings, request.mediaResolutions)
               if (!replanned.ok) {
                 replyFail(false, replanned.issue.code, replanned.issue.detail)
                 return

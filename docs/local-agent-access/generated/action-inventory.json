@@ -3,18 +3,18 @@
   "generatedFrom": {
     "ipcChannels": 171,
     "canvasActions": 35,
-    "externalOperations": 32
+    "externalOperations": 34
   },
   "totals": {
     "actions": 206,
     "byPhase": {
-      "external": 29,
+      "external": 32,
       "F8": 25,
       "F9": 44,
       "F7": 41,
       "F2": 5,
       "excluded": 18,
-      "F4": 11,
+      "F4": 8,
       "F5": 21,
       "F6": 10,
       "F3": 2
@@ -373,7 +373,11 @@
       "label": "媒体导入",
       "channel": "media:import",
       "gui": "素材导入",
-      "phase": "F4"
+      "phase": "external",
+      "external": [
+        "media.import"
+      ],
+      "note": "F4 新增：本机文件登记为项目受控媒体（受控ID、去敏索引、归属预检）"
     },
     "ipc.media.importBuffer": {
       "label": "媒体导入(缓冲)",
@@ -509,7 +513,11 @@
       "label": "媒体列表",
       "channel": "media:list",
       "gui": "素材面板",
-      "phase": "F4"
+      "phase": "external",
+      "external": [
+        "media.list"
+      ],
+      "note": "F4 新增：项目受控媒体摘要分页"
     },
     "ipc.media.delete": {
       "label": "媒体删除",
@@ -1272,7 +1280,12 @@
     "canvas.media.drop-import": {
       "label": "拖放导入素材",
       "gui": "画布拖放",
-      "phase": "F4"
+      "phase": "external",
+      "external": [
+        "media.import",
+        "graph.patch"
+      ],
+      "note": "F4：media.import 登记 + graph.patch media 引用建节点；拖放快捷路径与外部路径共用同一登记服务"
     },
     "canvas.chat.send": {
       "label": "发送对话消息",

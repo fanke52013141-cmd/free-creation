@@ -153,6 +153,27 @@ export const ACCESS_OPERATIONS = {
       '读取节点最近一次正式输出投影（确定性文本/JSON/processor/媒体引用等已登记类型）；运行事实来自真实运行记录，不可伪造',
     input: project.extend({ nodeId }).strict()
   },
+  'media.import': {
+    effect: 'write',
+    description:
+      '把本机文件登记为项目受控媒体（复制入库、去敏索引）；返回受控 mediaId 供节点引用，不接收二进制报文',
+    input: project
+      .extend({
+        filePath: z.string().min(2).max(1000),
+        name: z.string().trim().min(1).max(120).optional()
+      })
+      .strict()
+  },
+  'media.list': {
+    effect: 'read',
+    description: '分页读取项目受控媒体摘要（kind/mime/尺寸/相对引用路径），不返回绝对路径或文件正文',
+    input: project
+      .extend({
+        offset: z.number().int().min(0).max(100000).default(0),
+        limit: z.number().int().min(1).max(200).default(50)
+      })
+      .strict()
+  },
   'model.list': {
     effect: 'read',
     description: '分页读取本地模型ID、启用状态与能力验证状态；不联网探测，不返回凭据、地址或配置',
@@ -277,6 +298,17 @@ export const ACCESS_OPERATIONS = {
   }
 } as const
 export type AccessOperationId = keyof typeof ACCESS_OPERATIONS
+
+// F7 未验收前不开放“包传输”类导入（完整项目包/资源包/凭据包按计划单独验收）；
+// 单文件素材登记（media.import）是普通业务动作，不受此限——按明确范围判定，
+// 不再用名称子串一票否决（一致性计划 F1 要求）。
+const PACKAGE_IMPORT_BLOCKLIST: ReadonlySet<string> = new Set([
+  'project.import',
+  'project.importStructure',
+  'library.import',
+  'keys.importProviders',
+  'workspace.import'
+])
 
 export const AccessRequestSchema = z
   .object({
@@ -550,6 +582,38 @@ export const ACCESS_OUTPUTS = {
       projection: z.string().max(60)
     })
     .strict(),
+  'media.import': z
+    .object({
+      projectId: identifier,
+      mediaId: z.string().max(40),
+      kind: z.enum(['image', 'video', 'audio', 'file']),
+      mime: z.string().max(120),
+      path: z.string().max(300),
+      sizeBytes: z.number().int().nonnegative(),
+      name: z.string().max(200),
+      textContent: z.string().max(20000).optional()
+    })
+    .strict(),
+  'media.list': z
+    .object({
+      projectId: identifier,
+      total: z.number().int().nonnegative(),
+      items: z
+        .array(
+          z
+            .object({
+              mediaId: z.string().max(40),
+              kind: z.enum(['image', 'video', 'audio', 'file']),
+              mime: z.string().max(120),
+              path: z.string().max(300),
+              sizeBytes: z.number().int().nonnegative(),
+              name: z.string().max(200)
+            })
+            .strict()
+        )
+        .max(200)
+    })
+    .strict(),
   'node.type.list': z
     .object({
       nodes: z.array(
@@ -714,7 +778,7 @@ export function validateAccessRegistry(
       !['read', 'write', 'export', 'delete', 'execute'].includes(spec.effect)
     )
       errors.push(`INVALID_OPERATION:${id}`)
-    if (id.includes('import')) errors.push(`EXCLUDED_OPERATION:${id}`)
+    if (PACKAGE_IMPORT_BLOCKLIST.has(id)) errors.push(`EXCLUDED_OPERATION:${id}`)
   }
   return errors
 }

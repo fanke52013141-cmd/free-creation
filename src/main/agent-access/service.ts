@@ -40,6 +40,7 @@ import {
 import { newTraceId, newSpanId } from '../../shared/observability'
 import { getDb, getSetting, setSetting } from '../store/db'
 import * as projects from '../store/projects.repo'
+import { importMedia, listMedia } from '../store/media.repo'
 import { exportProject } from '../store/transfer'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import { assertLicenseActive } from '../security/license/gate'
@@ -329,12 +330,30 @@ export class LocalAccessService {
               .map((e) => `op[${e.index}]:${e.code}`)
               .join(',')
           )
+        // F4：素材引用必须已登记到同一项目；解析事实（相对路径/MIME）按 mediaId 注入宿主载荷。
+        const mediaResolutions: Record<
+          string,
+          { mediaId: string; mediaPath: string; mediaMime: string; name?: string }
+        > = {}
+        for (const op of input.ops as GraphPatchOp[]) {
+          const mediaRef = op.action === 'node.create' || op.action === 'node.update' ? op.media : undefined
+          if (!mediaRef || mediaResolutions[mediaRef.mediaId]) continue
+          const asset = listMedia(id).find((candidate) => candidate.id === mediaRef.mediaId)
+          if (!asset) throw new AccessFailure('MEDIA_NOT_FOUND', 'precheck', mediaRef.mediaId)
+          mediaResolutions[mediaRef.mediaId] = {
+            mediaId: asset.id,
+            mediaPath: asset.path,
+            mediaMime: asset.mime,
+            ...(asset.name ? { name: asset.name.slice(0, 200) } : {})
+          }
+        }
         const patchResult = await this.options.desktop.run(
           {
             action: 'graph-patch',
             projectId: id,
             ops: input.ops as GraphPatchOp[],
-            expectedGraphVersion: input.expectedGraphVersion as number
+            expectedGraphVersion: input.expectedGraphVersion as number,
+            ...(Object.keys(mediaResolutions).length ? { mediaResolutions } : {})
           },
           (version) => {
             if (this.options.activeProjectId() !== id)
@@ -714,6 +733,48 @@ export class LocalAccessService {
   private async execute(operation: AccessOperationId, input: Record<string, unknown>): Promise<unknown> {
     const id = input.projectId as string
     switch (operation) {
+      case 'media.import': {
+        // F4：素材经公共导入服务登记为项目受控媒体；字节不过线，路径是导入请求。
+        if (!projects.getProject(id)) throw new AccessFailure('NOT_FOUND', 'read')
+        const outcome = await importMedia(id, input.filePath as string)
+        if (!outcome.ok)
+          throw new AccessFailure(
+            'MEDIA_IMPORT_FAILED',
+            'media-import',
+            outcome.reason.slice(0, 120)
+          )
+        const asset = outcome.asset
+        const textContent =
+          typeof asset.textContent === 'string' ? asset.textContent.slice(0, 20_000) : undefined
+        return {
+          projectId: id,
+          mediaId: asset.id,
+          kind: asset.kind,
+          mime: asset.mime,
+          path: asset.path,
+          sizeBytes: asset.sizeBytes,
+          name: (input.name as string | undefined) ?? asset.name ?? '',
+          ...(textContent ? { textContent } : {})
+        }
+      }
+      case 'media.list': {
+        if (!projects.getProject(id)) throw new AccessFailure('NOT_FOUND', 'read')
+        const all = listMedia(id)
+        return {
+          projectId: id,
+          total: all.length,
+          items: all
+            .slice(input.offset as number, (input.offset as number) + (input.limit as number))
+            .map((asset) => ({
+              mediaId: asset.id,
+              kind: asset.kind,
+              mime: asset.mime,
+              path: asset.path,
+              sizeBytes: asset.sizeBytes,
+              name: (asset.name ?? '').slice(0, 200)
+            }))
+        }
+      }
       case 'graph.get': {
         const view = (input.view as 'persisted' | 'latest') ?? 'persisted'
         const offset = input.offset as number

@@ -8,6 +8,10 @@ import { GraphPatchOpSchema, type GraphPatchOp } from '@shared/agent-access/grap
 import { GRAPH_NODE_CONFIG_MAX_BYTES } from '@shared/agent-access/graph-ops'
 import { flowInitialConfig } from '@shared/agent-flow/model-defaults'
 import type { FeatureBinding } from '@free-creation/model-contracts'
+import {
+  type MediaResolution,
+  type MediaResolutionMap
+} from '@shared/agent-access/graph-ops'
 import { getNodeType, getNodePorts, type NodeTypeSpec } from '../nodes/registry'
 import { createEdge, portPairCompatible } from './graph'
 import type { NodeCardShape } from './NodeCardShape'
@@ -114,11 +118,14 @@ export function parseGraphPatchOps(raw: unknown): { ok: true; ops: GraphPatchOp[
 export function planGraphPatch(
   editor: Editor,
   rawOps: unknown,
-  modelBindings: FeatureBinding[]
+  modelBindings: FeatureBinding[],
+  mediaResolutions?: MediaResolutionMap
 ): GraphPatchPlanResult {
   const parsed = parseGraphPatchOps(rawOps)
   if (!parsed.ok) return { ok: false, issue: { index: 0, code: 'INVALID_INPUT', detail: parsed.detail } }
   const ops = parsed.ops
+  // main 预检注入的素材事实：外部 op 只携带 mediaId，相对路径与 MIME 由存储拥有者解析。
+  const resolutionOf = (mediaId: string): MediaResolution | undefined => mediaResolutions?.[mediaId]
 
   // ── 模拟状态：以当前画布为基线，按操作顺序推进 ──
   const nodes = new Map<TLShapeId, SimNode>()
@@ -185,6 +192,8 @@ export function planGraphPatch(
       const config = initialConfigString(spec, op.config, modelBindings)
       if (configByteLength(config) > GRAPH_NODE_CONFIG_MAX_BYTES)
         return fail(index, 'CONFIG_TOO_LARGE')
+      const media = op.media ? resolutionOf(op.media.mediaId) : undefined
+      if (op.media && !media) return fail(index, 'MEDIA_NOT_RESOLVED', op.media.mediaId)
       const id = createShapeId()
       nodes.set(id, { nodeType: op.nodeType, config, text: op.text ?? '', exists: true })
       if (op.ref) refToId.set(op.ref, id)
@@ -198,14 +207,14 @@ export function planGraphPatch(
           y: op.y,
           props: {
             nodeType: op.nodeType,
-            title: op.title ?? spec.label,
+            title: op.title ?? media?.name ?? spec.label,
             w: op.w ?? spec.defaultSize.w,
             h: op.h ?? spec.defaultSize.h,
             config,
             text: op.text ?? '',
-            mediaId: '',
-            mediaPath: '',
-            mediaMime: '',
+            mediaId: media?.mediaId ?? '',
+            mediaPath: media?.mediaPath ?? '',
+            mediaMime: media?.mediaMime ?? '',
             exec: 'idle'
           }
         })
@@ -245,6 +254,8 @@ export function planGraphPatch(
       }
       node.config = nextConfig
       if (op.text !== undefined) node.text = op.text
+      const updateMedia = op.media ? resolutionOf(op.media.mediaId) : undefined
+      if (op.media && !updateMedia) return fail(index, 'MEDIA_NOT_RESOLVED', op.media.mediaId)
       counts.nodeUpdated += 1
       applySteps.push((ed) => {
         const props: Record<string, unknown> = {}
@@ -253,6 +264,11 @@ export function planGraphPatch(
         if (op.config) props.config = nextConfig
         if (op.w !== undefined) props.w = op.w
         if (op.h !== undefined) props.h = op.h
+        if (updateMedia) {
+          props.mediaId = updateMedia.mediaId
+          props.mediaPath = updateMedia.mediaPath
+          props.mediaMime = updateMedia.mediaMime
+        }
         if (Object.keys(props).length) ed.updateShape({ id, type: 'node-card', props } as never)
         if (op.x !== undefined || op.y !== undefined) {
           const shape = ed.getShape(id)

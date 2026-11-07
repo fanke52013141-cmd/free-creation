@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { SkillAgentConfigSchema } from '../skill-agent'
-import { GraphPatchOpsSchema, GRAPH_VIEW_MAX_NODES } from './graph-ops'
+import { GraphPatchOpsSchema, GRAPH_VIEW_MAX_NODES, mediaResolutionSchema } from './graph-ops'
 import { NODE_EXECUTE_MAX_NODES } from './run-ops'
 
 export const ACCESS_DESKTOP_REQUEST = 'local-agent:desktop-request'
@@ -36,7 +36,9 @@ export const DesktopRequestSchema = z
     taskId: z.string().max(160).optional(),
     mode: z.enum(['single', 'subgraph']).optional(),
     nodeIds: z.array(z.string().max(180)).min(1).max(NODE_EXECUTE_MAX_NODES).optional(),
-    confirmPaidRerun: z.boolean().optional()
+    confirmPaidRerun: z.boolean().optional(),
+    /** graph-patch：main 预检解析的素材事实（按 mediaId 注入，外部输入不可携带路径）。 */
+    mediaResolutions: z.record(z.string(), mediaResolutionSchema).optional()
   })
   .strict()
 export type DesktopRequest = z.infer<typeof DesktopRequestSchema>

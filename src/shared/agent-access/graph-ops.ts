@@ -36,7 +36,9 @@ const nodeCreate = z
     h: z.number().finite().min(40).max(GRAPH_NODE_SIZE_LIMIT).optional(),
     text: z.string().max(GRAPH_NODE_TEXT_MAX_CHARS).optional(),
     /** 固定配置键值合并到该类型 GUI 初始配置之上；null 值删除键。 */
-    config: z.record(z.string(), z.unknown()).optional()
+    config: z.record(z.string(), z.unknown()).optional(),
+    /** 素材引用：mediaId 必须已经 media.import 登记到同一项目，main 预检解析归属。 */
+    media: z.object({ mediaId: z.string().regex(/^[a-zA-Z0-9_-]{1,40}$/) }).strict().optional()
   })
   .strict()
 
@@ -51,6 +53,8 @@ const nodeUpdate = z
     h: z.number().finite().min(40).max(GRAPH_NODE_SIZE_LIMIT).optional(),
     text: z.string().max(GRAPH_NODE_TEXT_MAX_CHARS).optional(),
     config: z.record(z.string(), z.unknown()).optional(),
+    /** 替换素材引用（null 清除素材字段）。 */
+    media: z.object({ mediaId: z.string().regex(/^[a-zA-Z0-9_-]{1,40}$/) }).strict().optional(),
     order: z.enum(['front', 'back']).optional()
   })
   .strict()
@@ -231,6 +235,18 @@ export interface GraphPatchReferenceError {
 export function isExistingNodeId(id: string): boolean {
   return id.startsWith('shape:')
 }
+
+/** main 预检解析出的素材事实（相对路径与 MIME），桌面载荷按 mediaId 注入。 */
+export const mediaResolutionSchema = z
+  .object({
+    mediaId: z.string(),
+    mediaPath: z.string().max(300),
+    mediaMime: z.string().max(120),
+    name: z.string().max(200).optional()
+  })
+  .strict()
+export type MediaResolution = z.infer<typeof mediaResolutionSchema>
+export type MediaResolutionMap = Record<string, MediaResolution>
 
 /** main 侧结构预检：引用可解析、ref 唯一、目标存在。类型/端口/兼容校验由权威宿主做。 */
 export function resolvePatchReferences(

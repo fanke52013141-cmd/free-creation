@@ -76,7 +76,7 @@ async function captureDesktop(app,file){
     await client.connect(transport)
     const tools=await client.listTools()
     // 32 项操作（F3 后）；仍不允许 import/通用逃逸工具，node_execute 是具名业务操作不是万能执行器。
-    check(tools.tools.length===32&&!tools.tools.some(t=>/import|invoke|eval|ipc/.test(t.name)),'MCP_TOOL_DIRECTORY_INVALID')
+    check(tools.tools.length===34&&!tools.tools.some(t=>/project_import|import_structure|library_import|invoke|eval|ipc/.test(t.name)),'MCP_TOOL_DIRECTORY_INVALID')
     const queryFixture=await page.evaluate(async()=>{
       const connection=await window.api.models.saveConnection({id:'a14-connection',name:'A14 private connection',protocol:'openai-compatible',baseUrl:'https://a14-private.invalid',headers:{Authorization:'Bearer a14-fake-secret'},enabled:false})
       const model=await window.api.models.saveDefinition({id:'a14-model',connectionId:'a14-connection',modelId:'a14-model',name:'A14 private model',capabilities:[{operation:'text.generate',asynchronous:false,streaming:false,acceptedAssetKinds:[],producedAssetKinds:[],controls:{}}]})
