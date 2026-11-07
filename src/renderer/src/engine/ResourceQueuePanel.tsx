@@ -1,3 +1,4 @@
+import { Tooltip } from '../components/Tooltip'
 import { setResourceLimit, useResourceQueue } from './resource-queue'
 import { Icon } from '../components/Icon'
 import { NumberStepper } from '../components/NumberStepper'
@@ -11,16 +12,18 @@ export function ResourceQueuePanel({ projectId }: { projectId: string }): React.
   const statusLabel = `${running} 个任务运行中，${queued} 个任务排队中`
   return (
     <details className="resource-queue-control" style={{ position: 'relative', marginLeft: 8 }}>
-      <summary className="resource-queue-summary" title={statusLabel} aria-label={statusLabel}>
-        <span className="resource-queue-count">
-          <Icon name="play" size={14} />
-          <span>{running}</span>
-        </span>
-        <span className="resource-queue-count">
-          <Icon name="history" size={14} />
-          <span>{queued}</span>
-        </span>
-      </summary>
+      <Tooltip label={`任务队列：${statusLabel}`} placement="bottom" allowButton>
+        <summary className="resource-queue-summary topbar-icon-button" aria-label={statusLabel}>
+          <span className="resource-queue-count">
+            <Icon name="play" size={14} />
+            <span>{running}</span>
+          </span>
+          <span className="resource-queue-count">
+            <Icon name="history" size={14} />
+            <span>{queued}</span>
+          </span>
+        </summary>
+      </Tooltip>
       <div
         style={{
           position: 'absolute',

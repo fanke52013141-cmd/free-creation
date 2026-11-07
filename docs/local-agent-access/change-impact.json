@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "对话弹窗与视频工作台仅调整样式及展示结构，复用现有执行、媒体和日志路径，外部契约与存储格式不变。",
+  "reason": "资源库批量管理新增数量诊断并复用桌面接口；顶栏图标统一说明与悬浮样式；外部操作契约不变。",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "97d2ffb5e2403b33a2d3ac8ab3eee8272f78cf948e4c73ab53cc662bd73a5a6f",
@@ -160,7 +160,7 @@
     "src/renderer/src/nodes/storyboard-editor.ts": "8b5e31508a4905d6f2638663c05436ea24de0242635cbc3e2c4d0ba354cb4fd4",
     "src/renderer/src/nodes/storyboard-selections.ts": "a460f0cd3af820703392b812a70003d5687f188f132e7fa7d891bc6ae42e5869",
     "src/renderer/src/nodes/structured-data.ts": "1e3c976ad5965a3da616760421189a7e0183c07ed88b69fa555fd63586a05dc4",
-    "src/renderer/src/pages/CanvasPage.tsx": "a2034236c6fc4952d4f1c11a5fea1431207dbcb9891e8480e4b62a4f7e26eff9",
+    "src/renderer/src/pages/CanvasPage.tsx": "3575d682b3c0b1fb6752283cc6826d16dcea682c789594ba1f30e07e9bc4d4da",
     "src/renderer/src/stores/save-coordinator.ts": "2624c5f77e6b45f9603b9d22d738e6b04da610b4e4ee27d366cf8d7006724c24",
     "src/shared/agent-access/connection.ts": "8bb5d31fef7898f652008f6fc052e6d384a6ed06f37fe736c87ede870bd13c5e",
     "src/shared/agent-access/desktop.ts": "643f5b5dfd45f13a0a26c8e9d7ef23b48362e57b2de0953f5878ec35270e908b",
@@ -218,7 +218,7 @@
     "src/shared/node-schemas.ts": "8cfee69c687bbe9c3b6cfbac800ac1458b28a4a353145d0d0c93451295de6c07",
     "src/shared/observability/context.ts": "cdf1a70c0b0393892142a2efaf7870399971a0c3b33842631130d48ddf468951",
     "src/shared/observability/errors.ts": "829f7dd82c35db25926a5a7bd67ceadeba4bdc0984e005462ecc93132e6cef23",
-    "src/shared/observability/events.ts": "1c24326a28d6c1d6c698c652b58b5f5379f7df9a88cba09e4a3c6d1fc2093215",
+    "src/shared/observability/events.ts": "3e4e22db9d7551be4b3534b192474a369adb44263bad93ce7c34a90e86b057be",
     "src/shared/observability/ids.ts": "7def76e572e1c7866fd9732f2264454e47cd43c77566ec103fd7dac95d31c882",
     "src/shared/observability/index.ts": "2f03ca0f3c35217c4471492b968f0753e6c0d3ea01fa855c3ab085689c47af21",
     "src/shared/observability/limits.ts": "ed0484324eaa3d28554ec76dd9a4eb274035703096f2350005fcfa3508b4f9c6",

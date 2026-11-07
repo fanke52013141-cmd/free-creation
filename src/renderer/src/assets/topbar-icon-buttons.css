@@ -1,0 +1,24 @@
+.topbar-icon-button.topbar-icon-button,
+:is(.canvas-topbar, .project-home-topbar, .library-page-header) .topbar-icon-button:is(:hover, :active, :focus-visible) {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+:is(.project-home-tool-group, .library-tool-group, .canvas-transfer-actions) {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none;
+}
+.topbar-disabled-icon { display: inline-flex; }
+.topbar-disabled-icon > button { pointer-events: none; }
+.topbar-icon-button :is(svg) {
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.topbar-icon-button:hover:not(:disabled) :is(svg) {
+  transform: scale(1.18);
+}
+@media (prefers-reduced-motion: reduce) {
+  .topbar-icon-button :is(svg) { transition: none; }
+}

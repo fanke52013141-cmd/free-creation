@@ -3,6 +3,7 @@ import './assets/ui-foundation.css'
 import './assets/ui-surfaces.css'
 import './assets/scrollbars.css'
 import './assets/window-chrome.css'
+import './assets/topbar-icon-buttons.css'
 import './canvas/node-visual-system.css'
 import './canvas/node-interaction-refinement.css'
 

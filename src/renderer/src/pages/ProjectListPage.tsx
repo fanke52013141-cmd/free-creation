@@ -1,3 +1,4 @@
+import { TopbarIconButton } from '../components/TopbarIconButton'
 import { useCallback, useEffect, useState } from 'react'
 import type { ProjectMeta } from '@shared/types'
 import { useAppStore } from '../stores/app'
@@ -176,33 +177,30 @@ export function ProjectListPage(): React.JSX.Element {
           {/* 2026-11-06 用户裁决：与画布顶栏一致——除新建项目保留品牌主按钮外，
               资源库 / 模型设置 / 导入项目都用纯图标按钮。 */}
           <div className="project-home-tool-group" role="group" aria-label="项目工具">
-            <button
+            <TopbarIconButton
               type="button"
               className="project-home-tool-btn"
-              title="资源库"
               aria-label="资源库"
               onClick={() => setShowLibrary(true)}
             >
               <Icon name="assets" size={16} />
-            </button>
-            <button
+            </TopbarIconButton>
+            <TopbarIconButton
               type="button"
               className="project-home-tool-btn"
-              title="模型设置"
               aria-label="模型设置"
               onClick={openModelSettings}
             >
               <Icon name="settings" size={16} />
-            </button>
-            <button
+            </TopbarIconButton>
+            <TopbarIconButton
               type="button"
               className="project-home-tool-btn"
-              title="导入项目"
               aria-label="导入项目"
               onClick={() => void handleImport()}
             >
               <Icon name="download" size={16} />
-            </button>
+            </TopbarIconButton>
           </div>
           <button
             type="button"

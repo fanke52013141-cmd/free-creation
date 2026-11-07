@@ -1,3 +1,6 @@
+import { TopbarIconButton } from '../components/TopbarIconButton'
+import { DiagnosticsProducer, newProducerId, newSpanId, newTraceId } from '@shared/observability'
+import { emitDiagnosticsEvent } from '../engine/diagnosticsReporter'
 import { GenerationLoadingOverlay } from '../canvas/GenerationLoadingOverlay'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LibraryResourceDetail, LibraryResourceSummary, CreateLibraryResourceInput, PublishLibraryRevisionInput } from '@shared/library/types'
@@ -13,6 +16,8 @@ import { LibraryCategoryEditor } from './LibraryCategoryEditor'
 import { libraryValueTypeLabel, libraryVersionLabel } from './value-type-labels'
 import './library.css'
 
+const batchDiagnostics = new DiagnosticsProducer({ process: 'renderer', producerId: newProducerId('renderer') })
+
 const revisionDate = new Intl.DateTimeFormat('zh-CN', {
   year: 'numeric',
   month: '2-digit',
@@ -27,9 +32,10 @@ function formatRevisionDate(timestamp: number): string {
   return revisionDate.format(timestamp).replaceAll('/', '-')
 }
 
-function ResourceCard({ resource, onOpen, onDragStart }: { resource: LibraryResourceSummary; onOpen: () => void; onDragStart?: React.DragEventHandler<HTMLButtonElement> }): React.JSX.Element {
+function ResourceCard({ resource, onOpen, onDragStart, selected }: { resource: LibraryResourceSummary; onOpen: React.MouseEventHandler<HTMLButtonElement>; selected?: boolean; onDragStart?: React.DragEventHandler<HTMLButtonElement> }): React.JSX.Element {
   return (
-    <button className="library-resource-card" draggable={Boolean(onDragStart)} onDragStart={onDragStart} onClick={onOpen}>
+    <button className="library-resource-card" aria-pressed={selected} draggable={Boolean(onDragStart)} onDragStart={onDragStart} onClick={onOpen}>
+      {selected !== undefined && <span className="library-card-selection" aria-hidden="true">{selected ? '✓' : ''}</span>}
       {resource.iconKind && <LibraryCardCover icon={resource.iconKind} path={resource.iconKind === 'video' ? resource.videoPreviewPath : resource.coverPath} />}
       <div className="library-resource-card-body">
         <div className="library-resource-card-title"><strong>{resource.title}</strong></div>
@@ -88,86 +94,46 @@ function ComponentPreview({ component, onCopy }: { component: LibraryResourceDet
   )
 }
 
-type ComponentComparison = {
-  key: string
-  role: string
-  current?: LibraryResourceDetail['components'][number]
-  compared?: LibraryResourceDetail['components'][number]
-  status: 'added' | 'removed' | 'changed' | 'same'
-}
-
-function componentMap(components: LibraryResourceDetail['components']): Map<string, LibraryResourceDetail['components'][number]> {
-  const occurrences = new Map<string, number>()
-  return new Map(components.map((component) => {
-    const occurrence = occurrences.get(component.role) ?? 0
-    occurrences.set(component.role, occurrence + 1)
-    return [`${component.role}#${occurrence}`, component] as const
-  }))
-}
-
-function compareComponents(
-  current: LibraryResourceDetail['components'],
-  compared: LibraryResourceDetail['components']
-): ComponentComparison[] {
-  const currentMap = componentMap(current)
-  const comparedMap = componentMap(compared)
-  return [...new Set([...currentMap.keys(), ...comparedMap.keys()])].map((key) => {
-    const currentComponent = currentMap.get(key)
-    const comparedComponent = comparedMap.get(key)
-    const equal = Boolean(currentComponent && comparedComponent &&
-      currentComponent.valueType === comparedComponent.valueType &&
-      (currentComponent.text !== undefined || comparedComponent.text !== undefined
-        ? currentComponent.text === comparedComponent.text
-        : Boolean(currentComponent.contentHash && comparedComponent.contentHash && currentComponent.contentHash === comparedComponent.contentHash)))
-    const status: ComponentComparison['status'] = !currentComponent
-      ? 'removed'
-      : !comparedComponent
-        ? 'added'
-        : equal ? 'same' : 'changed'
-    return {
-      key,
-      role: currentComponent?.role ?? comparedComponent?.role ?? '组件',
-      ...(currentComponent ? { current: currentComponent } : {}),
-      ...(comparedComponent ? { compared: comparedComponent } : {}),
-      status
-    }
-  })
-}
-
-function comparisonValue(component: LibraryResourceDetail['components'][number] | undefined): string {
-  if (!component) return '此版本没有这个组件'
-  if (component.text !== undefined) return component.text || '（空内容）'
-  return [component.fileName ?? '资源文件', component.mime, component.sizeBytes ? `${component.sizeBytes} 字节` : undefined]
-    .filter(Boolean).join(' · ')
-}
-
 export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.JSX.Element {
   const [resources, setResources] = useState<LibraryResourceSummary[]>([])
   const [categories, setCategories] = useState<LibraryCategory[]>([])
   const [categoryId, setCategoryId] = useState('legacy')
   const [categoryEditor, setCategoryEditor] = useState<{ initial?: LibraryCategory } | null>(null)
   const [query, setQuery] = useState('')
+  const [loadedFilter, setLoadedFilter] = useState('')
+  const filter = JSON.stringify([categoryId, query])
+  const batchReady = loadedFilter === filter
+  const filterRef = useRef(filter)
+  useEffect(() => { filterRef.current = filter }, [filter])
+  const [batchMode, setBatchMode] = useState(false)
+  const [batchIds, setBatchIds] = useState(new Set<string>())
+  const [batchBusy, setBatchBusy] = useState(false)
+  const batchAnchor = useRef<string | null>(null)
+  const clearBatchSelection = (): void => {
+    batchAnchor.current = null
+    setBatchIds(new Set())
+  }
+  const allSelected = resources.length > 0 && resources.every((item) => batchIds.has(item.id))
+  const selectCard = (id: string, range: boolean): void => {
+    const start = resources.findIndex((item) => item.id === batchAnchor.current)
+    const end = resources.findIndex((item) => item.id === id)
+    if (!range || start < 0) batchAnchor.current = id
+    setBatchIds((current) => {
+      const next = new Set(current)
+      if (range && start >= 0) {
+        resources.slice(Math.min(start, end), Math.max(start, end) + 1).forEach((item) => next.add(item.id))
+      } else if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | undefined>()
   const [detail, setDetail] = useState<LibraryResourceDetail | null>(null)
-  const [compareRevisionSelection, setCompareRevisionSelection] = useState('')
-  const [compareDetail, setCompareDetail] = useState<LibraryResourceDetail | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const activeRevisionId = selectedRevisionId ?? (detail?.id === selectedId ? detail.selectedRevisionId : undefined)
-  const availableCompareRevisionId = detail?.id === selectedId
-    ? detail.revisions.find((revision) => revision.id !== activeRevisionId)?.id ?? ''
-    : ''
-  const compareRevisionId = detail?.id === selectedId
-    && compareRevisionSelection !== activeRevisionId
-    && detail.revisions.some((revision) => revision.id === compareRevisionSelection)
-    ? compareRevisionSelection
-    : availableCompareRevisionId
   const detailLoading = Boolean(selectedId) && (!detail || detail.id !== selectedId || detail.selectedRevisionId !== selectedRevisionId)
-  const currentCompareDetail = detail && compareDetail?.id === detail.id && compareDetail.selectedRevisionId === compareRevisionId
-    ? compareDetail
-    : null
   const loadPageData = useCallback(async (): Promise<void> => {
     const categoryResult = await window.api.listLibraryCategories()
     if (categoryResult.ok) setCategories(categoryResult.data)
@@ -175,6 +141,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
 
   const loadResources = useCallback(async (cursor?: string, append = false): Promise<void> => {
     const result = await window.api.searchLibrary({ query, categoryId: categoryId || undefined, cursor, limit: 48 })
+    if (filterRef.current !== filter) return
     if (!result.ok) {
       useToastStore.getState().show(`资源库读取失败：${result.error.message}`)
       return
@@ -182,7 +149,8 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     const items = result.data.items.filter((item) => !item.archivedAt)
     setResources((current) => append ? [...current, ...items] : items)
     setNextCursor(result.data.nextCursor)
-  }, [categoryId, query])
+    setLoadedFilter(filter)
+  }, [categoryId, query, filter])
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void loadPageData() }, 0)
@@ -206,17 +174,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     })
     return () => { cancelled = true }
   }, [selectedId, selectedRevisionId])
-
-  useEffect(() => {
-    const activeRevision = selectedRevisionId ?? (detail?.id === selectedId ? detail.selectedRevisionId : undefined)
-    if (!selectedId || !compareRevisionId || compareRevisionId === activeRevision) return
-    let cancelled = false
-    void window.api.getLibraryResource({ resourceId: selectedId, revisionId: compareRevisionId }).then((result) => {
-      if (cancelled) return
-      setCompareDetail(result.ok ? result.data : null)
-    })
-    return () => { cancelled = true }
-  }, [selectedId, selectedRevisionId, compareRevisionId, detail?.id, detail?.selectedRevisionId])
 
   const saveResource = async (input: CreateLibraryResourceInput | PublishLibraryRevisionInput): Promise<void> => {
     const isRevision = 'resourceId' in input
@@ -252,6 +209,51 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     useToastStore.getState().show(`已删除资源「${detail.title}」`)
   }
 
+  const runBatch = async (action: 'delete' | 'export'): Promise<void> => {
+    const ids = [...batchIds]
+    if (!ids.length || batchBusy || !batchReady) return
+    setBatchBusy(true)
+    try {
+      if (action === 'export') {
+        await exportLibrary(ids)
+        return
+      }
+      const confirmed = await useConfirmStore.getState().confirm({
+        title: `删除所选的 ${ids.length} 项资源？`,
+        message: '会同时删除这些资源的全部版本与内容，删除后无法恢复。',
+        confirmText: '删除所选',
+        danger: true
+      })
+      const context = { traceId: newTraceId(), spanId: newSpanId() }
+      const count = ids.length
+      if (!confirmed) {
+        emitDiagnosticsEvent(batchDiagnostics.build('library.batch_delete_cancelled', undefined, '已取消批量删除资源', context, { status: 'cancelled', attributes: { count } }))
+        return
+      }
+      emitDiagnosticsEvent(batchDiagnostics.build('library.batch_delete_started', undefined, '开始批量删除资源', context, { attributes: { count } }))
+      const deleted = new Set<string>()
+      for (const resourceId of ids) {
+        const result = await window.api.deleteLibraryResource({ resourceId }).catch(() => null)
+        if (result?.ok && result.data) deleted.add(resourceId)
+      }
+      setBatchIds((current) => new Set([...current].filter((id) => !deleted.has(id))))
+      setResources((current) => current.filter((item) => !deleted.has(item.id)))
+      batchAnchor.current = null
+      const failed = count - deleted.size
+      emitDiagnosticsEvent(batchDiagnostics.build(
+        failed ? 'library.batch_delete_failed' : 'library.batch_delete_completed',
+        undefined, failed ? '部分资源删除失败' : '批量删除资源完成', context,
+        { status: failed ? 'failed' : 'success', attributes: { count, deleted: deleted.size, failed } }
+      ))
+      if (filterRef.current === filter) await loadResources()
+      useToastStore.getState().show(failed ? `已删除 ${deleted.size} 项，${failed} 项删除失败` : `已删除 ${deleted.size} 项资源`)
+    } catch {
+      useToastStore.getState().show(action === 'export' ? '导出资源失败' : '无法刷新资源列表')
+    } finally {
+      setBatchBusy(false)
+    }
+  }
+
   const copyText = async (text: string): Promise<void> => {
     try {
       await navigator.clipboard.writeText(text)
@@ -272,8 +274,8 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     useToastStore.getState().show(`已导入 ${result.data.imported} 项资源`)
   }
 
-  const exportLibrary = async (): Promise<void> => {
-    const result = await window.api.exportLibrary({})
+  const exportLibrary = async (resourceIds?: string[]): Promise<void> => {
+    const result = await window.api.exportLibrary({ resourceIds })
     if (!result.ok) {
       if (result.error.code !== 'CANCELLED') useToastStore.getState().show(`导出失败：${result.error.message}`)
       return
@@ -308,10 +310,10 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
           <span className="library-header-label"><Icon name="assets" size={15} />资源库</span>
         </div>
         <div className="library-page-actions">
-          <label className="library-search library-header-search"><Icon name="search" size={15} /><input ref={searchInputRef} aria-label="搜索资源" value={query} onChange={(event) => setQuery(event.currentTarget.value)} /></label>
+          <label className="library-search library-header-search"><Icon name="search" size={15} /><input ref={searchInputRef} aria-label="搜索资源" value={query} onChange={(event) => { clearBatchSelection(); setQuery(event.currentTarget.value) }} /></label>
           <div className="library-tool-group" role="group" aria-label="资源库工具">
-            <button type="button" className="library-tool-btn" title="导入资产包" aria-label="导入资产包" onClick={() => void importLibrary()}><Icon name="upload" size={16} /></button>
-            <button type="button" className="library-tool-btn" title="导出资产包" aria-label="导出资产包" onClick={() => void exportLibrary()}><Icon name="download" size={16} /></button>
+            <TopbarIconButton type="button" className="library-tool-btn" aria-label="导入资产包" onClick={() => void importLibrary()}><Icon name="upload" size={16} /></TopbarIconButton>
+            <TopbarIconButton type="button" className="library-tool-btn" aria-label="导出资产包" onClick={() => void exportLibrary()}><Icon name="download" size={16} /></TopbarIconButton>
           </div>
           <button type="button" className="library-header-text-btn" onClick={() => setCategoryEditor({})}>
             <Icon name="add" size={13} />新建分类
@@ -334,21 +336,21 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
           </AppSelect>
           <button className="library-primary" onClick={() => { setSelectedId(null); setFormOpen(true) }}><span className="library-primary-icon"><Icon name="add" size={14} /></span>新建资源</button>
           {/* 2026-11-06 用户反馈：进入资源库后找不到返回入口——在系统窗口按钮左侧再放一个固定返回图标。 */}
-          <button type="button" className="library-home-btn" title="返回项目列表" aria-label="返回项目列表" onClick={onBack}>
+          <TopbarIconButton type="button" className="library-home-btn" aria-label="返回项目列表" onClick={onBack}>
             <Icon name="home" size={16} />
-          </button>
+          </TopbarIconButton>
         </div>
       </header>
 
       <nav className="library-filter-row" aria-label="资源分类">
         <div className="library-category-tabs">
-          <button className={!categoryId ? 'active' : ''} onClick={() => setCategoryId('')}>全部</button>
-          <button className={categoryId === 'legacy' ? 'active' : ''} onClick={() => setCategoryId('legacy')}>未分类</button>
+          <button className={!categoryId ? 'active' : ''} onClick={() => { clearBatchSelection(); setCategoryId('') }}>全部</button>
+          <button className={categoryId === 'legacy' ? 'active' : ''} onClick={() => { clearBatchSelection(); setCategoryId('legacy') }}>未分类</button>
           {categories.map((category) => (
             <button
               key={category.id}
               className={categoryId === category.id ? 'active' : ''}
-              onClick={() => setCategoryId(category.id)}
+              onClick={() => { clearBatchSelection(); setCategoryId(category.id) }}
               title={`浏览分类：${category.name}`}
             >
               {category.name}
@@ -357,11 +359,25 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
         </div>
       </nav>
 
+      <div className="library-batch-toolbar">
+        <button type="button" className="library-secondary" disabled={batchBusy} aria-pressed={batchMode} onClick={() => { clearBatchSelection(); setBatchMode(!batchMode) }}>
+          {batchMode ? '退出批量管理' : '批量管理'}
+        </button>
+        {batchMode && <>
+          <span role="status">已选 {batchIds.size} 项</span>
+          <button type="button" className="library-secondary" disabled={!batchIds.size || batchBusy || !batchReady} onClick={() => void runBatch('export')}>批量导出</button>
+          <button type="button" className="library-secondary library-batch-delete" disabled={!batchIds.size || batchBusy || !batchReady} onClick={() => void runBatch('delete')}>批量删除</button>
+          <button type="button" className="library-secondary library-batch-select-all" disabled={!resources.length || batchBusy || !batchReady} onClick={() => {
+            batchAnchor.current = null
+            setBatchIds(allSelected ? new Set() : new Set(resources.map((item) => item.id)))
+          }}>{allSelected ? '取消全选' : nextCursor ? '全选已加载' : '全选'}</button>
+        </>}
+      </div>
       <div className="library-workspace">
           <main className="library-resource-browser">
             {resources.length > 0 && (
               <div className="library-resource-grid">
-                {resources.map((resource) => <ResourceCard key={resource.id} resource={resource} onOpen={() => { setSelectedId(resource.id); setSelectedRevisionId(resource.latestRevisionId) }} onDragStart={(event) => event.dataTransfer.setData('application/x-canvas-library-resource', resource.id)} />)}
+                {resources.map((resource) => <ResourceCard key={resource.id} resource={resource} selected={batchMode ? batchIds.has(resource.id) : undefined} onOpen={(event) => { if (batchMode) { if (!batchBusy && batchReady) selectCard(resource.id, event.shiftKey); return } setSelectedId(resource.id); setSelectedRevisionId(resource.latestRevisionId) }} onDragStart={batchMode ? undefined : (event) => event.dataTransfer.setData('application/x-canvas-library-resource', resource.id)} />)}
               </div>
             )}
             {nextCursor && <button className="library-load-more" onClick={() => void loadResources(nextCursor, true)}>加载更多</button>}
@@ -396,7 +412,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
                     <div className="library-version-history" role="group" aria-label="资源版本历史">
                       {detail.revisions.map((revision) => {
                         const selected = revision.id === detail.selectedRevisionId
-                        return <button type="button" aria-pressed={selected} key={revision.id} className={`library-version-entry${selected ? ' selected' : ''}`} onClick={() => { setCompareRevisionSelection(''); setSelectedRevisionId(revision.id) }}>
+                        return <button type="button" aria-pressed={selected} key={revision.id} className={`library-version-entry${selected ? ' selected' : ''}`} onClick={() => setSelectedRevisionId(revision.id)}>
                           <span className="library-version-entry-marker" />
                           <span className="library-version-entry-body">
                             <span className="library-version-entry-title">
@@ -408,34 +424,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
                         </button>
                       })}
                     </div>
-                    {detail.revisions.length > 1 && (
-                      <details className="library-version-compare">
-                        <summary>比较两个版本</summary>
-                        <label>对比版本
-                          <select value={compareRevisionId} onChange={(event) => setCompareRevisionSelection(event.currentTarget.value)}>
-                            <option value="">选择另一个版本</option>
-                            {detail.revisions.filter((revision) => revision.id !== detail.selectedRevisionId).map((revision) => (
-                              <option key={revision.id} value={revision.id}>{libraryVersionLabel(revision.revisionNumber)} · {revision.changeNote || formatRevisionDate(revision.createdAt)}</option>
-                            ))}
-                          </select>
-                        </label>
-                        {currentCompareDetail && (
-                          <div className="library-version-compare-body">
-                            <div className="library-version-compare-heading">
-                              <span>{libraryVersionLabel(detail.selectedRevisionNumber)}（当前选择）</span>
-                              <span>{libraryVersionLabel(currentCompareDetail.selectedRevisionNumber)}（对比）</span>
-                            </div>
-                            {compareComponents(detail.components, currentCompareDetail.components).map((row) => (
-                              <article key={row.key} className={`library-version-compare-row ${row.status}`}>
-                                <strong>{row.role}</strong>
-                                <div><pre>{comparisonValue(row.current)}</pre><pre>{comparisonValue(row.compared)}</pre></div>
-                                <small>{row.status === 'same' ? '相同' : row.status === 'added' ? '所选版本新增' : row.status === 'removed' ? '所选版本已移除' : '内容已改变'}</small>
-                              </article>
-                            ))}
-                          </div>
-                        )}
-                      </details>
-                    )}
                   </div>
                 </div>
                 <footer className="library-detail-actions">

@@ -1,3 +1,4 @@
+import { TopbarIconButton } from '../components/TopbarIconButton'
 // 顶栏历史操作：位于搜索按钮左侧，避免遮挡画布与节点。
 import { useEffect, useState } from 'react'
 import { useEditorStore } from '../stores/editor'
@@ -25,22 +26,22 @@ export function CanvasTopHistory(): React.JSX.Element {
 
   return (
     <div className="undo-redo-group" aria-label="历史操作">
-      <button
+      <TopbarIconButton
         className="undo-redo-btn"
         aria-label="撤销"
         disabled={!canUndo}
         onClick={() => editor?.undo()}
       >
         <Icon name="undo" size={16} />
-      </button>
-      <button
+      </TopbarIconButton>
+      <TopbarIconButton
         className="undo-redo-btn"
         aria-label="重做"
         disabled={!canRedo}
         onClick={() => editor?.redo()}
       >
         <Icon name="redo" size={16} />
-      </button>
+      </TopbarIconButton>
     </div>
   )
 }

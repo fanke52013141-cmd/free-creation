@@ -401,6 +401,10 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
       code: 'short'
     }),
     // library.*
+    def('library.batch_delete_started', 'info', 'renderer/library/ResourceLibraryPage.tsx', { count: 'int' }),
+    def('library.batch_delete_cancelled', 'info', 'renderer/library/ResourceLibraryPage.tsx', { count: 'int' }),
+    def('library.batch_delete_completed', 'info', 'renderer/library/ResourceLibraryPage.tsx', { count: 'int', deleted: 'int', failed: 'int' }),
+    def('library.batch_delete_failed', 'error', 'renderer/library/ResourceLibraryPage.tsx', { count: 'int', deleted: 'int', failed: 'int' }),
     def('library.transfer.started', 'info', 'main/ipc/library.ipc.ts', { operation: 'short' }),
     def('library.transfer.completed', 'info', 'main/ipc/library.ipc.ts', { operation: 'short' }),
     def('library.transfer.cancelled', 'info', 'main/ipc/library.ipc.ts', {

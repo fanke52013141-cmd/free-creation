@@ -1,3 +1,4 @@
+import { TopbarIconButton } from '../components/TopbarIconButton'
 import { useEffect, useRef, useState } from 'react'
 import type { ProjectFile } from '@shared/types'
 import type { WorkspaceProfile } from '@shared/workspace-profile'
@@ -335,15 +336,13 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
           )}
           {/* 搜索按钮；撤销 / 重做紧挨搜索左侧 */}
           <CanvasTopHistory />
-          <Tooltip label="搜索节点（Ctrl+K）">
-            <button
-              className="run-btn search-trigger"
-              aria-label="搜索节点（Ctrl+K）"
-              onClick={() => useSearchStore.getState().toggle()}
-            >
-              <Icon name="search" size={16} />
-            </button>
-          </Tooltip>
+          <TopbarIconButton
+            className="run-btn search-trigger"
+            aria-label="搜索节点（Ctrl+K）"
+            onClick={() => useSearchStore.getState().toggle()}
+          >
+            <Icon name="search" size={16} />
+          </TopbarIconButton>
           {isRunning ? (
             <>
               <Tooltip label={isPaused ? '继续工作流' : '在当前原子任务结束后暂停'}>
@@ -380,15 +379,13 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
         <div className="topbar-actions">
           <CanvasTransferMenu project={currentProject ?? file.meta} />
           {/* 回到主页：常驻顶栏快捷按钮 */}
-          <Tooltip label="回到主页">
-            <button
-              className="topbar-shortcut"
-              aria-label="回到主页"
-              onClick={() => void window.api.closeProject().then(() => setHome())}
-            >
-              <Icon name="home" size={16} />
-            </button>
-          </Tooltip>
+          <TopbarIconButton
+            className="topbar-shortcut"
+            aria-label="回到主页"
+            onClick={() => void window.api.closeProject().then(() => setHome())}
+          >
+            <Icon name="home" size={16} />
+          </TopbarIconButton>
         </div>
       </div>
       {engineErrors.length > 0 && showErrors && (

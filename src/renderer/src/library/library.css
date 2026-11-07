@@ -516,10 +516,29 @@
   background: linear-gradient(transparent, rgb(21 25 34 / 72%));
   pointer-events: none;
 }
-.library-resource-cover img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+/* 白色填充封面空白；棋盘只位于图片自身范围，透明像素才会显现。 */
+.library-resource-cover:has(> img),
+.asset-thumb.library-card-cover-compact:has(> img) {
+  container-type: size;
+  background: #fff;
+}
+.library-resource-cover:has(> img) {
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+.asset-thumb.library-card-cover-compact:has(> img) {
+  min-height: 0;
+}
+.library-resource-cover > img,
+.asset-thumb.library-card-cover-compact > img {
+  display: block;
+  width: min(100cqw, calc(100cqh * var(--library-image-ratio, 1)));
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background-color: #fff;
+  background-image: conic-gradient(#e6e6e6 25%, #fff 0 50%, #e6e6e6 0 75%, #fff 0);
+  background-size: 16px 16px;
 }
 .library-resource-placeholder {
   display: grid;
@@ -885,71 +904,6 @@
   font-size: 11px;
   line-height: 1.6;
 }
-
-/* 版本对比 */
-.library-version-compare {
-  margin-top: 12px;
-  padding: 12px;
-  color: var(--muted);
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  font-size: 12px;
-}
-.library-version-compare > summary { color: var(--txt); cursor: pointer; }
-.library-version-compare > label {
-  display: grid;
-  gap: 6px;
-  margin-top: 10px;
-  color: var(--txt-dim);
-}
-.library-version-compare select {
-  min-width: 0;
-  height: 34px;
-  padding: 0 9px;
-  color: var(--txt);
-  background: var(--sunk);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font-size: 12px;
-}
-.library-version-compare-body { display: grid; gap: 8px; margin-top: 12px; }
-.library-version-compare-heading,
-.library-version-compare-row > div {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.library-version-compare-heading { color: var(--txt-dim); font-size: 10px; }
-.library-version-compare-row {
-  padding: 9px;
-  background: var(--sunk);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-.library-version-compare-row > strong { color: var(--txt); font-size: 12px; }
-.library-version-compare-row > div { margin-top: 7px; }
-.library-version-compare-row pre {
-  max-height: 130px;
-  overflow: auto;
-  margin: 0;
-  padding: 8px;
-  color: var(--muted);
-  background: #14171d;
-  border-radius: 6px;
-  font: 11px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.library-version-compare-row > small {
-  display: block;
-  margin-top: 6px;
-  color: var(--txt-dim);
-  text-align: right;
-}
-.library-version-compare-row.added { border-color: rgba(74, 222, 128, 0.35); }
-.library-version-compare-row.removed { border-color: rgba(255, 92, 92, 0.35); }
-.library-version-compare-row.changed { border-color: rgba(251, 146, 60, 0.35); }
 
 /* 放入项目 */
 .library-use-row { display: flex; gap: 8px; }
@@ -1836,7 +1790,7 @@
 .library-resource-cover { flex: 0 0 auto; width: 100%; }
 .library-resource-card-body { flex: 1 1 auto; width: 100%; box-sizing: border-box; }
 
-.asset-thumb.library-card-cover-compact { background: transparent; }
+.asset-thumb.library-card-cover-compact:not(:has(> img)) { background: transparent; }
 
 .library-detail-description { margin: 0 0 10px; color: var(--txt-dim); white-space: pre-wrap; overflow-wrap: anywhere; }
 
@@ -1856,4 +1810,43 @@
 
 .library-detail-panel {
   border-top: 1px solid var(--line);
+}
+/* The resource grid has a draggable scrollbar for long libraries. */
+.library-resource-browser {
+  scrollbar-width: auto;
+  scrollbar-color: #626c78 #181b20;
+  scrollbar-gutter: stable;
+}
+
+.library-batch-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px clamp(20px, 3vw, 44px) 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.library-batch-select-all { margin-left: auto; }
+.library-batch-delete:not(:disabled) { color: #f19a9a; }
+.library-resource-card { position: relative; }
+.library-resource-card[aria-pressed='true'] { box-shadow: inset 0 0 0 2px var(--brand); }
+.library-card-selection {
+  position: absolute;
+  z-index: 1;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid #aeb7c2;
+  border-radius: 5px;
+  background: #171b23;
+  color: #fff;
+}
+.library-resource-card[aria-pressed='true'] .library-card-selection {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #10202a;
 }

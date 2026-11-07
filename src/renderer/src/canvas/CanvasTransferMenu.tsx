@@ -1,3 +1,4 @@
+import { TopbarIconButton } from '../components/TopbarIconButton'
 import { useState } from 'react'
 import type { ProjectMeta } from '@shared/types'
 import { deriveGraph } from './graph'
@@ -62,24 +63,22 @@ export function CanvasTransferMenu({ project }: CanvasTransferMenuProps): React.
 
   return (
     <div className="canvas-transfer-actions" role="group" aria-label="画布导入导出">
-      <button
+      <TopbarIconButton
         className="canvas-transfer-button"
-        title="导入画布结构"
         aria-label="导入画布"
         disabled={busy}
         onClick={() => void importStructure()}
       >
         <Icon name="upload" size={16} />
-      </button>
-      <button
+      </TopbarIconButton>
+      <TopbarIconButton
         className="canvas-transfer-button"
-        title="导出画布结构"
         aria-label="导出画布"
         disabled={busy}
         onClick={() => void exportStructure()}
       >
         <Icon name="download" size={16} />
-      </button>
+      </TopbarIconButton>
     </div>
   )
 }

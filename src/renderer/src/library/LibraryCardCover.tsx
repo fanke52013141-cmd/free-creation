@@ -19,7 +19,17 @@ export function LibraryCardCover({
           <span className="asset-play-badge" aria-hidden="true"><Icon name="play" size={13} /></span>
         </>
       ) : icon === 'image' && path ? (
-        <img src={mediaUrl(path)} alt="" loading="lazy" />
+        <img
+          src={mediaUrl(path)}
+          alt=""
+          loading="lazy"
+          onLoad={(event) => {
+            const image = event.currentTarget
+            if (image.naturalWidth && image.naturalHeight) {
+              image.style.setProperty('--library-image-ratio', String(image.naturalWidth / image.naturalHeight))
+            }
+          }}
+        />
       ) : (
         <span className="library-default-cover" data-icon-kind={icon} aria-hidden="true">
           <Icon name={icon} size={compact ? 48 : 64} />

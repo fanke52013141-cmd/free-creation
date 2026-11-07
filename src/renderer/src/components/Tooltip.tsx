@@ -28,7 +28,8 @@ export function Tooltip({
   label,
   children,
   placement = 'auto',
-  anchorSelector
+  anchorSelector,
+  allowButton = false
 }: {
   label: string
   children: ReactElement<TooltipChildProps>
@@ -36,6 +37,7 @@ export function Tooltip({
   placement?: TooltipPlacement
   /** 用子元素里的局部锚点定位，例如左栏只对齐图标而不是图标加标签。 */
   anchorSelector?: string
+  allowButton?: boolean
 }): React.JSX.Element {
   const tooltipId = useId()
   const [position, setPosition] = useState<{
@@ -43,8 +45,8 @@ export function Tooltip({
     left: number
     side: Exclude<TooltipPlacement, 'auto'>
   } | null>(null)
-  // Buttons keep their accessible name, but never show hover labels in the canvas UI.
-  if (children.type === 'button' || children.props.role === 'button') return children
+  // Keep button tooltips opt-in so existing canvas interactions stay unchanged.
+  if (!allowButton && (children.type === 'button' || children.props.role === 'button')) return children
 
   const show = (element: HTMLElement): void => {
     const anchor = anchorSelector
@@ -98,6 +100,12 @@ export function Tooltip({
           createElement(
             'span',
             {
+              ref: (element: HTMLElement | null) => {
+                if (!element || !allowButton) return
+                const rect = element.getBoundingClientRect()
+                const shift = Math.max(8 - rect.left, 0) - Math.max(rect.right - window.innerWidth + 8, 0)
+                element.style.left = `${position.left + shift}px`
+              },
               id: tooltipId,
               className: 'app-tooltip',
               role: 'tooltip',
