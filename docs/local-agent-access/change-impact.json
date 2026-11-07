@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "统一首页、画布和资源库顶栏图标的说明与悬浮样式，点击行为和外部操作契约不变。资源库批量操作复用桌面删除和导出接口，只新增批量诊断事件，外部契约不变。P1 单机授权：接入启动门禁与业务守卫（model-host 密钥读写、provider-transfer 导入导出、agent-access 启动与 dispatch 断言），新增 license 协议包与授权窗隔离通道，不改变既有外部接入操作契约；AI 对话弹窗布局与菜单视口定位为纯 UI 变更。",
+  "reason": "轨道头宽度与图标背景纯呈现调整，移除空轨道教学提示；执行、保存、外部接口和日志路径不变。",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "97d2ffb5e2403b33a2d3ac8ab3eee8272f78cf948e4c73ab53cc662bd73a5a6f",
@@ -147,7 +147,7 @@
     "src/renderer/src/nodes/specs/bodies/text.tsx": "c6691c3391df796f67396df675579ec14793814ab2542a27f2285377a9670763",
     "src/renderer/src/nodes/specs/bodies/timeline-editor-shared.ts": "f1f39061e851875ba968f5990d99a2c8b86b8fa2fd4e9d97d5590efa141392cd",
     "src/renderer/src/nodes/specs/bodies/timeline-editor.tsx": "9f8e0a20bfba22d43b1e1a137fe90629c90e773dfda662af3a6a272f819eead3",
-    "src/renderer/src/nodes/specs/bodies/timeline.tsx": "e80ff4f79425b6845472f0c6c3f0e26415c01379986b0bc5d02026977b72f7ae",
+    "src/renderer/src/nodes/specs/bodies/timeline.tsx": "d576be7d175944ef6bd8e53c6725670f81ad07d190de29cd6961ad8d2ba02c75",
     "src/renderer/src/nodes/specs/bodies/tts.tsx": "fc9b03d42680d0890cb6d980625e8064dc0c2211455e88fa3c43b2de44690495",
     "src/renderer/src/nodes/specs/bodies/video-ai.tsx": "4fb088a718ed9da5e2bb00b3f3f7984ccc07c8e070697b327c477b1a8941f076",
     "src/renderer/src/nodes/specs/bodies/video-transforms.tsx": "229c1d305ed0a10ec52b69816dc5ad8b910ceeb10f9db4defe04172f1dc8b5fa",

@@ -749,17 +749,7 @@ function TimelineSurface({
                       </div>
                     )
                   })}
-                  {clips.length === 0 ? (
-                    <button
-                      type="button"
-                      className="tl-lane-empty"
-                      data-node-pointer="control"
-                      onClick={() => onAddMedia(track.id)}
-                    >
-                      <Icon name="add" size={13} />
-                      添加素材到这条轨道
-                    </button>
-                  ) : null}
+
                 </div>
               </div>
             )

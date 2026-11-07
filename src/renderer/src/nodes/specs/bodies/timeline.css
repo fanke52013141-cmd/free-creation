@@ -1654,3 +1654,10 @@ body.tl-asset-dragging {
 .tl-import-menu button:hover {
   background: rgb(35 154 211 / 18%);
 }
+
+/* 紧凑轨道头：名称与操作保持3px间距，内嵌和全屏共用。 */
+.tl-row-header { gap: 3px; padding-inline: 4px; }
+.tl-row-title { flex: 0 1 auto; }
+.tl-row-header > svg { flex-shrink: 0; }
+.tl-row-btn:hover:not(:disabled) { background: transparent; }
+.tl-editor-glyph { width: auto; height: auto; border: 0; border-radius: 0; background: transparent; box-shadow: none; }

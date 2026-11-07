@@ -28,7 +28,7 @@ export const TIMELINE_UI = {
   /** 默认轨道数（2026-11-03 用户裁决：默认三条通用轨道，打开旧项目时补齐到这个数）。 */
   trackCount: 3,
   /** 轨道头固定宽度（不随时间轴滚动）；要放得下「视频 1 / 音频 1」全名 + 两个小按钮 */
-  trackHeaderWidth: 132,
+  trackHeaderWidth: 108,
   /** 单条轨道高度 */
   trackHeight: 56,
   /** 刻度尺高度 */
