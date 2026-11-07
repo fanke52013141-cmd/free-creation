@@ -657,3 +657,9 @@ AI 对话工作区视觉重排：移除可见角色标签，保留无障碍消�
 ### 资源库批量管理
 
 资源库批量删除复用现有逐项删除接口，关联同一 trace/span 记录取消、开始及成功或部分失败，属性只含数量；失败项保留可重试。批量导出按所选资源 ID 复用已有资产包导出及其诊断，不记录资源名称、内容或路径。
+
+2026-11-07 新增外部操作 `library.create_resource`：由本机已存在图片路径创建单图图片资源（名称+可选描述/标签）。受理/拒绝/终态复用 dispatch 现有 agent.access.started/completed/failed/unknown 事件，attributes.operation=library.create_resource，无新增事件或字段；响应与诊断不回传源文件路径、图片字节，标签与描述不入日志（仅回传资源ID/修订号/标题/图片sha256）。见[台账12](local-agent-access/12-library-create-resource.md)。
+
+2026-11-07 资源库卡片封面竖图完整显示：library-resource-cover 与资源选择器紧凑卡片 img 由 cover 改为 contain，仅 CSS 呈现变化，不涉及执行、数据、日志或外部接入路径。新增 scripts/assign-figure-pose-category.cjs 走公共 IPC（saveLibraryCategory/publishLibraryRevision）建「人物站位」分类并归档未分类图片资源，不新增外部 Agent 操作或日志。
+
+2026-11-07 封面留边改白色填充：contain 留边区域以 #fff 填充（与白底姿势线稿无缝融合，横竖混排网格节奏一致），仍仅 CSS 呈现变化，不涉及执行、数据、日志或外部接入路径。

@@ -11,8 +11,9 @@ import {
   rmSync,
   statSync
 } from 'node:fs'
-import { join } from 'node:path'
+import { basename, extname, isAbsolute, join } from 'node:path'
 import { nanoid } from 'nanoid'
+import { createResource } from '../store/library.repo'
 import {
   ACCESS_KEY_TTL_MS,
   ACCESS_OPERATIONS,
@@ -32,6 +33,7 @@ import { getDb, getSetting, setSetting } from '../store/db'
 import * as projects from '../store/projects.repo'
 import { exportProject } from '../store/transfer'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
+import { assertLicenseActive } from '../security/license/gate'
 import { DesktopAccessError, type AccessDesktop } from './desktop'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
 import { FlowTaskStore } from '../agent-flow/task-store'
@@ -56,6 +58,13 @@ interface Receipt {
   status: string
   receipt_json: string
 }
+const IMAGE_MIME_BY_EXTENSION = new Map([
+  ['.png', 'image/png'],
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.webp', 'image/webp'],
+  ['.gif', 'image/gif']
+])
 export interface LocalAccessOptions {
   instanceId: string
   appVersion: string
@@ -91,6 +100,18 @@ export class LocalAccessService {
   }
 
   async dispatch(raw: unknown): Promise<AccessResponse> {
+    // 授权守卫：授权失效后立即停止响应外部操作。
+    try {
+      assertLicenseActive('agent.access.dispatch')
+    } catch {
+      return {
+        apiVersion: 1,
+        requestId: 'rejected',
+        operationId: 'invalid',
+        traceId: newTraceId(),
+        status: 'failed'
+      }
+    }
     const parsed = AccessRequestSchema.safeParse(raw)
     const base: AccessResponse = {
       apiVersion: 1,
@@ -313,6 +334,21 @@ export class LocalAccessService {
     if (this.taskOccupied(id)) throw new AccessFailure('RESOURCE_BUSY', 'task-occupancy')
   }
 
+  /** Media enters from a local file the agent already downloaded; bytes never cross the wire.
+   * The holder of the access token is the same local user, so any absolute path is admitted,
+   * but the file must be a non-empty image within the repository's component size limit. */
+  private readLibraryImage(source: string): Uint8Array {
+    if (!isAbsolute(source) || source.length > 500) throw new AccessFailure('INVALID_INPUT', 'validate')
+    let size: number
+    try {
+      size = statSync(source).size
+    } catch {
+      throw new AccessFailure('INVALID_INPUT', 'validate')
+    }
+    if (size < 1 || size > 128 * 1024 * 1024) throw new AccessFailure('INVALID_INPUT', 'validate')
+    return new Uint8Array(readFileSync(source))
+  }
+
   private taskOccupied(id: string): boolean {
     const db = getDb()
     return !!(
@@ -427,6 +463,41 @@ export class LocalAccessService {
         return new SqliteModelHost(getDb()).listAccessModels(input.offset as number, input.limit as number)
       case 'library.search':
         return searchAccessLibrary(ACCESS_OPERATIONS['library.search'].input.parse(input))
+      case 'library.create_resource': {
+        const source = input.imagePath as string
+        const mime = IMAGE_MIME_BY_EXTENSION.get(extname(source).toLowerCase())
+        if (!mime) throw new AccessFailure('INVALID_INPUT', 'validate')
+        const data = this.readLibraryImage(source)
+        const detail = createResource({
+          title: input.title as string,
+          formPreset: 'image',
+          ...(typeof input.description === 'string' && input.description.trim()
+            ? { description: input.description }
+            : {}),
+          ...(Array.isArray(input.tags) && input.tags.length
+            ? { tags: input.tags as string[] }
+            : {}),
+          components: [
+            {
+              role: 'reference-image',
+              valueType: 'image',
+              data,
+              mime,
+              fileName: basename(source),
+              metadata: {}
+            }
+          ]
+        })
+        const image = detail.components.find((component) => component.valueType === 'image')
+        if (!image?.contentHash) throw new AccessFailure('STORAGE_INCONSISTENT', 'storage')
+        return {
+          resourceId: detail.id,
+          revisionId: detail.latestRevisionId,
+          revisionNumber: detail.revisionNumber,
+          title: detail.title,
+          imageSha256: image.contentHash
+        }
+      }
       case 'run.get': {
         if (!projects.getProject(id)) throw new AccessFailure('NOT_FOUND', 'read')
         const task = new FlowTaskStore(getDb()).summary(id, input.taskId as string)

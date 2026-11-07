@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { createConnection } from 'node:net'
 import { spawnSync } from 'node:child_process'
 import AdmZip from 'adm-zip'
@@ -180,6 +180,77 @@ describe('local Agent vertical slice', () => {
     expect((await call('library.search', { includeArchived: true })).data).toMatchObject({
       items: expect.arrayContaining([expect.objectContaining({ id: first.id, archived: true })])
     })
+  })
+
+  it('creates a single-image library resource from a local file path with idempotent admission', async () => {
+    const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4])
+    const imagePath = join(directory, 'pose-fixture.png')
+    writeFileSync(imagePath, imageBytes)
+    const expectedSha = createHash('sha256').update(imageBytes).digest('hex')
+    const admission = key()
+    const created = await call(
+      'library.create_resource',
+      { title: '姿势模板A', imagePath, tags: ['单人', '站立'] },
+      admission
+    )
+    expect(created.status).toBe('completed')
+    expect(created.data).toEqual({
+      resourceId: expect.any(String),
+      revisionId: expect.any(String),
+      revisionNumber: 1,
+      title: '姿势模板A',
+      imageSha256: expectedSha
+    })
+    expect(created.idempotencyKey).toBe(admission)
+    expect(
+      existsSync(join(getDataDir(), 'library', 'blobs', expectedSha.slice(0, 2), `${expectedSha}.png`))
+    ).toBe(true)
+    expect((await call('library.search', { query: '姿势模板A' })).data).toMatchObject({
+      items: [{ title: '姿势模板A', formPreset: 'image', componentCount: 1 }]
+    })
+    const replay = await call(
+      'library.create_resource',
+      { title: '姿势模板A', imagePath, tags: ['单人', '站立'] },
+      admission
+    )
+    expect(replay.status).toBe('completed')
+    expect(replay.data).toEqual(created.data)
+    expect((await call('library.search', { query: '姿势模板A' })).data).toMatchObject({
+      items: [{ title: '姿势模板A' }]
+    })
+    expect(
+      (await call('library.create_resource', { title: 'X', imagePath }, admission)).error?.code
+    ).toBe('IDEMPOTENCY_CONFLICT')
+    // The wire response and diagnostics carry the digest but never the source path or raw bytes.
+    expect(JSON.stringify([created, replay, events])).not.toContain(imagePath)
+    expect(JSON.stringify(events)).not.toContain(expectedSha)
+  })
+
+  it('rejects library.create_resource inputs without touching the library', async () => {
+    const imagePath = join(directory, 'pose.png')
+    writeFileSync(imagePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+    const textPath = join(directory, 'pose.txt')
+    writeFileSync(textPath, 'not an image')
+    const missing = join(directory, 'missing.png')
+    const subdir = join(directory, 'subdir')
+    mkdirSync(subdir)
+    const cases: Array<[Record<string, unknown>]> = [
+      [{ title: 'T', imagePath: 'relative/pose.png' }],
+      [{ title: 'T', imagePath: missing }],
+      [{ title: 'T', imagePath: subdir }],
+      [{ title: 'T', imagePath: textPath }],
+      [{ title: '', imagePath }],
+      [{ title: 'T', imagePath, tags: Array.from({ length: 21 }, (_, index) => `t${index}`) }]
+    ]
+    for (const [input] of cases) {
+      const receipt = await call('library.create_resource', input, key())
+      expect(receipt.status).toBe('failed')
+      expect(receipt.error?.code).toBe('INVALID_INPUT')
+    }
+    expect(searchResources({ query: 'T' }).items).toHaveLength(0)
+    expect((await call('library.create_resource', { title: 'T', imagePath })).error?.code).toBe(
+      'IDEMPOTENCY_REQUIRED'
+    )
   })
 
   it('reads persisted Agent task facts with project scoping and no checkpoint or output payload', async () => {

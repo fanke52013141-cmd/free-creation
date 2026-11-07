@@ -4,7 +4,7 @@
 
 状态：评审草案；日期：2026-10-24；范围：本地单用户桌面应用。
 
-2026-10-24 A1.4接续：当前Registry为18项（14项项目/发现操作+4项只读查询），具体实现和验证见[最新查询台账](08-a1-4-read-only-queries.md)。下方9/11项描述保留为早期基线，不能用作当前总数。
+2026-10-24 A1.4接续：当前Registry为19项（14项项目/发现操作+4项只读查询+1项资源库图片资源创建），具体实现和验证见[最新查询台账](08-a1-4-read-only-queries.md)与[资源库创建台账](12-library-create-resource.md)。下方9/11项描述保留为早期基线，不能用作当前总数。
 
 A1.1接续：当前Registry为11项操作，project.open/update及活动画布保存/导出已实施，最终验证状态见[桌面项目操作台账](06-a1-1-desktop-projects.md)。下文9项为前包历史基线，整个A1及32类节点不升级为完成。
 
@@ -82,7 +82,7 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 | 能力               | 建议 `operationId`                                      | 阶段        | 当前外部状态 | 风险与约束                                                                    | 验收                         |
 | ------------------ | ------------------------------------------------------- | ----------- | ------------ | ----------------------------------------------------------------------------- | ---------------------------- |
 | 搜索/列出/读取资源 | `library.search` / `library.get`                        | A1          | search摘要implemented；get planned      | 分页、字段白名单、正文按需读取                                                | 权限外路径不可泄露、分页稳定 |
-| 创建资源与文件夹   | `library.create_resource` / `library.create_folder`     | A2          | planned      | 文本及元数据结构校验；媒体只能走受控接入                                      | 幂等、失败不留半成品         |
+| 创建资源与文件夹   | `library.create_resource` / `library.create_folder`     | A2          | create_resource implemented（CLI/MCP，见[台账12](12-library-create-resource.md)）；create_folder planned | 单图图片资源（一张图片+名称）；媒体走本机已存在文件路径，经扩展名/大小校验，不接收网络地址或二进制报文 | 幂等、失败不留半成品         |
 | 采集项目节点/媒体  | `library.capture_project_asset`                         | A2          | planned      | 固定来源 project/revision/media；不复制密钥                                   | 来源可追溯、源项目不变       |
 | 发布/归档资源修订  | `library.publish_revision` / `library.archive_revision` | A4          | planned      | 版本不可变；归档含确认                                                        | 修订冲突、回读一致           |
 | 集合维护           | `library.save_collection`                               | A2          | planned      | 仅 ID 引用；不把项目图复制为第二拓扑                                          | 顺序/引用校验、保存重开      |

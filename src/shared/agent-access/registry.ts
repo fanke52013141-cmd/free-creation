@@ -36,6 +36,19 @@ export const ACCESS_OPERATIONS = {
       })
       .strict()
   },
+  'library.create_resource': {
+    effect: 'write',
+    description:
+      '创建单图图片资源（一张图片+名称）；图片取自本机已存在的文件路径，不接收网络地址、二进制报文或额外组件',
+    input: z
+      .object({
+        title: z.string().trim().min(1).max(180),
+        imagePath: z.string().min(2).max(500),
+        description: z.string().max(2000).optional(),
+        tags: z.array(z.string().trim().min(1).max(40)).max(20).optional()
+      })
+      .strict()
+  },
   'run.get': {
     effect: 'read',
     description:
@@ -237,6 +250,15 @@ export const ACCESS_OUTPUTS = {
         )
         .max(100),
       nextCursor: z.string().nullable()
+    })
+    .strict(),
+  'library.create_resource': z
+    .object({
+      resourceId: identifier,
+      revisionId: identifier,
+      revisionNumber: z.number().int().positive(),
+      title: z.string().max(200),
+      imageSha256: z.string().regex(/^[a-f0-9]{64}$/)
     })
     .strict(),
   'run.get': z
