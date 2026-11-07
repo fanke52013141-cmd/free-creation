@@ -142,6 +142,10 @@ const api = {
     projectId: string
     ok: boolean
     graphVersion?: number
+    validated?: boolean
+    errorCode?: string
+    errorDetail?: string
+    result?: unknown
   }): void => ipcRenderer.send(ACCESS_DESKTOP_REPLY, input),
   commitLocalAgentDesktop: (input: {
     requestId: string
@@ -529,6 +533,17 @@ const api = {
   gateway: {
     listProviders: (): Promise<IpcEnvelope<ProviderSummary[]>> =>
       ipcRenderer.invoke(IPC.gateway.providers),
+    // ── P2 密钥包（.cskeys v2）──────────────────────────────────────
+    exportReceiveCredential: (): Promise<IpcEnvelope<{ path: string; deviceSummary: string; expiresAt: number | null }>> =>
+      ipcRenderer.invoke(IPC.gateway.keys.exportCredential),
+    listKeyConnections: (): Promise<IpcEnvelope<Array<{ id: string; name: string; protocol: string; baseUrl: string; modelCount: number; hasKey: boolean }>>> =>
+      ipcRenderer.invoke(IPC.gateway.keys.listConnections),
+    sealKeyPackage: (input: { password: string; connectionIds: string[] }): Promise<IpcEnvelope<{ path: string; packageId: string; connectionCount: number; expiresAt: number }>> =>
+      ipcRenderer.invoke(IPC.gateway.keys.sealPackage, input),
+    previewKeyPackage: (input: { password: string }): Promise<IpcEnvelope<{ packageId: string; expiresAt: number; issuerDeviceSummary: string; connections: Array<{ id: string; name: string; protocol: string; baseUrl: string; modelCount: number; hasKey: boolean }>; alreadyImported: boolean; existingConnections: string[] }>> =>
+      ipcRenderer.invoke(IPC.gateway.keys.previewPackage, input),
+    importKeyPackage: (input: { password: string; overwriteConfirmed: boolean }): Promise<IpcEnvelope<{ packageId: string; added: number; updated: number; modelCount: number }>> =>
+      ipcRenderer.invoke(IPC.gateway.keys.importPackage, input),
     listExecutableProviders: (): Promise<IpcEnvelope<ProviderSummary[]>> =>
       ipcRenderer.invoke(IPC.gateway.executableProviders),
     saveProvider: (input: SaveProviderInput): Promise<IpcEnvelope<ProviderSummary>> =>

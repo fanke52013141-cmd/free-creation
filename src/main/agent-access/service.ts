@@ -29,6 +29,11 @@ import {
   type AccessResponse
 } from '../../shared/agent-access/registry'
 import {
+  resolvePatchReferences,
+  toGraphView,
+  type GraphPatchOp
+} from '../../shared/agent-access/graph-ops'
+import {
   GraphVersionConflictError,
   GraphWriteInProgressError
 } from '../../shared/graph-snapshot-sync'
@@ -47,7 +52,8 @@ import { accessDiagnosticsSummary, searchAccessLibrary } from './queries'
 class AccessFailure extends Error {
   constructor(
     readonly code: string,
-    readonly phase: string
+    readonly phase: string,
+    readonly detail?: string
   ) {
     super(code)
   }
@@ -219,7 +225,77 @@ export class LocalAccessService {
       let result: unknown
       if (operationId === 'chat.skill.bind' && (id !== active || !this.options.desktop))
         throw new AccessFailure('ACTIVE_PROJECT_REQUIRED', 'desktop-ownership')
-      if (operationId === 'project.open' || (id === active && spec.effect !== 'read')) {
+      if (operationId === 'graph.patch') {
+        // F2 画布编辑走权威宿主：未打开的项目返回明确等待动作，不另建 headless 编辑路径。
+        if (id !== active || !this.options.desktop)
+          throw new AccessFailure(
+            'ACTIVE_PROJECT_REQUIRED',
+            'desktop-ownership',
+            'project.open the target canvas first, then retry graph.patch'
+          )
+        const current = projects.openProject(id)
+        if (!current) throw new AccessFailure('NOT_FOUND', 'read')
+        const resolved = resolvePatchReferences(input.ops as GraphPatchOp[], {
+          nodes: current.nodes,
+          edges: current.edges
+        })
+        if (!resolved.ok)
+          throw new AccessFailure(
+            'PATCH_REFERENCE_INVALID',
+            'precheck',
+            resolved.errors
+              .slice(0, 5)
+              .map((e) => `op[${e.index}]:${e.code}`)
+              .join(',')
+          )
+        const patchResult = await this.options.desktop.run(
+          {
+            action: 'graph-patch',
+            projectId: id,
+            ops: input.ops as GraphPatchOp[],
+            expectedGraphVersion: input.expectedGraphVersion as number
+          },
+          (version) => {
+            if (this.options.activeProjectId() !== id)
+              throw new AccessFailure('RESOURCE_BUSY', 'desktop-ownership')
+            this.assertNoActiveTasks(id)
+            const admitted = projects.openProject(id)
+            if (!admitted || admitted.meta.graphVersion !== version)
+              throw new AccessFailure('REVISION_CONFLICT', 'patch-admission')
+            // From this admission onward the renderer may have persisted a mutation.
+            metadataCommitted = true
+            return admitted.meta
+          }
+        )
+        // main 读取并核对：回执中的每个创建节点必须真实落盘，数量必须与保存结果一致。
+        const savedFile = projects.openProject(id)
+        if (!savedFile || savedFile.meta.graphVersion !== patchResult.graphVersion)
+          throw new AccessFailure('REVISION_CONFLICT', 'patch-verify')
+        const payload = (patchResult.result ?? {}) as {
+          created?: Array<{ ref?: string; nodeId?: string }>
+          counts?: Partial<Record<'nodeCreated' | 'nodeUpdated' | 'nodeDeleted' | 'edgeCreated' | 'edgeDeleted', number>>
+        }
+        const createdNodes = (payload.created ?? []).filter((c): c is { ref?: string; nodeId: string } =>
+          typeof c.nodeId === 'string'
+        )
+        for (const created of createdNodes) {
+          // 每个回执 ID（节点或连线）都必须能在正式持久化数据中核对到。
+          const persisted =
+            savedFile.nodes.some((n) => n.id === created.nodeId) ||
+            savedFile.edges.some((e) => e.id === created.nodeId)
+          if (!persisted)
+            throw new AccessFailure('STORAGE_INCONSISTENT', 'patch-verify', created.nodeId.slice(0, 60))
+        }
+        const zero = { nodeCreated: 0, nodeUpdated: 0, nodeDeleted: 0, edgeCreated: 0, edgeDeleted: 0 }
+        const counts = { ...zero, ...(payload.counts ?? {}) }
+        result = {
+          projectId: id,
+          graphVersion: patchResult.graphVersion,
+          saved: true,
+          created: createdNodes.map((c) => ({ ...(c.ref ? { ref: c.ref } : {}), nodeId: c.nodeId })),
+          applied: counts
+        }
+      } else if (operationId === 'project.open' || (id === active && spec.effect !== 'read')) {
         if (!this.options.desktop) throw new AccessFailure('RESOURCE_BUSY', 'desktop-ownership')
         const target = projects.openProject(id!)
         if (!target) throw new AccessFailure('NOT_FOUND', 'read')
@@ -256,13 +332,14 @@ export class LocalAccessService {
               )
             }
           }
-          const version = await this.options.desktop.run(
-            {
-              action: bind ? 'bind-skills' : rename ? 'rename' : 'flush',
-              ...(bind ? { nodeId: input.nodeId as string, agent } : {}),
-              projectId: id!,
-              ...(rename ? { name: input.name as string } : {})
-            },
+          const version = (
+            await this.options.desktop.run(
+              {
+                action: bind ? 'bind-skills' : rename ? 'rename' : 'flush',
+                ...(bind ? { nodeId: input.nodeId as string, agent } : {}),
+                projectId: id!,
+                ...(rename ? { name: input.name as string } : {})
+              },
             bind
               ? (version) => {
                   if (this.options.activeProjectId() !== id)
@@ -292,6 +369,7 @@ export class LocalAccessService {
                   }
                 : undefined
           )
+          ).graphVersion
           if (this.options.activeProjectId() !== id)
             throw new DesktopAccessError('DESKTOP_CHANGED', true)
           this.assertNoActiveTasks(id!)
@@ -316,9 +394,9 @@ export class LocalAccessService {
               ? { meta: projects.getProject(id!), saved: true }
               : operationId === 'project.save'
                 ? { graphVersion: version, saved: true }
-                : this.execute(operationId, { ...input, expectedGraphVersion: version })
+                : await this.execute(operationId, { ...input, expectedGraphVersion: version })
         }
-      } else result = this.execute(operationId, input)
+      } else result = await this.execute(operationId, input)
       base.status = 'completed'
       // Repositories use optional undefined properties; the wire contract is JSON.
       base.data = JSON.parse(JSON.stringify(result)) as unknown
@@ -329,7 +407,7 @@ export class LocalAccessService {
     } catch (error) {
       const known =
         error instanceof DesktopAccessError && !error.unknownOutcome
-          ? new AccessFailure(error.code, 'desktop-handshake')
+          ? new AccessFailure(error.code, 'desktop-handshake', error.detail)
           : error instanceof AccessFailure
             ? error
             : error instanceof AgentRuntimeError
@@ -352,7 +430,8 @@ export class LocalAccessService {
           : (known?.code ?? (claimed ? 'OUTCOME_UNKNOWN' : 'STORAGE_UNAVAILABLE')),
         phase:
           known?.phase ?? (error instanceof DesktopAccessError ? 'desktop-handshake' : 'storage'),
-        retryable: false
+        retryable: false,
+        ...(known?.detail ? { detail: known.detail } : {})
       }
       delete base.data
       if (claimed && key) {
@@ -519,9 +598,139 @@ export class LocalAccessService {
     return { deleted: true, projectId: id, graphVersion: snapshot.graphVersion }
   }
 
-  private execute(operation: AccessOperationId, input: Record<string, unknown>): unknown {
+  private async execute(operation: AccessOperationId, input: Record<string, unknown>): Promise<unknown> {
     const id = input.projectId as string
     switch (operation) {
+      case 'graph.get': {
+        const view = (input.view as 'persisted' | 'latest') ?? 'persisted'
+        const offset = input.offset as number
+        const limit = input.limit as number
+        if (view === 'latest' && id === this.options.activeProjectId() && this.options.desktop) {
+          // latest 视图取权威宿主当前状态（含未保存编辑）；未打开项目没有宿主，
+          // persisted 视图即当前唯一权威。分页与 DTO 投影在宿主侧用同一 toGraphView 完成。
+          const { result } = await this.options.desktop.run({
+            action: 'read-graph',
+            projectId: id,
+            offset,
+            limit
+          })
+          const projected = (result ?? {}) as {
+            graphVersion?: number
+            unsaved?: boolean
+            total?: number
+            offset?: number
+            nodes?: unknown
+            edges?: unknown
+            groups?: unknown
+          }
+          if (
+            typeof projected.graphVersion !== 'number' ||
+            typeof projected.total !== 'number' ||
+            !Array.isArray(projected.nodes) ||
+            !Array.isArray(projected.edges) ||
+            !Array.isArray(projected.groups)
+          )
+            throw new AccessFailure('HOST_NOT_READY', 'graph-read')
+          return {
+            projectId: id,
+            view,
+            graphVersion: projected.graphVersion,
+            unsaved: projected.unsaved === true,
+            total: projected.total,
+            offset: projected.offset ?? offset,
+            nodes: projected.nodes,
+            edges: projected.edges,
+            groups: projected.groups
+          }
+        }
+        const file = projects.openProject(id)
+        if (!file) throw new AccessFailure('NOT_FOUND', 'read')
+        return {
+          projectId: id,
+          view: 'persisted',
+          graphVersion: file.meta.graphVersion,
+          unsaved: false,
+          ...toGraphView(file, offset, limit)
+        }
+      }
+      case 'node.get': {
+        const file = projects.openProject(id)
+        if (!file) throw new AccessFailure('NOT_FOUND', 'read')
+        const node = file.nodes.find((candidate) => candidate.id === input.nodeId)
+        if (!node) throw new AccessFailure('NODE_NOT_FOUND', 'read')
+        let config: unknown = null
+        const rawConfig = node.params.config
+        if (typeof rawConfig === 'string' && rawConfig.trim()) {
+          try {
+            config = JSON.parse(rawConfig)
+          } catch {
+            config = null
+          }
+        }
+        const edgesIn = file.edges
+          .filter((edge) => edge.to.nodeId === node.id)
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .slice(0, 2000)
+          .map((edge) => ({
+            edgeId: edge.id,
+            from: edge.from,
+            to: edge.to,
+            ...(edge.connectOrder !== undefined ? { connectOrder: edge.connectOrder } : {})
+          }))
+        const edgesOut = file.edges
+          .filter((edge) => edge.from.nodeId === node.id)
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .slice(0, 2000)
+          .map((edge) => ({
+            edgeId: edge.id,
+            from: edge.from,
+            to: edge.to,
+            ...(edge.connectOrder !== undefined ? { connectOrder: edge.connectOrder } : {})
+          }))
+        return {
+          projectId: id,
+          graphVersion: file.meta.graphVersion,
+          node: {
+            nodeId: node.id,
+            type: node.type,
+            contractVersion: node.contractVersion,
+            title: node.title.slice(0, 200),
+            x: node.x,
+            y: node.y,
+            w: node.w,
+            h: node.h,
+            ports: node.ports.map((port) => ({
+              id: port.id,
+              dir: port.dir,
+              type: port.type,
+              required: port.required,
+              cardinality: port.cardinality,
+              name: (port.name ?? port.id).slice(0, 80),
+              ...(port.schema ? { schema: port.schema } : {})
+            })),
+            contentKind:
+              node.content.kind === 'media'
+                ? 'media'
+                : node.content.kind === 'text'
+                  ? 'text'
+                  : 'empty',
+            text: node.content.kind === 'text' ? node.content.text : '',
+            config,
+            ...(node.content.kind === 'media' && node.content.mediaId
+              ? { mediaId: node.content.mediaId }
+              : {}),
+            ...(typeof node.params.mediaPath === 'string'
+              ? { mediaPath: node.params.mediaPath }
+              : {}),
+            ...(typeof node.params.mediaMime === 'string'
+              ? { mediaMime: node.params.mediaMime }
+              : {}),
+            exec: String(node.exec?.status ?? 'idle'),
+            edgesIn,
+            edgesOut
+          }
+        }
+      }
       case 'skill.list': {
         const all = new FlowSkillStore(getDb()).list()
         return {
@@ -770,6 +979,9 @@ export class LocalAccessService {
         if (!result) throw new AccessFailure('NOT_FOUND', 'read')
         return result
       }
+      case 'graph.patch':
+        // graph.patch 在 dispatch 中经权威宿主握手执行，不落在这里。
+        throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
     }
     return unhandledOperation(operation)
   }

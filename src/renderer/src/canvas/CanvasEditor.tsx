@@ -48,6 +48,8 @@ import {
 import { mergeUnsavedLocalRecords, countRestorableRecords } from './external-reload'
 import { NODE_PORT_OUTSET } from './edge-geometry'
 import { assetNodeTypeFor } from './asset-node-type'
+import { planGraphPatch } from './graph-patch'
+import { toGraphView } from '@shared/agent-access/graph-ops'
 import type { AiProcessConfig } from '../engine/executors/aiProcess'
 import { markUndoPoint } from './history'
 import { collapseSelection } from './stack-collapse'
@@ -854,6 +856,96 @@ export function CanvasEditor({
               throw new Error('CANVAS_NOT_READY')
             if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
             saveTimerRef.current = null
+            // ── F2 read-graph：只读权威宿主 latest 视图；不保存、不修改 ──
+            if (request.action === 'read-graph') {
+              const save = useSaveCoordinator.getState()
+              const view = toGraphView(deriveGraph(editor), request.offset ?? 0, request.limit ?? 100)
+              window.api.replyLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                ok: true,
+                graphVersion: graphVersionRef.current,
+                result: {
+                  graphVersion: graphVersionRef.current,
+                  unsaved: save.dirtyVersion !== save.persistedVersion,
+                  ...view
+                }
+              })
+              return
+            }
+            // ── F2 graph-patch：整批校验 → 保存用户未保存内容 → 版本核对 →
+            // 准入 → 重校验 → 原子应用（单撤销步）→ 保存屏障 → 回执 ──
+            if (request.action === 'graph-patch') {
+              const replyFail = (validated: boolean, code: string, detail?: string): void => {
+                window.api.replyLocalAgentDesktop({
+                  requestId: request.requestId,
+                  projectId: project.id,
+                  ok: false,
+                  validated,
+                  errorCode: code,
+                  ...(detail ? { errorDetail: detail.slice(0, 300) } : {})
+                })
+              }
+              const bindings = useGatewayStore.getState().modelBindings
+              const planned = planGraphPatch(editor, request.ops, bindings)
+              if (!planned.ok) {
+                // 校验失败发生在任何变更之前：整批不留半图。
+                replyFail(true, planned.issue.code, planned.issue.detail)
+                return
+              }
+              // 先按正式协议协调未保存内容：用户编辑被保存，不丢弃、不被覆盖。
+              await ensureCanvasSaved()
+              if (
+                editorRef.current !== editor ||
+                useAppStore.getState().currentProject?.id !== project.id
+              )
+                throw new Error('CANVAS_CHANGED')
+              if (graphVersionRef.current !== request.expectedGraphVersion) {
+                replyFail(
+                  true,
+                  'REVISION_CONFLICT',
+                  `expected ${request.expectedGraphVersion}, current ${graphVersionRef.current}`
+                )
+                return
+              }
+              const admission = await window.api.commitLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                graphVersion: graphVersionRef.current
+              })
+              if (
+                !admission.ok ||
+                Date.now() >= request.expiresAt ||
+                editorRef.current !== editor ||
+                useAppStore.getState().currentProject?.id !== project.id
+              )
+                throw new Error('PATCH_NOT_ADMITTED')
+              // 准入与校验之间用户可能继续编辑：整批重新校验；此时失败按 unknown 核对。
+              const replanned = planGraphPatch(editor, request.ops, bindings)
+              if (!replanned.ok) {
+                replyFail(false, replanned.issue.code, replanned.issue.detail)
+                return
+              }
+              editor.run(() => {
+                replanned.plan.apply(editor)
+              })
+              markUndoPoint(editor, 'agent-graph-patch')
+              await ensureCanvasSaved()
+              window.api.replyLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                ok: true,
+                graphVersion: graphVersionRef.current,
+                result: {
+                  created: replanned.plan.created.map((created) => ({
+                    ...(created.ref ? { ref: created.ref } : {}),
+                    nodeId: created.nodeId
+                  })),
+                  counts: replanned.plan.counts
+                }
+              })
+              return
+            }
             await ensureCanvasSaved()
             if (
               editorRef.current !== editor ||

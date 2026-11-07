@@ -237,8 +237,10 @@ describe('local Agent vertical slice', () => {
         const file = openProject(p.id)!
         expect(commit?.(file.meta.graphVersion).id).toBe(p.id)
         graph.nodes[0].params.config = JSON.stringify({ agent: request.agent })
-        return saveProject({ id: p.id, expectedGraphVersion: file.meta.graphVersion, graph })!
-          .graphVersion
+        return {
+          graphVersion: saveProject({ id: p.id, expectedGraphVersion: file.meta.graphVersion, graph })!
+            .graphVersion
+        }
       }
     })
     expect(
@@ -277,7 +279,7 @@ describe('local Agent vertical slice', () => {
     withDesktop({
       run: async (_request, commit) => {
         commit?.(2)
-        return 2 // Acknowledgement without applying the requested clear must never report saved.
+        return { graphVersion: 2 } // Acknowledgement without applying the requested clear must never report saved.
       }
     })
     const lost = await call(
@@ -617,7 +619,9 @@ describe('local Agent vertical slice', () => {
             groups: []
           }
         })!
-        return commit ? commit(saved.graphVersion).graphVersion : saved.graphVersion
+        return {
+          graphVersion: commit ? commit(saved.graphVersion).graphVersion : saved.graphVersion
+        }
       }
     })
     expect(
@@ -647,7 +651,7 @@ describe('local Agent vertical slice', () => {
     active = p.id
     const run = vi.fn(async () => {
       active = null
-      return 0
+      return { graphVersion: 0 }
     })
     withDesktop({ run })
     expect(
@@ -668,7 +672,7 @@ describe('local Agent vertical slice', () => {
         writeFileSync(join(directory, 'projects', current.id, 'project.json.local-recovery'), '{}')
         admit!(0)
         active = target.id
-        return 0
+        return { graphVersion: 0 }
       }
     })
     const response = await call('project.open', { projectId: target.id }, key())
@@ -683,7 +687,7 @@ describe('local Agent vertical slice', () => {
     const p = createProject('open')
     const run = vi.fn(async () => {
       active = p.id
-      return 0
+      return { graphVersion: 0 }
     })
     withDesktop({ run })
     const same = key()
@@ -704,11 +708,11 @@ describe('local Agent vertical slice', () => {
 
   it('keeps pending idempotency and serializes external effects while the desktop is saving', async () => {
     const p = createProject('open')
-    let finish!: (version: number) => void
+    let finish!: (version: { graphVersion: number }) => void
     withDesktop({
       run: async () => {
         active = p.id
-        return await new Promise<number>((resolve) => {
+        return await new Promise<{ graphVersion: number }>((resolve) => {
           finish = resolve
         })
       }
@@ -719,7 +723,7 @@ describe('local Agent vertical slice', () => {
     expect((await call('project.create', { name: 'concurrent' }, key())).error?.code).toBe(
       'RESOURCE_BUSY'
     )
-    finish(0)
+    finish({ graphVersion: 0 })
     expect((await pending).status).toBe('completed')
     expect((await call('project.list')).data).toMatchObject({ total: 1 })
   })
@@ -1196,7 +1200,7 @@ describe('local Agent vertical slice', () => {
           }
         })!
         flushed++
-        return saved.graphVersion
+        return { graphVersion: saved.graphVersion }
       }
     })
     const cloned = await call(

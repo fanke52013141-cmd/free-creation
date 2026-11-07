@@ -13,7 +13,8 @@ import type { ProjectMeta } from '../../shared/types'
 export class DesktopAccessError extends Error {
   constructor(
     readonly code: string,
-    readonly unknownOutcome = false
+    readonly unknownOutcome = false,
+    readonly detail?: string
   ) {
     super(code)
   }
@@ -22,7 +23,7 @@ export interface AccessDesktop {
   run(
     input: Omit<DesktopRequest, 'requestId' | 'expiresAt'>,
     commit?: (version: number) => ProjectMeta
-  ): Promise<number>
+  ): Promise<{ graphVersion: number; result?: unknown }>
 }
 /** One bounded, sender-bound request. A late response cannot authorize another mutation. */
 export function createAccessDesktop(getWindow: () => BrowserWindow | null): AccessDesktop {
@@ -31,7 +32,7 @@ export function createAccessDesktop(getWindow: () => BrowserWindow | null): Acce
     sender: BrowserWindow['webContents']
     commit?: (version: number) => ProjectMeta
     committed: boolean
-    finish: (version?: number, error?: DesktopAccessError) => void
+    finish: (version?: number, error?: DesktopAccessError, result?: unknown) => void
   } | null = null
   const authorized = (event: IpcMainEvent | IpcMainInvokeEvent): boolean =>
     !!pending &&
@@ -48,10 +49,19 @@ export function createAccessDesktop(getWindow: () => BrowserWindow | null): Acce
     )
       return
     if (!reply.ok || reply.graphVersion === undefined) {
-      pending.finish(undefined, new DesktopAccessError('DESKTOP_OPERATION_FAILED', true))
+      // validated=true：失败发生在任何变更之前；否则按 unknown 核对处理。
+      pending.finish(
+        undefined,
+        new DesktopAccessError(
+          reply.errorCode ?? 'DESKTOP_OPERATION_FAILED',
+          reply.validated !== true,
+          reply.errorDetail
+        ),
+        undefined
+      )
     } else if (pending.commit && !pending.committed) {
       pending.finish(undefined, new DesktopAccessError('DESKTOP_OPERATION_FAILED'))
-    } else pending.finish(reply.graphVersion)
+    } else pending.finish(reply.graphVersion, undefined, reply.result)
   })
   ipcMain.handle(ACCESS_DESKTOP_COMMIT, (event, raw: unknown) => {
     const parsed = DesktopCommitSchema.safeParse(raw)
@@ -74,7 +84,7 @@ export function createAccessDesktop(getWindow: () => BrowserWindow | null): Acce
     }
   })
   return {
-    run(input, commit): Promise<number> {
+    run(input, commit): Promise<{ graphVersion: number; result?: unknown }> {
       if (pending) return Promise.reject(new DesktopAccessError('RESOURCE_BUSY'))
       const window = getWindow()
       if (!window || window.isDestroyed() || window.webContents.isDestroyed())
@@ -87,13 +97,13 @@ export function createAccessDesktop(getWindow: () => BrowserWindow | null): Acce
           () => finish(undefined, new DesktopAccessError('DESKTOP_TIMEOUT', true)),
           10000
         )
-        const finish = (version?: number, error?: DesktopAccessError): void => {
+        const finish = (version?: number, error?: DesktopAccessError, result?: unknown): void => {
           clearTimeout(timer)
           sender.off('render-process-gone', lost)
           sender.off('destroyed', lost)
           pending = null
           if (error) reject(error)
-          else resolve(version!)
+          else resolve({ graphVersion: version!, ...(result !== undefined ? { result } : {}) })
         }
         pending = { request, sender, commit, committed: false, finish }
         sender.once('render-process-gone', lost)

@@ -78,6 +78,7 @@ function parseRegistryOperations() {
 // 画布级业务动作：GUI 入口在 renderer（调色板/右键菜单/多选工具栏/侧栏/复杂工作区），
 // 多数最终落到 IPC 或引擎，但 GUI 语义先于通道存在，必须独立登记，不能只扫 IPC。
 const CANVAS_ACTIONS = [
+  ['canvas.graph.read', '画布节点/连线/分组视图读取（呈现层承载）'],
   ['canvas.node.create', '调色板/右键菜单/拖线新建节点'],
   ['canvas.node.update-content', '节点正文与固定配置编辑（Body/Settings）'],
   ['canvas.node.move-resize', '节点移动与调整尺寸'],

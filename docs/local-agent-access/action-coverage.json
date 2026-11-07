@@ -1106,67 +1106,108 @@
     "canvas.node.create": {
       "label": "新建节点",
       "gui": "调色板/右键/拖线",
-      "phase": "F2"
+      "phase": "external",
+      "external": [
+        "graph.patch"
+      ],
+      "note": "F2 新增：graph.patch node.create（契约测试通过；真实 Electron 画布验收见 18 号台账）"
     },
     "canvas.node.update-content": {
       "label": "编辑节点正文/配置",
       "gui": "Body/Settings",
-      "phase": "F2"
+      "phase": "external",
+      "external": [
+        "graph.patch",
+        "node.get"
+      ],
+      "note": "F2 新增：node.update 文本/配置/尺寸/层次；动态端口变化预检不静默删边"
     },
     "canvas.node.move-resize": {
       "label": "移动/调整节点",
       "gui": "拖拽",
-      "phase": "F2"
+      "phase": "external",
+      "external": [
+        "graph.patch"
+      ],
+      "note": "F2 新增：node.update x/y/w/h"
     },
     "canvas.node.duplicate": {
       "label": "复制节点",
       "gui": "右键菜单",
-      "phase": "F2"
+      "phase": "F2",
+      "note": "可由 node.get+graph.patch 组合表达；含媒体引用的完整复制策略随 F4/F7 验收"
     },
     "canvas.node.delete": {
       "label": "删除节点",
       "gui": "右键菜单/Delete",
-      "phase": "F2"
+      "phase": "external",
+      "external": [
+        "graph.patch"
+      ],
+      "note": "F2 新增：级联清理连线"
     },
     "canvas.node.order": {
       "label": "置顶/置底",
       "gui": "右键菜单",
-      "phase": "F2"
+      "phase": "external",
+      "external": [
+        "graph.patch"
+      ],
+      "note": "F2 新增：node.update order=front|back"
     },
     "canvas.edge.create": {
       "label": "创建连线",
       "gui": "端口拖线",
-      "phase": "F2"
+      "phase": "external",
+      "external": [
+        "graph.patch"
+      ],
+      "note": "F2 新增：类型/Schema/基数/占用/重复/成环校验"
     },
     "canvas.edge.delete": {
       "label": "删除连线",
       "gui": "点选删除",
-      "phase": "F2"
+      "phase": "external",
+      "external": [
+        "graph.patch"
+      ],
+      "note": "F2 新增"
     },
     "canvas.edge.retarget": {
       "label": "改接连线",
       "gui": "拖动端点",
-      "phase": "F2"
+      "phase": "external",
+      "external": [
+        "graph.patch"
+      ],
+      "note": "F2：以同批 edge.delete+edge.create 表达，保持多输入顺序语义待专项验收"
     },
     "canvas.multiselect.connect": {
       "label": "多选批量连接",
       "gui": "多选工具栏",
-      "phase": "F2"
+      "phase": "external",
+      "external": [
+        "graph.patch"
+      ],
+      "note": "F2：多条 edge.create+connectOrder 表达；异构回溯映射（planHeterogeneousBatchConnections）未直接暴露"
     },
     "canvas.group.toggle": {
       "label": "组合/取消组合",
       "gui": "多选工具栏",
-      "phase": "F2"
+      "phase": "F2",
+      "note": "graph.patch 暂不含分组操作，待补 op 类型"
     },
     "canvas.align": {
       "label": "对齐/均分",
       "gui": "多选工具栏",
-      "phase": "F2"
+      "phase": "F2",
+      "note": "可由多条 node.update x/y 表达；专用批量对齐命令待定"
     },
     "canvas.history.undo-redo": {
       "label": "撤销/重做",
       "gui": "历史坞",
-      "phase": "F2"
+      "phase": "F2",
+      "note": "外部批次编辑已成为单一撤销步；跨主体撤销语义待 F2 收尾验收"
     },
     "canvas.workflow.run-all": {
       "label": "运行整个工作流",
@@ -1274,6 +1315,16 @@
       "gui": "画布操作",
       "phase": "excluded",
       "reason": "纯呈现操作；影响用户查看的定位类命令按计划第3节在桌面呈现命令中单独声明"
+    },
+    "canvas.graph.read": {
+      "label": "读取画布节点/连线视图",
+      "gui": "画布呈现（读取由渲染层承载）",
+      "phase": "external",
+      "external": [
+        "graph.get",
+        "node.get"
+      ],
+      "note": "F2 新增：persisted 视图任意项目可读；latest 视图限当前打开项目"
     }
   }
 }

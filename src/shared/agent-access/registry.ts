@@ -1,6 +1,16 @@
 import { z } from 'zod'
 import { ACTIVE_NODE_TYPE_IDS } from '../types'
 import { SkillBindingSchema } from '../agent-flow/runtime-contracts'
+import {
+  GRAPH_PATCH_MAX_OPS,
+  GRAPH_VIEW_MAX_EDGES,
+  GRAPH_VIEW_MAX_NODES,
+  GraphPatchOpsSchema,
+  accessClientRef,
+  graphEdgeDto,
+  graphGroupDto,
+  graphNodeDto
+} from './graph-ops'
 
 export const ACCESS_API_VERSION = 1
 export const ACCESS_MAX_BYTES = 1024 * 1024
@@ -78,6 +88,30 @@ export const ACCESS_OPERATIONS = {
     effect: 'read',
     description: '分页查询节点库条目摘要，不返回配置正文',
     input: page
+  },
+  'graph.get': {
+    effect: 'read',
+    description:
+      '读取画布节点/连线/分组的版本化视图（分页）；config 与正文经 node.get 显式读取；latest 视图仅限当前打开项目',
+    input: project
+      .extend({
+        view: z.enum(['persisted', 'latest']).default('persisted'),
+        offset: z.number().int().min(0).max(100000).default(0),
+        limit: z.number().int().min(1).max(GRAPH_VIEW_MAX_NODES).default(100)
+      })
+      .strict()
+  },
+  'node.get': {
+    effect: 'read',
+    description:
+      '读取单个已保存节点的类型、契约版本、配置、正文、端口与连线引用；运行事实与结果经 run/output 族查询',
+    input: project.extend({ nodeId }).strict()
+  },
+  'graph.patch': {
+    effect: 'write',
+    description:
+      '向当前打开项目提交一批类型化画布编辑（建/改/删节点与连线）；整体校验后原子应用并保存；返回ID映射与保存版本',
+    input: revision.extend({ ops: GraphPatchOpsSchema }).strict()
   },
   'model.list': {
     effect: 'read',
@@ -227,7 +261,7 @@ export interface AccessResponse {
   status: 'completed' | 'failed' | 'unknown'
   idempotencyKey?: string
   data?: unknown
-  error?: { code: string; phase: string; retryable: boolean }
+  error?: { code: string; phase: string; retryable: boolean; detail?: string }
 }
 
 export const AccessResponseSchema = z
@@ -240,7 +274,12 @@ export const AccessResponseSchema = z
     idempotencyKey: z.string().optional(),
     data: z.json().optional(),
     error: z
-      .object({ code: z.string(), phase: z.string(), retryable: z.boolean() })
+      .object({
+        code: z.string(),
+        phase: z.string(),
+        retryable: z.boolean(),
+        detail: z.string().max(300).optional()
+      })
       .strict()
       .optional()
   })
@@ -386,6 +425,55 @@ export const ACCESS_OUTPUTS = {
     .strict(),
   'capability.list': z
     .object({ operations: z.array(z.json()), limitations: z.array(z.string()) })
+    .strict(),
+  'graph.get': z
+    .object({
+      projectId: identifier,
+      view: z.enum(['persisted', 'latest']),
+      graphVersion: z.number().int().nonnegative(),
+      /** latest 视图为 true 时表示权威宿主尚有未保存编辑，磁盘版本可能落后。 */
+      unsaved: z.boolean(),
+      total: z.number().int().nonnegative(),
+      offset: z.number().int().nonnegative(),
+      nodes: z.array(graphNodeDto).max(GRAPH_VIEW_MAX_NODES),
+      edges: z.array(graphEdgeDto).max(GRAPH_VIEW_MAX_EDGES),
+      groups: z.array(graphGroupDto).max(GRAPH_VIEW_MAX_NODES)
+    })
+    .strict(),
+  'node.get': z
+    .object({
+      projectId: identifier,
+      graphVersion: z.number().int().nonnegative(),
+      node: graphNodeDto.extend({
+        text: z.string(),
+        config: z.json().nullable(),
+        mediaId: z.string().optional(),
+        mediaPath: z.string().optional(),
+        mediaMime: z.string().optional(),
+        exec: z.string().max(40),
+        edgesIn: z.array(graphEdgeDto).max(GRAPH_VIEW_MAX_EDGES),
+        edgesOut: z.array(graphEdgeDto).max(GRAPH_VIEW_MAX_EDGES)
+      })
+    })
+    .strict(),
+  'graph.patch': z
+    .object({
+      projectId: identifier,
+      graphVersion: z.number().int().nonnegative(),
+      saved: z.literal(true),
+      created: z
+        .array(z.object({ ref: accessClientRef.optional(), nodeId: z.string().max(180) }).strict())
+        .max(GRAPH_PATCH_MAX_OPS),
+      applied: z
+        .object({
+          nodeCreated: z.number().int().nonnegative(),
+          nodeUpdated: z.number().int().nonnegative(),
+          nodeDeleted: z.number().int().nonnegative(),
+          edgeCreated: z.number().int().nonnegative(),
+          edgeDeleted: z.number().int().nonnegative()
+        })
+        .strict()
+    })
     .strict(),
   'node.type.list': z
     .object({
