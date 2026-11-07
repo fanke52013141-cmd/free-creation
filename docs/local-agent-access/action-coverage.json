@@ -1,0 +1,1279 @@
+{
+  "schemaVersion": 1,
+  "note": "F0 业务动作分母登记。phase=external 表示当前 Registry 已有对应操作（external 列出映射，可能只覆盖子集）；phase=F1..F9 为计划阶段；phase=excluded 须给出理由（呈现层/系统生命周期/历史退役）。运行可用性与开发状态以各交付台账为准，本文件不声明任何动作已实现。",
+  "actions": {
+    "ipc.app.bootstrap": {
+      "label": "应用启动信息",
+      "channel": "app:bootstrap",
+      "gui": "应用启动",
+      "phase": "external",
+      "external": [
+        "app.status"
+      ],
+      "note": "app.status 只暴露实例身份与版本子集"
+    },
+    "ipc.skillLibrary.list": {
+      "label": "技能列表",
+      "channel": "skill-library:list",
+      "gui": "技能面板",
+      "phase": "external",
+      "external": [
+        "skill.list"
+      ]
+    },
+    "ipc.skillLibrary.install": {
+      "label": "技能安装",
+      "channel": "skill-library:install",
+      "gui": "技能面板",
+      "phase": "external",
+      "external": [
+        "skill.install"
+      ]
+    },
+    "ipc.flowAgents.review": {
+      "label": "Flow 审核",
+      "channel": "flow-agents:review",
+      "gui": "Agent Flow 面板",
+      "phase": "F8"
+    },
+    "ipc.flowAgents.build": {
+      "label": "Flow 建图",
+      "channel": "flow-agents:build",
+      "gui": "Agent Flow 面板",
+      "phase": "F8"
+    },
+    "ipc.flowAgents.pause": {
+      "label": "Flow 暂停",
+      "channel": "flowAgents:pause",
+      "gui": "Agent Flow 面板",
+      "phase": "F8"
+    },
+    "ipc.flowAgents.publication": {
+      "label": "Flow 发布",
+      "channel": "flowAgents:publication",
+      "gui": "Agent Flow 面板",
+      "phase": "F8"
+    },
+    "ipc.flowAgents.run": {
+      "label": "Flow 运行",
+      "channel": "flow-agents:run",
+      "gui": "Agent Flow 面板",
+      "phase": "F8"
+    },
+    "ipc.flowAgents.inspect": {
+      "label": "Flow 查看",
+      "channel": "flow-agents:inspect",
+      "gui": "Agent Flow 面板",
+      "phase": "F8",
+      "note": "run.get 仅覆盖内部任务基础状态子集"
+    },
+    "ipc.flowAgents.stop": {
+      "label": "Flow 停止",
+      "channel": "flow-agents:stop",
+      "gui": "Agent Flow 面板",
+      "phase": "F8"
+    },
+    "ipc.flowAgents.catalog": {
+      "label": "Flow 能力目录",
+      "channel": "flow-agents:catalog",
+      "gui": "Agent Flow 面板",
+      "phase": "F8"
+    },
+    "ipc.flowAgents.collaboration": {
+      "label": "Flow 协作",
+      "channel": "flow-agents:collaboration",
+      "gui": "Agent Flow 面板",
+      "phase": "F8"
+    },
+    "ipc.flowAgents.cooperate": {
+      "label": "Flow 协作继续",
+      "channel": "flow-agents:cooperate",
+      "gui": "Agent Flow 面板",
+      "phase": "F8"
+    },
+    "ipc.flowCommands.attach": {
+      "label": "命令附着",
+      "channel": "flow-commands:attach",
+      "gui": "Agent Flow 命令",
+      "phase": "F8"
+    },
+    "ipc.flowCommands.detach": {
+      "label": "命令脱离",
+      "channel": "flow-commands:detach",
+      "gui": "Agent Flow 命令",
+      "phase": "F8"
+    },
+    "ipc.flowCommands.availability": {
+      "label": "命令可用性",
+      "channel": "flow-commands:availability",
+      "gui": "Agent Flow 命令",
+      "phase": "F8"
+    },
+    "ipc.flowCommands.dispatch": {
+      "label": "命令派发",
+      "channel": "flow-commands:dispatch",
+      "gui": "Agent Flow 命令",
+      "phase": "F8"
+    },
+    "ipc.flowCommands.grant": {
+      "label": "命令授权",
+      "channel": "flow-commands:grant",
+      "gui": "Agent Flow 命令",
+      "phase": "F8"
+    },
+    "ipc.flowCommands.cancel": {
+      "label": "命令取消",
+      "channel": "flow-commands:cancel",
+      "gui": "Agent Flow 命令",
+      "phase": "F8"
+    },
+    "ipc.flowCommands.prepare": {
+      "label": "人工协作准备",
+      "channel": "flow-commands:prepare",
+      "gui": "Agent Flow 命令",
+      "phase": "F8"
+    },
+    "ipc.flowCommands.check": {
+      "label": "命令核对",
+      "channel": "flow-commands:check",
+      "gui": "Agent Flow 命令",
+      "phase": "F8"
+    },
+    "ipc.flowCommands.commit": {
+      "label": "协作提交",
+      "channel": "flow-commands:commit",
+      "gui": "Agent Flow 命令",
+      "phase": "F8"
+    },
+    "ipc.flowCommands.lookup": {
+      "label": "命令查询",
+      "channel": "flow-commands:lookup",
+      "gui": "Agent Flow 命令",
+      "phase": "F8"
+    },
+    "ipc.flowCommands.unknown": {
+      "label": "unknown 核对",
+      "channel": "flow-commands:unknown",
+      "gui": "Agent Flow 命令",
+      "phase": "F8"
+    },
+    "ipc.flowCommands.abort": {
+      "label": "命令放弃",
+      "channel": "flow-commands:abort",
+      "gui": "Agent Flow 命令",
+      "phase": "F8"
+    },
+    "ipc.flowAssets.submit": {
+      "label": "固定资产提交",
+      "channel": "flow-assets:submit",
+      "gui": "Agent Flow 资产",
+      "phase": "F8"
+    },
+    "ipc.flowAssets.list": {
+      "label": "固定资产列表",
+      "channel": "flow-assets:list",
+      "gui": "Agent Flow 资产",
+      "phase": "F8"
+    },
+    "ipc.flowAssets.read": {
+      "label": "固定资产读取",
+      "channel": "flow-assets:read",
+      "gui": "Agent Flow 资产",
+      "phase": "F8"
+    },
+    "ipc.project.list": {
+      "label": "项目列表",
+      "channel": "project:list",
+      "gui": "项目页",
+      "phase": "external",
+      "external": [
+        "project.list"
+      ]
+    },
+    "ipc.project.create": {
+      "label": "新建项目",
+      "channel": "project:create",
+      "gui": "项目页",
+      "phase": "external",
+      "external": [
+        "project.create"
+      ]
+    },
+    "ipc.project.clone": {
+      "label": "复制项目",
+      "channel": "project:clone",
+      "gui": "项目页",
+      "phase": "external",
+      "external": [
+        "project.clone"
+      ]
+    },
+    "ipc.project.saveWorkspaceProfile": {
+      "label": "工作区配置保存",
+      "channel": "project:workspace-profile:save",
+      "gui": "画布工作区设置",
+      "phase": "F9"
+    },
+    "ipc.project.rename": {
+      "label": "项目重命名",
+      "channel": "project:rename",
+      "gui": "项目页",
+      "phase": "external",
+      "external": [
+        "project.rename",
+        "project.update"
+      ]
+    },
+    "ipc.project.remove": {
+      "label": "删除项目",
+      "channel": "project:delete",
+      "gui": "项目页",
+      "phase": "external",
+      "external": [
+        "project.delete.precheck",
+        "project.delete"
+      ]
+    },
+    "ipc.project.open": {
+      "label": "打开项目",
+      "channel": "project:open",
+      "gui": "项目页",
+      "phase": "external",
+      "external": [
+        "project.open"
+      ]
+    },
+    "ipc.project.save": {
+      "label": "保存项目",
+      "channel": "project:save",
+      "gui": "画布保存",
+      "phase": "external",
+      "external": [
+        "project.save"
+      ]
+    },
+    "ipc.project.saveSync": {
+      "label": "同步保存",
+      "channel": "project:save-sync",
+      "gui": "关窗保存",
+      "phase": "external",
+      "external": [
+        "project.save"
+      ],
+      "note": "renderer 内部通道，与 project.save 同一保存服务"
+    },
+    "ipc.project.saveRecoveryCopySync": {
+      "label": "恢复副本写入",
+      "channel": "project:save-recovery-copy-sync",
+      "gui": "关窗冲突保护",
+      "phase": "F7"
+    },
+    "ipc.project.hasRecoveryCopy": {
+      "label": "恢复副本存在",
+      "channel": "project:has-recovery-copy",
+      "gui": "打开冲突裁决",
+      "phase": "F7"
+    },
+    "ipc.project.readRecoveryCopy": {
+      "label": "读取恢复副本",
+      "channel": "project:read-recovery-copy",
+      "gui": "打开冲突裁决",
+      "phase": "F7"
+    },
+    "ipc.project.discardRecoveryCopy": {
+      "label": "丢弃恢复副本",
+      "channel": "project:discard-recovery-copy",
+      "gui": "打开冲突裁决",
+      "phase": "F7"
+    },
+    "ipc.project.restoreRecoveryCopy": {
+      "label": "恢复副本还原",
+      "channel": "project:restore-recovery-copy",
+      "gui": "打开冲突裁决",
+      "phase": "F7"
+    },
+    "ipc.project.close": {
+      "label": "关闭项目",
+      "channel": "project:close",
+      "gui": "项目菜单返回",
+      "phase": "F2"
+    },
+    "ipc.project.export": {
+      "label": "导出项目",
+      "channel": "project:export",
+      "gui": "项目菜单导出",
+      "phase": "external",
+      "external": [
+        "project.export"
+      ]
+    },
+    "ipc.project.import": {
+      "label": "导入项目包",
+      "channel": "project:import",
+      "gui": "项目页导入",
+      "phase": "F7"
+    },
+    "ipc.project.exportStructure": {
+      "label": "导出结构包",
+      "channel": "project:export-structure",
+      "gui": "画布传输菜单",
+      "phase": "F7"
+    },
+    "ipc.project.importStructure": {
+      "label": "导入结构包",
+      "channel": "project:import-structure",
+      "gui": "画布传输菜单",
+      "phase": "F7"
+    },
+    "ipc.project.externalChange": {
+      "label": "外部修改通知",
+      "channel": "project:external-change",
+      "gui": "内部通知",
+      "phase": "excluded",
+      "reason": "fs.watch 推送的内部事件通道，非用户业务动作；外部写后由读接口反映"
+    },
+    "ipc.media.checkProjectFiles": {
+      "label": "项目文件检查",
+      "channel": "media:check-project-files",
+      "gui": "项目媒体管理",
+      "phase": "F4"
+    },
+    "ipc.media.saveRecipe": {
+      "label": "产物配方保存",
+      "channel": "artifact-recipe:save",
+      "gui": "产物配方",
+      "phase": "F7"
+    },
+    "ipc.media.getRecipe": {
+      "label": "产物配方读取",
+      "channel": "artifact-recipe:get",
+      "gui": "产物配方",
+      "phase": "F7"
+    },
+    "ipc.media.import": {
+      "label": "媒体导入",
+      "channel": "media:import",
+      "gui": "素材导入",
+      "phase": "F4"
+    },
+    "ipc.media.importBuffer": {
+      "label": "媒体导入(缓冲)",
+      "channel": "media:import-buffer",
+      "gui": "拖放/剪贴板导入",
+      "phase": "F4"
+    },
+    "ipc.media.imageCrop": {
+      "label": "图片裁剪",
+      "channel": "media:image-crop",
+      "gui": "image-crop 节点执行",
+      "phase": "F4",
+      "note": "经节点执行接入，不单独开媒体直调"
+    },
+    "ipc.media.imageSplit": {
+      "label": "图片拆分",
+      "channel": "media:image-split",
+      "gui": "image-split 节点执行",
+      "phase": "F4"
+    },
+    "ipc.media.videoFrame": {
+      "label": "视频抽帧",
+      "channel": "media:video-frame",
+      "gui": "video-frame 节点执行",
+      "phase": "F5"
+    },
+    "ipc.media.videoClip": {
+      "label": "视频截取",
+      "channel": "media:video-clip",
+      "gui": "video-clip 节点执行",
+      "phase": "F5"
+    },
+    "ipc.media.videoAudio": {
+      "label": "提取视频音频",
+      "channel": "media:video-audio",
+      "gui": "历史入口",
+      "phase": "excluded",
+      "reason": "video-audio 节点 2026-09-18 退役，截取音频并入视频截取；仅旧项目读取兼容"
+    },
+    "ipc.media.soundAdjust": {
+      "label": "声音调整",
+      "channel": "media:sound-adjust",
+      "gui": "sound-adjust 节点执行",
+      "phase": "F5"
+    },
+    "ipc.media.videoProbe": {
+      "label": "视频探测",
+      "channel": "media:video-probe",
+      "gui": "视频节点预览",
+      "phase": "F5"
+    },
+    "ipc.media.timelineCompose": {
+      "label": "时间线合成",
+      "channel": "media:timeline-compose",
+      "gui": "timeline 节点执行",
+      "phase": "F5"
+    },
+    "ipc.media.probeMetadata": {
+      "label": "媒体元数据探测",
+      "channel": "media:probe-metadata",
+      "gui": "素材导入",
+      "phase": "F4"
+    },
+    "ipc.media.videoThumbnails": {
+      "label": "视频缩略图",
+      "channel": "media:video-thumbnails",
+      "gui": "视频预览",
+      "phase": "F5"
+    },
+    "ipc.media.audioWaveform": {
+      "label": "音频波形",
+      "channel": "media:audio-waveform",
+      "gui": "音频预览",
+      "phase": "F5"
+    },
+    "ipc.media.vocalSeparate": {
+      "label": "人声分离",
+      "channel": "media:vocal-separate",
+      "gui": "历史入口",
+      "phase": "excluded",
+      "reason": "vocal-separate 节点退役；历史项目读取兼容，不恢复新建入口"
+    },
+    "ipc.media.localCapabilities": {
+      "label": "本机能力查询",
+      "channel": "media:local-capabilities",
+      "gui": "媒体执行前置",
+      "phase": "F9"
+    },
+    "ipc.media.videoEngineStatus": {
+      "label": "视频引擎状态",
+      "channel": "media:video-engine-status",
+      "gui": "环境状态",
+      "phase": "F9"
+    },
+    "ipc.media.videoEngineInstall": {
+      "label": "视频引擎安装",
+      "channel": "media:video-engine-install",
+      "gui": "环境安装",
+      "phase": "F9"
+    },
+    "ipc.media.videoConvertDepth": {
+      "label": "深度视频转换",
+      "channel": "media:video-convert-depth",
+      "gui": "video-depth 节点执行",
+      "phase": "F5"
+    },
+    "ipc.media.videoConvertClay": {
+      "label": "白模视频转换",
+      "channel": "media:video-convert-clay",
+      "gui": "video-clay 节点执行",
+      "phase": "F5"
+    },
+    "ipc.media.videoConvertCancel": {
+      "label": "转换取消",
+      "channel": "media:video-convert-cancel",
+      "gui": "转换进度",
+      "phase": "F5"
+    },
+    "ipc.media.cancelTransforms": {
+      "label": "批量转换取消",
+      "channel": "media:cancel-transforms",
+      "gui": "转换进度",
+      "phase": "F5"
+    },
+    "ipc.media.pick": {
+      "label": "系统文件选择",
+      "channel": "media:pick",
+      "gui": "文件对话框",
+      "phase": "excluded",
+      "reason": "系统对话框按规范以明确路径/资源ID输入等价替代（F4 起随 media.import 提供）"
+    },
+    "ipc.media.list": {
+      "label": "媒体列表",
+      "channel": "media:list",
+      "gui": "素材面板",
+      "phase": "F4"
+    },
+    "ipc.media.delete": {
+      "label": "媒体删除",
+      "channel": "media:delete",
+      "gui": "素材面板",
+      "phase": "F4"
+    },
+    "ipc.media.reveal": {
+      "label": "打开所在文件夹",
+      "channel": "media:reveal",
+      "gui": "素材菜单",
+      "phase": "excluded",
+      "reason": "桌面呈现辅助；产物位置由导出/读取接口提供"
+    },
+    "ipc.media.copyPath": {
+      "label": "复制路径",
+      "channel": "media:copy-path",
+      "gui": "素材菜单",
+      "phase": "excluded",
+      "reason": "桌面呈现辅助；路径可由媒体引用读取获得"
+    },
+    "ipc.media.open": {
+      "label": "系统打开文件",
+      "channel": "media:open",
+      "gui": "素材菜单",
+      "phase": "excluded",
+      "reason": "桌面呈现辅助；预览/导出由业务接口提供"
+    },
+    "ipc.media.batchExport": {
+      "label": "素材批量导出",
+      "channel": "media:batch-export",
+      "gui": "素材面板",
+      "phase": "F7"
+    },
+    "ipc.media.ttsGenerate": {
+      "label": "TTS 生成",
+      "channel": "media:tts-generate",
+      "gui": "旧通道",
+      "phase": "excluded",
+      "reason": "由 speech/tts 节点执行统一接入（F5），此通道为历史保留"
+    },
+    "ipc.media.indexttsDetect": {
+      "label": "IndexTTS 检测",
+      "channel": "media:indextts-detect",
+      "gui": "本地语音环境",
+      "phase": "F5"
+    },
+    "ipc.media.indexttsSynthesize": {
+      "label": "IndexTTS 合成",
+      "channel": "media:indextts-synthesize",
+      "gui": "本地语音合成",
+      "phase": "F5"
+    },
+    "ipc.workspace.listTemplates": {
+      "label": "节点库列表",
+      "channel": "workspace:templates:list",
+      "gui": "节点库面板",
+      "phase": "external",
+      "external": [
+        "node.library.list"
+      ],
+      "note": "external 仅覆盖摘要；完整 CRUD 见 F7"
+    },
+    "ipc.workspace.saveTemplate": {
+      "label": "节点库保存",
+      "channel": "workspace:templates:save",
+      "gui": "保存工作流对话框",
+      "phase": "F7",
+      "note": "external node.library.save 仅覆盖 AI 对话技能预设子集"
+    },
+    "ipc.workspace.deleteTemplate": {
+      "label": "节点库删除",
+      "channel": "workspace:templates:delete",
+      "gui": "节点库面板",
+      "phase": "F7"
+    },
+    "ipc.workspace.listSnapshots": {
+      "label": "快照列表",
+      "channel": "workspace:snapshots:list",
+      "gui": "历史坞",
+      "phase": "F7"
+    },
+    "ipc.workspace.saveSnapshot": {
+      "label": "快照保存",
+      "channel": "workspace:snapshots:save",
+      "gui": "历史坞",
+      "phase": "F7"
+    },
+    "ipc.workspace.deleteSnapshot": {
+      "label": "快照删除",
+      "channel": "workspace:snapshots:delete",
+      "gui": "历史坞",
+      "phase": "F7"
+    },
+    "ipc.workspace.getPalettePreferences": {
+      "label": "面板偏好读取",
+      "channel": "workspace:palette-preferences:get",
+      "gui": "调色板",
+      "phase": "F9"
+    },
+    "ipc.workspace.savePalettePreferences": {
+      "label": "面板偏好保存",
+      "channel": "workspace:palette-preferences:save",
+      "gui": "调色板",
+      "phase": "F9"
+    },
+    "ipc.workspace.recordImageGenerationTiming": {
+      "label": "生图耗时记录",
+      "channel": "workspace:image-generation-timing:record",
+      "gui": "内部统计",
+      "phase": "excluded",
+      "reason": "性能遥测，非用户业务动作"
+    },
+    "ipc.workspace.getImageGenerationTimings": {
+      "label": "生图耗时读取",
+      "channel": "workspace:image-generation-timings:get",
+      "gui": "内部统计",
+      "phase": "excluded",
+      "reason": "性能遥测，非用户业务动作"
+    },
+    "ipc.workspace.recordGenerationTiming": {
+      "label": "生成耗时记录",
+      "channel": "workspace:generation-timing:record",
+      "gui": "内部统计",
+      "phase": "excluded",
+      "reason": "性能遥测，非用户业务动作"
+    },
+    "ipc.workspace.getGenerationTimings": {
+      "label": "生成耗时读取",
+      "channel": "workspace:generation-timings:get",
+      "gui": "内部统计",
+      "phase": "excluded",
+      "reason": "性能遥测，非用户业务动作"
+    },
+    "ipc.library.previewFiles": {
+      "label": "资源文件预览",
+      "channel": "library:preview-files",
+      "gui": "资源库导入预览",
+      "phase": "F7"
+    },
+    "ipc.library.listCategories": {
+      "label": "分类列表",
+      "channel": "library:categories:list",
+      "gui": "资源库",
+      "phase": "F7"
+    },
+    "ipc.library.saveCategory": {
+      "label": "分类保存",
+      "channel": "library:categories:save",
+      "gui": "资源库",
+      "phase": "F7"
+    },
+    "ipc.library.discardMaterialization": {
+      "label": "物化丢弃",
+      "channel": "library:materialize:discard",
+      "gui": "资源库",
+      "phase": "F7"
+    },
+    "ipc.library.search": {
+      "label": "资源检索",
+      "channel": "library:search",
+      "gui": "资源库",
+      "phase": "external",
+      "external": [
+        "library.search"
+      ]
+    },
+    "ipc.library.detail": {
+      "label": "资源详情",
+      "channel": "library:detail",
+      "gui": "资源库",
+      "phase": "F7"
+    },
+    "ipc.library.create": {
+      "label": "资源创建",
+      "channel": "library:create",
+      "gui": "资源库",
+      "phase": "F7",
+      "note": "external library.create_resource 仅覆盖单图子集"
+    },
+    "ipc.library.captureProjectMedia": {
+      "label": "项目素材采集",
+      "channel": "library:capture-project-media",
+      "gui": "画布→资源库",
+      "phase": "F7"
+    },
+    "ipc.library.captureProjectNodes": {
+      "label": "项目节点采集",
+      "channel": "library:capture-project-nodes",
+      "gui": "画布→资源库",
+      "phase": "F7"
+    },
+    "ipc.library.publishRevision": {
+      "label": "修订发布",
+      "channel": "library:publish-revision",
+      "gui": "资源库",
+      "phase": "F7"
+    },
+    "ipc.library.archive": {
+      "label": "资源归档",
+      "channel": "library:archive",
+      "gui": "资源库",
+      "phase": "F7"
+    },
+    "ipc.library.delete": {
+      "label": "资源删除",
+      "channel": "library:delete",
+      "gui": "资源库",
+      "phase": "F7"
+    },
+    "ipc.library.listCollections": {
+      "label": "集合列表",
+      "channel": "library:collections:list",
+      "gui": "资源库",
+      "phase": "F7"
+    },
+    "ipc.library.createCollection": {
+      "label": "集合创建",
+      "channel": "library:collections:create",
+      "gui": "资源库",
+      "phase": "F7"
+    },
+    "ipc.library.setCollections": {
+      "label": "集合设置",
+      "channel": "library:collections:set",
+      "gui": "资源库",
+      "phase": "F7"
+    },
+    "ipc.library.listFolders": {
+      "label": "文件夹列表",
+      "channel": "library:folders:list",
+      "gui": "资源库",
+      "phase": "F7"
+    },
+    "ipc.library.createFolder": {
+      "label": "文件夹创建",
+      "channel": "library:folders:create",
+      "gui": "资源库",
+      "phase": "F7"
+    },
+    "ipc.library.renameFolder": {
+      "label": "文件夹重命名",
+      "channel": "library:folders:rename",
+      "gui": "资源库",
+      "phase": "F7"
+    },
+    "ipc.library.deleteFolder": {
+      "label": "文件夹删除",
+      "channel": "library:folders:delete",
+      "gui": "资源库",
+      "phase": "F7"
+    },
+    "ipc.library.setResourceFolder": {
+      "label": "资源归入文件夹",
+      "channel": "library:folders:set-resource",
+      "gui": "资源库",
+      "phase": "F7"
+    },
+    "ipc.library.materialize": {
+      "label": "资源物化",
+      "channel": "library:materialize",
+      "gui": "资源库→画布",
+      "phase": "F7"
+    },
+    "ipc.library.export": {
+      "label": "资源包导出",
+      "channel": "library:export",
+      "gui": "资源库",
+      "phase": "F7"
+    },
+    "ipc.library.import": {
+      "label": "资源包导入",
+      "channel": "library:import",
+      "gui": "资源库",
+      "phase": "F7"
+    },
+    "ipc.keys.exportCredential": {
+      "label": "密钥导出",
+      "channel": "gateway:keys:export-credential",
+      "gui": "设备授权流程",
+      "phase": "excluded",
+      "reason": "密钥/凭据导出仅限设备授权签发流程，不开放为外部业务操作（安全边界）"
+    },
+    "ipc.keys.listConnections": {
+      "label": "密钥连接列表",
+      "channel": "gateway:keys:list-connections",
+      "gui": "模型设置",
+      "phase": "F9",
+      "note": "对外按去敏连接身份暴露（model 连接族）"
+    },
+    "ipc.keys.sealPackage": {
+      "label": "凭据封包",
+      "channel": "gateway:keys:seal-package",
+      "gui": "凭据包",
+      "phase": "F9"
+    },
+    "ipc.keys.previewPackage": {
+      "label": "凭据包预览",
+      "channel": "gateway:keys:preview-package",
+      "gui": "凭据包",
+      "phase": "F9"
+    },
+    "ipc.keys.importPackage": {
+      "label": "凭据包导入",
+      "channel": "gateway:keys:import-package",
+      "gui": "凭据包",
+      "phase": "F9"
+    },
+    "ipc.keys.providers": {
+      "label": "供应商列表",
+      "channel": "gateway:providers:list",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.keys.executableProviders": {
+      "label": "可执行供应商",
+      "channel": "gateway:providers:executable",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.keys.saveProvider": {
+      "label": "供应商保存",
+      "channel": "gateway:providers:save",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.keys.deleteProvider": {
+      "label": "供应商删除",
+      "channel": "gateway:providers:delete",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.keys.exportProviders": {
+      "label": "供应商导出",
+      "channel": "gateway:providers:export",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.keys.importProviders": {
+      "label": "供应商导入",
+      "channel": "gateway:providers:import",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.keys.testProvider": {
+      "label": "供应商测试",
+      "channel": "gateway:providers:test",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.keys.probeProvider": {
+      "label": "供应商探测",
+      "channel": "gateway:providers:probe",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.keys.dreaminaLoginStart": {
+      "label": "Dreamina 登录开始",
+      "channel": "gateway:dreamina:login:start",
+      "gui": "登录窗口",
+      "phase": "F9",
+      "note": "需真实人工登录，提供等待/继续协作协议"
+    },
+    "ipc.keys.dreaminaLoginCheck": {
+      "label": "Dreamina 登录检查",
+      "channel": "gateway:dreamina:login:check",
+      "gui": "登录窗口",
+      "phase": "F9"
+    },
+    "ipc.keys.chatStart": {
+      "label": "对话请求",
+      "channel": "gateway:chat:start",
+      "gui": "chat/ai-process 节点执行",
+      "phase": "F6",
+      "note": "经节点执行接入"
+    },
+    "ipc.keys.chatCancel": {
+      "label": "对话取消",
+      "channel": "gateway:chat:cancel",
+      "gui": "对话运行",
+      "phase": "F6"
+    },
+    "ipc.keys.imageGenerate": {
+      "label": "生图请求",
+      "channel": "gateway:image:generate",
+      "gui": "image-gen 节点执行",
+      "phase": "F4"
+    },
+    "ipc.keys.imageEdit": {
+      "label": "P图请求",
+      "channel": "gateway:image:edit",
+      "gui": "image-edit 节点执行",
+      "phase": "F4"
+    },
+    "ipc.keys.videoSubmit": {
+      "label": "视频提交",
+      "channel": "gateway:video:submit",
+      "gui": "video 节点执行",
+      "phase": "F5"
+    },
+    "ipc.keys.videoCancel": {
+      "label": "视频取消",
+      "channel": "gateway:video:cancel",
+      "gui": "视频任务",
+      "phase": "F5"
+    },
+    "ipc.keys.videoTask": {
+      "label": "视频任务查询",
+      "channel": "gateway:video:task",
+      "gui": "视频任务",
+      "phase": "F5"
+    },
+    "ipc.keys.audioGenerate": {
+      "label": "音频生成",
+      "channel": "gateway:audio:generate",
+      "gui": "tts 节点执行",
+      "phase": "F5"
+    },
+    "ipc.keys.speechGenerate": {
+      "label": "语音合成",
+      "channel": "gateway:speech:generate",
+      "gui": "speech 节点执行",
+      "phase": "F5"
+    },
+    "ipc.keys.voiceDesign": {
+      "label": "音色设计",
+      "channel": "gateway:voice:design",
+      "gui": "voice-design 节点执行",
+      "phase": "F5"
+    },
+    "ipc.keys.event": {
+      "label": "网关流事件",
+      "channel": "gateway:event",
+      "gui": "流式呈现",
+      "phase": "excluded",
+      "reason": "renderer 流式事件通道；外部经 run 事件/结果协议读取（F3/F6），不原样转发 IPC"
+    },
+    "ipc.models.connections": {
+      "label": "模型连接列表",
+      "channel": "models:connections:list",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.models.saveConnection": {
+      "label": "模型连接保存",
+      "channel": "models:connections:save",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.models.definitions": {
+      "label": "模型定义列表",
+      "channel": "models:definitions:list",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.models.saveDefinition": {
+      "label": "模型定义保存",
+      "channel": "models:definitions:save",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.models.deleteDefinition": {
+      "label": "模型定义删除",
+      "channel": "models:definitions:delete",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.models.deleteDefinitions": {
+      "label": "模型定义批量删除",
+      "channel": "models:definitions:delete-many",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.models.deleteConnection": {
+      "label": "模型连接删除",
+      "channel": "models:connections:delete",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.models.discover": {
+      "label": "模型发现",
+      "channel": "models:connections:discover",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.models.validate": {
+      "label": "模型验证",
+      "channel": "models:definitions:validate",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.models.validateAgentToolCalling": {
+      "label": "Agent 工具调用验证",
+      "channel": "models:definitions:validate-agent-tool-calling",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.models.saveBinding": {
+      "label": "默认绑定保存",
+      "channel": "models:bindings:save",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.models.bindings": {
+      "label": "默认绑定列表",
+      "channel": "models:bindings:list",
+      "gui": "模型设置",
+      "phase": "F9"
+    },
+    "ipc.models.resolveBinding": {
+      "label": "默认绑定解析",
+      "channel": "models:bindings:resolve",
+      "gui": "节点模型解析",
+      "phase": "F9"
+    },
+    "ipc.diagnostics.nodeRunEvent": {
+      "label": "节点运行事件上报",
+      "channel": "diagnostics:node-run:event",
+      "gui": "内部诊断",
+      "phase": "excluded",
+      "reason": "renderer 诊断上报通道，非业务动作"
+    },
+    "ipc.diagnostics.exportNodeRun": {
+      "label": "节点运行导出",
+      "channel": "diagnostics:node-run:export",
+      "gui": "运行时间线",
+      "phase": "F9"
+    },
+    "ipc.diagnostics.event": {
+      "label": "诊断事件上报",
+      "channel": "diagnostics:event",
+      "gui": "内部诊断",
+      "phase": "excluded",
+      "reason": "诊断底座内部通道"
+    },
+    "ipc.diagnostics.query": {
+      "label": "诊断查询",
+      "channel": "diagnostics:query",
+      "gui": "诊断面板",
+      "phase": "F9"
+    },
+    "ipc.diagnostics.health": {
+      "label": "诊断健康",
+      "channel": "diagnostics:health",
+      "gui": "诊断面板",
+      "phase": "external",
+      "external": [
+        "diagnostics.summary"
+      ]
+    },
+    "ipc.diagnostics.exportBundle": {
+      "label": "诊断包导出",
+      "channel": "diagnostics:export-bundle",
+      "gui": "诊断面板",
+      "phase": "F9"
+    },
+    "ipc.license.getStatus": {
+      "label": "授权状态",
+      "channel": "license:get-status",
+      "gui": "授权窗",
+      "phase": "F9"
+    },
+    "ipc.license.probeDevice": {
+      "label": "设备探测",
+      "channel": "license:probe-device",
+      "gui": "授权窗",
+      "phase": "F9"
+    },
+    "ipc.license.exportRequest": {
+      "label": "授权申请导出",
+      "channel": "license:export-request",
+      "gui": "授权窗",
+      "phase": "F9",
+      "note": "设备授权属真实人工/系统步骤，须等待/继续协作协议，不伪造"
+    },
+    "ipc.license.importChallenge": {
+      "label": "挑战导入",
+      "channel": "license:import-challenge",
+      "gui": "授权窗",
+      "phase": "F9"
+    },
+    "ipc.license.exportProof": {
+      "label": "证明导出",
+      "channel": "license:export-proof",
+      "gui": "授权窗",
+      "phase": "F9"
+    },
+    "ipc.license.importLicense": {
+      "label": "授权导入",
+      "channel": "license:import-license",
+      "gui": "授权窗",
+      "phase": "F9"
+    },
+    "ipc.license.importPolicy": {
+      "label": "策略导入",
+      "channel": "license:import-policy",
+      "gui": "授权窗",
+      "phase": "F9"
+    },
+    "ipc.license.getDiagnostic": {
+      "label": "授权诊断",
+      "channel": "license:get-diagnostic",
+      "gui": "授权窗",
+      "phase": "F9"
+    },
+    "ipc.license.exitApp": {
+      "label": "授权退出应用",
+      "channel": "license:exit-app",
+      "gui": "授权窗",
+      "phase": "excluded",
+      "reason": "应用生命周期控制，不作为外部业务操作开放"
+    },
+    "canvas.node.create": {
+      "label": "新建节点",
+      "gui": "调色板/右键/拖线",
+      "phase": "F2"
+    },
+    "canvas.node.update-content": {
+      "label": "编辑节点正文/配置",
+      "gui": "Body/Settings",
+      "phase": "F2"
+    },
+    "canvas.node.move-resize": {
+      "label": "移动/调整节点",
+      "gui": "拖拽",
+      "phase": "F2"
+    },
+    "canvas.node.duplicate": {
+      "label": "复制节点",
+      "gui": "右键菜单",
+      "phase": "F2"
+    },
+    "canvas.node.delete": {
+      "label": "删除节点",
+      "gui": "右键菜单/Delete",
+      "phase": "F2"
+    },
+    "canvas.node.order": {
+      "label": "置顶/置底",
+      "gui": "右键菜单",
+      "phase": "F2"
+    },
+    "canvas.edge.create": {
+      "label": "创建连线",
+      "gui": "端口拖线",
+      "phase": "F2"
+    },
+    "canvas.edge.delete": {
+      "label": "删除连线",
+      "gui": "点选删除",
+      "phase": "F2"
+    },
+    "canvas.edge.retarget": {
+      "label": "改接连线",
+      "gui": "拖动端点",
+      "phase": "F2"
+    },
+    "canvas.multiselect.connect": {
+      "label": "多选批量连接",
+      "gui": "多选工具栏",
+      "phase": "F2"
+    },
+    "canvas.group.toggle": {
+      "label": "组合/取消组合",
+      "gui": "多选工具栏",
+      "phase": "F2"
+    },
+    "canvas.align": {
+      "label": "对齐/均分",
+      "gui": "多选工具栏",
+      "phase": "F2"
+    },
+    "canvas.history.undo-redo": {
+      "label": "撤销/重做",
+      "gui": "历史坞",
+      "phase": "F2"
+    },
+    "canvas.workflow.run-all": {
+      "label": "运行整个工作流",
+      "gui": "画布运行",
+      "phase": "F3"
+    },
+    "canvas.workflow.run-selection": {
+      "label": "运行所选及上游",
+      "gui": "多选运行",
+      "phase": "F3"
+    },
+    "canvas.workflow.cancel": {
+      "label": "取消运行",
+      "gui": "运行时间线",
+      "phase": "F3"
+    },
+    "canvas.node.run": {
+      "label": "运行单节点",
+      "gui": "节点运行按钮",
+      "phase": "F3"
+    },
+    "canvas.node.result-select": {
+      "label": "选择结果版本",
+      "gui": "资产节点结果集合",
+      "phase": "F3"
+    },
+    "canvas.media.drop-import": {
+      "label": "拖放导入素材",
+      "gui": "画布拖放",
+      "phase": "F4"
+    },
+    "canvas.chat.send": {
+      "label": "发送对话消息",
+      "gui": "对话侧栏",
+      "phase": "F6"
+    },
+    "canvas.chat.cancel": {
+      "label": "取消对话",
+      "gui": "对话侧栏",
+      "phase": "F6"
+    },
+    "canvas.chat.edit-message": {
+      "label": "编辑/重新生成消息",
+      "gui": "对话侧栏",
+      "phase": "F6"
+    },
+    "canvas.chat.attachments": {
+      "label": "对话附件",
+      "gui": "对话侧栏",
+      "phase": "F6"
+    },
+    "canvas.chat.image-gen": {
+      "label": "对话内生图",
+      "gui": "对话侧栏",
+      "phase": "F6"
+    },
+    "canvas.storyboard.edit": {
+      "label": "分镜板编辑",
+      "gui": "分镜板表格",
+      "phase": "F3"
+    },
+    "canvas.timeline.edit": {
+      "label": "时间线编辑",
+      "gui": "轨道线",
+      "phase": "F5"
+    },
+    "canvas.timeline.render": {
+      "label": "时间线合成",
+      "gui": "轨道线运行",
+      "phase": "F5"
+    },
+    "canvas.director.edit": {
+      "label": "导演台编辑",
+      "gui": "3D 工作区",
+      "phase": "F6"
+    },
+    "canvas.director.publish": {
+      "label": "导演台发布",
+      "gui": "3D 工作区",
+      "phase": "F6"
+    },
+    "canvas.website.open": {
+      "label": "打开网址",
+      "gui": "网址节点点击",
+      "phase": "F6"
+    },
+    "canvas.nodeLibrary.save-node": {
+      "label": "保存节点到节点库",
+      "gui": "右键菜单",
+      "phase": "F7",
+      "note": "external node.library.save 覆盖 AI 对话技能预设子集"
+    },
+    "canvas.nodeLibrary.insert": {
+      "label": "节点库插入画布",
+      "gui": "节点库面板",
+      "phase": "F7"
+    },
+    "canvas.snapshot.save-restore": {
+      "label": "工作区快照",
+      "gui": "历史坞",
+      "phase": "F7"
+    },
+    "canvas.view.viewport": {
+      "label": "视口缩放/平移",
+      "gui": "画布操作",
+      "phase": "excluded",
+      "reason": "纯呈现操作；影响用户查看的定位类命令按计划第3节在桌面呈现命令中单独声明"
+    }
+  }
+}
