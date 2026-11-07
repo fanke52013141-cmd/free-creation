@@ -854,8 +854,8 @@ export function CanvasEditor({
               useAppStore.getState().currentProject?.id !== project.id
             )
               throw new Error('CANVAS_NOT_READY')
-            if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-            saveTimerRef.current = null
+            // 注意：读取型请求（read-graph/execute-nodes/cancel-run）不得取消
+            // 自动保存防抖计时器——否则未保存编辑会失去唯一的落盘调度。
             // ── F2 read-graph：只读权威宿主 latest 视图；不保存、不修改 ──
             if (request.action === 'read-graph') {
               const save = useSaveCoordinator.getState()
@@ -893,8 +893,13 @@ export function CanvasEditor({
                 replyFail(true, planned.issue.code, planned.issue.detail)
                 return
               }
-              // 先按正式协议协调未保存内容：用户编辑被保存，不丢弃、不被覆盖。
-              await ensureCanvasSaved()
+              // 先按正式协议协调未保存内容：仅在确有未保存修改时落盘保存，
+              // 不因一次读取型 flush 无谓推进图版本。取消防抖计时器由这里的
+              // flush 兜底（保存后计时器无存在意义）。
+              if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+              saveTimerRef.current = null
+              const preSave = useSaveCoordinator.getState()
+              if (preSave.dirtyVersion !== preSave.persistedVersion) await ensureCanvasSaved()
               if (
                 editorRef.current !== editor ||
                 useAppStore.getState().currentProject?.id !== project.id
@@ -1025,16 +1030,21 @@ export function CanvasEditor({
               }
               void (async () => {
                 try {
+                  let outcome: 'completed' | 'failed' | 'cancelled'
+                  let failureReason: string | undefined
                   if (executeMode === 'single') {
-                    const outcome = await runNodeManually(
+                    const result = await runNodeManually(
                       editor,
                       project.id,
                       providers,
                       executeNodeIds[0] as TLShapeId
                     )
-                    if (outcome.status === 'done') reportTerminal('completed')
-                    else if (sawStopping) reportTerminal('cancelled')
-                    else reportTerminal('failed', outcome.reason ?? '节点未执行')
+                    if (result.status === 'done') outcome = 'completed'
+                    else if (sawStopping) outcome = 'cancelled'
+                    else {
+                      outcome = 'failed'
+                      failureReason = result.reason ?? '节点未执行'
+                    }
                   } else {
                     await runWorkflowForNodes(
                       editor,
@@ -1043,11 +1053,22 @@ export function CanvasEditor({
                       executeNodeIds as TLShapeId[]
                     )
                     const after = useEngineStore.getState()
-                    if (sawStopping) reportTerminal('cancelled')
-                    else if (after.errors.length > 0)
-                      reportTerminal('failed', after.errors[0]?.reason ?? '子图执行失败')
-                    else reportTerminal('completed')
+                    if (sawStopping) outcome = 'cancelled'
+                    else if (after.errors.length > 0) {
+                      outcome = 'failed'
+                      failureReason = after.errors[0]?.reason ?? '子图执行失败'
+                    } else outcome = 'completed'
                   }
+                  // 终态前保存屏障：正式结果落盘后才报告 completed（保存失败如实报 failed）。
+                  if (outcome === 'completed') {
+                    try {
+                      await ensureCanvasSaved()
+                    } catch (saveError) {
+                      outcome = 'failed'
+                      failureReason = `结果保存未完成：${saveError instanceof Error ? saveError.message : '保存失败'}`
+                    }
+                  }
+                  reportTerminal(outcome, failureReason)
                 } catch (error) {
                   reportTerminal('failed', error instanceof Error ? error.message : '执行异常')
                 }

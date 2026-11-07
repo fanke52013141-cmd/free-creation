@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "F3 run access package: added node.execute/run.wait/run.cancel/output.get operations; run.get output became a tagged union on source (flow-agent-task branch unchanged field-for-field; node-run branch added) — additive evolution, old flow-task clients unaffected; effect whitelist gained 'execute'. Attestation covers only these files reviewed in this work package; other pre-existing uncommitted workspace modifications are NOT re-attested.",
+  "reason": "Milestone package: real-desktop acceptance script (test-agent-graph-milestone.cjs) with licensed launch collaboration; renderer execute-nodes terminal report now requires a save barrier (formal results persist before completed); graph-patch flush only when dirty (no gratuitous version bump); autosave debounce timer no longer canceled by read-type desktop requests (found by milestone run - unsaved edits could lose their save schedule); test-local-agent-access.cjs tool count updated to 32 with explicit no-escape-tool rule. Attestation covers only these reviewed files; other pre-existing uncommitted workspace modifications are NOT re-attested.",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "97d2ffb5e2403b33a2d3ac8ab3eee8272f78cf948e4c73ab53cc662bd73a5a6f",
@@ -102,7 +102,7 @@
     "src/main/store/transfer.ts": "9bb2c234482ddb97a70fbaee3ebd28a38f975f23fa5647239d1da17b42f0d4da",
     "src/preload/index.ts": "50ac184b2f23b8860e71dbb311886169c08df7eec71fe25780a7e6bd9330a17a",
     "src/renderer/src/App.tsx": "2c668996c4a04a85c27e9bedc3845c2265c6e0a90e64ad5efbd267b127e9e3d5",
-    "src/renderer/src/canvas/CanvasEditor.tsx": "0df033bae90f44ed77d51b9269915d6cf85323063975226f45aff57da965f596",
+    "src/renderer/src/canvas/CanvasEditor.tsx": "561c215e9d169eb43530e6b061b2ffd1b12ec8117326579362745121025ee143",
     "src/renderer/src/canvas/CanvasSidePanel.tsx": "405dbf0159a56f52c9f634bb64f5a1c6547d9e66a4ee64b1ce099c67de8933f2",
     "src/renderer/src/canvas/ChatSidePanel.tsx": "ddbebc7275822df64fa95b25b56c63d946fb5c512f9d2c2b3017046ae21e54b5",
     "src/renderer/src/canvas/RunTimeline.tsx": "c29fef7a5460a75a6f1d0dfb0f02afbd87d419014b6d0d7122949d5cfd4924a6",
