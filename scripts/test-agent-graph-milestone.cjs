@@ -425,6 +425,167 @@ async function launchLicensedApp(dataDirectory) {
       receipt.checks.push('F4 image family: media.import → graph.patch media reference → local crop execute → formal artifact on disk and indexed')
     }
 
+    // ── 6.6 F4 深验收：quad 裁剪 / 坐标越界钳制 / 拆分与失败回滚 / 取消契约 ──
+    {
+      const stable = async (projectId) => {
+        let previous = -1
+        for (let i = 0; i < 15; i++) {
+          const probe = await runCli(directory, ['project', 'get'], { input: { projectId } })
+          const current = probe.response.data.meta.graphVersion
+          if (current === previous) return current
+          previous = current
+          await new Promise((done) => setTimeout(done, 900))
+        }
+        return previous
+      }
+      const executeAnd = async (projectId, version, nodeId, label) => {
+        const executed = await runCli(directory, ['node', 'execute'], {
+          input: { projectId, expectedGraphVersion: version, nodeIds: [nodeId], mode: 'single', confirmPaidRerun: false },
+          idempotencyKey: key()
+        })
+        check(executed.response.status === 'completed', `${label}_SUBMIT_FAILED:${JSON.stringify(executed.response.error)}`)
+        const waited = await runCli(directory, ['run', 'wait'], { input: { projectId, taskId: executed.response.data.taskId, timeoutMs: 60000 } }, 90000)
+        return waited
+      }
+      const mediaCount = async (projectId) => {
+        const listed = await runCli(directory, ['media', 'list'], { input: { projectId, limit: 100 } })
+        return listed.response.data.total
+      }
+
+      // (a) quad 四点透视裁剪：合法点集 → 成功且产物落盘
+      {
+        const version = await stable(created.A)
+        const patched = await runCli(directory, ['graph', 'patch'], {
+          input: {
+            projectId: created.A,
+            expectedGraphVersion: version,
+            ops: [
+              { action: 'node.create', ref: 'q-src', nodeType: 'image', x: 60, y: 1900, media: { mediaId: receipt.crop.mediaId } },
+              { action: 'node.create', ref: 'q-crop', nodeType: 'image-crop', x: 480, y: 1900, config: { mode: 'quad', aspectRatio: 'free', points: [[0, 0], [1, 0], [1, 1], [0, 1]] } },
+              { action: 'edge.create', from: { nodeId: 'q-src', portId: 'out-image' }, to: { nodeId: 'q-crop', portId: 'in-image' } }
+            ]
+          },
+          idempotencyKey: key()
+        })
+        check(patched.response.status === 'completed', `QUAD_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
+        const qNode = patched.response.data.created.find((c) => c.ref === 'q-crop')
+        const waited = await executeAnd(created.A, patched.response.data.graphVersion, qNode.nodeId, 'QUAD')
+        check(waited.response.data.state === 'completed', `QUAD_DID_NOT_COMPLETE:${waited.response.data.state}:${waited.response.data.error}`)
+        const output = await runCli(directory, ['output', 'get'], { input: { projectId: created.A, nodeId: qNode.nodeId } })
+        const outImage = (output.response.data.outputs || []).find((o) => o.portId === 'out-image')
+        check(outImage && outImage.mediaId && existsSync(join(directory, (outImage.mediaPath ?? '').replace(/\//g, sep))), 'QUAD_ARTIFACT_INVALID')
+        receipt.checks.push('F4 quad crop: four-point perspective crop executes and materializes a formal artifact')
+      }
+
+      // (b) 坐标越界钳制：越界 rect 被规范层钳制后成功（与 GUI 同一解析）
+      {
+        const version = await stable(created.A)
+        const patched = await runCli(directory, ['graph', 'patch'], {
+          input: {
+            projectId: created.A,
+            expectedGraphVersion: version,
+            ops: [
+              { action: 'node.create', ref: 'o-src', nodeType: 'image', x: 60, y: 2300, media: { mediaId: receipt.crop.mediaId } },
+              { action: 'node.create', ref: 'o-crop', nodeType: 'image-crop', x: 480, y: 2300, config: { mode: 'rect', aspectRatio: 'free', rect: { x: 0.9, y: 0.9, width: 0.9, height: 0.9 } } },
+              { action: 'edge.create', from: { nodeId: 'o-src', portId: 'out-image' }, to: { nodeId: 'o-crop', portId: 'in-image' } }
+            ]
+          },
+          idempotencyKey: key()
+        })
+        check(patched.response.status === 'completed', `CLAMP_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
+        const oNode = patched.response.data.created.find((c) => c.ref === 'o-crop')
+        const waited = await executeAnd(created.A, patched.response.data.graphVersion, oNode.nodeId, 'CLAMP')
+        // 越界 rect 在执行期由与 GUI 同一 parseImageCropConfig 钳制（配置保存原值，
+        // 与 GUI 行为一致）：运行必须成功并产出有效裁剪，而不是报错或整图输出。
+        check(waited.response.data.state === 'completed', `CLAMP_DID_NOT_COMPLETE:${waited.response.data.state}:${waited.response.data.error}`)
+        const clampOutput = await runCli(directory, ['output', 'get'], { input: { projectId: created.A, nodeId: oNode.nodeId } })
+        const clampImage = (clampOutput.response.data.outputs || []).find((o) => o.portId === 'out-image')
+        check(
+          clampImage && clampImage.mediaId && existsSync(join(directory, (clampImage.mediaPath ?? '').replace(/\//g, sep))),
+          'CLAMP_ARTIFACT_INVALID'
+        )
+        receipt.checks.push('F4 clamp: out-of-bounds crop rect clamped at execution by the same normalization as GUI')
+      }
+
+      // (c) 拆分成功：2x2 拆分 → 4 个新资产入库，out-image 投影选中格
+      {
+        const gridSource = join(appRoot, 'qa-fixtures/media/images/I-GRID.png')
+        const imported = await runCli(directory, ['media', 'import'], { input: { projectId: created.A, filePath: gridSource, name: '宫格源图' }, idempotencyKey: key() })
+        check(imported.response.status === 'completed', 'GRID_IMPORT_FAILED')
+        const gridMediaId = imported.response.data.mediaId
+        const version = await stable(created.A)
+        const before = await mediaCount(created.A)
+        const patched = await runCli(directory, ['graph', 'patch'], {
+          input: {
+            projectId: created.A,
+            expectedGraphVersion: version,
+            ops: [
+              { action: 'node.create', ref: 'g-src', nodeType: 'image', x: 60, y: 2700, media: { mediaId: gridMediaId } },
+              { action: 'node.create', ref: 'g-split', nodeType: 'image-split', x: 480, y: 2700, config: { rows: 2, columns: 2, scalePercent: 100 } },
+              { action: 'edge.create', from: { nodeId: 'g-src', portId: 'out-image' }, to: { nodeId: 'g-split', portId: 'in-image' } }
+            ]
+          },
+          idempotencyKey: key()
+        })
+        check(patched.response.status === 'completed', `SPLIT_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
+        const gNode = patched.response.data.created.find((c) => c.ref === 'g-split')
+        const waited = await executeAnd(created.A, patched.response.data.graphVersion, gNode.nodeId, 'SPLIT')
+        check(waited.response.data.state === 'completed', `SPLIT_DID_NOT_COMPLETE:${waited.response.data.state}:${waited.response.data.error}`)
+        const after = await mediaCount(created.A)
+        check(after === before + 4, `SPLIT_CELL_COUNT:${before}->${after}`)
+        const output = await runCli(directory, ['output', 'get'], { input: { projectId: created.A, nodeId: gNode.nodeId } })
+        const splitImage = (output.response.data.outputs || []).find((o) => o.portId === 'out-image')
+        check(splitImage && splitImage.mediaId && splitImage.mediaId !== gridMediaId, 'SPLIT_OUTPUT_NOT_NEW_ASSET')
+        receipt.split = { cells: after - before, selected: splitImage && splitImage.mediaId }
+        receipt.checks.push('F4 split: 2x2 grid split materializes exactly four indexed assets with selected-cell projection')
+      }
+
+      // (d) 拆分失败回滚：坏图 → 运行 failed → 媒体数量不变（无半次产物）
+      {
+        const badSource = join(appRoot, 'qa-fixtures/media/bad/I-BAD-corrupt.png')
+        const imported = await runCli(directory, ['media', 'import'], { input: { projectId: created.A, filePath: badSource, name: '坏图' }, idempotencyKey: key() })
+        check(imported.response.status === 'completed', 'BAD_IMPORT_FAILED')
+        const badMediaId = imported.response.data.mediaId
+        const version = await stable(created.A)
+        const before = await mediaCount(created.A)
+        const patched = await runCli(directory, ['graph', 'patch'], {
+          input: {
+            projectId: created.A,
+            expectedGraphVersion: version,
+            ops: [
+              { action: 'node.create', ref: 'b-src', nodeType: 'image', x: 60, y: 3100, media: { mediaId: badMediaId } },
+              { action: 'node.create', ref: 'b-split', nodeType: 'image-split', x: 480, y: 3100, config: { rows: 2, columns: 2, scalePercent: 100 } },
+              { action: 'edge.create', from: { nodeId: 'b-src', portId: 'out-image' }, to: { nodeId: 'b-split', portId: 'in-image' } }
+            ]
+          },
+          idempotencyKey: key()
+        })
+        check(patched.response.status === 'completed', `BAD_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
+        const bNode = patched.response.data.created.find((c) => c.ref === 'b-split')
+        const waited = await executeAnd(created.A, patched.response.data.graphVersion, bNode.nodeId, 'BADSPLIT')
+        check(waited.response.data.state === 'failed', `BADSPLIT_NOT_FAILED:${waited.response.data.state}`)
+        const after = await mediaCount(created.A)
+        check(after === before, `BADSPLIT_LEFT_ORPHANS:${before}->${after}`)
+        receipt.checks.push('F4 split failure rollback: corrupt source fails the run and leaves no orphan cell assets')
+      }
+
+      // (e) 取消契约：终态任务取消为无操作（不伪造 cancelRequested）；未知任务拒绝
+      {
+        const doneTask = receipt.execute.taskId
+        check(Boolean(doneTask), 'CANCEL_CONTRACT_NO_DONE_TASK')
+        const noop = await runCli(directory, ['run', 'cancel'], { input: { projectId: created.A, taskId: doneTask }, idempotencyKey: key() })
+        check(
+          noop.response.status === 'completed' &&
+            noop.response.data.state === 'completed' &&
+            noop.response.data.cancelRequested === false,
+          `CANCEL_NOOP_INVALID:${JSON.stringify(noop.response.data || noop.response.error)}`
+        )
+        const missing = await runCli(directory, ['run', 'cancel'], { input: { projectId: created.A, taskId: 'run-missing' }, idempotencyKey: key() })
+        check(missing.response.error?.code === 'NOT_FOUND', 'CANCEL_UNKNOWN_ACCEPTED')
+        receipt.checks.push('F4 cancel contract: terminal-task cancel is an honest no-op; unknown task rejected')
+      }
+    }
+
     // ── 7. 保存、关闭并重启；重启后图与任务账本一致 ──
     // 运行后的节点状态写入有 800ms 防抖：等版本连续两次读数稳定后再保存。
     const stableVersion = async (projectId) => {
@@ -446,12 +607,18 @@ async function launchLicensedApp(dataDirectory) {
       receipt.projects[alias].graphVersion = graphVersions[alias]
     }
     const taskBefore = receipt.execute.taskId
+    // 关闭前记录各项目节点总数：重启后逐一比对（产物节点在运行中增加，不硬编码）。
+    const totalsBeforeRestart = {}
+    for (const alias of ['A', 'B', 'C']) {
+      const probe = await runCli(directory, ['graph', 'get'], { input: { projectId: created[alias] } })
+      totalsBeforeRestart[alias] = probe.response.data.total
+    }
     await app.close()
     app = undefined
     ;({ app, page } = await launchLicensedApp(directory))
     for (const alias of ['A', 'B', 'C']) {
       const graph = await runCli(directory, ['graph', 'get'], { input: { projectId: created[alias] } })
-      check(graph.response.data.total === (alias === 'A' ? 9 : 4), `RESTART_GRAPH_MISMATCH_${alias}:${graph.response.data.total}`)
+      check(graph.response.data.total === totalsBeforeRestart[alias], `RESTART_GRAPH_MISMATCH_${alias}:${graph.response.data.total}!=${totalsBeforeRestart[alias]}`)
       // 关窗保存会推进版本（保存即前进）；重启后只要求单调不减且结构一致。
       check(graph.response.data.graphVersion >= graphVersions[alias], `RESTART_VERSION_MISMATCH_${alias}`)
     }

@@ -39,13 +39,23 @@
 
 复用 `agent.access.*` 生命周期与 `media.read_failed` 既有域事件；media.import 失败 detail 仅含 ≤120 字符稳定原因摘要，不记录源路径、文件名与正文（测试断言绝对路径不进响应与日志）。
 
-## 6. 尚未支持 / 仅模拟验证
+## 6. 深验收补充（第四批，真实桌面）
+
+里程碑脚本新增 6.6 段，16 项检查全绿（qa/local-agent-access/milestone-a-b-c/report.json）：
+
+1. **quad 四点透视裁剪**：合法点集执行成功，正式产物落盘。
+2. **坐标越界钳制**：越界 rect 在执行期由与 GUI 同一 parseImageCropConfig 钳制（配置保存原值与 GUI 一致），运行成功并产出有效裁剪。
+3. **拆分成功**：2×2 拆分恰好 4 个新资产入库，out-image 投影选中格。
+4. **拆分失败回滚**：坏图运行 failed，媒体数量不变（主进程回滚已写资产，无孤儿）。
+5. **取消契约**：终态任务取消为诚实无操作（cancelRequested=false）；未知任务 NOT_FOUND。
+
+## 7. 尚未支持 / 仅模拟验证
 
 1. **生图（image-gen）与 P图（image-edit）**：经 node.execute 契约可提交，但真实供应商验收未做（无预算授权）；本地与模拟验证通过，不能宣称供应商全量通过。
-2. **裁剪/拆分的逐动作深验收**（坐标越界、quad 模式、部分失败清理、取消清理）未逐项桌面实测——本地执行路径与 GUI 同一 executor/媒体服务，已在里程碑中通过矩形裁剪主路径；其余组合列入 F4 收尾。
+2. **本地媒体取消的“迟到产物删除”时序**（runCancellableMedia 对已完成渲染的删除路径）未在快操作上复现——随 F5 长任务（视频转换）验收。
 3. media.delete/替换/批量导出（F4/F7 计划项）；拆分节点 out-images 列表端口的投影（当前仅 out-image 选中格）。
 4. 媒体预览/缩略图/波形等呈现类 IPC 不开放（excluded，见 action-coverage.json）。
 
-## 7. 下一工作包
+## 8. 下一工作包
 
-F4 收尾：裁剪 quad/越界/取消清理与拆分部分失败桌面验收；media.delete/替换；随后进入 F5 视频音频与时间线。
+F5：视频/音频/时间线接入——video-asset 导入、video-frame/video-clip/sound-adjust 本地执行（ffmpeg 已在本机 PATH 验证可用）、timeline 轨道/片段编辑（graph.patch 配置通道）与合成、任务恢复。
