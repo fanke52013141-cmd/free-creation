@@ -13,6 +13,8 @@ const { resolve, join, basename } = require('node:path')
 const { tmpdir } = require('node:os')
 const { randomUUID } = require('node:crypto')
 const fs = require('node:fs')
+const { existsSync } = require('node:fs')
+const { sep } = require('node:path')
 const { qaOutputPath } = require('./qa-output.cjs')
 const key = () => `${Date.now()}:${randomUUID()}`
 const electron = require('electron')
@@ -375,6 +377,54 @@ async function launchLicensedApp(dataDirectory) {
     }
     receipt.checks.push('project isolation: nodes/media/tasks do not cross A/B/C')
 
+    // ── 6.5 F4 图片族：媒体登记 → 素材节点引用 → 本地裁剪执行 → 正式产物读取 ──
+    {
+      const fixture = join(appRoot, 'qa-fixtures/media/images/I-A.png')
+      const imported = await runCli(directory, ['media', 'import'], { input: { projectId: created.A, filePath: fixture, name: '里程碑素材' }, idempotencyKey: key() })
+      check(imported.response.status === 'completed', `MEDIA_IMPORT_FAILED:${JSON.stringify(imported.response.error)}`)
+      const mediaId = imported.response.data.mediaId
+      const graph = await runCli(directory, ['graph', 'get'], { input: { projectId: created.A } })
+      const versionBefore = graph.response.data.graphVersion
+      const mediaPatch = await runCli(directory, ['graph', 'patch'], {
+        input: {
+          projectId: created.A,
+          expectedGraphVersion: versionBefore,
+          ops: [
+            { action: 'node.create', ref: 'asset', nodeType: 'image', x: 60, y: 1500, media: { mediaId } },
+            { action: 'node.create', ref: 'crop', nodeType: 'image-crop', x: 480, y: 1500, config: { mode: 'rect', aspectRatio: 'free', rect: { x: 0.1, y: 0.1, width: 0.5, height: 0.5 } } },
+            { action: 'edge.create', from: { nodeId: 'asset', portId: 'out-image' }, to: { nodeId: 'crop', portId: 'in-image' } }
+          ]
+        },
+        idempotencyKey: key()
+      })
+      check(mediaPatch.response.status === 'completed', `MEDIA_PATCH_FAILED:${JSON.stringify(mediaPatch.response.error)}`)
+      const cropNode = mediaPatch.response.data.created.find((c) => c.ref === 'crop')
+      check(Boolean(cropNode), 'MEDIA_PATCH_MAPPING')
+      const executed = await runCli(directory, ['node', 'execute'], {
+        input: { projectId: created.A, expectedGraphVersion: mediaPatch.response.data.graphVersion, nodeIds: [cropNode.nodeId], mode: 'single', confirmPaidRerun: false },
+        idempotencyKey: key()
+      })
+      check(executed.response.status === 'completed', `CROP_EXECUTE_FAILED:${JSON.stringify(executed.response.error)}`)
+      const cropTask = executed.response.data.taskId
+      const waited = await runCli(directory, ['run', 'wait'], { input: { projectId: created.A, taskId: cropTask, timeoutMs: 60000 } }, 90000)
+      check(waited.response.data.state === 'completed', `CROP_DID_NOT_COMPLETE:${waited.response.data.state}:${waited.response.data.error}`)
+      const cropOutput = await runCli(directory, ['output', 'get'], { input: { projectId: created.A, nodeId: cropNode.nodeId } })
+      check(
+        cropOutput.response.status === 'completed',
+        `CROP_OUTPUT_READ_FAILED:${JSON.stringify(cropOutput.response.error)}:${JSON.stringify(cropOutput.response.data && cropOutput.response.data.outputs)}`
+      )
+      const outImage = cropOutput.response.data.outputs.find((o) => o.portId === 'out-image')
+      check(outImage && outImage.mediaId && outImage.mediaId !== mediaId, 'CROP_OUTPUT_NOT_NEW_ASSET')
+      // 产物真实落盘（正式产物，非伪造引用）
+      const artifactPath = join(directory, (outImage.mediaPath ?? '').replace(/\//g, sep))
+      check(existsSync(artifactPath), 'CROP_ARTIFACT_MISSING_ON_DISK')
+      // 媒体索引中登记为新资产
+      const mediaAfter = await runCli(directory, ['media', 'list'], { input: { projectId: created.A, limit: 100 } })
+      check(mediaAfter.response.data.items.some((m) => m.mediaId === outImage.mediaId), 'CROP_ARTIFACT_NOT_INDEXED')
+      receipt.crop = { mediaId, artifactMediaId: outImage.mediaId, outputPath: outImage.mediaPath }
+      receipt.checks.push('F4 image family: media.import → graph.patch media reference → local crop execute → formal artifact on disk and indexed')
+    }
+
     // ── 7. 保存、关闭并重启；重启后图与任务账本一致 ──
     // 运行后的节点状态写入有 800ms 防抖：等版本连续两次读数稳定后再保存。
     const stableVersion = async (projectId) => {
@@ -401,7 +451,7 @@ async function launchLicensedApp(dataDirectory) {
     ;({ app, page } = await launchLicensedApp(directory))
     for (const alias of ['A', 'B', 'C']) {
       const graph = await runCli(directory, ['graph', 'get'], { input: { projectId: created[alias] } })
-      check(graph.response.data.total === (alias === 'A' ? 6 : 4), `RESTART_GRAPH_MISMATCH_${alias}:${graph.response.data.total}`)
+      check(graph.response.data.total === (alias === 'A' ? 9 : 4), `RESTART_GRAPH_MISMATCH_${alias}:${graph.response.data.total}`)
       // 关窗保存会推进版本（保存即前进）；重启后只要求单调不减且结构一致。
       check(graph.response.data.graphVersion >= graphVersions[alias], `RESTART_VERSION_MISMATCH_${alias}`)
     }
@@ -422,9 +472,15 @@ async function launchLicensedApp(dataDirectory) {
         return (await window.webContents.capturePage()).toPNG().toString('base64')
       })
       await writeFile(join(evidence, 'milestone-reopened-canvas.png'), Buffer.from(encoded, 'base64'))
-      // GUI 继续编辑：双击脚本节点正文（等待重开提示消失）输入新内容并保存
+      // GUI 继续编辑：双击脚本节点正文（等待重开提示消失）输入新内容并保存。
+      // 合并节点正文也含该片段：用 hasNotText 排除，精确命中脚本节点。
       await page.waitForTimeout(2500)
-      await page.locator('.node-text').filter({ hasText: '用户未保存的手工正文' }).first().dblclick()
+      await page
+        .locator('.node-text')
+        .filter({ hasText: '用户未保存的手工正文' })
+        .filter({ hasNotText: 'A 前缀' })
+        .first()
+        .dblclick()
       await page.locator('textarea.node-textarea').first().fill('人在GUI继续编辑的新正文')
       await page.keyboard.press('Control+Enter')
       // 数据级验证：权威宿主 latest 视图中脚本节点正文已是新内容

@@ -37,7 +37,19 @@ export const nodeRunTaskDto = z
 export const outputValueDto = z
   .object({
     portId: z.string().max(100),
-    kind: z.enum(['text', 'markdown', 'json', 'media', 'camera', 'file', 'any', 'iteration']),
+    kind: z.enum([
+      'text',
+      'markdown',
+      'json',
+      'media',
+      'image',
+      'video',
+      'audio',
+      'camera',
+      'file',
+      'any',
+      'iteration'
+    ]),
     /** 文本/JSON 值摘录；JSON 按 schema 校验后的原始值输出（有界）。 */
     text: z.string().max(20_000).optional(),
     json: z.unknown().optional(),
@@ -55,6 +67,8 @@ export const DETERMINISTIC_OUTPUT_SOURCES: Record<string, 'document' | 'run'> = 
   image: 'run',
   'image-gen': 'run',
   'image-edit': 'run',
+  'image-crop': 'run',
+  'image-split': 'run',
   audio: 'run',
   speech: 'run',
   tts: 'run',

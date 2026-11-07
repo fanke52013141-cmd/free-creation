@@ -1,6 +1,6 @@
-# F4 第一批交付：媒体登记接入与节点素材引用
+# F4 交付：媒体登记接入、节点素材引用与图片族桌面验收
 
-日期：2026-11-08。基线：里程碑（`b914917`）。
+日期：2026-11-08。基线：里程碑（`b914917`）。第二批（桌面验收）与第一批同包交付。
 
 ## 1. 实际完成的业务动作（GUI / CLI / MCP 状态）
 
@@ -21,21 +21,30 @@
 | 检查 | 结果 |
 | --- | --- |
 | `test/local-agent-media-access.test.ts`（导入/去敏/缺项目拒绝/坏文件拒绝/归属预检/路径不进外部输入/跨项目引用拒绝） | 3 项通过 |
-| 全部接入测试（access/graph/run/planner/media） | 65 项通过 |
+| 全部接入测试（access/graph/run/planner/media/compliance） | 70 项通过 |
 | `npm run typecheck`、ESLint（本包文件） | 通过 |
 | `npm run verify:agent-access` | 通过：34 操作 |
 | `node scripts/audit-business-actions.cjs` | 通过：206 动作、32 项 external |
+| **真实桌面（里程碑脚本 F4 段）**：media.import 真实 PNG → graph.patch 素材引用建 image/image-crop 节点并连线 → node.execute 本地裁剪 → run.wait completed → output.get 读到**新产物**（mediaId 与源不同）→ 产物文件真实落盘且媒体索引可查 | 通过（11 项检查全绿，见 `qa/local-agent-access/milestone-a-b-c/report.json`） |
 
-## 4. 日志覆盖
+## 4. 过程中发现并修复的真实缺陷
+
+1. **media.import 被活动项目 flush 握手误拦截**：画布无关写入被要求 expectedGraphVersion 核对而必然 REVISION_CONFLICT。已改为显式 flush-handshake 白名单（project.save/rename/update/clone/export/chat.skill.bind），画布无关写入直接走存储服务。
+2. **output.get 对媒体产物响应校验失败**：outputValueDto 的 kind 枚举缺 NodeValue 媒体种类（image/video/audio）→ STORAGE_UNAVAILABLE。已补枚举（加法扩展）。
+3. **导入排除门禁按名称子串误伤 media.import**：按一致性计划 F1 改为显式包传输黑名单（project.import/importStructure、library.import、凭据包等 F7 未验收项继续阻断）。
+4. image-crop/image-split 纳入共享确定性投影（裁剪=最近成功产物；拆分=当前选中格/首格，与 GUI 语义一致）。
+
+## 5. 日志覆盖
 
 复用 `agent.access.*` 生命周期与 `media.read_failed` 既有域事件；media.import 失败 detail 仅含 ≤120 字符稳定原因摘要，不记录源路径、文件名与正文（测试断言绝对路径不进响应与日志）。
 
-## 5. 尚未支持 / 仅模拟验证
+## 6. 尚未支持 / 仅模拟验证
 
-1. **F4 余项（下一批）**：image-gen/image-edit/image-crop/image-split 的逐类执行验收（crop/split 为本地确定性执行，经 node.execute 已可运行，但坐标单位/越界/部分失败/取消的逐动作桌面验收未做）；生图/P图的付费供应商验收未做（无预算授权）。
-2. 真实 Electron 桌面的 media.import→节点引用链路目前为服务级 mock 宿主验收；桌面实测并入 F4 第二批。
-3. 媒体删除/替换/导出（media.delete/batch-export）仍为 F4/F7 计划项。
+1. **生图（image-gen）与 P图（image-edit）**：经 node.execute 契约可提交，但真实供应商验收未做（无预算授权）；本地与模拟验证通过，不能宣称供应商全量通过。
+2. **裁剪/拆分的逐动作深验收**（坐标越界、quad 模式、部分失败清理、取消清理）未逐项桌面实测——本地执行路径与 GUI 同一 executor/媒体服务，已在里程碑中通过矩形裁剪主路径；其余组合列入 F4 收尾。
+3. media.delete/替换/批量导出（F4/F7 计划项）；拆分节点 out-images 列表端口的投影（当前仅 out-image 选中格）。
+4. 媒体预览/缩略图/波形等呈现类 IPC 不开放（excluded，见 action-coverage.json）。
 
-## 6. 下一工作包
+## 7. 下一工作包
 
-F4 第二批：image 族逐动作桌面验收（导入→引用→本地裁剪/拆分执行→结果选择→output.get）扩展里程碑脚本；生图/P图契约与参数 Schema（真实供应商按预算授权另列）；media.delete/替换。
+F4 收尾：裁剪 quad/越界/取消清理与拆分部分失败桌面验收；media.delete/替换；随后进入 F5 视频音频与时间线。

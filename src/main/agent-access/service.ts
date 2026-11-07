@@ -96,6 +96,16 @@ export interface LocalAccessOptions {
   diagnostics?: Pick<DiagnosticsService, 'health'> | null
 }
 
+/** 活动项目上需要"先 flush 画布再操作"的写入集合；其余写入不触碰画布。 */
+const FLUSH_HANDSHAKE_OPERATIONS: ReadonlySet<AccessOperationId> = new Set([
+  'project.save',
+  'project.rename',
+  'project.update',
+  'project.clone',
+  'project.export',
+  'chat.skill.bind'
+] as AccessOperationId[])
+
 /** Only this main-process service touches repositories; CLI/MCP are transport clients. */
 export class LocalAccessService {
   readonly dataStoreId: string
@@ -395,7 +405,12 @@ export class LocalAccessService {
           created: createdNodes.map((c) => ({ ...(c.ref ? { ref: c.ref } : {}), nodeId: c.nodeId })),
           applied: counts
         }
-      } else if (operationId === 'project.open' || (id === active && spec.effect !== 'read')) {
+      } else if (
+        operationId === 'project.open' ||
+        // 仅"需要协调活动画布"的写入走 flush 握手；画布无关写入（如 media.import）
+        // 直接走存储服务，避免无关版本核对拒绝。
+        (id === active && FLUSH_HANDSHAKE_OPERATIONS.has(operationId))
+      ) {
         if (!this.options.desktop) throw new AccessFailure('RESOURCE_BUSY', 'desktop-ownership')
         const target = projects.openProject(id!)
         if (!target) throw new AccessFailure('NOT_FOUND', 'read')

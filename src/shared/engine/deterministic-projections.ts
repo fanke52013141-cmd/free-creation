@@ -28,6 +28,9 @@ export const DETERMINISTIC_PROJECTIONS = {
   image: projectImageOutputs,
   'image-gen': projectImageGenOutputs,
   'image-edit': projectImageEditOutputs,
+  // F4：裁剪与拆分与 GUI 同一投影（裁剪=最近成功产物；拆分=当前选中格）。
+  'image-crop': projectImageGenOutputs,
+  'image-split': projectImageSplitOutputs,
   audio: projectAudioAssetOutputs,
   speech: projectSpeechOutputs,
   tts: projectTtsOutputs,
@@ -73,6 +76,31 @@ function latestResultMediaOutput(
 
 export function projectImageGenOutputs(shape: NodeShape): RawNodeOutputs {
   return latestResultMediaOutput(shape, 'image', 'out-image')
+}
+
+/** 拆分节点 out-image 投影「当前选中格」，无选中时回退第一格（与执行器写入语义一致）。 */
+export function projectImageSplitOutputs(shape: NodeShape): RawNodeOutputs {
+  const collection = parseMediaResultCollection(shape.meta?.nodeResult ?? '')
+  if (!collection || collection.results.length === 0) return {}
+  let selected: string | null = null
+  try {
+    const config = JSON.parse(shape.props.config ?? '{}') as Record<string, unknown>
+    if (typeof config.selectedMediaId === 'string') selected = config.selectedMediaId
+  } catch {
+    selected = null
+  }
+  const item =
+    collection.results.find((entry) => entry.mediaId === selected) ?? collection.results[0]
+  if (!item) return {}
+  return {
+    'out-image': {
+      kind: 'image',
+      mediaId: item.mediaId,
+      mediaPath: item.mediaPath,
+      mime: item.mime,
+      ...(shape.props.title ? { name: shape.props.title } : {})
+    }
+  }
 }
 
 export function projectImageEditOutputs(shape: NodeShape): RawNodeOutputs {
