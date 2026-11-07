@@ -34,7 +34,7 @@ function formatRevisionDate(timestamp: number): string {
 
 function ResourceCard({ resource, onOpen, onDragStart, selected }: { resource: LibraryResourceSummary; onOpen: React.MouseEventHandler<HTMLButtonElement>; selected?: boolean; onDragStart?: React.DragEventHandler<HTMLButtonElement> }): React.JSX.Element {
   return (
-    <button className="library-resource-card" aria-pressed={selected} draggable={Boolean(onDragStart)} onDragStart={onDragStart} onClick={onOpen}>
+    <button className="library-resource-card" aria-pressed={selected} title={resource.title} draggable={Boolean(onDragStart)} onDragStart={onDragStart} onClick={onOpen}>
       {selected !== undefined && <span className="library-card-selection" aria-hidden="true">{selected ? '✓' : ''}</span>}
       {resource.iconKind && <LibraryCardCover icon={resource.iconKind} path={resource.iconKind === 'video' ? resource.videoPreviewPath : resource.coverPath} />}
       <div className="library-resource-card-body">
@@ -133,6 +133,11 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
   const [detail, setDetail] = useState<LibraryResourceDetail | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const browserRef = useRef<HTMLElement | null>(null)
+  const loadMoreRef = useRef<HTMLDivElement | null>(null)
+  const loadingMoreRef = useRef(false)
+  const nextCursorRef = useRef<string | null>(null)
+  const maybeLoadMoreRef = useRef<() => void>(() => {})
   const detailLoading = Boolean(selectedId) && (!detail || detail.id !== selectedId || detail.selectedRevisionId !== selectedRevisionId)
   const loadPageData = useCallback(async (): Promise<void> => {
     const categoryResult = await window.api.listLibraryCategories()
@@ -151,6 +156,33 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     setNextCursor(result.data.nextCursor)
     setLoadedFilter(filter)
   }, [categoryId, query, filter])
+
+  // 自动加载：滚动接近底部时按 cursor 续页，替代手动「加载更多」按钮。
+  useEffect(() => {
+    maybeLoadMoreRef.current = () => {
+      const sentinel = loadMoreRef.current
+      const cursor = nextCursorRef.current
+      if (!sentinel || !cursor || loadingMoreRef.current) return
+      const viewport = browserRef.current?.clientHeight ?? window.innerHeight
+      if (sentinel.getBoundingClientRect().top > viewport + 480) return
+      loadingMoreRef.current = true
+      void loadResources(cursor, true).finally(() => {
+        loadingMoreRef.current = false
+        maybeLoadMoreRef.current()
+      })
+    }
+  }, [loadResources])
+  useEffect(() => {
+    nextCursorRef.current = nextCursor
+    maybeLoadMoreRef.current()
+  }, [nextCursor])
+  useEffect(() => {
+    const container = browserRef.current
+    if (!container) return
+    const onScroll = (): void => maybeLoadMoreRef.current()
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => container.removeEventListener('scroll', onScroll)
+  }, [])
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void loadPageData() }, 0)
@@ -374,13 +406,13 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
         </>}
       </div>
       <div className="library-workspace">
-          <main className="library-resource-browser">
+          <main ref={browserRef} className="library-resource-browser">
             {resources.length > 0 && (
               <div className="library-resource-grid">
                 {resources.map((resource) => <ResourceCard key={resource.id} resource={resource} selected={batchMode ? batchIds.has(resource.id) : undefined} onOpen={(event) => { if (batchMode) { if (!batchBusy && batchReady) selectCard(resource.id, event.shiftKey); return } setSelectedId(resource.id); setSelectedRevisionId(resource.latestRevisionId) }} onDragStart={batchMode ? undefined : (event) => event.dataTransfer.setData('application/x-canvas-library-resource', resource.id)} />)}
               </div>
             )}
-            {nextCursor && <button className="library-load-more" onClick={() => void loadResources(nextCursor, true)}>加载更多</button>}
+            {nextCursor && <div ref={loadMoreRef} className="library-load-more" aria-hidden="true">正在加载更多…</div>}
           </main>
         </div>
       {selectedId && (
