@@ -114,3 +114,12 @@ dreamina user_credit
 - 部分模型首次使用需要在即梦 Web 端先用它生成一次，否则会返回「合规确认」提示。
 - 分辨率与时长在节点上可选，默认停在最省成本的档位；部分模型有硬下限（图片最低 2k；`seedance2.0_vip` 才有 4k，其余视频仅 720p）。
 - 完整协议、能力表与限制见 [即梦 CLI 接入方案](./docs/DREAMINA_CLI_ADAPTER_PLAN.md)。
+
+## 资源库数据与 Git 边界
+
+资源库（图片/素材资产，含批量导入的姿势/服装模板图）保存在**应用数据目录**，不在仓库内：
+Windows 为 `%APPDATA%\canvas-studio\data\`（SQLite `app.db` + 内容寻址文件 `library/blobs/<sha256>`）。
+
+因此 **git 提交 / 克隆 / 推送不包含、也不会上传任何资源库资产**（`.gitignore` 已忽略 `canvas-studio/data/`、`qa/` 等运行时产物）。批量下载到本地磁盘的素材（如 `D:\pose-ingest\`）同样在仓库之外。
+
+换机迁移请随应用数据目录整体拷贝，或使用应用内「资源库 → 导出 / 导入 `.canvaslib` 资产包」。注意：导出的资产包含原素材版权内容，仅限本地个人使用，勿对外分发。

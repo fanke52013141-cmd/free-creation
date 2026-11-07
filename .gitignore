@@ -23,6 +23,7 @@ artifacts/*.mp4
 *.db-wal
 
 # 运行时用户数据和可再生 QA 产物不自动入库；现有审查基线保留。
+# 资源库资产（图片/素材）存于应用数据目录 canvas-studio/data/，不随 git 上传；详见 README「资源库数据与 Git 边界」。
 canvas-studio/data/
 artifacts/
 qa/
