@@ -504,7 +504,11 @@
       "label": "媒体删除",
       "channel": "media:delete",
       "gui": "素材面板",
-      "phase": "F4"
+      "phase": "external",
+      "external": [
+        "media.delete"
+      ],
+      "note": "F4：与 GUI 面板同一 deleteMedia 服务；外部校验项目归属，回执含引用计数"
     },
     "ipc.media.reveal": {
       "label": "打开所在文件夹",

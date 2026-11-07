@@ -198,3 +198,30 @@ describe('local Agent media access', () => {
     expect(lastDesktopRequest).toBeNull()
   })
 })
+
+describe('local Agent media delete', () => {
+  it('deletes project-owned media with reference count and rejects cross-project or unknown ids', async () => {
+    const p = createProject('删除素材')
+    const source = join(directory, 'del.png')
+    writeFileSync(source, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 5, 5, 5]))
+    const imported = await call('media.import', { projectId: p.id, filePath: source }, key())
+    const mediaId = (imported.data as any).mediaId
+    const deleted = await call('media.delete', { projectId: p.id, mediaId }, key())
+    expect(deleted.status).toBe('completed')
+    expect(deleted.data).toMatchObject({ projectId: p.id, deleted: true, mediaId, referencedBySavedNodes: 0 })
+    // 重复删除同一 mediaId（新幂等键）→ NOT_FOUND，不误删别家
+    const again = await call('media.delete', { projectId: p.id, mediaId }, key())
+    expect(again.error?.code).toBe('MEDIA_NOT_FOUND')
+    // 跨项目删除拒绝
+    const source2 = join(directory, 'del2.png')
+    writeFileSync(source2, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 6, 6, 6]))
+    const other = createProject('别家删除')
+    const imported2 = await call('media.import', { projectId: other.id, filePath: source2 }, key())
+    const otherMediaId = (imported2.data as any).mediaId
+    const cross = await call('media.delete', { projectId: p.id, mediaId: otherMediaId }, key())
+    expect(cross.error?.code).toBe('MEDIA_NOT_FOUND')
+    // B 项目的素材仍然存在
+    const listed = await call('media.list', { projectId: other.id })
+    expect((listed.data as any).items.some((m: any) => m.mediaId === otherMediaId)).toBe(true)
+  })
+})

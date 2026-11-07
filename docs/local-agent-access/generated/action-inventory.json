@@ -3,18 +3,18 @@
   "generatedFrom": {
     "ipcChannels": 171,
     "canvasActions": 35,
-    "externalOperations": 34
+    "externalOperations": 35
   },
   "totals": {
     "actions": 206,
     "byPhase": {
-      "external": 32,
+      "external": 33,
       "F8": 25,
       "F9": 44,
       "F7": 41,
       "F2": 5,
       "excluded": 18,
-      "F4": 8,
+      "F4": 7,
       "F5": 21,
       "F6": 10,
       "F3": 2
@@ -523,7 +523,11 @@
       "label": "媒体删除",
       "channel": "media:delete",
       "gui": "素材面板",
-      "phase": "F4"
+      "phase": "external",
+      "external": [
+        "media.delete"
+      ],
+      "note": "F4：与 GUI 面板同一 deleteMedia 服务；外部校验项目归属，回执含引用计数"
     },
     "ipc.media.reveal": {
       "label": "打开所在文件夹",

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "F4 second batch: registered image-crop/image-split in the shared deterministic projections and output sources; outputValueDto kind enum now includes NodeValue media kinds (image/video/audio) - purely additive enum extension fixing response validation for media outputs. Milestone script gained the image-family section (media.import -> media reference -> local crop execute -> artifact on disk + indexed). Attestation covers only these reviewed files; other pre-existing uncommitted workspace modifications are NOT re-attested.",
+  "reason": "F4 closeout: added media.delete operation (project-ownership enforced, reference count reported, same deleteMedia service as GUI panel). Additive; package-transfer import blocklist unchanged. Attestation covers only these reviewed files; other pre-existing uncommitted workspace modifications are NOT re-attested.",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "97d2ffb5e2403b33a2d3ac8ab3eee8272f78cf948e4c73ab53cc662bd73a5a6f",
@@ -11,7 +11,7 @@
     "src/main/agent-access/reports.ts": "acb0e123a75747ca4c582569d284a8fecb69892a01b300da095dbe64d8733458",
     "src/main/agent-access/runs.ts": "ba6049e884e8b0621cee7d6b90c74683d1444e64596babc88e1cbff038b05e46",
     "src/main/agent-access/server.ts": "cee6b0ee7ec382a2e0b9dc54c76399a3488c3f588e109215b20acaa4a05bb431",
-    "src/main/agent-access/service.ts": "5824d19e006c321e5c117804534b7fee7b4de8bed880b75cf6bebb17e8ae1970",
+    "src/main/agent-access/service.ts": "71bc5edfedea9f1a21a3cb9553a5d9607e6250ea5eb2466660c30cc356c15187",
     "src/main/agent-access/skills.ts": "1edbde79022baf6791578e158d68c9cbfe4527c39339a8e6ec27aec95909279b",
     "src/main/agent-flow/agent-fixed-input-acceptance.ts": "affdeef59ed58505bbf33e9696bd8c57c95e98950ab2db3a332275a42d8876c1",
     "src/main/agent-flow/agent-output-set-acceptance.ts": "4877ac363a2879d36e56593070f6b41ea5f49cf941e07f835535590c7bce71a4",
@@ -168,7 +168,7 @@
     "src/shared/agent-access/connection.ts": "8bb5d31fef7898f652008f6fc052e6d384a6ed06f37fe736c87ede870bd13c5e",
     "src/shared/agent-access/desktop.ts": "cbc0fdd06970b068adf494116b5ffffb2a3119e3109bf7b1054d1cc125754ada",
     "src/shared/agent-access/graph-ops.ts": "6aaf2ef18dfbc7fb9ce03a318b01708171fec438719e78aa61f8a9f8f6ff49be",
-    "src/shared/agent-access/registry.ts": "22c095e33b267e763423bdb4e15739c8b96d0e5fc39c92cd4e7ad8effb4ea459",
+    "src/shared/agent-access/registry.ts": "8e36274eb033c121eb037aca7ad2b83665b2f4f88151f65596b6aca9e9bc0d51",
     "src/shared/agent-access/run-ops.ts": "44dcd8c7914248e0dea8c87772402c069637ace5b6f2f327133be527660b1e59",
     "src/shared/contracts/index.ts": "fdf6c3363f251253d6656a86e88b78f489d4f350af9ea21250b4304071a18d51",
     "src/shared/engine/chat-data.ts": "c3d55786d6acf73e7efd9fd3fda9adec9e49983828648289e93e945b401a8ca8",

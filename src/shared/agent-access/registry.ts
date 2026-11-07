@@ -174,6 +174,12 @@ export const ACCESS_OPERATIONS = {
       })
       .strict()
   },
+  'media.delete': {
+    effect: 'delete',
+    description:
+      '删除项目受控媒体（磁盘文件+索引）；mediaId 必须属于指定项目；回执含保存图中引用计数，不校验引用为空（与 GUI 面板删除同一规则）',
+    input: project.extend({ mediaId: z.string().regex(/^[a-zA-Z0-9_-]{1,40}$/) }).strict()
+  },
   'model.list': {
     effect: 'read',
     description: '分页读取本地模型ID、启用状态与能力验证状态；不联网探测，不返回凭据、地址或配置',
@@ -592,6 +598,14 @@ export const ACCESS_OUTPUTS = {
       sizeBytes: z.number().int().nonnegative(),
       name: z.string().max(200),
       textContent: z.string().max(20000).optional()
+    })
+    .strict(),
+  'media.delete': z
+    .object({
+      projectId: identifier,
+      deleted: z.literal(true),
+      mediaId: z.string().max(40),
+      referencedBySavedNodes: z.number().int().nonnegative()
     })
     .strict(),
   'media.list': z

@@ -40,7 +40,7 @@ import {
 import { newTraceId, newSpanId } from '../../shared/observability'
 import { getDb, getSetting, setSetting } from '../store/db'
 import * as projects from '../store/projects.repo'
-import { importMedia, listMedia } from '../store/media.repo'
+import { deleteMedia, importMedia, listMedia } from '../store/media.repo'
 import { exportProject } from '../store/transfer'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import { assertLicenseActive } from '../security/license/gate'
@@ -788,6 +788,26 @@ export class LocalAccessService {
               sizeBytes: asset.sizeBytes,
               name: (asset.name ?? '').slice(0, 200)
             }))
+        }
+      }
+      case 'media.delete': {
+        // F4 收尾：与 GUI 面板删除同一 deleteMedia 服务；外部额外校验项目归属，
+        // 回执携带保存图引用计数（信息性，不阻断——与 GUI 规则一致）。
+        if (!projects.getProject(id)) throw new AccessFailure('NOT_FOUND', 'read')
+        const file = projects.openProject(id)
+        if (!file) throw new AccessFailure('NOT_FOUND', 'read')
+        const asset = listMedia(id).find((candidate) => candidate.id === input.mediaId)
+        if (!asset) throw new AccessFailure('MEDIA_NOT_FOUND', 'read', String(input.mediaId).slice(0, 40))
+        const referenced = file.nodes.filter(
+          (node) => node.content.kind === 'media' && node.content.mediaId === asset.id
+        ).length
+        const deleted = await deleteMedia(asset.id)
+        if (!deleted) throw new AccessFailure('MEDIA_NOT_FOUND', 'media-delete')
+        return {
+          projectId: id,
+          deleted: true,
+          mediaId: asset.id,
+          referencedBySavedNodes: referenced
         }
       }
       case 'graph.get': {
