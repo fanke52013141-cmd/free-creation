@@ -1,14 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  mkdtempSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { createConnection } from 'node:net'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import AdmZip from 'adm-zip'
 vi.mock('electron', () => ({ app: undefined }))
 import { closeDb, getDb, getDataDir } from '../src/main/store/db'
 import { createProject, openProject, saveProject } from '../src/main/store/projects.repo'
+import { listWorkflowTemplates } from '../src/main/store/workspace-state.repo'
 import { LocalAccessService } from '../src/main/agent-access/service'
 import { setGatewayEventSink } from '../src/main/diagnostics/gateway-events'
 import {
@@ -76,6 +87,208 @@ afterEach(() => {
 })
 
 describe('local Agent vertical slice', () => {
+  it('exposes named skill installation and node-library queries over the actual CLI and MCP transports', async () => {
+    server = await startLocalAccessServer({
+      dataDirectory: directory,
+      appVersion: 'test',
+      activeProjectId: () => active
+    })
+    const sourcePath = join(directory, 'SKILL.md')
+    writeFileSync(
+      sourcePath,
+      '---\nname: transport-fixture\nversion: v1\n---\nprivate-transport-instructions'
+    )
+    const inputFile = join(directory, 'install.json')
+    writeFileSync(
+      inputFile,
+      JSON.stringify({ input: { sourcePath, name: 'CLI命名技能' }, idempotencyKey: key() })
+    )
+    const cli = await new Promise<{ code: number | null; output: string }>(
+      (resolveCall, reject) => {
+        const child = spawn(
+          process.execPath,
+          [
+            resolve('out/main/local-agent.js'),
+            'skill',
+            'install',
+            '--data-dir',
+            directory,
+            '--input-file',
+            inputFile
+          ],
+          {
+            env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+            windowsHide: true,
+            stdio: ['ignore', 'pipe', 'pipe']
+          }
+        )
+        let output = ''
+        child.stdout.on('data', (chunk) => {
+          output += chunk
+        })
+        child.once('error', reject)
+        child.once('exit', (code) => resolveCall({ code, output }))
+      }
+    )
+    expect(cli.code).toBe(0)
+    expect(JSON.parse(cli.output).data).toMatchObject({ name: 'CLI命名技能', version: 'v1' })
+    const client = new Client({ name: 'skill-acceptance', version: '1' }, { capabilities: {} })
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [resolve('out/main/local-agent.js'), 'mcp', 'serve', '--data-dir', directory],
+      env: {
+        ...Object.fromEntries(
+          Object.entries(process.env).filter(
+            (entry): entry is [string, string] => entry[1] !== undefined
+          )
+        ),
+        ELECTRON_RUN_AS_NODE: '1'
+      },
+      stderr: 'pipe'
+    })
+    try {
+      await client.connect(transport)
+      const tools = await client.listTools()
+      for (const name of [
+        'skill_install',
+        'skill_list',
+        'chat_skill_bind',
+        'chat_skill_list',
+        'node_library_save',
+        'node_library_list'
+      ])
+        expect(tools.tools.some((tool) => tool.name === name)).toBe(true)
+      const list = await client.callTool({ name: 'skill_list', arguments: { input: {} } })
+      expect(list.isError).toBe(false)
+      expect(JSON.stringify(list)).toContain('CLI命名技能')
+      expect(JSON.stringify(list)).not.toContain('private-transport-instructions')
+      const templates = await client.callTool({
+        name: 'node_library_list',
+        arguments: { input: {} }
+      })
+      expect(templates.isError).toBe(false)
+      expect((templates.structuredContent as any).data.total).toBe(0)
+    } finally {
+      await client.close()
+      await transport.close()
+    }
+  }, 30000)
+
+  it('installs independently named skills, preserves immutable versions, and excludes private content from summaries and diagnostics', async () => {
+    const sourcePath = join(directory, 'SKILL.md')
+    writeFileSync(sourcePath, '---\nname: original\nversion: v1\n---\nprivate-skill-instructions')
+    const installKey = key()
+    const installed = await call('skill.install', { sourcePath, name: '我的角色技能' }, installKey)
+    expect(installed.status).toBe('completed')
+    expect(installed.data).toMatchObject({ name: '我的角色技能', version: 'v1' })
+    expect(
+      (await call('skill.install', { sourcePath, name: '我的角色技能' }, installKey)).data
+    ).toEqual(installed.data)
+    expect(
+      (await call('skill.install', { sourcePath, name: '另一个名称' }, key())).error?.code
+    ).toBe('SKILL_VERSION_IMMUTABLE')
+    const list = await call('skill.list')
+    expect(JSON.stringify(list)).not.toContain('private-skill-instructions')
+    expect(JSON.stringify(events)).not.toContain('private-skill-instructions')
+    expect(JSON.stringify(events)).not.toContain(sourcePath)
+    const bad = join(directory, 'bad.md')
+    writeFileSync(bad, 'x'.repeat(131073))
+    expect((await call('skill.install', { sourcePath: bad, name: 'bad' }, key())).error?.code).toBe(
+      'SKILL_PACKAGE_INVALID'
+    )
+  })
+
+  it('binds installed skills through the desktop and saves an independently named clean reusable chat node', async () => {
+    const sourcePath = join(directory, 'SKILL.md')
+    writeFileSync(sourcePath, '---\nname: fixture\nversion: v1\n---\nprivate-instructions')
+    const install = await call('skill.install', { sourcePath, name: '角色技能' }, key())
+    const skill = install.data as { id: string; version: string }
+    const p = createProject('skill project')
+    const nodeId = 'shape:chat1'
+    const graph = {
+      nodes: [
+        {
+          id: nodeId,
+          type: 'chat',
+          title: 'AI 对话',
+          w: 480,
+          h: 320,
+          params: { config: '{}' },
+          content: { kind: 'text', text: 'private-chat-history-and-attachment' }
+        }
+      ],
+      edges: [],
+      groups: []
+    }
+    saveProject({ id: p.id, expectedGraphVersion: 0, graph })
+    const input = {
+      projectId: p.id,
+      expectedGraphVersion: 1,
+      nodeId,
+      skills: [{ id: skill.id, version: skill.version }]
+    }
+    expect((await call('chat.skill.bind', input, key())).error?.code).toBe(
+      'ACTIVE_PROJECT_REQUIRED'
+    )
+    active = p.id
+    withDesktop({
+      run: async (request, commit) => {
+        expect(request.action).toBe('bind-skills')
+        const file = openProject(p.id)!
+        expect(commit?.(file.meta.graphVersion).id).toBe(p.id)
+        graph.nodes[0].params.config = JSON.stringify({ agent: request.agent })
+        return saveProject({ id: p.id, expectedGraphVersion: file.meta.graphVersion, graph })!
+          .graphVersion
+      }
+    })
+    expect(
+      (
+        await call(
+          'chat.skill.bind',
+          { ...input, skills: [{ id: skill.id, version: 'missing' }] },
+          key()
+        )
+      ).error?.code
+    ).toBe('SKILL_MISSING')
+    const bindKey = key()
+    const bound = await call('chat.skill.bind', input, bindKey)
+    expect(bound.status).toBe('completed')
+    expect((await call('chat.skill.bind', input, bindKey)).data).toEqual(bound.data)
+    const found = await call('chat.skill.list', { projectId: p.id })
+    expect((found.data as any).nodes[0].skills).toEqual(input.skills)
+    // Closed-project save reads the same persisted graph without a second writer.
+    active = null
+    const saveInput = { projectId: p.id, expectedGraphVersion: 2, nodeId, name: '我的角色设计助手' }
+    const saveKey = key()
+    const saved = await call('node.library.save', saveInput, saveKey)
+    expect(saved.status).toBe('completed')
+    expect(saved.data).toMatchObject({ name: '我的角色设计助手', nodeCount: 1 })
+    expect((await call('node.library.save', saveInput, saveKey)).data).toEqual(saved.data)
+    const templates = listWorkflowTemplates()
+    expect(templates).toHaveLength(1)
+    expect(JSON.stringify(templates)).not.toContain('private-chat-history-and-attachment')
+    expect(JSON.stringify(templates)).toContain('private-instructions')
+    expect(
+      (await call('node.library.save', { ...saveInput, expectedGraphVersion: 1 }, key())).error
+        ?.code
+    ).toBe('REVISION_CONFLICT')
+    expect(JSON.stringify(events)).not.toContain('private-instructions')
+    active = p.id
+    withDesktop({
+      run: async (_request, commit) => {
+        commit?.(2)
+        return 2 // Acknowledgement without applying the requested clear must never report saved.
+      }
+    })
+    const lost = await call(
+      'chat.skill.bind',
+      { ...input, expectedGraphVersion: 2, skills: [] },
+      key()
+    )
+    expect(lost.status).toBe('unknown')
+    expect(lost.error?.code).toBe('OUTCOME_UNKNOWN')
+  })
+
   it('pages model metadata without exposing connection configuration or probe messages', async () => {
     const host = new SqliteModelHost(getDb())
     host.saveConnection({
@@ -203,7 +416,9 @@ describe('local Agent vertical slice', () => {
     })
     expect(created.idempotencyKey).toBe(admission)
     expect(
-      existsSync(join(getDataDir(), 'library', 'blobs', expectedSha.slice(0, 2), `${expectedSha}.png`))
+      existsSync(
+        join(getDataDir(), 'library', 'blobs', expectedSha.slice(0, 2), `${expectedSha}.png`)
+      )
     ).toBe(true)
     expect((await call('library.search', { query: '姿势模板A' })).data).toMatchObject({
       items: [{ title: '姿势模板A', formPreset: 'image', componentCount: 1 }]

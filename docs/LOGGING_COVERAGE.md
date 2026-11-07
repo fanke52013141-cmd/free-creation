@@ -663,3 +663,7 @@ AI 对话工作区视觉重排：移除可见角色标签，保留无障碍消�
 2026-11-07 资源库卡片封面竖图完整显示：library-resource-cover 与资源选择器紧凑卡片 img 由 cover 改为 contain，仅 CSS 呈现变化，不涉及执行、数据、日志或外部接入路径。新增 scripts/assign-figure-pose-category.cjs 走公共 IPC（saveLibraryCategory/publishLibraryRevision）建「人物站位」分类并归档未分类图片资源，不新增外部 Agent 操作或日志。
 
 2026-11-07 封面留边改白色填充：contain 留边区域以 #fff 填充（与白底姿势线稿无缝融合，横竖混排网格节奏一致），仍仅 CSS 呈现变化，不涉及执行、数据、日志或外部接入路径。
+
+## 2026-11-07 AI 对话 Skill 与节点库 CLI/MCP
+
+六项操作复用 agent.access 生命周期、幂等账本和 SkillStore 的 skill.library 事件；安装读取/解析错误统一脱敏 SKILL_PACKAGE_INVALID，版本冲突保留 SKILL_VERSION_IMMUTABLE。绑定经桌面准入和保存后核对，超时/无法核对维持 unknown；模板读取正式图只保存技能配置。排除名称、正文、参考、源路径及聊天记录，测试验证摘要/日志不泄漏。无模型执行、网络调用或新的业务事件。边界见 docs/local-agent-access/13-chat-skills-node-library.md。

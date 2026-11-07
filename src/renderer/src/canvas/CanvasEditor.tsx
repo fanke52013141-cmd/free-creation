@@ -51,7 +51,13 @@ import { assetNodeTypeFor } from './asset-node-type'
 import type { AiProcessConfig } from '../engine/executors/aiProcess'
 import { markUndoPoint } from './history'
 import { collapseSelection } from './stack-collapse'
-import { getNodeType, allNodeTypes, needsNodeSizeMigration, needsTimelineHeightMigration, nodeIconColor } from '../nodes/registry'
+import {
+  getNodeType,
+  allNodeTypes,
+  needsNodeSizeMigration,
+  needsTimelineHeightMigration,
+  nodeIconColor
+} from '../nodes/registry'
 import { TIMELINE_UI } from './node-ui-tokens'
 import { padTimelineTracks, parseTimeline, serializeTimeline } from '@shared/timeline'
 import {
@@ -180,7 +186,10 @@ function migrateLegacyNodeSizes(editor: Editor): number {
       // 轨道线：迁移旧默认高度，并把旧的默认两轨补齐到三轨。
       if (shape.props.nodeType === 'timeline') {
         const props: { w?: number; h?: number; text?: string } = {}
-        if (shape.meta?.nodeHeightMode !== 'manual' && needsTimelineHeightMigration(shape.props.nodeType, shape.props.h)) {
+        if (
+          shape.meta?.nodeHeightMode !== 'manual' &&
+          needsTimelineHeightMigration(shape.props.nodeType, shape.props.h)
+        ) {
           props.h = spec.defaultSize.h
         }
         const parsed = parseTimeline(shape.props.text)
@@ -349,7 +358,12 @@ export function CanvasEditor({
     if (!panelTab && nodePanelKind !== 'contract') return
     const dismiss = (event: PointerEvent): void => {
       if (!(event.target instanceof Element)) return
-      if (event.target.closest('.side-panel, .node-contract-panel, .app-select-content, [role="dialog"], [role="alertdialog"]')) return
+      if (
+        event.target.closest(
+          '.side-panel, .node-contract-panel, .app-select-content, [role="dialog"], [role="alertdialog"]'
+        )
+      )
+        return
       if (panelTab) setPanelTab(null)
       else useNodePanelStore.getState().close()
     }
@@ -848,6 +862,52 @@ export function CanvasEditor({
             )
               throw new Error('CANVAS_CHANGED')
             if (Date.now() >= request.expiresAt) throw new Error('REQUEST_EXPIRED')
+            if (request.action === 'bind-skills') {
+              const idle = (): boolean => useEngineStore.getState().phase === 'idle'
+              const getTarget = (): NodeCardShape => {
+                const node = editor.getShape<NodeCardShape>(request.nodeId as TLShapeId)
+                if (
+                  !node ||
+                  node.type !== 'node-card' ||
+                  node.props.nodeType !== 'chat' ||
+                  !idle() ||
+                  ['running', 'queued', 'pending'].includes(node.props.exec) ||
+                  (node.meta?.nodeRun as { status?: string } | undefined)?.status === 'running'
+                )
+                  throw new Error('CHAT_NODE_UNAVAILABLE')
+                return node
+              }
+              getTarget()
+              if (!request.agent) throw new Error('SKILL_CONFIG_MISSING')
+              const admission = await window.api.commitLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                graphVersion: graphVersionRef.current
+              })
+              if (
+                !admission.ok ||
+                Date.now() >= request.expiresAt ||
+                useAppStore.getState().currentProject?.id !== project.id ||
+                editorRef.current !== editor
+              )
+                throw new Error('SKILL_BIND_NOT_ADMITTED')
+              const node = getTarget()
+              const config = JSON.parse(node.props.config || '{}') as Record<string, unknown>
+              editor.updateShape({
+                id: node.id,
+                type: 'node-card',
+                props: {
+                  config: JSON.stringify({ ...config, agent: request.agent })
+                }
+              })
+              await ensureCanvasSaved()
+              if (
+                Date.now() >= request.expiresAt ||
+                editorRef.current !== editor ||
+                useAppStore.getState().currentProject?.id !== project.id
+              )
+                throw new Error('CANVAS_CHANGED')
+            }
             if (request.action === 'rename') {
               const result = await window.api.commitLocalAgentDesktop({
                 requestId: request.requestId,

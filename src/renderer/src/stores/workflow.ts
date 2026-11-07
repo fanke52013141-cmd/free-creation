@@ -63,7 +63,6 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   loaded: false,
 
   load: async () => {
-    if (get().loaded) return
     const result = await window.api.workspace.listTemplates()
     if (!result.ok) throw new Error(result.error.message)
     set({ templates: result.data.map(asTemplate), loaded: true })

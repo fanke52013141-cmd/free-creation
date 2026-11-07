@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ACTIVE_NODE_TYPE_IDS } from '../types'
+import { SkillBindingSchema } from '../agent-flow/runtime-contracts'
 
 export const ACCESS_API_VERSION = 1
 export const ACCESS_MAX_BYTES = 1024 * 1024
@@ -15,7 +16,69 @@ const page = z
   })
   .strict()
 
+const nodeId = z.string().regex(/^shape:[a-zA-Z0-9_-]{1,160}$/)
+const skillSummary = z
+  .object({
+    id: z.string(),
+    version: z.string(),
+    name: z.string(),
+    description: z.string(),
+    contentHash: z.string()
+  })
+  .strict()
+const bindings = z.array(SkillBindingSchema).max(8)
+const templateSummary = z
+  .object({
+    id: identifier,
+    name: z.string(),
+    createdAt: z.number(),
+    nodeCount: z.number().int().nonnegative()
+  })
+  .strict()
+
 export const ACCESS_OPERATIONS = {
+  'skill.list': {
+    effect: 'read',
+    description: '分页查询已安装技能的名称、固定版本和摘要，不返回指令正文',
+    input: page
+  },
+  'skill.install': {
+    effect: 'write',
+    description:
+      '安装本机 SKILL.md、JSON 技能包或扁平技能目录；name 为独立技能名称；仅支持指令与文本参考，不执行脚本',
+    input: z
+      .object({ sourcePath: z.string().min(2).max(1000), name: z.string().trim().min(1).max(120) })
+      .strict()
+  },
+  'chat.skill.list': {
+    effect: 'read',
+    description: '分页查询项目已保存的 AI 对话节点及其绑定技能版本；活动画布的未保存修改不在结果中',
+    input: project
+      .extend({
+        offset: z.number().int().min(0).max(100000).default(0),
+        limit: z.number().int().min(1).max(100).default(50)
+      })
+      .strict()
+  },
+  'chat.skill.bind': {
+    effect: 'write',
+    description:
+      '替换当前打开的 AI 对话节点的完整技能集合（空数组为清空），经桌面保存；必须使用已安装的固定版本，不启动对话',
+    input: revision
+      .extend({ nodeId, skills: bindings, maxSteps: z.number().int().min(1).max(12).default(6) })
+      .strict()
+  },
+  'node.library.save': {
+    effect: 'write',
+    description:
+      '以独立 name 将指定 AI 对话节点和固定版本技能保存到节点库；排除聊天记录、附件与运行结果',
+    input: revision.extend({ nodeId, name: z.string().trim().min(1).max(120) }).strict()
+  },
+  'node.library.list': {
+    effect: 'read',
+    description: '分页查询节点库条目摘要，不返回配置正文',
+    input: page
+  },
   'model.list': {
     effect: 'read',
     description: '分页读取本地模型ID、启用状态与能力验证状态；不联网探测，不返回凭据、地址或配置',
@@ -195,6 +258,30 @@ const metadata = z
   .strict()
 const savedMetadata = z.object({ meta: metadata, saved: z.literal(true) }).strict()
 export const ACCESS_OUTPUTS = {
+  'skill.list': z
+    .object({ items: z.array(skillSummary).max(100), total: z.number().int().nonnegative() })
+    .strict(),
+  'skill.install': skillSummary,
+  'chat.skill.list': z
+    .object({
+      graphVersion: z.number().int().nonnegative(),
+      nodes: z.array(z.object({ nodeId, title: z.string(), skills: bindings }).strict()).max(100),
+      total: z.number().int().nonnegative()
+    })
+    .strict(),
+  'chat.skill.bind': z
+    .object({
+      projectId: identifier,
+      nodeId,
+      graphVersion: z.number().int().nonnegative(),
+      saved: z.literal(true),
+      skills: bindings
+    })
+    .strict(),
+  'node.library.save': templateSummary,
+  'node.library.list': z
+    .object({ items: z.array(templateSummary).max(100), total: z.number().int().nonnegative() })
+    .strict(),
   'model.list': z
     .object({
       models: z

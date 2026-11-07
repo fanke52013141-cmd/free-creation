@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { SkillAgentConfigSchema } from '../skill-agent'
 
 export const ACCESS_DESKTOP_REQUEST = 'local-agent:desktop-request'
 export const ACCESS_DESKTOP_REPLY = 'local-agent:desktop-reply'
@@ -8,7 +9,9 @@ export const DesktopRequestSchema = z
     requestId: z.string().uuid(),
     expiresAt: z.number().int().positive(),
     projectId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/),
-    action: z.enum(['open', 'flush', 'rename']),
+    action: z.enum(['open', 'flush', 'rename', 'bind-skills']),
+    nodeId: z.string().optional(),
+    agent: SkillAgentConfigSchema.optional(),
     name: z.string().trim().min(1).max(200).optional()
   })
   .strict()

@@ -1,3 +1,7 @@
+import { FlowSkillStore } from '../agent-flow/skill-store'
+import { accessSkillAgent, chatNodeAgent, installAccessSkill, skillSummary } from './skills'
+import { listWorkflowTemplates, saveWorkflowTemplate } from '../store/workspace-state.repo'
+import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import {
   closeSync,
@@ -213,6 +217,8 @@ export class LocalAccessService {
       if (operationId === 'project.delete' && id === active)
         throw new AccessFailure('RESOURCE_BUSY', 'desktop-ownership')
       let result: unknown
+      if (operationId === 'chat.skill.bind' && (id !== active || !this.options.desktop))
+        throw new AccessFailure('ACTIVE_PROJECT_REQUIRED', 'desktop-ownership')
       if (operationId === 'project.open' || (id === active && spec.effect !== 'read')) {
         if (!this.options.desktop) throw new AccessFailure('RESOURCE_BUSY', 'desktop-ownership')
         const target = projects.openProject(id!)
@@ -238,36 +244,79 @@ export class LocalAccessService {
           result = { meta: projects.getProject(id!), opened: true }
         } else {
           const rename = operationId === 'project.rename' || operationId === 'project.update'
+          const bind = operationId === 'chat.skill.bind'
+          let agent: ReturnType<typeof accessSkillAgent> | undefined
+          if (bind) {
+            try {
+              agent = accessSkillAgent(input as Parameters<typeof accessSkillAgent>[0])
+            } catch (error) {
+              throw new AccessFailure(
+                error instanceof AgentRuntimeError ? error.code : 'SKILL_BINDING_INVALID',
+                'skill-validation'
+              )
+            }
+          }
           const version = await this.options.desktop.run(
             {
-              action: rename ? 'rename' : 'flush',
+              action: bind ? 'bind-skills' : rename ? 'rename' : 'flush',
+              ...(bind ? { nodeId: input.nodeId as string, agent } : {}),
               projectId: id!,
               ...(rename ? { name: input.name as string } : {})
             },
-            rename
+            bind
               ? (version) => {
                   if (this.options.activeProjectId() !== id)
                     throw new AccessFailure('RESOURCE_BUSY', 'desktop-ownership')
                   this.assertNoActiveTasks(id!)
-                  if (projects.getProject(id!)?.name !== target.meta.name)
-                    throw new AccessFailure('REVISION_CONFLICT', 'metadata')
-                  const meta = projects.renameProjectAtVersion(id!, input.name as string, version)
-                  if (!meta) throw new AccessFailure('NOT_FOUND', 'read')
+                  const file = projects.openProject(id!)
+                  if (!file || file.meta.graphVersion !== version)
+                    throw new AccessFailure('REVISION_CONFLICT', 'skill-admission')
+                  const node = file.nodes.find((node) => node.id === input.nodeId)
+                  if (!node || node.type !== 'chat')
+                    throw new AccessFailure('CHAT_NODE_REQUIRED', 'skill-admission')
+                  // From this admission onward the renderer may have persisted a mutation.
                   metadataCommitted = true
-                  return meta
+                  return file.meta
                 }
-              : undefined
+              : rename
+                ? (version) => {
+                    if (this.options.activeProjectId() !== id)
+                      throw new AccessFailure('RESOURCE_BUSY', 'desktop-ownership')
+                    this.assertNoActiveTasks(id!)
+                    if (projects.getProject(id!)?.name !== target.meta.name)
+                      throw new AccessFailure('REVISION_CONFLICT', 'metadata')
+                    const meta = projects.renameProjectAtVersion(id!, input.name as string, version)
+                    if (!meta) throw new AccessFailure('NOT_FOUND', 'read')
+                    metadataCommitted = true
+                    return meta
+                  }
+                : undefined
           )
           if (this.options.activeProjectId() !== id)
             throw new DesktopAccessError('DESKTOP_CHANGED', true)
           this.assertNoActiveTasks(id!)
           if (projects.openProject(id!)?.meta.graphVersion !== version)
             throw new AccessFailure('REVISION_CONFLICT', 'desktop-flush')
-          result = rename
-            ? { meta: projects.getProject(id!), saved: true }
-            : operationId === 'project.save'
-              ? { graphVersion: version, saved: true }
-              : this.execute(operationId, { ...input, expectedGraphVersion: version })
+          if (bind) {
+            const savedNode = projects
+              .openProject(id!)
+              ?.nodes.find((node) => node.id === input.nodeId)
+            if (!savedNode || JSON.stringify(chatNodeAgent(savedNode)) !== JSON.stringify(agent))
+              throw new DesktopAccessError('SKILL_BIND_NOT_SAVED', true)
+          }
+          result = bind
+            ? {
+                projectId: id,
+                nodeId: input.nodeId,
+                graphVersion: version,
+                saved: true,
+                skills: input.skills
+              }
+            : rename
+              ? { meta: projects.getProject(id!), saved: true }
+              : operationId === 'project.save'
+                ? { graphVersion: version, saved: true }
+                : this.execute(operationId, { ...input, expectedGraphVersion: version })
         }
       } else result = this.execute(operationId, input)
       base.status = 'completed'
@@ -283,11 +332,13 @@ export class LocalAccessService {
           ? new AccessFailure(error.code, 'desktop-handshake')
           : error instanceof AccessFailure
             ? error
-            : error instanceof GraphVersionConflictError
-              ? new AccessFailure('REVISION_CONFLICT', 'storage')
-              : error instanceof GraphWriteInProgressError
-                ? new AccessFailure('RESOURCE_BUSY', 'storage')
-                : null
+            : error instanceof AgentRuntimeError
+              ? new AccessFailure(error.code, 'skill-storage')
+              : error instanceof GraphVersionConflictError
+                ? new AccessFailure('REVISION_CONFLICT', 'storage')
+                : error instanceof GraphWriteInProgressError
+                  ? new AccessFailure('RESOURCE_BUSY', 'storage')
+                  : null
       base.status = metadataCommitted
         ? 'unknown'
         : known
@@ -338,7 +389,8 @@ export class LocalAccessService {
    * The holder of the access token is the same local user, so any absolute path is admitted,
    * but the file must be a non-empty image within the repository's component size limit. */
   private readLibraryImage(source: string): Uint8Array {
-    if (!isAbsolute(source) || source.length > 500) throw new AccessFailure('INVALID_INPUT', 'validate')
+    if (!isAbsolute(source) || source.length > 500)
+      throw new AccessFailure('INVALID_INPUT', 'validate')
     let size: number
     try {
       size = statSync(source).size
@@ -371,9 +423,13 @@ export class LocalAccessService {
     )
   }
 
-  private deleteSnapshot(
-    id: string
-  ): { graphVersion: number; impact: Record<'nodeCount' | 'edgeCount' | 'groupCount' | 'mediaCount' | 'mediaBytes' | 'libraryUsageCount', number> } {
+  private deleteSnapshot(id: string): {
+    graphVersion: number
+    impact: Record<
+      'nodeCount' | 'edgeCount' | 'groupCount' | 'mediaCount' | 'mediaBytes' | 'libraryUsageCount',
+      number
+    >
+  } {
     const file = projects.openProject(id)
     if (!file) throw new AccessFailure('NOT_FOUND', 'read')
     const db = getDb()
@@ -382,9 +438,9 @@ export class LocalAccessService {
         'SELECT COUNT(*) AS n, COALESCE(SUM(size_bytes),0) AS bytes FROM media WHERE substr(path,1,length(?))=?'
       )
       .get(`projects/${id}/media/`, `projects/${id}/media/`) as { n: number; bytes: number }
-    const usage = db.prepare('SELECT COUNT(*) AS n FROM library_usages WHERE project_id=?').get(
-      id
-    ) as { n: number }
+    const usage = db
+      .prepare('SELECT COUNT(*) AS n FROM library_usages WHERE project_id=?')
+      .get(id) as { n: number }
     return {
       graphVersion: file.meta.graphVersion,
       impact: {
@@ -398,7 +454,12 @@ export class LocalAccessService {
     }
   }
 
-  private impactToken(id: string, graphVersion: number, impact: unknown, expiresAt: number): string {
+  private impactToken(
+    id: string,
+    graphVersion: number,
+    impact: unknown,
+    expiresAt: number
+  ): string {
     const payload = JSON.stringify({
       d: this.dataStoreId,
       p: id,
@@ -416,7 +477,12 @@ export class LocalAccessService {
     if (projects.hasRecoveryCopy(id)) blockers.push('RECOVERY_COPY')
     if (this.taskOccupied(id)) blockers.push('TASK_OCCUPANCY')
     if (blockers.length)
-      return { projectId: id, graphVersion: snapshot.graphVersion, impact: snapshot.impact, blockers }
+      return {
+        projectId: id,
+        graphVersion: snapshot.graphVersion,
+        impact: snapshot.impact,
+        blockers
+      }
     const expiresAt = Date.now() + 600000
     return {
       projectId: id,
@@ -437,12 +503,9 @@ export class LocalAccessService {
     if (!rawExpiry || !supplied || !Number.isInteger(expiresAt) || Date.now() > expiresAt)
       throw new AccessFailure('IMPACT_TOKEN_INVALID', 'delete-admission')
     const snapshot = this.deleteSnapshot(id)
-    const expected = this.impactToken(
-      id,
-      snapshot.graphVersion,
-      snapshot.impact,
-      expiresAt
-    ).split('.')[1]
+    const expected = this.impactToken(id, snapshot.graphVersion, snapshot.impact, expiresAt).split(
+      '.'
+    )[1]
     let signature: Buffer
     try {
       signature = Buffer.from(supplied, 'hex')
@@ -459,8 +522,87 @@ export class LocalAccessService {
   private execute(operation: AccessOperationId, input: Record<string, unknown>): unknown {
     const id = input.projectId as string
     switch (operation) {
+      case 'skill.list': {
+        const all = new FlowSkillStore(getDb()).list()
+        return {
+          items: all
+            .slice(input.offset as number, (input.offset as number) + (input.limit as number))
+            .map(skillSummary),
+          total: all.length
+        }
+      }
+      case 'skill.install': {
+        try {
+          return skillSummary(installAccessSkill(input.sourcePath as string, input.name as string))
+        } catch (error) {
+          throw new AccessFailure(
+            error instanceof AgentRuntimeError ? error.code : 'SKILL_PACKAGE_INVALID',
+            'skill-install'
+          )
+        }
+      }
+      case 'chat.skill.list': {
+        const file = projects.openProject(id)
+        if (!file) throw new AccessFailure('NOT_FOUND', 'read')
+        const nodes = file.nodes.filter((node) => node.type === 'chat')
+        return {
+          graphVersion: file.meta.graphVersion,
+          total: nodes.length,
+          nodes: nodes
+            .slice(input.offset as number, (input.offset as number) + (input.limit as number))
+            .map((node) => ({
+              nodeId: node.id,
+              title: node.title,
+              skills: chatNodeAgent(node).skills.map(({ id, version }) => ({ id, version }))
+            }))
+        }
+      }
+      case 'chat.skill.bind':
+        throw new AccessFailure('ACTIVE_PROJECT_REQUIRED', 'desktop-ownership')
+      case 'node.library.list': {
+        const all = listWorkflowTemplates()
+        return {
+          total: all.length,
+          items: all
+            .slice(input.offset as number, (input.offset as number) + (input.limit as number))
+            .map(({ id, name, createdAt, nodeCount }) => ({ id, name, createdAt, nodeCount }))
+        }
+      }
+      case 'node.library.save': {
+        const file = projects.openProject(id)
+        if (!file) throw new AccessFailure('NOT_FOUND', 'read')
+        if (file.meta.graphVersion !== input.expectedGraphVersion)
+          throw new AccessFailure('REVISION_CONFLICT', 'storage')
+        const node = file.nodes.find((node) => node.id === input.nodeId)
+        if (!node || node.type !== 'chat')
+          throw new AccessFailure('CHAT_NODE_REQUIRED', 'template-validation')
+        // Keep only the explicit reusable skill configuration, never chat history, attachments or results.
+        const agent = chatNodeAgent(node)
+        const entry = saveWorkflowTemplate({
+          name: input.name as string,
+          nodeCount: 1,
+          edges: [],
+          nodes: [
+            {
+              nodeType: 'chat',
+              title: node.title,
+              dx: 0,
+              dy: 0,
+              w: node.w,
+              h: node.h,
+              text: '',
+              config: JSON.stringify({ agent })
+            }
+          ]
+        })
+        const { id: templateId, name, createdAt, nodeCount } = entry
+        return { id: templateId, name, createdAt, nodeCount }
+      }
       case 'model.list':
-        return new SqliteModelHost(getDb()).listAccessModels(input.offset as number, input.limit as number)
+        return new SqliteModelHost(getDb()).listAccessModels(
+          input.offset as number,
+          input.limit as number
+        )
       case 'library.search':
         return searchAccessLibrary(ACCESS_OPERATIONS['library.search'].input.parse(input))
       case 'library.create_resource': {
