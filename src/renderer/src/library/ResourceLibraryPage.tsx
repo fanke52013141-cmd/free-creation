@@ -155,9 +155,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
   const [compareDetail, setCompareDetail] = useState<LibraryResourceDetail | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const activeCategoryName = categoryId === 'legacy'
-    ? '未分类'
-    : categories.find((category) => category.id === categoryId)?.name
   const activeRevisionId = selectedRevisionId ?? (detail?.id === selectedId ? detail.selectedRevisionId : undefined)
   const availableCompareRevisionId = detail?.id === selectedId
     ? detail.revisions.find((revision) => revision.id !== activeRevisionId)?.id ?? ''
@@ -362,15 +359,9 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
 
       <div className="library-workspace">
           <main className="library-resource-browser">
-            {resources.length ? (
+            {resources.length > 0 && (
               <div className="library-resource-grid">
                 {resources.map((resource) => <ResourceCard key={resource.id} resource={resource} onOpen={() => { setSelectedId(resource.id); setSelectedRevisionId(resource.latestRevisionId) }} onDragStart={(event) => event.dataTransfer.setData('application/x-canvas-library-resource', resource.id)} />)}
-              </div>
-            ) : (
-              <div className="library-empty-state">
-                <h2>{query.trim() ? '没有找到匹配的资源' : activeCategoryName ? `「${activeCategoryName}」分类下暂无资源` : '资源库还没有内容'}</h2>
-                <p>{query.trim() ? '试试其他关键词，或清除搜索条件。' : '可点击下方快速创建资源，或从顶部导入已有资产包。'}</p>
-                <div className="library-empty-actions"><button className="library-primary" onClick={() => { setSelectedId(null); setFormOpen(true) }}><span className="library-primary-icon"><Icon name="add" size={14} /></span>新建资源</button><button className="library-secondary" onClick={() => setCategoryEditor({})}>管理分类</button></div>
               </div>
             )}
             {nextCursor && <button className="library-load-more" onClick={() => void loadResources(nextCursor, true)}>加载更多</button>}

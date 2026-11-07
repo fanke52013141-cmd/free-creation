@@ -7,7 +7,7 @@
      - ResourceInsertRequest.tsx（.library-form-dialog，无本文件作用域类名）
      - WorkflowSaveDialog.tsx（.library-form-dialog.workflow-save-dialog）
    材质沿用画布节点卡片：底 #151922、卡面 #1b202b、描边 #252b36、
-   控件底 #0f131a；青色 #3cdde3 只用于主按钮与聚焦态。
+   控件底 #0f131a；主按钮使用青色，输入框聚焦使用中性描边。
    ============================================================ */
 
 /* ── 1. 弹窗材质、宽度与头部 ─────────────────────────────── */
@@ -53,14 +53,19 @@
 }
 .library-form-dialog.library-resource-form-dialog :is(input:not([type='checkbox']), textarea, select):focus,
 .library-form-dialog.library-category-dialog :is(input:not([type='checkbox']), textarea, select):focus {
-  border-color: rgba(60, 221, 227, 0.5);
+  border-color: #69717d;
   outline: none;
-  box-shadow: 0 0 0 2px rgba(60, 221, 227, 0.16);
+  box-shadow: none;
 }
 .library-form-dialog.library-resource-form-dialog select option,
 .library-form-dialog.library-category-dialog select option {
   color: #f1f4f7;
   background: #0f131a;
+}
+
+/* The Select portal is outside the dialog, so its layer must clear the form mask. */
+.app-select-content.app-select-content-modal {
+  z-index: 12020;
 }
 
 /* 分区标题（ResourceForm「资源内容」等）与说明的层级 */

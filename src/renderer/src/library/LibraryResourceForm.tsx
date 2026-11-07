@@ -421,7 +421,7 @@ export function LibraryResourceForm({
         </header>
         <div className="library-form-scroll">
           <label className="library-form-field"><span>资源分类</span>
-            <AppSelect value={selectedCategoryKey} onChange={(event) => handleCategoryChange(event.currentTarget.value)} aria-label="资源分类">
+            <AppSelect modal value={selectedCategoryKey} onChange={(event) => handleCategoryChange(event.currentTarget.value)} aria-label="资源分类">
               <option value="">{detail ? '未分类自由组合' : '不选分类，保存为自由组合'}</option>
               {availableCategories.map((category) => <option key={categoryKey(category)} value={categoryKey(category)}>{category.name}</option>)}
             </AppSelect>

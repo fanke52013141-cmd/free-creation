@@ -42,6 +42,8 @@ export interface AppSelectProps extends Omit<
   defaultValue?: string
   name?: string
   required?: boolean
+  /** Keep menus in front of a modal and allow them to flip at the viewport edge. */
+  modal?: boolean
   onChange?: (event: AppSelectChangeEvent) => void
 }
 
@@ -100,6 +102,7 @@ export function AppSelect({
   name,
   required,
   disabled,
+  modal = false,
   onChange,
   ...triggerProps
 }: AppSelectProps): React.JSX.Element {
@@ -208,10 +211,10 @@ export function AppSelect({
       <Select.Portal>
         <Select.Content
           ref={contentRef}
-          className="app-select-content"
+          className={`app-select-content${modal ? ' app-select-content-modal' : ''}`}
           position="popper"
           side="bottom"
-          avoidCollisions={false}
+          avoidCollisions={modal}
           align="start"
           sideOffset={4}
           collisionPadding={8}

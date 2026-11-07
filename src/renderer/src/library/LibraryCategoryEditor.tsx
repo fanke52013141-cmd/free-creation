@@ -205,6 +205,7 @@ export function LibraryCategoryEditor({
                     <label>
                       <span>映射到节点</span>
                       <AppSelect
+                        modal
                         aria-label="映射到节点"
                         value={slot.nodeType}
                         onChange={(e) => {
