@@ -173,7 +173,7 @@ export function FlowAssetPanel({
       )}
       {version && (
         <>
-          <p>v{version.ordinal} · 已固定输出</p>
+          <p>当前查看 v{version.ordinal} · 已固定输出</p>
           <pre>
             {version.value.kind === 'video' ||
             version.value.kind === 'image' ||

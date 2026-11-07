@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "资源摘要增加可选视频预览路径供桌面封面使用，外部 library.search 仍经字段白名单过滤；节点侧栏、跟随光和视频工作台调整呈现与交互，复用现有媒体与日志路径；外部操作 Schema 和项目存储格式不变。",
+  "reason": "资源摘要增加可选视频预览路径供桌面封面使用，外部 library.search 仍经字段白名单过滤；节点侧栏、固定资产版本状态、跟随光和视频工作台调整呈现与交互，复用现有媒体与日志路径；外部操作 Schema 和项目存储格式不变。",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "97d2ffb5e2403b33a2d3ac8ab3eee8272f78cf948e4c73ab53cc662bd73a5a6f",
