@@ -6,7 +6,6 @@ import {
   maxImageSplitColumns,
   parseImageSplitConfig,
   serializeImageSplitConfig,
-  MAX_IMAGE_SPLIT_TILES,
   type ImageSplitConfig
 } from '@shared/image-split'
 import { gatherUpstreamMedia } from '../../../canvas/graph'
@@ -205,7 +204,6 @@ export function ImageSplitSettings({ shape, editor }: NodeSettingsProps): React.
   const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
   const noSourceLine = useSourceWiringNotice(editor, shape.id, 'in-image', '原图')
   const tiles = buildImageSplitTiles(config)
-  const linearPercent = Math.sqrt(config.scalePercent / 100) * 100
   const columnCap = maxImageSplitColumns(config.rows)
 
   const save = (partial: Partial<ImageSplitConfig>, reason: string): void => {
@@ -221,9 +219,6 @@ export function ImageSplitSettings({ shape, editor }: NodeSettingsProps): React.
   return (
     <section className="contract-section image-split-settings">
       <h4>图片宫格拆分</h4>
-      <p className="contract-settings-hint">
-        原图来自 in-image 连线。每一格都会生成独立 PNG 资产，原图保持不变。
-      </p>
       <div className="image-split-controls">
         <label>
           行数
@@ -275,15 +270,6 @@ export function ImageSplitSettings({ shape, editor }: NodeSettingsProps): React.
         <strong>
           {config.rows} × {config.columns} = {imageSplitCount(config)} 份
         </strong>
-        <span>
-          每格以自身中心缩放；面积为原格的 {config.scalePercent}%（边长约 {linearPercent.toFixed(1)}
-          %）。
-        </span>
-        {columnCap < MAX_IMAGE_SPLIT_TILES && (
-          <span>
-            行数 × 列数不超过 {MAX_IMAGE_SPLIT_TILES}，{config.rows} 行时列数最多 {columnCap}。
-          </span>
-        )}
       </p>
       {source ? (
         <div
@@ -324,11 +310,8 @@ export function ImageSplitSettings({ shape, editor }: NodeSettingsProps): React.
           ))}
         </div>
       ) : (
-        <div className="crop-no-source">{noSourceLine}</div>
+        <div className="crop-no-source">{noSourceLine.replace('，运行会跳过。', '')}</div>
       )}
-      <p className="crop-coordinate-hint">
-        输出「图片集合」可连接到循环节点批处理；「当前图片」是从集合中选中的一格，可直接接生图、裁剪或视频。
-      </p>
     </section>
   )
 }

@@ -201,7 +201,7 @@ describe('v1.2 §16.5 媒体后续动作按钮只放文字', () => {
     const video = read('src/renderer/src/nodes/specs/bodies/video.tsx')
     const block =
       video.match(
-        /className="node-media-next-actions media-action-toolbar"[\s\S]*?<span className="node-media-file-actions"/
+        /className="node-media-next-actions media-action-toolbar"[\s\S]*?<NodeHeaderActions>/
       )?.[0] ?? ''
     expect(block).not.toBe('')
     for (const label of ['抽帧', '视频截取']) {
@@ -210,12 +210,16 @@ describe('v1.2 §16.5 媒体后续动作按钮只放文字', () => {
     // 2026-11-02 用户裁决：视频操作条撤掉私有浮层底/描边/模糊，改用图片节点的公共样式。
     expect(block).toContain('media-action-toolbar')
     expect(block).toContain('media-action-button')
-    const textActions = block.split('<span className="media-action-divider"')[0]
+    const textActions = block.split('<NodeHeaderActions>')[0]
+    expect(textActions).not.toContain('name="target"')
+    expect(video).toMatch(/<NodeHeaderActions>[\s\S]*?name="target"[\s\S]*?<\/NodeHeaderActions>/)
     expect(block).not.toContain('截人声')
     // 截音频已并入「视频截取」，视频节点不再单独提供该入口
     expect(block).not.toContain('截音频')
-    // 2026-11-06 用户新裁决：三个主操作允许配图标，但必须仍是文字按钮、且不再有复制节点。
-    expect(textActions).toContain('<Icon')
+    // 操作可带图标，但始终保留可读文字；底部操作不再依赖图标才可识别。
+    expect(textActions).toContain('替换')
+    expect(textActions).toContain('视频截取')
+    expect(textActions).toContain('抽帧')
     expect(block).not.toContain('复制节点')
     expect(video).not.toContain('一键提取人声')
   })
@@ -1028,8 +1032,8 @@ describe('v1.2 §16.26 导入落空要有去向说明，输入上限等于引擎
     expect(splitBody).toContain('max={columnCap}')
     // 「列数」写死 64 就是漂移源头：解析会按行数下调，界面不许先答应下来。
     expect(splitBody).not.toMatch(/列数\s*<input[\s\S]{0,120}max="64"/)
-    // 上限收紧时必须把规则讲清楚，而不是让数字自己缩回去。
-    expect(splitBody).toContain('行时列数最多')
+    // 2026-11-07：上限由控件约束，侧栏不再铺重复解释。
+    expect(splitBody).not.toContain('行时列数最多')
   })
 
   it('真实浏览器门禁存在：多选导入的其余文件必须被交代', () => {

@@ -151,17 +151,6 @@ export function FileBody({ shape }: NodeBodyProps): React.JSX.Element {
           替换
           <Icon name="upload" size={13} />
         </button>
-        <button
-          className="btn-ghost small"
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onClick={(e) => {
-            e.stopPropagation()
-            void window.api.revealMedia(shape.props.mediaId)
-          }}
-        >
-          定位
-          <Icon name="target" size={13} />
-        </button>
       </div>
     </div>
   )

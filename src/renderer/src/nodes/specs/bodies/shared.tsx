@@ -15,7 +15,7 @@ import { readNodeConfig } from '../../../canvas/node-persistence'
 import { getNodeType, mediaUrl } from '../../registry'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
-import { NodeIdentity } from '../../../canvas/NodePresentation'
+import { NodeHeaderActions, NodeIdentity } from '../../../canvas/NodePresentation'
 import { toast } from '../../../stores/toast'
 import { useConfirmStore } from '../../../stores/confirm'
 import { useMediaStore } from '../../../stores/media'
@@ -590,33 +590,24 @@ export function MediaSourceSummary({
 }
 
 /** 媒体结果统一的本地文件操作，不改变节点输出，只操作已落盘资产。 */
-export function MediaFileActions({
-  shape,
-  className = ''
-}: {
-  shape: NodeCardShape
-  className?: string
-}): React.JSX.Element | null {
+export function MediaFileActions({ shape }: { shape: NodeCardShape }): React.JSX.Element | null {
   if (!shape.props.mediaId) return null
   return (
-    <span
-      className={`node-media-file-actions${className ? ` ${className}` : ''}`}
-      role="group"
-      aria-label="媒体文件操作"
-    >
+    <NodeHeaderActions>
       <button
         type="button"
-        className="icon-btn media-file-action-btn"
+        className="node-info-btn media-file-action-btn"
+        title="在资源管理器中定位"
         aria-label="在资源管理器中定位"
-        onPointerDown={(e) => stopEventPropagation(e)}
-        onClick={(e) => {
-          e.stopPropagation()
+        onPointerDown={stopEventPropagation}
+        onClick={(event) => {
+          stopEventPropagation(event)
           void window.api.revealMedia(shape.props.mediaId)
         }}
       >
-        <Icon name="target" size={11} />
+        <Icon name="target" size={16} />
       </button>
-    </span>
+    </NodeHeaderActions>
   )
 }
 

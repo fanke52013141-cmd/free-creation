@@ -1047,26 +1047,16 @@ select:focus-visible {
   top: calc(-26px * var(--group-zoom, 1));
   width: 180px;
   height: 22px;
-  padding: 0 8px;
-  border: 1px solid rgba(148, 163, 184, 0.42);
+  padding: 0;
+  border: 0;
   border-radius: 8px;
-  background: linear-gradient(180deg, #1b202b, #151922 46%);
+  background: transparent;
   color: #eef2f7;
   font-size: 12.5px;
   font-weight: 600;
   line-height: 20px;
   outline: none;
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.45),
-    inset 0 1px rgba(255, 255, 255, 0.03);
   pointer-events: auto;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-.canvas-group-name-input:focus {
-  border-color: rgba(60, 221, 227, 0.55);
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.45),
-    0 0 0 2px rgba(60, 221, 227, 0.12);
 }
 .canvas-combo-name-input {
   position: static;
@@ -1113,7 +1103,7 @@ select:focus-visible {
   border: 1px solid rgba(140, 160, 190, 0.3);
   border-radius: 14px;
   /* 折叠组合外框：比画布亮一档、接近卡片材质的实底，堆叠遮挡时仍能读出边界。 */
-  background: linear-gradient(180deg, rgba(27, 32, 43, 0.92), rgba(21, 25, 34, 0.92));
+  background: transparent;
   box-shadow: 0 16px 38px rgba(0, 0, 0, 0.35);
   pointer-events: none;
 }
@@ -1283,7 +1273,7 @@ select:focus-visible {
   width: 30px;
   height: 30px;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  border: 0;
   border-radius: 50%;
   background: rgba(238, 247, 255, 0.94);
   color: #18222c;
@@ -1294,15 +1284,15 @@ select:focus-visible {
   cursor: default;
   transform: translate(13px, -50%);
   scale: 1;
-  animation: canvas-selection-batch-breathe 2.8s ease-in-out infinite;
+  animation: canvas-selection-batch-breathe 3.6s ease-in-out infinite;
   box-shadow:
-    0 0 9px 2px rgba(255, 255, 255, 0.28),
-    0 3px 14px rgba(0, 0, 0, 0.35);
+    0 0 12px 3px rgba(238, 247, 255, 0.22),
+    0 0 26px 7px rgba(238, 247, 255, 0.1);
 }
 
 .canvas-selection-batch-port:hover {
   background: #fff;
-  transform: translate(13px, -50%) scale(1.08);
+  transform: translate(13px, -50%) scale(1.03);
 }
 
 .canvas-selection-batch-port::before {
@@ -1313,14 +1303,14 @@ select:focus-visible {
   border-radius: 50%;
   background: radial-gradient(
     circle,
-    rgba(255, 255, 255, 0.62) 0%,
-    rgba(255, 255, 255, 0.3) 34%,
-    rgba(255, 255, 255, 0.12) 52%,
-    transparent 74%
+    rgba(238, 247, 255, 0.24) 0%,
+    rgba(238, 247, 255, 0.12) 30%,
+    rgba(238, 247, 255, 0.04) 55%,
+    transparent 76%
   );
-  filter: blur(3px);
-  opacity: 0;
-  animation: canvas-selection-batch-pulse 2.8s ease-out infinite;
+  filter: blur(6px);
+  opacity: 0.5;
+  animation: canvas-selection-batch-pulse 3.6s ease-in-out infinite;
   pointer-events: none;
 }
 
@@ -1329,28 +1319,28 @@ select:focus-visible {
   100% {
     scale: 1;
     box-shadow:
-      0 0 9px 2px rgba(255, 255, 255, 0.28),
-      0 3px 14px rgba(0, 0, 0, 0.35);
+      0 0 12px 3px rgba(238, 247, 255, 0.22),
+      0 0 26px 7px rgba(238, 247, 255, 0.1);
   }
 
   50% {
-    scale: 1.12;
+    scale: 1.045;
     box-shadow:
-      0 0 13px 4px rgba(255, 255, 255, 0.5),
-      0 3px 16px rgba(0, 0, 0, 0.35);
+      0 0 16px 4px rgba(238, 247, 255, 0.3),
+      0 0 32px 9px rgba(238, 247, 255, 0.14);
   }
 }
 
 @keyframes canvas-selection-batch-pulse {
-  0% {
-    transform: scale(0.55);
-    opacity: 0.82;
+  0%,
+  100% {
+    transform: scale(0.94);
+    opacity: 0.5;
   }
 
-  82%,
-  100% {
-    transform: scale(1.8);
-    opacity: 0;
+  50% {
+    transform: scale(1.12);
+    opacity: 0.8;
   }
 }
 
@@ -5034,6 +5024,33 @@ select:focus-visible {
   background: #f9a8d4;
 }
 
+.video-timeline {
+  user-select: none;
+}
+
+.video-timeline-track {
+  touch-action: none;
+}
+
+.video-timeline-track[data-point] .video-timeline-handle {
+  top: -5px;
+  bottom: -5px;
+  width: 28px;
+  border: 0;
+  background: linear-gradient(#b7d8ec, #b7d8ec) center / 5px 100% no-repeat;
+  box-shadow: none;
+}
+
+.video-timeline-track[data-point] .video-timeline-handle::after {
+  position: absolute;
+  inset: 0 6px auto;
+  height: 10px;
+  border: 0;
+  border-radius: 2px;
+  background: #b7d8ec;
+  content: '';
+}
+
 /* 控制按钮行 */
 .video-timeline-controls {
   display: flex;
@@ -6937,7 +6954,7 @@ select:focus-visible {
 }
 
 .assets-toolbar-btn.active {
-  border-color: rgba(98, 199, 246, 0.3) !important;
+  border-color: var(--border-soft) !important;
   background: rgba(66, 185, 245, 0.13);
   color: #c1edff;
 }
@@ -7040,9 +7057,9 @@ select:focus-visible {
 }
 
 .asset-card.selected {
-  border-color: rgba(105, 208, 255, 0.55);
-  background: rgba(66, 185, 245, 0.07);
-  box-shadow: inset 0 0 0 1px rgba(105, 208, 255, 0.35);
+  border-color: var(--border-soft);
+  background: var(--node-surface);
+  box-shadow: inset 0 0 0 1px var(--border-soft);
 }
 
 .asset-check {
@@ -7185,6 +7202,7 @@ select:focus-visible {
   grid-auto-rows: max-content;
   align-content: start;
   gap: 8px;
+  padding: 3px 1px 2px;
   overflow-y: auto;
   flex: 1;
 }
@@ -11627,9 +11645,22 @@ select:focus-visible {
   gap: 6px;
   align-items: center;
 }
-.history-toolbar .assets-toolbar-btn {
+.history-save-btn {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
   width: 100%;
+  min-height: 34px;
+  border-radius: 8px;
+  background: var(--node-surface);
+  box-shadow: inset 0 0 0 1px var(--border-soft);
+  color: var(--txt);
+  font-weight: 600;
+  cursor: pointer;
 }
+.history-save-btn:hover:not(:disabled) { background: var(--card-hover); }
+.history-save-btn:disabled { opacity: .5; cursor: default; }
 .history-list {
   flex: 1;
   overflow-y: auto;
@@ -11675,7 +11706,11 @@ select:focus-visible {
   flex-shrink: 0;
 }
 .history-action-btn {
-  padding: 4px 8px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   font-size: 10px;
   border: 1px solid var(--line);
   border-radius: 5px;
@@ -11693,19 +11728,6 @@ select:focus-visible {
   background: var(--line);
   color: var(--txt);
 }
-.history-action-btn.restore:hover {
-  border-color: var(--brand);
-  color: var(--brand);
-}
-.history-action-btn.delete {
-  color: var(--red);
-  border-color: rgba(255, 107, 107, 0.2);
-}
-.history-action-btn.delete:hover {
-  background: rgba(255, 107, 107, 0.1);
-  border-color: var(--red);
-}
-
 /* ── P3-2 自绘确认弹窗 ── */
 .confirm-overlay {
   position: fixed;

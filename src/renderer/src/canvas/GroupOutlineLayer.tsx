@@ -423,9 +423,7 @@ export function GroupOutlineLayer({
             />
           ) : (
             <span>
-              {outline.label
-                ? `${outline.label} · ${outline.count} 个节点`
-                : `分组 · ${outline.count} 个节点`}
+              {outline.label || '分组'}
             </span>
           )}
           <button
@@ -472,7 +470,6 @@ export function GroupOutlineLayer({
             ) : (
               <span className="canvas-combo-title" title="双击重命名组合">
                 {combo.label || '分组'}
-                <i>· {combo.nodeCount} 个节点</i>
               </span>
             )}
             <span className="canvas-combo-header-space" aria-hidden="true" />
@@ -486,7 +483,7 @@ export function GroupOutlineLayer({
                 toggleGroupCollapse(editor, combo.id)
               }}
             >
-              <Icon name="unfold" size={14} />
+              <Icon name="fullscreen" size={14} />
             </button>
             <button
               type="button"

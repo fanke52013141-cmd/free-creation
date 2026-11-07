@@ -6,7 +6,6 @@ import { LibraryCardCover } from './LibraryCardCover'
 import { useConfirmStore } from '../stores/confirm'
 import { useToastStore } from '../stores/toast'
 import { insertResource } from './insertResource'
-import { libraryVersionLabel } from './value-type-labels'
 import { useDragToCanvas } from '../canvas/drag-to-canvas'
 
 interface LibraryResourcePickerProps {
@@ -17,13 +16,10 @@ interface LibraryResourcePickerProps {
 const SEARCH_DEBOUNCE_MS = 160
 const SEARCH_LIMIT = 100
 
-function formatTime(ts: number): string {
-  const d = new Date(ts)
-  return `${d.getMonth() + 1}/${d.getDate()} ${d
-    .getHours()
-    .toString()
-    .padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
-}
+const resourceDate = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+})
 
 export function LibraryResourcePicker({
   projectId,
@@ -174,14 +170,14 @@ function LibraryCard({
       }
       onClick={() => handleClick(onAdd)}
     >
-      {resource.iconKind && <LibraryCardCover icon={resource.iconKind} compact />}
+      {resource.iconKind && <LibraryCardCover icon={resource.iconKind} path={resource.iconKind === 'video' ? resource.videoPreviewPath : resource.coverPath} compact />}
 
       <div className="asset-info">
         <span className="asset-name" title={resource.title}>
           {resource.title}
         </span>
         <span className="asset-meta">
-          {formatTime(resource.updatedAt)} · {libraryVersionLabel(resource.revisionNumber)}
+          {resourceDate.format(resource.updatedAt).replaceAll('/', '-')}
         </span>
       </div>
 

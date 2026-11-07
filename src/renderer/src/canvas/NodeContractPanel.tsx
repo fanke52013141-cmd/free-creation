@@ -24,7 +24,6 @@ import {
   type NodeTestInputs
 } from '../engine/executor'
 import { useMediaStore } from '../stores/media'
-import { NodeIoExamples } from './NodeIoExamples'
 import { FlowAssetPanel } from './FlowAssetPanel'
 import { AgentCollaborationPanel } from '../nodes/specs/AgentCollaborationPanel'
 
@@ -99,7 +98,6 @@ function PortRows({
                   {port.required ? ' · 必填' : ''}
                   {port.cardinality === 'many' ? ' · 多值' : ' · 单值'}
                 </small>
-                <p>{port.description}</p>
                 <code>
                   {port.id}
                   {port.schema ? ` · ${port.schema.id}@${port.schema.version}` : ''}
@@ -156,7 +154,7 @@ const COLLAB_TAB_ITEM: { id: InspectorTab; label: string } = {
 const COLLAB_NODE_TYPES = new Set(['agent', 'ai-review', 'state-machine'])
 
 function safeConfigPreview(text: string): string {
-  if (!text.trim()) return '此节点没有固定配置；全部值来自连线或媒体资产。'
+  if (!text.trim()) return '无固定配置'
   let value: unknown = text
   try {
     value = JSON.parse(text)
@@ -298,7 +296,7 @@ function TestHarness({
     <section className="contract-section contract-test-harness">
       <h4>未连线测试</h4>
       {ports.length === 0 ? (
-        <p className="contract-empty">此节点没有可注入的输入，可直接点击下方测试运行。</p>
+        <p className="contract-empty">无测试输入</p>
       ) : (
         ports.map((port) => {
           const draft = readDraft(port)
@@ -311,7 +309,7 @@ function TestHarness({
                 <strong>{port.name}</strong>
                 <small>
                   {port.required ? '必填' : '可选'} ·{' '}
-                  {port.cardinality === 'many' ? '多值（本次注入一项）' : '单值'}
+                  {port.cardinality === 'many' ? '多值' : '单值'}
                 </small>
               </span>
               {port.type === 'any' && (
@@ -621,7 +619,7 @@ export function NodeContractPanel({
   return (
     <aside ref={panelRef} className="node-contract-panel" aria-label="节点输入输出说明">
       <header className="contract-head">
-        <span style={{ color: nodeIconColor(spec.color) }}>
+        <span className="side-panel-icon" style={{ color: nodeIconColor(spec.color) }}>
           <Icon name={spec.icon} size={17} />
         </span>
         <div>
@@ -670,15 +668,6 @@ export function NodeContractPanel({
           )}
           {activeTab === 'overview' && (
             <div role="tabpanel" id="contract-tabpanel-overview" className="contract-overview">
-              <p className="contract-description">{spec.description}</p>
-              <div className="contract-rule">
-                <span className="contract-rule-icon" aria-hidden="true">
-                  <Icon name="info" size={14} />
-                </span>
-                <span>
-                  连线会把上游端口的真实输出填入对应输入；没有连线时才使用节点内的固定内容。
-                </span>
-              </div>
               <div className="contract-overview-grid">
                 <span className="contract-overview-stat">
                   <small>执行方式</small>
@@ -714,9 +703,7 @@ export function NodeContractPanel({
           {activeTab === 'io' && (
             <div role="tabpanel" id="contract-tabpanel-io">
               <PortRows
-                title={
-                  ports.in.some((port) => port.exclusiveGroup) ? '输入（同组恰好选一种）' : '输入'
-                }
+                title="输入"
                 ports={ports.in}
                 connections={incoming}
                 previews={inputPreviews}
@@ -735,7 +722,6 @@ export function NodeContractPanel({
                 connections={outgoing}
                 previews={outputPreviews}
               />
-              <NodeIoExamples nodeType={shape.props.nodeType} />
               <FlowAssetPanel
                 key={JSON.stringify([projectId, shape.id, shape.props.nodeType])}
                 editor={editor}
@@ -751,7 +737,6 @@ export function NodeContractPanel({
               ) : (
                 <section className="contract-section">
                   <h4>节点固定配置</h4>
-                  <p className="contract-settings-hint">连线值优先于固定值；敏感字段会自动隐藏。</p>
                   <pre className="contract-settings-code">
                     {safeConfigPreview(readNodeConfig(shape))}
                   </pre>
@@ -779,7 +764,6 @@ export function NodeContractPanel({
                   <button disabled={!runRecord} onClick={() => void exportDiagnostics()}>
                     导出节点诊断信息
                   </button>
-                  <small>包含运行阶段、耗时和错误原因；不包含正文、媒体内容或 API Key。</small>
                 </div>
               </section>
               {runRecord ? (

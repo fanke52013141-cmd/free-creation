@@ -29,7 +29,7 @@
   --elevation-1: 0 14px 34px rgba(0, 0, 0, 0.22);
   --elevation-float: 0 18px 48px rgba(0, 0, 0, 0.34);
   /* 节点卡片 v1.5：卡片、分区、控件统一使用中性灰，不再使用节点分类色。 */
-  --node-surface: #20242a;
+  --node-surface: #151922;
   --node-surface-hover: #242930;
   --node-edge: #343a43;
   --node-edge-strong: #444c57;
@@ -679,7 +679,8 @@ textarea {
 }
 
 .app-select-item[data-state='checked'] {
-  color: #22d3ee;
+  background: var(--node-surface);
+  color: var(--txt);
 }
 
 .app-select-item[data-disabled] {
@@ -693,7 +694,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #22d3ee;
+  color: inherit;
 }
 
 .app-select-item-check svg {

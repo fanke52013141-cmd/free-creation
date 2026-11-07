@@ -154,6 +154,7 @@ function resourceSummary(row: ResourceRow): LibraryResourceSummary {
   // 2026-11-06：没有封面槽位/持久化封面的资源（例如组合资产）优先用第一张图片作为卡片背景。
   const firstImageCover = components.find((component) => component.valueType === 'image')?.blobPath
   const cover = coverSlotCover ?? row.cover_path ?? firstImageCover
+  const videoPreviewPath = components.find((component) => component.valueType === 'video' && component.blobPath)?.blobPath
   return {
     id: row.id,
     formPreset: row.form_preset,
@@ -165,6 +166,7 @@ function resourceSummary(row: ResourceRow): LibraryResourceSummary {
     componentCount: row.component_count,
     ...(iconKind ? { iconKind } : {}),
     ...(cover ? { coverPath: cover } : {}),
+    ...(videoPreviewPath ? { videoPreviewPath } : {}),
     tags: resourceTags(row.id),
     collectionIds: resourceCollections(row.id),
     folderIds: resourceFolderIds(row.id),

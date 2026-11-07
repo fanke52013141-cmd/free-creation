@@ -345,6 +345,17 @@ export function CanvasEditor({
   const [panelTab, setPanelTab] = useState<SidePanelTab | null>(null)
   // 节点右上角 info 图标显式打开的面板目标（选中不触发；对话节点→聊天，其余→契约窗）
   const nodePanelKind = useNodePanelStore((s) => s.kind)
+  useEffect(() => {
+    if (!panelTab && nodePanelKind !== 'contract') return
+    const dismiss = (event: PointerEvent): void => {
+      if (!(event.target instanceof Element)) return
+      if (event.target.closest('.side-panel, .node-contract-panel, .app-select-content, [role="dialog"], [role="alertdialog"]')) return
+      if (panelTab) setPanelTab(null)
+      else useNodePanelStore.getState().close()
+    }
+    document.addEventListener('pointerdown', dismiss, true)
+    return () => document.removeEventListener('pointerdown', dismiss, true)
+  }, [panelTab, nodePanelKind])
   const nodePanelShapeId = useNodePanelStore((s) => s.shapeId)
   // 右侧区域是单例：节点详情请求（info 图标、卡片配置按钮、预演台入口、选中对话节点）
   // 到达时，若资产/工作流/历史/运行中心等侧栏面板正开着，必须先关闭它再渲染详情，

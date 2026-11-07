@@ -30,7 +30,7 @@ function formatRevisionDate(timestamp: number): string {
 function ResourceCard({ resource, onOpen, onDragStart }: { resource: LibraryResourceSummary; onOpen: () => void; onDragStart?: React.DragEventHandler<HTMLButtonElement> }): React.JSX.Element {
   return (
     <button className="library-resource-card" draggable={Boolean(onDragStart)} onDragStart={onDragStart} onClick={onOpen}>
-      {resource.iconKind && <LibraryCardCover icon={resource.iconKind} />}
+      {resource.iconKind && <LibraryCardCover icon={resource.iconKind} path={resource.iconKind === 'video' ? resource.videoPreviewPath : resource.coverPath} />}
       <div className="library-resource-card-body">
         <div className="library-resource-card-title"><strong>{resource.title}</strong></div>
         {resource.description && <p>{resource.description}</p>}

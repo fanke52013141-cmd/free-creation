@@ -5,14 +5,14 @@ import { useEffect, useRef } from 'react'
  *
  * 参考桌面样例「生成中」的 3D 星尘：中心亮核 + 青色光晕、近大远小、缓慢漂浮、
  * 呼吸闪烁。与样例的关键差异在节奏：样例用 14 秒进度逐圈激活，前期几乎全暗；
- * 这里改为「加载开始后 ≤600ms 星星全部出现」（四组按中心向外错峰淡入），
+ * 基础星场在加载开始后 ≤600ms 淡入，额外星星随预计进度逐渐增加，
  * 星星从出现时就开始漂浮，并随预计进度加速。闪烁与淡入各自保持原有节奏。
  *
  * 可测性：state 通过 data-* 暴露在 .generation-loading-field 上，
  * 浏览器验收脚本据此断言星数、出现时长、reduced-motion 静态帧。
  */
 
-/** 全部星星出现上限：最后一组淡入结束时间（460ms + 首帧调度余量仍 ≤600ms）。 */
+/** 基础星场淡入上限：最后一组淡入结束时间（460ms + 首帧调度余量仍 ≤600ms）。 */
 const REVEAL_TOTAL_MS = 460
 const REVEAL_FADE_MS = 150
 const REVEAL_GROUPS = 4
@@ -34,6 +34,7 @@ interface Star {
   driftAmplitude: number
   /** 淡入分组（0 靠近中心，越大越靠外）。 */
   group: number
+  threshold: number
 }
 
 interface StarDustFieldProps {
@@ -46,14 +47,14 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
- * 按容器面积算星数：节点全屏遮罩约 97 颗，compact 约 28-36 颗。
+ * 按容器面积限定最大星数，完整节点最多 180 颗，compact 最多 52 颗。
  * 极小的内联加载态（如对话里的「AI 回复中」chip）按面积自然降到个位数，
  * 不硬塞 50 多颗光点把文字糊掉。
  */
 function starCountFor(width: number, height: number, compact: boolean): number {
   const area = width * height
-  if (compact) return Math.round(clamp(area / 460, 28, 36))
-  return Math.round(clamp(area / 1050, 10, 100))
+  if (compact) return Math.round(clamp(area / 350, 14, 52))
+  return Math.round(clamp(area / 680, 14, 180))
 }
 
 function shareCanvas(width: number, height: number): HTMLCanvasElement {
@@ -91,11 +92,12 @@ function createStars(count: number, compact: boolean): Star[] {
       y,
       depth: Math.random(),
       seed: Math.random(),
-      size: compact ? 1.2 + Math.random() * 1.5 : 1.7 + Math.random() * 2.2,
+      size: compact ? 2.2 + Math.random() * 2.7 : 3.2 + Math.random() * 4.8,
       twinkleSpeed: 0.5 + Math.random() * 1.2,
       phase: Math.random() * Math.PI * 2,
       driftSpeed: 0.65 + Math.random() * 0.75,
-      driftAmplitude: 0.035 + Math.random() * 0.065,
+      driftAmplitude: 0.045 + Math.random() * 0.09,
+      threshold: index < count * 0.65 ? 0 : (index / count - 0.65) / 0.35,
       // 中心先亮、向外蔓延；四组在 600ms 内全部点亮（与样例 14 秒进度无关）。
       group: Math.min(REVEAL_GROUPS - 1, Math.floor(radial * REVEAL_GROUPS))
     })
@@ -134,7 +136,7 @@ export function StarDustField({ compact = false, progress }: StarDustFieldProps)
     let dpr = 1
     let elapsedMs = 0
     let driftMs = 0
-    let driftRate = 1
+    let driftRate = 1.65
     // 淡入按可见时长计时，漂浮与闪烁限制每帧时间增量，避免卡顿后跳变。
     let revealedMs = 0
     let lastFrame = 0
@@ -169,20 +171,25 @@ export function StarDustField({ compact = false, progress }: StarDustFieldProps)
 
       ctx.globalCompositeOperation = 'lighter'
       for (const star of stars) {
-        const reveal = reduced ? 1 : revealAlphaFor(star.group, revealClock)
+        const reveal = reduced
+          ? 1
+          : revealAlphaFor(star.group, revealClock) *
+            (star.threshold === 0 || progressRef.current === undefined
+              ? 1
+              : clamp((progressValue - star.threshold) / 0.1, 0, 1))
         if (reveal <= 0) continue
         const depth = star.depth
         const twinkle = 0.74 + 0.26 * Math.sin(seconds * star.twinkleSpeed + star.phase)
         const driftX = Math.sin(driftSeconds * star.driftSpeed + star.phase) * star.driftAmplitude
         const driftY =
           Math.cos(driftSeconds * star.driftSpeed * 0.82 + star.phase * 1.27) * star.driftAmplitude
-        const parallax = reduced ? 0 : 0.014 + depth * 0.052
+        const parallax = reduced ? 0 : 0.03 + depth * 0.10
         const px = star.x + driftX + pointerX * parallax
         const py = star.y + driftY + pointerY * parallax
         const sx = halfWidth + px * halfWidth * 0.94
         const sy = halfHeight + py * halfHeight * 0.94
-        const radius = (star.size * (0.6 + depth * 1.05) * (compact ? 0.86 : 1)) / 2.4
-        const alpha = (0.14 + depth * 0.5) * twinkle * reveal * (1 + progressValue * 0.18)
+        const radius = (star.size * (0.6 + depth * 1.05) * (compact ? 0.86 : 1)) * (0.68 + progressValue * 0.4)
+        const alpha = (0.34 + depth * 0.64) * twinkle * reveal * (1 + progressValue * 0.18)
         if (alpha <= 0.015) continue
         ctx.globalAlpha = Math.min(1, alpha)
         ctx.drawImage(sprite, sx - radius, sy - radius, radius * 2, radius * 2)
@@ -223,7 +230,7 @@ export function StarDustField({ compact = false, progress }: StarDustFieldProps)
       lastFrame = now
       const frameMs = Math.min(delta, 64)
       const progressRatio = clamp((progressRef.current ?? 0) / 100, 0, 1)
-      const targetDriftRate = 1 + 2.8 * progressRatio
+      const targetDriftRate = 1.65 + 3.7 * progressRatio
       // 逐帧积分速度，进度跳变也不会让星星瞬移。
       driftRate += (targetDriftRate - driftRate) * (1 - Math.exp(-frameMs / 240))
       driftMs += frameMs * driftRate
@@ -334,7 +341,7 @@ export function StarDustField({ compact = false, progress }: StarDustFieldProps)
     )
     intersectionObserver.observe(field)
 
-    const card = field.parentElement
+    const card = field.closest<HTMLElement>('.node-card-wrap') ?? field.parentElement
     card?.addEventListener('pointermove', onPointerMove, { passive: true })
     card?.addEventListener('pointerleave', onPointerLeave, { passive: true })
     document.addEventListener('visibilitychange', onVisibilityChange)

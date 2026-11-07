@@ -1,6 +1,5 @@
 import {
   NodeFooterActions,
-  NodeHeaderActions,
   NodeIdentity,
   NodePrimaryButton
 } from '../../../canvas/NodePresentation'
@@ -70,7 +69,7 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
 
   return (
     <div className="node-media-wrap">
-      <NodeHeaderActions><MediaFileActions shape={shape} /></NodeHeaderActions>
+      <MediaFileActions shape={shape} />
       <div
         className="node-media"
         data-node-interactive="media-preview"

@@ -217,9 +217,8 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   frame: (
     <>
-      <rect x="2.5" y="4" width="14" height="11" rx="1.5" />
-      <path d="M5.5 4v11M13.5 4v3M13.5 12v3" strokeDasharray="1.5 2" />
-      <rect x="9" y="10" width="12.5" height="10" rx="1.5" />
+      <rect x="3" y="6.5" width="18" height="11" rx="1.5" />
+      <path d="M12 3v18m-2-18h4" />
     </>
   ),
   // 视频截取：片段块 + 左右 [ ] 修剪把手，表达入点/出点，不再复用播放卡片。

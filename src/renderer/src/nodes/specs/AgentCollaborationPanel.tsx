@@ -130,7 +130,6 @@ export function AgentCollaborationPanel({
   ]
   return (
     <section className="agent-flow-settings agent-collaboration" aria-label="Agent 节点协作">
-      <p>讨论和保存意见不会执行节点。采用新要求后，请回卡片明确启动新修订。</p>
       {!view ? (
         <p>暂无任务。请先启动人机协作 Agent。</p>
       ) : (
@@ -220,7 +219,6 @@ export function AgentCollaborationPanel({
           <button disabled={!ready} onClick={() => void action('submit', false)}>
             提交拒绝意见
           </button>
-          <p>提交后，回本节点“确认并继续”。拒绝意见会阻断原任务，保留回执。</p>
           <label>
             新目标
             <textarea

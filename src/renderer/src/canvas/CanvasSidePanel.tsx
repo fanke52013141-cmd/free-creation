@@ -557,16 +557,13 @@ function HistoryPanel({
     <div className="side-panel-body history-panel">
       <div className="history-toolbar">
         <button
-          className="assets-toolbar-btn"
+          className="history-save-btn"
           onClick={() => void handleSave()}
           disabled={!editor || restoring}
         >
           <Icon name="history" size={14} /> 保存版本
         </button>
       </div>
-      <p className="side-panel-hint">
-        手动保存当前画布为版本快照，随时可回溯。最多保留 {30} 个版本。
-      </p>
       {snapshots.length === 0 ? (
         <div className="side-panel-empty">暂无历史版本。点击「保存版本」记录当前画布状态。</div>
       ) : (
@@ -574,7 +571,7 @@ function HistoryPanel({
           {snapshots.map((snap, index) => (
             <div key={snap.id} className="history-card">
               <div className="history-card-info" title={snap.label}>
-                <span className="history-card-label">{snapshots.length - index}.0</span>
+                <span className="history-card-label">{snapshots.length - index}.0 版本</span>
                 <time
                   className="history-card-meta"
                   dateTime={new Date(snap.timestamp).toISOString()}
@@ -584,15 +581,17 @@ function HistoryPanel({
               </div>
               <div className="history-card-actions">
                 <button
-                  className="history-action-btn restore"
+                  className="history-action-btn"
+                  title="回溯到此版本"
                   aria-label="回溯到此版本"
                   disabled={restoring || !editor}
                   onClick={() => void handleRestore(snap)}
                 >
-                  ↩ 回溯
+                  <Icon name="undo" size={16} />
                 </button>
                 <button
-                  className="history-action-btn delete"
+                  className="history-action-btn"
+                  title="删除版本"
                   aria-label={`删除历史版本 ${snap.label}`}
                   disabled={restoring}
                   onClick={() => void handleRemove(snap)}

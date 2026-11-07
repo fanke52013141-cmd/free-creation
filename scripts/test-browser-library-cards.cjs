@@ -1,18 +1,23 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
 const { chromium } = require('playwright')
 const assert = require('node:assert/strict')
+const { readFileSync } = require('node:fs')
+const path = require('node:path')
 
 async function main() {
   const browser = await chromium.launch({ headless: true })
   try {
     const page = await browser.newPage({ viewport: { width: 1500, height: 1000 } })
     await page.goto(process.env.BROWSER_ORIGIN || 'http://127.0.0.1:5202')
-    await page.evaluate(async () => {
+    const video = 'data:video/mp4;base64,' + readFileSync(path.join(__dirname, '../test/fixtures/agent-video.mp4')).toString('base64')
+    await page.evaluate(async (videoPreviewPath) => {
       const kinds = ['video', 'image', 'audio', 'text']
       const resources = kinds.map((kind, index) => ({
         id: `resource-${index}`, title: `资源 ${kind}`, iconKind: kind, description: index === 0 ? '测试说明' : '',
         formPreset: 'custom', latestRevisionId: 'v1', revisionNumber: 1, componentCount: 1,
-        tags: [], collectionIds: [], folderIds: [], updatedAt: 100 - index
+        tags: [], collectionIds: [], folderIds: [], updatedAt: 100 - index,
+        ...(kind === 'video' ? { videoPreviewPath } : {}),
+        ...(kind === 'image' ? { coverPath: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="90"><rect width="160" height="90" fill="orange"/></svg>') } : {})
       }))
       window.api.getLibraryResource = async () => ({ ok: true, data: {
         ...resources[0], selectedTitle: resources[0].title, selectedRevisionId: 'v1',
@@ -23,7 +28,7 @@ async function main() {
       window.api.searchLibrary = async () => ({ ok: true, data: { items: resources, nextCursor: null } })
       const { useAppStore } = await import('/src/stores/app.ts')
       useAppStore.getState().setHome()
-    })
+    }, video)
     await page.getByRole('button', { name: '资源库', exact: true }).click()
     await page.getByRole('button', { name: '资源 video 测试说明' }).waitFor()
     const search = page.getByRole('textbox', { name: '搜索资源' })
@@ -32,8 +37,15 @@ async function main() {
     assert.equal(await page.locator('.library-resource-card-body p').count(), 1)
     for (const kind of ['video', 'image', 'audio', 'text']) {
       const card = page.locator('.library-resource-card').filter({ hasText: `资源 ${kind}` })
-      assert.equal(await card.locator('.library-default-cover').getAttribute('data-icon-kind'), kind)
-      assert.equal(await card.locator('.library-resource-cover img').count(), 0)
+      if (kind === 'video') {
+        assert.equal(await card.locator('video').count(), 1)
+        assert.equal(await card.locator('.asset-play-badge').count(), 1)
+      } else if (kind === 'image') {
+        assert.equal(await card.locator('.library-resource-cover img').count(), 1)
+      } else {
+        assert.equal(await card.locator('.library-default-cover').getAttribute('data-icon-kind'), kind)
+        assert.equal(await card.locator('.library-default-cover svg').getAttribute('width'), '64')
+      }
     }
     assert.equal(await page.getByRole('button', { name: '导入资产包' }).count(), 1)
     assert.equal(await page.locator('.library-default-cover').first().evaluate((icon) =>

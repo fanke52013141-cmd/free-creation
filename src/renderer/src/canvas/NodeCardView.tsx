@@ -776,7 +776,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const stackMeta = shape.meta as Record<string, unknown> | undefined
   const stackMember = stackMeta?.stackRole === 'member'
   const comboTop = stackMeta?.stackRole === 'top'
-  const stackCount = typeof stackMeta?.stackCount === 'number' ? stackMeta.stackCount : 0
   const visibleInPorts = stackMember ? [] : inLayout.ports
   const visibleOutPorts = stackMember ? [] : outLayout.ports
   const visibleInY = inLayout.offsets
@@ -1078,10 +1077,18 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         }`}
         data-node-id={shape.id}
         style={{ width: shape.props.w, height: shape.props.h,
+          ['--node-spot-radius' as string]: Math.max(260, Math.hypot(shape.props.w, shape.props.h) * 0.55) + 'px',
           ['--node-header-h' as string]: `${NODE_UI.header.height}px`,
           ['--node-empty-icon-size' as string]: `${NODE_UI.identity.iconSize}px`,
           ['--node-port-outset' as string]: `${NODE_PORT_OUTSET}px`,
           ['--node-port-hit' as string]: `${NODE_PORT_SIZE}px`
+        }}
+        onPointerMoveCapture={(event) => {
+          if (event.pointerType !== 'mouse' || !event.currentTarget.contains(event.target as Node)) return
+          const card = event.currentTarget
+          const bounds = card.getBoundingClientRect()
+          card.style.setProperty('--node-mouse-x', `${(event.clientX - bounds.left) / bounds.width * 100}%`)
+          card.style.setProperty('--node-mouse-y', `${(event.clientY - bounds.top) / bounds.height * 100}%`)
         }}
         onPointerDown={handleCardPointerDown}
         onPointerDownCapture={(event) => {
@@ -1293,6 +1300,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             </>
           )}
         </div>
+        <span className="node-hover-spot" aria-hidden="true" />
         <span className="node-selection-beam" aria-hidden="true" />
         <div
           className={`node-card type-${shape.props.nodeType}`}
@@ -1323,7 +1331,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                   /* 折叠组合的首位卡：组合内单个节点的正文失去意义，
                      只呈现组合规模与操作提示，具体内容展开后查看。 */
                   <div className="node-combo-summary">
-                    <span className="node-combo-count">组合 · {stackCount} 个节点</span>
                     <span className="node-combo-hint">右上角图标可展开或运行整个组合</span>
                   </div>
                 ) : (

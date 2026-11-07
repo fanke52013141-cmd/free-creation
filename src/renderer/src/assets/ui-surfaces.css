@@ -148,11 +148,53 @@
 }
 
 .side-panel-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 20px;
+  line-height: 1;
   width: 20px;
   height: 20px;
   border: 0;
   background: transparent;
   color: var(--txt-dim);
+}
+
+/* 所有侧栏标题共用同一条垂直中线，SVG 不参与文字基线排版。 */
+:is(.side-panel-head, .contract-head, .library-detail-header) {
+  display: flex;
+  align-items: center;
+}
+:is(.side-panel-head, .contract-head) > :is(div, strong) {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin-block: 0;
+  line-height: 20px;
+}
+:is(.side-panel-head, .contract-head, .library-detail-header) svg {
+  display: block;
+  flex-shrink: 0;
+}
+:is(.side-panel-head, .contract-head) .side-panel-close {
+  flex: 0 0 30px;
+  padding: 0;
+  margin: 0;
+  align-self: center;
+  line-height: 1;
+}
+
+/* 节点侧栏只保留参数、当前状态和错误，不铺教程式说明。
+   显式 status/alert 是实际运行或配置状态，继续呈现。 */
+.node-contract-panel :is(
+  .contract-settings-hint:not([role]),
+  .crop-coordinate-hint,
+  .crop-aspect-settings > small,
+  .local-capability-alert > small,
+  .video-ai-engine > p,
+  .tts-upload-hint
+) {
+  display: none;
 }
 
 .side-panel-title,
@@ -583,7 +625,7 @@
 .asset-card:hover {
   border-color: rgba(119, 207, 250, 0.32);
   background: rgba(66, 185, 245, 0.055);
-  transform: translateY(-1px);
+  transform: none;
 }
 
 .run-card:hover,
@@ -5422,4 +5464,22 @@ button {
   box-shadow: none !important;
   outline: none;
   outline-offset: 0;
+}
+
+/* Drawer boundaries and quiet selection colors share the canvas node material. */
+.side-panel,
+.node-contract-panel {
+  border-top: 1px solid var(--line);
+}
+
+.side-panel :is(.asset-filter-tab.active, .assets-toolbar-btn.active, .asset-card.selected),
+.node-contract-panel .contract-tabs button.active,
+.run-card-actions button[aria-expanded='true'] {
+  background: var(--node-surface);
+  color: var(--txt);
+  border-color: var(--border-soft);
+}
+
+.side-panel .asset-filter-tab.active .asset-filter-count {
+  color: var(--muted);
 }

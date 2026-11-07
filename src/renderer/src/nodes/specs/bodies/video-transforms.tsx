@@ -49,21 +49,17 @@ const timeLabel = (value: number): string => `${(value / 1000).toFixed(2)}s`
 
 /** 格式化时间码 mm:ss.mmm */
 function timecode(ms: number): string {
-  const totalSec = ms / 1000
+  const roundedMs = Math.round(ms)
+  const totalSec = roundedMs / 1000
   const mm = Math.floor(totalSec / 60)
   const ss = Math.floor(totalSec % 60)
-  const mmm = Math.round((totalSec % 1) * 1000)
+  const mmm = roundedMs % 1000
   return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}.${String(mmm).padStart(3, '0')}`
 }
 
-function playbackTime(ms: number): string {
-  const seconds = Math.floor(Math.max(0, ms) / 1000)
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const remainder = seconds % 60
-  return hours > 0
-    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
-    : `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
+function workbenchTimecode(ms: number): string {
+  const hours = Math.floor(ms / 3600000)
+  return `${String(hours).padStart(2, '0')}:${timecode(ms % 3600000)}`
 }
 
 // ── 统一时间轴组件 ──
@@ -72,21 +68,30 @@ function playbackTime(ms: number): string {
 function TimeInput({
   label,
   valueMs,
+  full = false,
   max,
   onCommit
 }: {
   label?: string
   valueMs: number
+  full?: boolean
   max: number
   onCommit: (ms: number) => void
 }): React.JSX.Element {
-  const [text, setText] = useState(timecode(valueMs))
+  const format = full ? workbenchTimecode : timecode
+  const [text, setText] = useState(format(valueMs))
 
   const parseTimecode = (s: string): number | null => {
     const parts = s.trim().split(':')
     if (parts.length === 1) {
       const sec = parseFloat(parts[0])
       return Number.isNaN(sec) ? null : Math.round(sec * 1000)
+    }
+    if (full && parts.length === 3) {
+      const [hours, minutes, seconds] = parts.map(Number)
+      return parts.every((part) => part !== '') && [hours, minutes, seconds].every(Number.isFinite)
+        ? Math.round((hours * 3600 + minutes * 60 + seconds) * 1000)
+        : null
     }
     if (parts.length === 2) {
       const mm = parseInt(parts[0], 10)
@@ -101,7 +106,7 @@ function TimeInput({
     if (ms !== null) {
       onCommit(clamp(ms, max))
     } else {
-      setText(timecode(valueMs))
+      setText(format(valueMs))
     }
   }
 
@@ -117,7 +122,7 @@ function TimeInput({
         onKeyDown={(event): void => {
           if (event.key === 'Enter') event.currentTarget.blur()
           if (event.key === 'Escape') {
-            setText(timecode(valueMs))
+            setText(format(valueMs))
             event.currentTarget.blur()
           }
         }}
@@ -184,7 +189,6 @@ function MediaTimeline({
   endMs,
   progressMs,
   integrated = false,
-  playbackOnly = false,
   fps,
   thumbnails,
   waveform,
@@ -207,8 +211,6 @@ function MediaTimeline({
   progressMs?: number
   /** 紧凑播放器模式：进度与截取范围共用轨道，控制项由调用方渲染 */
   integrated?: boolean
-  /** 仅显示并拖动原始播放进度，不显示截取手柄 */
-  playbackOnly?: boolean
   fps: number | null
   /** 8~12 张缩略图 data URL 数组 */
   thumbnails?: string[]
@@ -261,86 +263,63 @@ function MediaTimeline({
     onCommit()
   }
 
-  // 统一坐标系：手柄中心与粉色柱边界用同一 `value / max` 百分比定位，
-  // 拖动时二者恒等对齐（修复手柄与柱间距随位置漂移的问题）。
-  const trackRef = useRef<HTMLDivElement>(null)
+  const drag = useRef<{
+    pointerId: number
+    kind: 'point' | 'start' | 'end'
+    offsetMs: number
+  } | null>(null)
 
-  const clientXToMs = (clientX: number): number => {
-    const el = trackRef.current
-    if (!el) return 0
-    const rect = el.getBoundingClientRect()
-    const ratio = rect.width > 0 ? (clientX - rect.left) / rect.width : 0
-    return clamp(ratio * max, max)
+  const clientXToMs = (event: React.PointerEvent<HTMLDivElement>): number => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    return rect.width > 0 ? ((event.clientX - rect.left) / rect.width) * max : 0
   }
 
-  const dragHandle = (kind: 'point' | 'start' | 'end', startClientX: number): void => {
-    const el = trackRef.current
-    if (!el) return
-    const fromMs = kind === 'point' ? currentPoint : kind === 'start' ? currentStart : currentEnd
-    let lastMs = fromMs
-    const move = (event: PointerEvent): void => {
-      let ms = clientXToMs(event.clientX)
-      if (kind === 'start') ms = Math.min(ms, currentEnd - 1)
-      else if (kind === 'end') ms = Math.max(ms, currentStart + 1)
-      lastMs = ms
+  const applyDrag = (kind: 'point' | 'start' | 'end', timeMs: number): void => {
+    const ms = clamp(timeMs, max)
+    if (kind === 'point') {
       onSeek(ms)
-      if (kind === 'point') onPoint?.(ms)
-      else if (kind === 'start') onRange?.(ms, currentEnd)
-      else onRange?.(currentStart, ms)
+      onPoint?.(ms)
+    } else if (kind === 'start') {
+      const start = Math.min(ms, currentEnd - 1)
+      onSeek(start)
+      onRange?.(start, currentEnd)
+    } else {
+      const end = Math.max(ms, currentStart + 1)
+      onSeek(end)
+      onRange?.(currentStart, end)
     }
-    const up = (): void => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-      if (kind === 'point') onPoint?.(lastMs)
-      else if (kind === 'start') onRange?.(lastMs, currentEnd)
-      else onRange?.(currentStart, lastMs)
-      onCommit()
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
-    void startClientX
   }
 
-  // 点击轨道：单点模式直接设定；双游标模式移动最近的手柄。
-  const handleTrackPointerDown = (event: React.PointerEvent): void => {
+  const handleTrackPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (event.button !== 0 || drag.current) return
+    event.preventDefault()
     stopEventPropagation(event)
-    const ms = clientXToMs(event.clientX)
-    onSeek(ms)
-    if (integrated) {
-      if (playbackOnly) {
-        dragHandle('point', event.clientX)
-      } else if (isPoint) {
-        onPoint?.(ms)
-        dragHandle('point', event.clientX)
-      } else {
-        const target = event.target instanceof Element ? event.target : null
-        const handle = target?.closest('.video-timeline-handle')
-        const handles = Array.from(
-          trackRef.current?.querySelectorAll('.video-timeline-handle') ?? []
-        )
-        const kind: 'start' | 'end' = handle
-          ? handles.indexOf(handle) === 0
-            ? 'start'
-            : 'end'
-          : Math.abs(ms - currentStart) <= Math.abs(ms - currentEnd)
-            ? 'start'
-            : 'end'
-        if (kind === 'start') onRange?.(Math.min(ms, currentEnd - 1), currentEnd)
-        else onRange?.(currentStart, Math.max(ms, currentStart + 1))
-        dragHandle(kind, event.clientX)
-      }
-      return
-    }
-    if (isPoint) {
-      onPoint?.(ms)
-      dragHandle('point', event.clientX)
-    } else {
-      const kind: 'start' | 'end' =
-        Math.abs(ms - currentStart) <= Math.abs(ms - currentEnd) ? 'start' : 'end'
-      if (kind === 'start') onRange?.(Math.min(ms, currentEnd - 1), currentEnd)
-      else onRange?.(currentStart, Math.max(ms, currentStart + 1))
-      dragHandle(kind, event.clientX)
-    }
+    const ms = clientXToMs(event)
+    const handle = (event.target as Element).closest<HTMLElement>('[data-handle]')
+    const kind = isPoint
+      ? 'point'
+      : handle?.dataset.handle === 'start' ||
+          (!handle && Math.abs(ms - currentStart) <= Math.abs(ms - currentEnd))
+        ? 'start'
+        : 'end'
+    const handleMs = kind === 'point' ? currentPoint : kind === 'start' ? currentStart : currentEnd
+    drag.current = { pointerId: event.pointerId, kind, offsetMs: handle ? ms - handleMs : 0 }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    if (!handle) applyDrag(kind, ms)
+  }
+
+  const handleTrackPointerMove = (event: React.PointerEvent<HTMLDivElement>): void => {
+    const active = drag.current
+    if (!active || active.pointerId !== event.pointerId) return
+    stopEventPropagation(event)
+    applyDrag(active.kind, clientXToMs(event) - active.offsetMs)
+  }
+
+  const finishTrackDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (drag.current?.pointerId !== event.pointerId) return
+    stopEventPropagation(event)
+    drag.current = null
+    onCommit()
   }
 
   return (
@@ -374,10 +353,9 @@ function MediaTimeline({
 
       {/* 滑块轨道：手柄与粉色柱共用同一百分比坐标系 */}
       <div
-        ref={trackRef}
         className="video-timeline-track"
-        data-point={(isPoint && !playbackOnly) || undefined}
-        data-playback-only={playbackOnly || undefined}
+        data-point={isPoint || undefined}
+        data-frame-time={integrated && isPoint ? workbenchTimecode(Math.round(currentPoint)) : undefined}
         style={
           {
             ...(isPoint
@@ -389,6 +367,11 @@ function MediaTimeline({
           } as React.CSSProperties
         }
         onPointerDown={handleTrackPointerDown}
+        onPointerMove={handleTrackPointerMove}
+        onPointerUp={finishTrackDrag}
+        onPointerCancel={finishTrackDrag}
+        onLostPointerCapture={finishTrackDrag}
+        onDragStart={(event) => event.preventDefault()}
       >
         {integrated && thumbnails && thumbnails.length > 0 && (
           <div className="video-timeline-thumbnails" aria-hidden="true">
@@ -396,26 +379,24 @@ function MediaTimeline({
           </div>
         )}
         {integrated && typeof progressMs === 'number' && (
-          <div className="video-timeline-progress" />
+          <span className="video-operations-playhead" aria-hidden="true" />
         )}
         {isPoint ? (
-          playbackOnly ? (
-            <span className="video-operations-playhead" style={{ left: percent(currentPoint) }} aria-hidden="true" />
-          ) : (
-            <div
-              className="video-timeline-handle"
-              style={{ left: percent(currentPoint) }}
-              role="slider"
-              aria-label="取帧位置"
-              aria-valuemin={0}
-              aria-valuemax={max}
-              aria-valuenow={currentPoint}
-            />
-          )
+          <div
+            className="video-timeline-handle"
+            data-handle="point"
+            style={{ left: percent(currentPoint) }}
+            role="slider"
+            aria-label="取帧位置"
+            aria-valuemin={0}
+            aria-valuemax={max}
+            aria-valuenow={currentPoint}
+          />
         ) : (
           <>
             <div
               className="video-timeline-handle"
+              data-handle="start"
               style={{ left: percent(currentStart) }}
               role="slider"
               aria-label="起始时间"
@@ -425,6 +406,7 @@ function MediaTimeline({
             />
             <div
               className="video-timeline-handle"
+              data-handle="end"
               style={{ left: percent(currentEnd) }}
               role="slider"
               aria-label="结束时间"
@@ -660,7 +642,7 @@ export function VideoOperationsWorkbench({
   const [isMuted, setIsMuted] = useState(false)
   const [volume, setVolume] = useState(1)
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [clipCfg, setClipCfg] = useState<VideoClipConfig>(() => parseVideoClipConfig(''))
+  const [clipCfg, setClipCfg] = useState<VideoClipConfig>(() => ({ ...parseVideoClipConfig(''), quality: 'balanced' }))
   const [frameCfg, setFrameCfg] = useState<VideoFrameConfig>(() => parseVideoFrameConfig(''))
   const [clipOutput, setClipOutput] = useState<ClipOutput>('video-with-audio')
   const [extractVocals, setExtractVocals] = useState(false)
@@ -674,7 +656,7 @@ export function VideoOperationsWorkbench({
   > | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  const max = Math.max(durationMs, clipCfg.endMs, frameCfg.timeMs + 1, 1000)
+  const max = durationMs || Math.max(clipCfg.endMs, frameCfg.timeMs + 1, 1000)
   const thumbnails = thumbnailResult?.sourceMediaId === sourceMediaId && thumbnailResult.projectId === project?.id
     ? thumbnailResult.thumbnails
     : []
@@ -1014,6 +996,18 @@ export function VideoOperationsWorkbench({
               <div className="video-operations-controls-main">
                 <button
                   type="button"
+                  className="video-operations-player-button step"
+                  aria-label="后退 5 秒"
+                  title="后退 5 秒"
+                  disabled={durationMs <= 0}
+                  onClick={() => jumpBy(-5000)}
+                >
+                  <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M3 2h2v12H3zm10 0L5 8l8 6z" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
                   className="video-operations-player-button primary"
                   aria-label={isPlaying ? '暂停' : '播放'}
                   title={isPlaying ? '暂停' : '播放'}
@@ -1025,29 +1019,21 @@ export function VideoOperationsWorkbench({
                 <button
                   type="button"
                   className="video-operations-player-button step"
-                  aria-label="后退 5 秒"
-                  title="后退 5 秒"
-                  disabled={durationMs <= 0}
-                  onClick={() => jumpBy(-5000)}
-                >
-                  −5s
-                </button>
-                <button
-                  type="button"
-                  className="video-operations-player-button step"
                   aria-label="快进 5 秒"
                   title="快进 5 秒"
                   disabled={durationMs <= 0}
                   onClick={() => jumpBy(5000)}
                 >
-                  +5s
+                  <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M11 2h2v12h-2zM3 2l8 6-8 6z" />
+                  </svg>
                 </button>
                 <div className="video-operations-timecode">
                   <span className="video-operations-player-time current">
-                    {playbackTime(currentTimeMs)}
+                    {workbenchTimecode(currentTimeMs)}
                   </span>
                   <span className="video-operations-player-time-separator">/</span>
-                  <span className="video-operations-player-time">{playbackTime(durationMs)}</span>
+                  <span className="video-operations-player-time">{workbenchTimecode(durationMs)}</span>
                 </div>
               </div>
               <div className="video-operations-controls-secondary">
@@ -1090,43 +1076,30 @@ export function VideoOperationsWorkbench({
                   <Icon name={isFullscreen ? 'fullscreen-exit' : 'fullscreen'} size={15} />
                 </button>
               </div>
-              <input
-                className="video-operations-progress-accessible"
-                type="range"
-                aria-label="播放进度"
-                min={0}
-                max={Math.max(1, durationMs)}
-                step={1}
-                value={Math.min(currentTimeMs, Math.max(1, durationMs))}
-                disabled={durationMs <= 0}
-                onChange={(event) => seek(Number(event.currentTarget.value))}
-              />
             </div>
             <div className="video-operations-timeline">
               <div className="video-operations-axes">
-                <div className="video-operations-ruler" aria-hidden="true">
-                  {[0, 1, 2, 3, 4].map((step) => {
-                    const mark = Math.round((max * step) / 4)
-                    return <span key={step}>{max < 4000 ? timecode(mark) : playbackTime(mark)}</span>
-                  })}
-                </div>
-                <div className="video-operations-axis">
-                  <span className="video-operations-axis-label">播放</span>
-                  <MediaTimeline
-                    durationMs={max}
-                    pointMs={currentTimeMs}
-                    progressMs={currentTimeMs}
-                    integrated
-                    playbackOnly
-                    fps={fps}
-                    onSeek={seek}
-                    onCommit={() => undefined}
+                <div className="video-operations-ruler">
+                  <div className="video-operations-ruler-labels" aria-hidden="true">
+                    {Array.from({ length: 9 }, (_, step) => {
+                      const mark = Math.round((max * step) / 8)
+                      const label = workbenchTimecode(mark)
+                      return <span key={step}>{max < 8000 ? label : label.split('.')[0]}</span>
+                    })}
+                  </div>
+                  <input
+                    className="video-operations-ruler-seek"
+                    type="range"
+                    aria-label="播放进度"
+                    min={0}
+                    max={Math.max(1, durationMs)}
+                    step={1}
+                    value={Math.min(currentTimeMs, Math.max(1, durationMs))}
+                    disabled={durationMs <= 0}
+                    onChange={(event) => seek(Number(event.currentTarget.value))}
                   />
                 </div>
                 <div className="video-operations-axis">
-                  <span className="video-operations-axis-label">
-                    {mode === 'frame' ? '抽帧' : '截取'}
-                  </span>
                   {mode === 'frame' ? (
                     <MediaTimeline
                       durationMs={max}
@@ -1149,6 +1122,7 @@ export function VideoOperationsWorkbench({
                       durationMs={max}
                       startMs={clipCfg.startMs}
                       endMs={clipCfg.endMs}
+                      progressMs={currentTimeMs}
                       integrated
                       thumbnails={thumbnails}
                       fps={fps}
@@ -1159,54 +1133,38 @@ export function VideoOperationsWorkbench({
                   )}
                 </div>
               </div>
-              <div className="video-operations-time-fields">
-                {mode === 'clip' ? (
-                  <>
-                    <TimeInput
-                      key={`integrated-start-${clipCfg.startMs}`}
-                      label="起始"
-                      valueMs={clipCfg.startMs}
-                      max={max}
-                      onCommit={(ms) => {
-                        const next = Math.min(ms, clipCfg.endMs - 1)
-                        saveRange(next, clipCfg.endMs)
-                        seek(next)
-                      }}
-                    />
-                    <TimeInput
-                      key={`integrated-end-${clipCfg.endMs}`}
-                      label="截止"
-                      valueMs={clipCfg.endMs}
-                      max={max}
-                      onCommit={(ms) => {
-                        const next = Math.max(ms, clipCfg.startMs + 1)
-                        saveRange(clipCfg.startMs, next)
-                        seek(next)
-                      }}
-                    />
-                    <span className="video-operations-duration-badge">
-                      时长 {((clipCfg.endMs - clipCfg.startMs) / 1000).toFixed(3)}s
-                    </span>
-                  </>
-                ) : (
+              {mode === 'clip' && (
+                <div className="video-operations-time-fields">
                   <TimeInput
-                    key={`integrated-point-${frameCfg.timeMs}`}
-                    label="取帧"
-                    valueMs={
-                      frameCfg.mode === 'first'
-                        ? 0
-                        : frameCfg.mode === 'last'
-                          ? max - 1
-                          : frameCfg.timeMs
-                    }
+                    key={`integrated-start-${clipCfg.startMs}`}
+                    full
+                    label="起始"
+                    valueMs={clipCfg.startMs}
                     max={max}
                     onCommit={(ms) => {
-                      savePoint(ms)
-                      seek(ms)
+                      const next = Math.min(ms, clipCfg.endMs - 1)
+                      saveRange(next, clipCfg.endMs)
+                      seek(next)
                     }}
                   />
-                )}
-              </div>
+                  <TimeInput
+                    key={`integrated-end-${clipCfg.endMs}`}
+                    full
+                    label="截止"
+                    valueMs={clipCfg.endMs}
+                    max={max}
+                    onCommit={(ms) => {
+                      const next = Math.max(ms, clipCfg.startMs + 1)
+                      saveRange(clipCfg.startMs, next)
+                      seek(next)
+                    }}
+                  />
+                  <div className="video-operations-duration-badge">
+                    <span>时长</span>
+                    <output>{workbenchTimecode(clipCfg.endMs - clipCfg.startMs)}</output>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1225,8 +1183,7 @@ export function VideoOperationsWorkbench({
 
             {mode === 'frame' ? (
               <div className="video-operations-option-line">
-                <span className="video-operations-option-label">取帧位置</span>
-                <div className="video-operations-choice-row" role="group" aria-label="取帧位置">
+                <div className="video-operations-output-choices" role="radiogroup" aria-label="取帧位置">
                   {(
                     [
                       ['first', '首帧'],
@@ -1234,22 +1191,40 @@ export function VideoOperationsWorkbench({
                       ['custom', '指定时刻']
                     ] as const
                   ).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className={`btn-ghost small frame-preset-btn ${frameCfg.mode === value ? 'active' : ''}`}
-                      disabled={value === 'last' && durationMs <= 0}
-                      onClick={() => {
-                        const timeMs =
-                          value === 'first' ? 0 : value === 'last' ? max - 1 : frameCfg.timeMs
-                        setFrameCfg((previous) => ({ ...previous, mode: value, timeMs }))
-                        seek(timeMs)
-                      }}
-                    >
+                    <label key={value}>
+                      <input
+                        type="radio"
+                        name="video-operation-frame-mode"
+                        checked={frameCfg.mode === value}
+                        disabled={value === 'last' && durationMs <= 0}
+                        onChange={() => {
+                          const timeMs =
+                            value === 'first' ? 0 : value === 'last' ? max - 1 : frameCfg.timeMs
+                          setFrameCfg((previous) => ({ ...previous, mode: value, timeMs }))
+                          seek(timeMs)
+                        }}
+                      />
                       {label}
-                    </button>
+                    </label>
                   ))}
                 </div>
+                <TimeInput
+                  key={`integrated-point-${frameCfg.timeMs}`}
+                  full
+                  label="取帧"
+                  valueMs={
+                    frameCfg.mode === 'first'
+                      ? 0
+                      : frameCfg.mode === 'last'
+                        ? max - 1
+                        : frameCfg.timeMs
+                  }
+                  max={max}
+                  onCommit={(ms) => {
+                    savePoint(ms)
+                    seek(ms)
+                  }}
+                />
                 <label className="video-operations-inline-select">
                   格式
                   <AppSelect
@@ -1268,7 +1243,7 @@ export function VideoOperationsWorkbench({
               <div className="video-operations-clip-options">
                 <div className="video-operations-option-line">
                   <span className="video-operations-option-label">保留内容</span>
-                  <div className="video-operations-choice-row" role="group" aria-label="保留内容">
+                  <div className="video-operations-output-choices" role="radiogroup" aria-label="保留内容">
                     {(
                       [
                         ['video-only', '仅画面'],
@@ -1276,18 +1251,19 @@ export function VideoOperationsWorkbench({
                         ['video-with-audio', '画面 + 音频']
                       ] as const
                     ).map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        className={clipOutput === value ? 'active' : ''}
-                        aria-pressed={clipOutput === value}
-                        onClick={() => {
-                          setClipOutput(value)
-                          if (value !== 'audio-only') setExtractVocals(false)
-                        }}
-                      >
+                      <label key={value}>
+                        <input
+                          type="radio"
+                          name="video-operation-output"
+                          value={value}
+                          checked={clipOutput === value}
+                          onChange={() => {
+                            setClipOutput(value)
+                            if (value !== 'audio-only') setExtractVocals(false)
+                          }}
+                        />
                         {label}
-                      </button>
+                      </label>
                     ))}
                   </div>
                 </div>
@@ -1336,50 +1312,30 @@ export function VideoOperationsWorkbench({
                     本机缺少高质量分离器；可安装 audio-separator，或选择快速人声增强。
                   </div>
                 )}
-                <div className="video-operations-output-settings">
-                  <div className="video-operations-output-heading">
-                    <span aria-hidden="true">◆</span>
-                    输出参数设置
-                  </div>
+                <details className="video-operations-output-settings">
+                  <summary className="video-operations-output-heading">输出参数设置</summary>
                   {clipOutput !== 'audio-only' && (
                     <div className="video-operations-option-line">
                       <span className="video-operations-option-label">画面质量</span>
-                      <div
-                        className="video-operations-choice-row quality"
-                        role="group"
-                        aria-label="画面质量"
-                      >
+                      <div className="video-operations-output-choices" role="radiogroup" aria-label="画面质量">
                         {(
                           [
-                            ['fast', '快速复制'],
                             ['balanced', '平衡 · CRF 18'],
                             ['high', '高质量 · CRF 14']
                           ] as const
                         ).map(([quality, label]) => (
-                          <button
-                            key={quality}
-                            type="button"
-                            className={clipCfg.quality === quality ? 'active' : ''}
-                            aria-pressed={clipCfg.quality === quality}
-                            title={
-                              quality === 'fast'
-                                ? '快速复制，不重新编码；截取边界可能不够精确'
-                                : quality === 'balanced'
-                                  ? '平衡文件体积与画面质量'
-                                  : '使用较高画面质量重新编码'
-                            }
-                            onClick={() => setClipCfg((previous) => ({ ...previous, quality }))}
-                          >
+                          <label key={quality}>
+                            <input
+                              type="radio"
+                              name="video-operation-clip-quality"
+                              checked={clipCfg.quality === quality}
+                              onChange={() => setClipCfg((previous) => ({ ...previous, quality }))}
+                            />
                             {label}
-                          </button>
+                          </label>
                         ))}
                       </div>
                     </div>
-                  )}
-                  {clipOutput !== 'audio-only' && clipCfg.quality === 'fast' && (
-                    <p className="node-wiring">
-                      快速复制按关键帧截取，起止位置可能偏移；需要精确区间请选择平衡或高质量。
-                    </p>
                   )}
                   {clipOutput !== 'video-only' && (
                     <>
@@ -1387,6 +1343,7 @@ export function VideoOperationsWorkbench({
                         <span className="video-operations-option-label">音频格式</span>
                         <label className="video-operations-inline-select">
                           <AppSelect
+                            aria-label="音频格式"
                             value={needsVocalSeparation ? 'wav' : clipCfg.audioFormat}
                             disabled={needsVocalSeparation}
                             onChange={(event) => {
@@ -1403,6 +1360,7 @@ export function VideoOperationsWorkbench({
                         <span className="video-operations-option-label">采样率</span>
                         <label className="video-operations-inline-select">
                           <AppSelect
+                            aria-label="采样率"
                             value={String(clipCfg.audioSampleRate)}
                             onChange={(event) => {
                               const audioSampleRate =
@@ -1417,7 +1375,7 @@ export function VideoOperationsWorkbench({
                       </div>
                     </>
                   )}
-                </div>
+                </details>
               </div>
             )}
           </section>
@@ -1438,10 +1396,6 @@ export function VideoOperationsWorkbench({
               separatorUnavailable
             }
           >
-            <Icon
-              name={mode === 'frame' ? 'frame' : clipOutput === 'audio-only' ? 'audio' : 'clip'}
-              size={15}
-            />
             {submitting
               ? '正在创建…'
               : mode === 'frame'
@@ -2062,7 +2016,9 @@ function VideoTransformSettings({
                       value={clipCfg.quality}
                       onChange={(event) => setClipQuality(event.currentTarget.value as ClipQuality)}
                     >
-                      <option value="fast">快速（关键帧复制，边界可能不精确）</option>
+                      {clipCfg.quality === 'fast' && (
+                        <option value="fast" disabled>旧版快速模式</option>
+                      )}
                       <option value="balanced">平衡（重编码 CRF 18）</option>
                       <option value="high">高质量（重编码 CRF 14）</option>
                     </AppSelect>

@@ -1,4 +1,4 @@
-import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
+import { NodeFooterActions, NodeHeaderActions, NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 // 视频节点 Body（路线图 R6：bodies.tsx 拆分）
 import { useEffect, useState } from 'react'
 import { stopEventPropagation, useEditor, useValue } from 'tldraw'
@@ -305,24 +305,26 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     }
     return (
       <div className="node-media-wrap video-thumbnail-wrap">
-        <div
-          className="node-media"
-          data-node-interactive="media-preview"
-          onPointerDown={guard.onPointerDown}
-          onDoubleClick={(e) =>
-            guard.onDoubleClick(e, () =>
-              openPreview({
-                kind: 'video',
-                url: mediaUrl(shape.props.mediaPath),
-                title: shape.props.title
-              })
-            )
-          }
-        >
-          <video src={mediaUrl(shape.props.mediaPath)} preload="metadata" muted playsInline />
-          <span className="play-badge">
-            <Icon name="play" size={24} />
-          </span>
+        <div className="video-thumbnail-stage">
+          <div
+            className="node-media"
+            data-node-interactive="media-preview"
+            onPointerDown={guard.onPointerDown}
+            onDoubleClick={(e) =>
+              guard.onDoubleClick(e, () =>
+                openPreview({
+                  kind: 'video',
+                  url: mediaUrl(shape.props.mediaPath),
+                  title: shape.props.title
+                })
+              )
+            }
+          >
+            <video src={mediaUrl(shape.props.mediaPath)} preload="metadata" muted playsInline />
+            <span className="play-badge">
+              <Icon name="play" size={24} />
+            </span>
+          </div>
         </div>
         <MediaResultGrid
           shape={shape}
@@ -354,6 +356,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         />
         {/* 操作条与图片节点共用同一套公共样式（NODE_UI_STANDARD §19：按钮 32px、按可用宽度分配）：
             不再使用节点私有的浮层底、描边与背景模糊。 */}
+        <NodeFooterActions>
         <div
           className="node-media-next-actions media-action-toolbar"
           role="group"
@@ -369,7 +372,6 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
                 void chooseAsset()
               }}
             >
-              <Icon name="refresh" size={13} />
               替换
             </button>
             <button
@@ -382,7 +384,6 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
                 setVideoOperationsOpen(true)
               }}
             >
-              <Icon name="clip" size={13} />
               视频截取
             </button>
             <button
@@ -395,33 +396,31 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
                 setVideoOperationsOpen(true)
               }}
             >
-              <Icon name="frame" size={13} />
               抽帧
             </button>
           </div>
-          <span className="media-action-divider" aria-hidden="true" />
-          {/* 2026-11-06 用户裁决：去掉重复按钮，只保留定位；三个主操作等宽分布。 */}
-          <span className="node-media-file-actions" role="group" aria-label="节点辅助操作">
-            <button
-              type="button"
-              className="icon-btn media-file-action-btn"
-              title="在画布中定位居中"
-              aria-label="在画布中定位居中"
-              onPointerDown={stopEventPropagation}
-              onClick={(event) => {
-                stopEventPropagation(event)
-                const bounds = editor.getShapePageBounds(shape.id)
-                if (!bounds) return
-                editor.centerOnPoint(
-                  { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 },
-                  { animation: { duration: 250 } }
-                )
-              }}
-            >
-              <Icon name="target" size={16} />
-            </button>
-          </span>
         </div>
+        </NodeFooterActions>
+        <NodeHeaderActions>
+          <button
+            type="button"
+            className="node-info-btn"
+            title="在画布中定位居中"
+            aria-label="在画布中定位居中"
+            onPointerDown={stopEventPropagation}
+            onClick={(event) => {
+              stopEventPropagation(event)
+              const bounds = editor.getShapePageBounds(shape.id)
+              if (!bounds) return
+              editor.centerOnPoint(
+                { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 },
+                { animation: { duration: 250 } }
+              )
+            }}
+          >
+            <Icon name="target" size={16} />
+          </button>
+        </NodeHeaderActions>
         {videoOperationsOpen && (
           <VideoOperationsWorkbench
             key={videoOperationsMode}

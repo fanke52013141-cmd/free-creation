@@ -475,3 +475,20 @@
   min-height: 72px;
   height: 72px;
 }
+
+/* Keep the card layers visible underneath the collapsed group's outline. */
+.canvas-page .node-card-wrap.stack-member {
+  outline-color: #566170;
+  box-shadow: 0 3px 10px rgb(0 0 0 / 48%);
+}
+.canvas-page .node-card-wrap.stack-top {
+  outline-color: #6a7586;
+}
+
+.canvas-page .node-card-wrap:is(.stack-member, .stack-top) > .node-header {
+  display: none;
+}
+
+.canvas-page .node-header .node-icon svg {
+  translate: 0 1px;
+}

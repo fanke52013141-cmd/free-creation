@@ -98,7 +98,9 @@ const path = require('node:path')
         await page.waitForTimeout(250)
         assert.equal(await button.evaluate(node=>getComputedStyle(node).backgroundColor), 'rgba(0, 0, 0, 0)', `${theme} 标题图标悬浮无背景`)
       }
-      assert.equal(await asset.locator('.node-hover-spot').count(),0)
+      assert.equal(await asset.locator('.node-hover-spot').count(),1,`${theme} 保留节点跟随光`)
+      assert.equal(await asset.locator('.node-hover-spot').evaluate(node=>getComputedStyle(node).opacity),'1',`${theme} 悬浮时显示跟随光`)
+      assert.notEqual(await asset.evaluate(node=>getComputedStyle(node,'::before').content), '""', `${theme} 不叠加额外伪元素光层`)
     }
     await page.locator('.canvas-page').evaluate(node => {
       node.classList.add('canvas-theme-dark')

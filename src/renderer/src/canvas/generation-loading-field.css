@@ -1,6 +1,6 @@
 /*
  * 星辰加载场：暗青底 #081113 + Canvas 2D 星尘（青 #3cdde3 / 亮青 #86eef3 / 暖白核心）。
- * 星星在加载开始后 ≤600ms 全部出现，漂浮随预计进度加速，保留闪烁与扫光。
+ * 基础星场在加载开始后 ≤600ms 淡入，额外光点随进度渐增，漂浮随预计进度加速，保留闪烁与扫光。
  * 具体绘制与性能策略见 StarDustField.tsx。
  */
 .generation-loading-card:has(.generation-loading-field) {
@@ -44,7 +44,7 @@
   background: radial-gradient(
     ellipse 78% 76% at 50% 46%,
     #08111300 34%,
-    #0811138c 74%,
+    #08111354 74%,
     #081113eb 100%
   );
   pointer-events: none;

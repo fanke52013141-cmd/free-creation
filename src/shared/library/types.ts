@@ -107,6 +107,7 @@ export interface LibraryResourceSummary {
   componentCount: number
   iconKind?: 'video' | 'image' | 'audio' | 'text'
   coverPath?: string
+  videoPreviewPath?: string
   tags: string[]
   collectionIds: string[]
   folderIds: string[]

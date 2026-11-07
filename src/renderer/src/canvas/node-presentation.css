@@ -648,11 +648,12 @@
 }
 
 /* 视频仅作为缩略预览；完整播放由双击预览承载。 */
-.node-card .video-thumbnail-wrap {
+.node-card .node-standard-shell .node-body-content > .video-thumbnail-wrap {
   flex: 1 1 0;
   min-height: 0;
   height: 100%;
   gap: 8px;
+  justify-content: center;
 }
 .node-card .video-thumbnail-wrap .node-media {
   flex: 1 1 0;
@@ -868,4 +869,34 @@
   left: 12px;
   right: 12px;
   text-align: center;
+}
+
+.node-card .video-thumbnail-stage {
+  display: grid;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  place-items: center;
+  container-type: size;
+}
+
+.node-card .video-thumbnail-wrap .node-media {
+  flex: 0 0 auto;
+  width: min(100%, calc(100cqh * 16 / 9));
+  height: auto;
+  aspect-ratio: 16 / 9;
+}
+
+.node-card .node-standard-action-bar .media-action-toolbar {
+  width: 100%;
+  margin: 0;
+}
+
+.node-card .node-standard-action-bar .media-action-button > svg {
+  display: none;
+}
+
+.node-card .video-thumbnail-wrap .node-media video {
+  position: absolute;
+  inset: 0;
 }

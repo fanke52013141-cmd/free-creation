@@ -100,11 +100,45 @@
   width: 12px;
   height: 12px;
 }
+.canvas-page .node-hover-spot,
 .canvas-page .node-selection-beam {
   position: absolute;
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
+}
+.canvas-page .node-hover-spot {
+  z-index: 0;
+  opacity: 0;
+  /* 2026-11-06 四次修订：对齐参考实现的强度与观感——中心 18%（参考 14%），
+     按高斯衰减 alpha(t)=.18·e^(-5.9t²) 平滑过渡到 100% 半径归零：没有 42% 拐点、
+     没有 72% 突然截断，也没有模糊层，因此不会出现可辨认的同心环；
+     中心比参考略亮一点，避免"中心不明显"。 */
+  background: radial-gradient(
+    var(--node-spot-radius, 260px) circle at var(--node-mouse-x, 50%) var(--node-mouse-y, 50%),
+    rgb(60 221 227 / 18%) 0%,
+    rgb(60 221 227 / 17.3%) 8%,
+    rgb(60 221 227 / 15.5%) 16%,
+    rgb(60 221 227 / 12.8%) 24%,
+    rgb(60 221 227 / 9.8%) 32%,
+    rgb(60 221 227 / 7.0%) 40%,
+    rgb(60 221 227 / 4.6%) 48%,
+    rgb(60 221 227 / 2.8%) 56%,
+    rgb(60 221 227 / 1.6%) 64%,
+    rgb(60 221 227 / 0.85%) 72%,
+    rgb(60 221 227 / 0.4%) 80%,
+    rgb(60 221 227 / 0.19%) 88%,
+    transparent 100%
+  );
+  transition: opacity 280ms ease;
+}
+.canvas-page .node-hover-spot::before {
+  content: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .canvas-page .node-card-wrap:hover:not(:has(.port-dot:hover)) .node-hover-spot {
+    opacity: 1;
+  }
 }
 .canvas-page .node-selection-beam {
   z-index: 7;
@@ -169,6 +203,24 @@
   overflow-wrap: anywhere;
 }
 
+/* 2026-11-06 四次修订：按参考实现恢复 1px 边缘光——半径 0.62×面光、颜色
+   rgba(120,232,238,.55)、只在卡边 1px 内环可见；随 hover 一起淡入淡出。 */
+.canvas-page .node-hover-spot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: radial-gradient(
+    calc(var(--node-spot-radius, 260px) * .62) circle at var(--node-mouse-x, 50%) var(--node-mouse-y, 50%),
+    rgb(120 232 238 / 55%),
+    transparent 62%
+  );
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
 .canvas-page.canvas-theme-light
   .node-card-wrap
   .node-card

@@ -1,5 +1,4 @@
 import {
-  NodeHeaderActions,
   NodeIdentity,
   NodePrimaryButton
 } from '../../../canvas/NodePresentation'
@@ -344,9 +343,7 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           </div>
         </div>
 
-        <NodeHeaderActions>
-          <MediaFileActions shape={shape} />
-        </NodeHeaderActions>
+        <MediaFileActions shape={shape} />
 
         <NodePrimaryButton
           className="audio-replace-button"

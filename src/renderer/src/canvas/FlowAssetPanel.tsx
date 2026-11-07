@@ -144,7 +144,6 @@ export function FlowAssetPanel({
           <option value="out-json">JSON 资产</option>
         </AppSelect>
       )}
-      <p>提交已保存的输出。版本保持不变；放到画布后，可以从固定资产节点连接下游。</p>
       <div className="contract-run-actions">
         <button
           type="button"
@@ -174,7 +173,7 @@ export function FlowAssetPanel({
       )}
       {version && (
         <>
-          <p>当前查看 v{version.ordinal} · 已固定输出。修改节点正文不会更新这份版本。</p>
+          <p>v{version.ordinal} · 已固定输出</p>
           <pre>
             {version.value.kind === 'video' ||
             version.value.kind === 'image' ||
