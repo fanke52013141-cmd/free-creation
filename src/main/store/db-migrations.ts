@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 21
+export const DB_SCHEMA_VERSION = 23
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -466,6 +466,33 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
       updated_at INTEGER NOT NULL
     );
     CREATE INDEX idx_external_runs_project ON external_runs(project_id, status);`)
+  },
+  // M22: 导演台外部发布授权账本（F6 收尾）。manual-publish 不能由外部伪造：
+  // 只存"待人工授权/已授权/已拒绝/执行中/终态"与正式产物引用，不存工程正文。
+  (database) => {
+    database.exec(`CREATE TABLE director_publish_requests (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      mode TEXT NOT NULL,
+      shot_id TEXT NOT NULL,
+      expected_graph_version INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      error TEXT,
+      media_id TEXT,
+      media_path TEXT,
+      media_mime TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+    CREATE INDEX idx_director_publish_project ON director_publish_requests(project_id, status);`)
+  },
+  // M23: 历史快照携带"已持久化图数据"（F7 历史恢复）。外部恢复只读这一列，
+  // 不往 tldraw 快照 JSON 里塞附加键——两种格式互不污染；NULL 表示该快照
+  // 没有可外部恢复的图（未保存编辑下拍的快照或历史旧行），GUI 恢复不受影响。
+  (database) => {
+    database.exec('ALTER TABLE history_snapshots ADD COLUMN graph_json TEXT;')
   }
 ]
 

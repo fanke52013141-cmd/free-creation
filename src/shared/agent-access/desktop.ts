@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { SkillAgentConfigSchema } from '../skill-agent'
 import { GraphPatchOpsSchema, GRAPH_VIEW_MAX_NODES, mediaResolutionSchema } from './graph-ops'
+import { PublishModeSchema, publishRequestIdSchema } from './publish'
 import { NODE_EXECUTE_MAX_NODES } from './run-ops'
 
 export const ACCESS_DESKTOP_REQUEST = 'local-agent:desktop-request'
@@ -20,7 +21,12 @@ export const DesktopRequestSchema = z
       'graph-patch',
       'read-graph',
       'execute-nodes',
-      'cancel-run'
+      'cancel-run',
+      // F6 收尾：manual-publish 的等待/继续。
+      // publish-authorize 由人在 GUI 上亲眼确认（交互式请求，不占用写入槽）；
+      // director-publish 只在人工授权后执行，复用 GUI 同一发布服务。
+      'publish-authorize',
+      'director-publish'
     ]),
     nodeId: z.string().optional(),
     agent: SkillAgentConfigSchema.optional(),
@@ -38,7 +44,11 @@ export const DesktopRequestSchema = z
     nodeIds: z.array(z.string().max(180)).min(1).max(NODE_EXECUTE_MAX_NODES).optional(),
     confirmPaidRerun: z.boolean().optional(),
     /** graph-patch：main 预检解析的素材事实（按 mediaId 注入，外部输入不可携带路径）。 */
-    mediaResolutions: z.record(z.string(), mediaResolutionSchema).optional()
+    mediaResolutions: z.record(z.string(), mediaResolutionSchema).optional(),
+    /** 发布授权协议：待授权请求、发布模式与镜头；方向由 main 决定，外部不可自造授权。 */
+    publishRequestId: publishRequestIdSchema.optional(),
+    publishMode: PublishModeSchema.optional(),
+    shotId: z.string().min(1).max(80).optional()
   })
   .strict()
 export type DesktopRequest = z.infer<typeof DesktopRequestSchema>

@@ -50,6 +50,11 @@ import { NODE_PORT_OUTSET } from './edge-geometry'
 import { assetNodeTypeFor } from './asset-node-type'
 import { planGraphPatch } from './graph-patch'
 import { planChatPatch } from './chat-patch'
+// F6 收尾：导演台外部发布授权（人工确认 + 与 GUI 同一发布服务）。
+import { useConfirmStore } from '../stores/confirm'
+import { parseDirectorProject } from '../nodes/director-data'
+import { readNodeConfig } from './node-persistence'
+import { publishDirectorOutput } from './director-frame'
 import { toGraphView } from '@shared/agent-access/graph-ops'
 import type { AiProcessConfig } from '../engine/executors/aiProcess'
 import { markUndoPoint } from './history'
@@ -921,7 +926,11 @@ export function CanvasEditor({
                   replyFail(false, 'CHAT_NODE_REQUIRED', entry.nodeId)
                   return
                 }
-                const planned = planChatPatch(target.props.text ?? '', entry.ops as never)
+                const planned = planChatPatch(
+                  target.props.text ?? '',
+                  entry.ops as never,
+                  request.mediaResolutions
+                )
                 if (!planned.ok) {
                   replyFail(false, planned.issue.code, `op[${planned.issue.index}]`)
                   return
@@ -939,6 +948,115 @@ export function CanvasEditor({
                 projectId: project.id,
                 ok: true,
                 graphVersion: graphVersionRef.current
+              })
+              return
+            }
+            // ── F6 收尾：导演台发布授权（交互式请求）──
+            // manual-publish 的授权必须来自人：这里复用 GUI 自己的确认弹窗，
+            // 外部无法伪造这一步（它没有 renderer 回复通道），也不占用写入槽。
+            if (request.action === 'publish-authorize') {
+              const target = request.nodeId
+                ? editor.getShape<NodeCardShape>(request.nodeId as TLShapeId)
+                : undefined
+              const isDirector = !!target && target.type === 'node-card' && target.props.nodeType === 'director'
+              const modeLabel = request.publishMode === 'video' ? '预演视频（WebM）' : '静帧画面（PNG）'
+              const allowed = isDirector
+                ? await useConfirmStore.getState().confirm({
+                    title: '外部发布请求：导演台',
+                    message: `外部 Agent 请求发布这个「3D 预演台」的${modeLabel}。只有你点「允许发布」才会用当前工程渲染，并把结果写成该节点的正式发布记录（可被下游节点使用）。`,
+                    confirmText: '允许发布',
+                    cancelText: '拒绝'
+                  })
+                : false
+              window.api.replyLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                ok: allowed,
+                graphVersion: graphVersionRef.current,
+                ...(allowed
+                  ? {}
+                  : {
+                      validated: true,
+                      errorCode: isDirector ? 'PUBLISH_DENIED' : 'DIRECTOR_NODE_REQUIRED'
+                    })
+              })
+              return
+            }
+            // ── F6 收尾：人工授权后执行发布（与 GUI 面板同一发布服务）──
+            if (request.action === 'director-publish') {
+              const replyFail = (validated: boolean, code: string, detail?: string): void => {
+                window.api.replyLocalAgentDesktop({
+                  requestId: request.requestId,
+                  projectId: project.id,
+                  ok: false,
+                  validated,
+                  errorCode: code,
+                  ...(detail ? { errorDetail: detail.slice(0, 300) } : {})
+                })
+              }
+              const target = request.nodeId
+                ? editor.getShape<NodeCardShape>(request.nodeId as TLShapeId)
+                : undefined
+              if (!target || target.type !== 'node-card' || target.props.nodeType !== 'director') {
+                replyFail(true, 'DIRECTOR_NODE_REQUIRED', request.nodeId ?? '')
+                return
+              }
+              const directorProject = parseDirectorProject(readNodeConfig(target))
+              const shotId = request.shotId ?? directorProject.activeShotId
+              const shot = directorProject.shots.find((candidate) => candidate.id === shotId)
+              if (!shot) {
+                replyFail(true, 'SHOT_NOT_FOUND', shotId)
+                return
+              }
+              const publishMode = request.publishMode === 'video' ? 'video' : 'frame'
+              // 与 graph.patch 同一提交协议：落未保存内容 → 版本核对 → 准入 → 发布 → 保存屏障。
+              if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+              saveTimerRef.current = null
+              const preSave = useSaveCoordinator.getState()
+              if (preSave.dirtyVersion !== preSave.persistedVersion) await ensureCanvasSaved()
+              if (
+                editorRef.current !== editor ||
+                useAppStore.getState().currentProject?.id !== project.id
+              )
+                throw new Error('CANVAS_CHANGED')
+              if (graphVersionRef.current !== request.expectedGraphVersion) {
+                replyFail(
+                  true,
+                  'REVISION_CONFLICT',
+                  `expected ${request.expectedGraphVersion}, current ${graphVersionRef.current}`
+                )
+                return
+              }
+              const admission = await window.api.commitLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                graphVersion: graphVersionRef.current
+              })
+              if (!admission.ok || Date.now() >= request.expiresAt)
+                throw new Error('PUBLISH_NOT_ADMITTED')
+              // 外部发布走 2D 预演渲染：3D 白模需要用户已在工作区打开 WebGL 视口，
+              // 宿主不能替用户开工作区后再静默渲染，因此 3D 只用 GUI 手动路径。
+              const published = await publishDirectorOutput({
+                editor,
+                shapeId: target.id,
+                projectId: project.id,
+                project: directorProject,
+                shot,
+                mode: publishMode,
+                viewport: '2d'
+              })
+              await ensureCanvasSaved()
+              window.api.replyLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                ok: true,
+                graphVersion: graphVersionRef.current,
+                result: {
+                  mediaId: published.mediaId,
+                  mediaPath: published.mediaPath,
+                  mime: published.mime,
+                  shotId: shot.id
+                }
               })
               return
             }

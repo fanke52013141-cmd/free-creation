@@ -266,31 +266,48 @@
       "label": "恢复副本写入",
       "channel": "project:save-recovery-copy-sync",
       "gui": "关窗冲突保护",
-      "phase": "F7"
+      "phase": "excluded",
+      "reason": "关窗乐观锁冲突时的崩溃保障写入，不是用户发起的业务动作；外部只读取与裁决恢复副本（history.recovery.precheck/resolve），不提供伪造副本的写口"
     },
     "ipc.project.hasRecoveryCopy": {
       "label": "恢复副本存在",
       "channel": "project:has-recovery-copy",
       "gui": "打开冲突裁决",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "history.recovery.precheck"
+      ],
+      "note": "F7：precheck 返回 exists 与阻塞项，并签发 use/discard 的短期确认令牌"
     },
     "ipc.project.readRecoveryCopy": {
       "label": "读取恢复副本",
       "channel": "project:read-recovery-copy",
       "gui": "打开冲突裁决",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "history.recovery.precheck"
+      ],
+      "note": "F7：只返回副本事实（版本/节点数/更新时间），不返回画布正文；正文经 resolve 落盘后按正式读取口径访问"
     },
     "ipc.project.discardRecoveryCopy": {
       "label": "丢弃恢复副本",
       "channel": "project:discard-recovery-copy",
       "gui": "打开冲突裁决",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "history.recovery.resolve"
+      ],
+      "note": "F7：decision=discard，保留磁盘版本、移除副本；与 GUI 裁决调用同一 repo 服务"
     },
     "ipc.project.restoreRecoveryCopy": {
       "label": "恢复副本还原",
       "channel": "project:restore-recovery-copy",
       "gui": "打开冲突裁决",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "history.recovery.resolve"
+      ],
+      "note": "F7：decision=use，经正式保存机制（写锁/tmp+fsync/.bak 轮转/版本推进）落盘；仅未在桌面打开的项目可执行"
     },
     "ipc.project.close": {
       "label": "关闭项目",
@@ -311,7 +328,11 @@
       "label": "导入项目包",
       "channel": "project:import",
       "gui": "项目页导入",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "project.import"
+      ],
+      "note": "F7 包传输：仅受控导出目录内的 .canvasbundle；暂存→校验→媒体ID/相对路径重映射→凭据剥离→事务提交，失败清理暂存与半个项目"
     },
     "ipc.project.exportStructure": {
       "label": "导出结构包",
@@ -323,7 +344,11 @@
       "label": "导入结构包",
       "channel": "project:import-structure",
       "gui": "画布传输菜单",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "project.importStructure"
+      ],
+      "note": "F7 包传输：仅受控导出目录内的 .canvasflow；复用画布结构导入服务（新项目、清除媒体引用/运行结果/聊天正文），失败回滚新项目"
     },
     "ipc.project.externalChange": {
       "label": "外部修改通知",
@@ -562,40 +587,62 @@
       "gui": "节点库面板",
       "phase": "external",
       "external": [
-        "node.library.list"
+        "node.library.list",
+        "node.library.search",
+        "node.library.get"
       ],
-      "note": "external 仅覆盖摘要；完整 CRUD 见 F7"
+      "note": "F7：list 摘要 + search（名称/标题/类型过滤，GUI 面板同一过滤口径）+ get 详情（不返回配置正文）；增删改见下三项"
     },
     "ipc.workspace.saveTemplate": {
       "label": "节点库保存",
       "channel": "workspace:templates:save",
       "gui": "保存工作流对话框",
-      "phase": "F7",
-      "note": "external node.library.save 仅覆盖 AI 对话技能预设子集"
+      "phase": "external",
+      "external": [
+        "node.library.save",
+        "node.library.compose"
+      ],
+      "note": "node.library.save 保持旧 chat 技能预设子集语义不变；node.library.compose 为 F7 新增的全类型多节点组合保存（含连线拓扑与媒体引用，排除聊天历史/附件/运行结果）"
     },
     "ipc.workspace.deleteTemplate": {
       "label": "节点库删除",
       "channel": "workspace:templates:delete",
       "gui": "节点库面板",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "node.library.delete"
+      ],
+      "note": "F7：删除条目；画布上已插入的节点不受影响"
     },
     "ipc.workspace.listSnapshots": {
       "label": "快照列表",
       "channel": "workspace:snapshots:list",
       "gui": "历史坞",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "history.list"
+      ],
+      "note": "F7：目录不返回快照正文；restorable 标记该版本是否可由外部恢复到正式项目文件"
     },
     "ipc.workspace.saveSnapshot": {
       "label": "快照保存",
       "channel": "workspace:snapshots:save",
       "gui": "历史坞",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "history.snapshot.create"
+      ],
+      "note": "F7：GUI 保存快照时主进程顺手记录持久化图数据（仅当快照与磁盘 tldraw 快照一致）；外部 create 直接捕获已持久化画布，未保存编辑不在其中"
     },
     "ipc.workspace.deleteSnapshot": {
       "label": "快照删除",
       "channel": "workspace:snapshots:delete",
       "gui": "历史坞",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "history.snapshot.delete"
+      ],
+      "note": "F7：删除历史版本快照；当前画布不受影响"
     },
     "ipc.workspace.getPalettePreferences": {
       "label": "面板偏好读取",
@@ -641,25 +688,37 @@
       "label": "资源文件预览",
       "channel": "library:preview-files",
       "gui": "资源库导入预览",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.resource.preview_files"
+      ]
     },
     "ipc.library.listCategories": {
       "label": "分类列表",
       "channel": "library:categories:list",
       "gui": "资源库",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.category.list"
+      ]
     },
     "ipc.library.saveCategory": {
       "label": "分类保存",
       "channel": "library:categories:save",
       "gui": "资源库",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.category.save"
+      ]
     },
     "ipc.library.discardMaterialization": {
       "label": "物化丢弃",
       "channel": "library:materialize:discard",
       "gui": "资源库",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.materialization.discard"
+      ]
     },
     "ipc.library.search": {
       "label": "资源检索",
@@ -667,117 +726,176 @@
       "gui": "资源库",
       "phase": "external",
       "external": [
-        "library.search"
-      ]
+        "library.search",
+        "library.resource.list"
+      ],
+      "note": "library.search 保持原契约（旧客户端兼容）；library.resource.list 提供分类/文件夹/集合/类型/归档过滤"
     },
     "ipc.library.detail": {
       "label": "资源详情",
       "channel": "library:detail",
       "gui": "资源库",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.resource.get"
+      ]
     },
     "ipc.library.create": {
       "label": "资源创建",
       "channel": "library:create",
       "gui": "资源库",
-      "phase": "F7",
-      "note": "external library.create_resource 仅覆盖单图子集"
+      "phase": "external",
+      "external": [
+        "library.create_resource",
+        "library.resource.create"
+      ],
+      "note": "library.create_resource 保留单图子集（旧客户端兼容）；library.resource.create 覆盖文本/图片/音频/视频/文件/JSON 全类型组件与分类/标签/集合/文件夹"
     },
     "ipc.library.captureProjectMedia": {
       "label": "项目素材采集",
       "channel": "library:capture-project-media",
       "gui": "画布→资源库",
-      "phase": "F7"
+      "phase": "F7",
+      "note": "画布→资源库采集（项目素材/节点快照入库）未在本族开放：属资源捕获专项，需与图形谱系校验同包验收"
     },
     "ipc.library.captureProjectNodes": {
       "label": "项目节点采集",
       "channel": "library:capture-project-nodes",
       "gui": "画布→资源库",
-      "phase": "F7"
+      "phase": "F7",
+      "note": "画布→资源库采集（项目素材/节点快照入库）未在本族开放：属资源捕获专项，需与图形谱系校验同包验收"
     },
     "ipc.library.publishRevision": {
       "label": "修订发布",
       "channel": "library:publish-revision",
       "gui": "资源库",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.resource.publish"
+      ]
     },
     "ipc.library.archive": {
       "label": "资源归档",
       "channel": "library:archive",
       "gui": "资源库",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.resource.archive"
+      ],
+      "note": "2026-11-06 用户裁决后 GUI 页面已无归档入口（删除即彻底删除）；IPC 与 repo 仍在，外部同源提供可逆归档，includeArchived 可查回"
     },
     "ipc.library.delete": {
       "label": "资源删除",
       "channel": "library:delete",
       "gui": "资源库",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.resource.delete",
+        "library.resource.delete_many"
+      ],
+      "note": "批量删除在 GUI 是逐项调用同一 delete IPC；外部 delete_many 提供逐项回执（部分失败不静默）"
     },
     "ipc.library.listCollections": {
       "label": "集合列表",
       "channel": "library:collections:list",
       "gui": "资源库",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.collection.list"
+      ]
     },
     "ipc.library.createCollection": {
       "label": "集合创建",
       "channel": "library:collections:create",
       "gui": "资源库",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.collection.create"
+      ]
     },
     "ipc.library.setCollections": {
       "label": "集合设置",
       "channel": "library:collections:set",
       "gui": "资源库",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.resource.set_collections"
+      ]
     },
     "ipc.library.listFolders": {
       "label": "文件夹列表",
       "channel": "library:folders:list",
       "gui": "资源库",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.folder.list"
+      ]
     },
     "ipc.library.createFolder": {
       "label": "文件夹创建",
       "channel": "library:folders:create",
       "gui": "资源库",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.folder.create"
+      ]
     },
     "ipc.library.renameFolder": {
       "label": "文件夹重命名",
       "channel": "library:folders:rename",
       "gui": "资源库",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.folder.rename"
+      ]
     },
     "ipc.library.deleteFolder": {
       "label": "文件夹删除",
       "channel": "library:folders:delete",
       "gui": "资源库",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.folder.delete"
+      ]
     },
     "ipc.library.setResourceFolder": {
       "label": "资源归入文件夹",
       "channel": "library:folders:set-resource",
       "gui": "资源库",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.resource.set_folder"
+      ]
     },
     "ipc.library.materialize": {
       "label": "资源物化",
       "channel": "library:materialize",
       "gui": "资源库→画布",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.resource.materialize"
+      ],
+      "note": "复用 materializeResource 复制受控媒体 + 现有 graph-patch 桌面握手与保存屏障；未编排 GUI 的 meta.librarySource 与分组呈现"
     },
     "ipc.library.export": {
       "label": "资源包导出",
       "channel": "library:export",
       "gui": "资源库",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.export"
+      ],
+      "note": "F7 包传输：仅写受控导出目录并排他落位（不覆盖已有文件），回执 sha256/字节数/资源数"
     },
     "ipc.library.import": {
       "label": "资源包导入",
       "channel": "library:import",
       "gui": "资源库",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "library.import"
+      ],
+      "note": "F7 包传输：仅受控导出目录内的 .canvaslib；清单/版本/逐文件大小与 sha256 校验通过后单事务登记，重复内容包按包哈希拒绝"
     },
     "ipc.keys.exportCredential": {
       "label": "密钥导出",
@@ -1351,7 +1469,12 @@
     "canvas.director.publish": {
       "label": "导演台发布",
       "gui": "3D 工作区",
-      "phase": "F6"
+      "phase": "external",
+      "external": [
+        "director.publish.prepare",
+        "director.publish.status",
+        "director.publish.continue"
+      ]
     },
     "canvas.website.open": {
       "label": "打开网址",
@@ -1364,19 +1487,35 @@
     },
     "canvas.nodeLibrary.save-node": {
       "label": "保存节点到节点库",
-      "gui": "右键菜单",
-      "phase": "F7",
-      "note": "external node.library.save 覆盖 AI 对话技能预设子集"
+      "gui": "右键菜单/多选浮动工具栏",
+      "phase": "external",
+      "external": [
+        "node.library.save",
+        "node.library.compose"
+      ],
+      "note": "F7：单 chat 技能预设沿用 node.library.save；通用保存走 node.library.compose（多节点+连线拓扑+媒体引用，排除聊天历史/附件/运行结果）。外部保存读取已持久化画布，未保存编辑需先 project.save"
     },
     "canvas.nodeLibrary.insert": {
       "label": "节点库插入画布",
       "gui": "节点库面板",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "node.library.insert"
+      ],
+      "note": "F7：须先 project.open 目标画布；经权威宿主 graph.patch 握手落盘，节点 ID/连线/媒体引用全部重映射（媒体复制进目标项目，不跨画布串用）。GUI 插入仍按纯结构预设清空媒体（既有行为，本包未改）"
     },
     "canvas.snapshot.save-restore": {
       "label": "工作区快照",
       "gui": "历史坞",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "history.list",
+        "history.snapshot.create",
+        "history.snapshot.delete",
+        "history.restore.precheck",
+        "history.restore"
+      ],
+      "note": "F7：GUI 在打开的画布内做 snapshot-restore 事务（内存快照 + 检查点 + 回滚）；外部恢复只在项目未于桌面打开时执行（precheck→令牌→正式保存→重读核对），打开中的画布返回 RESOURCE_BUSY/desktop-ownership。恢复副本裁决另见 history.recovery.*"
     },
     "canvas.view.viewport": {
       "label": "视口缩放/平移",

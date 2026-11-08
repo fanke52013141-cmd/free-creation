@@ -45,6 +45,8 @@ import { exportProject } from '../store/transfer'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import { assertLicenseActive } from '../security/license/gate'
 import { DesktopAccessError, type AccessDesktop } from './desktop'
+import { runNodeLibraryOperation } from './node-library-ops'
+import { runHistoryOperation } from './history-ops'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
 import { FlowTaskStore } from '../agent-flow/task-store'
 import type { DiagnosticsService } from '../diagnostics/service'
@@ -61,6 +63,31 @@ import {
 } from '../../shared/agent-access/run-ops'
 import { DETERMINISTIC_PROJECTIONS } from '../../shared/engine/deterministic-projections'
 import { parseChat as parseChatShared, chatConversations as chatConversationsShared } from '../../shared/engine/chat-data'
+import { parseDirectorProject, parseDirectorPublishRecord } from '../../shared/director-data'
+import {
+  PUBLISH_AUTHORIZATION_TTL_MS,
+  PublishArtifactSchema,
+  PublishHostResultSchema,
+  type PublishMode
+} from '../../shared/agent-access/publish'
+import {
+  PublishLimitError,
+  authorizePublishRequest,
+  claimPublishRequest,
+  completePublishRequest,
+  createPublishRequest,
+  denyPublishRequest,
+  failPublishRequest,
+  getPublishRequest,
+  recoverAbandonedPublishRequests
+} from './publish'
+import {
+  exportLibraryPackage,
+  importLibraryPackage,
+  importProjectPackage,
+  importStructurePackage
+} from './transfer-ops'
+import { runLibraryOperation } from './library-ops'
 
 class AccessFailure extends Error {
   constructor(
@@ -107,6 +134,23 @@ const FLUSH_HANDSHAKE_OPERATIONS: ReadonlySet<AccessOperationId> = new Set([
   'chat.skill.bind'
 ] as AccessOperationId[])
 
+/** F7 节点库/历史操作：在 dispatch 内带 trace/span 与占用回调执行（见 case 分支），不另建执行器。 */
+const F7_DISPATCH_OPERATIONS: ReadonlySet<AccessOperationId> = new Set([
+  'node.library.compose',
+  'node.library.update',
+  'node.library.delete',
+  'node.library.get',
+  'node.library.search',
+  'node.library.insert',
+  'history.list',
+  'history.snapshot.create',
+  'history.snapshot.delete',
+  'history.restore.precheck',
+  'history.restore',
+  'history.recovery.precheck',
+  'history.recovery.resolve'
+] as AccessOperationId[])
+
 /** Only this main-process service touches repositories; CLI/MCP are transport clients. */
 export class LocalAccessService {
   readonly dataStoreId: string
@@ -130,6 +174,8 @@ export class LocalAccessService {
     getDb()
       .prepare('DELETE FROM local_agent_operations WHERE created_at < ?')
       .run(Date.now() - ACCESS_KEY_TTL_MS)
+    // 崩溃遗留的执行中发布请求按 unknown 语义结算：不自动重发，等外部重新申请与授权。
+    recoverAbandonedPublishRequests()
   }
 
   async dispatch(raw: unknown): Promise<AccessResponse> {
@@ -241,7 +287,14 @@ export class LocalAccessService {
         this.mutating = ownsMutation = true
       }
       // run.cancel 是对在途任务的控制操作，豁免占用检查（否则取消不了自己要停的任务）。
-      if (id && spec.effect !== 'read' && operationId !== 'run.cancel')
+      // history.recovery.resolve 同理：它是"解决恢复副本"的操作，本身必须能在副本存在时执行；
+      // 其他写操作（含 project.delete/export/其他 history 写）仍照旧被恢复副本阻断。
+      if (
+        id &&
+        spec.effect !== 'read' &&
+        operationId !== 'run.cancel' &&
+        operationId !== 'history.recovery.resolve'
+      )
         this.assertNoActiveTasks(id)
       const active = this.options.activeProjectId()
       // The desktop must never have its open canvas deleted from underneath it.
@@ -360,7 +413,17 @@ export class LocalAccessService {
           }
         }
         // F6：chat.patch 预检——目标必须是对话节点；附件 mediaId 解析同媒体规则。
-        for (const op of input.ops as GraphPatchOp[]) {
+        // chat.patch 由权威宿主的独立分支整体应用；与几何 op 混批时宿主只应用会话
+        // 分支会静默丢弃其余 op，因此这里在准入前明确拒绝（failed，不留半张图）。
+        const patchOps = input.ops as GraphPatchOp[]
+        const chatOpCount = patchOps.filter((op) => op.action === 'chat.patch').length
+        if (chatOpCount > 0 && chatOpCount !== patchOps.length)
+          throw new AccessFailure(
+            'MIXED_PATCH_UNSUPPORTED',
+            'precheck',
+            'chat.patch must be submitted in its own graph.patch batch'
+          )
+        for (const op of patchOps) {
           if (op.action !== 'chat.patch') continue
           const chatNode = current.nodes.find((candidate) => candidate.id === op.nodeId)
           if (!chatNode || chatNode.type !== 'chat')
@@ -428,6 +491,248 @@ export class LocalAccessService {
           saved: true,
           created: createdNodes.map((c) => ({ ...(c.ref ? { ref: c.ref } : {}), nodeId: c.nodeId })),
           applied: counts
+        }
+      } else if (
+        operationId === 'director.publish.prepare' ||
+        operationId === 'director.publish.status' ||
+        operationId === 'director.publish.continue'
+      ) {
+        // F6 收尾：manual-publish 的等待/继续协议。发布必须由人在 GUI 授权；
+        // node.execute 对 director 永远只读最近一次一致的发布记录，不能偷渡发布。
+        if (operationId === 'director.publish.status') {
+          const row = getPublishRequest(input.publishRequestId as string)
+          if (!row || row.project_id !== id) throw new AccessFailure('NOT_FOUND', 'publish-read')
+          const artifact = PublishArtifactSchema.safeParse({
+            mediaId: row.media_id ?? '',
+            mediaPath: row.media_path ?? '',
+            mime: row.media_mime ?? ''
+          })
+          result = {
+            projectId: row.project_id,
+            publishRequestId: row.id,
+            nodeId: row.node_id,
+            mode: row.mode,
+            shotId: row.shot_id,
+            status: row.status,
+            authorizationRequired: row.status === 'awaiting-authorization',
+            expiresAt: row.expires_at,
+            graphVersion: row.expected_graph_version,
+            ...(artifact.success ? { artifact: artifact.data } : {}),
+            ...(row.error ? { error: row.error } : {})
+          }
+        } else if (id !== active || !this.options.desktop) {
+          // 发布与授权都发生在权威宿主上：没有打开的桌面画布就没有可授权对象。
+          throw new AccessFailure(
+            'ACTIVE_PROJECT_REQUIRED',
+            'desktop-ownership',
+            'project.open the target canvas first, then retry director.publish'
+          )
+        } else if (operationId === 'director.publish.prepare') {
+          const file = projects.openProject(id)
+          if (!file) throw new AccessFailure('NOT_FOUND', 'read')
+          if (file.meta.graphVersion !== input.expectedGraphVersion)
+            throw new AccessFailure('REVISION_CONFLICT', 'precheck')
+          const node = file.nodes.find((candidate) => candidate.id === input.nodeId)
+          if (!node) throw new AccessFailure('NODE_NOT_FOUND', 'precheck')
+          // 只有 manual-publish 的导演台需要这条协议；普通节点直接 node.execute。
+          if (node.type !== 'director')
+            throw new AccessFailure('DIRECTOR_NODE_REQUIRED', 'precheck', String(node.type).slice(0, 40))
+          const directorProject = parseDirectorProject(
+            typeof node.params.config === 'string' ? node.params.config : ''
+          )
+          const shotId = (input.shotId as string | undefined) ?? directorProject.activeShotId
+          if (!directorProject.shots.some((shot) => shot.id === shotId))
+            throw new AccessFailure('SHOT_NOT_FOUND', 'precheck')
+          const mode = (input.mode as PublishMode | undefined) ?? 'frame'
+          let row
+          try {
+            row = createPublishRequest({
+              projectId: id,
+              nodeId: node.id,
+              mode,
+              shotId,
+              expectedGraphVersion: file.meta.graphVersion
+            })
+          } catch (error) {
+            if (error instanceof PublishLimitError)
+              throw new AccessFailure('PUBLISH_REQUEST_LIMIT', 'precheck')
+            throw error
+          }
+          // 授权经交互式通道交给 GUI：人看到的是同一条请求，点"允许"才成立。
+          // 外部无法构造这一步——它没有 renderer 回复通道。
+          void this.options.desktop
+            .ask(
+              {
+                action: 'publish-authorize',
+                projectId: id,
+                nodeId: row.node_id,
+                publishRequestId: row.id,
+                publishMode: row.mode,
+                shotId: row.shot_id,
+                expectedGraphVersion: row.expected_graph_version
+              },
+              PUBLISH_AUTHORIZATION_TTL_MS
+            )
+            .then((reply) => {
+              if (reply.authorized) authorizePublishRequest(row.id)
+              else denyPublishRequest(row.id)
+            })
+            .catch(() => {
+              // 宿主不可用：请求保持待授权，过期自然作废，不静默放行。
+            })
+          result = {
+            projectId: id,
+            publishRequestId: row.id,
+            nodeId: row.node_id,
+            mode: row.mode,
+            shotId: row.shot_id,
+            status: row.status,
+            authorizationRequired: true,
+            expiresAt: row.expires_at,
+            graphVersion: file.meta.graphVersion
+          }
+        } else {
+          const row = getPublishRequest(input.publishRequestId as string)
+          if (!row || row.project_id !== id) throw new AccessFailure('NOT_FOUND', 'publish-request')
+          const existing = PublishArtifactSchema.safeParse({
+            mediaId: row.media_id ?? '',
+            mediaPath: row.media_path ?? '',
+            mime: row.media_mime ?? ''
+          })
+          if (row.status === 'completed') {
+            // 重放原回执：不重新渲染、不产生第二份产物。
+            if (!existing.success) throw new AccessFailure('STORAGE_INCONSISTENT', 'publish-verify')
+            result = {
+              projectId: id,
+              publishRequestId: row.id,
+              nodeId: row.node_id,
+              mode: row.mode,
+              shotId: row.shot_id,
+              status: 'completed',
+              graphVersion: row.expected_graph_version,
+              saved: true,
+              artifact: existing.data
+            }
+          } else if (row.status === 'denied') {
+            throw new AccessFailure('PUBLISH_DENIED', 'publish-admission', 'the user denied this publish request')
+          } else if (row.status === 'expired') {
+            throw new AccessFailure(
+              'PUBLISH_AUTHORIZATION_EXPIRED',
+              'publish-admission',
+              'authorization window elapsed; prepare a new request'
+            )
+          } else if (row.status === 'failed') {
+            throw new AccessFailure('PUBLISH_FAILED', 'publish-admission', row.error ?? undefined)
+          } else if (row.status === 'executing') {
+            throw new AccessFailure('RESOURCE_BUSY', 'publish-admission')
+          } else if (row.status !== 'authorized') {
+            throw new AccessFailure(
+              'PUBLISH_NOT_AUTHORIZED',
+              'publish-admission',
+              'a human must authorize this publish request in the GUI first'
+            )
+          } else {
+            const file = projects.openProject(id)
+            if (!file) throw new AccessFailure('NOT_FOUND', 'read')
+            // 授权绑定的是申请时的画布状态：工程变过就必须重新申请，不能拿旧授权发布新内容。
+            if (
+              file.meta.graphVersion !== input.expectedGraphVersion ||
+              row.expected_graph_version !== input.expectedGraphVersion
+            )
+              throw new AccessFailure(
+                'REVISION_CONFLICT',
+                'publish-admission',
+                'canvas changed after prepare; prepare a new publish request'
+              )
+            const node = file.nodes.find((candidate) => candidate.id === row.node_id)
+            if (!node || node.type !== 'director')
+              throw new AccessFailure('DIRECTOR_NODE_REQUIRED', 'publish-admission')
+            if (!claimPublishRequest(row.id)) throw new AccessFailure('RESOURCE_BUSY', 'publish-admission')
+            try {
+              const reply = await this.options.desktop.run(
+                {
+                  action: 'director-publish',
+                  projectId: id,
+                  nodeId: row.node_id,
+                  publishRequestId: row.id,
+                  publishMode: row.mode,
+                  shotId: row.shot_id,
+                  expectedGraphVersion: input.expectedGraphVersion as number
+                },
+                (version) => {
+                  if (this.options.activeProjectId() !== id)
+                    throw new AccessFailure('RESOURCE_BUSY', 'desktop-ownership')
+                  this.assertNoActiveTasks(id)
+                  const admitted = projects.openProject(id)
+                  if (!admitted || admitted.meta.graphVersion !== version)
+                    throw new AccessFailure('REVISION_CONFLICT', 'publish-admission')
+                  // 从此点起宿主可能已经写入正式发布记录：失败按 unknown 核对。
+                  metadataCommitted = true
+                  return admitted.meta
+                },
+                // 导演台发布要真实渲染/编码（WebM 可达十几秒），不能用 10 秒编辑窗口。
+                60000
+              )
+              const published = PublishHostResultSchema.safeParse(reply.result)
+              if (!published.success)
+                throw new AccessFailure('STORAGE_INCONSISTENT', 'publish-verify', 'host result invalid')
+              // 保存屏障之后核对：正式发布记录必须真的落到持久化节点里。
+              const savedFile = projects.openProject(id)
+              const savedNode = savedFile?.nodes.find((candidate) => candidate.id === row.node_id)
+              const savedMeta = (savedNode?.meta ?? {}) as Record<string, unknown>
+              let persisted: ReturnType<typeof parseDirectorPublishRecord> = null
+              try {
+                persisted = parseDirectorPublishRecord(
+                  typeof savedMeta.nodeResult === 'string' ? JSON.parse(savedMeta.nodeResult) : null
+                )
+              } catch {
+                persisted = null
+              }
+              const media = row.mode === 'frame' ? persisted?.frame : persisted?.video
+              if (media?.mediaId !== published.data.mediaId)
+                throw new AccessFailure(
+                  'STORAGE_INCONSISTENT',
+                  'publish-verify',
+                  'publish record not persisted'
+                )
+              completePublishRequest(row.id, {
+                mediaId: published.data.mediaId,
+                mediaPath: published.data.mediaPath,
+                mime: published.data.mime
+              })
+              result = {
+                projectId: id,
+                publishRequestId: row.id,
+                nodeId: row.node_id,
+                mode: row.mode,
+                shotId: published.data.shotId,
+                status: 'completed',
+                graphVersion: reply.graphVersion,
+                saved: true,
+                artifact: {
+                  mediaId: published.data.mediaId,
+                  mediaPath: published.data.mediaPath,
+                  mime: published.data.mime
+                }
+              }
+            } catch (error) {
+              // 已有正式写入的失败按 unknown 保留原样，绝不表述成"没发生过"。
+              if (metadataCommitted) {
+                failPublishRequest(row.id, 'PUBLISH_OUTCOME_UNKNOWN')
+                throw error
+              }
+              if (error instanceof DesktopAccessError && !error.unknownOutcome) {
+                failPublishRequest(row.id, error.code)
+                throw new AccessFailure(error.code, 'publish-handshake', error.detail)
+              }
+              if (error instanceof AccessFailure) {
+                failPublishRequest(row.id, error.code)
+                throw error
+              }
+              failPublishRequest(row.id, 'PUBLISH_OUTCOME_UNKNOWN')
+              throw error
+            }
+          }
         }
       } else if (
         operationId === 'project.open' ||
@@ -535,6 +840,24 @@ export class LocalAccessService {
                 ? { graphVersion: version, saved: true }
                 : await this.execute(operationId, { ...input, expectedGraphVersion: version })
         }
+      } else if (F7_DISPATCH_OPERATIONS.has(operationId)) {
+        // F7：节点库/历史操作需要 agent.access 的 trace/span 与占用回调；业务实现只有一份，
+        // 在 node-library-ops.ts / history-ops.ts（不新增外部专用执行路径）。
+        const f7Context = {
+          activeProjectId: this.options.activeProjectId,
+          diagnostics: { traceId: base.traceId, spanId }
+        }
+        result = operationId.startsWith('history.')
+          ? runHistoryOperation(operationId, input, {
+              ...f7Context,
+              isTaskOccupied: (projectId) => this.taskOccupied(projectId),
+              issueImpactToken: (projectId, graphVersion, facts, expiresAt) =>
+                this.impactToken(projectId, graphVersion, facts, expiresAt)
+            })
+          : await runNodeLibraryOperation(operationId, input, {
+              ...f7Context,
+              desktop: this.options.desktop
+            })
       } else result = await this.execute(operationId, input)
       base.status = 'completed'
       // Repositories use optional undefined properties; the wire contract is JSON.
@@ -1001,6 +1324,11 @@ export class LocalAccessService {
       }
       case 'chat.skill.bind':
         throw new AccessFailure('ACTIVE_PROJECT_REQUIRED', 'desktop-ownership')
+      case 'director.publish.prepare':
+      case 'director.publish.status':
+      case 'director.publish.continue':
+        // 发布授权协议在 dispatch 里按桌面握手处理；走到这里说明宿主前置条件不成立。
+        throw new AccessFailure('ACTIVE_PROJECT_REQUIRED', 'desktop-ownership')
       case 'node.library.list': {
         const all = listWorkflowTemplates()
         return {
@@ -1040,6 +1368,21 @@ export class LocalAccessService {
         const { id: templateId, name, createdAt, nodeCount } = entry
         return { id: templateId, name, createdAt, nodeCount }
       }
+      case 'node.library.compose':
+      case 'node.library.update':
+      case 'node.library.delete':
+      case 'node.library.get':
+      case 'node.library.search':
+      case 'node.library.insert':
+      case 'history.list':
+      case 'history.snapshot.create':
+      case 'history.snapshot.delete':
+      case 'history.restore.precheck':
+      case 'history.restore':
+      case 'history.recovery.precheck':
+      case 'history.recovery.resolve':
+        // F7：这些操作在 dispatch 分支带 trace/span 与占用回调执行，不落在这里。
+        throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'model.list':
         return new SqliteModelHost(getDb()).listAccessModels(
           input.offset as number,
@@ -1171,9 +1514,9 @@ export class LocalAccessService {
           operations: operationDirectory(),
           limitations: [
             'DESKTOP_HANDSHAKE_REQUIRED',
-            'NO_NODE_EXECUTION',
-            'NO_PROJECT_IMPORT',
-            'EXPORT_DIRECTORY_ONLY'
+            'EXPORT_DIRECTORY_ONLY',
+            // 导演台是 manual-publish：外部只能申请，必须由人在 GUI 授权后继续。
+            'DIRECTOR_PUBLISH_REQUIRES_HUMAN_AUTHORIZATION'
           ]
         }
       case 'node.type.list':
@@ -1279,6 +1622,57 @@ export class LocalAccessService {
         )
         if (!result) throw new AccessFailure('NOT_FOUND', 'read')
         return result
+      }
+      // F7 包传输：业务实现在 ./transfer-ops（复用 GUI 同一导入导出服务）；
+      // 外部入口只负责受控导出目录边界、提交后核对与 sha256/字节回执。
+      case 'project.import': {
+        const outcome = importProjectPackage(input, this.exportRoot)
+        if (!outcome.ok) throw new AccessFailure(outcome.code, outcome.phase, outcome.detail)
+        return outcome.data
+      }
+      case 'project.importStructure': {
+        const outcome = importStructurePackage(input, this.exportRoot)
+        if (!outcome.ok) throw new AccessFailure(outcome.code, outcome.phase, outcome.detail)
+        return outcome.data
+      }
+      case 'library.import': {
+        const outcome = importLibraryPackage(input, this.exportRoot)
+        if (!outcome.ok) throw new AccessFailure(outcome.code, outcome.phase, outcome.detail)
+        return outcome.data
+      }
+      case 'library.export': {
+        const outcome = exportLibraryPackage(input, this.exportRoot)
+        if (!outcome.ok) throw new AccessFailure(outcome.code, outcome.phase, outcome.detail)
+        return outcome.data
+      }
+      // F7 资源库族：业务实现在 ./library-ops（复用 GUI 同一 store 服务）；
+      // 物化走与 graph.patch 相同的权威宿主握手，不新造桌面通道。
+      case 'library.resource.list':
+      case 'library.resource.get':
+      case 'library.resource.preview_files':
+      case 'library.resource.create':
+      case 'library.resource.publish':
+      case 'library.resource.delete':
+      case 'library.resource.delete_many':
+      case 'library.resource.archive':
+      case 'library.resource.set_folder':
+      case 'library.resource.set_collections':
+      case 'library.folder.list':
+      case 'library.folder.create':
+      case 'library.folder.rename':
+      case 'library.folder.delete':
+      case 'library.collection.list':
+      case 'library.collection.create':
+      case 'library.category.list':
+      case 'library.category.save':
+      case 'library.resource.materialize':
+      case 'library.materialization.discard': {
+        const outcome = await runLibraryOperation(operation, input, {
+          desktop: this.options.desktop,
+          activeProjectId: () => this.options.activeProjectId()
+        })
+        if (!outcome.ok) throw new AccessFailure(outcome.code, outcome.phase, outcome.detail)
+        return outcome.data
       }
       case 'graph.patch':
         // graph.patch 在 dispatch 中经权威宿主握手执行，不落在这里。
