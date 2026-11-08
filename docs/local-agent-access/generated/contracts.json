@@ -24421,6 +24421,271 @@
       ]
     },
     {
+      "operationId": "provider.testConnection",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "测试已保存供应商连接是否可用（向供应商 /models 发一次请求）；必须显式 confirmNetwork=true 才执行，否则拒绝且不发任何请求；外部只给供应商 id，密钥与地址由 main 从设备密钥库读取；回执只给可用性与模型数量",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "providerId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "confirmNetwork": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "providerId",
+          "confirmNetwork"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "provider.testConnection"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "providerId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "reachable": {
+                "type": "boolean"
+              },
+              "modelCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 400
+              }
+            },
+            "required": [
+              "providerId",
+              "reachable",
+              "modelCount",
+              "message"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "model.validate",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "对某个模型定义做真实能力验证（会向供应商发起真实请求、**可能产生费用**）；必须同时显式 confirmNetwork=true 与 confirmCost=true 才执行，否则拒绝且不发任何请求；外部只给连接与模型定义 id，不提供密钥",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "modelDefinitionId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "operation": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "confirmNetwork": {
+            "default": false,
+            "type": "boolean"
+          },
+          "confirmCost": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "connectionId",
+          "modelDefinitionId",
+          "operation",
+          "confirmNetwork",
+          "confirmCost"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "model.validate"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "connectionId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "modelDefinitionId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "operation": {
+                "type": "string",
+                "maxLength": 60
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "verified",
+                  "failed",
+                  "pending"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 400
+              }
+            },
+            "required": [
+              "connectionId",
+              "modelDefinitionId",
+              "operation",
+              "status",
+              "message"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
       "operationId": "director.publish.prepare",
       "operationVersion": 1,
       "effect": "write",

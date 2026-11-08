@@ -89,6 +89,21 @@ describe('AppSelect', () => {
     expect(document.body.querySelector('[role="listbox"]')).toBeNull()
   })
 
+  it('关闭态触发器只显示一行，title 提供完整文案（长模型名不再换行）', async () => {
+    const longName = 'ToAPIS · gpt-image-2.6-sunburst-official'
+    const select = createElement(
+      AppSelect,
+      { value: 'long' },
+      createElement('option', { value: 'long' }, longName),
+      createElement('option', { value: 'short' }, '短模型')
+    ) as ReactElement
+
+    await act(async () => root.render(select))
+    const trigger = container.querySelector('button')
+    expect(trigger?.getAttribute('title')).toBe(longName)
+    expect(trigger?.querySelector('span')?.textContent).toBe(longName)
+  })
+
   it('点击下拉内部不会关闭', async () => {
     const select = createElement(
       AppSelect,

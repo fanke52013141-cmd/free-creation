@@ -574,6 +574,8 @@ textarea {
   justify-content: space-between;
   gap: 8px;
   padding: 8px 12px;
+  overflow: hidden;
+  white-space: nowrap;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   background: #181b24;
@@ -605,8 +607,19 @@ textarea {
   opacity: 0.52;
 }
 
+/* Radix 当前版本把选中值渲染成不带 data 属性的 span：必须按第一个子元素兜底，
+   否则长模型名会换行把下拉撑成两排。 */
+.app-select-trigger > span:first-child,
 .app-select-trigger > [data-radix-select-value] {
+  flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-select-trigger > span:first-child > .app-select-value {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

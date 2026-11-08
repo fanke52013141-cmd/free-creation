@@ -116,6 +116,18 @@ export function AppSelect({
   const contentRef = useRef<HTMLDivElement>(null)
   const selectedValue = value === undefined ? uncontrolledValue : value
   const selectedOption = options.find((option) => option.value === selectedValue)
+  // 触发器只显示一行：完整文案用于 title 悬浮提示，避免长模型名把下拉撑成两行。
+  const selectedLabelText =
+    typeof selectedOption?.label === 'string'
+      ? selectedOption.label
+      : selectedOption?.triggerLabel ?? ''
+  const triggerTitle = selectedLabelText
+    ? triggerProps.title &&
+      triggerProps.title !== selectedLabelText &&
+      !selectedLabelText.includes(triggerProps.title)
+      ? `${selectedLabelText}（${triggerProps.title}）`
+      : selectedLabelText
+    : triggerProps.title
 
   const closeSelect = useCallback((): void => {
     if (activeAppSelect?.owner === owner.current) activeAppSelect = null
@@ -197,6 +209,7 @@ export function AppSelect({
         }}
         className={`app-select app-select-trigger ${className}`.trim()}
         aria-haspopup="listbox"
+        title={triggerTitle}
       >
         {/* 有 triggerLabel 的选项：关闭态显示短标签（如仅模型名），下拉里仍展示完整 label */}
         <Select.Value placeholder={selectedValue}>

@@ -61,6 +61,7 @@ import { MEDIA_ASSET_OPERATION_IDS, runMediaAssetOperation } from './media-asset
 import { LIBRARY_CAPTURE_OPERATION_IDS, runLibraryCaptureOperation } from './library-capture-ops'
 import { CANVAS_HISTORY_OPERATION_IDS, runCanvasHistoryOperation } from './canvas-history-ops'
 import { PROVIDER_OPERATION_IDS, runProviderOperation } from './providers-ops'
+import { PROVIDER_NETWORK_OPERATION_IDS, runProviderNetworkOperation } from './provider-network-ops'
 import { runProjectSettingsOperation } from './project-settings-ops'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
 import { FlowTaskStore } from '../agent-flow/task-store'
@@ -976,6 +977,10 @@ export class LocalAccessService {
         // F9 收尾：供应商目录只读投影（复用 GUI 模型设置同一来源，字段白名单去敏，
         // 不返回地址/鉴权头/密钥材料）。
         result = await runProviderOperation(operationId, input)
+      } else if (PROVIDER_NETWORK_OPERATION_IDS.has(operationId)) {
+        // F9：供应商连通性测试与模型真实验证。默认不执行——必须显式 confirmNetwork=true
+        // （validate 还需 confirmCost=true），否则拒绝且不发任何请求（用户已授权此边界）。
+        result = await runProviderNetworkOperation(operationId, input)
       } else if (CANVAS_HISTORY_OPERATION_IDS.has(operationId)) {
         // F2：撤销/重做与关闭项目必须由权威宿主执行（历史栈在 editor 里；关画布要先保存）。
         result = await runCanvasHistoryOperation(operationId, input, {
@@ -1925,6 +1930,10 @@ export class LocalAccessService {
       case 'provider.listExecutable':
       case 'provider.exportableConnections':
         // F9 收尾：供应商目录只读投影在 dispatch 分组分支执行，不落在这里。
+        throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
+      case 'provider.testConnection':
+      case 'model.validate':
+        // F9：需要显式确认才联网，在 dispatch 分组分支执行。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'chat.read': {
         const file = projects.openProject(id)

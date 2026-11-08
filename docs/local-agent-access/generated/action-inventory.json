@@ -3,15 +3,15 @@
   "generatedFrom": {
     "ipcChannels": 171,
     "canvasActions": 42,
-    "externalOperations": 127
+    "externalOperations": 129
   },
   "totals": {
     "actions": 213,
     "byPhase": {
-      "external": 158,
+      "external": 160,
       "F8": 2,
       "excluded": 29,
-      "F9": 23,
+      "F9": 21,
       "F3": 1
     }
   },
@@ -1210,7 +1210,11 @@
       "label": "供应商测试",
       "channel": "gateway:providers:test",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "provider.testConnection"
+      ],
+      "note": "F9：测试已保存供应商连接（向 /models 发一次请求）。**必须显式 confirmNetwork=true 才执行**，外部只给 providerId（密钥与地址由 main 从设备密钥库读取）；不可用按业务结果返回 reachable=false，不把\"发了但失败\"说成\"没发出去\"；真实供应商响应未在本轮实测"
     },
     "ipc.keys.probeProvider": {
       "label": "供应商探测",
@@ -1444,7 +1448,11 @@
       "label": "模型验证",
       "channel": "models:definitions:validate",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "model.validate"
+      ],
+      "note": "F9：模型真实验证（会调用模型、**可能计费**）。必须同时 confirmNetwork=true 与 confirmCost=true，否则拒绝且不发任何请求；复用 GUI 同一 model-runtime.validateModel；真实调用未在本轮实测"
     },
     "ipc.models.validateAgentToolCalling": {
       "label": "Agent 工具调用验证",
