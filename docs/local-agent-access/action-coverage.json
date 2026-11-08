@@ -576,7 +576,10 @@
       "label": "视频引擎安装",
       "channel": "media:video-engine-install",
       "gui": "环境安装",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "environment.videoEngine.install"
+      ]
     },
     "ipc.media.videoConvertDepth": {
       "label": "深度视频转换",
@@ -1165,7 +1168,11 @@
       "label": "模型连接保存",
       "channel": "models:connections:save",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "model.connection.save"
+      ],
+      "note": "F9（四）：外部受控写入连接与 API Key；复用 GUI 同一 saveConnection（设备绑定密钥库），明文不回传。连接事实变化会清除验证与功能绑定"
     },
     "ipc.models.definitions": {
       "label": "模型定义列表",
@@ -1180,13 +1187,21 @@
       "label": "模型定义保存",
       "channel": "models:definitions:save",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "model.definition.save"
+      ],
+      "note": "F9（四）：模型定义创建/更新，能力声明非空；不涉及凭据"
     },
     "ipc.models.deleteDefinition": {
       "label": "模型定义删除",
       "channel": "models:definitions:delete",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "model.definition.delete"
+      ],
+      "note": "F9（四）：单条模型定义删除（连带验证、工具调用验证与绑定）"
     },
     "ipc.models.deleteDefinitions": {
       "label": "模型定义批量删除",
@@ -1198,7 +1213,11 @@
       "label": "模型连接删除",
       "channel": "models:connections:delete",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "model.connection.delete"
+      ],
+      "note": "F9（四）：删除连接及其模型定义（连带验证与绑定）；不删凭据指纹以外的任何信息"
     },
     "ipc.models.discover": {
       "label": "模型发现",
@@ -1222,7 +1241,11 @@
       "label": "默认绑定保存",
       "channel": "models:bindings:save",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "model.binding.save"
+      ],
+      "note": "F9（四）：功能默认绑定；只有该模型该操作已验证才成立，外部不能自行验证模型"
     },
     "ipc.models.bindings": {
       "label": "默认绑定列表",
@@ -1700,6 +1723,15 @@
         "node.type.get"
       ],
       "note": "N1：不创建实例即可查询类型契约；数据来自生成快照（漂移门禁 test/node-contracts-export.test.ts）；动态端口节点导出的是默认配置结果，实例端口请用 node.get 读取"
+    },
+    "canvas.model.credential-status": {
+      "label": "模型设置里的密钥状态（已保存/未保存）",
+      "gui": "模型设置",
+      "phase": "external",
+      "external": [
+        "model.credential.status"
+      ],
+      "note": "F9（四）：只读查询某连接是否已保存 API Key，仅返回存在性与不可逆指纹（sha256 前 12 位），不返回明文/端点/请求头"
     }
   }
 }

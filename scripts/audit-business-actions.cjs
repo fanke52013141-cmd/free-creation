@@ -144,7 +144,8 @@ const CANVAS_ACTIONS = [
   ['canvas.run.observe', '运行时间线/任务状态查询'],
   ['canvas.model.catalog', '模型设置页读取本地模型与能力验证状态'],
   ['canvas.project.read-summary', '项目页/打开项目时读取项目摘要'],
-  ['canvas.node.contract-panel', '选中节点右侧 I/O 面板的类型/字段/端口/依赖查询（N1）']
+  ['canvas.node.contract-panel', '选中节点右侧 I/O 面板的类型/字段/端口/依赖查询（N1）'],
+  ['canvas.model.credential-status', '模型设置里每个连接显示"已保存密钥/未保存"状态']
 ]
 
 const PHASES = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'external', 'excluded']

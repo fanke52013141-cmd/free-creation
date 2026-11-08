@@ -1,5 +1,30 @@
 # 日志覆盖清单
 
+## 2026-11-08：F9（四）环境探测补强与视频引擎安装
+
+新增 1 项外部**写**操作 `environment.videoEngine.install`（只受理启动，下载/安装复用 GUI
+`installVideoEngine()`）并补强 `environment.local` 探测；**未新增事件类型**，日志影响 = 复用接入公共生命周期
++ 登记一个既有盲区。详见 [45 号台账](local-agent-access/45-environment-install-delivery.md)。
+
+- 生命周期：安装启动由 dispatch 记 `agent.access.started/completed/failed`（`attributes.operation`、
+  `phase=environment-install`、稳定 `code`、trace/span），**只代表操作受理**，不代表安装成功；
+  唯一终态由 dispatch 拥有，`settings-ops.ts` 不重复记终态。
+- 失败阶段稳定码：`INSTALL_CONFIRM_REQUIRED`（未确认，安装实现 0 次调用）、`PYTHON_REQUIRED`
+  （`detail` 为 GUI 同一句「请先安装 Python 3.12」提示）、`INSTALL_START_FAILED`、`ENVIRONMENT_PROBE_FAILED`；
+  `detail` 不含原始异常栈、pip 输出、下载 URL 或本机路径。
+- **既有盲区（本包如实登记，未修复）**：安装后台阶段（创建 venv / pip / 下载并校验权重 / GPU 检测）只有
+  内存 `installStatus`（progress/message），GUI 同样没有对应诊断事件；外部 `environment.videoEngine.status`
+  可读到进度与失败文案，但诊断 JSONL 里没有安装生命周期。建议下一包登记
+  `videoEngine.install.started/completed/failed`（阶段、耗时、GPU 名称摘要；不含 URL 查询串/密钥/路径）。
+- 脱敏：`environment.local`、`environment.videoEngine.status`、`environment.videoEngine.install` 的
+  `message`/`progress` 统一抹除应用数据目录、Windows 盘符与常见 POSIX 绝对路径（`[数据目录]`/`[本机路径]`）；
+  事件不含安装命令、模型 URL、数据目录或密钥。
+- 只读补强：`environment.local` 新增 FFmpeg/FFprobe 版本（同一二进制 `-version`，只取版本令牌）与
+  `videoEngine.phase`，不新增逐工具事件，避免高频噪声；探测失败仍只体现在响应与 dispatch 终态。
+- 日志写入失败不改变业务结果（dispatch 既有语义）；安装启动不依赖日志。
+- 覆盖边界：真实联网安装、安装失败恢复、真实桌面/MCP 客户端的安装流程未验收；本小节"已覆盖"指
+  代码路径与 21 项定向测试证据。
+
 ## 2026-11-08：F9（三）诊断查询与项目节点可见集
 
 新增外部操作 3 项（`diagnostics.query`、`project.nodeVisibility.get`、`project.nodeVisibility.set`），沿用既有事件、**未新增事件类型**（新事件需登记 `src/shared/observability/events.ts`，不在本包文件范围）：
