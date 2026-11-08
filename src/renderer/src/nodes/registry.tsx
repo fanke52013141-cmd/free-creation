@@ -11,6 +11,7 @@ import type {
 import { ACTIVE_NODE_TYPE_IDS } from '@shared/types'
 import { nodeSchemaRegistered } from '@shared/node-schemas'
 import { NODE_CATEGORY_IDS, type NodeCategoryId } from '@shared/palette-preferences'
+import { DISTRIBUTION_EDITION, DISTRIBUTION_HIDDEN_NODE_TYPES } from '@shared/edition'
 import type { NodeExecutor } from '../engine/executor-types'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
 import { NODE_UI, STORYBOARD_UI } from '../canvas/node-ui-tokens'
@@ -433,6 +434,12 @@ function validateNodeTypeSpec(spec: NodeTypeSpec): void {
 
 export function registerNodeType(spec: NodeTypeSpec): void {
   validateNodeTypeSpec(spec)
+  // 发行版裁剪（src/shared/edition.ts）：注册保留（外部接口/既有工程兼容），
+  // 但不可创建——Dock、拖线菜单与新建项目选择器不再出现这些入口。
+  if (DISTRIBUTION_EDITION && DISTRIBUTION_HIDDEN_NODE_TYPES.has(spec.type)) {
+    registry.set(spec.type, { ...spec, creatable: false })
+    return
+  }
   registry.set(spec.type, spec)
 }
 

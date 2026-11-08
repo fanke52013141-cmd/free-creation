@@ -93,7 +93,7 @@ export function startChat(send: Send, input: ChatStartInput): string {
     let generatedImages = 0
     try {
       const result = streamText({
-        model: createChatModel(input.providerId, input.modelId),
+        model: await createChatModel(input.providerId, input.modelId),
         system:
           [input.system?.trim(), input.imageSkill ? loadImageSkillInstructions() : '']
             .filter(Boolean)

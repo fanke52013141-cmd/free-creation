@@ -312,7 +312,7 @@ if (
         installVideoReworkSupplier(directory, phase!)
       }
       stage = 'setup-model'
-      host.saveConnection({
+      await host.saveConnection({
         id: 'agent-test-connection',
         name: '隔离验收模型',
         protocol: 'openai-compatible',

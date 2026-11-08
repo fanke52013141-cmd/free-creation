@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
 // 首个开发里程碑验收：Agent 经真实 CLI 在真实 Electron 桌面上
 //   1) 建立三个独立项目画布 A/B/C 并批量建图连线

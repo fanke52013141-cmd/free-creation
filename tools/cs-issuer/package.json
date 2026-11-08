@@ -1,0 +1,10 @@
+{
+  "name": "cs-issuer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Canvas Studio 离线发证工具（不随客户包分发）。Node 24+ 直接运行：node tools/cs-issuer/cli.ts <command> ...",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}

@@ -61,7 +61,7 @@ async function transformMiniMaxTts(input: TtsGenerateInput): Promise<VoiceCloneR
   if (!MINIMAX_VOICE_CLONE_MODELS.includes(config.modelId)) {
     throw new GatewayError('INVALID_INPUT', `MiniMax 音色克隆不支持模型 ${config.modelId}`)
   }
-  const provider = getProvider(config.providerId)
+  const provider = await getProvider(config.providerId)
   if (!provider) throw new GatewayError('PROVIDER_NOT_FOUND', 'MiniMax 供应商不存在')
   if (provider.specId !== 'minimax') {
     throw new GatewayError('INVALID_INPUT', '语音克隆只能选择 MiniMax 供应商')

@@ -1103,6 +1103,7 @@ describe('v1.2 §16.27 浏览器门禁存在：逐镜编辑必须保住镜头额
 
 describe('v1.2 §16.28 3D 预演台：读文档真值、连线数上按钮、只摆画面在变的控件', () => {
   const studio = stripComments(read('src/renderer/src/canvas/DirectorStudioPanel.tsx'))
+const directorFrame = stripComments(read('src/renderer/src/canvas/director-frame.ts'))
   const viewport3d = stripComments(read('src/renderer/src/canvas/Director3DViewport.tsx'))
   const dataLayer = read('src/shared/director-data.ts')
   const studioExecutor = stripComments(read('src/shared/engine/executors/director.ts'))
@@ -1163,7 +1164,10 @@ describe('v1.2 §16.28 3D 预演台：读文档真值、连线数上按钮、只
       /Math\.min\(\s*DIRECTOR_DURATION_RANGE_SEC\[1\],\s*raw \|\| 5\s*\)/
     )
     // WebM 导出与界面同一上限：曾经界面 10 秒、告警 12 秒、导出又截成 10 秒。
-    expect(studio).toContain('DIRECTOR_DURATION_RANGE_SEC[1] * 1000')
+    // 2026-11-08：画面绘制与预演录制抽到 director-frame.ts（GUI 与外部授权发布共用同一实现），
+    // 因此这条断言改查真正拥有该表达式的模块；面板里不得再出现第二份上限换算。
+    expect(directorFrame).toContain('DIRECTOR_DURATION_RANGE_SEC[1] * 1000')
+    expect(studio).not.toContain('DIRECTOR_DURATION_RANGE_SEC[1] * 1000')
     expect(studio).not.toMatch(/焦距[\s\S]{0,200}max="200"/)
     expect(dataLayer).toContain('durationSec: directorCutDurationSec(shot)')
     // 切片沿用自己的旧秒数，就是「时长」和「导出整段」分叉的现场。

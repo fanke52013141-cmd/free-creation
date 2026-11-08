@@ -3,7 +3,43 @@ import { readFileSync, writeFileSync } from 'fs'
 import type { GatewayModelInfo, ProviderConfig } from '../../shared/types'
 import { PROVIDER_SPECS } from '../../shared/types'
 import { getDb } from '../store/db'
-import { getProvider, saveProvider } from './providers.repo'
+import { getProvider, bootstrapLegacyProvidersToCatalog } from './providers.repo'
+import { SqliteModelHost } from '../model-host/sqlite-model-host'
+import { assertLicenseActive, licenseSnapshot } from '../security/license/gate'
+import { DISTRIBUTION_EDITION } from '../../shared/edition'
+import { getActiveVault } from '../security/keystore/vault'
+import { encryptSecret, vaultRef } from './keycrypto'
+
+function originOfSafe(baseUrl: string): string {
+  try {
+    const url = new URL(baseUrl)
+    return `${url.protocol}//${url.host}`
+  } catch {
+    return 'unknown'
+  }
+}
+
+/**
+ * 供应商配置传输（密码保护文件）。
+ *
+ * 用途：把发放员/运营方机器上的供应商配置（含 API Key）以密码加密文件交给
+ * 发行版（免授权直发版）用户导入——两种模式都开放导出，发行版开放导入。
+ * 授权版的使用者（仅 app.run 能力）不开放此通道（P2 §4.3：使用者无复制带 Key
+ * 配置的路径）；发放员（credentials.export）与发行版可用。
+ *
+ * 与 P2 密钥包（.cskeys v2，绑定接收设备）的关系：直发版没有设备身份体系，
+ * 密码保护文件是其唯一可行的接收通道；安全性等同「密码 + 你选择的交付渠道」。
+ */
+
+/** 授权版门控：使用者拒绝；发放员与发行版放行。 */
+function ensureTransferAllowed(operation: 'provider.export' | 'provider.import'): void {
+  assertLicenseActive(operation)
+  if (DISTRIBUTION_EDITION) return
+  const snapshot = licenseSnapshot()
+  if (snapshot.state !== 'active' || !snapshot.capabilities.includes('credentials.export')) {
+    throw new Error('当前授权不具备配置传输能力（credentials.export）')
+  }
+}
 
 const FORMAT = 'canvas-studio-providers'
 const VERSION = 1
@@ -46,7 +82,7 @@ function deriveKey(password: string, salt: Buffer): Buffer {
   return scryptSync(password, salt, 32, { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 })
 }
 
-function exportableProviders(providerIds: string[]): PortableProvider[] {
+async function exportableProviders(providerIds: string[]): Promise<PortableProvider[]> {
   if (
     !Array.isArray(providerIds) ||
     !providerIds.length ||
@@ -55,7 +91,7 @@ function exportableProviders(providerIds: string[]): PortableProvider[] {
     new Set(providerIds).size !== providerIds.length
   )
     throw new Error('请选择需要导出的供应商')
-  const providers = providerIds.map((id) => getProvider(id))
+  const providers = await Promise.all(providerIds.map((id) => getProvider(id)))
   if (providers.some((provider) => !provider)) throw new Error('所选供应商不可用，请刷新列表后重试')
   const selected = providers as ProviderConfig[]
   const missingKeys = selected.filter((provider) => !provider.apiKey)
@@ -75,8 +111,9 @@ function exportableProviders(providerIds: string[]): PortableProvider[] {
 }
 
 /** Export supplier IDs, endpoints, model selections and API Keys into a password-encrypted file. */
-export function exportProviders(filePath: string, password: string, providerIds: string[]): number {
-  const providers = exportableProviders(providerIds)
+export async function exportProviders(filePath: string, password: string, providerIds: string[]): Promise<number> {
+  ensureTransferAllowed('provider.export')
+  const providers = await exportableProviders(providerIds)
   const payload: ProviderTransferPayload = {
     format: FORMAT,
     version: VERSION,
@@ -200,15 +237,16 @@ function parsePayload(value: unknown): ProviderTransferPayload {
   return { format: FORMAT, version: VERSION, exportedAt: Date.now(), providers }
 }
 
-/** Decrypt and atomically upsert imported suppliers; existing IDs are updated in place. */
-export function importProviders(
+/** Decrypt and upsert imported suppliers; existing IDs are updated in place. */
+export async function importProviders(
   filePath: string,
   password: string
-): {
+): Promise<{
   added: number
   updated: number
   count: number
-} {
+}> {
+  ensureTransferAllowed('provider.import')
   const file = readFileSync(filePath)
   if (!file.byteLength || file.byteLength > MAX_FILE_BYTES) {
     throw new Error('供应商配置文件为空或超过 10 MB')
@@ -254,12 +292,56 @@ export function importProviders(
   let added = 0
   let updated = 0
   const database = getDb()
+  const vault = getActiveVault()
+
+  // 1. 预处理（异步）：新密钥写入设备密钥库（发行版无 vault 时走 safeStorage 引用）
+  const refs = new Map<string, string | null>()
+  for (const provider of payload.providers) {
+    if (await getProvider(provider.id)) updated++
+    else added++
+    const existingRow = database
+      .prepare('SELECT api_key_ref FROM providers WHERE id = ?')
+      .get(provider.id) as { api_key_ref: string | null } | undefined
+    if (vault) {
+      await vault.writeSecret({
+        kind: 'provider',
+        id: provider.id,
+        origin: originOfSafe(provider.baseURL),
+        source: 'local',
+        scope: 'app.run',
+        plain: provider.apiKey
+      })
+      refs.set(provider.id, vaultRef('provider', provider.id))
+    } else {
+      refs.set(provider.id, existingRow && !provider.apiKey ? existingRow.api_key_ref : encryptSecret(provider.apiKey))
+    }
+  }
+
+  // 2. 行 upsert（单事务；引用指向刚写入的 vault/加密值）
   database.transaction(() => {
     for (const provider of payload.providers) {
-      if (getProvider(provider.id)) updated++
-      else added++
-      saveProvider(provider)
+      const now = Date.now()
+      database
+        .prepare(
+          `INSERT INTO providers (id, name, spec_id, base_url, api_key_ref, models, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             name = excluded.name, spec_id = excluded.spec_id, base_url = excluded.base_url,
+             api_key_ref = excluded.api_key_ref, models = excluded.models`
+        )
+        .run(
+          provider.id,
+          provider.name,
+          provider.specId,
+          provider.baseURL.replace(/\/+$/, ''),
+          refs.get(provider.id) ?? null,
+          JSON.stringify(provider.models),
+          now
+        )
     }
   })()
+
+  // 3. 旧→目录连接同步（与 saveProvider 同一套语义，批处理一次）
+  await bootstrapLegacyProvidersToCatalog(new SqliteModelHost(database))
   return { added, updated, count: payload.providers.length }
 }

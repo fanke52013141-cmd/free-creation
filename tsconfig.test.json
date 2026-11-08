@@ -5,10 +5,12 @@
     "composite": true,
     "noEmit": true,
     "types": ["vitest/globals", "node"],
+    "allowImportingTsExtensions": true,
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["src/shared/*"],
-      "@renderer/*": ["src/renderer/src/*"]
+      "@renderer/*": ["src/renderer/src/*"],
+      "@free-creation/license-protocol": ["packages/license-protocol/src/index.ts"]
     }
   }
 }

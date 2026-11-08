@@ -164,13 +164,15 @@ async function main() {
       }
       try {
         if (
-          submitVideoTask(() => {}, {
-            projectId,
-            nodeId: 'node',
-            providerId: 'provider',
-            modelId: 'model',
-            prompt
-          }).taskId !== 'task'
+          (
+            await submitVideoTask(() => {}, {
+              projectId,
+              nodeId: 'node',
+              providerId: 'provider',
+              modelId: 'model',
+              prompt
+            })
+          ).taskId !== 'task'
         )
           throw new Error('SOAK_TASK_REPLACED')
         await controlVideoTask('task')
@@ -282,7 +284,7 @@ async function main() {
       modelId: 'model',
       prompt: mode === 'changed-input' ? 'changed-private-prompt' : prompt
     }
-    const submitted = submitVideoTask(() => {}, input)
+    const submitted = await submitVideoTask(() => {}, input)
     if (submitted.taskId !== 'task') throw new Error('TASK_ID_CHANGED')
     if (mode !== 'changed-input') await controlVideoTask('task')
   } else if (mode === 'corrupt') {

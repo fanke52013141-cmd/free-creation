@@ -14,6 +14,7 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { app } from 'electron'
 import {
   buildImageArgs,
   buildVideoArgs,
@@ -56,14 +57,20 @@ interface RunResult {
 }
 
 /**
- * 二进制探测顺序：环境变量 → PATH → 安装脚本的默认落点。
- * 不打包二进制（31MB 闭源 beta、会自更新），与 FFmpeg 保持同一套约定。
+ * 二进制探测顺序：环境变量 → 打包内副本 → PATH → 安装脚本的默认落点。
+ * 发行安装包把即梦 CLI 放在 resources/bin（extraResources），用户无需自行下载；
+ * CLI 仍会自更新，PATH/默认落点的新版本优先级更高（打包副本只是开箱兜底）。
  */
 function binaryCandidates(): string[] {
   const candidates: string[] = []
   const override = process.env.CANVAS_STUDIO_DREAMINA_PATH?.trim()
   if (override) candidates.push(override)
   const exe = process.platform === 'win32' ? 'dreamina.exe' : 'dreamina'
+  try {
+    if (app.isPackaged) candidates.push(join(process.resourcesPath, 'bin', exe))
+  } catch {
+    // 非 Electron 运行时（单测等）忽略打包内候选
+  }
   candidates.push('dreamina')
   const home = process.env.USERPROFILE?.trim() || process.env.HOME?.trim()
   if (home) {

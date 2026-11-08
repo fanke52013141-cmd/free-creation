@@ -1,0 +1,19 @@
+{
+  "name": "@free-creation/license-protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Canvas Studio 离线授权协议契约：文件 Schema、规范字节与 Ed25519 签名原语。客户端主进程与签发工具共用，防止协议漂移。",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}

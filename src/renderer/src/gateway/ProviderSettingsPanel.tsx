@@ -16,12 +16,14 @@ import type {
   SaveProviderInput
 } from '@shared/contracts'
 import { driverForSpec, guessModelModality } from '@shared/provider-driver'
+import { DISTRIBUTION_EDITION } from '@shared/edition'
 import { isDreaminaModelSupported } from '@shared/dreamina-models'
 import { useGatewayStore } from '../stores/gateway'
 import { useConfirmStore } from '../stores/confirm'
 import { toast } from '../stores/toast'
 import { Icon } from '../components/Icon'
 import { AppSelect } from '../components/AppSelect'
+import { KeyPackageDialogs, type KeyPackageDialogMode } from './KeyPackageDialogs'
 
 interface Draft extends Omit<SaveProviderInput, 'apiKey'> {
   apiKey: string
@@ -122,6 +124,10 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
   /** 'free' 表示整表自检，其余为某个计费项正在真实调用。 */
   const [probing, setProbing] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
+  // 密钥包三步流（.cskeys v2，仅授权版发码模式使用；发行版隐藏）。
+  const [keysDialog, setKeysDialog] = useState<KeyPackageDialogMode>(null)
+  const [canIssueKeys, setCanIssueKeys] = useState(false)
+  // 供应商配置传输（密码加密文件）：发行版 + 发放员可用——把带 Key 的配置发给客户导入。
   const [transferMode, setTransferMode] = useState<'import' | 'export' | null>(null)
   const [transferPassword, setTransferPassword] = useState('')
   const [transferPasswordConfirm, setTransferPasswordConfirm] = useState('')
@@ -143,11 +149,82 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     if (result.ok) setProviders(result.data)
   }
 
+  const beginProviderTransfer = (mode: 'import' | 'export'): void => {
+    setTransferMode(mode)
+    setTransferPassword('')
+    setTransferPasswordConfirm('')
+    setTransferProviderIds(new Set())
+    setTransferError('')
+  }
+
+  const finishProviderTransfer = (): void => {
+    setTransferMode(null)
+    setTransferPassword('')
+    setTransferPasswordConfirm('')
+    setTransferProviderIds(new Set())
+    setTransferError('')
+  }
+
+  const submitProviderTransfer = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault()
+    if (!transferMode) return
+    if (transferPassword.length < 8) {
+      setTransferError('密码至少需要 8 个字符')
+      return
+    }
+    if (transferMode === 'export' && transferPassword !== transferPasswordConfirm) {
+      setTransferError('两次输入的密码不一致')
+      return
+    }
+    if (transferMode === 'export' && transferProviderIds.size === 0) {
+      setTransferError('请选择需要导出的供应商')
+      return
+    }
+    setTransferBusy(true)
+    setTransferError('')
+    try {
+      if (transferMode === 'export') {
+        const result = await window.api.gateway.exportProviders({
+          password: transferPassword,
+          providerIds: [...transferProviderIds]
+        })
+        if (!result.ok) {
+          if (result.error.code === 'CANCELLED') return finishProviderTransfer()
+          setTransferError(result.error.message)
+          return
+        }
+        finishProviderTransfer()
+        toast(`已加密导出 ${result.data.count} 个供应商`)
+      } else {
+        const result = await window.api.gateway.importProviders({ password: transferPassword })
+        if (!result.ok) {
+          if (result.error.code === 'CANCELLED') return finishProviderTransfer()
+          setTransferError(result.error.message)
+          return
+        }
+        finishProviderTransfer()
+        await loadSettingsProviders()
+        void useGatewayStore.getState().load()
+        toast(`已导入 ${result.data.count} 个供应商（新增 ${result.data.added}，更新 ${result.data.updated}）`)
+      }
+    } catch (error) {
+      setTransferError(String((error as Error).message ?? error))
+    } finally {
+      setTransferBusy(false)
+    }
+  }
+
   useEffect(() => {
     if (!open) return
     let active = true
     void window.api.gateway.listProviders().then((result) => {
       if (active && result.ok) setProviders(result.data)
+    })
+    // P2：发放入口只对具备 credentials.export 能力的授权（模型密钥发放员）可见。
+    void window.api.bootstrap().then((result) => {
+      if (active && result.ok) {
+        setCanIssueKeys(result.data.license.capabilities.includes('credentials.export'))
+      }
     })
     return () => {
       active = false
@@ -159,10 +236,11 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return
       if (transferMode) {
-        setTransferMode(null)
-        setTransferPassword('')
-        setTransferPasswordConfirm('')
-        setTransferError('')
+        finishProviderTransfer()
+        return
+      }
+      if (keysDialog) {
+        setKeysDialog(null)
         return
       }
       // 弹层打开时 Esc 只关弹层，不关整个面板
@@ -174,7 +252,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, close, modelPickerOpen, transferMode])
+  }, [open, close, modelPickerOpen, keysDialog, transferMode])
 
   // 授权在浏览器里完成，面板按固定节奏查询；过期或失败即停止，避免无限轮询。
   useEffect(() => {
@@ -488,72 +566,6 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     toast(`已删除 ${results.length} 个供应商`)
   }
 
-  const beginProviderTransfer = (mode: 'import' | 'export'): void => {
-    setTransferMode(mode)
-    setTransferPassword('')
-    setTransferPasswordConfirm('')
-    setTransferProviderIds(new Set())
-    setTransferError('')
-  }
-
-  const finishProviderTransfer = (): void => {
-    setTransferMode(null)
-    setTransferPassword('')
-    setTransferPasswordConfirm('')
-    setTransferProviderIds(new Set())
-    setTransferError('')
-  }
-
-  const submitProviderTransfer = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault()
-    if (!transferMode) return
-    if (transferPassword.length < 8) {
-      setTransferError('密码至少需要 8 个字符')
-      return
-    }
-    if (transferMode === 'export' && transferPassword !== transferPasswordConfirm) {
-      setTransferError('两次输入的密码不一致')
-      return
-    }
-    if (transferMode === 'export' && transferProviderIds.size === 0) {
-      setTransferError('请选择需要导出的 API 密钥')
-      return
-    }
-    setTransferBusy(true)
-    setTransferError('')
-    try {
-      if (transferMode === 'export') {
-        const result = await window.api.gateway.exportProviders({
-          password: transferPassword,
-          providerIds: [...transferProviderIds]
-        })
-        if (!result.ok) {
-          if (result.error.code === 'CANCELLED') return finishProviderTransfer()
-          setTransferError(result.error.message)
-          return
-        }
-        finishProviderTransfer()
-        toast(`已加密导出 ${result.data.count} 个供应商`)
-      } else {
-        const result = await window.api.gateway.importProviders({ password: transferPassword })
-        if (!result.ok) {
-          if (result.error.code === 'CANCELLED') return finishProviderTransfer()
-          setTransferError(result.error.message)
-          return
-        }
-        finishProviderTransfer()
-        await loadSettingsProviders()
-        void useGatewayStore.getState().load()
-        toast(
-          `已导入 ${result.data.count} 个供应商（新增 ${result.data.added}，更新 ${result.data.updated}）`
-        )
-      }
-    } catch (error) {
-      setTransferError(error instanceof Error ? error.message : String(error))
-    } finally {
-      setTransferBusy(false)
-    }
-  }
 
   return createPortal(
     <div
@@ -662,13 +674,28 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                 )}
               </div>
             )}
-            {!picking && !selecting && (
+            {!picking && !selecting && !DISTRIBUTION_EDITION && (
+              <div className="gw-provider-transfer-actions">
+                <button className="btn-ghost small" onClick={() => setKeysDialog('credential')}>
+                  导出接收凭证
+                </button>
+                <button className="btn-ghost small" onClick={() => setKeysDialog('import')}>
+                  导入密钥包
+                </button>
+                {canIssueKeys && (
+                  <button className="btn-ghost small" onClick={() => setKeysDialog('export')}>
+                    发放密钥包
+                  </button>
+                )}
+              </div>
+            )}
+            {!picking && !selecting && (DISTRIBUTION_EDITION || canIssueKeys) && (
               <div className="gw-provider-transfer-actions">
                 <button className="btn-ghost small" onClick={() => beginProviderTransfer('import')}>
-                  导入
+                  导入配置
                 </button>
                 <button className="btn-ghost small" onClick={() => beginProviderTransfer('export')}>
-                  导出
+                  导出配置
                 </button>
               </div>
             )}
@@ -1130,7 +1157,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                 )}
                 {transferMode === 'export' && (
                   <fieldset className="gw-transfer-selection">
-                    <legend>选择导出的 API 密钥</legend>
+                    <legend>选择导出的供应商（含 API 密钥）</legend>
                     {providers
                       .filter((provider) => provider.hasApiKey)
                       .map((provider) => (
@@ -1152,7 +1179,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                         </label>
                       ))}
                     {!providers.some((provider) => provider.hasApiKey) && (
-                      <span>暂无可导出的 API 密钥</span>
+                      <span>暂无可导出的供应商</span>
                     )}
                   </fieldset>
                 )}
@@ -1183,6 +1210,16 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
               </form>
             </section>
           </div>
+        )}
+        {keysDialog && (
+          <KeyPackageDialogs
+            mode={keysDialog}
+            onClose={() => {
+              setKeysDialog(null)
+              void loadSettingsProviders()
+              void useGatewayStore.getState().load()
+            }}
+          />
         )}
       </div>
     </div>,

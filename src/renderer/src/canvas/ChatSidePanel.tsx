@@ -577,6 +577,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
         文本模型
         {options.length ? (
           <AppSelect
+            modal
             aria-label="文本模型"
             value={data.modelKey}
             onChange={(event) => update({ ...data, modelKey: event.target.value })}
@@ -633,6 +634,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
             <label>
               图片模型
               <AppSelect
+                modal
                 aria-label="生图模型"
                 value={imageSkill.modelKey}
                 onChange={(event) =>
@@ -736,6 +738,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
         <header className="chat-dialog-header">
           <div className="chat-dialog-session-picker">
             <AppSelect
+              modal
               aria-label="历史对话"
               disabled={running || importingAttachments}
               value={activeConversation.id}
@@ -896,7 +899,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                 </article>
               )}
               {!messages.length && !running && (
-                <div className="chat-dialog-empty">从一个问题开始，历史会保存在当前会话。</div>
+                <div className="chat-dialog-empty">有什么可以帮你？</div>
               )}
             </main>
             <footer className="chat-dialog-composer">
@@ -975,6 +978,8 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
               <div className="chat-dialog-skill-controls">
                 <span className="chat-dialog-control-label">模式</span>
                 <AppSelect
+                  modal
+                  menuSide="top"
                   aria-label="发送方式"
                   value={sendMode}
                   disabled={running}
@@ -993,6 +998,8 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                 </span>
                 {sendMode === 'chat' ? (
                   <AppSelect
+                    modal
+                    menuSide="top"
                     aria-label="发送栏文本模型"
                     className="chat-dialog-model-select"
                     value={data.modelKey}
@@ -1012,6 +1019,8 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                   </AppSelect>
                 ) : (
                   <AppSelect
+                    modal
+                    menuSide="top"
                     aria-label="发送栏图片模型"
                     className="chat-dialog-model-select"
                     value={imageSkill.modelKey}
@@ -1040,6 +1049,8 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                     <span className="chat-dialog-control-divider" aria-hidden="true" />
                     <span className="chat-dialog-control-label">分辨率</span>
                     <AppSelect
+                      modal
+                      menuSide="top"
                       aria-label="生图分辨率"
                       value={imageSkill.resolution}
                       disabled={running}

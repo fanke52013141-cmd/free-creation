@@ -282,7 +282,7 @@ describe('L04 视频链路结构化事件', () => {
     const { submitVideoTask } = await import('../../src/main/gateway/video')
     // 规避在途去重与参考资源校验：直接走 submitWithBackoff 的公开入口不可行，
     // 使用 submitVideoTask（mock DB 无在途任务、无参考图）。
-    const result = submitVideoTask((event: unknown) => sendEvents.push(event), {
+    const result = await submitVideoTask((event: unknown) => sendEvents.push(event), {
       projectId: 'project-1',
       nodeId: 'shape:video-9',
       providerId: 'provider-seedance',

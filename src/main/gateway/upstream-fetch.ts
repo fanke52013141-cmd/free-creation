@@ -3,6 +3,7 @@
 // 而画布引擎是单任务串行——一次挂起会把整张画布的执行入口一起拖死。这里统一注入
 // AbortSignal.timeout，并把超时异常翻译成一句用户能行动的网关错误。
 import { GatewayError } from './factory'
+import { emitGatewayEvent } from '../diagnostics/gateway-events'
 
 /** 控制面请求（建任务 / 查询 / 检索 / 登记音色）：正常都是秒级回包。 */
 export const CONTROL_TIMEOUT_MS = 60 * 1000
@@ -29,14 +30,47 @@ export class UpstreamStatusError extends GatewayError {
  * 带超时的上游 fetch。超时（TimeoutError）与外部中止（AbortError）都归一为
  * GatewayError('TIMEOUT')；其余异常（网络断开等）原样抛出，维持既有错误通道。
  */
+const CREDENTIAL_HEADERS = new Set(['authorization', 'x-api-key', 'x-goog-api-key', 'cookie'])
+
+function carriesCredentials(init: RequestInit): boolean {
+  try {
+    const headers = new Headers(init.headers)
+    for (const name of headers.keys()) {
+      if (CREDENTIAL_HEADERS.has(name.toLowerCase())) return true
+    }
+  } catch {
+    return true // 无法解析时按携带凭据处理，宁可保守
+  }
+  return false
+}
+
 export async function fetchUpstream(
   url: string,
   init: RequestInit,
   timeoutMs: number,
   context: string
 ): Promise<Response> {
+  // P2 端点绑定（方案 §4.3）：携带凭据的请求禁用自动重定向——3xx 一律拒绝，
+  // 防止 Authorization / 自定义鉴权头被转发到非预期主机。
+  const guardRedirect = carriesCredentials(init)
   try {
-    return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) })
+    const response = await fetch(url, {
+      ...init,
+      ...(guardRedirect ? { redirect: 'manual' as RequestRedirect } : {}),
+      signal: AbortSignal.timeout(timeoutMs)
+    })
+    if (guardRedirect && response.status >= 300 && response.status < 400 && response.headers.get('location')) {
+      emitGatewayEvent('gateway.upstream.redirect_blocked', '携带凭据的上游重定向被拒绝', undefined, {
+        status: 'failed',
+        level: 'warn',
+        attributes: { component: 'gateway', code: 'REDIRECT_BLOCKED' }
+      })
+      throw new GatewayError(
+        'REDIRECT_BLOCKED',
+        `${context}：上游返回重定向，为防止凭据外发已拒绝；请改用最终直达地址`
+      )
+    }
+    return response
   } catch (error) {
     if (
       error instanceof DOMException &&

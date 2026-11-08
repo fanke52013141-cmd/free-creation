@@ -23,7 +23,19 @@ import type {
   ValidationRecord,
   VoicePort
 } from '@free-creation/model-runtime'
-import { decryptSecret, encryptSecret } from '../gateway/keycrypto'
+import { decryptSecret, encryptSecret, parseVaultRef, vaultRef } from '../gateway/keycrypto'
+import { assertLicenseActive } from '../security/license/gate'
+import { getActiveVault } from '../security/keystore/vault'
+
+/** 连接端点的规范来源；非法 URL 时退化为 'unknown'（vault 绑定仍拒绝其他来源）。 */
+function originOfSafe(baseUrl: string): string {
+  try {
+    const url = new URL(baseUrl)
+    return `${url.protocol}//${url.host}`
+  } catch {
+    return 'unknown'
+  }
+}
 import type { AccessOutput } from '../../shared/agent-access/registry'
 
 interface Statement {
@@ -151,12 +163,34 @@ export class SqliteModelHost
     })
   }
 
-  saveConnection(input: ModelCatalogConnectionInput): Connection {
+  async saveConnection(input: ModelCatalogConnectionInput): Promise<Connection> {
+    // 授权守卫：密钥写入只在有效授权下放行。
+    assertLicenseActive('model.secret.write')
     const now = new Date().toISOString()
     const existing = this.db.prepare('SELECT secret_ref, created_at, protocol, base_url, headers_json, agent_tool_calling_revision FROM model_connections WHERE id = ?').get(input.id) as { secret_ref: string | null; created_at: string; protocol: string; base_url: string; headers_json: string; agent_tool_calling_revision: number } | undefined
-    const secret = input.apiKey?.trim() ? encryptSecret(input.apiKey.trim()) : (existing?.secret_ref ?? null)
     const nextUrl = input.baseUrl.replace(/\/+$/, '')
     const nextHeaders = JSON.stringify(input.headers ?? {})
+    // P2 密钥库：新密钥写设备绑定 vault（绑定连接 id 与端点来源）；vault 未注入时
+    // （单元测试路径）走 safeStorage，且明文回退已被 keycrypto 停用。
+    let secret: string | null
+    if (input.apiKey?.trim()) {
+      const vault = getActiveVault()
+      if (vault) {
+        await vault.writeSecret({
+          kind: 'connection',
+          id: input.id,
+          origin: originOfSafe(nextUrl),
+          source: 'local',
+          scope: 'app.run',
+          plain: input.apiKey.trim()
+        })
+        secret = vaultRef('connection', input.id)
+      } else {
+        secret = encryptSecret(input.apiKey.trim())
+      }
+    } else {
+      secret = existing?.secret_ref ?? null
+    }
     const connectionChanged = Boolean(existing && (
       existing.protocol !== input.protocol || existing.base_url !== nextUrl ||
       existing.headers_json !== nextHeaders || Boolean(input.apiKey?.trim())
@@ -362,8 +396,28 @@ export class SqliteModelHost
   }
 
   async readSecret(connectionId: string): Promise<string | null> {
+    // 授权守卫（方案 §3.3）：密钥读取只在有效授权下放行。
+    assertLicenseActive('model.secret.read')
     const row = this.db.prepare('SELECT secret_ref FROM model_connections WHERE id = ?').get(connectionId) as { secret_ref: string | null } | undefined
-    return row?.secret_ref ? decryptSecret(row.secret_ref) || null : null
+    const ref = row?.secret_ref ?? null
+    // P2：vault 引用走设备密钥库；兼容读取尚未迁移的 enc:/plain:/裸值。
+    const parsed = parseVaultRef(ref)
+    if (parsed) {
+      const vault = getActiveVault()
+      return vault ? vault.readSecret('connection', connectionId) : null
+    }
+    return ref ? decryptSecret(ref) || null : null
+  }
+
+  /** 请求时读取：目标来源与绑定来源一致才释放（阻止改地址外发，方案 §4.3）。 */
+  async readSecretForRequest(connectionId: string, targetUrl: string): Promise<string | null> {
+    assertLicenseActive('model.secret.read')
+    const row = this.db.prepare('SELECT secret_ref FROM model_connections WHERE id = ?').get(connectionId) as { secret_ref: string | null } | undefined
+    const parsed = parseVaultRef(row?.secret_ref ?? null)
+    if (!parsed) return this.readSecret(connectionId)
+    const vault = getActiveVault()
+    if (!vault) return null
+    return vault.readForRequest('connection', connectionId, targetUrl)
   }
 
   async getValidation(connectionId: string, modelDefinitionId: string, operation: ModelOperation): Promise<ValidationRecord | null> {

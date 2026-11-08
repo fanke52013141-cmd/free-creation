@@ -426,7 +426,7 @@ async function runPaidProbe(
 }
 
 export async function probeProvider(input: ProbeProviderInput): Promise<ProbeProviderResult> {
-  const p = draftToConfig(input)
+  const p = await draftToConfig(input)
   const specs = await buildProbeSpecs(p)
   const items: ProviderProbeItem[] = []
 
@@ -485,12 +485,12 @@ function authHeaderFor(p: ProviderConfig): string {
 }
 
 /** 面板里未保存的草稿也要能自检，因此密钥解析规则与 testProvider 完全一致。 */
-export function draftToConfig(input: SaveProviderInput): ProviderConfig {
+export async function draftToConfig(input: SaveProviderInput): Promise<ProviderConfig> {
   const baseURL = input.baseURL.trim().replace(/\/+$/, '')
   // 本机 CLI 通道（即梦）没有 Base URL 与 API Key，草稿也要能直接探测。
   const localCli = driverForSpec(input.specId) === 'local-cli'
   if (!baseURL && !localCli) throw new GatewayError('PROVIDER_NO_URL', 'Base URL 不能为空')
-  const apiKey = input.apiKey?.trim() || (input.id ? (getProvider(input.id)?.apiKey ?? '') : '')
+  const apiKey = input.apiKey?.trim() || (input.id ? ((await getProvider(input.id))?.apiKey ?? '') : '')
   if (!apiKey && !localCli) throw new GatewayError('PROVIDER_NO_KEY', 'API Key 不能为空')
   return {
     id: input.id ?? 'draft',

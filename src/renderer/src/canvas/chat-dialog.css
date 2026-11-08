@@ -120,9 +120,9 @@
   isolation: isolate;
   display: flex;
   flex-direction: column;
-  width: min(66.666vw, 1240px);
-  height: 100vh;
-  height: 100dvh;
+  width: min(calc(100vw - 48px), 960px);
+  height: calc(100vh - 32px);
+  height: calc(100dvh - 32px);
   min-height: 0;
   max-height: 100vh;
   max-height: 100dvh;
@@ -131,7 +131,7 @@
   background-color: var(--chat-obsidian-900);
   background-image: none;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0;
+  border-radius: 14px;
   box-shadow:
     0 25px 60px -15px rgba(0, 0, 0, 0.7),
     0 0 0 1px rgba(255, 255, 255, 0.06),
@@ -143,6 +143,8 @@
 .chat-dialog.is-fullscreen {
   width: 100vw;
   max-width: none;
+  height: 100dvh;
+  border-radius: 0;
 }
 
 .chat-dialog button {
@@ -207,10 +209,12 @@
 }
 
 .chat-dialog-session-picker .app-select {
-  width: min(260px, 100%);
+  width: fit-content;
+  max-width: min(180px, calc(100% - 42px));
+  padding-inline: 10px;
   min-height: 34px;
   color: #edf5ff;
-  background-color: rgba(7, 9, 14, 0.64);
+  background-color: #ffffff05;
   border-color: rgba(148, 163, 184, 0.22);
 }
 
@@ -860,12 +864,11 @@
 
 .chat-dialog-empty {
   margin: auto;
-  padding: 24px;
-  color: #91a8c0;
+  padding: 12px;
+  color: #c3cfdd;
+  font-size: 19px;
+  font-weight: 600;
   text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--chat-obsidian-850) 72%, transparent);
 }
 
 .chat-dialog-message.is-streaming .chat-dialog-markdown:last-child::after {
@@ -1232,13 +1235,26 @@
   min-height: 34px;
 }
 .chat-dialog-composer .chat-dialog-send { box-shadow: none; }
+.chat-dialog-composer .chat-dialog-send:disabled {
+  opacity: 1;
+  background: #26434c;
+  border-color: transparent;
+  color: #91a9b3;
+}
 .chat-dialog-composer .chat-dialog-skill-controls {
   grid-column: 2;
   min-width: 0;
   gap: 3px 5px;
   padding: 0;
 }
-.chat-dialog-composer .chat-dialog-skill-controls .app-select-trigger { background: #ffffff07; }
+.chat-dialog-composer .chat-dialog-skill-controls .app-select-trigger {
+  min-height: 30px;
+  border-color: transparent;
+  background: transparent;
+}
+.chat-dialog-composer .chat-dialog-skill-controls .app-select-trigger:hover:not(:disabled) {
+  background: #ffffff0b;
+}
 .chat-dialog-composer .chat-dialog-control-label,
 .chat-dialog-composer .chat-dialog-control-divider { display: none; }
 .chat-dialog-settings {

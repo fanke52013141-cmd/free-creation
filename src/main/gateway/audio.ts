@@ -114,7 +114,7 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 export async function generateAudioToAsset(input: AudioGenerateInput): Promise<MediaAsset> {
   if (!input.text?.trim()) throw new GatewayError('INVALID_INPUT', '朗读文本不能为空')
 
-  const p = getProvider(input.providerId)
+  const p = await getProvider(input.providerId)
   if (!p) throw new GatewayError('PROVIDER_NOT_FOUND', '供应商不存在')
 
   if (p.specId === 'minimax') return generateViaMiniMax(p, input)
@@ -148,7 +148,7 @@ export async function generateSpeechToAsset(
     throw new GatewayError('INVALID_INPUT', `朗读文本超过 ${limit} 字符上限（当前 ${text.length}）`)
   }
 
-  const p = getProvider(input.providerId)
+  const p = await getProvider(input.providerId)
   if (!p) throw new GatewayError('PROVIDER_NOT_FOUND', '供应商不存在')
   if (!p.apiKey) {
     throw new GatewayError('PROVIDER_NO_KEY', '语音合成供应商的 API Key 不可用，请在模型供应商中重新配置密钥')

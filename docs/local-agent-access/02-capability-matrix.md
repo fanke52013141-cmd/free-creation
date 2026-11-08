@@ -1,5 +1,9 @@
 # 本地 Agent 接入能力矩阵（评审草案）
 
+2026-11-07 完整目标接续：[一致性规范](../../AGENT_PARITY_SPEC.md)、[F0–F10开发计划](15-gui-cli-mcp-parity-plan.md)
+和[32类节点动作表](16-node-action-coverage.md)补齐当前全软件范围。以下A0–A4及planned表保留为历史分期，
+不能用于豁免今后的GUI新功能同步要求；项目/资源包导入纳入最终目标，当前仍未开放。
+
 2026-11-07：新增 Skill 安装/查询、AI 对话技能绑定/查询、节点库保存/查询共6项，Registry共25项。范围、参数与限制见[接入说明](13-chat-skills-node-library.md)。实现不等于全部桌面/安装包验收完成。
 
 2026-10-24 内容 Skill Agent 接续：AI 对话与 AI 处理桌面节点增加固定 Skill 配置和自主内容循环；外部节点执行、Skill 安装仍未开放，不提升本矩阵状态。公共端口/输出和外部 Schema 不变；接入影响、持久化、日志和验证见[本包交付记录](../SKILL_AGENT_DELIVERY_2026_10_24.md)。

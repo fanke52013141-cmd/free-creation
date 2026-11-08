@@ -74,7 +74,7 @@ import { encryptSecret, decryptSecret } from '../src/main/gateway/keycrypto'
 
 const ORIGINAL_CIPHER = 'enc:' + Buffer.from('original-secret', 'utf8').toString('base64')
 
-beforeEach(() => {
+beforeEach(async () => {
   dbState.rows.clear()
   cryptoState.available = true
   cryptoState.decryptFails = false
@@ -89,11 +89,11 @@ beforeEach(() => {
   })
 })
 
-describe('saveProvider 密文保留（F11）', () => {
-  it('未提交新 apiKey 时 api_key_ref 逐字节保留（即使解密不可用）', () => {
+describe('saveProvider 密文保留（F11）', async () => {
+  it('未提交新 apiKey 时 api_key_ref 逐字节保留（即使解密不可用）', async () => {
     // 模拟 safeStorage 暂不可用：decryptSecret 返回空串
     cryptoState.available = false
-    const summary = saveProvider({
+    const summary = await saveProvider({
       id: 'p1',
       name: '只改名',
       specId: 'relay',
@@ -111,24 +111,23 @@ describe('saveProvider 密文保留（F11）', () => {
     expect(dbState.rows.get('p1')!.base_url).toBe('https://new.example/v1')
   })
 
-  it('提交了新 apiKey 时正常重新加密', () => {
-    cryptoState.available = false // 加密降级为 plain:，但不影响断言
-    saveProvider({
+  it('加密不可用时提交新 apiKey 被拒绝且原密文保留（P2 明文回退停用）', async () => {
+    cryptoState.available = false
+    await expect(saveProvider({
       id: 'p1',
       name: '换密钥',
       specId: 'relay',
       baseURL: 'https://old.example/v1',
       apiKey: 'sk-new-key',
       models: []
-    })
-    const stored = dbState.rows.get('p1')!.api_key_ref as string
-    expect(stored).not.toBe(ORIGINAL_CIPHER)
-    expect(stored.length).toBeGreaterThan(0)
+    })).rejects.toThrow(/SECRET_ENCRYPTION_UNAVAILABLE/)
+    // 拒绝保存必须不动原始密文（保留旧密文等恢复后再换）。
+    expect(dbState.rows.get('p1')!.api_key_ref).toBe(ORIGINAL_CIPHER)
   })
 
-  it('getProvider 在解密恢复后仍能读出原始密钥（密文未损坏）', () => {
-    cryptoState.available = false
-    saveProvider({
+  it('getProvider 在解密恢复后仍能读出原始密钥（密文未损坏）', async () => {
+    cryptoState.available = true
+    await saveProvider({
       id: 'p1',
       name: '只改名',
       specId: 'relay',
@@ -139,13 +138,13 @@ describe('saveProvider 密文保留（F11）', () => {
     // 解密能力恢复后，原密文仍可解出（原始明文为 'original-secret'）
     cryptoState.available = true
     cryptoState.decryptFails = false
-    const config = getProvider('p1')
+    const config = await getProvider('p1')
     expect(config?.apiKey).toBe('original-secret')
   })
 
-  it('真正解密失败时也不破坏密文（enc: 密文完好保留）', () => {
+  it('真正解密失败时也不破坏密文（enc: 密文完好保留）', async () => {
     cryptoState.decryptFails = true // decryptString 抛错 → decryptSecret 返回 ''
-    saveProvider({
+    await saveProvider({
       id: 'p1',
       name: '改名不改钥',
       specId: 'relay',
@@ -156,22 +155,23 @@ describe('saveProvider 密文保留（F11）', () => {
     expect(dbState.rows.get('p1')!.api_key_ref).toBe(ORIGINAL_CIPHER)
   })
 
-  it('列表摘要仍不泄露密钥（回归 providers-security 语义）', () => {
-    const list = listProviders()
+  it('列表摘要仍不泄露密钥（回归 providers-security 语义）', async () => {
+    const list = await listProviders()
     expect(list[0]).toMatchObject({ id: 'p1', hasApiKey: true })
     expect(list[0]).not.toHaveProperty('apiKey')
     expect(JSON.stringify(list[0])).not.toContain('original-secret')
   })
 })
 
-describe('keycrypto 前缀约定（背景回归）', () => {
-  it('encryptSecret 在 safeStorage 可用时输出 enc: 前缀', () => {
+describe('keycrypto 前缀约定（背景回归）', async () => {
+  it('encryptSecret 在 safeStorage 可用时输出 enc: 前缀', async () => {
     expect(encryptSecret('abc')).toMatch(/^enc:/)
   })
-  it('encryptSecret 在不可用时降级 plain: 前缀且可解回', () => {
+  it('encryptSecret 在不可用时抛错拒绝保存（P2 明文回退停用）', async () => {
     cryptoState.available = false
-    const stored = encryptSecret('abc')
-    expect(stored).toMatch(/^plain:/)
-    expect(decryptSecret(stored)).toBe('abc')
+    expect(() => encryptSecret('abc')).toThrowError(/SECRET_ENCRYPTION_UNAVAILABLE/)
+    // 历史遗留的 plain: 数据仍可读取（仅迁移兼容）。
+    const legacy = `plain:${Buffer.from('abc').toString('base64')}`
+    expect(decryptSecret(legacy)).toBe('abc')
   })
 })

@@ -123,7 +123,7 @@ describe('视频任务链路的接线', () => {
 
   it('提交时把连接快照写进任务，重启续跑才不会查错服务商', () => {
     expect(video).toContain('connection: snapshotProviderConnection(p)')
-    expect(video).toContain('const liveProvider = requireLiveProvider(input.providerId)')
+    expect(video).toContain('const liveProvider = await requireLiveProvider(input.providerId)')
     expect(video).toContain('credentialHash(liveProvider) !== state.credentialHash')
     expect(video).toMatch(
       /const st = await pollUpstream\(\s*poll,\s*liveProvider,\s*state\.connection,\s*upstreamId,\s*pollFailures\s*\)/

@@ -2,6 +2,7 @@
   "excludedPaths": [
     "src/renderer/src/dev/",
     "src/main/model-smoke.ts",
+    "tools/cs-issuer/",
     "qa/",
     "artifacts/",
     "results/"
@@ -24,5 +25,5 @@
     "src/main/agent-flow/parallel-media-acceptance.ts": "只由隔离 desktop-electron --parallel-media 加载，不进入应用。供应商 fetch 替身强制两个 POST 同时在途，复用公共 gateway/command/runtime 生命周期；本地 MP4 不产生真实计费。两进程验证停止、unknown 锁、原任务接回及唯一终态和脱敏，见 37 并行媒体包。",
     "src/main/agent-flow/parallel-review-acceptance.ts": "仅由独立 desktop-electron --parallel-review 验收入口加载，不进入应用。fetch 替身校验首批双 POST 重叠、冻结返工反馈，并提供本地蓝/红 MP4；其余传输沿原 fetch，不发真实付费请求。公共 gateway/runtime/review/command/node/task/media/save 提供生命周期，runner 检查四次提交、四次审核、唯一终态、恢复关联及正文/Key/媒体排除。不豁免生产网络、裸日志或秘密内容；证据见 39 并行审核返工记录。"
   },
-  "_说明": "excludedPaths 内的文件跳过旁路检查：dev/browserMock 是浏览器演示 mock（无 main 诊断存储，接受即丢弃）；model-smoke.ts 的 console 是 --model-smoke-test 的 stdout 报告通道（无界面验收输出）；qa/ 与 artifacts/、results/ 是一次性 QA 探测脚本与验收产物，不属于应用业务代码。新条目必须带理由登记；密钥/正文禁止项不可通过本清单豁免。"
+  "_说明": "excludedPaths 内的文件跳过旁路检查：dev/browserMock 是浏览器演示 mock（无 main 诊断存储，接受即丢弃）；model-smoke.ts 的 console 是 --model-smoke-test 的 stdout 报告通道（无界面验收输出）；tools/cs-issuer 是离线签发 CLI（不随客户包分发、无诊断底座，stdout/err 即其操作界面，绝不输出密钥材料）；qa/ 与 artifacts/、results/ 是一次性 QA 探测脚本与验收产物，不属于应用业务代码。新条目必须带理由登记；密钥/正文禁止项不可通过本清单豁免。"
 }

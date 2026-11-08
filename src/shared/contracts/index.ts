@@ -189,6 +189,14 @@ export const IPC = {
     import: 'library:import'
   },
   gateway: {
+    // P2 密钥包通道（.cskeys v2 指定设备发放）。seal 需 credentials.export 能力。
+  keys: {
+  exportCredential: 'gateway:keys:export-credential',
+  listConnections: 'gateway:keys:list-connections',
+  sealPackage: 'gateway:keys:seal-package',
+  previewPackage: 'gateway:keys:preview-package',
+  importPackage: 'gateway:keys:import-package'
+  },
     providers: 'gateway:providers:list',
     executableProviders: 'gateway:providers:executable',
     saveProvider: 'gateway:providers:save',
@@ -235,14 +243,35 @@ export const IPC = {
     health: 'diagnostics:health',
     // L05：整流程诊断包导出（manifest/events/summary/coverage）。
     exportBundle: 'diagnostics:export-bundle'
+  },
+  // 授权窗专用通道：仅注册在锁定/未授权状态的隔离窗口（src/main/ipc/license.ipc.ts），
+  // 业务窗口与外部 Agent 没有任何授权操作入口（方案 §3.3）。
+  license: {
+    getStatus: 'license:get-status',
+    probeDevice: 'license:probe-device',
+    exportRequest: 'license:export-request',
+    importChallenge: 'license:import-challenge',
+    exportProof: 'license:export-proof',
+    importLicense: 'license:import-license',
+    importPolicy: 'license:import-policy',
+    getDiagnostic: 'license:get-diagnostic',
+    exitApp: 'license:exit-app'
   }
 } as const
 
 export type IpcEnvelope<T> =
   { ok: true; data: T } | { ok: false; error: { code: string; message: string } }
 
+export interface LicenseSummary {
+  state: 'unlicensed' | 'checking' | 'active' | 'locked'
+  capabilities: string[]
+  term: 'days' | 'permanent' | null
+  expiresAt: number | null
+}
+
 export interface BootstrapInfo {
   lastProjectId: string | null
+  license: LicenseSummary
 }
 
 export interface NodeRunDiagnosticRecord {

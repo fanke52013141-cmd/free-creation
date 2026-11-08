@@ -7,6 +7,15 @@ asar: false
 extraFiles:
   - from: build/canvas-studio-agent.cmd
     to: canvas-studio-agent.cmd
+extraResources:
+  # 即梦 CLI 随包分发（用户无需自行下载）；CLI 仍会自更新，PATH 上的新版本优先。
+  - from: build/bin/dreamina.exe
+    to: bin/dreamina.exe
+  # FFmpeg/FFprobe 随包分发（gyan.dev essentials 构建），截帧/时间线/媒体处理开箱即用。
+  - from: build/bin/ffmpeg.exe
+    to: bin/ffmpeg.exe
+  - from: build/bin/ffprobe.exe
+    to: bin/ffprobe.exe
 directories:
   buildResources: build
 files:
@@ -35,6 +44,10 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  # 向导式安装：用户可选择安装位置（默认仍为用户目录，不要求管理员权限）
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:

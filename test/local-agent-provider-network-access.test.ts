@@ -29,7 +29,9 @@ vi.mock('../src/main/model-host/runtime', () => ({
 }))
 vi.mock('../src/main/model-host/sqlite-model-host', () => ({
   SqliteModelHost: class {
-    constructor() {}
+    constructor() {
+      // 无状态桩
+    }
   }
 }))
 

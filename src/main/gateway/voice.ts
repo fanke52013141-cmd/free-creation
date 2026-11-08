@@ -49,8 +49,8 @@ function assertMiniMaxOk(payload: MiniMaxEnvelope | null, prefix: string): void 
   }
 }
 
-function requireMiniMax(providerId: string): ProviderConfig {
-  const provider = getProvider(providerId)
+async function requireMiniMax(providerId: string): Promise<ProviderConfig> {
+  const provider = await getProvider(providerId)
   if (!provider) throw new GatewayError('PROVIDER_NOT_FOUND', '供应商不存在')
   if (provider.specId !== 'minimax') {
     throw new GatewayError('INVALID_INPUT', '音色复刻与音色设计只能选择 MiniMax 供应商')
@@ -168,7 +168,7 @@ export function buildVoiceDesignBody(
  * 两种输出的语义不被混为一谈。
  */
 export async function cloneMiniMaxVoice(request: CloneVoiceRequest): Promise<string> {
-  const provider = requireMiniMax(request.providerId)
+  const provider = await requireMiniMax(request.providerId)
   const config = request.config
   const base = provider.baseURL.replace(/\/+$/, '')
 
@@ -240,7 +240,7 @@ export async function designMiniMaxVoice(input: VoiceDesignInput): Promise<Voice
   const prompt = input.prompt?.trim()
   if (!prompt) throw new GatewayError('INVALID_INPUT', '音色描述不能为空')
 
-  const provider = requireMiniMax(input.providerId)
+  const provider = await requireMiniMax(input.providerId)
   const base = provider.baseURL.replace(/\/+$/, '')
   const config = input.config
   const previewText = config.previewText.trim()

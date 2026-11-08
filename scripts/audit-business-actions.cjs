@@ -1,3 +1,4 @@
+/* eslint-disable no-regex-spaces, @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
 // F0 业务动作分母审计：把 GUI 业务动作（IPC 契约 + 画布级动作）与外部 Registry 覆盖对照。
 // 产物：docs/local-agent-access/generated/action-inventory.json

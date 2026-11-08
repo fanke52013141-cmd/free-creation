@@ -2,6 +2,7 @@
 import { ipcMain, dialog } from 'electron'
 import { IPC } from '../../shared/contracts'
 import type {
+  BootstrapInfo,
   ExportCanvasStructureInput,
   GatewayDiagnosticsContext,
   IpcEnvelope,
@@ -13,6 +14,7 @@ import {
   GraphWriteInProgressError
 } from '../../shared/graph-snapshot-sync'
 import { getSetting, setSetting } from '../store/db'
+import { licenseSnapshot } from '../security/license/gate'
 import * as repo from '../store/projects.repo'
 import { emitDomainEvent } from '../diagnostics/ipc-domain-events'
 import { exportProject, importProject } from '../store/transfer'
@@ -111,8 +113,17 @@ function transferFailure(
 }
 
 export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
-  ipcMain.handle(IPC.app.bootstrap, (): IpcEnvelope<{ lastProjectId: string | null }> => {
-    return ok({ lastProjectId: getSetting('lastProjectId') })
+  ipcMain.handle(IPC.app.bootstrap, (): IpcEnvelope<BootstrapInfo> => {
+    const snapshot = licenseSnapshot()
+    return ok({
+      lastProjectId: getSetting('lastProjectId'),
+      license: {
+        state: snapshot.state,
+        capabilities: [...snapshot.capabilities],
+        term: snapshot.term,
+        expiresAt: snapshot.expiresAt
+      }
+    })
   })
 
   ipcMain.handle(IPC.project.list, (): IpcEnvelope<ProjectMeta[]> => {

@@ -140,15 +140,15 @@ function response(state: string, id = 'remote-1') {
 describe('C4 supplier facts and conditional cancellation', () => {
   it.each(['unknown', 'success', 'failed', 'cancelled'])(
     'an admitted Agent command reuses its %s video task without POST',
-    (status) => {
+    async (status) => {
       seed({ flowCommandId: 'command', cancelRequested: true })
       fixture.db.prepare("UPDATE tasks SET status=? WHERE id='local'").run(status)
       bindFlowCommand()
-      const fetcher = vi.fn(() => {
+      const fetcher = vi.fn(async () => {
         throw new Error('POST_FORBIDDEN')
       })
       vi.stubGlobal('fetch', fetcher)
-      const result = submitVideoTask(() => {}, {
+      const result = await submitVideoTask(() => {}, {
         projectId: 'project',
         nodeId: 'node',
         providerId: 'provider',
@@ -162,7 +162,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
       expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
     }
   )
-  it('rejects an unadmitted/forged Agent lease and changed fixed request before side effects', () => {
+  it('rejects an unadmitted/forged Agent lease and changed fixed request before side effects', async () => {
     seed({ flowCommandId: 'command' })
     bindFlowCommand(0)
     const input = {
@@ -174,21 +174,21 @@ describe('C4 supplier facts and conditional cancellation', () => {
       mode: 'text' as const,
       flowCommand: { projectId: 'project', commandId: 'command', leaseId: 'lease' }
     }
-    expect(() => submitVideoTask(() => {}, input)).toThrow('视频命令未获准执行')
+    await expect(submitVideoTask(() => {}, input)).rejects.toThrow('视频命令未获准执行')
     fixture.db.prepare('UPDATE flow_commands SET admitted=1').run()
-    expect(() => submitVideoTask(() => {}, { ...input, prompt: 'changed' })).toThrow(
+    await expect(submitVideoTask(() => {}, { ...input, prompt: 'changed' })).rejects.toThrow(
       '原视频命令输入发生变化'
     )
-    expect(() =>
+    await expect(
       submitVideoTask(() => {}, { ...input, referenceImageMediaIds: ['foreign'] })
-    ).toThrow('Agent 视频支持文本、提示词包、固定首尾帧及有序图片、视频和音频参考')
+    ).rejects.toThrow('Agent 视频支持文本、提示词包、固定首尾帧及有序图片、视频和音频参考')
     const stored = fixture.db.prepare('SELECT command_json FROM flow_commands').get() as {
       command_json: string
     }
     fixture.db
       .prepare('UPDATE flow_commands SET command_json=?')
       .run(JSON.stringify({ ...JSON.parse(stored.command_json), contractVersion: 1 }))
-    expect(() => submitVideoTask(() => {}, input)).toThrow('视频命令未获准执行')
+    await expect(submitVideoTask(() => {}, input)).rejects.toThrow('视频命令未获准执行')
   })
   function firstFrameInput() {
     bindFlowCommand()
@@ -252,17 +252,17 @@ describe('C4 supplier facts and conditional cancellation', () => {
       flowCommand: { projectId: 'project', commandId: 'command', leaseId: 'lease' }
     }
   }
-  it('recovers the fixed first-frame task without POST and rejects replacement bytes or media IDs', () => {
+  it('recovers the fixed first-frame task without POST and rejects replacement bytes or media IDs', async () => {
     seed({ flowCommandId: 'command', mode: 'first-frame', firstFrameMediaId: 'frame' })
     const input = firstFrameInput(),
       fetcher = vi.fn()
     vi.stubGlobal('fetch', fetcher)
-    expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
-    expect(() => submitVideoTask(() => {}, { ...input, firstFrameMediaId: 'foreign' })).toThrow(
+    expect(await submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+    await expect(submitVideoTask(() => {}, { ...input, firstFrameMediaId: 'foreign' })).rejects.toThrow(
       '不匹配固定媒体版本'
     )
     writeFileSync(join(fixture.directory, 'projects/project/media/frame.png'), 'other-frame')
-    expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_IMAGE_CHANGED')
+    await expect(submitVideoTask(() => {}, input)).rejects.toThrow('ASSET_IMAGE_CHANGED')
     expect(fetcher).not.toHaveBeenCalled()
     expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
   })
@@ -305,7 +305,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
     fixture.db.prepare('UPDATE flow_commands SET command_json=?').run(JSON.stringify(command))
     return { ...input, mode: 'first-last-frame' as const, lastFrameMediaId: 'tail' }
   }
-  it('recovers both ordered frames without POST; swap, tail replacement and missing tail remain blocked', () => {
+  it('recovers both ordered frames without POST; swap, tail replacement and missing tail remain blocked', async () => {
     seed({
       flowCommandId: 'command',
       mode: 'first-last-frame',
@@ -315,17 +315,17 @@ describe('C4 supplier facts and conditional cancellation', () => {
     const input = twoFrameInput(),
       fetcher = vi.fn()
     vi.stubGlobal('fetch', fetcher)
-    expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
-    expect(() =>
+    expect(await submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+    await expect(
       submitVideoTask(() => {}, { ...input, firstFrameMediaId: 'tail', lastFrameMediaId: 'frame' })
-    ).toThrow('不匹配固定媒体版本')
-    expect(() => submitVideoTask(() => {}, { ...input, lastFrameMediaId: 'foreign' })).toThrow(
+    ).rejects.toThrow('不匹配固定媒体版本')
+    await expect(submitVideoTask(() => {}, { ...input, lastFrameMediaId: 'foreign' })).rejects.toThrow(
       '不匹配固定媒体版本'
     )
     writeFileSync(join(fixture.directory, 'projects/project/media/tail.png'), 'other--tail')
-    expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_IMAGE_CHANGED')
+    await expect(submitVideoTask(() => {}, input)).rejects.toThrow('ASSET_IMAGE_CHANGED')
     unlinkSync(join(fixture.directory, 'projects/project/media/tail.png'))
-    expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_IMAGE_CHANGED')
+    await expect(submitVideoTask(() => {}, input)).rejects.toThrow('ASSET_IMAGE_CHANGED')
     expect(fetcher).not.toHaveBeenCalled()
     expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
   })
@@ -422,7 +422,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
   }
   it.each(['video', 'audio'] as const)(
     'resumes ordered distinct %s references and rejects swapping, duplication or changed bytes before POST',
-    (kind) => {
+    async (kind) => {
       const input = kind === 'video' ? motionInput() : audioInput()
       const extension = kind === 'video' ? 'mp4' : 'wav'
       const mediaPath = `projects/project/media/second.${extension}`
@@ -474,11 +474,11 @@ describe('C4 supplier facts and conditional cancellation', () => {
       fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
       const fetcher = vi.fn()
       vi.stubGlobal('fetch', fetcher)
-      expect(submitVideoTask(() => {}, ordered)).toEqual({ taskId: 'local' })
+      expect(await submitVideoTask(() => {}, ordered)).toEqual({ taskId: 'local' })
       for (const ids of [['motion-second', 'motion'], ['motion', 'motion'], ['motion']])
-        expect(() => submitVideoTask(() => {}, { ...ordered, [field]: ids })).toThrow()
+        await expect(submitVideoTask(() => {}, { ...ordered, [field]: ids })).rejects.toThrow()
       writeFileSync(join(fixture.directory, mediaPath), 'changed-second-reference')
-      expect(() => submitVideoTask(() => {}, ordered)).toThrow(
+      await expect(submitVideoTask(() => {}, ordered)).rejects.toThrow(
         kind === 'video' ? 'ASSET_VIDEO_CHANGED' : 'ASSET_AUDIO_CHANGED'
       )
       expect(fetcher).not.toHaveBeenCalled()
@@ -487,7 +487,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
   )
   it.each([false, true])(
     'reattaches one fixed audio with image=%s and rejects changed or missing bytes before POST',
-    (withImage) => {
+    async (withImage) => {
       seed({
         flowCommandId: 'command',
         mode: 'reference',
@@ -498,30 +498,30 @@ describe('C4 supplier facts and conditional cancellation', () => {
         fetcher = vi.fn()
       fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
       vi.stubGlobal('fetch', fetcher)
-      expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+      expect(await submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
       for (const ids of [[], ['other'], ['motion', 'motion']])
-        expect(() => submitVideoTask(() => {}, { ...input, referenceAudioMediaIds: ids })).toThrow()
-      expect(() =>
+        await expect(submitVideoTask(() => {}, { ...input, referenceAudioMediaIds: ids })).rejects.toThrow()
+      await expect(
         submitVideoTask(() => {}, { ...input, mode: 'first-frame', firstFrameMediaId: 'frame' })
-      ).toThrow()
+      ).rejects.toThrow()
       writeFileSync(join(fixture.directory, 'projects/project/media/motion.wav'), 'other--bytes')
-      expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_AUDIO_CHANGED')
+      await expect(submitVideoTask(() => {}, input)).rejects.toThrow('ASSET_AUDIO_CHANGED')
       unlinkSync(join(fixture.directory, 'projects/project/media/motion.wav'))
-      expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_AUDIO_CHANGED')
+      await expect(submitVideoTask(() => {}, input)).rejects.toThrow('ASSET_AUDIO_CHANGED')
       expect(fetcher).not.toHaveBeenCalled()
       expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
     }
   )
-  it('binds the original audio list and refuses unsupported model capability without POST', () => {
+  it('binds the original audio list and refuses unsupported model capability without POST', async () => {
     seed({ flowCommandId: 'command', mode: 'reference', referenceAudioMediaIds: ['other'] })
     const input = audioInput()
     const fetcher = vi.fn()
     vi.stubGlobal('fetch', fetcher)
     fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
-    expect(() => submitVideoTask(() => {}, input)).toThrow('原视频命令输入发生变化')
-    expect(() =>
+    await expect(submitVideoTask(() => {}, input)).rejects.toThrow('原视频命令输入发生变化')
+    await expect(
       submitVideoTask(() => {}, { ...input, modelId: 'doubao-seedance-1-5-pro' })
-    ).toThrow('不支持该参考媒体或数量')
+    ).rejects.toThrow('不支持该参考媒体或数量')
     expect(fetcher).not.toHaveBeenCalled()
     expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
   })
@@ -535,7 +535,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
       })
       const fetcher = vi.fn()
       vi.stubGlobal('fetch', fetcher)
-      const result = submitVideoTask(() => {}, input)
+      const result = await submitVideoTask(() => {}, input)
       await vi.waitFor(() => expect(getVideoTask(result.taskId)?.status).toBe('unknown'))
       expect(fetcher).not.toHaveBeenCalled()
     }
@@ -553,13 +553,13 @@ describe('C4 supplier facts and conditional cancellation', () => {
           .input
       ).cancelRequested
     ).toBe(true)
-    expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+    expect(await submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
     expect(fetcher.mock.calls.every((call) => (call[1]?.method ?? 'GET') === 'GET')).toBe(true)
     expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
   })
   it.each([false, true])(
     'reattaches fixed video reference with image=%s and rejects identity/content drift without POST',
-    (withImage) => {
+    async (withImage) => {
       seed({
         flowCommandId: 'command',
         mode: 'reference',
@@ -570,34 +570,28 @@ describe('C4 supplier facts and conditional cancellation', () => {
         fetcher = vi.fn()
       fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
       vi.stubGlobal('fetch', fetcher)
-      expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
-      expect(() =>
-        submitVideoTask(() => {}, { ...input, referenceVideoMediaIds: ['other'] })
-      ).toThrow('不匹配固定媒体版本')
-      expect(() =>
-        submitVideoTask(() => {}, { ...input, referenceVideoMediaIds: ['motion', 'motion'] })
-      ).toThrow()
-      expect(() =>
-        submitVideoTask(() => {}, { ...input, referenceAudioMediaIds: ['audio'] })
-      ).toThrow()
+      expect(await submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+      await expect(submitVideoTask(() => {}, { ...input, referenceVideoMediaIds: ['other'] })).rejects.toThrow('不匹配固定媒体版本')
+      await expect(submitVideoTask(() => {}, { ...input, referenceVideoMediaIds: ['motion', 'motion'] })).rejects.toThrow()
+      await expect(submitVideoTask(() => {}, { ...input, referenceAudioMediaIds: ['audio'] })).rejects.toThrow()
       writeFileSync(join(fixture.directory, 'projects/project/media/motion.mp4'), 'other--bytes')
-      expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_VIDEO_CHANGED')
+      await expect(submitVideoTask(() => {}, input)).rejects.toThrow('ASSET_VIDEO_CHANGED')
       unlinkSync(join(fixture.directory, 'projects/project/media/motion.mp4'))
-      expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_VIDEO_CHANGED')
+      await expect(submitVideoTask(() => {}, input)).rejects.toThrow('ASSET_VIDEO_CHANGED')
       expect(fetcher).not.toHaveBeenCalled()
       expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
     }
   )
-  it('rejects original video reference list drift and unsupported provider capability', () => {
+  it('rejects original video reference list drift and unsupported provider capability', async () => {
     seed({ flowCommandId: 'command', mode: 'reference', referenceVideoMediaIds: ['other'] })
     const input = motionInput()
     const fetcher = vi.fn()
     vi.stubGlobal('fetch', fetcher)
     fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
-    expect(() => submitVideoTask(() => {}, input)).toThrow('原视频命令输入发生变化')
-    expect(() =>
+    await expect(submitVideoTask(() => {}, input)).rejects.toThrow('原视频命令输入发生变化')
+    await expect(
       submitVideoTask(() => {}, { ...input, modelId: 'doubao-seedance-1-5-pro' })
-    ).toThrow('不支持该参考媒体或数量')
+    ).rejects.toThrow('不支持该参考媒体或数量')
     expect(fetcher).not.toHaveBeenCalled()
     expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
   })
@@ -609,7 +603,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
     })
     const fetcher = vi.fn()
     vi.stubGlobal('fetch', fetcher)
-    const result = submitVideoTask(() => {}, input)
+    const result = await submitVideoTask(() => {}, input)
     await vi.waitFor(() => expect(getVideoTask(result.taskId)?.status).toBe('unknown'))
     expect(fetcher).not.toHaveBeenCalled()
   })
@@ -620,11 +614,11 @@ describe('C4 supplier facts and conditional cancellation', () => {
     fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
     vi.stubGlobal('fetch', fetcher)
     await cancelVideoTask('local')
-    expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+    expect(await submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
     expect(fetcher.mock.calls.every((call) => (call[1]?.method ?? 'GET') === 'GET')).toBe(true)
     expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
   })
-  it('reattaches ordered image references without POST and rejects changed order, missing, duplicate and mixed inputs', () => {
+  it('reattaches ordered image references without POST and rejects changed order, missing, duplicate and mixed inputs', async () => {
     seed({
       flowCommandId: 'command',
       modelId: 'doubao-seedance-2-0',
@@ -636,33 +630,31 @@ describe('C4 supplier facts and conditional cancellation', () => {
     const input = referenceInput(),
       fetcher = vi.fn()
     vi.stubGlobal('fetch', fetcher)
-    expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+    expect(await submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
     for (const ids of [
       ['tail', 'frame'],
       ['frame'],
       ['frame', 'frame'],
       ['frame', 'tail', 'extra']
     ])
-      expect(() => submitVideoTask(() => {}, { ...input, referenceImageMediaIds: ids })).toThrow()
-    expect(() => submitVideoTask(() => {}, { ...input, firstFrameMediaId: 'frame' })).toThrow()
-    expect(() =>
-      submitVideoTask(() => {}, { ...input, referenceVideoMediaIds: ['video'] })
-    ).toThrow()
+      await expect(submitVideoTask(() => {}, { ...input, referenceImageMediaIds: ids })).rejects.toThrow()
+    await expect(submitVideoTask(() => {}, { ...input, firstFrameMediaId: 'frame' })).rejects.toThrow()
+    await expect(submitVideoTask(() => {}, { ...input, referenceVideoMediaIds: ['video'] })).rejects.toThrow()
     writeFileSync(join(fixture.directory, 'projects/project/media/tail.png'), 'other--tail')
-    expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_IMAGE_CHANGED')
+    await expect(submitVideoTask(() => {}, input)).rejects.toThrow('ASSET_IMAGE_CHANGED')
     expect(fetcher).not.toHaveBeenCalled()
     expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
   })
-  it('rejects drift in an original reference task and unsupported model capability before POST', () => {
+  it('rejects drift in an original reference task and unsupported model capability before POST', async () => {
     seed({ flowCommandId: 'command', mode: 'reference', referenceImageMediaIds: ['tail', 'frame'] })
     const input = referenceInput()
     const fetcher = vi.fn()
     vi.stubGlobal('fetch', fetcher)
     fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
-    expect(() => submitVideoTask(() => {}, input)).toThrow('原视频命令输入发生变化')
-    expect(() =>
+    await expect(submitVideoTask(() => {}, input)).rejects.toThrow('原视频命令输入发生变化')
+    await expect(
       submitVideoTask(() => {}, { ...input, modelId: 'doubao-seedance-1-5-pro' })
-    ).toThrow('不支持该参考媒体或数量')
+    ).rejects.toThrow('不支持该参考媒体或数量')
     expect(fetcher).not.toHaveBeenCalled()
     expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
   })
@@ -678,7 +670,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
       }))
       const fetcher = vi.fn()
       vi.stubGlobal('fetch', fetcher)
-      const result = submitVideoTask(() => {}, input)
+      const result = await submitVideoTask(() => {}, input)
       await vi.waitFor(() => expect(getVideoTask(result.taskId)?.status).toBe('unknown'))
       expect(fetcher).not.toHaveBeenCalled()
     }
@@ -696,11 +688,11 @@ describe('C4 supplier facts and conditional cancellation', () => {
           .input
       ).cancelRequested
     ).toBe(true)
-    expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+    expect(await submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
     expect(fetcher.mock.calls.every((call) => (call[1]?.method ?? 'GET') === 'GET')).toBe(true)
     expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
   })
-  it('rejects tail drift in an existing task even when the fixed command is valid', () => {
+  it('rejects tail drift in an existing task even when the fixed command is valid', async () => {
     seed({
       flowCommandId: 'command',
       mode: 'first-last-frame',
@@ -708,7 +700,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
       lastFrameMediaId: 'different-tail'
     })
     const input = twoFrameInput()
-    expect(() => submitVideoTask(() => {}, input)).toThrow('原视频命令输入发生变化')
+    await expect(submitVideoTask(() => {}, input)).rejects.toThrow('原视频命令输入发生变化')
   })
   it('persists stop for both fixed frames and explicit reattachment keeps the original task', async () => {
     seed({
@@ -725,7 +717,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
       input: string
     }
     expect(JSON.parse(row.input).cancelRequested).toBe(true)
-    expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+    expect(await submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
     expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
     expect(fetcher).toHaveBeenCalledTimes(1)
     expect(fetcher.mock.calls[0][1]?.method ?? 'GET').toBe('GET')
@@ -746,7 +738,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
       }))
       const fetcher = vi.fn()
       vi.stubGlobal('fetch', fetcher)
-      const result = submitVideoTask(() => {}, input)
+      const result = await submitVideoTask(() => {}, input)
       for (let i = 0; i < 100; i++) {
         const row = fixture.db
           .prepare('SELECT status FROM tasks WHERE id=?')
@@ -768,7 +760,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
     })
     const fetcher = vi.fn()
     vi.stubGlobal('fetch', fetcher)
-    const result = submitVideoTask(() => {}, input)
+    const result = await submitVideoTask(() => {}, input)
     for (let i = 0; i < 100; i++) {
       const row = fixture.db.prepare('SELECT status FROM tasks WHERE id=?').get(result.taskId) as {
         status: string
@@ -788,7 +780,9 @@ describe('C4 supplier facts and conditional cancellation', () => {
       .fn()
       .mockImplementationOnce(
         () =>
-          new Promise<Response>((done) => {
+          // eslint-disable-next-line no-async-promise-executor -- 沿用本文件既有传输桩写法
+          // eslint-disable-next-line no-async-promise-executor -- 沿用本文件既有传输桩写法
+          new Promise<Response>(async (done) => {
             release = done
           })
       )
@@ -802,7 +796,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
       prompt: 'private-material'
     }
     const send = vi.fn()
-    const submitted = submitVideoTask(send, input)
+    const submitted = await submitVideoTask(send, input)
     await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1))
     await cancelVideoTask(submitted.taskId)
     release(new Response(JSON.stringify({ id: 'remote-1' })))
@@ -821,9 +815,9 @@ describe('C4 supplier facts and conditional cancellation', () => {
       modelId: 'doubao-seedance-2-0',
       prompt: 'private-material'
     }
-    const submitted = submitVideoTask(() => {}, input)
+    const submitted = await submitVideoTask(() => {}, input)
     await vi.waitFor(() => expect(getVideoTask(submitted.taskId)?.status).toBe('unknown'))
-    expect(submitVideoTask(() => {}, input)).toEqual(submitted)
+    expect(await submitVideoTask(() => {}, input)).toEqual(submitted)
     expect((await controlVideoTask(submitted.taskId))?.status).toBe('unknown')
     expect(fetcher).toHaveBeenCalledTimes(1)
     expect(fetcher.mock.calls[0][1].method).toBe('POST')
@@ -893,7 +887,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
       expect(fetcher).not.toHaveBeenCalled()
     }
   )
-  it('reattaches the identical unknown task; changed input cannot submit', () => {
+  it('reattaches the identical unknown task; changed input cannot submit', async () => {
     seed()
     const input = {
       projectId: 'project',
@@ -904,8 +898,8 @@ describe('C4 supplier facts and conditional cancellation', () => {
     }
     const fetcher = vi.fn()
     vi.stubGlobal('fetch', fetcher)
-    expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
-    expect(() => submitVideoTask(() => {}, { ...input, prompt: 'changed' })).toThrow(
+    expect(await submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+    await expect(submitVideoTask(() => {}, { ...input, prompt: 'changed' })).rejects.toThrow(
       '原任务结果未知'
     )
     expect(fetcher).not.toHaveBeenCalled()
@@ -930,7 +924,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
   it('logger failure does not change supplier facts', async () => {
     seed()
     setGatewayEventSink({
-      emit: () => {
+      emit: async () => {
         throw new Error('LOGGER_DOWN')
       }
     })
@@ -944,7 +938,8 @@ describe('C4 supplier facts and conditional cancellation', () => {
       .fn()
       .mockImplementationOnce(
         () =>
-          new Promise<Response>((done) => {
+          // eslint-disable-next-line no-async-promise-executor -- 沿用本文件既有传输桩写法
+          new Promise<Response>(async (done) => {
             release = done
           })
       )
@@ -966,7 +961,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
     vi.stubGlobal('fetch', fetcher)
     expect((await controlVideoTask('local'))?.status).toBe('unknown')
     expect((fixture.db.prepare('SELECT count(*) AS n FROM media').get() as { n: number }).n).toBe(0)
-    submitVideoTask(() => {}, {
+    await submitVideoTask(() => {}, {
       projectId: 'project',
       nodeId: 'node',
       providerId: 'provider',
@@ -1002,7 +997,8 @@ describe('C4 supplier facts and conditional cancellation', () => {
       vi.fn(async (url: string) => {
         if (!url.includes('media.example')) return response('succeeded')
         started()
-        return new Promise<Response>((done) => {
+        // eslint-disable-next-line no-async-promise-executor -- 沿用本文件既有传输桩写法
+        return new Promise<Response>(async (done) => {
           release = done
         })
       })
@@ -1025,7 +1021,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
   it('uses real HTTP transport for terminal query and emits a paired redacted lifecycle', async () => {
     seed()
     const observed: string[] = []
-    const server = createServer((request, reply) => {
+    const server = createServer(async (request, reply) => {
       observed.push(`${request.method} ${request.url}`)
       reply.setHeader('Content-Type', 'application/json')
       reply.end(JSON.stringify({ id: 'remote-1', status: 'cancelled' }))

@@ -1,0 +1,166 @@
+/* 授权窗样式：独立最小样式，不依赖业务主题。 */
+:root {
+  color-scheme: dark;
+  font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #141414;
+  color: #e8e8e8;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  user-select: none;
+}
+
+.shell {
+  width: min(680px, 92vw);
+  padding: 40px 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+header h1 {
+  font-size: 22px;
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.subtitle {
+  margin: 0;
+  color: #9a9a9a;
+  font-size: 13px;
+}
+
+.status-card {
+  background: #1e1e1e;
+  border: 1px solid #2e2e2e;
+  border-radius: 10px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.status-row {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+  align-items: baseline;
+}
+
+.label {
+  width: 72px;
+  color: #8a8a8a;
+  flex-shrink: 0;
+}
+
+.mono {
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: #333;
+  color: #ddd;
+}
+
+.badge[data-state='active'] {
+  background: #1d4220;
+  color: #8ee29a;
+}
+
+.badge[data-state='locked'] {
+  background: #4a1f1f;
+  color: #f0a3a3;
+}
+
+.steps ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.steps li {
+  background: #1b1b1b;
+  border: 1px solid #2c2c2c;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.step-head {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #8a8a8a;
+}
+
+button {
+  appearance: none;
+  border: 1px solid #3a6ea5;
+  background: #23517c;
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  margin-right: 8px;
+}
+
+button:hover:not(:disabled) {
+  background: #2c639c;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+button.secondary {
+  background: transparent;
+  border-color: #3a3a3a;
+  color: #bbb;
+}
+
+button.secondary:hover:not(:disabled) {
+  background: #262626;
+}
+
+.footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.diagnostic {
+  background: #161616;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 12px;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 11px;
+  color: #a8c7a8;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}

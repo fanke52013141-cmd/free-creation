@@ -777,8 +777,8 @@ function sleep(ms: number): Promise<void> {
 }
 
 /** 供应商连接可能在任务在途时被用户改动，因此每轮续查前重新读取。 */
-function requireLiveProvider(providerId: string): ProviderConfig {
-  const p = getProvider(providerId)
+async function requireLiveProvider(providerId: string): Promise<ProviderConfig> {
+  const p = await getProvider(providerId)
   if (!p) throw new GatewayError('PROVIDER_NOT_FOUND', '供应商已被删除')
   return p
 }
@@ -973,7 +973,7 @@ function commandFrames(
   return frames
 }
 
-export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmitResult {
+export async function submitVideoTask(send: Send, input: VideoSubmitInput): Promise<VideoSubmitResult> {
   if (input.flowCommand) {
     const binding = CommandLeaseSchema.parse(input.flowCommand)
     const command = getDb()
@@ -1039,7 +1039,7 @@ export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmi
       )
     commandFrames(input, fixed)
     if (input.mode === 'reference') {
-      const provider = getProvider(input.providerId)
+      const provider = await getProvider(input.providerId)
       if (!provider) throw new GatewayError('PROVIDER_NOT_FOUND', '供应商不存在')
       const caps = videoCapabilitiesFor(provider.specId, input.modelId, {
         gatewayProxy: isSeedanceGatewayProxy(provider.specId, provider.baseURL)
@@ -1095,7 +1095,7 @@ export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmi
     }
   }
   if (!input.prompt?.trim()) throw new GatewayError('INVALID_INPUT', '提示词不能为空')
-  const p = getProvider(input.providerId)
+  const p = await getProvider(input.providerId)
   if (!p) throw new GatewayError('PROVIDER_NOT_FOUND', '供应商不存在')
   if (p.specId !== 'minimax' && p.specId !== 'seedance' && p.specId !== 'dreamina' && p.specId !== 'vidu') {
     throw new GatewayError('WRONG_SPEC', '该供应商不支持视频生成')
@@ -1236,7 +1236,7 @@ async function pollLoop(
   const run = { stopped: false }
   liveRuns.set(taskId, run)
   try {
-    const p = requireLiveProvider(input.providerId)
+    const p = await requireLiveProvider(input.providerId)
     const { submit, poll } = adaptersFor(p)
     const upstreamId = await submitWithBackoff(
       submit,
@@ -1284,7 +1284,7 @@ async function pollLoop(
       await sleep(POLL_INTERVAL_MS)
       if (run.stopped) return
 
-      const liveProvider = requireLiveProvider(input.providerId)
+      const liveProvider = await requireLiveProvider(input.providerId)
       if (state.credentialHash && credentialHash(liveProvider) !== state.credentialHash)
         throw new GatewayError('TASK_OUTCOME_UNKNOWN', UNKNOWN_VIDEO)
       const st = await pollUpstream(poll, liveProvider, state.connection, upstreamId, pollFailures)
@@ -1420,7 +1420,7 @@ export function controlVideoTask(
           return getVideoTask(taskId)
         }
       }
-      const provider = getProvider(row.provider_id)
+      const provider = await getProvider(row.provider_id)
       if (
         !provider ||
         !state.upstreamTaskId ||
@@ -1442,7 +1442,7 @@ export function controlVideoTask(
       const latest = getDb().prepare('SELECT input FROM tasks WHERE id = ?').get(taskId) as {
         input: string
       }
-      const currentProvider = getProvider(row.provider_id)
+      const currentProvider = await getProvider(row.provider_id)
       if (
         latest.input !== row.input ||
         !currentProvider ||
@@ -1490,7 +1490,7 @@ export function controlVideoTask(
 }
 
 // 应用启动恢复：重启前仍在途的任务，有 upstreamTaskId 且连接未漂移才继续轮询，否则标失败
-export function resumePendingVideoTasks(send: Send): void {
+export async function resumePendingVideoTasks(send: Send): Promise<void> {
   const rows = getDb()
     .prepare("SELECT * FROM tasks WHERE kind = 'video' AND status IN ('submitted', 'running')")
     .all() as TaskRow[]
@@ -1505,7 +1505,7 @@ export function resumePendingVideoTasks(send: Send): void {
   }
   for (const row of rows) {
     const state = parseInput(row.id)
-    const p = getProvider(row.provider_id)
+    const p = await getProvider(row.provider_id)
     if (
       state.cancelRequested ||
       (p && state.credentialHash && credentialHash(p) !== state.credentialHash)
@@ -1602,7 +1602,7 @@ async function resumeLoop(
       await sleep(POLL_INTERVAL_MS)
       if (run.stopped) return
       // 重启后用户可能改过供应商；每轮重新读取，漂移即停手
-      p = requireLiveProvider(row.provider_id)
+      p = await requireLiveProvider(row.provider_id)
     }
   } catch (e) {
     if (['success', 'failed', 'cancelled'].includes(getVideoTask(row.id)?.status ?? '')) return

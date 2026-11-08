@@ -68,6 +68,7 @@ function visualClipAtPlayhead(data: TimelineData, playheadMs: number): TimelineC
 }
 
 /** 播放头位置上的音频片段（跳过静音/隐藏轨道）：用于全屏预览的音频播放。 */
+// eslint-disable-next-line react-refresh/only-export-components -- 与时间线编辑器同源的纯函数
 export function audioClipAtPlayhead(data: TimelineData, playheadMs: number): TimelineClip | null {
   for (let index = data.tracks.length - 1; index >= 0; index -= 1) {
     const track = data.tracks[index]

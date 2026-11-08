@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Canvas Studio 授权</title>
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'"
+    />
+  </head>
+  <body>
+    <div class="shell">
+      <header>
+        <h1>Canvas Studio 授权</h1>
+        <p class="subtitle">此设备尚未激活。请按以下步骤完成离线发证。</p>
+      </header>
+
+      <section class="status-card">
+        <div class="status-row">
+          <span class="label">当前状态</span>
+          <span id="state" class="badge">检查中…</span>
+        </div>
+        <div class="status-row">
+          <span class="label">原因</span>
+          <span id="reason" class="mono">—</span>
+        </div>
+        <div class="status-row">
+          <span class="label">设备摘要</span>
+          <span id="device-summary" class="mono">—</span>
+        </div>
+        <div class="status-row">
+          <span class="label">期限</span>
+          <span id="term" class="mono">—</span>
+        </div>
+      </section>
+
+      <section class="steps">
+        <ol>
+          <li>
+            <div class="step-head">① 导出设备申请（.csreq）</div>
+            <button id="btn-export-request" type="button">导出设备申请</button>
+            <p class="hint">把申请文件发给签发人；签发人将核对设备并生成挑战。</p>
+          </li>
+          <li>
+            <div class="step-head">② 导入挑战并导出证明（.cschallenge → .csproof）</div>
+            <button id="btn-import-challenge" type="button">导入挑战文件</button>
+            <button id="btn-export-proof" type="button" disabled>导出设备证明</button>
+            <p class="hint">导入签发人返回的挑战，本机会自动生成证明文件，再交回签发人。若签发人采用「信任直发」（凭申请直接签发），可跳过此步，直接进行第 ③ 步。</p>
+          </li>
+          <li>
+            <div class="step-head">③ 导入授权（.cslicense）</div>
+            <button id="btn-import-license" type="button">导入授权文件</button>
+            <p class="hint">激活成功后应用将自动进入项目列表，之后启动无需再次导入。</p>
+          </li>
+        </ol>
+      </section>
+
+      <section class="footer">
+        <button id="btn-import-policy" type="button" class="secondary">导入策略文件</button>
+        <button id="btn-diagnostic" type="button" class="secondary">诊断信息</button>
+        <button id="btn-exit" type="button" class="secondary">退出</button>
+      </section>
+
+      <pre id="diagnostic" class="diagnostic" hidden></pre>
+    </div>
+    <script type="module" src="/src/license/main.ts"></script>
+  </body>
+</html>

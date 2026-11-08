@@ -166,7 +166,7 @@ function speechConfigFor(provider: ProviderConfig, modelId: string): SpeechConfi
 
 async function runText(target: SmokeTarget): Promise<Omit<SmokeResult, 'id'>> {
   const started = Date.now()
-  const provider = getProvider(target.provider.id)
+  const provider = await getProvider(target.provider.id)
   if (!provider) {
     return {
       kind: 'text',
@@ -179,7 +179,7 @@ async function runText(target: SmokeTarget): Promise<Omit<SmokeResult, 'id'>> {
   }
   try {
     const result = streamText({
-      model: createChatModel(provider.id, target.model.id),
+      model: await createChatModel(provider.id, target.model.id),
       prompt: '这是连通性验收。请只回复 OK。',
       // 推理型模型先消耗输出预算；真实 Flash 验收在 96 token 内只有推理，512 才返回正文。
       maxOutputTokens: 512,
@@ -227,7 +227,7 @@ async function runText(target: SmokeTarget): Promise<Omit<SmokeResult, 'id'>> {
  */
 async function runChatNodeTransport(target: SmokeTarget): Promise<Omit<SmokeResult, 'id'>> {
   const started = Date.now()
-  const provider = getProvider(target.provider.id)
+  const provider = await getProvider(target.provider.id)
   if (!provider) {
     return { kind: 'chat', status: 'fail', provider: publicProvider(target.provider), modelId: target.model.id, durationMs: Date.now() - started, detail: '供应商记录不存在' }
   }
@@ -268,7 +268,7 @@ async function runChatNodeTransport(target: SmokeTarget): Promise<Omit<SmokeResu
 
 async function runImage(target: SmokeTarget, projectId: string): Promise<Omit<SmokeResult, 'id'>> {
   const started = Date.now()
-  const provider = getProvider(target.provider.id)
+  const provider = await getProvider(target.provider.id)
   if (!provider)
     return {
       kind: 'image',
@@ -322,7 +322,7 @@ function smokeReferencePng(): Buffer {
 
 async function runImageEdit(target: SmokeTarget, projectId: string): Promise<Omit<SmokeResult, 'id'>> {
   const started = Date.now()
-  const provider = getProvider(target.provider.id)
+  const provider = await getProvider(target.provider.id)
   if (!provider) {
     return { kind: 'image-edit', status: 'fail', provider: publicProvider(target.provider), modelId: target.model.id, durationMs: Date.now() - started, detail: '供应商记录不存在' }
   }
@@ -350,7 +350,7 @@ async function runImageEdit(target: SmokeTarget, projectId: string): Promise<Omi
 
 async function runSpeech(target: SmokeTarget, projectId: string): Promise<Omit<SmokeResult, 'id'>> {
   const started = Date.now()
-  const provider = getProvider(target.provider.id)
+  const provider = await getProvider(target.provider.id)
   if (!provider)
     return {
       kind: 'speech',
@@ -395,7 +395,7 @@ async function runVoiceDesign(
   projectId: string
 ): Promise<Omit<SmokeResult, 'id'>> {
   const started = Date.now()
-  const provider = getProvider(providerSummary.id)
+  const provider = await getProvider(providerSummary.id)
   if (!provider)
     return {
       kind: 'voice-design',
@@ -440,7 +440,7 @@ async function runVoiceClone(
   projectId: string
 ): Promise<Omit<SmokeResult, 'id'>> {
   const started = Date.now()
-  const provider = getProvider(providerSummary.id)
+  const provider = await getProvider(providerSummary.id)
   if (!provider) {
     return {
       kind: 'voice-clone',
@@ -513,13 +513,13 @@ export async function runModelSmokeTest(
   const startedAt = new Date().toISOString()
   const projectId = `model-smoke-${runId}`
   const catalogHost = new SqliteModelHost(getDb())
-  const importedEntries = bootstrapLegacyProvidersToCatalog(catalogHost)
+  const importedEntries = await bootstrapLegacyProvidersToCatalog(catalogHost)
   // 旧配置导入后，仍用导入前读取到的 legacy provider 做本轮真实调用；新目录只有
   // 在以下实际调用成功后才会出现 verified 记录并成为节点的唯一可选来源。
   const importedByLegacyModel = new Map(
     importedEntries.map((entry) => [`${entry.legacyProviderId}::${entry.modelId}`, entry])
   )
-  const providers = listProviders()
+  const providers = await listProviders()
   const allowedKinds = new Set(options.kinds ?? ['text', 'image', 'speech'])
   const targets = collectSmokeTargets(providers).filter((target) => allowedKinds.has(target.kind))
   const results: SmokeResult[] = []
@@ -634,7 +634,7 @@ export async function runModelSmokeTest(
     try {
       result = await withTimeout(target.kind, task)
     } catch (error) {
-      const provider = getProvider(target.provider.id)
+      const provider = await getProvider(target.provider.id)
       result = {
         kind: target.kind,
         status: 'fail',
@@ -656,7 +656,7 @@ export async function runModelSmokeTest(
       try {
         editResult = await withTimeout('image-edit', runImageEdit(target, projectId))
       } catch (error) {
-        const provider = getProvider(target.provider.id)
+        const provider = await getProvider(target.provider.id)
         editResult = {
           kind: 'image-edit', status: 'fail', provider: publicProvider(provider ?? target.provider), modelId: target.model.id,
           durationMs: SMOKE_TIMEOUT_MS['image-edit'], detail: provider ? errorDetail(error, provider) : String(error)
@@ -671,7 +671,7 @@ export async function runModelSmokeTest(
       try {
         chatResult = await withTimeout('chat', runChatNodeTransport(target))
       } catch (error) {
-        const provider = getProvider(target.provider.id)
+        const provider = await getProvider(target.provider.id)
         chatResult = { kind: 'chat', status: 'fail', provider: publicProvider(provider ?? target.provider), modelId: target.model.id, durationMs: SMOKE_TIMEOUT_MS.chat, detail: provider ? errorDetail(error, provider) : String(error) }
       }
       results.push({ id: randomUUID(), ...chatResult })
@@ -691,7 +691,7 @@ export async function runModelSmokeTest(
         await recordCatalogPass(result.kind, minimax.id, modelId, result.detail)
       }
     } catch (error) {
-      const provider = getProvider(minimax.id)
+      const provider = await getProvider(minimax.id)
       results.push({
         id: randomUUID(),
         kind: 'voice-design',
@@ -721,7 +721,7 @@ export async function runModelSmokeTest(
         await recordCatalogPass(result.kind, minimax.id, minimaxAudioModel.id, result.detail)
       }
     } catch (error) {
-      const provider = getProvider(minimax.id)
+      const provider = await getProvider(minimax.id)
       results.push({
         id: randomUUID(),
         kind: 'voice-clone',
@@ -744,4 +744,9 @@ export async function runModelSmokeTest(
   }
   await persist()
   return { report, reportPath }
+}
+
+/** 授权门禁封闭无界面冒烟时的 stdout 契约（与上方 report 输出同通道；原因码不涉密）。 */
+export function printSmokeGateBlocked(code: string): void {
+  console.log(JSON.stringify({ error: 'LICENSE_REQUIRED', code }))
 }

@@ -391,7 +391,7 @@ describe('flowAgent 建图/审核准入', () => {
     const { projectId, preview: proposed } = withProject()
     const committed = { ...proposed, state: 'committed' as const }
     const desktopCalls: Array<Record<string, unknown>> = []
-    let saveProjectOnCommit = true
+    const saveProjectOnCommit = true
     const desktop: AccessDesktop = {
       async run(input) {
         desktopCalls.push(input as Record<string, unknown>)

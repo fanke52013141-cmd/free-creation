@@ -9,6 +9,11 @@ import type { Plugin } from 'vite'
  * React Fast Refresh 的热替换到达不了它们——改动后界面停留在旧版节点卡片。
  * 对这些文件改为整页刷新，保证形状相关改动总能生效。
  */
+/** 发行版构建开关：CANVAS_DISTRIBUTION=1 时注入 __CANVAS_DISTRIBUTION__=true（见 src/shared/edition.ts）。 */
+const editionDefine = {
+  __CANVAS_DISTRIBUTION__: JSON.stringify(process.env.CANVAS_DISTRIBUTION === '1')
+}
+
 const forceReloadCanvasShapes = (): Plugin => ({
   name: 'force-reload-canvas-shapes',
   handleHotUpdate(ctx) {
@@ -28,6 +33,7 @@ const forceReloadCanvasShapes = (): Plugin => ({
 
 export default defineConfig({
   main: {
+    define: editionDefine,
     build: {
       rollupOptions: {
         input: {
@@ -47,24 +53,47 @@ export default defineConfig({
       alias: {
         '@shared': resolve('src/shared'),
         '@free-creation/model-contracts': resolve('packages/model-contracts/src/index.ts'),
-        '@free-creation/model-runtime': resolve('packages/model-runtime/src/index.ts')
+        '@free-creation/model-runtime': resolve('packages/model-runtime/src/index.ts'),
+        '@free-creation/license-protocol': resolve('packages/license-protocol/src/index.ts')
       }
     }
   },
   preload: {
+    define: editionDefine,
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve('src/preload/index.ts'),
+          // 授权窗隔离 preload：与业务 preload 完全分离（方案 §3.3）。
+          license: resolve('src/preload/license.ts')
+        }
+      }
+    },
     resolve: {
       alias: {
         '@shared': resolve('src/shared'),
-        '@free-creation/model-contracts': resolve('packages/model-contracts/src/index.ts')
+        '@free-creation/model-contracts': resolve('packages/model-contracts/src/index.ts'),
+        '@free-creation/license-protocol': resolve('packages/license-protocol/src/index.ts')
       }
     }
   },
   renderer: {
+    define: editionDefine,
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve('src/renderer/index.html'),
+          // 授权窗第二入口（极简页面，不引入业务模块）。
+          license: resolve('src/renderer/license.html')
+        }
+      }
+    },
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src'),
         '@shared': resolve('src/shared'),
-        '@free-creation/model-contracts': resolve('packages/model-contracts/src/index.ts')
+        '@free-creation/model-contracts': resolve('packages/model-contracts/src/index.ts'),
+        '@free-creation/license-protocol': resolve('packages/license-protocol/src/index.ts')
       }
     },
     plugins: [forceReloadCanvasShapes(), react()]

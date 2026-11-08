@@ -6,28 +6,45 @@
 // 进度解析」，业务参数仍由调用方拼装。
 //
 // 约定：
-// - 只调用用户本机安装/显式配置的 FFmpeg，不随应用打包 GPL 二进制。
+// - FFmpeg 解析顺序：环境变量 → 发行包内副本（resources/bin）→ 系统 PATH。
+//   2026-11-08 起发行安装包随带 FFmpeg（gyan.dev essentials 构建），客户开箱即用。
 // - 子进程终止句柄必须登记进媒体作用域（trackMediaJob），停止工作流时由主进程统一 kill。
 // - 失败一律以 Error 抛出，missingHint 用于把 ENOENT 翻译成用户可操作的提示；
 //   是否显示为阻塞态由调用方决定，本模块不做产品判断。
 import { spawn } from 'child_process'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { app } from 'electron'
 import { isMediaCancelled, trackMediaJob } from './cancellation'
+
+/** 发行包内的 FFmpeg 副本（extraResources → resources/bin）；未打包或缺失时返回 null。 */
+function bundledFfmpegPath(name: string): string | null {
+  try {
+    if (!app.isPackaged) return null
+    const candidate = join(process.resourcesPath, 'bin', name)
+    return existsSync(candidate) ? candidate : null
+  } catch {
+    return null
+  }
+}
 
 export const FFMPEG_MISSING_HINT =
   '未找到本机 FFmpeg。请安装 FFmpeg 并加入 PATH，或设置 CANVAS_STUDIO_FFMPEG_PATH。'
 export const FFPROBE_MISSING_HINT =
   '未找到本机 FFprobe。请安装 FFmpeg 并加入 PATH，或设置 CANVAS_STUDIO_FFMPEG_PATH。'
 
-/** 配置路径优先级：CANVAS_STUDIO_FFMPEG_PATH > 系统 PATH 中的 ffmpeg。 */
+/** 配置路径优先级：CANVAS_STUDIO_FFMPEG_PATH > 包内副本 > 系统 PATH 中的 ffmpeg。 */
 export function resolveFfmpegBinary(): string {
-  return process.env.CANVAS_STUDIO_FFMPEG_PATH?.trim() || 'ffmpeg'
+  const configured = process.env.CANVAS_STUDIO_FFMPEG_PATH?.trim()
+  if (configured) return configured
+  return bundledFfmpegPath('ffmpeg.exe') ?? 'ffmpeg'
 }
 
 /** FFprobe 与 FFmpeg 同目录；配置了 ffmpeg 路径时按文件名替换推导。 */
 export function resolveFfprobeBinary(): string {
   const configured = process.env.CANVAS_STUDIO_FFMPEG_PATH?.trim()
   if (configured) return configured.replace(/ffmpeg(\.exe)?$/i, 'ffprobe$1')
-  return 'ffprobe'
+  return bundledFfmpegPath('ffprobe.exe') ?? 'ffprobe'
 }
 
 export interface RunProcessOptions {

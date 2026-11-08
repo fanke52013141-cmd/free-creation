@@ -34,7 +34,7 @@ export function createChatImageTool(
     execute: async ({ prompt }) => {
       signal.throwIfAborted()
       if (submitted) throw new GatewayError('SKILL_LIMIT', '本轮已调用生图，请发送新消息后再生成')
-      const provider = requireProvider(target.providerId)
+      const provider = await requireProvider(target.providerId)
       const model = provider.models.find(
         (item) => item.id === target.modelId && item.modality === 'image'
       )

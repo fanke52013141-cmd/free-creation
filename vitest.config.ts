@@ -14,6 +14,7 @@ export default defineConfig({
     alias: {
       '@free-creation/model-contracts': resolve(__dirname, 'packages/model-contracts/src/index.ts'),
       '@free-creation/model-runtime': resolve(__dirname, 'packages/model-runtime/src/index.ts'),
+      '@free-creation/license-protocol': resolve(__dirname, 'packages/license-protocol/src/index.ts'),
       '@shared': resolve(__dirname, 'src/shared'),
       '@renderer': resolve(__dirname, 'src/renderer/src')
     }

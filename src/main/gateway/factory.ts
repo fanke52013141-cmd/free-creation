@@ -18,8 +18,8 @@ export class GatewayError extends Error {
 }
 
 /** 供应商协议驱动见 shared/provider-driver：网关与设置面板共用一份判定。 */
-export function requireProvider(providerId: string): ProviderConfig {
-  const p = getProvider(providerId)
+export async function requireProvider(providerId: string): Promise<ProviderConfig> {
+  const p = await getProvider(providerId)
   if (!p) throw new GatewayError('PROVIDER_NOT_FOUND', `供应商不存在：${providerId}`)
   // 本机 CLI 通道（即梦）没有 Base URL / API Key：凭据是机器上的 OAuth 登录态，
   // 因此不套用密钥校验，否则每次调用都会报“未配置 Base URL”。
@@ -60,13 +60,13 @@ export function createCatalogChatModel(input: {
   }).chatModel(input.modelId)
 }
 
-export function createChatModel(providerId: string, modelId: string): LanguageModel {
-  const p = requireProvider(providerId)
+export async function createChatModel(providerId: string, modelId: string): Promise<LanguageModel> {
+  const p = await requireProvider(providerId)
   return createCompatible(p).chatModel(modelId)
 }
 
-export function createImageModel(providerId: string, modelId: string): ImageModel {
-  const p = requireProvider(providerId)
+export async function createImageModel(providerId: string, modelId: string): Promise<ImageModel> {
+  const p = await requireProvider(providerId)
   return createCompatible(p).imageModel(modelId)
 }
 
@@ -80,7 +80,7 @@ export async function testProvider(
   const baseURL = input.baseURL.trim().replace(/\/+$/, '')
   if (!baseURL) throw new GatewayError('PROVIDER_NO_URL', 'Base URL 不能为空')
   // 已保存供应商的编辑面板不回显密钥；测试未保存的 URL/模型变更时可安全复用主进程密钥。
-  const apiKey = input.apiKey?.trim() || (input.id ? (getProvider(input.id)?.apiKey ?? '') : '')
+  const apiKey = input.apiKey?.trim() || (input.id ? ((await getProvider(input.id))?.apiKey ?? '') : '')
   if (!apiKey) throw new GatewayError('PROVIDER_NO_KEY', 'API Key 不能为空')
 
   const res = await fetch(`${baseURL}/models`, {

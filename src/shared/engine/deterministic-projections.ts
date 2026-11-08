@@ -155,7 +155,7 @@ export function projectVideoClipOutputs(shape: NodeShape): RawNodeOutputs {
       ? results.filter((item) => item.runId === run.runId)
       : []
   const effective = currentRunResults.length > 0 ? currentRunResults : results
-  const byKind = (kind: 'video' | 'audio') =>
+  const byKind = (kind: 'video' | 'audio'): (typeof results)[number] | undefined =>
     effective.filter((item) => (item.mime ?? '').startsWith(`${kind}/`)).at(-1)
   const output: RawNodeOutputs = {}
   const name = shape.props.title ? { name: shape.props.title } : {}

@@ -39,12 +39,37 @@ import {
 import { generateAudioToAsset, generateSpeechToAsset } from '../gateway/audio'
 import { designMiniMaxVoice } from '../gateway/voice'
 
+async function readPackageViaDialog(win: BrowserWindow): Promise<string | null> {
+  const opened = await dialog.showOpenDialog(win, {
+    title: '选择密钥包文件',
+    filters: [{ name: '密钥包', extensions: ['cskeys'] }],
+    properties: ['openFile']
+  })
+  if (opened.canceled || !opened.filePaths[0]) return null
+  const { readFile } = await import('node:fs/promises')
+  return readFile(opened.filePaths[0], 'utf8')
+}
+
+function errorCodeOf(error: unknown): string {
+  if (error && typeof error === 'object' && 'code' in error && typeof (error as { code: unknown }).code === 'string') {
+    return (error as { code: string }).code
+  }
+  return 'UNKNOWN'
+}
+
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
 }
 
 function err(code: string, message: string): IpcEnvelope<never> {
   return { ok: false, error: { code, message } }
+}
+
+/** 错误 → 稳定原因码信封（GatewayError 保留码；其余归一 GATEWAY_ERROR）。 */
+function errOf(error: unknown): IpcEnvelope<never> {
+  const message = String((error as Error)?.message ?? error).slice(0, 300)
+  if (error instanceof GatewayError) return err(error.code, message)
+  return err('GATEWAY_ERROR', message)
 }
 
 function wrap<T>(fn: () => T): IpcEnvelope<T> {
@@ -65,15 +90,168 @@ async function wrapAsync<T>(fn: () => Promise<T>): Promise<IpcEnvelope<T>> {
   }
 }
 
-export function registerGatewayIpc(win: BrowserWindow): void {
+/** P2 密钥包服务（index.ts 在模型宿主就绪后构造并注入）。 */
+export interface GatewayKeysService {
+  exportReceiveCredential(): Promise<{ credentialText: string; deviceSummary: string; expiresAt: number | null }>
+  listExportableConnections(): Promise<Array<{ id: string; name: string; protocol: string; baseUrl: string; modelCount: number; hasKey: boolean }>>
+  sealKeyPackageForRecipient(input: { password: string; recipientCredentialText: string; connectionIds: string[] }): Promise<{ packageText: string; packageId: string; expiresAt: number; connectionCount: number }>
+  openKeyPackagePreview(input: { packageText: string; password: string }): Promise<{ packageId: string; expiresAt: number; issuerDeviceSummary: string; connections: Array<{ id: string; name: string; protocol: string; baseUrl: string; modelCount: number; hasKey: boolean }>; alreadyImported: boolean; existingConnections: string[] }>
+  applyKeyPackageImport(input: { packageText: string; password: string; overwriteConfirmed: boolean }): Promise<{ packageId: string; added: number; updated: number; modelCount: number }>
+}
+
+export function registerGatewayIpc(win: BrowserWindow, keysService?: GatewayKeysService): void {
   const send = (e: GatewayEvent): void => {
     if (!win.isDestroyed()) win.webContents.send(IPC.gateway.event, e)
   }
 
-  ipcMain.handle(IPC.gateway.providers, (): IpcEnvelope<ProviderSummary[]> => ok(listProviders()))
-  ipcMain.handle(IPC.gateway.executableProviders, (): IpcEnvelope<ProviderSummary[]> =>
-    ok(listVerifiedProviders())
+  ipcMain.handle(IPC.gateway.providers, async (): Promise<IpcEnvelope<ProviderSummary[]>> => ok(await listProviders()))
+  ipcMain.handle(IPC.gateway.executableProviders, async (): Promise<IpcEnvelope<ProviderSummary[]>> =>
+    ok(await listVerifiedProviders())
   )
+
+  // ── P2 密钥包（.cskeys v2）──────────────────────────────────────────
+  // 全程不向 renderer 返回明文 Key；诊断事件只含连接数/包 ID/阶段与原因码。
+  ipcMain.handle(IPC.gateway.keys.exportCredential, async () => {
+    if (!keysService) return err('KEYS_SERVICE_MISSING', '密钥包服务未就绪')
+    const traceId = newTraceId()
+    const startedAt = Date.now()
+    try {
+      const result = await keysService.exportReceiveCredential()
+      const save = await dialog.showSaveDialog(win, {
+        title: '导出接收设备凭证',
+        defaultPath: 'device.csdevcred',
+        filters: [{ name: '接收设备凭证', extensions: ['csdevcred'] }],
+        properties: ['createDirectory', 'showOverwriteConfirmation']
+      })
+      if (save.canceled || !save.filePath) {
+        emitGatewayEvent('keys.credential.completed', '接收设备凭证导出', { traceId }, { status: 'cancelled', attributes: { component: 'keys' } })
+        return err('CANCELLED', '已取消')
+      }
+      const { writeFile } = await import('node:fs/promises')
+      await writeFile(save.filePath, result.credentialText, { mode: 0o600 })
+      emitGatewayEvent('keys.credential.completed', '接收设备凭证导出', { traceId }, {
+        status: 'success',
+        durationMs: Date.now() - startedAt,
+        attributes: { component: 'keys', deviceSummary: result.deviceSummary }
+      })
+      return ok({ path: save.filePath, deviceSummary: result.deviceSummary, expiresAt: result.expiresAt })
+    } catch (error) {
+      emitGatewayEvent('keys.credential.completed', '接收设备凭证导出', { traceId }, {
+        status: 'failed',
+        level: 'warn',
+        durationMs: Date.now() - startedAt,
+        attributes: { component: 'keys', code: errorCodeOf(error) }
+      })
+      return errOf(error)
+    }
+  })
+
+  ipcMain.handle(IPC.gateway.keys.listConnections, async () => {
+    if (!keysService) return err('KEYS_SERVICE_MISSING', '密钥包服务未就绪')
+    try {
+      return ok(await keysService.listExportableConnections())
+    } catch (error) {
+      return errOf(error)
+    }
+  })
+
+  ipcMain.handle(IPC.gateway.keys.sealPackage, async (_event, input: { password?: string; connectionIds?: string[] }) => {
+    if (!keysService) return err('KEYS_SERVICE_MISSING', '密钥包服务未就绪')
+    const traceId = newTraceId()
+    const startedAt = Date.now()
+    let phase = 'validation'
+    try {
+      if (typeof input?.password !== 'string' || !Array.isArray(input.connectionIds) || input.connectionIds.length === 0) {
+        throw new GatewayError('INVALID_INPUT', '请设置密码并选择要发放的连接')
+      }
+      phase = 'destination'
+      const opened = await dialog.showOpenDialog(win, {
+        title: '选择接收设备凭证',
+        filters: [{ name: '接收设备凭证', extensions: ['csdevcred'] }],
+        properties: ['openFile']
+      })
+      if (opened.canceled || !opened.filePaths[0]) {
+        emitGatewayEvent('keys.package.completed', '密钥包发放', { traceId }, { status: 'cancelled', attributes: { component: 'keys', phase: 'destination' } })
+        return err('CANCELLED', '已取消')
+      }
+      const { readFile } = await import('node:fs/promises')
+      const recipientCredentialText = await readFile(opened.filePaths[0], 'utf8')
+      phase = 'write'
+      const sealed = await keysService.sealKeyPackageForRecipient({
+        password: input.password,
+        recipientCredentialText,
+        connectionIds: input.connectionIds
+      })
+      const save = await dialog.showSaveDialog(win, {
+        title: '导出密钥包',
+        defaultPath: 'device-keys.cskeys',
+        filters: [{ name: '密钥包', extensions: ['cskeys'] }],
+        properties: ['createDirectory', 'showOverwriteConfirmation']
+      })
+      if (save.canceled || !save.filePath) {
+        emitGatewayEvent('keys.package.completed', '密钥包发放', { traceId }, { status: 'cancelled', attributes: { component: 'keys', phase: 'destination' } })
+        return err('CANCELLED', '已取消')
+      }
+      const { writeFile } = await import('node:fs/promises')
+      await writeFile(save.filePath, sealed.packageText, { mode: 0o600 })
+      emitGatewayEvent('keys.package.completed', '密钥包发放', { traceId }, {
+        status: 'success',
+        durationMs: Date.now() - startedAt,
+        attributes: { component: 'keys', packageId: sealed.packageId, connectionCount: sealed.connectionCount, expiresAt: sealed.expiresAt }
+      })
+      return ok({ path: save.filePath, packageId: sealed.packageId, connectionCount: sealed.connectionCount, expiresAt: sealed.expiresAt })
+    } catch (error) {
+      emitGatewayEvent('keys.package.completed', '密钥包发放', { traceId }, {
+        status: 'failed',
+        level: 'warn',
+        durationMs: Date.now() - startedAt,
+        attributes: { component: 'keys', phase, code: errorCodeOf(error) }
+      })
+      return errOf(error)
+    }
+  })
+
+  ipcMain.handle(IPC.gateway.keys.previewPackage, async (_event, input: { password?: string }) => {
+    if (!keysService) return err('KEYS_SERVICE_MISSING', '密钥包服务未就绪')
+    try {
+      if (typeof input?.password !== 'string') throw new GatewayError('INVALID_INPUT', '请输入解封密码')
+      const packageText = await readPackageViaDialog(win)
+      if (packageText === null) return err('CANCELLED', '已取消')
+      return ok(await keysService.openKeyPackagePreview({ packageText, password: input.password }))
+    } catch (error) {
+      return errOf(error)
+    }
+  })
+
+  ipcMain.handle(IPC.gateway.keys.importPackage, async (_event, input: { password?: string; overwriteConfirmed?: boolean }) => {
+    if (!keysService) return err('KEYS_SERVICE_MISSING', '密钥包服务未就绪')
+    const traceId = newTraceId()
+    const startedAt = Date.now()
+    try {
+      if (typeof input?.password !== 'string') throw new GatewayError('INVALID_INPUT', '请输入解封密码')
+      const packageText = await readPackageViaDialog(win)
+      if (packageText === null) return err('CANCELLED', '已取消')
+      const result = await keysService.applyKeyPackageImport({
+        packageText,
+        password: input.password,
+        overwriteConfirmed: input.overwriteConfirmed === true
+      })
+      emitGatewayEvent('keys.package.completed', '密钥包导入', { traceId }, {
+        status: 'success',
+        durationMs: Date.now() - startedAt,
+        attributes: { component: 'keys', packageId: result.packageId, added: result.added, updated: result.updated, modelCount: result.modelCount }
+      })
+      return ok(result)
+    } catch (error) {
+      emitGatewayEvent('keys.package.completed', '密钥包导入', { traceId }, {
+        status: 'failed',
+        level: 'warn',
+        durationMs: Date.now() - startedAt,
+        attributes: { component: 'keys', code: errorCodeOf(error) }
+      })
+      return errOf(error)
+    }
+  })
 
   ipcMain.handle(
     IPC.gateway.exportProviders,
@@ -119,19 +297,22 @@ export function registerGatewayIpc(win: BrowserWindow): void {
         }
         const output = {
           path: result.filePath,
-          count: exportProviders(result.filePath, input.password, input.providerIds)
+          count: await exportProviders(result.filePath, input.password, input.providerIds)
         }
         emitGatewayEvent('provider.export.completed', '供应商导出完成', diagnostics, {
           phase: 'write',
           attributes: { count: output.count }
         })
         return ok(output)
-      } catch {
+      } catch (error) {
         emitGatewayEvent('provider.export.failed', '供应商导出失败', diagnostics, {
           phase: 'export',
           attributes: { code: 'EXPORT_FAILED' }
         })
-        return err('EXPORT_FAILED', '导出失败，请检查所选供应商密钥和目标位置后重试')
+        // 业务校验类错误（选择无效/密钥不可读等）带原因返回，便于界面直接提示。
+        const message = String((error as Error)?.message ?? '')
+        const business = message && !/ENOENT|EACCES|EPERM/.test(message)
+        return err('EXPORT_FAILED', business ? message.slice(0, 300) : '导出失败，请检查所选供应商密钥和目标位置后重试')
       }
     }
   )
@@ -151,12 +332,12 @@ export function registerGatewayIpc(win: BrowserWindow): void {
         filters: [{ name: 'Canvas Studio 供应商配置（已加密）', extensions: ['canvasproviders'] }]
       })
       if (result.canceled || result.filePaths.length === 0) return err('CANCELLED', '已取消导入')
-      return wrap(() => importProviders(result.filePaths[0], input.password))
+      return wrapAsync(() => importProviders(result.filePaths[0], input.password))
     }
   )
 
   ipcMain.handle(IPC.gateway.saveProvider, (_e, input: SaveProviderInput) =>
-    wrap(() => {
+    wrapAsync(() => {
       if (!input?.name?.trim()) throw new GatewayError('INVALID_NAME', '供应商名称不能为空')
       // 本机 CLI 通道（即梦）没有 Base URL 与 API Key，凭据是本机登录态。
       const localCli = driverForSpec(input.specId) === 'local-cli'
@@ -170,7 +351,7 @@ export function registerGatewayIpc(win: BrowserWindow): void {
   )
 
   ipcMain.handle(IPC.gateway.deleteProvider, (_e, id: string) =>
-    wrap(() => deleteProvider(id ?? ''))
+    wrapAsync(() => deleteProvider(id ?? ''))
   )
 
   // openai-compatible 走 /models；原生协议没有 /models，改用只读的协议探测，
@@ -178,7 +359,7 @@ export function registerGatewayIpc(win: BrowserWindow): void {
   ipcMain.handle(IPC.gateway.testProvider, (_e, input: SaveProviderInput) =>
     wrapAsync<TestProviderResult>(async () => {
       if (driverForSpec(input.specId) === 'openai-compatible') return testProvider(input)
-      return { models: [], message: await freeConnectionMessage(draftToConfig(input)) }
+      return { models: [], message: await freeConnectionMessage(await draftToConfig(input)) }
     })
   )
 
@@ -221,7 +402,7 @@ export function registerGatewayIpc(win: BrowserWindow): void {
   )
 
   ipcMain.handle(IPC.gateway.videoSubmit, (_e, input: Parameters<typeof submitVideoTask>[1]) =>
-    wrap<VideoSubmitResult>(() => submitVideoTask(send, input))
+    wrapAsync<VideoSubmitResult>(() => submitVideoTask(send, input))
   )
 
   ipcMain.handle(

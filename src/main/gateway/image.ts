@@ -64,7 +64,7 @@ async function errorTail(res: Response, context = ''): Promise<string> {
 
 export async function generateImageToAsset(input: ImageGenerateInput): Promise<MediaAsset> {
   if (!input.prompt?.trim()) throw new GatewayError('INVALID_INPUT', '提示词不能为空')
-  const provider = requireProvider(input.providerId)
+  const provider = await requireProvider(input.providerId)
   const capabilities = imageCapabilitiesFor(provider.specId, input.modelId)
   const promptChars = input.prompt.trim().length
   if (capabilities.maxPromptChars && promptChars > capabilities.maxPromptChars) {
@@ -152,7 +152,7 @@ async function generateImageWithReference(
   // P 图的存量配置里 size 可能存的是比例串（旧版把画幅镜像进 size），同步接口只接受像素尺寸。
   const pixelSize = /^\d+x\d+$/.test(input.size ?? '') ? input.size : undefined
   const { images } = await generateImage({
-    model: createImageModel(input.providerId, input.modelId),
+    model: await createImageModel(input.providerId, input.modelId),
     prompt:
       referenceImages.length > 0
         ? { text: prompt, images: [...referenceImages], ...(maskImage ? { mask: maskImage } : {}) }
@@ -702,7 +702,7 @@ export async function generateImageEditToAsset(
   if (input.size && !IMAGE_EDIT_SIZES.includes(input.size as (typeof IMAGE_EDIT_SIZES)[number])) {
     throw new GatewayError('INVALID_INPUT', '图片修改尺寸不受支持')
   }
-  const provider = requireProvider(input.providerId)
+  const provider = await requireProvider(input.providerId)
   const capabilities = imageCapabilitiesFor(provider.specId, input.modelId)
 
   if (capabilities.driver === 'dreamina-cli') {
