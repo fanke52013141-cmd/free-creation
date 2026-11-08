@@ -1,5 +1,25 @@
 # 日志覆盖清单
 
+## 2026-11-08：F7 节点库通用化与历史/恢复
+
+新增外部操作 13 项（node.library.compose/update/delete/get/search/insert、history.list/snapshot.create/snapshot.delete/restore.precheck/restore/recovery.precheck/recovery.resolve），全部沿用既有事件，**未新增事件类型**（新事件需登记 `src/shared/observability/events.ts`，不在本包范围）：
+
+- 生命周期：复用 `agent.access.started/completed/failed/rejected/unknown`（operation/phase/code + trace/span），唯一终态由 dispatch 拥有，不在业务模块重复记终态。
+- 历史恢复：复用 `project.restore.started / checkpoint_created / completed / failed / cancelled`，主进程携带 `agent.access` 的 trace/span 与 projectId；`history.recovery.resolve` 的 `use` 走同一 started→completed 配对，`discard` 复用 `cancelled`（语义=用户选择保留磁盘版本）。检查点保存失败、令牌拒绝、事实漂移、写入前失败均先记 `failed`/如实返回稳定错误码，不写假成功。
+- 媒体：节点库实例化的媒体复制复用 `media.buffer_import.started/completed/failed`（仅 byteSize/mime/受控 mediaId/phase），失败不影响画布（准入前会补偿删除已复制媒体）。
+- 脱敏：事件与错误 detail 不含条目名称、节点标题、正文、配置、提示词、聊天记录、绝对路径或快照 label；只含操作 ID、阶段、稳定错误码与受控 projectId/nodeId/mediaId/snapshotId。`history.snapshot.create` 不记录 snapshot 内容，`node.library.get` 的"详情"输出本身不含配置/正文。
+- 已覆盖/未覆盖边界：外部恢复只在项目未在桌面打开时执行（打开中 `RESOURCE_BUSY/desktop-ownership`，不伪造恢复日志）；真实 Electron 桌面逐动作验收未做，日志样本来自服务级定向测试（11 项）与分析代码路径，本小节的"已覆盖"指代码路径与事件配对，不含真实桌面 JSONL 实测。详见 [F7 台账](local-agent-access/25-node-library-history-delivery.md)。
+
+## 2026-11-07：P2 密钥库与指定设备导出
+
+新增 `gateway.upstream.redirect_blocked`（携带凭据的请求遭遇 3xx 时发出，唯一终态语义=一次重定向拦截；无请求生命周期配对，attributes 仅含组件与原因码）。`model.discovery.started/failed`（discover 拉取模型列表，started/failed 配对；不含 URL、密钥与响应体）。
+
+新增 `keys.credential.completed`（接收设备凭证导出）与 `keys.package.completed`（发放/导入，分事件）事件族，成功/失败/取消唯一终态，attributes 仅含包 ID、连接数、模型数、阶段、原因码与 16 位设备摘要；**明文 Key、连接密文、密码、完整端点路径不入事件**。密钥消费路径改为设备绑定密钥库（vault）短时解密（5 分钟 TTL，写/删/迁移/锁定/resume 即清），读取失败以稳定原因码（VAULT_ORIGIN_MISMATCH/VAULT_DECRYPT_FAILED）进入既有请求错误通道，不新增旁路日志。v1 供应商配置导出/导入按方案停用，其 provider.export.* 事件保留错误终态。定向：keypackage 7、vault 5、keycrypto 12、协议/服务/签发 36、真实 TPM 密钥包 e2e 8 场景（凭证导出→发放→导入→重导识别→错密码拒绝）；既有回归 106 项通过。边界：双实体机互测属 P0；裸 fetch 全量收口分期做。见[交付台账](security/02-P2-keystore-delivery.md)。
+
+## 2026-11-07：P1 单机授权（启动锁与发证）
+
+新增授权域事件族 `license.check.started/completed/failed`（冷启动/resume/激活后复验，trigger 区分来源）、`license.activation.completed`（导入授权成功/失败，附原因码与耗时）、`license.policy.completed`（撤销策略应用/跳过，附序号）、`license.request.completed`（导出申请/导入挑战/导出证明，附原因码）、`license.guard.skipped`（开发/测试路径门禁未注入，debug 级留痕）。事件只含状态、原因码、trigger、序号与耗时；公钥、EK/AK 摘要、原始证明、设备码、签名文件内容、密码与 API Key 一律不入事件。授权存储与项目数据分离（`<dataDir>/security/`），日志拒写不改变授权判定。定向测试 54 项（协议 26/设备 7+真机 1/服务 15/签发 CLI 4/preload 契约 1）与真实 TPM 的 electron 端到端 4 场景（未授权仅授权窗且无 app.db、UI 全流程激活进业务、重启免输入、无授权冒烟被封闭）通过。边界：完整 TCG 证明链（EK 证书链 + MakeCredential/ActivateCredential/Certify）与双实体机互测属 P0 待办；签名安装包、ASAR 完整性与 App Control 属 P3，未在本包宣称。见[交付台账](security/01-P1-license-delivery.md)。
+
 ## 2026-11-06：提示词素材引用
 
 桌面输入框根据真实连线识别和归一化有效素材引用。视频编号在现有执行器中解析，沿用原能力校验、请求与终态诊断，未解析编号保持原文。复用原有关联信息，不新增事件，也不记录提示词、节点名或素材路径。
@@ -652,18 +672,50 @@ Agent 手动启动的无模型预检在 `ensureCanvasSaved`、workflow/task admi
 
 视频截取播放针简化为圆点与细线：纯样式变化，不涉及执行、媒体处理、保存或日志。
 
-AI 对话工作区视觉重排：移除可见角色标签，保留无障碍消息角色；重排输入区与设置区。发送、流式回复、模型调用、附件、技能绑定与持久化路径沿用原实现，无新增日志。
-
-### 资源库批量管理
-
-资源库批量删除复用现有逐项删除接口，关联同一 trace/span 记录取消、开始及成功或部分失败，属性只含数量；失败项保留可重试。批量导出按所选资源 ID 复用已有资产包导出及其诊断，不记录资源名称、内容或路径。
-
 2026-11-07 新增外部操作 `library.create_resource`：由本机已存在图片路径创建单图图片资源（名称+可选描述/标签）。受理/拒绝/终态复用 dispatch 现有 agent.access.started/completed/failed/unknown 事件，attributes.operation=library.create_resource，无新增事件或字段；响应与诊断不回传源文件路径、图片字节，标签与描述不入日志（仅回传资源ID/修订号/标题/图片sha256）。见[台账12](local-agent-access/12-library-create-resource.md)。
+
+AI 对话工作区视觉重排：移除可见角色标签，保留无障碍消息角色；重排输入区与设置区。发送、流式回复、模型调用、附件、技能绑定与持久化路径沿用原实现，无新增日志。
 
 2026-11-07 资源库卡片封面竖图完整显示：library-resource-cover 与资源选择器紧凑卡片 img 由 cover 改为 contain，仅 CSS 呈现变化，不涉及执行、数据、日志或外部接入路径。新增 scripts/assign-figure-pose-category.cjs 走公共 IPC（saveLibraryCategory/publishLibraryRevision）建「人物站位」分类并归档未分类图片资源，不新增外部 Agent 操作或日志。
 
 2026-11-07 封面留边改白色填充：contain 留边区域以 #fff 填充（与白底姿势线稿无缝融合，横竖混排网格节奏一致），仍仅 CSS 呈现变化，不涉及执行、数据、日志或外部接入路径。
 
+### 资源库批量管理
+
+资源库批量删除复用现有逐项删除接口，关联同一 trace/span 记录取消、开始及成功或部分失败，属性只含数量；失败项保留可重试。批量导出按所选资源 ID 复用已有资产包导出及其诊断，不记录资源名称、内容或路径。
+
 ## 2026-11-07 AI 对话 Skill 与节点库 CLI/MCP
 
 六项操作复用 agent.access 生命周期、幂等账本和 SkillStore 的 skill.library 事件；安装读取/解析错误统一脱敏 SKILL_PACKAGE_INVALID，版本冲突保留 SKILL_VERSION_IMMUTABLE。绑定经桌面准入和保存后核对，超时/无法核对维持 unknown；模板读取正式图只保存技能配置。排除名称、正文、参考、源路径及聊天记录，测试验证摘要/日志不泄漏。无模型执行、网络调用或新的业务事件。边界见 docs/local-agent-access/13-chat-skills-node-library.md。
+
+## 2026-11-08 资源库外部接入（F7 library 族，19 项操作）
+
+外部资源库操作的分发/准入/终态复用 dispatch 现有 `agent.access.started/completed/failed/unknown/rejected` 生命周期，`attributes.operation=library.<family>.<action>`，`phase` 区分 `validate/library-validate/library-create/library-revision/library-delete/library-archive/library-folder/library-collection/library-category/library-version/library-materialize/desktop-ownership`，`code` 为稳定回执码；**未新增事件类型**。GUI 侧既有 `library.*` 域事件（categories/transfer/revision_published/mutation_failed/materialization_*）保持原样。
+
+物化到画布（新增关键路径，唯一新增事件为复用现有事件族的两条终态）：
+- `library.materialization_completed`（成功，attributes：operation / phase / nodes / assets）：表示资源文件已复制为项目受控媒体、节点已经桌面握手创建并保存、回执节点已与落盘图核对；不记录资源标题、正文、文件名或路径。
+- `library.materialization_failed`（失败，attributes：operation / phase / cleanup）：`cleanup=completed` 表示准入前失败已补偿删除本次复制的项目媒体；`cleanup=incomplete` 表示补偿未完成（可用 `library.materialization.discard` 按 usageId 重试）。准入后失联不记 failed，按 unknown 交给 `project.open`+`graph.get` 核对。
+- 开始由 dispatch 的 `agent.access.started` 承担（同一 trace/span），不重复记终态；物化前的纯校验失败只有 dispatch 生命周期，不额外发库事件。
+
+脱敏边界：资源标题/描述/标签/组件正文、导入的本机源路径、blob 相对路径、项目媒体相对路径、资源包内容一律不入事件与回执（回执只回受控 ID、哈希、MIME、尺寸、修订号与节点 ID）。`library.resource.get` 的正文只在显式 `includeText` 时回给调用方，不写日志。测试断言事件序列化串不含临时数据目录、资源标题、描述与源文件名。
+
+失败语义：写操作沿用幂等账本（同键同参重放原回执、同键异参 IDEMPOTENCY_CONFLICT）；批量删除逐项回执，单项失败只写回执码不写日志正文；物化准入前失败=failed（媒体已补偿），准入后失联=unknown（媒体保留）。日志写入失败不改变任何业务结果（`emitGatewayEvent`/`emitDomainEvent` 内部 catch）。未覆盖边界：GUI 页面内逐项点击产生的 renderer 事件不在本清单范围；`scripts/check-logging-bypass.mjs` 与真实安装包日志导出未在本包重跑。
+
+## 2026-11-08 F7 包传输外部接入（project.import / project.importStructure / library.import / library.export）
+
+四项操作复用 dispatch 现有 `agent.access.started/completed/failed/unknown` 生命周期：开始与终态事件各一条，`attributes.operation` 为操作 ID，`phase` 区分 `package-path / project-import / project-import-verify / structure-import / structure-import-verify / library-import / library-import-verify / library-export`，`code` 为稳定回执码（`PACKAGE_INVALID / PACKAGE_VERSION_UNSUPPORTED / PACKAGE_CONTENT_INVALID / PACKAGE_PATH_INVALID / PACKAGE_TOO_LARGE / PACKAGE_HASH_MISMATCH / PACKAGE_DUPLICATE / PATH_NOT_ALLOWED / NOT_FOUND / INVALID_INPUT / OUTPUT_EXISTS / STORAGE_INCONSISTENT / IMPORT_FAILED / LIBRARY_IMPORT_FAILED` 等）。**未新增事件类型，也未重复记终态**：GUI 侧既有 `project.transfer.*` 与 `library.transfer.*` 事件保持原样，外部路径不再双写。
+
+脱敏边界：不记录包路径/文件名、包条目内容、项目/节点/资源标题、提示词、媒体字节或任何凭据；成功回执只在响应中返回受控项目 ID、数量、sha256、字节数与受控资源 ID。测试断言事件序列化串不含明文 API Key、包文件名与提示词正文。日志写入失败不改变导入/导出业务结果（底层 `emitGatewayEvent` 内部 catch）。
+
+验证：`test/local-agent-transfer-access.test.ts`（9 项）覆盖导出→导入往返（节点/连线/分组/快照/配方/媒体）、媒体可读且跨项目不串用、密钥剥离（导出包与恶意导入包两侧）、损坏包与版本不兼容、中途失败后无新项目且暂存目录清理、幂等重放、受控目录边界、资源包导出回执与重复/损坏包回滚，并断言 `agent.access.started/completed/failed` 事件与失败 `code`。
+
+未覆盖边界：真实 Electron 桌面端到端（GUI 项目页导入可见/可打开、结构包从画布菜单导出）未在本包重跑；结构包导出 `project.exportStructure` 需要渲染器当前未保存快照，外部没有等价协议，本包未开放；资源包导入的 DB 事务回滚保证业务记录不出现，但既有 `storeBlob` 在事务提交前写入的 blob 文件在极端失败下可能成为孤儿（既有 GUI 路径，不属本包文件范围），详见 `docs/local-agent-access/24-transfer-delivery.md`。
+
+## 2026-11-08 F6 收尾：对话 chat.patch 真实画布与附件注入
+
+- 范围与复用：外部 `graph.patch`（`node.create` chat / `chat.patch`）、`chat.read`、`chat.messages`、`node.execute` 复用 dispatch 现有 `agent.access.started/completed/failed/unknown` 生命周期；`attributes.operation` 为操作 ID，`phase` 沿用 `precheck / patch-admission / execute-handshake / chat-session` 等既有稳定值，`code` 为稳定回执码（`CHAT_NODE_REQUIRED / MEDIA_NOT_FOUND / MEDIA_NOT_RESOLVED / MIXED_PATCH_UNSUPPORTED / SESSION_NOT_FOUND / MESSAGE_INDEX_INVALID / REVISION_CONFLICT` 等）。**未新增事件类型**；权威宿主 `planChatPatch` 不写日志。
+- 附件注入路径（renderer 权威宿主）：外部输入只有 `mediaId`；main 预检解析项目相对路径/MIME 后经桌面请求 `mediaResolutions` 注入，宿主写入节点正文。该路径不记录消息正文、会话标题、附件名或路径；失败 detail 只含稳定 code/index（如 `op[N]`）与受控 mediaId。
+- 脱敏验证：真实 Electron 里程碑扫描 `diagnostics/**.jsonl`，断言新增聊天正文（`F6 外部追加`）、会话标题（`外部会话 F6`）与跨项目拒绝消息均未出现，同时保留既有正文/用户内容断言；`node.execute` 无已验证模型时 `run.wait` 的失败原因为稳定能力文案，不含提示词或回复。
+- 失败语义：预检失败=failed（无半条消息、无孤儿媒体）；准入后失联=unknown（幂等重放原回执，不自动重发）；`chat.patch` 与几何 op 混批在 main 预检被拒绝（`MIXED_PATCH_UNSUPPORTED`），避免宿主静默丢弃其余 op。
+- 边界：桌面宿主没有 chat.patch 独立 trace 事件（复用外部接入生命周期 + 既有 `project.save`），未做跨进程 trace 树对齐；模型回复的真实供应商请求未验收（无预算/无已验证连接），详见 [22-f6-closeout-delivery.md](local-agent-access/22-f6-closeout-delivery.md)。
+

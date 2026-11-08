@@ -14,6 +14,7 @@ import {
   type ChatData
 } from '@shared/engine/chat-data'
 import type { ChatPatchOp } from '@shared/agent-access/chat-ops'
+import type { MediaResolutionMap } from '@shared/agent-access/graph-ops'
 
 export interface ChatPatchIssue {
   index: number
@@ -76,8 +77,17 @@ function renameConversation(data: ChatData, sessionId: string, title: string): C
   }
 }
 
-/** 按顺序应用 chat.* 操作；任何失败返回带序号的稳定错误码。 */
-export function planChatPatch(rawText: string, ops: readonly ChatPatchOp[]): ChatPatchPlanResult {
+/** 按顺序应用 chat.* 操作；任何失败返回带序号的稳定错误码。
+ *
+ * 附件的外部输入只有 mediaId：main 预检解析出的项目相对路径与 MIME 经桌面载荷
+ * mediaResolutions 传入，本规划器与 GUI 的 chat-data 写入格式保持一致。缺少解析
+ * 事实时整批拒绝——绝不写入空路径附件（parseChat 会丢弃它，GUI 只剩空壳消息）。
+ */
+export function planChatPatch(
+  rawText: string,
+  ops: readonly ChatPatchOp[],
+  mediaResolutions?: MediaResolutionMap
+): ChatPatchPlanResult {
   let data: ChatData
   try {
     data = parseChat(rawText)
@@ -123,20 +133,22 @@ export function planChatPatch(rawText: string, ops: readonly ChatPatchOp[]): Cha
         break
       }
       case 'chat.message.append': {
+        const images: ChatMessage['images'] = []
+        for (const image of op.message.images ?? []) {
+          const resolution = mediaResolutions?.[image.mediaId]
+          if (!resolution) return fail(index, 'MEDIA_NOT_RESOLVED')
+          images.push({
+            mediaId: image.mediaId,
+            mediaPath: resolution.mediaPath,
+            name: resolution.name ?? image.name ?? image.mediaId,
+            mime: resolution.mediaMime
+          })
+        }
         const message: ChatMessage = {
           role: 'user',
           content: op.message.content,
           ...(op.message.intent ? { intent: op.message.intent } : {}),
-          ...(op.message.images?.length
-            ? {
-                images: op.message.images.map((image) => ({
-                  mediaId: image.mediaId,
-                  mediaPath: '',
-                  name: image.name ?? image.mediaId,
-                  mime: ''
-                }))
-              }
-            : {})
+          ...(images.length ? { images } : {})
         }
         data = appendMessage(data, message)
         break

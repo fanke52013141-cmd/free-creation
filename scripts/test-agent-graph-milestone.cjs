@@ -58,6 +58,51 @@ async function writeDialogConfig(configPath, savePaths, openPaths) {
   await mkdir(join(directory0(), 'x'), { recursive: true }).catch(() => {})
   await writeFile(configPath, JSON.stringify({ savePaths, openPaths }), 'utf8')
 }
+/**
+ * 权威图版本稳定读数：节点运行状态/宿主保存有 800ms 防抖，可能在两次读数之间落盘。
+ * 相邻两次相等后再隔一个防抖窗口复核，避免把偏旧版本当作 expectedGraphVersion。
+ */
+async function stableProjectVersion(directory, projectId) {
+  let previous = -1
+  for (let i = 0; i < 20; i++) {
+    const probe = await runCli(directory, ['project', 'get'], { input: { projectId } })
+    const current = probe.response.data.meta.graphVersion
+    if (current === previous) {
+      await new Promise((done) => setTimeout(done, 1200))
+      const confirm = await runCli(directory, ['project', 'get'], { input: { projectId } })
+      const confirmed = confirm.response.data.meta.graphVersion
+      if (confirmed === current) return current
+      previous = confirmed
+      continue
+    }
+    previous = current
+    await new Promise((done) => setTimeout(done, 900))
+  }
+  return previous
+}
+/**
+ * 以稳定读数为 expectedGraphVersion 提交 graph.patch。预检版本冲突无副作用，
+ * 重新读版本后重试；只重试 REVISION_CONFLICT，其余失败立即抛出。
+ */
+async function patchWithFreshVersion(directory, projectId, makeOps, label, attempts = 5) {
+  let lastError = null
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) await new Promise((done) => setTimeout(done, 1200))
+    const result = await runCli(directory, ['graph', 'patch'], {
+      input: {
+        projectId,
+        expectedGraphVersion: await stableProjectVersion(directory, projectId),
+        ops: makeOps()
+      },
+      idempotencyKey: key()
+    })
+    if (result.response.status === 'completed') return result
+    lastError = result.response.error
+    if (lastError?.code !== 'REVISION_CONFLICT')
+      throw new Error(`${label}:${JSON.stringify(lastError)}`)
+  }
+  throw new Error(`${label}:REVISION_CONFLICT:${JSON.stringify(lastError)}`)
+}
 let milestoneRoot = ''
 function directory0() {
   return milestoneRoot
@@ -206,11 +251,12 @@ async function launchLicensedApp(dataDirectory) {
       const versionProbe = await runCli(directory, ['project', 'get'], { input: { projectId: created[alias] } })
       check(versionProbe.response.status === 'completed', `VERSION_PROBE_${alias}_FAILED`)
       graphVersions[alias] = versionProbe.response.data.meta.graphVersion
-      const patched = await runCli(directory, ['graph', 'patch'], {
-        input: batchFor(alias, `${alias} 的剧本文本：一段确定性测试正文。`),
-        idempotencyKey: key()
-      })
-      check(patched.response.status === 'completed', `PATCH_${alias}_FAILED:${JSON.stringify(patched.response.error)}`)
+      const patched = await patchWithFreshVersion(
+        directory,
+        created[alias],
+        () => batchFor(alias, `${alias} 的剧本文本：一段确定性测试正文。`).ops,
+        `PATCH_${alias}_FAILED`
+      )
       const applied = patched.response.data.applied
       check(applied.nodeCreated === 4 && applied.edgeCreated === 2, `PATCH_${alias}_COUNTS`)
       graphVersions[alias] = patched.response.data.graphVersion
@@ -383,21 +429,11 @@ async function launchLicensedApp(dataDirectory) {
       const imported = await runCli(directory, ['media', 'import'], { input: { projectId: created.A, filePath: fixture, name: '里程碑素材' }, idempotencyKey: key() })
       check(imported.response.status === 'completed', `MEDIA_IMPORT_FAILED:${JSON.stringify(imported.response.error)}`)
       const mediaId = imported.response.data.mediaId
-      const graph = await runCli(directory, ['graph', 'get'], { input: { projectId: created.A } })
-      const versionBefore = graph.response.data.graphVersion
-      const mediaPatch = await runCli(directory, ['graph', 'patch'], {
-        input: {
-          projectId: created.A,
-          expectedGraphVersion: versionBefore,
-          ops: [
-            { action: 'node.create', ref: 'asset', nodeType: 'image', x: 60, y: 1500, media: { mediaId } },
-            { action: 'node.create', ref: 'crop', nodeType: 'image-crop', x: 480, y: 1500, config: { mode: 'rect', aspectRatio: 'free', rect: { x: 0.1, y: 0.1, width: 0.5, height: 0.5 } } },
-            { action: 'edge.create', from: { nodeId: 'asset', portId: 'out-image' }, to: { nodeId: 'crop', portId: 'in-image' } }
-          ]
-        },
-        idempotencyKey: key()
-      })
-      check(mediaPatch.response.status === 'completed', `MEDIA_PATCH_FAILED:${JSON.stringify(mediaPatch.response.error)}`)
+      const mediaPatch = await patchWithFreshVersion(directory, created.A, () => [
+        { action: 'node.create', ref: 'asset', nodeType: 'image', x: 60, y: 1500, media: { mediaId } },
+        { action: 'node.create', ref: 'crop', nodeType: 'image-crop', x: 480, y: 1500, config: { mode: 'rect', aspectRatio: 'free', rect: { x: 0.1, y: 0.1, width: 0.5, height: 0.5 } } },
+        { action: 'edge.create', from: { nodeId: 'asset', portId: 'out-image' }, to: { nodeId: 'crop', portId: 'in-image' } }
+      ], 'MEDIA_PATCH_FAILED')
       const cropNode = mediaPatch.response.data.created.find((c) => c.ref === 'crop')
       check(Boolean(cropNode), 'MEDIA_PATCH_MAPPING')
       const executed = await runCli(directory, ['node', 'execute'], {
@@ -427,17 +463,7 @@ async function launchLicensedApp(dataDirectory) {
 
     // ── 6.6 F4 深验收：quad 裁剪 / 坐标越界钳制 / 拆分与失败回滚 / 取消契约 ──
     {
-      const stable = async (projectId) => {
-        let previous = -1
-        for (let i = 0; i < 15; i++) {
-          const probe = await runCli(directory, ['project', 'get'], { input: { projectId } })
-          const current = probe.response.data.meta.graphVersion
-          if (current === previous) return current
-          previous = current
-          await new Promise((done) => setTimeout(done, 900))
-        }
-        return previous
-      }
+      const stable = (projectId) => stableProjectVersion(directory, projectId)
       const executeAnd = async (projectId, version, nodeId, label) => {
         const executed = await runCli(directory, ['node', 'execute'], {
           input: { projectId, expectedGraphVersion: version, nodeIds: [nodeId], mode: 'single', confirmPaidRerun: false },
@@ -588,17 +614,7 @@ async function launchLicensedApp(dataDirectory) {
 
     // ── 6.7 F5 视频/音频：抽帧 / 截取双产物 / 声音调整（本机 ffmpeg）──
     {
-      const stable = async (projectId) => {
-        let previous = -1
-        for (let i = 0; i < 15; i++) {
-          const probe = await runCli(directory, ['project', 'get'], { input: { projectId } })
-          const current = probe.response.data.meta.graphVersion
-          if (current === previous) return current
-          previous = current
-          await new Promise((done) => setTimeout(done, 900))
-        }
-        return previous
-      }
+      const stable = (projectId) => stableProjectVersion(directory, projectId)
       const executeAnd = async (projectId, version, nodeId, label) => {
         const executed = await runCli(directory, ['node', 'execute'], {
           input: { projectId, expectedGraphVersion: version, nodeIds: [nodeId], mode: 'single', confirmPaidRerun: false },
@@ -765,25 +781,17 @@ async function launchLicensedApp(dataDirectory) {
         // timeline 执行器要求 clip.mediaPath 真实；通过 node.update 把解析到的 mediaPath 写入。
         const mediaListed = await runCli(directory, ['media', 'list'], { input: { projectId: created.A, limit: 200 } })
         const videoAsset = mediaListed.response.data.items.find((m) => m.mediaId === videoId)
-        const edited = await runCli(directory, ['graph', 'patch'], {
-          input: {
-            projectId: created.A,
-            expectedGraphVersion: tlRead.response.data.graphVersion,
-            ops: [
-              {
-                action: 'node.update',
-                nodeId: tlNode.nodeId,
-                text: JSON.stringify({
-                  ...tlData,
-                  clips: [{ ...tlData.clips[0], mediaPath: videoAsset.path }],
-                  references: [{ ...tlData.references[0], mediaPath: videoAsset.path }]
-                })
-              }
-            ]
-          },
-          idempotencyKey: key()
-        })
-        check(edited.response.status === 'completed', `TIMELINE_UPDATE_FAILED:${JSON.stringify(edited.response.error)}`)
+        const edited = await patchWithFreshVersion(directory, created.A, () => [
+          {
+            action: 'node.update',
+            nodeId: tlNode.nodeId,
+            text: JSON.stringify({
+              ...tlData,
+              clips: [{ ...tlData.clips[0], mediaPath: videoAsset.path }],
+              references: [{ ...tlData.references[0], mediaPath: videoAsset.path }]
+            })
+          }
+        ], 'TIMELINE_UPDATE_FAILED')
         // 二次编辑验证轨道结构可继续修改（加一条静音轨道），证明编辑不是一次性快照
         const tlRead2 = await runCli(directory, ['node', 'get'], { input: { projectId: created.A, nodeId: tlNode.nodeId } })
         const tlData2 = JSON.parse(tlRead2.response.data.node.text || '{}')
@@ -791,15 +799,9 @@ async function launchLicensedApp(dataDirectory) {
           ...tlData2,
           tracks: [...tlData2.tracks, { id: 't2', name: '轨道 2', muted: true, locked: false, visible: true }]
         })
-        const edited2 = await runCli(directory, ['graph', 'patch'], {
-          input: {
-            projectId: created.A,
-            expectedGraphVersion: edited.response.data.graphVersion,
-            ops: [{ action: 'node.update', nodeId: tlNode.nodeId, text: tlJson2 }]
-          },
-          idempotencyKey: key()
-        })
-        check(edited2.response.status === 'completed', 'TIMELINE_TRACK_ADD_FAILED')
+        const edited2 = await patchWithFreshVersion(directory, created.A, () => [
+          { action: 'node.update', nodeId: tlNode.nodeId, text: tlJson2 }
+        ], 'TIMELINE_TRACK_ADD_FAILED')
         const tlRead3 = await runCli(directory, ['node', 'get'], { input: { projectId: created.A, nodeId: tlNode.nodeId } })
         const tlData3 = JSON.parse(tlRead3.response.data.node.text || '{}')
         check(tlData3.tracks.length === 2 && tlData3.tracks[1].muted === true && tlData3.clips.length === 1, 'TIMELINE_TRACK_ADD_NOT_PERSISTED')
@@ -819,19 +821,409 @@ async function launchLicensedApp(dataDirectory) {
       }
     }
 
+    // ── 6.8 F6 收尾：真实画布对话节点 ──
+    // 外部 graph.patch(chat.patch) 追加用户消息 → GUI 对话面板 DOM 可见 → node.execute
+    // 在无已验证模型连接时如实失败（与 GUI 同一执行器/原因）→ chat.messages 读回 →
+    // 附件 mediaId 由宿主注入项目相对路径/MIME → 幂等重放不重复 → 跨项目 mediaId 拒绝。
+    {
+      const stable = (projectId) => stableProjectVersion(directory, projectId)
+      const mediaCount = async (projectId) => {
+        const listed = await runCli(directory, ['media', 'list'], { input: { projectId, limit: 200 } })
+        return listed.response.data.total
+      }
+      // graph.patch 的 expectedGraphVersion 以权威读数为准；GUI 防抖保存可能在读取与
+      // 准入之间推进版本。预检冲突无副作用，用新幂等键重读重试；只重试
+      // REVISION_CONFLICT，其余失败立即抛出。
+      const patchWithRetry = async (label, makeOps, attempts = 6) => {
+        let lastError = null
+        for (let attempt = 0; attempt < attempts; attempt++) {
+          if (attempt > 0) await new Promise((done) => setTimeout(done, 1200))
+          const expectedGraphVersion = await stable(created.A)
+          const input = { projectId: created.A, expectedGraphVersion, ops: makeOps() }
+          const idempotencyKey = key()
+          const result = await runCli(directory, ['graph', 'patch'], { input, idempotencyKey })
+          if (result.response.status === 'completed') return { result, input, idempotencyKey }
+          lastError = result.response.error
+          if (lastError?.code !== 'REVISION_CONFLICT')
+            throw new Error(`${label}:${JSON.stringify(lastError)}`)
+        }
+        throw new Error(`${label}:REVISION_CONFLICT:${JSON.stringify(lastError)}`)
+      }
+
+      // (a) 外部创建对话节点：权威宿主原子应用并正式保存，persisted 数据可读
+      let chatNodeId = ''
+      {
+        const createdPatch = await patchWithRetry('F6_CHAT_NODE_CREATE_FAILED', () => [
+          { action: 'node.create', ref: 'f6-chat', nodeType: 'chat', x: 480, y: 380, title: 'F6 对话验收' }
+        ])
+        const mapped = createdPatch.result.response.data.created.find((item) => item.ref === 'f6-chat')
+        check(Boolean(mapped), 'F6_CHAT_NODE_MAPPING_MISSING')
+        chatNodeId = mapped.nodeId
+        const read = await runCli(directory, ['chat', 'read'], { input: { projectId: created.A, nodeId: chatNodeId } })
+        check(
+          read.response.status === 'completed' && read.response.data.nodeId === chatNodeId,
+          `F6_CHAT_NODE_NOT_PERSISTED:${JSON.stringify(read.response.error)}`
+        )
+      }
+      const readMessages = async (sessionId) => {
+        const read = await runCli(directory, ['chat', 'messages'], {
+          input: {
+            projectId: created.A,
+            nodeId: chatNodeId,
+            limit: 200,
+            ...(sessionId ? { sessionId } : {})
+          }
+        })
+        check(read.response.status === 'completed', `F6_CHAT_MESSAGES_READ_FAILED:${JSON.stringify(read.response.error)}`)
+        return read.response.data
+      }
+
+      // (b) 新建会话并追加第一条用户消息；chat.read/chat.messages 从持久化数据读回
+      const MSG1 = 'F6 外部追加：对话面板应可见的第一条用户消息'
+      const MSG2 = 'F6 外部追加：对话顺序验证的第二条用户消息'
+      const MSG3 = 'F6 外部追加：宿主注入附件的第三条用户消息'
+      const appendOne = await patchWithRetry('F6_CHAT_APPEND_FAILED', () => [
+        {
+          action: 'chat.patch',
+          nodeId: chatNodeId,
+          ops: [
+            { action: 'chat.session.create', title: '外部会话 F6' },
+            { action: 'chat.message.append', message: { role: 'user', content: MSG1 } }
+          ]
+        }
+      ])
+      const appendKey = appendOne.idempotencyKey
+      const appendInput = appendOne.input
+      const appended = appendOne.result
+      const directoryRead = await runCli(directory, ['chat', 'read'], { input: { projectId: created.A, nodeId: chatNodeId } })
+      check(directoryRead.response.status === 'completed', 'F6_CHAT_READ_FAILED')
+      const catalog = directoryRead.response.data
+      const activeSession = catalog.conversations.find((conversation) => conversation.active)
+      check(
+        Boolean(activeSession) && activeSession.title === '外部会话 F6' && activeSession.messageCount === 1,
+        `F6_CHAT_SESSION_INVALID:${JSON.stringify(catalog.conversations)}`
+      )
+      const sessionId = activeSession.id
+      const firstRead = await readMessages(sessionId)
+      check(
+        firstRead.total === 1 &&
+          firstRead.messages[0].role === 'user' &&
+          firstRead.messages[0].content === MSG1,
+        `F6_CHAT_FIRST_READ_INVALID:${JSON.stringify(firstRead)}`
+      )
+
+      // (c) 同幂等键重放原回执：不重复追加消息
+      const replayed = await runCli(directory, ['graph', 'patch'], { input: appendInput, idempotencyKey: appendKey })
+      check(replayed.response.status === 'completed', 'F6_CHAT_REPLAY_FAILED')
+      check(
+        replayed.response.data.graphVersion === appended.response.data.graphVersion,
+        'F6_CHAT_REPLAY_RECEIPT_DIVERGED'
+      )
+      const afterReplay = await readMessages(sessionId)
+      check(afterReplay.total === 1, `F6_CHAT_REPLAY_DUPLICATED:${afterReplay.total}`)
+
+      await patchWithRetry('F6_CHAT_SECOND_APPEND_FAILED', () => [
+        {
+          action: 'chat.patch',
+          nodeId: chatNodeId,
+          ops: [{ action: 'chat.message.append', message: { role: 'user', content: MSG2 } }]
+        }
+      ])
+
+      // (d) 附件注入：外部输入只有 mediaId，宿主写项目相对路径与 MIME
+      const mediaCountBefore = await mediaCount(created.A)
+      const attachmentSource = join(appRoot, 'qa-fixtures/media/images/I-A.png')
+      const importedAttachment = await runCli(directory, ['media', 'import'], {
+        input: { projectId: created.A, filePath: attachmentSource, name: 'F6附件图' },
+        idempotencyKey: key()
+      })
+      check(
+        importedAttachment.response.status === 'completed',
+        `F6_CHAT_MEDIA_IMPORT_FAILED:${JSON.stringify(importedAttachment.response.error)}`
+      )
+      const attachmentMediaId = importedAttachment.response.data.mediaId
+      const attachmentAttempt = await patchWithRetry('F6_CHAT_ATTACH_FAILED', () => [
+        {
+          action: 'chat.patch',
+          nodeId: chatNodeId,
+          ops: [
+            {
+              action: 'chat.message.append',
+              message: { role: 'user', content: MSG3, images: [{ mediaId: attachmentMediaId }] }
+            }
+          ]
+        }
+      ])
+      const attachmentInput = attachmentAttempt.input
+      // 外部输入不可携带路径/MIME：只有受控 mediaId。
+      check(!JSON.stringify(attachmentInput).includes('projects/'), 'F6_CHAT_EXTERNAL_INPUT_HAS_PATH')
+      check(!JSON.stringify(attachmentInput).includes('image/png'), 'F6_CHAT_EXTERNAL_INPUT_HAS_MIME')
+      const allMessages = await readMessages(sessionId)
+      check(allMessages.total === 3, `F6_CHAT_MESSAGE_COUNT:${allMessages.total}`)
+      check(
+        allMessages.messages.map((message) => message.role).join(',') === 'user,user,user' &&
+          allMessages.messages[0].content === MSG1 &&
+          allMessages.messages[1].content === MSG2 &&
+          allMessages.messages[2].content === MSG3,
+        `F6_CHAT_ORDER_MISMATCH:${JSON.stringify(allMessages.messages.map((message) => message.content))}`
+      )
+      const injectedImage = allMessages.messages[2].images?.[0]
+      check(Boolean(injectedImage), 'F6_CHAT_ATTACHMENT_MISSING')
+      check(injectedImage.mediaId === attachmentMediaId, 'F6_CHAT_ATTACHMENT_ID_MISMATCH')
+      check(
+        new RegExp(`^projects/${String(created.A).replace(/[^a-zA-Z0-9_-]/g, '\\$&')}/media/[^/]+$`).test(
+          injectedImage.mediaPath
+        ),
+        `F6_CHAT_ATTACHMENT_PATH_NOT_INJECTED:${JSON.stringify(injectedImage)}`
+      )
+      check(injectedImage.mime === 'image/png', `F6_CHAT_ATTACHMENT_MIME_NOT_INJECTED:${injectedImage.mime}`)
+      const attachmentAbs = join(directory, injectedImage.mediaPath.replace(/\//g, sep))
+      check(existsSync(attachmentAbs), 'F6_CHAT_ATTACHMENT_FILE_MISSING')
+      // 节点持久化正文（权威数据）同样携带注入路径/MIME，不是响应层拼装
+      const chatNodeRead = await runCli(directory, ['node', 'get'], { input: { projectId: created.A, nodeId: chatNodeId } })
+      const persistedChat = JSON.parse(chatNodeRead.response.data.node.text)
+      const persistedConversation = persistedChat.conversations.find(
+        (conversation) => conversation.id === persistedChat.activeConversationId
+      )
+      check(
+        Boolean(persistedConversation) &&
+          persistedConversation.messages[2].images[0].mediaPath === injectedImage.mediaPath &&
+          persistedConversation.messages[2].images[0].mime === 'image/png',
+        'F6_CHAT_ATTACHMENT_NOT_IN_PERSISTED_TEXT'
+      )
+
+      // (e) GUI 可见性：真实对话面板 DOM + 附件图片实际加载（不是只看服务回执）
+      const openChatDialog = async () => {
+        // 标题行在 node-card-wrap 内、正文卡片 .node-card 之外：按包装定位并点击公共
+        // “打开对话”按钮（与 GUI 手动入口同一 nodePanel store 动作）。
+        const card = page.locator('.node-card-wrap').filter({ hasText: 'F6 对话验收' }).first()
+        await card.waitFor({ timeout: 20000 })
+        // NodePrimaryButton 由公共外壳 portal 到卡片底部操作栏，保留原始 className 在
+        // data-original-action；这里点击与用户相同的主按钮“打开对话”。
+        await card.locator('[data-original-action="chat-open-button"]').click()
+        await page.locator('.chat-dialog').waitFor({ timeout: 20000 })
+        if (!(await page.locator('.chat-dialog-messages').isVisible().catch(() => false))) {
+          // 无已验证模型时面板默认展开设置页；用户同一点击“对话设置”可切回消息列表。
+          await page.locator('button[aria-label="对话设置"]').click()
+          await page.locator('.chat-dialog-messages').waitFor({ timeout: 10000 })
+        }
+      }
+      const closeChatDialog = async () => {
+        await page.locator('button[aria-label="关闭对话"]').click()
+        await page.locator('.chat-dialog').waitFor({ state: 'detached', timeout: 10000 })
+      }
+      const guiMessages = async () =>
+        await page.evaluate(() =>
+          Array.from(document.querySelectorAll('.chat-dialog-message')).map((message) => ({
+            role: message.getAttribute('aria-label'),
+            text: message.querySelector('.chat-dialog-bubble')?.textContent ?? ''
+          }))
+        )
+      await openChatDialog()
+      const firstGui = await guiMessages()
+      check(firstGui.length === 3, `F6_CHAT_GUI_MESSAGE_COUNT:${firstGui.length}`)
+      check(
+        firstGui[0].role === '用户消息' &&
+          firstGui[0].text.includes(MSG1) &&
+          firstGui[1].text.includes(MSG2) &&
+          firstGui[2].text.includes(MSG3),
+        `F6_CHAT_GUI_ORDER_MISMATCH:${JSON.stringify(firstGui.map((message) => message.text.slice(0, 40)))}`
+      )
+      await page.waitForFunction(
+        () => {
+          const image = document.querySelector('.chat-dialog-message .chat-dialog-image img')
+          return Boolean(image && image.complete && image.naturalWidth > 0)
+        },
+        null,
+        { timeout: 15000 }
+      )
+      const guiImage = await page.evaluate(() => {
+        const image = document.querySelector('.chat-dialog-message .chat-dialog-image img')
+        return image ? { src: image.getAttribute('src') ?? '', alt: image.getAttribute('alt') ?? '' } : null
+      })
+      check(
+        Boolean(guiImage) && guiImage.src.includes('/media/'),
+        `F6_CHAT_GUI_IMAGE_SRC_INVALID:${JSON.stringify(guiImage)}`
+      )
+      // 消息入场动画 280ms（opacity 0→1）：等首条消息真正完成绘制再截图，
+      // 否则证据图可能是动画首帧的空列表。
+      await page.waitForFunction(
+        () => {
+          const message = document.querySelector('.chat-dialog-message')
+          return Boolean(message && Number(getComputedStyle(message).opacity) >= 0.99)
+        },
+        null,
+        { timeout: 10000 }
+      )
+      await page.waitForTimeout(400)
+      const guiShot = await app.evaluate(async ({ BrowserWindow }) => {
+        const window = BrowserWindow.getAllWindows()[0]
+        window.webContents.invalidate()
+        return (await window.webContents.capturePage()).toPNG().toString('base64')
+      })
+      await writeFile(join(evidence, 'milestone-f6-chat-dialog.png'), Buffer.from(guiShot, 'base64'))
+      await closeChatDialog()
+
+      // (f) node.execute：本地无已验证模型连接时与 GUI 一致地如实失败；不得伪造助手回复
+      const textBeforeExecute = (
+        await runCli(directory, ['node', 'get'], { input: { projectId: created.A, nodeId: chatNodeId } })
+      ).response.data.node.text
+      const chatExecute = await runCli(directory, ['node', 'execute'], {
+        input: {
+          projectId: created.A,
+          expectedGraphVersion: await stable(created.A),
+          nodeIds: [chatNodeId],
+          mode: 'single',
+          confirmPaidRerun: false
+        },
+        idempotencyKey: key()
+      })
+      check(
+        chatExecute.response.status === 'completed' && chatExecute.response.data.accepted === true,
+        `F6_CHAT_EXECUTE_SUBMIT_FAILED:${JSON.stringify(chatExecute.response.error)}`
+      )
+      const chatTaskId = chatExecute.response.data.taskId
+      const chatWaited = await runCli(
+        directory,
+        ['run', 'wait'],
+        { input: { projectId: created.A, taskId: chatTaskId, timeoutMs: 60000 } },
+        90000
+      )
+      check(
+        chatWaited.response.status === 'completed' && chatWaited.response.data.state === 'failed',
+        `F6_CHAT_EXECUTE_NOT_HONEST_FAILURE:${JSON.stringify(chatWaited.response.data)}`
+      )
+      const chatExecuteError = String(chatWaited.response.data.error ?? '')
+      check(
+        chatExecuteError.includes('尚未绑定已验证文本模型'),
+        `F6_CHAT_EXECUTE_ERROR_NOT_GUI_CONSISTENT:${chatExecuteError}`
+      )
+      const afterExecute = await readMessages(sessionId)
+      check(
+        afterExecute.total === 3 && afterExecute.messages.every((message) => message.role === 'user'),
+        `F6_CHAT_EXECUTE_FABRICATED_REPLY:${JSON.stringify(afterExecute.messages.map((message) => message.role))}`
+      )
+      const textAfterExecute = (
+        await runCli(directory, ['node', 'get'], { input: { projectId: created.A, nodeId: chatNodeId } })
+      ).response.data.node.text
+      check(textAfterExecute === textBeforeExecute, 'F6_CHAT_EXECUTE_MUTATED_CONVERSATION')
+      await openChatDialog()
+      const afterExecuteGui = await guiMessages()
+      check(
+        afterExecuteGui.length === 3 && afterExecuteGui.every((message) => message.role === '用户消息'),
+        `F6_CHAT_EXECUTE_GUI_FABRICATED:${JSON.stringify(afterExecuteGui.map((message) => message.role))}`
+      )
+      await closeChatDialog()
+
+      // (g) 跨项目 mediaId：main 预检拒绝且不留半条消息/孤儿媒体
+      const importedForeign = await runCli(directory, ['media', 'import'], {
+        input: { projectId: created.B, filePath: attachmentSource, name: 'B项目附件' },
+        idempotencyKey: key()
+      })
+      check(importedForeign.response.status === 'completed', 'F6_CHAT_FOREIGN_IMPORT_FAILED')
+      const foreignMediaId = importedForeign.response.data.mediaId
+      const foreign = await runCli(directory, ['graph', 'patch'], {
+        input: {
+          projectId: created.A,
+          expectedGraphVersion: await stable(created.A),
+          ops: [
+            {
+              action: 'chat.patch',
+              nodeId: chatNodeId,
+              ops: [
+                {
+                  action: 'chat.message.append',
+                  message: {
+                    role: 'user',
+                    content: '不应写入的跨项目附件消息',
+                    images: [{ mediaId: foreignMediaId }]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        idempotencyKey: key()
+      })
+      check(
+        foreign.response.status === 'failed' && foreign.response.error?.code === 'MEDIA_NOT_FOUND',
+        `F6_CHAT_FOREIGN_MEDIA_NOT_REJECTED:${JSON.stringify(foreign.response.error)}`
+      )
+      const afterForeign = await readMessages(sessionId)
+      check(afterForeign.total === 3, `F6_CHAT_FOREIGN_LEFT_HALF_MESSAGE:${afterForeign.total}`)
+      check((await mediaCount(created.A)) === mediaCountBefore + 1, 'F6_CHAT_FOREIGN_LEFT_ORPHAN_MEDIA')
+
+      // (h) 混批防御：chat.patch 与几何 op 同批 → 准入前拒绝，不静默丢弃几何 op
+      const mixed = await runCli(directory, ['graph', 'patch'], {
+        input: {
+          projectId: created.A,
+          expectedGraphVersion: await stable(created.A),
+          ops: [
+            { action: 'node.create', nodeType: 'text', x: 60, y: 3400, title: '不应存在的混批节点' },
+            {
+              action: 'chat.patch',
+              nodeId: chatNodeId,
+              ops: [{ action: 'chat.message.append', message: { role: 'user', content: '不应写入的混批消息' } }]
+            }
+          ]
+        },
+        idempotencyKey: key()
+      })
+      check(
+        mixed.response.status === 'failed' && mixed.response.error?.code === 'MIXED_PATCH_UNSUPPORTED',
+        `F6_CHAT_MIXED_PATCH_NOT_REJECTED:${JSON.stringify(mixed.response.error)}`
+      )
+      check((await readMessages(sessionId)).total === 3, 'F6_CHAT_MIXED_PATCH_LEFT_MESSAGE')
+      const graphAfterMixed = await runCli(directory, ['graph', 'get'], { input: { projectId: created.A } })
+      check(
+        !graphAfterMixed.response.data.nodes.some((node) => node.title === '不应存在的混批节点'),
+        'F6_CHAT_MIXED_PATCH_LEFT_NODE'
+      )
+
+      receipt.chat = {
+        nodeId: chatNodeId,
+        sessionId,
+        messages: allMessages.messages.map((message) => ({ role: message.role, content: message.content })),
+        attachment: { mediaId: injectedImage.mediaId, mediaPath: injectedImage.mediaPath, mime: injectedImage.mime },
+        idempotentReplay: { graphVersion: replayed.response.data.graphVersion, totalAfterReplay: afterReplay.total },
+        gui: { messageBubbles: firstGui.length, imageLoaded: true, screenshot: 'milestone-f6-chat-dialog.png' },
+        execute: {
+          taskId: chatTaskId,
+          state: chatWaited.response.data.state,
+          error: chatExecuteError,
+          modelPath: 'none: isolated data dir has no verified text model connection (same failure as GUI)'
+        },
+        crossProjectMedia: {
+          attemptedMediaId: foreignMediaId,
+          code: foreign.response.error?.code,
+          totalAfter: afterForeign.total
+        },
+        mixedBatch: {
+          code: mixed.response.error?.code,
+          totalAfterMixed: 3,
+          nodeCreated: graphAfterMixed.response.data.nodes.some((node) => node.title === '不应存在的混批节点')
+        }
+      }
+      receipt.checks.push(
+        'F6 chat: external graph.patch creates a real canvas chat node; chat.patch appends a user message that the GUI dialog really renders'
+      )
+      receipt.checks.push(
+        'F6 chat: chat.messages read-back preserves user message order/content; the same idempotency key replays the original receipt without duplicating messages'
+      )
+      receipt.checks.push(
+        'F6 chat attachment: mediaId-only input is resolved by the host into project-relative path and MIME in persisted data and GUI image; cross-project mediaId is rejected with MEDIA_NOT_FOUND and leaves no half message'
+      )
+      receipt.checks.push(
+        'F6 chat execute: with no verified text model the run fails honestly with the same reason as GUI; no fabricated assistant reply'
+      )
+      receipt.checks.push(
+        'F6 chat guard: a chat.patch mixed with geometry ops is rejected before admission (MIXED_PATCH_UNSUPPORTED); neither a node nor a message is half-applied'
+      )
+    }
+
     // ── 7. 保存、关闭并重启；重启后图与任务账本一致 ──
     // 运行后的节点状态写入有 800ms 防抖：等版本连续两次读数稳定后再保存。
-    const stableVersion = async (projectId) => {
-      let previous = -1
-      for (let i = 0; i < 20; i++) {
-        const probe = await runCli(directory, ['project', 'get'], { input: { projectId } })
-        const current = probe.response.data.meta.graphVersion
-        if (current === previous) return current
-        previous = current
-        await new Promise((done) => setTimeout(done, 900))
-      }
-      return previous
-    }
+    const stableVersion = (projectId) => stableProjectVersion(directory, projectId)
     for (const alias of ['A', 'B', 'C']) {
       graphVersions[alias] = await stableVersion(created[alias])
       const saved = await runCli(directory, ['project', 'save'], { input: { projectId: created[alias], expectedGraphVersion: graphVersions[alias] }, idempotencyKey: key() })
@@ -912,6 +1304,11 @@ async function launchLicensedApp(dataDirectory) {
       check(events.length > 0, 'NO_DIAGNOSTIC_EVENTS')
       check(!JSON.stringify(events).includes('一段确定性测试正文'), 'LOG_CONTENT_LEAK_BODY')
       check(!JSON.stringify(events).includes('用户未保存的手工正文'), 'LOG_CONTENT_LEAK_USER_TEXT')
+      // F6 对话正文/会话标题/附件名同样不得进入诊断（复用 agent.access 生命周期，无新增正文事件）。
+      check(!JSON.stringify(events).includes('F6 外部追加'), 'LOG_CONTENT_LEAK_F6_CHAT_BODY')
+      check(!JSON.stringify(events).includes('外部会话 F6'), 'LOG_CONTENT_LEAK_F6_SESSION_TITLE')
+      check(!JSON.stringify(events).includes('不应写入的跨项目附件消息'), 'LOG_CONTENT_LEAK_F6_REJECTED_CHAT')
+      check(!JSON.stringify(events).includes('不应写入的混批消息'), 'LOG_CONTENT_LEAK_F6_MIXED_CHAT')
       receipt.checks.push('diagnostics JSONL exists without prompt/body/user-content leakage')
     }
 
