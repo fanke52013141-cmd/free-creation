@@ -618,6 +618,13 @@ async function launchLicensedApp(dataDirectory) {
         return imported.response.data.mediaId
       }
       const artifactOnDisk = (mediaPath) => existsSync(join(directory, (mediaPath ?? '').replace(/\//g, sep)))
+      const probeMediaDuration = (relPath) => {
+        const abs = join(directory, (relPath ?? '').replace(/\//g, sep))
+        try {
+          const out = require('node:child_process').execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', abs], { encoding: 'utf8', timeout: 20000 })
+          return Number(out.trim())
+        } catch { return null }
+      }
 
       // (a) 视频素材导入 + 抽帧：指定 2000ms 时刻 → PNG 产物
       {
@@ -676,14 +683,7 @@ async function launchLicensedApp(dataDirectory) {
         check(outVideo && (outVideo.mime || '').startsWith('video/') && artifactOnDisk(outVideo.mediaPath), `CLIP_VIDEO_INVALID:${JSON.stringify(outputs)}`)
         check(outAudio && (outAudio.mime || '').startsWith('audio/') && artifactOnDisk(outAudio.mediaPath), `CLIP_AUDIO_INVALID:${JSON.stringify(outputs)}`)
         // 产物时长与区间一致（3s）
-        const probeDuration = (relPath) => {
-          const abs = join(directory, (relPath ?? '').replace(/\//g, sep))
-          try {
-            const out = require('node:child_process').execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', abs], { encoding: 'utf8', timeout: 20000 })
-            return Number(out.trim())
-          } catch { return null }
-        }
-        const clipSec = probeDuration(outVideo.mediaPath)
+        const clipSec = probeMediaDuration(outVideo.mediaPath)
         check(clipSec !== null && Math.abs(clipSec - 3) < 0.6, `CLIP_DURATION_MISMATCH:${clipSec}`)
         receipt.clip = { videoMediaId: outVideo && outVideo.mediaId, audioMediaId: outAudio && outAudio.mediaId, durationSec: clipSec }
         receipt.checks.push('F5 video-clip: 3s-6s clip materializes both video and audio artifacts of matching range and duration')
@@ -718,6 +718,104 @@ async function launchLicensedApp(dataDirectory) {
         check(Math.abs(duration - 5) < 0.8, `ADJUST_RATE_MISMATCH:${duration}`)
         receipt.adjust = { mediaId: adjusted.mediaId, durationSec: duration }
         receipt.checks.push('F5 sound-adjust: 2x rate adjustment halves duration via the same ffmpeg pipeline as GUI')
+      }
+
+      // (d) 时间线：轨道/片段结构编辑（graph.patch text 通道承载 timeline JSON）→ 合成成片
+      {
+        const videoId = await importFixture(created.A, 'qa-fixtures/media/video/V-AV.mp4', '时间线素材')
+        const version = await stable(created.A)
+        const timelineJson = JSON.stringify({
+          schemaVersion: 1,
+          frameRate: 30,
+          tracks: [{ id: 't1', name: '轨道 1', muted: false, locked: false, visible: true }],
+          clips: [
+            {
+              id: 'clip1',
+              trackId: 't1',
+              kind: 'video',
+              mediaId: videoId,
+              mediaPath: '',
+              name: '验收片段',
+              startMs: 0,
+              durationMs: 4000,
+              inMs: 1000,
+              sourceDurationMs: 10000,
+              volume: 1
+            }
+          ],
+          references: [{ mediaId: videoId, mediaPath: '', name: '验收素材', kind: 'video' }]
+        })
+        const patched = await runCli(directory, ['graph', 'patch'], {
+          input: {
+            projectId: created.A,
+            expectedGraphVersion: version,
+            ops: [
+              { action: 'node.create', ref: 'tl', nodeType: 'timeline', x: 60, y: 4700, text: timelineJson, config: { render: { width: 1280, height: 720 } } }
+            ]
+          },
+          idempotencyKey: key()
+        })
+        check(patched.response.status === 'completed', `TIMELINE_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
+        const tlNode = patched.response.data.created.find((c) => c.ref === 'tl')
+        // 编辑结构读取核对：node.get 返回的正文与提交一致（轨道/片段真实承载）
+        const tlRead = await runCli(directory, ['node', 'get'], { input: { projectId: created.A, nodeId: tlNode.nodeId } })
+        const tlData = JSON.parse(tlRead.response.data.node.text || '{}')
+        check(Array.isArray(tlData.tracks) && tlData.tracks.length === 1 && Array.isArray(tlData.clips) && tlData.clips.length === 1 && tlData.clips[0].durationMs === 4000, `TIMELINE_EDIT_NOT_PERSISTED:${JSON.stringify(tlData).slice(0, 200)}`)
+        // 片段 mediaPath 由执行器在导入时补齐；外部只给 mediaId。先跑一次「链接导入」：
+        // timeline 执行器要求 clip.mediaPath 真实；通过 node.update 把解析到的 mediaPath 写入。
+        const mediaListed = await runCli(directory, ['media', 'list'], { input: { projectId: created.A, limit: 200 } })
+        const videoAsset = mediaListed.response.data.items.find((m) => m.mediaId === videoId)
+        const edited = await runCli(directory, ['graph', 'patch'], {
+          input: {
+            projectId: created.A,
+            expectedGraphVersion: tlRead.response.data.graphVersion,
+            ops: [
+              {
+                action: 'node.update',
+                nodeId: tlNode.nodeId,
+                text: JSON.stringify({
+                  ...tlData,
+                  clips: [{ ...tlData.clips[0], mediaPath: videoAsset.path }],
+                  references: [{ ...tlData.references[0], mediaPath: videoAsset.path }]
+                })
+              }
+            ]
+          },
+          idempotencyKey: key()
+        })
+        check(edited.response.status === 'completed', `TIMELINE_UPDATE_FAILED:${JSON.stringify(edited.response.error)}`)
+        // 二次编辑验证轨道结构可继续修改（加一条静音轨道），证明编辑不是一次性快照
+        const tlRead2 = await runCli(directory, ['node', 'get'], { input: { projectId: created.A, nodeId: tlNode.nodeId } })
+        const tlData2 = JSON.parse(tlRead2.response.data.node.text || '{}')
+        const tlJson2 = JSON.stringify({
+          ...tlData2,
+          tracks: [...tlData2.tracks, { id: 't2', name: '轨道 2', muted: true, locked: false, visible: true }]
+        })
+        const edited2 = await runCli(directory, ['graph', 'patch'], {
+          input: {
+            projectId: created.A,
+            expectedGraphVersion: edited.response.data.graphVersion,
+            ops: [{ action: 'node.update', nodeId: tlNode.nodeId, text: tlJson2 }]
+          },
+          idempotencyKey: key()
+        })
+        check(edited2.response.status === 'completed', 'TIMELINE_TRACK_ADD_FAILED')
+        const tlRead3 = await runCli(directory, ['node', 'get'], { input: { projectId: created.A, nodeId: tlNode.nodeId } })
+        const tlData3 = JSON.parse(tlRead3.response.data.node.text || '{}')
+        check(tlData3.tracks.length === 2 && tlData3.tracks[1].muted === true && tlData3.clips.length === 1, 'TIMELINE_TRACK_ADD_NOT_PERSISTED')
+        // 合成：执行时间线节点 → out-video 成片产物
+        const waited = await executeAnd(created.A, edited2.response.data.graphVersion, tlNode.nodeId, 'TLRENDER')
+        check(waited.response.data.state === 'completed', `TLRENDER_DID_NOT_COMPLETE:${waited.response.data.state}:${waited.response.data.error}`)
+        const output = await runCli(directory, ['output', 'get'], { input: { projectId: created.A, nodeId: tlNode.nodeId } })
+        const composed = (output.response.data.outputs || []).find((o) => o.portId === 'out-video')
+        check(composed && (composed.mime || '').startsWith('video/') && artifactOnDisk(composed.mediaPath), `TLRENDER_ARTIFACT_INVALID:${JSON.stringify(output.response.data.outputs)}`)
+        const renderSec = probeMediaDuration(composed.mediaPath)
+        check(renderSec !== null && Math.abs(renderSec - 4) < 1.2, `TLRENDER_DURATION_MISMATCH:${renderSec}`)
+        // 成片是独立资产（node-invariants）：不出现在 timeline 节点自身 mediaId
+        const finalRead = await runCli(directory, ['node', 'get'], { input: { projectId: created.A, nodeId: tlNode.nodeId } })
+        check(!finalRead.response.data.node.mediaId, 'TLRENDER_WROTE_SELF_MEDIA')
+        receipt.timeline = { composedMediaId: composed.mediaId, durationSec: renderSec, tracks: 2 }
+        receipt.checks.push('F5 timeline: track/clip structure edits via graph.patch persist across reads, then compose materializes an independent 4s video artifact')
       }
     }
 

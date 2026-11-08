@@ -8,14 +8,14 @@
   "totals": {
     "actions": 206,
     "byPhase": {
-      "external": 33,
+      "external": 35,
       "F8": 25,
       "F9": 44,
       "F7": 41,
       "F2": 5,
       "excluded": 18,
       "F4": 7,
-      "F5": 21,
+      "F5": 19,
       "F6": 10,
       "F3": 2
     }
@@ -1324,12 +1324,21 @@
     "canvas.timeline.edit": {
       "label": "时间线编辑",
       "gui": "轨道线",
-      "phase": "F5"
+      "phase": "external",
+      "external": [
+        "graph.patch"
+      ],
+      "note": "F5：轨道/片段/入出点/静音等结构经 graph.patch node.update(text) 承载 timeline JSON，与 GUI 同一 normalizeTimeline 解析"
     },
     "canvas.timeline.render": {
       "label": "时间线合成",
       "gui": "轨道线运行",
-      "phase": "F5"
+      "phase": "external",
+      "external": [
+        "node.execute",
+        "output.get"
+      ],
+      "note": "F5：合成经 node.execute（同一 ffmpeg 管线），成片为独立资产（node-invariants）"
     },
     "canvas.director.edit": {
       "label": "导演台编辑",

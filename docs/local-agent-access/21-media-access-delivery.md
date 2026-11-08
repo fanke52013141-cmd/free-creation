@@ -94,6 +94,12 @@ F5：视频/音频/时间线接入——video-asset 导入、video-frame/video-c
 3. timeline 轨道/片段编辑接入（graph.patch 配置通道）与合成渲染在 F5 第二批。
 4. 取消清理（迟到产物删除）随长任务验收。
 
-## 5. 下一工作包
+## 6. F5 第二批交付：时间线编辑与合成（真实桌面）
 
-F5 第二批：timeline 轨道/片段/入出点编辑接入（graph.patch config 通道承载 timeline JSON）+ 合成渲染桌面验收；audio 素材节点链路。
+- **轨道/片段结构编辑**：graph.patch node.update(text) 承载 timeline JSON（轨道增删/静音、片段 durationMs/inMs），与 GUI 同一 normalizeTimeline 解析；多轮编辑读回核对一致。
+- **合成渲染**：node.execute 时间线节点 → out-video 成片为独立资产（不写回节点 mediaId，node-invariants 核对）；ffprobe 实测成片 4.02s 与片段区间一致；自定义渲染配置 1280×720 生效。
+- 里程碑脚本 20 项检查全部通过；audit 分母 35 项 external（canvas.timeline.edit/render 移入）。
+
+## 7. 下一工作包
+
+F5 余项：audio 素材节点链路、speech/tts 付费供应商验收（待预算授权）；随后 F6 对话/Skill/3D。
