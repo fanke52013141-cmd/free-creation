@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ModelOperationSchema } from '@free-creation/model-contracts'
+import { PALETTE_CATEGORY_IDS } from '../../palette-preferences'
 import { empty, page } from './common'
 
 /**
@@ -84,6 +85,25 @@ export const SETTINGS_OPERATIONS = {
     description:
       '启动本地视频推理环境安装（联网下载 CUDA/PyTorch 依赖与校验后的模型权重并写入应用数据目录，需要本机 Python 3.12）；必须显式 confirmInstall=true，否则拒绝且不启动任何下载；只受理启动，不等待安装完成，进度与就绪经 environment.videoEngine.status 读取',
     input: z.object({ confirmInstall: z.boolean().default(false) }).strict()
+  },
+  'workspace.palettePreferences.get': {
+    effect: 'read',
+    description:
+      '读取调色板（一级分类 Dock）的本机偏好：分类显示顺序与名称覆盖；这是纯界面业务偏好，不含项目数据、不含密钥',
+    input: empty
+  },
+  'workspace.palettePreferences.save': {
+    effect: 'write',
+    description:
+      '保存调色板偏好（分类显示顺序 + 可选名称覆盖）。与 GUI 调色板设置同一归一化：忽略未知分类、自动去重、缺失分类补默认顺序；幂等，同幂等键重放不产生第二次写入',
+    input: z
+      .object({
+        order: z.array(z.enum(PALETTE_CATEGORY_IDS)).min(1).max(PALETTE_CATEGORY_IDS.length),
+        labels: z
+          .record(z.string(), z.string().trim().min(1).max(24))
+          .optional()
+      })
+      .strict()
   }
 } as const
 
@@ -259,6 +279,20 @@ export const SETTINGS_OUTPUTS = {
       pythonAvailable: z.boolean(),
       /** GUI 同款状态文案（已去敏，不含本机绝对路径或密钥）。 */
       message: z.string().max(600)
+    })
+    .strict(),
+  'workspace.palettePreferences.get': z
+    .object({
+      order: z.array(z.enum(PALETTE_CATEGORY_IDS)).min(1).max(PALETTE_CATEGORY_IDS.length),
+      labels: z.record(z.string(), z.string().max(24))
+    })
+    .strict(),
+  'workspace.palettePreferences.save': z
+    .object({
+      order: z.array(z.enum(PALETTE_CATEGORY_IDS)).min(1).max(PALETTE_CATEGORY_IDS.length),
+      labels: z.record(z.string(), z.string().max(24)),
+      /** 本次保存实际改变了事实（false = 与保存前一致，重复保存不产生副作用）。 */
+      changed: z.boolean()
     })
     .strict()
 } as const

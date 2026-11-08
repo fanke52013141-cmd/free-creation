@@ -15,6 +15,9 @@ import type {
 import type { DiagnosticsEvent } from '../../shared/observability'
 import { DIAGNOSTICS_EVENTS } from '../../shared/observability'
 import { redactDiagnosticText } from '../../shared/diagnostics'
+import { createHash } from 'node:crypto'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { DesktopAccessError } from './desktop'
 
 const MESSAGE_MAX_CHARS = 500
@@ -25,14 +28,23 @@ const MAX_READ = 2000
 export interface DiagnosticsOperationContext {
   /**
    * LocalAccessOptions.diagnostics。装配层只声明了 Pick<DiagnosticsService,'health'>，
-   * 这里按鸭子类型取 query，避免为了一个查询改共享选项类型 / server 装配签名。
+   * 这里按鸭子类型取 query/exportBundle，避免为了一个查询改共享选项类型 / server 装配签名。
    */
   diagnostics: unknown
+  /** 受控导出目录（服务启动时 realpath 固定）；导出包只能写在这里。 */
+  exportRoot: string
 }
 
 interface DiagnosticsQueryHost {
   health(): DiagnosticsHealthSnapshot
   query(input: DiagnosticsQueryInput): Promise<DiagnosticsQueryResult>
+}
+
+interface DiagnosticsExportHost extends DiagnosticsQueryHost {
+  exportBundle(
+    input: { scope: Record<string, unknown>; label?: string },
+    filePath: string
+  ): Promise<{ totalEvents?: number }>
 }
 
 function refuse(code: string, detail?: string): never {
@@ -179,7 +191,59 @@ async function queryDiagnostics(
   }
 }
 
-/** diagnostics.* 的统一入口（本包只有 query；未登记分支由类型系统与 dispatch 兜底）。 */
+/**
+ * 诊断包导出：范围由外部指定，**输出位置由 main 决定**（受控导出目录内、带时间戳、
+ * 不覆盖已有文件）。导出内容复用 DiagnosticsService.exportBundle 的既有脱敏写入，
+ * 本函数只负责边界（可用性、范围、落位、回执）。
+ */
+async function exportDiagnosticsBundle(
+  input: Record<string, unknown>,
+  context: DiagnosticsOperationContext
+): Promise<unknown> {
+  const host = resolveHost(context.diagnostics) as DiagnosticsExportHost | null
+  if (!host) refuse('DIAGNOSTICS_UNAVAILABLE', 'host-missing')
+  if (typeof host.exportBundle !== 'function') refuse('DIAGNOSTICS_UNAVAILABLE', 'export-unsupported')
+  let health: DiagnosticsHealthSnapshot | null = null
+  try {
+    health = host.health()
+  } catch {
+    health = null
+  }
+  if (!health || health.available !== true) refuse('DIAGNOSTICS_UNAVAILABLE', 'degraded')
+  const scope: Record<string, unknown> = {}
+  if (typeof input.traceId === 'string') scope.traceId = input.traceId
+  if (typeof input.runId === 'string') scope.runId = input.runId
+  if (typeof input.since === 'number') scope.since = input.since
+  if (typeof input.until === 'number') scope.until = input.until
+  // 空范围会导出"全部事件"，对诊断包没有意义且可能很大：要求至少给一个边界。
+  if (Object.keys(scope).length === 0)
+    refuse('INVALID_INPUT', 'scope requires traceId, runId, since or until')
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  const fileName = `diagnostics-${stamp}.zip`
+  const target = join(context.exportRoot, fileName)
+  if (existsSync(target)) refuse('OUTPUT_EXISTS', fileName)
+  let exported: { totalEvents?: number }
+  try {
+    exported = await host.exportBundle(
+      { scope, ...(typeof input.label === 'string' ? { label: input.label } : {}) },
+      target
+    )
+  } catch {
+    refuse('EXPORT_FAILED', 'export-bundle')
+  }
+  if (!existsSync(target)) refuse('EXPORT_FAILED', 'package-missing')
+  const bytes = readFileSync(target)
+  if (bytes.length <= 0) refuse('EXPORT_FAILED', 'package-empty')
+  return {
+    fileName,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+    byteSize: bytes.length,
+    totalEvents: Number.isInteger(exported?.totalEvents) ? Number(exported.totalEvents) : 0,
+    scope
+  }
+}
+
+/** diagnostics.* 的统一入口。 */
 export async function runDiagnosticsOperation(
   operation: string,
   input: Record<string, unknown>,
@@ -188,6 +252,8 @@ export async function runDiagnosticsOperation(
   switch (operation) {
     case 'diagnostics.query':
       return queryDiagnostics(input, context)
+    case 'diagnostics.exportBundle':
+      return exportDiagnosticsBundle(input, context)
     default:
       throw new DesktopAccessError('UNSUPPORTED_OPERATION', false, 'diagnostics-dispatch')
   }

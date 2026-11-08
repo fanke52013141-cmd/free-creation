@@ -15,6 +15,7 @@ export const MODEL_ADMIN_OPERATION_IDS: ReadonlySet<AccessOperationId> = new Set
   'model.connection.delete',
   'model.definition.save',
   'model.definition.delete',
+  'model.definition.deleteMany',
   'model.binding.save'
 ] as AccessOperationId[])
 
@@ -133,6 +134,23 @@ export async function runModelAdminOperation(
     if (!instance.listModels().some((model) => model.id === id)) refuse('NOT_FOUND', id)
     if (!instance.deleteModel(id)) refuse('NOT_FOUND', id)
     return { id, deleted: true }
+  }
+
+  if (operationId === 'model.definition.deleteMany') {
+    // 与 GUI 多选删除同一 deleteModels；不存在的 ID 逐项计入 notFound，
+    // 不让"一个 ID 过期"把整批成功项变成失败（与 GUI 行为一致）。
+    const requested = [...new Set(input.modelDefinitionIds as string[])]
+    const known = new Set(instance.listModels().map((model) => model.id))
+    const deleted = requested.filter((id) => known.has(id))
+    const notFound = requested.filter((id) => !known.has(id))
+    let removed = 0
+    if (deleted.length) {
+      removed = instance.deleteModels(deleted)
+      // 防御：宿主返回值与请求不符时如实报不一致，而不是假装全删成功。
+      if (removed !== deleted.length)
+        refuse('STORAGE_INCONSISTENT', `deleted ${removed}/${deleted.length}`)
+    }
+    return { deleted, notFound }
   }
 
   // model.binding.save：宿主只接受"该模型该操作已验证"的绑定。外部无法自行验证模型，

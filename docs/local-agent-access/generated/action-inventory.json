@@ -3,19 +3,19 @@
   "generatedFrom": {
     "ipcChannels": 171,
     "canvasActions": 42,
-    "externalOperations": 113
+    "externalOperations": 117
   },
   "totals": {
     "actions": 213,
     "byPhase": {
-      "external": 116,
+      "external": 120,
       "F8": 2,
       "excluded": 23,
       "F2": 5,
       "F7": 6,
       "F4": 7,
       "F5": 19,
-      "F9": 30,
+      "F9": 26,
       "F6": 3,
       "F3": 2
     }
@@ -764,13 +764,21 @@
       "label": "面板偏好读取",
       "channel": "workspace:palette-preferences:get",
       "gui": "调色板",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "workspace.palettePreferences.get"
+      ],
+      "note": "F9：读取调色板分类顺序与名称覆盖（纯界面偏好，不含项目数据或密钥）"
     },
     "ipc.workspace.savePalettePreferences": {
       "label": "面板偏好保存",
       "channel": "workspace:palette-preferences:save",
       "gui": "调色板",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "workspace.palettePreferences.save"
+      ],
+      "note": "F9：保存调色板偏好；与 GUI 同一归一化（未知分类忽略、去重、补默认顺序）；重复保存 changed=false"
     },
     "ipc.workspace.recordImageGenerationTiming": {
       "label": "生图耗时记录",
@@ -1226,7 +1234,11 @@
       "label": "模型定义批量删除",
       "channel": "models:definitions:delete-many",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "model.definition.deleteMany"
+      ],
+      "note": "F9：批量删除模型定义（与 GUI 多选删除同一 deleteModels）；不存在的 ID 计入 notFound，不让过期 ID 把整批成功项变成失败"
     },
     "ipc.models.deleteConnection": {
       "label": "模型连接删除",
@@ -1327,7 +1339,11 @@
       "label": "诊断包导出",
       "channel": "diagnostics:export-bundle",
       "gui": "诊断面板",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "diagnostics.exportBundle"
+      ],
+      "note": "F9：诊断包导出到受控导出目录（复用 GUI 同一 exportBundle 与脱敏）；范围必须给 traceId/runId/时间窗之一；回执给文件名/sha256/字节数/事件数，不覆盖已有文件"
     },
     "ipc.license.getStatus": {
       "label": "授权状态",

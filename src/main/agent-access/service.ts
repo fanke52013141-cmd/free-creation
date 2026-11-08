@@ -963,6 +963,7 @@ export class LocalAccessService {
         result = await runModelAdminOperation(operationId, input)
       } else if (
         operationId === 'diagnostics.query' ||
+        operationId === 'diagnostics.exportBundle' ||
         operationId === 'project.nodeVisibility.get' ||
         operationId === 'project.nodeVisibility.set'
       ) {
@@ -975,7 +976,8 @@ export class LocalAccessService {
         }
         result = operationId.startsWith('diagnostics.')
           ? await runDiagnosticsOperation(operationId, input, {
-              diagnostics: f9ReadContext.diagnostics
+              diagnostics: f9ReadContext.diagnostics,
+              exportRoot: this.exportRoot
             })
           : runProjectSettingsOperation(operationId, input, f9ReadContext)
       } else result = await this.execute(operationId, input)
@@ -1640,9 +1642,12 @@ export class LocalAccessService {
       case 'diagnostics.summary':
         return accessDiagnosticsSummary(this.options.diagnostics)
       case 'diagnostics.query':
+      case 'diagnostics.exportBundle':
+      case 'workspace.palettePreferences.get':
+      case 'workspace.palettePreferences.save':
       case 'project.nodeVisibility.get':
       case 'project.nodeVisibility.set':
-        // F9（三）：在 dispatch 分组分支里执行（需要 trace/span 与装配层依赖），不落在这里。
+        // F9：在 dispatch 分组分支里执行（需要 trace/span 与装配层依赖），不落在这里。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'app.status':
         return {
@@ -1866,6 +1871,7 @@ export class LocalAccessService {
       case 'model.connection.delete':
       case 'model.definition.save':
       case 'model.definition.delete':
+      case 'model.definition.deleteMany':
       case 'model.binding.save':
         // F9（四）：模型连接与受控凭据写入委托 model-admin-ops 执行，不落在这里。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')

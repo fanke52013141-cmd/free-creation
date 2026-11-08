@@ -32,6 +32,14 @@ import {
 import { getLocalMediaCapabilities } from '../media/video-transform'
 import { getVideoEngineStatus, installVideoEngine } from '../media/video-conversion'
 import { getDataDir, getDb } from '../store/db'
+import {
+  getPalettePreferences as readStoredPalettePreferences,
+  savePalettePreferences as writeStoredPalettePreferences
+} from '../store/workspace-state.repo'
+import {
+  normalizePalettePreferences,
+  type PalettePreferences
+} from '../../shared/palette-preferences'
 import { DesktopAccessError } from './desktop'
 
 export type SettingsOperationId =
@@ -42,6 +50,8 @@ export type SettingsOperationId =
   | 'environment.local'
   | 'environment.videoEngine.status'
   | 'environment.videoEngine.install'
+  | 'workspace.palettePreferences.get'
+  | 'workspace.palettePreferences.save'
 
 const SETTINGS_OPERATION_IDS: ReadonlySet<AccessOperationId> = new Set<AccessOperationId>([
   'model.connection.list',
@@ -50,7 +60,9 @@ const SETTINGS_OPERATION_IDS: ReadonlySet<AccessOperationId> = new Set<AccessOpe
   'model.binding.resolve',
   'environment.local',
   'environment.videoEngine.status',
-  'environment.videoEngine.install'
+  'environment.videoEngine.install',
+  'workspace.palettePreferences.get',
+  'workspace.palettePreferences.save'
 ])
 
 export function isSettingsOperation(id: AccessOperationId): id is SettingsOperationId {
@@ -440,6 +452,30 @@ async function videoEngineInstall(input: Record<string, unknown>): Promise<unkno
   }
 }
 
+/** 调色板偏好 → 外部 DTO（顺序 + 名称覆盖；纯界面偏好，无敏感内容）。 */
+function paletteDto(preferences: PalettePreferences): PalettePreferences {
+  return { order: [...preferences.order], labels: { ...preferences.labels } }
+}
+
+function readPalettePreferences(): unknown {
+  return paletteDto(readStoredPalettePreferences())
+}
+
+/**
+ * 保存调色板偏好：与 GUI 同一归一化（未知分类忽略、去重、缺失分类补默认顺序）。
+ * 归一化后与现有值一致时标记 changed=false，避免"重复保存"被误读成发生了变更。
+ */
+function savePalettePreferences(input: Record<string, unknown>): unknown {
+  const before = readStoredPalettePreferences()
+  const next = normalizePalettePreferences({
+    order: input.order,
+    labels: input.labels ?? {}
+  })
+  const changed = JSON.stringify(paletteDto(before)) !== JSON.stringify(paletteDto(next))
+  if (changed) writeStoredPalettePreferences(next)
+  return { ...paletteDto(next), changed }
+}
+
 /** dispatch 分组分支的唯一入口；operationId 已由 isSettingsOperation 收窄。 */
 export function runSettingsOperation(
   operationId: SettingsOperationId,
@@ -460,5 +496,9 @@ export function runSettingsOperation(
       return videoEngineStatus()
     case 'environment.videoEngine.install':
       return videoEngineInstall(input)
+    case 'workspace.palettePreferences.get':
+      return readPalettePreferences()
+    case 'workspace.palettePreferences.save':
+      return savePalettePreferences(input)
   }
 }

@@ -94,6 +94,21 @@ export const DIAGNOSTICS_OPERATIONS = {
         limit: z.number().int().min(1).max(DIAGNOSTICS_QUERY_MAX_LIMIT).default(50)
       })
       .strict()
+  },
+  'diagnostics.exportBundle': {
+    effect: 'export',
+    description:
+      '把指定范围的诊断事件导出为诊断包（zip）到**受控导出目录**（复用 GUI 同一 exportBundle 与脱敏规则）；范围可为一次流程(traceId)、一次运行(runId)或时间窗，可组合；回执给文件名/sha256/字节数/事件数，不接受任意输出路径也不覆盖已有文件',
+    input: z
+      .object({
+        traceId: associationId.optional(),
+        runId: associationId.optional(),
+        since: epochMs.optional(),
+        until: epochMs.optional(),
+        /** 写入包内 manifest 的可读标注（不含正文）。 */
+        label: z.string().trim().max(120).optional()
+      })
+      .strict()
   }
 } as const
 
@@ -113,6 +128,23 @@ export const DIAGNOSTICS_OUTPUTS = {
       scannedShards: z.number().int().nonnegative(),
       source: z.literal('diagnostics-store'),
       redaction: z.literal('event-whitelist@1')
+    })
+    .strict(),
+  'diagnostics.exportBundle': z
+    .object({
+      /** 受控导出目录内的文件名；不返回绝对路径。 */
+      fileName: z.string().max(160),
+      sha256: z.string().regex(/^[a-f0-9]{64}$/),
+      byteSize: z.number().int().positive(),
+      totalEvents: z.number().int().nonnegative(),
+      scope: z
+        .object({
+          traceId: associationId.optional(),
+          runId: associationId.optional(),
+          since: epochMs.optional(),
+          until: epochMs.optional()
+        })
+        .strict()
     })
     .strict()
 } as const

@@ -87,8 +87,15 @@ export const MODEL_ADMIN_OPERATIONS = {
   },
   'model.definition.delete': {
     effect: 'write',
-    description: '删除单个模型定义（连带清理其验证、工具调用验证与功能绑定）；不存在如实 NOT_FOUND',
+    description:
+      '删除单个模型定义（连带清理其验证、工具调用验证与功能绑定）；不存在如实 NOT_FOUND',
     input: z.object({ id: definitionId }).strict()
+  },
+  'model.definition.deleteMany': {
+    effect: 'write',
+    description:
+      '批量删除模型定义（与 GUI 多选删除同一 deleteModels）；不存在的 ID 计入 notFound 而不是让整批失败，回执逐项可核对',
+    input: z.object({ modelDefinitionIds: z.array(definitionId).min(1).max(100) }).strict()
   },
   'model.binding.save': {
     effect: 'write',
@@ -138,6 +145,12 @@ export const MODEL_ADMIN_OUTPUTS = {
     })
     .strict(),
   'model.definition.delete': z.object({ id: definitionId, deleted: z.literal(true) }).strict(),
+  'model.definition.deleteMany': z
+    .object({
+      deleted: z.array(definitionId).max(100),
+      notFound: z.array(definitionId).max(100)
+    })
+    .strict(),
   'model.binding.save': z
     .object({
       featureKey: z.string().max(200),
