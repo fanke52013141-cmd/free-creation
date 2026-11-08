@@ -326,12 +326,22 @@ describe('F6 output.get coverage: website/code', () => {
     ])
   })
 
-  it('still refuses structured/storyboard/iterate honestly until their projections land', async () => {
-    const p = createProject('未登记')
-    const structuredNode: CanvasNode = { ...chatNode('s', ''), id: 'shape:s', type: 'structured', contractVersion: 1 }
+  it('projects structured data through schema validation after its shared migration', async () => {
+    const p = createProject('结构数据')
+    const config = JSON.stringify({ schema: { id: 'json.any', version: 1 } })
+    const structuredNode: CanvasNode = {
+      ...chatNode('s', '{"level": 3}'),
+      id: 'shape:s',
+      type: 'structured',
+      contractVersion: 1,
+      params: { config }
+    }
     saveProject({ id: p.id, graph: { nodes: [structuredNode], edges: [], groups: [] } })!
-    const refused = await call('output.get', { projectId: p.id, nodeId: 'shape:s' })
-    expect(refused.error?.code).toBe('UNSUPPORTED_CONTRACT')
-    expect(refused.error?.detail).toContain('structured')
+    const output = await call('output.get', { projectId: p.id, nodeId: 'shape:s' })
+    expect(output.status).toBe('completed')
+    expect(output.data).toMatchObject({ nodeType: 'structured', outputSource: 'run' })
+    expect((output.data as any).outputs).toEqual([
+      { portId: 'out-json', kind: 'json', json: { level: 3 } }
+    ])
   })
 })

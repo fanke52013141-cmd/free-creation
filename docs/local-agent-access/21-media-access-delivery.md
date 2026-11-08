@@ -159,3 +159,36 @@ structured/storyboard/iterate 的投影（schema 绑定、分镜汇总、迭代�
 ## 3. 下一批次
 
 F6 第三批：导演台编辑/发布动作 + structured/storyboard/iterate 投影迁入 + chat.patch 真实画布桌面验收。
+
+---
+
+# F6 第三批交付：全部确定性节点族 output.get 覆盖完成
+
+日期：2026-11-08。基线：F6 第二批（`8e078e4`）。
+
+## 1. 实际完成的业务动作
+
+新建共享 family-projections 模块（避免在 deterministic-projections 内继续膨胀），迁入五族投影（与 GUI specs 同语义）：
+
+| 节点族 | 投影语义 | outputSource |
+| --- | --- | --- |
+| structured | 运行闸门 + Schema 校验（json.any/业务 Schema），未运行的手工合法数据仍可投影 | run |
+| storyboard | shots 数据 + 摘要文本双端口 | document |
+| iterate | list.items@1 项目级结果列表 | run |
+| ai-process | 按存储结果类型分端口（text/markdown/json） | run |
+| director | 工程摘要恒投影；帧/视频/机位仅在发布记录与工程当前一致时投影（防陈旧发布） | manual-publish |
+
+至此 output.get 覆盖**全部确定性/文档节点族**（20 类已登记）；付费生成族（image-gen/image-edit/video/speech/tts/voice-design）投影已登记，执行验收待预算。chat/agent/state-machine/ai-review 有专用投影（agent/review 已在共享层）。
+
+## 2. 验证证据
+
+- 全部接入测试 78 项通过（ai-process 按存储类型分端口、structured Schema 校验投影均实测）。
+- verify:agent-access（37 操作）、typecheck、audit（41 项 external）通过。
+
+## 3. 过程发现
+
+- 代码投影依赖（parseCodeConfigs/outputFieldPortId）全部已在共享层，迁移无语义分叉；structured 的运行记录识别需要一个共享版 readSharedRunRecord（GUI 的 readNodeRunRecord 依赖 renderer 类型）。
+
+## 4. 下一批次
+
+F6 收尾桌面脚本：chat.patch 会话编辑 + website/code/structured 输出读取的真实现场验收；导演台发布动作（manual-publish 的外部发布授权协议）。

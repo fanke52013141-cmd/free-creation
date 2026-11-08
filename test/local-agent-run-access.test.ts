@@ -282,14 +282,37 @@ describe('local Agent run access', () => {
     void website
   })
 
-  it('declares unsupported output projections instead of faking values', async () => {
-    const p = createProject('未支持')
-    // structured 的投影（schema 绑定 + 运行闸门）尚未迁入共享层：如实拒绝而非伪造。
-    const structuredNode: CanvasNode = { ...textNode('s', ''), type: 'structured', contractVersion: 1 }
-    saveProject({ id: p.id, graph: { nodes: [structuredNode], edges: [], groups: [] } })!
-    const unsupported = await call('output.get', { projectId: p.id, nodeId: 'shape:s' })
-    expect(unsupported.status).toBe('failed')
-    expect(unsupported.error?.code).toBe('UNSUPPORTED_CONTRACT')
-    expect(unsupported.error?.detail).toContain('structured')
+  it('projects ai-process results by stored kind (F6 third batch)', async () => {
+    const p = createProject('AI处理')
+    const config = JSON.stringify({ modelKey: '', mode: 'json', temperature: 0.7, maxTokens: 4096 })
+    const aiNode: CanvasNode = {
+      ...textNode('a', ''),
+      id: 'shape:a',
+      type: 'ai-process',
+      contractVersion: 1,
+      params: { config }
+    }
+    saveProject({
+      id: p.id,
+      graph: { nodes: [aiNode], edges: [], groups: [] },
+      tldrawSnapshot: {
+        store: {
+          'shape:a': {
+            type: 'node-card',
+            props: { nodeType: 'ai-process', config },
+            meta: { nodeResult: JSON.stringify({ kind: 'json', data: { shots: [1, 2] } }) }
+          }
+        }
+      }
+    })!
+    const output = await call('output.get', { projectId: p.id, nodeId: 'shape:a' })
+    expect(output.status === 'completed' ? output.data : output.error).toMatchObject({
+      nodeType: 'ai-process'
+    })
+    expect(output.status).toBe('completed')
+    expect(output.data).toMatchObject({ nodeType: 'ai-process', outputSource: 'run' })
+    expect((output.data as any).outputs).toEqual([
+      { portId: 'out-json', kind: 'json', json: { shots: [1, 2] } }
+    ])
   })
 })

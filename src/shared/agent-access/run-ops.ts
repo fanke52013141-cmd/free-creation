@@ -60,7 +60,7 @@ export const outputValueDto = z
   .strict()
 
 /** main 侧输出投影：持久化节点 + 快照 meta → 共享确定性投影。仅覆盖已登记类型。 */
-export const DETERMINISTIC_OUTPUT_SOURCES: Record<string, 'document' | 'run'> = {
+export const DETERMINISTIC_OUTPUT_SOURCES: Record<string, 'document' | 'run' | 'manual-publish'> = {
   text: 'document',
   json: 'document',
   processor: 'run',
@@ -76,6 +76,11 @@ export const DETERMINISTIC_OUTPUT_SOURCES: Record<string, 'document' | 'run'> = 
   'video-clay': 'run',
   website: 'document',
   code: 'run',
+  structured: 'run',
+  storyboard: 'document',
+  iterate: 'run',
+  director: 'manual-publish',
+  'ai-process': 'run',
   audio: 'run',
   speech: 'run',
   tts: 'run',
