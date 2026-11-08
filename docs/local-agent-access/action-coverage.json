@@ -426,7 +426,11 @@
       "label": "导出结构包",
       "channel": "project:export-structure",
       "gui": "画布传输菜单",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "project.exportStructure"
+      ],
+      "note": "F7：把**已保存**画布结构导出到受控导出目录（.canvasflow，临时文件→fsync→排他落位不覆盖）；导出读的是持久化快照，renderer 未保存编辑不在范围内——需要最新编辑请先 project.save"
     },
     "ipc.project.importStructure": {
       "label": "导入结构包",
@@ -456,13 +460,18 @@
       "label": "产物配方保存",
       "channel": "artifact-recipe:save",
       "gui": "产物配方",
-      "phase": "F7"
+      "phase": "excluded",
+      "note": "不开放：生成来源是**运行事实**，只能由执行器在真实产出时写入；外部写入等于伪造谱系，与「不得伪造运行事实」的红线冲突。读取已由 media.getRecipe 开放"
     },
     "ipc.media.getRecipe": {
       "label": "产物配方读取",
       "channel": "artifact-recipe:get",
       "gui": "产物配方",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "media.getRecipe"
+      ],
+      "note": "F7：读取产物生成来源（谱系）：生产者节点/类型/契约版本/运行ID/模型/上游媒体引用/参数摘要；**不返回提示词正文 fullPrompt**，媒体必须属于本项目"
     },
     "ipc.media.import": {
       "label": "媒体导入",
@@ -717,7 +726,11 @@
       "label": "素材批量导出",
       "channel": "media:batch-export",
       "gui": "素材面板",
-      "phase": "F7"
+      "phase": "external",
+      "external": [
+        "media.batchExport"
+      ],
+      "note": "F7：批量导出项目媒体到受控导出目录下的新子目录；同名文件加序号后缀、绝不覆盖；逐项回执成功/失败，不用总数掩盖个别失败"
     },
     "ipc.media.ttsGenerate": {
       "label": "TTS 生成",
@@ -933,15 +946,21 @@
       "label": "项目素材采集",
       "channel": "library:capture-project-media",
       "gui": "画布→资源库",
-      "phase": "F7",
-      "note": "画布→资源库采集（项目素材/节点快照入库）未在本族开放：属资源捕获专项，需与图形谱系校验同包验收"
+      "phase": "external",
+      "note": "F7：把项目已登记媒体采集为资源库资源（复制入库、生成来源随迁）；媒体必须属于该项目，外部只提供 mediaId，不提供路径；素材缺失/超限如实失败",
+      "external": [
+        "library.captureProjectMedia"
+      ]
     },
     "ipc.library.captureProjectNodes": {
       "label": "项目节点采集",
       "channel": "library:capture-project-nodes",
       "gui": "画布→资源库",
-      "phase": "F7",
-      "note": "画布→资源库采集（项目素材/节点快照入库）未在本族开放：属资源捕获专项，需与图形谱系校验同包验收"
+      "phase": "external",
+      "note": "F7：把选定画布节点快照采集为独立版本化资源；逐个校验 nodeId 真实存在、nodeType 与持久化一致、引用 mediaId 属于本项目，外部不能提交伪造节点或跨项目媒体",
+      "external": [
+        "library.captureProjectNodes"
+      ]
     },
     "ipc.library.publishRevision": {
       "label": "修订发布",

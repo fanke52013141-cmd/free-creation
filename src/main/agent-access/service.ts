@@ -57,6 +57,8 @@ import { isFlowCommandOperation, runFlowCommandOperation } from './flow-commands
 import { isSettingsOperation, runSettingsOperation } from './settings-ops'
 import { runDiagnosticsOperation } from './diagnostics-ops'
 import { MODEL_ADMIN_OPERATION_IDS, runModelAdminOperation } from './model-admin-ops'
+import { MEDIA_ASSET_OPERATION_IDS, runMediaAssetOperation } from './media-assets-ops'
+import { LIBRARY_CAPTURE_OPERATION_IDS, runLibraryCaptureOperation } from './library-capture-ops'
 import { runProjectSettingsOperation } from './project-settings-ops'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
 import { FlowTaskStore } from '../agent-flow/task-store'
@@ -94,6 +96,7 @@ import {
 } from './publish'
 import {
   exportLibraryPackage,
+  exportStructurePackage,
   importLibraryPackage,
   importProjectPackage,
   importStructurePackage
@@ -956,11 +959,17 @@ export class LocalAccessService {
         // （SqliteModelHost、ModelRuntime.resolveForExecution、媒体/推理环境探测）；
         // 全部只读，不发供应商请求、不写凭据，不落 execute 的普通分支。
         result = await runSettingsOperation(operationId, input)
-      } else if (MODEL_ADMIN_OPERATION_IDS.has(operationId)) {
-        // F9（四）：模型连接与受控凭据写入复用 SqliteModelHost（GUI 模型设置同一实现）。
+      } else if (MODEL_ADMIN_OPERATION_IDS.has(operationId)) {        // F9（四）：模型连接与受控凭据写入复用 SqliteModelHost（GUI 模型设置同一实现）。
         // 明文密钥只在本进程内用于写入/计算指纹，不回传、不进日志；模型验证与发现
         // 需要供应商请求，未在本批开放，因此外部也无法"自行验证"。
         result = await runModelAdminOperation(operationId, input)
+      } else if (MEDIA_ASSET_OPERATION_IDS.has(operationId)) {
+        // F7 收尾：产物生成来源只读（不返回提示词正文）+ 素材批量导出到受控目录（逐项回执）。
+        result = await runMediaAssetOperation(operationId, input, { exportRoot: this.exportRoot })
+      } else if (LIBRARY_CAPTURE_OPERATION_IDS.has(operationId)) {
+        // F7 收尾：资源捕获（画布→资源库）复用 library.repo 同一服务，
+        // 外部只传受控 ID；节点/媒体的项目归属由实现逐个校验。
+        result = runLibraryCaptureOperation(operationId, input)
       } else if (
         operationId === 'diagnostics.query' ||
         operationId === 'diagnostics.exportBundle' ||
@@ -1235,6 +1244,11 @@ export class LocalAccessService {
   private async execute(operation: AccessOperationId, input: Record<string, unknown>): Promise<unknown> {
     const id = input.projectId as string
     switch (operation) {
+      case 'media.getRecipe':
+      case 'media.batchExport':
+        // F7 收尾：在 dispatch 分组分支委托 media-assets-ops 执行（需要受控导出目录），
+        // 不落在这里。
+        throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'media.import': {
         // F4：素材经公共导入服务登记为项目受控媒体；字节不过线，路径是导入请求。
         if (!projects.getProject(id)) throw new AccessFailure('NOT_FOUND', 'read')
@@ -1801,6 +1815,11 @@ export class LocalAccessService {
         if (!outcome.ok) throw new AccessFailure(outcome.code, outcome.phase, outcome.detail)
         return outcome.data
       }
+      case 'project.exportStructure': {
+        const outcome = exportStructurePackage(input, this.exportRoot)
+        if (!outcome.ok) throw new AccessFailure(outcome.code, outcome.phase, outcome.detail)
+        return outcome.data
+      }
       // F7 资源库族：业务实现在 ./library-ops（复用 GUI 同一 store 服务）；
       // 物化走与 graph.patch 相同的权威宿主握手，不新造桌面通道。
       case 'library.resource.list':
@@ -1830,6 +1849,12 @@ export class LocalAccessService {
         if (!outcome.ok) throw new AccessFailure(outcome.code, outcome.phase, outcome.detail)
         return outcome.data
       }
+      case 'library.captureProjectMedia':
+      case 'library.captureProjectNodes':
+        // F7 收尾：资源捕获在 dispatch 分组分支委托 library-capture-ops 执行，不落在这里。
+        // 注意：必须放在 library 组的**之后**，否则会打断上面 case 组的 fall-through，
+        // 让整族操作都落进这个 throw（曾经真的踩过）。
+        throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'graph.patch':
         // graph.patch 在 dispatch 中经权威宿主握手执行，不落在这里。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')

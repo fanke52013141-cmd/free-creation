@@ -49,6 +49,17 @@ export const TRANSFER_OPERATIONS = {
         resourceIds: z.array(identifier).max(500).optional()
       })
       .strict()
+  },
+  'project.exportStructure': {
+    effect: 'export',
+    description:
+      '把项目**已保存**的画布结构导出为受控导出目录内的结构包（.canvasflow）：节点/连线/分组与画布快照经公共清洗（不含媒体文件、运行结果、聊天正文），临时文件→fsync→排他落位不覆盖已有文件；返回文件名、sha256、字节数与节点数',
+    input: z
+      .object({
+        projectId: identifier,
+        fileName: z.string().regex(/^[a-zA-Z0-9_-]{1,100}\.canvasflow$/)
+      })
+      .strict()
   }
 } as const
 
@@ -93,6 +104,16 @@ export const TRANSFER_OUTPUTS = {
       sha256,
       resourceCount: count,
       /** 排他创建：目标文件已存在时操作拒绝，不会覆盖。 */
+      overwritten: z.literal(false)
+    })
+    .strict(),
+  'project.exportStructure': z
+    .object({
+      /** 受控导出目录内的文件名；不返回绝对路径。 */
+      fileName: z.string().max(160),
+      byteSize: count,
+      sha256,
+      nodeCount: count,
       overwritten: z.literal(false)
     })
     .strict()

@@ -31,7 +31,7 @@ import { listArtifactRecipes } from '../store/artifact-recipes.repo'
 import { getDb, getProjectsDir } from '../store/db'
 import * as projects from '../store/projects.repo'
 import { importProject } from '../store/transfer'
-import { importCanvasStructure } from '../store/canvas-structure-transfer'
+import { exportCanvasStructure, importCanvasStructure } from '../store/canvas-structure-transfer'
 import {
   exportResourcePackage,
   getResourceDetail,
@@ -368,6 +368,83 @@ export function importLibraryPackage(
     return fail('STORAGE_INCONSISTENT', 'library-import-verify', 'library.count-mismatch')
   }
   return { ok: true, data: { imported, packageSha256: digest, byteSize, committed: true } }
+}
+
+/** 结构包导出：把**已保存**画布结构导出到受控目录（临时文件→fsync→排他落位，不覆盖）。 */
+export function exportStructurePackage(
+  input: Record<string, unknown>,
+  exportRoot: string
+): TransferOutcome<AccessOutput<'project.exportStructure'>> {
+  const projectId = typeof input.projectId === 'string' ? input.projectId : ''
+  if (!/^[a-zA-Z0-9_-]{1,80}$/.test(projectId))
+    return fail('INVALID_INPUT', 'structure-export', 'projectId')
+  const fileName = typeof input.fileName === 'string' ? input.fileName : ''
+  if (!/^[a-zA-Z0-9_-]{1,100}\.canvasflow$/.test(fileName))
+    return fail('INVALID_INPUT', 'structure-export', 'fileName')
+  const file = projects.openProject(projectId)
+  if (!file) return fail('NOT_FOUND', 'structure-export', 'projectId')
+  // 结构包必须携带画布快照；项目从未保存过 tldraw 快照（例如只经外部 graph.patch 建过图、
+  // 或旧格式项目）时无法导出，如实报明确原因而不是让它变成模糊的"包内容无效"。
+  const snapshot = file.tldrawSnapshot
+  if (!snapshot || typeof snapshot !== 'object')
+    return fail(
+      'STRUCTURE_SNAPSHOT_MISSING',
+      'structure-export',
+      'project has no saved canvas snapshot; open it in the GUI and save once first'
+    )
+  let root: string
+  try {
+    root = realpathSync(exportRoot)
+  } catch {
+    return fail('PATH_NOT_ALLOWED', 'structure-export', 'export-root')
+  }
+  if (root !== exportRoot) return fail('PATH_NOT_ALLOWED', 'structure-export', 'export-root')
+  const destination = join(root, fileName)
+  if (existsSync(destination)) return fail('OUTPUT_EXISTS', 'structure-export', fileName)
+  const temporary = join(root, `.${randomUUID()}.canvasflow`)
+  try {
+    // 导出的是**已保存**的权威结构：外部请求不携带画布快照（renderer 的未保存编辑不在范围内，
+    // 需要最新编辑请先 project.save；这与 GUI"导出画布结构"读取当前文档不同，如实写进台账）。
+    const exported = exportCanvasStructure(temporary, {
+      id: projectId,
+      name: file.meta.name,
+      graph: { nodes: file.nodes, edges: file.edges, groups: file.groups },
+      snapshot
+    })
+    const fd = openSync(temporary, 'r+')
+    try {
+      fsyncSync(fd)
+    } finally {
+      closeSync(fd)
+    }
+    const byteSize = statSync(temporary).size
+    if (byteSize <= 0) return fail('EXPORT_FAILED', 'structure-export', 'package-empty')
+    const sha256 = hashFile(temporary)
+    // 排他创建：并发下也不会覆盖已有文件。
+    linkSync(temporary, destination)
+    return {
+      ok: true,
+      data: {
+        fileName,
+        byteSize,
+        sha256,
+        nodeCount: exported.nodeCount,
+        overwritten: false
+      }
+    }
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException)?.code
+    if (code === 'EEXIST') return fail('OUTPUT_EXISTS', 'structure-export', fileName)
+    if (/版本不受支持|缺少项目名称/.test(error instanceof Error ? error.message : ''))
+      return fail('PACKAGE_CONTENT_INVALID', 'structure-export', 'structure.graph')
+    return fail('EXPORT_FAILED', 'structure-export', 'structure-write')
+  } finally {
+    try {
+      if (existsSync(temporary)) rmSync(temporary, { force: true })
+    } catch {
+      // 临时文件清理失败不改变导出结果；残留为受控目录内隐藏文件。
+    }
+  }
 }
 
 /** 资源包导出：临时文件 + fsync + 排他 link 落位（不覆盖），回执 sha256/字节数。 */
