@@ -29,7 +29,12 @@ export const DesktopRequestSchema = z
       'director-publish',
       // F8 收官：把已持久化的 Flow 建图预览交给渲染器权威动作提交到画布
       // （commitFlowBuild：authorize/confirm + 单撤销步 + 保存屏障）。
-      'flow-build'
+      'flow-build',
+      // F2：历史撤销/重做与关闭项目。
+      // 撤销重做必须由权威宿主执行——历史栈在 editor 里，main 自己维护一份必然与 GUI 分叉；
+      // 关闭项目需要 renderer 先保存再回到项目列表（否则关掉画布会丢未保存编辑）。
+      'history',
+      'close-project'
     ]),
     nodeId: z.string().optional(),
     agent: SkillAgentConfigSchema.optional(),
@@ -58,7 +63,9 @@ export const DesktopRequestSchema = z
       .min(1)
       .max(160)
       .regex(/^[a-zA-Z0-9_.:-]+$/)
-      .optional()
+      .optional(),
+    /** history：撤销还是重做。 */
+    direction: z.enum(['undo', 'redo']).optional()
   })
   .strict()
 export type DesktopRequest = z.infer<typeof DesktopRequestSchema>

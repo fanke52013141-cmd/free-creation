@@ -59,6 +59,7 @@ import { runDiagnosticsOperation } from './diagnostics-ops'
 import { MODEL_ADMIN_OPERATION_IDS, runModelAdminOperation } from './model-admin-ops'
 import { MEDIA_ASSET_OPERATION_IDS, runMediaAssetOperation } from './media-assets-ops'
 import { LIBRARY_CAPTURE_OPERATION_IDS, runLibraryCaptureOperation } from './library-capture-ops'
+import { CANVAS_HISTORY_OPERATION_IDS, runCanvasHistoryOperation } from './canvas-history-ops'
 import { runProjectSettingsOperation } from './project-settings-ops'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
 import { FlowTaskStore } from '../agent-flow/task-store'
@@ -970,6 +971,13 @@ export class LocalAccessService {
         // F7 收尾：资源捕获（画布→资源库）复用 library.repo 同一服务，
         // 外部只传受控 ID；节点/媒体的项目归属由实现逐个校验。
         result = runLibraryCaptureOperation(operationId, input)
+      } else if (CANVAS_HISTORY_OPERATION_IDS.has(operationId)) {
+        // F2：撤销/重做与关闭项目必须由权威宿主执行（历史栈在 editor 里；关画布要先保存）。
+        result = await runCanvasHistoryOperation(operationId, input, {
+          activeProjectId: this.options.activeProjectId,
+          desktop: this.options.desktop,
+          clearLastProject: () => setSetting('lastProjectId', '')
+        })
       } else if (
         operationId === 'diagnostics.query' ||
         operationId === 'diagnostics.exportBundle' ||
@@ -1903,6 +1911,10 @@ export class LocalAccessService {
       case 'node.execute':
       case 'run.cancel':
         // 同上：执行与取消需要权威宿主握手，在 dispatch 分支处理。
+        throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
+      case 'canvas.history':
+      case 'project.close':
+        // F2：撤销/重做与关闭项目需要权威宿主（历史栈在 editor 里），在 dispatch 分支处理。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'chat.read': {
         const file = projects.openProject(id)

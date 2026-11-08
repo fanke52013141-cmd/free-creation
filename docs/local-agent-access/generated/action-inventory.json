@@ -3,15 +3,14 @@
   "generatedFrom": {
     "ipcChannels": 171,
     "canvasActions": 42,
-    "externalOperations": 122
+    "externalOperations": 124
   },
   "totals": {
     "actions": 213,
     "byPhase": {
-      "external": 148,
+      "external": 153,
       "F8": 2,
       "excluded": 29,
-      "F2": 5,
       "F5": 2,
       "F9": 26,
       "F3": 1
@@ -417,7 +416,11 @@
       "label": "关闭项目",
       "channel": "project:close",
       "gui": "项目菜单返回",
-      "phase": "F2"
+      "phase": "external",
+      "external": [
+        "project.close"
+      ],
+      "note": "F2：保存并关闭当前打开的画布回到项目列表（与项目菜单\"返回\"同一动作）；只能关闭当前打开的画布，未打开的项目不会被误关"
     },
     "ipc.project.export": {
       "label": "导出项目",
@@ -1589,8 +1592,11 @@
     "canvas.node.duplicate": {
       "label": "复制节点",
       "gui": "右键菜单",
-      "phase": "F2",
-      "note": "可由 node.get+graph.patch 组合表达；含媒体引用的完整复制策略随 F4/F7 验收"
+      "phase": "external",
+      "note": "F2：经 graph.patch 的 node.duplicate op 复制（含类型/配置/正文/素材引用/尺寸/标题），**不带运行结果与运行状态**（meta 清空、exec=idle）；可指定偏移与 ref 供同批后续 op 引用",
+      "external": [
+        "graph.patch"
+      ]
     },
     "canvas.node.delete": {
       "label": "删除节点",
@@ -1649,20 +1655,29 @@
     "canvas.group.toggle": {
       "label": "组合/取消组合",
       "gui": "多选工具栏",
-      "phase": "F2",
-      "note": "graph.patch 暂不含分组操作，待补 op 类型"
+      "phase": "external",
+      "note": "F2：组合用 group.create op（与 GUI 同一 editor.groupShapes）、解组用 group.delete op（同一 ungroupShapes）；对非 group 解组提前拒绝，不留半应用",
+      "external": [
+        "graph.patch"
+      ]
     },
     "canvas.align": {
       "label": "对齐/均分",
       "gui": "多选工具栏",
-      "phase": "F2",
-      "note": "可由多条 node.update x/y 表达；专用批量对齐命令待定"
+      "phase": "external",
+      "note": "F2：经 graph.patch 的 layout.align op（left/right/center-h/center-v/distribute-h/distribute-v），与 GUI 多选工具栏同一算法；少于两个节点/重复 ID 在规划阶段拒绝",
+      "external": [
+        "graph.patch"
+      ]
     },
     "canvas.history.undo-redo": {
       "label": "撤销/重做",
       "gui": "历史坞",
-      "phase": "F2",
-      "note": "外部批次编辑已成为单一撤销步；跨主体撤销语义待 F2 收尾验收"
+      "phase": "external",
+      "note": "F2：撤销/重做必须由权威宿主执行（历史栈在 editor 里，main 不复制历史）；只回滚画布编辑，**不会撤销已发生的模型调用或发布副作用**；执行后保存并返回新图版本",
+      "external": [
+        "canvas.history"
+      ]
     },
     "canvas.workflow.run-all": {
       "label": "运行整个工作流",

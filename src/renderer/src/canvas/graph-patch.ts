@@ -5,7 +5,10 @@
 import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import type { PortDecl } from '@shared/types'
 import { GraphPatchOpSchema, type GraphPatchOp } from '@shared/agent-access/graph-ops'
-import { GRAPH_NODE_CONFIG_MAX_BYTES } from '@shared/agent-access/graph-ops'
+import {
+  GRAPH_NODE_CONFIG_MAX_BYTES,
+  GRAPH_NODE_TITLE_MAX_CHARS
+} from '@shared/agent-access/graph-ops'
 import { flowInitialConfig } from '@shared/agent-flow/model-defaults'
 import type { FeatureBinding } from '@free-creation/model-contracts'
 import {
@@ -279,6 +282,141 @@ export function planGraphPatch(
       })
       const portCheck = validateEdgesOn(index, id)
       if (portCheck) return portCheck
+      continue
+    }
+    if (op.action === 'node.duplicate') {
+      // 复制只带结构（类型/配置/正文/素材引用/尺寸），**不带运行结果与运行状态**：
+      // meta 清空、exec 重置 idle，避免复制体伪装成"已经跑过"。
+      const id = refToId.get(op.nodeId) ?? idOf(op.nodeId)
+      const source = nodes.get(id)
+      if (!source || !source.exists) return fail(index, 'NODE_NOT_FOUND', op.nodeId)
+      const newId = createShapeId()
+      nodes.set(newId, {
+        nodeType: source.nodeType,
+        config: source.config,
+        text: source.text,
+        exists: true
+      })
+      if (op.ref) refToId.set(op.ref, newId)
+      created.push({ ...(op.ref ? { ref: op.ref } : {}), nodeId: newId })
+      counts.nodeCreated += 1
+      applySteps.push((ed) => {
+        const src = ed.getShape(id)
+        if (!src) return
+        const props = (src as NodeCardShape).props
+        ed.createShape({
+          id: newId,
+          type: 'node-card',
+          x: src.x + (op.dx ?? 40),
+          y: src.y + (op.dy ?? 40),
+          props: {
+            nodeType: props.nodeType,
+            title: (op.title ?? props.title ?? '').slice(0, GRAPH_NODE_TITLE_MAX_CHARS),
+            w: props.w,
+            h: props.h,
+            config: props.config ?? '',
+            text: props.text ?? '',
+            mediaId: props.mediaId ?? '',
+            mediaPath: props.mediaPath ?? '',
+            mediaMime: props.mediaMime ?? '',
+            exec: 'idle'
+          },
+          meta: {}
+        } as never)
+      })
+      continue
+    }
+    if (op.action === 'layout.align') {
+      // 与 GUI 多选工具栏同一算法（左/右/水平居中/垂直居中/水平均分/垂直均分）。
+      const ids: TLShapeId[] = []
+      for (const raw of op.nodeIds) {
+        const id = refToId.get(raw) ?? idOf(raw)
+        const node = nodes.get(id)
+        if (!node || !node.exists) return fail(index, 'NODE_NOT_FOUND', raw)
+        ids.push(id)
+      }
+      if (new Set(ids).size !== ids.length) return fail(index, 'DUPLICATE_NODE', 'nodeIds')
+      const mode = op.mode
+      applySteps.push((ed) => {
+        const bounds = ids
+          .map((id) => {
+            const shape = ed.getShape(id)
+            if (!shape) return null
+            const props = (shape as NodeCardShape).props
+            return { id, x: shape.x, y: shape.y, w: props.w ?? 200, h: props.h ?? 120 }
+          })
+          .filter((entry): entry is { id: TLShapeId; x: number; y: number; w: number; h: number } => entry !== null)
+        if (bounds.length < 2) return
+        const minX = Math.min(...bounds.map((b) => b.x))
+        const maxX = Math.max(...bounds.map((b) => b.x + b.w))
+        const minY = Math.min(...bounds.map((b) => b.y))
+        const maxY = Math.max(...bounds.map((b) => b.y + b.h))
+        const totalW = maxX - minX
+        const totalH = maxY - minY
+        if (mode === 'distribute-h') {
+          const sorted = [...bounds].sort((a, b) => a.x - b.x)
+          const totalNodeW = sorted.reduce((sum, b) => sum + b.w, 0)
+          const gap = sorted.length > 1 ? (totalW - totalNodeW) / (sorted.length - 1) : 0
+          let cursor = minX
+          for (const b of sorted) {
+            ed.updateShape({ id: b.id, type: 'node-card', x: cursor } as never)
+            cursor += b.w + gap
+          }
+          return
+        }
+        if (mode === 'distribute-v') {
+          const sorted = [...bounds].sort((a, b) => a.y - b.y)
+          const totalNodeH = sorted.reduce((sum, b) => sum + b.h, 0)
+          const gap = sorted.length > 1 ? (totalH - totalNodeH) / (sorted.length - 1) : 0
+          let cursor = minY
+          for (const b of sorted) {
+            ed.updateShape({ id: b.id, type: 'node-card', y: cursor } as never)
+            cursor += b.h + gap
+          }
+          return
+        }
+        for (const b of bounds) {
+          const patch =
+            mode === 'left'
+              ? { x: minX }
+              : mode === 'right'
+                ? { x: maxX - b.w }
+                : mode === 'center-h'
+                  ? { x: (minX + maxX) / 2 - b.w / 2 }
+                  : { y: (minY + maxY) / 2 - b.h / 2 }
+          ed.updateShape({ id: b.id, type: 'node-card', ...patch } as never)
+        }
+      })
+      continue
+    }
+    if (op.action === 'group.create') {
+      // 与 GUI「组合」同一 editor.groupShapes；分组本身是呈现结构，不改变节点数据。
+      const ids: TLShapeId[] = []
+      for (const raw of op.nodeIds) {
+        const id = refToId.get(raw) ?? idOf(raw)
+        const node = nodes.get(id)
+        if (!node || !node.exists) return fail(index, 'NODE_NOT_FOUND', raw)
+        ids.push(id)
+      }
+      if (new Set(ids).size !== ids.length) return fail(index, 'DUPLICATE_NODE', 'nodeIds')
+      let groupId: TLShapeId | undefined
+      applySteps.push((ed) => {
+        ed.markHistoryStoppingPoint('agent-group-create')
+        const groups = ed.groupShapes(ids)
+        groupId = groups[0]?.id
+        if (op.ref && groupId) refToId.set(op.ref, groupId)
+      })
+      continue
+    }
+    if (op.action === 'group.delete') {
+      const groupId = refToId.get(op.groupId) ?? idOf(op.groupId)
+      const group = editor.getShape(groupId)
+      // 只允许解组真实存在的 group：对普通节点调用 ungroup 会静默失败，必须提前拒绝。
+      if (!group || group.type !== 'group') return fail(index, 'GROUP_NOT_FOUND', op.groupId)
+      applySteps.push((ed) => {
+        ed.markHistoryStoppingPoint('agent-group-delete')
+        ed.ungroupShapes([groupId])
+      })
       continue
     }
     if (op.action === 'node.delete') {

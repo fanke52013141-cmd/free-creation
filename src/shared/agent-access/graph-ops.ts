@@ -87,13 +87,65 @@ const chatNodeOp = z
   .object({ action: z.literal('chat.patch'), nodeId: z.string().min(1).max(180), ops: ChatPatchOpsSchema })
   .strict()
 
+/** 对齐/均分模式：与 GUI 多选工具栏（MultiSelectToolbar）的 AlignMode 完全一致。 */
+export const GRAPH_ALIGN_MODES = [
+  'left',
+  'right',
+  'center-h',
+  'center-v',
+  'distribute-h',
+  'distribute-v'
+] as const
+export type GraphAlignMode = (typeof GRAPH_ALIGN_MODES)[number]
+
+/** 复制节点：可选偏移与原引用；复制只带结构（配置/正文/素材引用），不带运行结果。 */
+const nodeDuplicate = z
+  .object({
+    action: z.literal('node.duplicate'),
+    nodeId: z.string().min(1).max(180),
+    dx: coord.optional(),
+    dy: coord.optional(),
+    /** 新节点标题；省略则沿用原标题。 */
+    title: z.string().max(GRAPH_NODE_TITLE_MAX_CHARS).optional(),
+    /** 为复制出的节点登记客户端引用，供同批后续 op 使用。 */
+    ref: accessClientRef.optional()
+  })
+  .strict()
+
+/** 对齐/均分：至少两个节点；坐标由与 GUI 相同的算法计算。 */
+const layoutAlign = z
+  .object({
+    action: z.literal('layout.align'),
+    mode: z.enum(GRAPH_ALIGN_MODES),
+    nodeIds: z.array(z.string().min(1).max(180)).min(2).max(GRAPH_PATCH_MAX_OPS)
+  })
+  .strict()
+
+/** 组合：把若干节点归入一个新的 tldraw group（与 GUI「组合」同一 groupShapes）。 */
+const groupCreate = z
+  .object({
+    action: z.literal('group.create'),
+    nodeIds: z.array(z.string().min(1).max(180)).min(2).max(GRAPH_PATCH_MAX_OPS),
+    ref: accessClientRef.optional()
+  })
+  .strict()
+
+/** 解组：取消一个既有 group（与 GUI「拆分」同一 ungroupShapes）。 */
+const groupDelete = z
+  .object({ action: z.literal('group.delete'), groupId: z.string().min(1).max(180) })
+  .strict()
+
 export const GraphPatchOpSchema = z.discriminatedUnion('action', [
   nodeCreate,
   nodeUpdate,
   nodeDelete,
   edgeCreate,
   edgeDelete,
-  chatNodeOp
+  chatNodeOp,
+  nodeDuplicate,
+  layoutAlign,
+  groupCreate,
+  groupDelete
 ])
 export type GraphPatchOp = z.infer<typeof GraphPatchOpSchema>
 

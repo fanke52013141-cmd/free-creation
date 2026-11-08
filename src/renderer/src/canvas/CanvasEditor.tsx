@@ -1436,6 +1436,60 @@ export function CanvasEditor({
               graphVersionRef.current = result.meta.graphVersion
               useAppStore.getState().openProject(result.meta)
             }
+            // ── F2 撤销/重做：与 GUI 历史坞同一 editor 历史栈 ──
+            // main 不维护历史副本（必然与 GUI 分叉），这里只执行并保存屏障后回真实版本。
+            if (request.action === 'history') {
+              const replyHistory = (ok: boolean, code?: string, detail?: string): void => {
+                window.api.replyLocalAgentDesktop({
+                  requestId: request.requestId,
+                  projectId: project.id,
+                  ok,
+                  ...(ok ? { graphVersion: graphVersionRef.current } : {}),
+                  ...(ok
+                    ? {}
+                    : {
+                        validated: true,
+                        ...(code ? { errorCode: code } : {}),
+                        ...(detail ? { errorDetail: detail.slice(0, 300) } : {})
+                      })
+                })
+              }
+              if (graphVersionRef.current !== request.expectedGraphVersion) {
+                replyHistory(
+                  false,
+                  'REVISION_CONFLICT',
+                  `expected ${request.expectedGraphVersion}, current ${graphVersionRef.current}`
+                )
+                return
+              }
+              if (request.direction !== 'undo' && request.direction !== 'redo') {
+                replyHistory(false, 'INVALID_INPUT', 'direction')
+                return
+              }
+              // 撤销/重做改变画布内容：先取消待执行保存，执行后立刻走保存屏障。
+              if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+              saveTimerRef.current = null
+              if (request.direction === 'undo') editor.undo()
+              else editor.redo()
+              await ensureCanvasSaved()
+              replyHistory(true)
+              return
+            }
+            // ── F2 关闭项目：先保存再回项目列表（与项目菜单"返回"同一动作）──
+            if (request.action === 'close-project') {
+              if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+              saveTimerRef.current = null
+              await ensureCanvasSaved()
+              window.api.replyLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                ok: true,
+                graphVersion: graphVersionRef.current
+              })
+              // 保存屏障成功后才离开画布：先回执再切视图，避免 main 收到"已关闭但未保存"。
+              useAppStore.getState().setHome()
+              return
+            }
             // ── 保存屏障（flush）：main 在外部写操作提交前要求"当前画布已落盘" ──
             // 此前没有这个分支：未匹配的动作只会回当前已保存版本，于是"画布有未保存编辑"
             // 时外部拿到的版本号与磁盘内容不一致（project.save/rename/export、固定资产提交、
