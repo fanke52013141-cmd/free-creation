@@ -1192,14 +1192,23 @@
       "label": "对话请求",
       "channel": "gateway:chat:start",
       "gui": "chat/ai-process 节点执行",
-      "phase": "F6",
-      "note": "经节点执行接入"
+      "phase": "external",
+      "note": "F6：GUI 该动作是 chat / ai-process 节点执行，外部等价路径为 node.execute + 任务族。对话发送需要已验证模型连接；无凭据时与 GUI 同因如实失败，不伪造回复（真实供应商未实测）",
+      "external": [
+        "node.execute",
+        "run.get",
+        "run.wait"
+      ]
     },
     "ipc.keys.chatCancel": {
       "label": "对话取消",
       "channel": "gateway:chat:cancel",
       "gui": "对话运行",
-      "phase": "F6"
+      "phase": "external",
+      "external": [
+        "run.cancel"
+      ],
+      "note": "F6：对话取消对应外部 run.cancel（取消请求与确认分离，终态由 run.get 读账本事实，不把 unknown 报成成功）"
     },
     "ipc.keys.imageGenerate": {
       "label": "生图请求",
@@ -1740,7 +1749,12 @@
     "canvas.storyboard.edit": {
       "label": "分镜板编辑",
       "gui": "分镜板表格",
-      "phase": "F3"
+      "phase": "external",
+      "external": [
+        "graph.patch",
+        "node.get"
+      ],
+      "note": "F3：分镜板镜头行/列编辑经 graph.patch 的 text/config 通道写入（与 GUI 同一分镜解析与 Schema 校验）；输出投影经 output.get（document 源）"
     },
     "canvas.timeline.edit": {
       "label": "时间线编辑",
@@ -1764,7 +1778,12 @@
     "canvas.director.edit": {
       "label": "导演台编辑",
       "gui": "3D 工作区",
-      "phase": "F6"
+      "phase": "external",
+      "external": [
+        "graph.patch",
+        "node.get"
+      ],
+      "note": "F6：导演台场景/对象/机位/镜头编辑经 graph.patch 的 config 通道写入（与 GUI 同一 normalizeTimeline/导演工程解析）；发布另有 director.publish.prepare/status/continue 授权协议，不能经 node.execute 偷渡"
     },
     "canvas.director.publish": {
       "label": "导演台发布",
