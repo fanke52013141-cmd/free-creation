@@ -3,14 +3,13 @@
   "generatedFrom": {
     "ipcChannels": 171,
     "canvasActions": 42,
-    "externalOperations": 129
+    "externalOperations": 130
   },
   "totals": {
     "actions": 213,
     "byPhase": {
-      "external": 161,
-      "F8": 2,
-      "excluded": 29,
+      "external": 162,
+      "excluded": 30,
       "F9": 21
     }
   },
@@ -79,8 +78,8 @@
       "label": "Flow 发布",
       "channel": "flowAgents:publication",
       "gui": "Agent Flow 面板",
-      "phase": "F8",
-      "note": "F8 收官仍不开放：发布是协调器运行期向权威宿主发出的等待/继续信号（main→renderer 事件），确认条件依赖渲染器保存后的内部运行事实；外部替宿主回执等于伪造内部运行身份。若后续需要，必须按导演台发布授权协议另建 prepare/authorize/continue 契约（见 41 号台账 §5）"
+      "phase": "excluded",
+      "note": "主→渲染的**推送通道**（flowAgents:publication 只在 main 侧 webContents.send，渲染器 on 监听），没有入站的独立业务语义：它是协调运行内部\"发布确认\"人工门禁的一部分，由 flowAgent.run 的协调流程触发，普通人确认在 GUI 上完成。因此不设外部等价操作——把它做成可调用的外部动作等于让 Agent自己确认发布，与人工门禁冲突"
     },
     "ipc.flowAgents.run": {
       "label": "Flow 运行",
@@ -136,8 +135,11 @@
       "label": "Flow 协作继续",
       "channel": "flow-agents:cooperate",
       "gui": "Agent Flow 面板",
-      "phase": "F8",
-      "note": "F8 收官仍不开放：协作事件（FlowAgentCollaboration / CollaborationEvent）没有外部主体身份维度——note/submit/revise 写入后与人在画布内的输入不可区分；且 note 需要一条正在等待的协作任务（无模型运行无法产生）。若需开放，先给协作事件加 actor/source 契约并让 GUI 呈现，再单独验收（见 41 号台账 §5）"
+      "phase": "external",
+      "note": "F8：向 Agent 任务写入一次协作事件（note/discuss/submit/revise），复用 flow-bridge 发布的**同一个宿主实例**与同一任务表；事件标 actor=external 与人工输入可区分；discuss/revise 会真实调用模型，先走与 IPC 同一工具调用预检；revision/waitRevision 由宿主核对，外部不能自造",
+      "external": [
+        "flowAgent.cooperate"
+      ]
     },
     "ipc.flowCommands.attach": {
       "label": "命令附着",

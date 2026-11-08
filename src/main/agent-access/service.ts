@@ -1879,6 +1879,7 @@ export class LocalAccessService {
       case 'flowAgent.inspect':
       case 'flowAgent.catalog':
       case 'flowAgent.collaboration':
+      case 'flowAgent.cooperate':
       case 'flowAgent.run':
       case 'flowAgent.pause':
       case 'flowAgent.stop':

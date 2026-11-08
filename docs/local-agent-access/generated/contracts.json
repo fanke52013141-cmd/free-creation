@@ -14987,6 +14987,546 @@
       ]
     },
     {
+      "operationId": "flowAgent.cooperate",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "向指定 Agent 任务写入一次协作事件（note/discuss/submit/revise），与 GUI 面板同一宿主实例与同一任务表；discuss/revise 可能真实调用模型，故先做模型工具调用预检；事件带 actor=external 标记，与人工输入可区分；不接受伪造 revision/waitRevision（由宿主核对）",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "nodeId": {
+            "type": "string",
+            "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+          },
+          "taskId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-zA-Z0-9_.:-]+$"
+          },
+          "waitRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "eventId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-zA-Z0-9_.:-]+$"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "note",
+              "discuss",
+              "submit",
+              "revise"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "accepted": {
+            "type": "boolean"
+          },
+          "selectedOutputs": {
+            "maxItems": 128,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "assetId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                },
+                "versionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                },
+                "sourceNodeId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                },
+                "sourcePortId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                }
+              },
+              "required": [
+                "assetId",
+                "versionId",
+                "sourceNodeId",
+                "sourcePortId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "selectedInputs": {
+            "maxItems": 128,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "assetId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                },
+                "versionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                },
+                "sourceNodeId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                },
+                "sourcePortId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                }
+              },
+              "required": [
+                "assetId",
+                "versionId",
+                "sourceNodeId",
+                "sourcePortId"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "projectId",
+          "nodeId",
+          "taskId",
+          "waitRevision",
+          "revision",
+          "eventId",
+          "action",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "flowAgent.cooperate"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "nodeId": {
+                "type": "string",
+                "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+              },
+              "graphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "task": {
+                "type": "object",
+                "properties": {
+                  "taskId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "ready",
+                      "running",
+                      "waiting",
+                      "blocked",
+                      "completed",
+                      "failed",
+                      "cancelled"
+                    ]
+                  },
+                  "waitKind": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "human",
+                          "reconcile"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "waitRevision": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "decisions": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "tools": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "code": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "prepared": {
+                    "type": "boolean"
+                  },
+                  "phase": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "recovery": {
+                    "type": "object",
+                    "properties": {
+                      "reasons": {
+                        "maxItems": 8,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 80
+                        }
+                      },
+                      "canRestore": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "reasons",
+                      "canRestore"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "reviewFeedback": {
+                    "type": "object",
+                    "properties": {
+                      "reviewNodeId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      },
+                      "reviewId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      },
+                      "feedback": {
+                        "type": "string",
+                        "maxLength": 16384
+                      },
+                      "round": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "state": {
+                        "type": "string",
+                        "maxLength": 40
+                      },
+                      "subjects": {
+                        "maxItems": 128,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "assetId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "versionId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "sourceNodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "sourcePortId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            }
+                          },
+                          "required": [
+                            "assetId",
+                            "versionId",
+                            "sourceNodeId",
+                            "sourcePortId"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "reviewNodeId",
+                      "reviewId",
+                      "feedback",
+                      "round",
+                      "state",
+                      "subjects"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "taskId",
+                  "state",
+                  "waitKind",
+                  "waitRevision",
+                  "decisions",
+                  "tools"
+                ],
+                "additionalProperties": false
+              },
+              "goal": {
+                "type": "string",
+                "maxLength": 32768
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "messages": {
+                "maxItems": 100,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "eventId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 160,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "maxLength": 40
+                    },
+                    "text": {
+                      "type": "string",
+                      "maxLength": 4096
+                    },
+                    "reply": {
+                      "type": "string",
+                      "maxLength": 4096
+                    }
+                  },
+                  "required": [
+                    "eventId",
+                    "kind",
+                    "text"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "inputs": {
+                "maxItems": 256,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "assetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 160,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "versionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 160,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "sourceNodeId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 160,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "sourcePortId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 160,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    }
+                  },
+                  "required": [
+                    "assetId",
+                    "versionId",
+                    "sourceNodeId",
+                    "sourcePortId"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "candidates": {
+                "maxItems": 128,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "assetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 160,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "versionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 160,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "sourceNodeId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 160,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "sourcePortId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 160,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    }
+                  },
+                  "required": [
+                    "assetId",
+                    "versionId",
+                    "sourceNodeId",
+                    "sourcePortId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "projectId",
+              "nodeId",
+              "graphVersion",
+              "task",
+              "goal",
+              "revision",
+              "messages",
+              "inputs",
+              "candidates"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
       "operationId": "flowAgent.run",
       "operationVersion": 1,
       "effect": "execute",

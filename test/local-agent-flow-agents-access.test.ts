@@ -717,9 +717,13 @@ describe('unopened Flow lifecycle actions', () => {
   it('keeps impersonation-prone actions unregistered while run/build/review go through the shared host port', async () => {
     // F8 第二批：run/pause/stop 已开放，但只经"启动时创建的那一个宿主实例"的窄接口执行
     // （见 flow-bridge）；F8 收官：build（inspect/propose/commit）与 review 也只经同一
-    // builder/review 宿主端口开放。冒充人工决定或内部运行发布的 cooperate/publication
-    // 仍不开放。
-    const notOpened = ['flowAgent.cooperate', 'flowAgent.publication']
+    // builder/review 宿主端口开放。
+    //
+    // F8 收官（第二轮）：cooperate 已开放，前提是**外部写入必须可与人工输入区分**——
+    // 实现里强制写入 actor=external 标记（见 local-agent-flow-cooperate-access.test.ts）。
+    // publication 仍不开放：它是主→渲染的推送通道，没有入站业务语义，做成可调动作等于
+    // 让 Agent 自己确认发布，与人工门禁冲突。
+    const notOpened = ['flowAgent.publication']
     for (const operationId of notOpened) expect(ACCESS_OPERATIONS).not.toHaveProperty(operationId)
     const capability = await call('capability.list')
     const listed = (capability.data as any).operations.map((item: any) => item.operationId)
@@ -728,6 +732,7 @@ describe('unopened Flow lifecycle actions', () => {
       'flowAgent.inspect',
       'flowAgent.catalog',
       'flowAgent.collaboration',
+      'flowAgent.cooperate',
       'flowAgent.run',
       'flowAgent.pause',
       'flowAgent.stop',

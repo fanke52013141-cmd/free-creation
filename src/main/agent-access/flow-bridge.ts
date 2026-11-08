@@ -41,6 +41,12 @@ export interface FlowAgentAccessPort {
   review(raw: unknown): Promise<unknown>
   /** 与 IPC review 分支同一模型/证据预检；失败发生在任何模型请求之前。 */
   assertReviewToolCalling(projectId: string, nodeId: string): Promise<void>
+  /**
+   * 与 IPC `flowAgents:cooperate` 同一入口（FlowAgentDesktopHost.cooperate）：
+   * discuss/revise/submit 等协作事件写在同一张任务表上；讨论与返工类动作在调用前
+   * 必须先过 assertAgentScopeToolCalling（付费路径的第一道闸门，由外部实现调用）。
+   */
+  cooperate(raw: unknown): Promise<unknown>
 }
 
 let published: FlowAgentAccessPort | null = null

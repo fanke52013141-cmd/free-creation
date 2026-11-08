@@ -440,7 +440,8 @@ export function registerFlowAgentsIpc(
       assertAgentScopeToolCalling(projectId, nodeId),
     build: (raw) => builder.handle(raw as BuildRequest),
     review: (raw) => review.run(raw as ReviewRequest),
-    assertReviewToolCalling: (projectId, nodeId) => assertReviewToolCalling(projectId, nodeId)
+    assertReviewToolCalling: (projectId, nodeId) => assertReviewToolCalling(projectId, nodeId),
+    cooperate: (raw) => host.cooperate(raw)
   })
   return host
 }

@@ -179,6 +179,28 @@ export const FLOW_AGENTS_OPERATIONS = {
       '读取指定 Agent 任务的协作记录（目标/消息/固定输入/候选成果）；只读，不接受外部代替人填写意见、选择或继续',
     input: project.extend({ nodeId }).strict()
   },
+  // F8 收官：协作事件写入（与 GUI 面板同一宿主实例与同一任务表）。
+  // 外部主体身份：提交里显式声明 actor=external，落在协作事件上，与人工输入可区分；
+  // discuss/revise 会真实调用模型，因此先走与 IPC 入口同一的工具调用预检。
+  'flowAgent.cooperate': {
+    effect: 'write',
+    description:
+      '向指定 Agent 任务写入一次协作事件（note/discuss/submit/revise），与 GUI 面板同一宿主实例与同一任务表；discuss/revise 可能真实调用模型，故先做模型工具调用预检；事件带 actor=external 标记，与人工输入可区分；不接受伪造 revision/waitRevision（由宿主核对）',
+    input: project
+      .extend({
+        nodeId,
+        taskId: flowId,
+        waitRevision: z.number().int().nonnegative(),
+        revision: z.number().int().nonnegative(),
+        eventId: flowId,
+        action: z.enum(['note', 'discuss', 'submit', 'revise']),
+        text: z.string().max(4096),
+        accepted: z.boolean().optional(),
+        selectedOutputs: z.array(flowAssetRef).max(128).optional(),
+        selectedInputs: z.array(flowAssetRef).max(128).optional()
+      })
+      .strict()
+  },
   // F8：运行控制。它们只经由"启动时创建的那一个宿主实例"执行（见 flow-bridge），
   // 因此不会出现两个权威；start/continue 的第一道闸门是模型工具调用预检，
   // 预检失败发生在任何模型请求之前（付费路径不会被偷偷触发）。
@@ -292,6 +314,30 @@ export const FLOW_AGENTS_OUTPUTS = {
     })
     .strict(),
   'flowAgent.collaboration': z
+    .object({
+      projectId: identifier,
+      nodeId,
+      graphVersion: z.number().int().nonnegative(),
+      task: flowTaskView,
+      goal: z.string().max(32768),
+      revision: z.number().int().nonnegative(),
+      messages: z
+        .array(
+          z
+            .object({
+              eventId: flowId,
+              kind: z.string().max(40),
+              text: z.string().max(4096),
+              reply: z.string().max(4096).optional()
+            })
+            .strict()
+        )
+        .max(100),
+      inputs: z.array(flowAssetRef).max(256),
+      candidates: z.array(flowAssetRef).max(128)
+    })
+    .strict(),
+  'flowAgent.cooperate': z
     .object({
       projectId: identifier,
       nodeId,

@@ -12,6 +12,8 @@
 import type Database from 'better-sqlite3'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 import type { FlowAgentView } from '../../shared/agent-flow/desktop-tasks'
+import { FlowAgentCollaborationSchema } from '../../shared/agent-flow/desktop-tasks'
+import { flowAgentAccessPort } from './flow-bridge'
 import type { AccessOperationId } from '../../shared/agent-access/registry'
 import { supportsSampledVideoReview } from '../../shared/agent-flow/video-review'
 import { supportsReviewAudioInput } from '../../shared/agent-flow/media-review'
@@ -26,7 +28,8 @@ import { DesktopAccessError } from './desktop'
 export const FLOW_AGENT_OPERATION_IDS: ReadonlySet<AccessOperationId> = new Set([
   'flowAgent.inspect',
   'flowAgent.catalog',
-  'flowAgent.collaboration'
+  'flowAgent.collaboration',
+  'flowAgent.cooperate'
 ] as AccessOperationId[])
 
 export interface FlowAgentOperationContext {
@@ -244,6 +247,67 @@ function collaborationFlowAgent(
   }
 }
 
+/**
+ * 写入一次协作事件（F8 收官）。与 GUI 面板同一宿主实例、同一任务表：
+ * - 事件显式标记 `actor: 'external'`，落在协作消息上，可与人工输入区分；
+ * - discuss/revise 会真实调用模型，先走与 IPC 入口同一的工具调用预检（付费路径第一道闸门）；
+ * - revision/waitRevision 由宿主核对，外部不能自造。
+ */
+async function cooperateFlowAgent(
+  input: Record<string, unknown>,
+  _context: FlowAgentOperationContext
+): Promise<unknown> {
+  const port = flowAgentAccessPort()
+  if (!port) refuse('FLOW_AGENTS_UNAVAILABLE', 'flow agent host is not running in this instance')
+  const projectId = input.projectId as string
+  const nodeId = input.nodeId as string
+  const file = projectFile(projectId)
+  // 用与 IPC 完全相同的 Schema 校验（含 refs 去重 superRefine）——外部不能绕过。
+  const parsed = FlowAgentCollaborationSchema.safeParse({
+    projectId,
+    nodeId,
+    taskId: input.taskId,
+    waitRevision: input.waitRevision,
+    revision: input.revision,
+    eventId: input.eventId,
+    action: input.action,
+    text: input.text,
+    ...(input.accepted !== undefined ? { accepted: input.accepted } : {}),
+    ...(input.selectedOutputs !== undefined ? { selectedOutputs: input.selectedOutputs } : {}),
+    ...(input.selectedInputs !== undefined ? { selectedInputs: input.selectedInputs } : {})
+  })
+  if (!parsed.success)
+    refuse('AGENT_INPUT_INVALID', parsed.error.issues[0]?.path.join('.') ?? 'collaboration')
+  const collaboration = parsed.data
+  if (collaboration.action === 'discuss' || collaboration.action === 'revise')
+    await port.assertAgentScopeToolCalling(collaboration.projectId, collaboration.nodeId)
+  const view = (await port.cooperate({ ...collaboration, actor: 'external' })) as {
+    task: Parameters<typeof taskDto>[0]
+    goal: string
+    revision: number
+    messages: Array<{ eventId: string; kind: string; text: string; reply?: string }>
+    inputs: unknown[]
+    candidates: unknown[]
+  }
+  if (!view || !view.task) refuse('FLOW_AGENT_REPLY_INVALID', 'host reply missing task view')
+  return {
+    projectId,
+    nodeId,
+    graphVersion: file.meta.graphVersion,
+    task: taskDto(view.task),
+    goal: view.goal,
+    revision: view.revision,
+    messages: view.messages.map((message) => ({
+      eventId: message.eventId,
+      kind: message.kind,
+      text: message.text,
+      ...(message.reply !== undefined ? { reply: message.reply } : {})
+    })),
+    inputs: view.inputs,
+    candidates: view.candidates
+  }
+}
+
 /** dispatch 的分组委托入口：只分发本族操作，其余明确拒绝（防误接）。 */
 export async function runFlowAgentOperation(
   operationId: AccessOperationId,
@@ -258,6 +322,8 @@ export async function runFlowAgentOperation(
         return catalogFlowAgent(input, context)
       case 'flowAgent.collaboration':
         return collaborationFlowAgent(input, context)
+      case 'flowAgent.cooperate':
+        return cooperateFlowAgent(input, context)
       default:
         refuse('UNSUPPORTED_OPERATION', 'flow-agents-dispatch')
     }
