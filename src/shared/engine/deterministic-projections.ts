@@ -4,6 +4,8 @@ import { projectAgentOutputs } from '../agent-flow/agent-outputs'
 import { projectReviewOutputs } from '../agent-flow/review'
 import { readStoredNodeRunStatus } from './run-status'
 import { validateNodeSchema } from '../node-schemas'
+import { readWebsiteLink } from '../website-link'
+import { outputFieldPortId, outputPortId, parseCodeConfigs } from './executors/code'
 
 // These exact functions are registered by the desktop NodeTypeSpecs.
 export const projectTextOutputs = (shape: NodeShape): RawNodeOutputs =>
@@ -44,6 +46,9 @@ export const DETERMINISTIC_PROJECTIONS = {
   'sound-adjust': projectSoundAdjustOutputs,
   'video-depth': projectVideoAiOutputsShared,
   'video-clay': projectVideoAiOutputsShared,
+  // F6：网址节点是纯文档数据（website.link@1），投影与 GUI 同一 readWebsiteLink。
+  website: projectWebsiteOutputsShared,
+  code: projectCodeOutputsShared,
   'ai-review': projectReviewOutputs,
   agent: projectAgentOutputs,
   text: projectTextOutputs,
@@ -111,6 +116,42 @@ export function projectImageSplitOutputs(shape: NodeShape): RawNodeOutputs {
 
 export function projectImageEditOutputs(shape: NodeShape): RawNodeOutputs {
   return latestResultMediaOutput(shape, 'image', 'out-image')
+}
+
+/**
+ * 代码节点：具名输出字段映射端口（fields 模式）或单输出端口（single 历史）。
+ * 与 GUI projectCodeOutputs 同语义，helpers 全部来自共享 code 执行器模块。
+ */
+export function projectCodeOutputsShared(shape: NodeShape): RawNodeOutputs {
+  const raw = typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
+  if (!raw) return {}
+  const config = parseCodeConfigs(shape.props.config ?? '')
+  try {
+    const result = JSON.parse(raw) as Record<string, unknown>
+    if (result.kind === 'code-outputs' && result.values && typeof result.values === 'object') {
+      const values = result.values as Record<string, unknown>
+      const outputs: RawNodeOutputs = {}
+      for (const field of config.outputs) {
+        const portId = outputFieldPortId(field)
+        const value = values[portId]
+        if (value === undefined) continue
+        const parsed = parseStoredNodeValue(JSON.stringify(value))
+        if (parsed) outputs[portId] = parsed
+      }
+      return outputs
+    }
+  } catch {
+    // 单输出历史结果继续由统一 NodeValue 解析器读取。
+  }
+  const single = parseStoredNodeValue(raw)
+  if (single) return { [outputPortId(config.outputName)]: single }
+  return {}
+}
+
+/** 网址节点：config 里的名称+链接，经共享 readWebsiteLink 校验后投影。 */
+export function projectWebsiteOutputsShared(shape: NodeShape): RawNodeOutputs {
+  const link = readWebsiteLink(shape.props.config ?? '')
+  return link ? { 'out-website': { kind: 'json', data: link } } : {}
 }
 
 /** 抽帧：最近一次成功运行产出的帧图片（与 GUI projectVideoFrameOutputs 同语义）。 */

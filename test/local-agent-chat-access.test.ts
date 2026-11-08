@@ -257,3 +257,81 @@ describe('local Agent chat access', () => {
     expect(ghost.error?.code).toBe('MEDIA_NOT_FOUND')
   })
 })
+
+describe('F6 output.get coverage: website/code', () => {
+  it('projects website links from config via the shared validator', async () => {
+    const p = createProject('网址')
+    const websiteNode: CanvasNode = {
+      ...chatNode('w', ''),
+      id: 'shape:w',
+      type: 'website',
+      contractVersion: 1,
+      params: { config: JSON.stringify({ name: '示例站点', url: 'https://example.com/page' }) },
+      content: { kind: 'empty' }
+    }
+    saveProject({ id: p.id, graph: { nodes: [websiteNode], edges: [], groups: [] } })!
+    const output = await call('output.get', { projectId: p.id, nodeId: 'shape:w' })
+    expect(output.status).toBe('completed')
+    expect(output.data).toMatchObject({ nodeType: 'website', outputSource: 'document' })
+    expect((output.data as any).outputs[0]).toMatchObject({
+      portId: 'out-website',
+      kind: 'json',
+      json: { name: '示例站点', url: 'https://example.com/page' }
+    })
+  })
+
+  it('projects code node named-field outputs from the stored run result', async () => {
+    const p = createProject('代码')
+    const config = JSON.stringify({
+      source: 'return { greeting: input }',
+      inputName: 'input',
+      inputType: 'string',
+      outputName: 'result',
+      outputType: 'string',
+      params: [],
+      outputs: [{ name: 'greeting', type: 'string' }],
+      outputMode: 'fields'
+    })
+    const codeNode: CanvasNode = {
+      ...chatNode('c', ''),
+      id: 'shape:c',
+      type: 'code',
+      contractVersion: 3,
+      params: { config },
+      content: { kind: 'empty' }
+    }
+    saveProject({
+      id: p.id,
+      graph: { nodes: [codeNode], edges: [], groups: [] },
+      tldrawSnapshot: {
+        store: {
+          'shape:c': {
+            type: 'node-card',
+            props: { nodeType: 'code', config },
+            meta: {
+              nodeResult: JSON.stringify({
+                kind: 'code-outputs',
+                values: { 'out-greeting': { kind: 'text', text: '你好，世界' } }
+              })
+            }
+          }
+        }
+      }
+    })!
+    const output = await call('output.get', { projectId: p.id, nodeId: 'shape:c' })
+    expect(output.status).toBe('completed')
+    expect(output.data).toMatchObject({ nodeType: 'code', outputSource: 'run' })
+    expect((output.data as any).outputs).toEqual([
+      { portId: 'out-greeting', kind: 'text', text: '你好，世界' }
+    ])
+  })
+
+  it('still refuses structured/storyboard/iterate honestly until their projections land', async () => {
+    const p = createProject('未登记')
+    const structuredNode: CanvasNode = { ...chatNode('s', ''), id: 'shape:s', type: 'structured', contractVersion: 1 }
+    saveProject({ id: p.id, graph: { nodes: [structuredNode], edges: [], groups: [] } })!
+    const refused = await call('output.get', { projectId: p.id, nodeId: 'shape:s' })
+    expect(refused.error?.code).toBe('UNSUPPORTED_CONTRACT')
+    expect(refused.error?.detail).toContain('structured')
+  })
+})

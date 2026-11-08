@@ -134,3 +134,28 @@ Registry 37 项操作。已修复真实缺陷：删除唯一会话时 sessionize
 1. 对话**发送的模型回复**需要已验证模型连接；本地无供应商凭据时执行如实失败（依赖门禁与 GUI 一致），付费验收待预算授权。
 2. 附件图片在宿主端写入 mediaPath/mime 的注入尚未实测（载荷通道已实现，随桌面验收）。
 3. 代码/循环/网址节点、导演台编辑发布在 F6 后续批次。
+
+---
+
+# F6 第二批交付：网址/代码节点 output.get 覆盖
+
+日期：2026-11-08。基线：F6 第一批（`99786b1`）。
+
+## 1. 实际完成的业务动作
+
+| 业务动作 | GUI | CLI | MCP | 公共实现 |
+| --- | --- | --- | --- | --- |
+| 网址节点数据读取 | ✅ | ✅ output.get | ✅ output_get | 共享 readWebsiteLink（website.link@1 校验），document 真值 |
+| 代码节点具名输出读取 | ✅ | ✅ 同左 | ✅ 同左 | fields 模式按输出字段映射端口（out-<字段>），single 历史模式回退；helpers 全部来自共享 code 执行器模块 |
+| 代码/循环节点执行 | ✅ | ✅ node.execute | ✅ 同上 | 同一 worker 执行器（代码隔离/超时不变）；循环经 subgraph 模式 |
+
+structured/storyboard/iterate 的投影（schema 绑定、分镜汇总、迭代结果集合）尚未迁入共享层——output.get 对它们如实返回 UNSUPPORTED_CONTRACT，不伪造。其编辑（配置/正文）经 graph.patch 已可用。
+
+## 2. 验证证据
+
+- chat-access 套件扩至 7 项（新增 website 投影、code 具名端口、structured 如实拒绝）；全部接入测试 78 项通过。
+- verify:agent-access（37 操作）、audit（41 项 external）通过。
+
+## 3. 下一批次
+
+F6 第三批：导演台编辑/发布动作 + structured/storyboard/iterate 投影迁入 + chat.patch 真实画布桌面验收。

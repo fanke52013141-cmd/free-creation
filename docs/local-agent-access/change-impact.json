@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "F6 chat package: added chat.read/chat.messages operations (additive reads of conversation directory and message bodies; assistant replies are real model output, never forgeable) and chat.patch as a graph.patch op kind targeting chat nodes only (session create/select/rename/delete, user message append/edit/truncate via the same shared chat-data functions as the GUI panel). Attachments resolve media ownership in main precheck; ops carry mediaId only. Attestation covers only these reviewed files; other pre-existing uncommitted workspace modifications are NOT re-attested.",
+  "reason": "F6 second batch: website (document source, shared readWebsiteLink) and code (named-field ports via shared code executor helpers) added to shared deterministic projections and output sources; output.get coverage widens additively. structured/storyboard/iterate still refuse honestly pending their projections. No external operation schema changes. Attestation covers only these reviewed files; other pre-existing uncommitted workspace modifications are NOT re-attested.",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "97d2ffb5e2403b33a2d3ac8ab3eee8272f78cf948e4c73ab53cc662bd73a5a6f",
@@ -170,13 +170,13 @@
     "src/shared/agent-access/desktop.ts": "cbc0fdd06970b068adf494116b5ffffb2a3119e3109bf7b1054d1cc125754ada",
     "src/shared/agent-access/graph-ops.ts": "6478b8c1bd85896597a970c1927a93ef68a0ed8bbc0813a357cab253570a5a02",
     "src/shared/agent-access/registry.ts": "920ed9b9d2e18b26ce9f897b508cb8ceb498172a98d0c2792f7b93c72950b685",
-    "src/shared/agent-access/run-ops.ts": "c0f2efe3a5dd496f533e89048b1bc95ef2ea8f0cf3289dd298182429d145301d",
+    "src/shared/agent-access/run-ops.ts": "f0c8e5b33234359b4fa9184f586d70d9ed3a8dcf90ea7398886899adc744d0a5",
     "src/shared/contracts/index.ts": "fdf6c3363f251253d6656a86e88b78f489d4f350af9ea21250b4304071a18d51",
     "src/shared/engine/chat-data.ts": "c3d55786d6acf73e7efd9fd3fda9adec9e49983828648289e93e945b401a8ca8",
     "src/shared/engine/chat-image.ts": "94ef8a94ca862880dba62d09d640d5fa122975a29250b9f492d45d6f0cab962a",
     "src/shared/engine/chat-memory.ts": "27f1768842811a05b60149024cbee09f0b7169941fc0ec798eeca2b90ad4f68c",
     "src/shared/engine/code-runtime.ts": "3781c22cc9e6d6616a5bb00f6f3c46fa9f87134d80a9ad32d1d2306ff7311165",
-    "src/shared/engine/deterministic-projections.ts": "dfe38da6fef98b501bc779931e0320b17f04ce566accf2bd33ebe470e5378bbc",
+    "src/shared/engine/deterministic-projections.ts": "c44655ae6482e52503cc752df2fec1161d28b7a1807419982264dfccbd2f7f90",
     "src/shared/engine/executor-diagnostics.ts": "1c43169def89b98bf0411e3411c24a107b25bab56c2d947bf2dd18032d95b9f6",
     "src/shared/engine/executor-types.ts": "94fa516cff51662feb17671a1ef4eb3783c48248bc356b2632acb2c5e60e9aa3",
     "src/shared/engine/executors/agentFlow.ts": "94e6b241625a732512361a73970b7a222873d44d06a7c430aaa417dfa497498b",

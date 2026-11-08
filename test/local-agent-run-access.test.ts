@@ -284,11 +284,12 @@ describe('local Agent run access', () => {
 
   it('declares unsupported output projections instead of faking values', async () => {
     const p = createProject('未支持')
-    const websiteNode: CanvasNode = { ...textNode('w', ''), type: 'website', contractVersion: 1 }
-    saveProject({ id: p.id, graph: { nodes: [websiteNode], edges: [], groups: [] } })!
-    const unsupported = await call('output.get', { projectId: p.id, nodeId: 'shape:w' })
+    // structured 的投影（schema 绑定 + 运行闸门）尚未迁入共享层：如实拒绝而非伪造。
+    const structuredNode: CanvasNode = { ...textNode('s', ''), type: 'structured', contractVersion: 1 }
+    saveProject({ id: p.id, graph: { nodes: [structuredNode], edges: [], groups: [] } })!
+    const unsupported = await call('output.get', { projectId: p.id, nodeId: 'shape:s' })
     expect(unsupported.status).toBe('failed')
     expect(unsupported.error?.code).toBe('UNSUPPORTED_CONTRACT')
-    expect(unsupported.error?.detail).toContain('website')
+    expect(unsupported.error?.detail).toContain('structured')
   })
 })

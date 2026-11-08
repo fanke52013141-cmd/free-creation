@@ -74,6 +74,8 @@ export const DETERMINISTIC_OUTPUT_SOURCES: Record<string, 'document' | 'run'> = 
   'sound-adjust': 'run',
   'video-depth': 'run',
   'video-clay': 'run',
+  website: 'document',
+  code: 'run',
   audio: 'run',
   speech: 'run',
   tts: 'run',

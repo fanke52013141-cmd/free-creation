@@ -8,7 +8,7 @@
   "totals": {
     "actions": 206,
     "byPhase": {
-      "external": 40,
+      "external": 41,
       "F8": 25,
       "F9": 44,
       "F7": 41,
@@ -16,7 +16,7 @@
       "excluded": 18,
       "F4": 7,
       "F5": 19,
-      "F6": 5,
+      "F6": 4,
       "F3": 2
     }
   },
@@ -1375,7 +1375,11 @@
     "canvas.website.open": {
       "label": "打开网址",
       "gui": "网址节点点击",
-      "phase": "F6"
+      "phase": "external",
+      "external": [
+        "output.get"
+      ],
+      "note": "F6：网址数据（website.link@1）经 output.get 可读；系统浏览器打开为桌面呈现（excluded），链接数据本身是文档真值"
     },
     "canvas.nodeLibrary.save-node": {
       "label": "保存节点到节点库",
