@@ -110,8 +110,31 @@ function directory0() {
 function makeBootstrap() {
   const bootstrap = join(milestoneRoot, 'bootstrap.cjs')
   const contents = `
-const { app, dialog } = require('electron');
+const { app, dialog, powerMonitor } = require('electron');
 const fs = require('node:fs');
+// 生命周期取证：桌面验收失败时区分“应用被外部关闭/系统恢复/渲染进程崩溃”，
+// 不改变任何业务行为，只把事实追加到 milestone 根目录的 lifecycle.log。
+const lifecycle = (name, extra) => {
+  try {
+    fs.appendFileSync(process.env.CS_MILESTONE_LIFECYCLE, JSON.stringify({ at: Date.now(), pid: process.pid, name, ...(extra || {}) }) + '\\n');
+  } catch {}
+};
+app.on('before-quit', () => lifecycle('before-quit'));
+app.on('will-quit', () => lifecycle('will-quit'));
+app.on('window-all-closed', () => lifecycle('window-all-closed'));
+app.on('browser-window-created', (_event, window) => {
+  lifecycle('window-created', { id: window.id });
+  window.on('close', () => lifecycle('window-close', { id: window.id }));
+  window.on('closed', () => lifecycle('window-closed', { id: window.id }));
+});
+app.on('render-process-gone', (_event, contents, details) => lifecycle('render-process-gone', { reason: details && details.reason, exitCode: details && details.exitCode }));
+app.on('child-process-gone', (_event, details) => lifecycle('child-process-gone', { type: details && details.type, reason: details && details.reason }));
+app.whenReady().then(() => {
+  for (const name of ['suspend', 'resume', 'lock-screen', 'unlock-screen', 'shutdown']) {
+    try { powerMonitor.on(name, () => lifecycle('power-' + name)) } catch {}
+  }
+  lifecycle('ready');
+});
 const cfgPath = process.env.CS_LICENSE_QA_CFG;
 dialog.showSaveDialog = async (_win, options) => {
   const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
@@ -139,7 +162,8 @@ async function launchLicensedApp(dataDirectory) {
   let env = {
     ...process.env,
     CANVAS_DATA_DIR: dataDirectory,
-    CS_LICENSE_QA_CFG: cfgPath
+    CS_LICENSE_QA_CFG: cfgPath,
+    CS_MILESTONE_LIFECYCLE: join(milestoneRoot, 'lifecycle.log')
   }
   delete env.ELECTRON_RUN_AS_NODE
   delete env.ELECTRON_RENDERER_URL
@@ -1458,6 +1482,1125 @@ async function launchLicensedApp(dataDirectory) {
       )
     }
 
+    // ── 6.10 音频族零成本桌面验收：speech / tts / voice-design ──
+    // 用户明确要求验收阶段不做真实音色克隆/音色设计产物（会触发付费请求）。
+    // 本段只做：外部 graph.patch 建节点 → GUI 卡片真实可见（不打开编辑器、不点合成/试听/生成）
+    // → node.execute 的真实门禁（缺参考音频/缺已验证模型）→ 无媒体副作用。
+    const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
+    {
+      const AUDIO_SPECS = [
+        {
+          ref: 'f7-speech',
+          nodeType: 'speech',
+          title: 'F7 语音合成验收',
+          x: 120,
+          y: 740,
+          text: '这是一段用于验收的朗读文本。',
+          config: { backend: 'minimax' },
+          expectedReason: '功能 speech.synthesize 尚未绑定已验证语音模型'
+        },
+        {
+          ref: 'f7-tts',
+          nodeType: 'tts',
+          title: 'F7 语音克隆验收',
+          x: 560,
+          y: 740,
+          config: { backend: 'minimax', modelId: 'speech-2.8-turbo' },
+          expectedReason: '缺少参考语音'
+        },
+        {
+          ref: 'f7-voice-design',
+          nodeType: 'voice-design',
+          title: 'F7 音色设计验收',
+          x: 1000,
+          y: 740,
+          text: '清亮、略带磁性的青年女声，语速偏慢，语气温柔。',
+          config: { previewText: '你好，很高兴认识你。' },
+          expectedReason: '功能 voice.design 尚未绑定已验证音色设计模型'
+        }
+      ]
+      const audioPatch = await patchWithFreshVersion(
+        directory,
+        created.A,
+        () =>
+          AUDIO_SPECS.map((spec) => ({
+            action: 'node.create',
+            ref: spec.ref,
+            nodeType: spec.nodeType,
+            x: spec.x,
+            y: spec.y,
+            title: spec.title,
+            ...(spec.text !== undefined ? { text: spec.text } : {}),
+            ...(spec.config !== undefined ? { config: spec.config } : {})
+          })),
+        'F7_AUDIO_NODE_CREATE_FAILED'
+      )
+      check(
+        audioPatch.response.data.applied.nodeCreated === AUDIO_SPECS.length,
+        `F7_AUDIO_NODE_COUNTS:${JSON.stringify(audioPatch.response.data.applied)}`
+      )
+      const audioNodes = AUDIO_SPECS.map((spec) => {
+        const mapped = audioPatch.response.data.created.find((item) => item.ref === spec.ref)
+        check(Boolean(mapped), `F7_AUDIO_NODE_MAPPING:${spec.ref}`)
+        return { ...spec, nodeId: mapped.nodeId }
+      })
+      // 数据级读回：类型/标题/正文/配置必须是真实 JSON 配置（不是空壳）。
+      for (const spec of audioNodes) {
+        const read = await runCli(directory, ['node', 'get'], {
+          input: { projectId: created.A, nodeId: spec.nodeId }
+        })
+        check(
+          read.response.status === 'completed',
+          `F7_AUDIO_NODE_READ_FAILED:${spec.ref}:${JSON.stringify(read.response.error)}`
+        )
+        const audioNode = read.response.data.node
+        check(audioNode.type === spec.nodeType, `F7_AUDIO_NODE_TYPE:${spec.ref}:${audioNode.type}`)
+        check(audioNode.title === spec.title, `F7_AUDIO_NODE_TITLE:${spec.ref}:${audioNode.title}`)
+        check(
+          Boolean(audioNode.config) &&
+            typeof audioNode.config === 'object' &&
+            !Array.isArray(audioNode.config),
+          `F7_AUDIO_NODE_CONFIG_NOT_JSON:${spec.ref}:${JSON.stringify(audioNode.config)}`
+        )
+        if (spec.text !== undefined)
+          check(audioNode.text === spec.text, `F7_AUDIO_NODE_TEXT:${spec.ref}`)
+      }
+      // GUI 可见性：三个节点卡片真实出现在画布 DOM 中（按标题定位 node-card-wrap）。
+      // 全程不打开编辑器、不点“合成/试听/生成”，因此不会产生任何付费请求。
+      await page.locator('.node-palette').waitFor({ timeout: 30000 }).catch(() => {})
+      for (const spec of audioNodes) {
+        await page
+          .locator('.node-card-wrap')
+          .filter({ hasText: spec.title })
+          .first()
+          .waitFor({ timeout: 20000 })
+      }
+
+      const mediaTotal = async (projectId) => {
+        const listed = await runCli(directory, ['media', 'list'], { input: { projectId, limit: 200 } })
+        check(listed.response.status === 'completed', 'F7_AUDIO_MEDIA_LIST_FAILED')
+        return listed.response.data.total
+      }
+      const mediaBefore = await mediaTotal(created.A)
+      const audioResults = {}
+      for (const spec of audioNodes) {
+        const executed = await runCli(directory, ['node', 'execute'], {
+          input: {
+            projectId: created.A,
+            expectedGraphVersion: await stableProjectVersion(directory, created.A),
+            nodeIds: [spec.nodeId],
+            mode: 'single',
+            confirmPaidRerun: false
+          },
+          idempotencyKey: key()
+        })
+        check(
+          executed.response.status === 'completed' && executed.response.data.accepted === true,
+          `F7_AUDIO_EXECUTE_REJECTED:${spec.ref}:${JSON.stringify(executed.response.error)}`
+        )
+        const taskId = executed.response.data.taskId
+        const waited = await runCli(
+          directory,
+          ['run', 'wait'],
+          { input: { projectId: created.A, taskId, timeoutMs: 60000 } },
+          90000
+        )
+        const state = waited.response.data.state
+        const reason = String(waited.response.data.error ?? '')
+        check(
+          state === 'failed' || state === 'skipped',
+          `F7_AUDIO_GATE_STATE:${spec.ref}:${state}:${reason}`
+        )
+        check(reason.includes(spec.expectedReason), `F7_AUDIO_GATE_REASON:${spec.ref}:${reason}`)
+        const read = await runCli(directory, ['node', 'get'], {
+          input: { projectId: created.A, nodeId: spec.nodeId }
+        })
+        check(read.response.status === 'completed', `F7_AUDIO_EXEC_READ_FAILED:${spec.ref}`)
+        check(
+          read.response.data.node.exec !== 'success',
+          `F7_AUDIO_EXEC_MARKED_SUCCESS:${spec.ref}:${read.response.data.node.exec}`
+        )
+        // output.get 不得给出伪造的媒体输出：无产物时为空 / 无投影契约时明确拒绝。
+        const output = await runCli(directory, ['output', 'get'], {
+          input: { projectId: created.A, nodeId: spec.nodeId }
+        })
+        let outputShape = 'empty'
+        if (output.response.status === 'completed') {
+          const outputs = output.response.data.outputs ?? []
+          check(
+            outputs.every((entry) => !['image', 'audio', 'video'].includes(entry.kind)),
+            `F7_AUDIO_OUTPUT_FABRICATED:${spec.ref}:${JSON.stringify(outputs)}`
+          )
+          outputShape = outputs.length
+            ? JSON.stringify(outputs.map((entry) => entry.portId))
+            : 'empty'
+        } else {
+          check(
+            output.response.error?.code === 'UNSUPPORTED_CONTRACT',
+            `F7_AUDIO_OUTPUT_UNEXPECTED:${spec.ref}:${JSON.stringify(output.response.error)}`
+          )
+          outputShape = `unsupported:${output.response.error?.code}`
+        }
+        audioResults[spec.ref] = {
+          nodeId: spec.nodeId,
+          nodeType: spec.nodeType,
+          taskId,
+          state,
+          reason,
+          exec: read.response.data.node.exec,
+          output: outputShape
+        }
+      }
+      const mediaAfter = await mediaTotal(created.A)
+      check(mediaAfter === mediaBefore, `F7_AUDIO_MEDIA_SIDE_EFFECT:${mediaBefore}->${mediaAfter}`)
+      receipt.audioFamily = {
+        nodes: audioResults,
+        media: { before: mediaBefore, after: mediaAfter },
+        paidRequests:
+          'none: executors gate on missing reference audio / unbound verified voice models before any gateway call'
+      }
+      receipt.checks.push(
+        'F7 audio: external graph.patch creates speech/tts/voice-design nodes; node.get reads back their types, titles and JSON configs and all three render as GUI node cards without opening an editor'
+      )
+      receipt.checks.push(
+        'F7 audio: tts without reference audio is honestly gated with 缺少参考语音 and no success state, so no voice-clone request is sent'
+      )
+      receipt.checks.push(
+        'F7 audio: speech and voice-design without a verified model are gated with the executor reasons 功能 speech.synthesize 尚未绑定已验证语音模型 / 功能 voice.design 尚未绑定已验证音色设计模型'
+      )
+      receipt.checks.push(
+        'F7 audio: zero paid side effects — media.list count is unchanged, output.get exposes no fabricated image/audio/video output and node exec is not success'
+      )
+    }
+
+    // ── 6.11 F7 资源库物化：CLI 建资源 → 物化到当前画布 → 受控媒体落盘 → 重启存活 ──
+    // 当前活动画布是 A。物化要求目标画布已打开（ACTIVE_PROJECT_REQUIRED），链路与 GUI
+    // 同一份实现：复制资源 blob 为项目受控媒体 → graph-patch 权威宿主应用 → 正式保存。
+    {
+      const fixture = join(appRoot, 'qa-fixtures/media/images/I-A.png')
+      const fixtureBytes = await readFile(fixture)
+      const createdResource = await runCli(directory, ['library', 'resource', 'create'], {
+        input: {
+          title: 'F7 资源库物化验收图',
+          formPreset: 'image',
+          description: '桌面验收：本地 png → 资源库 → 物化到画布',
+          components: [{ role: '主图', valueType: 'image', filePath: fixture }]
+        },
+        idempotencyKey: key()
+      })
+      check(
+        createdResource.response.status === 'completed',
+        `F7_LIBRARY_CREATE_FAILED:${JSON.stringify(createdResource.response.error)}`
+      )
+      const resource = createdResource.response.data
+      const resourceComponent = resource.components.find((component) => component.valueType === 'image')
+      check(
+        Boolean(resourceComponent) && resourceComponent.hasBlob === true,
+        `F7_LIBRARY_COMPONENT_MISSING_BLOB:${JSON.stringify(resource.components)}`
+      )
+      check(
+        resourceComponent.sizeBytes === fixtureBytes.byteLength,
+        `F7_LIBRARY_BLOB_SIZE:${resourceComponent.sizeBytes}!=${fixtureBytes.byteLength}`
+      )
+
+      // 物化：expectedGraphVersion 取权威稳定读数；GUI 防抖保存可能在读数与准入之间
+      // 推进版本（预检冲突无副作用，重读后重试）。
+      let materialized = null
+      let lastMaterializeError = null
+      for (let attempt = 0; attempt < 6 && !materialized; attempt++) {
+        if (attempt > 0) await sleep(1200)
+        const attemptResult = await runCli(directory, ['library', 'resource', 'materialize'], {
+          input: {
+            projectId: created.A,
+            resourceId: resource.resourceId,
+            revisionId: resource.selectedRevisionId,
+            componentIds: [resourceComponent.componentId],
+            expectedGraphVersion: await stableProjectVersion(directory, created.A),
+            x: 120,
+            y: 5100
+          },
+          idempotencyKey: key()
+        })
+        if (attemptResult.response.status === 'completed') materialized = attemptResult
+        else {
+          lastMaterializeError = attemptResult.response.error
+          if (lastMaterializeError?.code !== 'REVISION_CONFLICT')
+            throw new Error(`F7_LIBRARY_MATERIALIZE_FAILED:${JSON.stringify(lastMaterializeError)}`)
+        }
+      }
+      check(
+        Boolean(materialized),
+        `F7_LIBRARY_MATERIALIZE_FAILED:${JSON.stringify(lastMaterializeError)}`
+      )
+      const materializeData = materialized.response.data
+      check(materializeData.saved === true, 'F7_LIBRARY_MATERIALIZE_NOT_SAVED')
+      check(
+        materializeData.assetCount === 1 && materializeData.nodes.length === 1,
+        `F7_LIBRARY_MATERIALIZE_ASSETS:${materializeData.assetCount}/${materializeData.nodes.length}`
+      )
+      const materializedNode = materializeData.nodes[0]
+      check(
+        materializedNode.nodeType === 'image',
+        `F7_LIBRARY_MATERIALIZE_NODE_TYPE:${materializedNode.nodeType}`
+      )
+      check(Boolean(materializedNode.mediaId), 'F7_LIBRARY_MATERIALIZE_NO_MEDIA')
+
+      const graphAfterMaterialize = await runCli(directory, [
+        'graph',
+        'get'
+      ], { input: { projectId: created.A, limit: 200 } })
+      check(
+        graphAfterMaterialize.response.data.nodes.some(
+          (entry) => entry.nodeId === materializedNode.nodeId
+        ),
+        'F7_LIBRARY_MATERIALIZED_NODE_NOT_IN_GRAPH'
+      )
+      const nodeRead = await runCli(directory, ['node', 'get'], {
+        input: { projectId: created.A, nodeId: materializedNode.nodeId }
+      })
+      check(
+        nodeRead.response.status === 'completed',
+        `F7_LIBRARY_NODE_READ_FAILED:${JSON.stringify(nodeRead.response.error)}`
+      )
+      const materializedRead = nodeRead.response.data.node
+      check(
+        materializedRead.mediaId === materializedNode.mediaId,
+        `F7_LIBRARY_NODE_MEDIA_MISMATCH:${materializedRead.mediaId}`
+      )
+      const mediaPath = String(materializedRead.mediaPath ?? '')
+      check(
+        mediaPath.startsWith(`projects/${created.A}/media/`),
+        `F7_LIBRARY_MEDIA_NOT_PROJECT_CONTROLLED:${mediaPath}`
+      )
+      check(!mediaPath.includes('library/'), `F7_LIBRARY_MEDIA_IS_LIBRARY_BLOB:${mediaPath}`)
+      const materializedAbs = join(directory, mediaPath.replace(/\//g, sep))
+      const diskBytes = await readFile(materializedAbs).catch(() => null)
+      check(Boolean(diskBytes) && diskBytes.byteLength > 0, 'F7_LIBRARY_MEDIA_FILE_MISSING')
+      check(
+        diskBytes.byteLength === fixtureBytes.byteLength,
+        `F7_LIBRARY_MEDIA_BYTES:${diskBytes.byteLength}!=${fixtureBytes.byteLength}`
+      )
+      check(
+        Buffer.compare(Buffer.from(diskBytes), fixtureBytes) === 0,
+        'F7_LIBRARY_MEDIA_BYTES_DIFFER'
+      )
+      const mediaIndex = await runCli(directory, ['media', 'list'], {
+        input: { projectId: created.A, limit: 200 }
+      })
+      check(
+        mediaIndex.response.data.items.some((item) => item.mediaId === materializedNode.mediaId),
+        'F7_LIBRARY_MEDIA_NOT_INDEXED'
+      )
+      const detailAfterMaterialize = await runCli(directory, ['library', 'resource', 'get'], {
+        input: { resourceId: resource.resourceId }
+      })
+      const resourceUsage = (detailAfterMaterialize.response.data.usages ?? []).find(
+        (entry) => entry.projectId === created.A
+      )
+      check(
+        Boolean(resourceUsage) && resourceUsage.materializedNodeCount >= 1,
+        'F7_LIBRARY_USAGE_NOT_RECORDED'
+      )
+
+      // 重启应用：物化节点与受控媒体必须仍在（项目正式持久化 + 媒体落盘）。
+      await app.close()
+      app = undefined
+      ;({ app, page } = await launchLicensedApp(directory))
+      const reopened = await runCli(directory, ['project', 'open'], {
+        input: { projectId: created.A },
+        idempotencyKey: key()
+      })
+      check(
+        reopened.response.status === 'completed',
+        `F7_LIBRARY_REOPEN_FAILED:${JSON.stringify(reopened.response.error)}`
+      )
+      await page.locator('.node-palette').waitFor({ timeout: 30000 })
+      const graphAfterRestart = await runCli(directory, ['graph', 'get'], {
+        input: { projectId: created.A, limit: 200 }
+      })
+      check(
+        graphAfterRestart.response.data.nodes.some(
+          (entry) => entry.nodeId === materializedNode.nodeId
+        ),
+        'F7_LIBRARY_NODE_LOST_AFTER_RESTART'
+      )
+      const nodeAfterRestart = await runCli(directory, ['node', 'get'], {
+        input: { projectId: created.A, nodeId: materializedNode.nodeId }
+      })
+      check(
+        nodeAfterRestart.response.status === 'completed' &&
+          nodeAfterRestart.response.data.node.mediaId === materializedNode.mediaId,
+        'F7_LIBRARY_MEDIA_LOST_AFTER_RESTART'
+      )
+      check(
+        existsSync(
+          join(directory, String(nodeAfterRestart.response.data.node.mediaPath).replace(/\//g, sep))
+        ),
+        'F7_LIBRARY_MEDIA_FILE_LOST_AFTER_RESTART'
+      )
+
+      receipt.library = {
+        resourceId: resource.resourceId,
+        revisionId: resource.selectedRevisionId,
+        componentId: resourceComponent.componentId,
+        blob: { hasBlob: resourceComponent.hasBlob, sizeBytes: resourceComponent.sizeBytes },
+        materialize: {
+          usageId: materializeData.usageId,
+          graphVersion: materializeData.graphVersion,
+          nodeId: materializedNode.nodeId,
+          mediaId: materializedNode.mediaId,
+          mediaPath,
+          bytes: diskBytes.byteLength
+        },
+        restart: { nodeId: materializedNode.nodeId, mediaId: materializedNode.mediaId }
+      }
+      receipt.checks.push(
+        'F7 library: CLI library.resource.create imports a local PNG into the resource library (blob stored, byte size equals the source file)'
+      )
+      receipt.checks.push(
+        'F7 library: library.resource.materialize creates a canvas image node via the authoritative host; graph.get and node.get see it after a formal save'
+      )
+      receipt.checks.push(
+        'F7 library: the materialized node references a project-controlled media copy (projects/<id>/media, readable on disk with identical bytes), not the resource-library blob'
+      )
+      receipt.checks.push(
+        'F7 library: the materialized node and its media file survive an app restart unchanged'
+      )
+    }
+
+    // ── 6.12 F7 节点库组合与跨画布实例化 ──
+    // 在 A 建 2-3 节点 + 连线（含一份 media.import 的图片）→ node.library.compose 保存组合
+    // → project.open(B) 后在 B 上 node.library.insert → 比对节点/连线/媒体重映射与幂等重放。
+    {
+      const fixture = join(appRoot, 'qa-fixtures/media/images/I-A.png')
+      const imported = await runCli(directory, ['media', 'import'], {
+        input: { projectId: created.A, filePath: fixture, name: 'F7节点库组合素材' },
+        idempotencyKey: key()
+      })
+      check(
+        imported.response.status === 'completed',
+        `F7_NODE_LIBRARY_MEDIA_IMPORT_FAILED:${JSON.stringify(imported.response.error)}`
+      )
+      const sourceMediaId = imported.response.data.mediaId
+
+      const composedPatch = await patchWithFreshVersion(
+        directory,
+        created.A,
+        () => [
+          {
+            action: 'node.create',
+            ref: 'lib-img',
+            nodeType: 'image',
+            x: 120,
+            y: 5500,
+            title: 'F7 组合图片',
+            media: { mediaId: sourceMediaId }
+          },
+          {
+            action: 'node.create',
+            ref: 'lib-crop-a',
+            nodeType: 'image-crop',
+            x: 520,
+            y: 5500,
+            title: 'F7 组合裁剪甲',
+            config: { mode: 'rect', aspectRatio: 'free', rect: { x: 0.1, y: 0.1, width: 0.6, height: 0.6 } }
+          },
+          {
+            action: 'node.create',
+            ref: 'lib-crop-b',
+            nodeType: 'image-crop',
+            x: 920,
+            y: 5500,
+            title: 'F7 组合裁剪乙',
+            config: { mode: 'quad', aspectRatio: 'free', points: [[0, 0], [1, 0], [1, 1], [0, 1]] }
+          },
+          {
+            action: 'edge.create',
+            ref: 'lib-e1',
+            from: { nodeId: 'lib-img', portId: 'out-image' },
+            to: { nodeId: 'lib-crop-a', portId: 'in-image' }
+          },
+          {
+            action: 'edge.create',
+            ref: 'lib-e2',
+            from: { nodeId: 'lib-crop-a', portId: 'out-image' },
+            to: { nodeId: 'lib-crop-b', portId: 'in-image' }
+          }
+        ],
+        'F7_NODE_LIBRARY_SOURCE_PATCH_FAILED'
+      )
+      const sourceNodeIds = ['lib-img', 'lib-crop-a', 'lib-crop-b'].map((ref) => {
+        const mapped = composedPatch.response.data.created.find((item) => item.ref === ref)
+        check(Boolean(mapped), `F7_NODE_LIBRARY_SOURCE_MAPPING:${ref}`)
+        return mapped.nodeId
+      })
+      check(
+        composedPatch.response.data.applied.nodeCreated === 3 &&
+          composedPatch.response.data.applied.edgeCreated === 2,
+        `F7_NODE_LIBRARY_SOURCE_COUNTS:${JSON.stringify(composedPatch.response.data.applied)}`
+      )
+
+      // 组合保存：条目记录 3 个节点、2 条连线与 1 份媒体引用（外部输入始终只有 mediaId）。
+      let composed = null
+      let lastComposeError = null
+      for (let attempt = 0; attempt < 6 && !composed; attempt++) {
+        if (attempt > 0) await sleep(1200)
+        const attemptResult = await runCli(directory, ['node', 'library', 'compose'], {
+          input: {
+            projectId: created.A,
+            expectedGraphVersion: await stableProjectVersion(directory, created.A),
+            name: 'F7 节点库组合验收',
+            nodeIds: sourceNodeIds
+          },
+          idempotencyKey: key()
+        })
+        if (attemptResult.response.status === 'completed') composed = attemptResult
+        else {
+          lastComposeError = attemptResult.response.error
+          if (lastComposeError?.code !== 'REVISION_CONFLICT')
+            throw new Error(`F7_NODE_LIBRARY_COMPOSE_FAILED:${JSON.stringify(lastComposeError)}`)
+        }
+      }
+      check(Boolean(composed), `F7_NODE_LIBRARY_COMPOSE_FAILED:${JSON.stringify(lastComposeError)}`)
+      const entry = composed.response.data
+      check(
+        Boolean(entry.id) && entry.nodeCount === 3,
+        `F7_NODE_LIBRARY_ENTRY_INVALID:${JSON.stringify(entry)}`
+      )
+      const entryRead = await runCli(directory, ['node', 'library', 'get'], {
+        input: { entryId: entry.id }
+      })
+      check(
+        entryRead.response.status === 'completed',
+        `F7_NODE_LIBRARY_ENTRY_READ_FAILED:${JSON.stringify(entryRead.response.error)}`
+      )
+      const entryDetail = entryRead.response.data
+      check(
+        entryDetail.nodeCount === 3 && entryDetail.impact.edgeCount === 2,
+        `F7_NODE_LIBRARY_ENTRY_COUNTS:${JSON.stringify(entryDetail.impact)}`
+      )
+      check(
+        entryDetail.nodes.some(
+          (entryNode) => entryNode.nodeType === 'image' && entryNode.mediaId === sourceMediaId
+        ),
+        'F7_NODE_LIBRARY_ENTRY_MEDIA_REF_MISSING'
+      )
+
+      // 目标画布 B：实例化要求目标是当前打开的权威画布。
+      const graphBeforeInsert = await runCli(directory, ['graph', 'get'], {
+        input: { projectId: created.B, limit: 200 }
+      })
+      const beforeInsertTotal = graphBeforeInsert.response.data.total
+      const beforeInsertEdges = graphBeforeInsert.response.data.edges.length
+      const mediaBeforeInsert = (
+        await runCli(directory, ['media', 'list'], { input: { projectId: created.B, limit: 200 } })
+      ).response.data.total
+      const openB = await runCli(directory, ['project', 'open'], {
+        input: { projectId: created.B },
+        idempotencyKey: key()
+      })
+      check(
+        openB.response.status === 'completed',
+        `F7_NODE_LIBRARY_OPEN_B_FAILED:${JSON.stringify(openB.response.error)}`
+      )
+      await page.locator('.node-palette').waitFor({ timeout: 30000 })
+
+      let inserted = null
+      let insertInput = null
+      let insertKey = null
+      let lastInsertError = null
+      for (let attempt = 0; attempt < 6 && !inserted; attempt++) {
+        if (attempt > 0) await sleep(1200)
+        insertInput = {
+          projectId: created.B,
+          expectedGraphVersion: await stableProjectVersion(directory, created.B),
+          entryId: entry.id,
+          x: 100,
+          y: 100
+        }
+        insertKey = key()
+        const attemptResult = await runCli(directory, ['node', 'library', 'insert'], {
+          input: insertInput,
+          idempotencyKey: insertKey
+        })
+        if (attemptResult.response.status === 'completed') inserted = attemptResult
+        else {
+          lastInsertError = attemptResult.response.error
+          if (lastInsertError?.code !== 'REVISION_CONFLICT')
+            throw new Error(`F7_NODE_LIBRARY_INSERT_FAILED:${JSON.stringify(lastInsertError)}`)
+        }
+      }
+      check(Boolean(inserted), `F7_NODE_LIBRARY_INSERT_FAILED:${JSON.stringify(lastInsertError)}`)
+      const insertData = inserted.response.data
+      check(
+        insertData.applied.nodeCreated === 3 &&
+          insertData.applied.edgeCreated === 2 &&
+          insertData.saved === true,
+        `F7_NODE_LIBRARY_INSERT_COUNTS:${JSON.stringify(insertData.applied)}`
+      )
+      check(
+        insertData.skippedEdges === 0,
+        `F7_NODE_LIBRARY_INSERT_SKIPPED_EDGES:${insertData.skippedEdges}`
+      )
+      check(
+        insertData.media.length === 1 && insertData.media[0].entryMediaId === sourceMediaId,
+        `F7_NODE_LIBRARY_INSERT_MEDIA:${JSON.stringify(insertData.media)}`
+      )
+      const targetMediaId = insertData.media[0].mediaId
+      check(targetMediaId !== sourceMediaId, 'F7_NODE_LIBRARY_MEDIA_ID_NOT_REMAPPED')
+
+      const graphAfterInsert = await runCli(directory, ['graph', 'get'], {
+        input: { projectId: created.B, limit: 200 }
+      })
+      check(
+        graphAfterInsert.response.data.total === beforeInsertTotal + 3,
+        `F7_NODE_LIBRARY_NODE_COUNT:${beforeInsertTotal}->${graphAfterInsert.response.data.total}`
+      )
+      check(
+        graphAfterInsert.response.data.edges.length === beforeInsertEdges + 2,
+        `F7_NODE_LIBRARY_EDGE_COUNT:${beforeInsertEdges}->${graphAfterInsert.response.data.edges.length}`
+      )
+      const insertedByTitle = {}
+      for (const title of ['F7 组合图片', 'F7 组合裁剪甲', 'F7 组合裁剪乙']) {
+        const found = graphAfterInsert.response.data.nodes.find(
+          (entryNode) => entryNode.title === title
+        )
+        check(Boolean(found), `F7_NODE_LIBRARY_INSERTED_NODE_MISSING:${title}`)
+        insertedByTitle[title] = found.nodeId
+      }
+      const insertedIdSet = new Set(Object.values(insertedByTitle))
+      check(insertedIdSet.size === 3, 'F7_NODE_LIBRARY_INSERTED_IDS_NOT_UNIQUE')
+      for (const insertedId of insertedIdSet) {
+        check(
+          !sourceNodeIds.includes(insertedId),
+          `F7_NODE_LIBRARY_ID_NOT_REMAPPED:${insertedId}`
+        )
+      }
+      const insertedEdges = graphAfterInsert.response.data.edges.filter(
+        (edge) => insertedIdSet.has(edge.from.nodeId) && insertedIdSet.has(edge.to.nodeId)
+      )
+      check(insertedEdges.length === 2, `F7_NODE_LIBRARY_INSERTED_EDGES:${insertedEdges.length}`)
+      const insertedImage = graphAfterInsert.response.data.nodes.find(
+        (entryNode) => entryNode.title === 'F7 组合图片'
+      )
+      check(
+        insertedImage.mediaId === targetMediaId,
+        `F7_NODE_LIBRARY_IMAGE_MEDIA:${insertedImage.mediaId}!==${targetMediaId}`
+      )
+
+      // 媒体在 B 项目下且与 A 不串用：目标节点引用 B 的受控媒体文件，A 的媒体仍在。
+      const insertedImageRead = await runCli(directory, ['node', 'get'], {
+        input: { projectId: created.B, nodeId: insertedImage.nodeId }
+      })
+      const insertedMediaPath = String(insertedImageRead.response.data.node.mediaPath ?? '')
+      check(
+        insertedMediaPath.startsWith(`projects/${created.B}/media/`),
+        `F7_NODE_LIBRARY_MEDIA_NOT_IN_B:${insertedMediaPath}`
+      )
+      const insertedMediaBytes = await readFile(
+        join(directory, insertedMediaPath.replace(/\//g, sep))
+      ).catch(() => null)
+      check(
+        Boolean(insertedMediaBytes) && insertedMediaBytes.byteLength > 0,
+        'F7_NODE_LIBRARY_MEDIA_FILE_MISSING'
+      )
+      const mediaA = await runCli(directory, ['media', 'list'], {
+        input: { projectId: created.A, limit: 200 }
+      })
+      const mediaB = await runCli(directory, ['media', 'list'], {
+        input: { projectId: created.B, limit: 200 }
+      })
+      check(
+        mediaA.response.data.items.some((item) => item.mediaId === sourceMediaId),
+        'F7_NODE_LIBRARY_SOURCE_MEDIA_MOVED'
+      )
+      check(
+        !mediaA.response.data.items.some((item) => item.mediaId === targetMediaId),
+        'F7_NODE_LIBRARY_TARGET_MEDIA_LEAKED_TO_A'
+      )
+      check(
+        mediaB.response.data.items.some((item) => item.mediaId === targetMediaId),
+        'F7_NODE_LIBRARY_TARGET_MEDIA_NOT_IN_B'
+      )
+      check(
+        mediaB.response.data.total === mediaBeforeInsert + 1,
+        `F7_NODE_LIBRARY_MEDIA_COUNT:${mediaBeforeInsert}->${mediaB.response.data.total}`
+      )
+      const graphA = await runCli(directory, ['graph', 'get'], {
+        input: { projectId: created.A, limit: 200 }
+      })
+      for (const sourceId of sourceNodeIds) {
+        check(
+          graphA.response.data.nodes.some((entryNode) => entryNode.nodeId === sourceId),
+          `F7_NODE_LIBRARY_SOURCE_NODE_LOST:${sourceId}`
+        )
+      }
+
+      // 幂等重放：同一幂等键返回原回执，不再产生第二份节点/媒体。
+      const replay = await runCli(directory, ['node', 'library', 'insert'], {
+        input: insertInput,
+        idempotencyKey: insertKey
+      })
+      check(
+        replay.response.status === 'completed' &&
+          replay.response.data.graphVersion === insertData.graphVersion,
+        `F7_NODE_LIBRARY_REPLAY_DIVERGED:${JSON.stringify(replay.response.error)}`
+      )
+      const graphAfterReplay = await runCli(directory, ['graph', 'get'], {
+        input: { projectId: created.B, limit: 200 }
+      })
+      check(
+        graphAfterReplay.response.data.total === beforeInsertTotal + 3,
+        `F7_NODE_LIBRARY_REPLAY_DUPLICATED:${graphAfterReplay.response.data.total}`
+      )
+      const mediaAfterReplay = await runCli(directory, ['media', 'list'], {
+        input: { projectId: created.B, limit: 200 }
+      })
+      check(
+        mediaAfterReplay.response.data.total === mediaBeforeInsert + 1,
+        `F7_NODE_LIBRARY_REPLAY_MEDIA_DUPLICATED:${mediaAfterReplay.response.data.total}`
+      )
+
+      receipt.nodeLibrary = {
+        entryId: entry.id,
+        entry: { nodeCount: entryDetail.nodeCount, edgeCount: entryDetail.impact.edgeCount },
+        source: { projectId: created.A, nodeIds: sourceNodeIds, mediaId: sourceMediaId },
+        insert: {
+          projectId: created.B,
+          graphVersion: insertData.graphVersion,
+          applied: insertData.applied,
+          media: insertData.media,
+          skippedEdges: insertData.skippedEdges,
+          before: { total: beforeInsertTotal, edges: beforeInsertEdges, media: mediaBeforeInsert }
+        },
+        replay: {
+          graphVersion: replay.response.data.graphVersion,
+          total: graphAfterReplay.response.data.total,
+          media: mediaAfterReplay.response.data.total
+        }
+      }
+      receipt.checks.push(
+        'F7 node library: node.library.compose saves three selected nodes and their two connecting edges plus the media reference as one reusable entry'
+      )
+      receipt.checks.push(
+        'F7 node library: node.library.insert instantiates the entry on another opened canvas (3 nodes / 2 edges) with every node and edge id remapped'
+      )
+      receipt.checks.push(
+        'F7 node library: the inserted image node references a fresh project-controlled media copy under the target project; the source project media is untouched and never reused across canvases'
+      )
+      receipt.checks.push(
+        'F7 node library: replaying the same idempotency key returns the original receipt without creating a second copy of nodes or media'
+      )
+    }
+
+    // ── 6.13 F7 历史快照与恢复：快照 → 改图 → 恢复 → 检查点回退 → 打开中拒绝 ──
+    // 恢复只能对未在桌面画布打开的项目执行（打开中返回 RESOURCE_BUSY/desktop-ownership，
+    // 见 25 号台账）；恢复前会自动落检查点，供回退到修改后的状态。
+    {
+      const historyProject = await runCli(directory, ['project', 'create'], {
+        input: { name: '历史恢复（里程碑）' },
+        idempotencyKey: key()
+      })
+      check(
+        historyProject.response.status === 'completed',
+        `F7_HISTORY_PROJECT_CREATE_FAILED:${JSON.stringify(historyProject.response.error)}`
+      )
+      const historyId = historyProject.response.data.meta.id
+      const openHistory = await runCli(directory, ['project', 'open'], {
+        input: { projectId: historyId },
+        idempotencyKey: key()
+      })
+      check(
+        openHistory.response.status === 'completed',
+        `F7_HISTORY_PROJECT_OPEN_FAILED:${JSON.stringify(openHistory.response.error)}`
+      )
+      await page.locator('.node-palette').waitFor({ timeout: 30000 })
+
+      const snapshotPatch = await patchWithFreshVersion(
+        directory,
+        historyId,
+        () => [
+          {
+            action: 'node.create',
+            ref: 'h-script',
+            nodeType: 'text',
+            x: 60,
+            y: 60,
+            title: 'H 剧本',
+            text: '历史快照正文'
+          },
+          {
+            action: 'node.create',
+            ref: 'h-pass',
+            nodeType: 'processor',
+            x: 480,
+            y: 60,
+            title: 'H 透传',
+            config: { operation: 'pass' }
+          },
+          {
+            action: 'node.create',
+            ref: 'h-merge',
+            nodeType: 'text',
+            x: 900,
+            y: 60,
+            title: 'H 合并',
+            text: '历史合并前缀'
+          },
+          {
+            action: 'edge.create',
+            ref: 'h-e1',
+            from: { nodeId: 'h-script', portId: 'out-text' },
+            to: { nodeId: 'h-pass', portId: 'in-value' }
+          },
+          {
+            action: 'edge.create',
+            ref: 'h-e2',
+            from: { nodeId: 'h-pass', portId: 'out-value' },
+            to: { nodeId: 'h-merge', portId: 'in-text' }
+          }
+        ],
+        'F7_HISTORY_SOURCE_PATCH_FAILED'
+      )
+      check(
+        snapshotPatch.response.data.applied.nodeCreated === 3 &&
+          snapshotPatch.response.data.applied.edgeCreated === 2,
+        `F7_HISTORY_SOURCE_COUNTS:${JSON.stringify(snapshotPatch.response.data.applied)}`
+      )
+      // project.open 后显式保存到稳定版本；快照只捕获已持久化画布。
+      const saveStable = async (projectId) => {
+        for (let attempt = 0; attempt < 6; attempt++) {
+          if (attempt > 0) await sleep(1200)
+          const saved = await runCli(directory, ['project', 'save'], {
+            input: {
+              projectId,
+              expectedGraphVersion: await stableProjectVersion(directory, projectId)
+            },
+            idempotencyKey: key()
+          })
+          if (saved.response.status === 'completed') return saved.response.data.graphVersion
+          if (saved.response.error?.code !== 'REVISION_CONFLICT')
+            throw new Error(`F7_HISTORY_SAVE_FAILED:${JSON.stringify(saved.response.error)}`)
+        }
+        throw new Error('F7_HISTORY_SAVE_FAILED:REVISION_CONFLICT')
+      }
+      const captureGraph = async (projectId, label) => {
+        const view = await runCli(directory, ['graph', 'get'], {
+          input: { projectId, limit: 200 }
+        })
+        check(
+          view.response.status === 'completed',
+          `F7_HISTORY_${label}_GRAPH_READ_FAILED:${JSON.stringify(view.response.error)}`
+        )
+        const nodes = view.response.data.nodes.map((entryNode) => ({
+          nodeId: entryNode.nodeId,
+          type: entryNode.type,
+          title: entryNode.title
+        }))
+        const contents = {}
+        for (const entryNode of view.response.data.nodes) {
+          const read = await runCli(directory, ['node', 'get'], {
+            input: { projectId, nodeId: entryNode.nodeId }
+          })
+          check(
+            read.response.status === 'completed',
+            `F7_HISTORY_${label}_NODE_READ_FAILED:${entryNode.nodeId}`
+          )
+          contents[entryNode.nodeId] = {
+            text: String(read.response.data.node.text ?? ''),
+            config: JSON.stringify(read.response.data.node.config ?? null)
+          }
+        }
+        return {
+          nodes,
+          contents,
+          nodeCount: view.response.data.total,
+          edgeCount: view.response.data.edges.length,
+          graphVersion: view.response.data.graphVersion
+        }
+      }
+      await saveStable(historyId)
+      const snapshotBase = await captureGraph(historyId, 'BASE')
+
+      let createdSnapshot = null
+      let lastSnapshotError = null
+      for (let attempt = 0; attempt < 6 && !createdSnapshot; attempt++) {
+        if (attempt > 0) await sleep(1200)
+        const attemptResult = await runCli(directory, ['history', 'snapshot', 'create'], {
+          input: {
+            projectId: historyId,
+            expectedGraphVersion: await stableProjectVersion(directory, historyId),
+            label: 'F7 历史快照验收'
+          },
+          idempotencyKey: key()
+        })
+        if (attemptResult.response.status === 'completed') createdSnapshot = attemptResult
+        else {
+          lastSnapshotError = attemptResult.response.error
+          if (lastSnapshotError?.code !== 'REVISION_CONFLICT')
+            throw new Error(`F7_HISTORY_SNAPSHOT_FAILED:${JSON.stringify(lastSnapshotError)}`)
+        }
+      }
+      check(
+        Boolean(createdSnapshot),
+        `F7_HISTORY_SNAPSHOT_FAILED:${JSON.stringify(lastSnapshotError)}`
+      )
+      const snapshotData = createdSnapshot.response.data
+      check(
+        snapshotData.restorable === true && snapshotData.nodeCount === snapshotBase.nodeCount,
+        `F7_HISTORY_SNAPSHOT_INVALID:${JSON.stringify(snapshotData)}`
+      )
+      const snapshotId = snapshotData.snapshotId
+
+      // 改图（新增节点）并保存：这是恢复应被替换掉的状态。
+      const modifiedPatch = await patchWithFreshVersion(
+        directory,
+        historyId,
+        () => [
+          {
+            action: 'node.create',
+            ref: 'h-extra',
+            nodeType: 'text',
+            x: 60,
+            y: 460,
+            title: 'H 恢复前新增',
+            text: '恢复前的修改'
+          }
+        ],
+        'F7_HISTORY_MODIFY_PATCH_FAILED'
+      )
+      await saveStable(historyId)
+      const modifiedState = await captureGraph(historyId, 'MODIFIED')
+      check(
+        modifiedState.nodeCount === snapshotBase.nodeCount + 1,
+        `F7_HISTORY_MODIFIED_COUNT:${modifiedState.nodeCount}`
+      )
+      const addedNodeId = modifiedPatch.response.data.created.find(
+        (item) => item.ref === 'h-extra'
+      ).nodeId
+
+      // 切到另一个项目：打开中的画布才拥有权威内容，外部恢复只对未打开项目执行。
+      const openOther = await runCli(directory, ['project', 'open'], {
+        input: { projectId: created.B },
+        idempotencyKey: key()
+      })
+      check(
+        openOther.response.status === 'completed',
+        `F7_HISTORY_OPEN_OTHER_FAILED:${JSON.stringify(openOther.response.error)}`
+      )
+      await page.locator('.node-palette').waitFor({ timeout: 30000 })
+
+      // 无令牌 → 必须明确要求先预检（令牌绑定实例/项目/版本/影响事实）。
+      const noToken = await runCli(directory, ['history', 'restore'], {
+        input: {
+          projectId: historyId,
+          snapshotId
+        },
+        idempotencyKey: key()
+      })
+      check(
+        noToken.response.status === 'failed' &&
+          noToken.response.error?.code === 'IMPACT_CONFIRM_REQUIRED',
+        `F7_HISTORY_TOKEN_NOT_REQUIRED:${JSON.stringify(noToken.response.error)}`
+      )
+
+      const precheck = await runCli(directory, ['history', 'restore', 'precheck'], {
+        input: { projectId: historyId, snapshotId }
+      })
+      check(
+        precheck.response.status === 'completed',
+        `F7_HISTORY_PRECHECK_FAILED:${JSON.stringify(precheck.response.error)}`
+      )
+      const precheckData = precheck.response.data
+      check(
+        !precheckData.blockers.includes('ACTIVE_PROJECT'),
+        `F7_HISTORY_PRECHECK_BLOCKED:${JSON.stringify(precheckData.blockers)}`
+      )
+      check(
+        typeof precheckData.impactToken === 'string' && precheckData.impactToken.length > 0,
+        'F7_HISTORY_PRECHECK_NO_TOKEN'
+      )
+      check(
+        precheckData.target.nodeCount === snapshotBase.nodeCount &&
+          precheckData.current.nodeCount === modifiedState.nodeCount,
+        `F7_HISTORY_PRECHECK_IMPACT:${JSON.stringify({
+          current: precheckData.current,
+          target: precheckData.target
+        })}`
+      )
+
+      const restored = await runCli(directory, ['history', 'restore'], {
+        input: {
+          projectId: historyId,
+          snapshotId,
+          impactToken: precheckData.impactToken
+        },
+        idempotencyKey: key()
+      })
+      check(
+        restored.response.status === 'completed',
+        `F7_HISTORY_RESTORE_FAILED:${JSON.stringify(restored.response.error)}`
+      )
+      const restoreData = restored.response.data
+      check(
+        restoreData.restored === true &&
+          restoreData.nodeCount === snapshotBase.nodeCount &&
+          restoreData.edgeCount === snapshotBase.edgeCount,
+        `F7_HISTORY_RESTORE_RECEIPT:${JSON.stringify(restoreData)}`
+      )
+      const restoredState = await captureGraph(historyId, 'RESTORED')
+      check(
+        JSON.stringify(restoredState.nodes) === JSON.stringify(snapshotBase.nodes),
+        'F7_HISTORY_RESTORE_NODES_MISMATCH'
+      )
+      check(
+        JSON.stringify(restoredState.contents) === JSON.stringify(snapshotBase.contents),
+        'F7_HISTORY_RESTORE_CONTENT_MISMATCH'
+      )
+      check(
+        restoredState.edgeCount === snapshotBase.edgeCount,
+        `F7_HISTORY_RESTORE_EDGES:${restoredState.edgeCount}`
+      )
+
+      // 恢复前自动检查点：存在、可恢复；再恢复它可回到“修改后的状态”。
+      const checkpointId = restoreData.checkpointSnapshotId
+      check(typeof checkpointId === 'string' && checkpointId.length > 0, 'F7_HISTORY_CHECKPOINT_MISSING')
+      const historyList = await runCli(directory, ['history', 'list'], {
+        input: { projectId: historyId, limit: 100 }
+      })
+      const checkpointEntry = historyList.response.data.items.find(
+        (item) => item.snapshotId === checkpointId
+      )
+      check(
+        Boolean(checkpointEntry) && checkpointEntry.restorable === true,
+        `F7_HISTORY_CHECKPOINT_NOT_LISTED:${JSON.stringify(historyList.response.data.items)}`
+      )
+      const checkpointPrecheck = await runCli(directory, ['history', 'restore', 'precheck'], {
+        input: { projectId: historyId, snapshotId: checkpointId }
+      })
+      check(
+        checkpointPrecheck.response.status === 'completed' &&
+          checkpointPrecheck.response.data.target.nodeCount === modifiedState.nodeCount,
+        `F7_HISTORY_CHECKPOINT_PRECHECK:${JSON.stringify(
+          checkpointPrecheck.response.error ?? checkpointPrecheck.response.data
+        )}`
+      )
+      const checkpointRestore = await runCli(directory, ['history', 'restore'], {
+        input: {
+          projectId: historyId,
+          snapshotId: checkpointId,
+          impactToken: checkpointPrecheck.response.data.impactToken
+        },
+        idempotencyKey: key()
+      })
+      check(
+        checkpointRestore.response.status === 'completed',
+        `F7_HISTORY_CHECKPOINT_RESTORE_FAILED:${JSON.stringify(checkpointRestore.response.error)}`
+      )
+      const checkpointState = await captureGraph(historyId, 'CHECKPOINT')
+      check(
+        JSON.stringify(checkpointState.nodes) === JSON.stringify(modifiedState.nodes),
+        'F7_HISTORY_CHECKPOINT_NODES_MISMATCH'
+      )
+      check(
+        checkpointState.nodes.some((entryNode) => entryNode.nodeId === addedNodeId),
+        'F7_HISTORY_CHECKPOINT_LOST_ADDED_NODE'
+      )
+      check(
+        JSON.stringify(checkpointState.contents) === JSON.stringify(modifiedState.contents),
+        'F7_HISTORY_CHECKPOINT_CONTENT_MISMATCH'
+      )
+
+      // 打开中的项目：precheck 报 ACTIVE_PROJECT 且不签发令牌；执行明确 RESOURCE_BUSY，版本不变。
+      const openHistoryAgain = await runCli(directory, ['project', 'open'], {
+        input: { projectId: historyId },
+        idempotencyKey: key()
+      })
+      check(
+        openHistoryAgain.response.status === 'completed',
+        `F7_HISTORY_REOPEN_FAILED:${JSON.stringify(openHistoryAgain.response.error)}`
+      )
+      await page.locator('.node-palette').waitFor({ timeout: 30000 })
+      const activePrecheck = await runCli(directory, ['history', 'restore', 'precheck'], {
+        input: { projectId: historyId, snapshotId }
+      })
+      check(
+        activePrecheck.response.status === 'completed' &&
+          activePrecheck.response.data.blockers.includes('ACTIVE_PROJECT') &&
+          activePrecheck.response.data.impactToken === undefined,
+        `F7_HISTORY_ACTIVE_PRECHECK:${JSON.stringify(
+          activePrecheck.response.data?.blockers
+        )}`
+      )
+      const activeRestore = await runCli(directory, ['history', 'restore'], {
+        input: {
+          projectId: historyId,
+          snapshotId
+        },
+        idempotencyKey: key()
+      })
+      check(
+        activeRestore.response.status === 'failed' &&
+          activeRestore.response.error?.code === 'RESOURCE_BUSY',
+        `F7_HISTORY_ACTIVE_RESTORE_NOT_BUSY:${JSON.stringify(activeRestore.response.error)}`
+      )
+      const afterBusy = await runCli(directory, ['project', 'get'], {
+        input: { projectId: historyId }
+      })
+      check(
+        afterBusy.response.data.meta.graphVersion === activePrecheck.response.data.graphVersion,
+        'F7_HISTORY_ACTIVE_RESTORE_CHANGED_VERSION'
+      )
+
+      receipt.history = {
+        projectId: historyId,
+        snapshotId,
+        checkpointSnapshotId: checkpointId,
+        base: {
+          nodeCount: snapshotBase.nodeCount,
+          edgeCount: snapshotBase.edgeCount,
+          graphVersion: snapshotBase.graphVersion
+        },
+        modified: {
+          nodeCount: modifiedState.nodeCount,
+          edgeCount: modifiedState.edgeCount,
+          graphVersion: modifiedState.graphVersion,
+          addedNodeId
+        },
+        restore: {
+          graphVersion: restoreData.graphVersion,
+          previousGraphVersion: restoreData.previousGraphVersion,
+          nodeCount: restoreData.nodeCount,
+          edgeCount: restoreData.edgeCount
+        },
+        checkpointRestore: {
+          nodeCount: checkpointState.nodeCount,
+          edgeCount: checkpointState.edgeCount
+        },
+        tokenRequired: noToken.response.error?.code,
+        activeRestore: {
+          code: activeRestore.response.error?.code,
+          detail: activeRestore.response.error?.detail,
+          blockers: activePrecheck.response.data?.blockers
+        }
+      }
+      receipt.checks.push(
+        'F7 history: after project.open and an explicit stable save, history.snapshot.create captures the persisted graph as a restorable snapshot with the expected node count'
+      )
+      receipt.checks.push(
+        'F7 history: history.restore.precheck issues a bound token and history.restore returns the persisted graph to the snapshot state — node ids/types/titles, node text/config and edge count all match, not just the version'
+      )
+      receipt.checks.push(
+        'F7 history: the pre-restore checkpoint is listed as restorable and restoring it returns the canvas to the modified state including the newly added node'
+      )
+      receipt.checks.push(
+        'F7 history: history.restore without the precheck token is rejected with IMPACT_CONFIRM_REQUIRED before touching the project'
+      )
+      receipt.checks.push(
+        'F7 history: restoring a project that is open in the desktop is refused with RESOURCE_BUSY (desktop-ownership) and does not change its graph version'
+      )
+    }
+
     // ── 7. 保存、关闭并重启；重启后图与任务账本一致 ──
     // 运行后的节点状态写入有 800ms 防抖：等版本连续两次读数稳定后再保存。
     const stableVersion = (projectId) => stableProjectVersion(directory, projectId)
@@ -1559,6 +2702,7 @@ async function launchLicensedApp(dataDirectory) {
     await writeFile(join(evidence, 'report.json'), JSON.stringify(receipt, null, 2))
     if (receipt.status === 'failed') {
       await cp(join(directory, 'diagnostics'), join(evidence, 'failed-diagnostics'), { recursive: true }).catch(() => {})
+      await cp(join(directory, 'lifecycle.log'), join(evidence, 'failed-lifecycle.log'), { force: true }).catch(() => {})
     }
     if (resolve(directory, '..') === resolve(tmpdir()) && basename(directory).startsWith('canvas-agent-milestone-')) {
       await rm(directory, { recursive: true, force: true }).catch(() => {})

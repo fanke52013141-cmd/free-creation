@@ -1,5 +1,15 @@
 # 日志覆盖清单
 
+## 2026-11-08：F7 桌面补验（音频族 / 资源库物化 / 节点库实例化 / 历史恢复）
+
+本轮只改验收脚本 `scripts/test-agent-graph-milestone.cjs`（新增 6.10–6.13 真实 Electron 桌面段 + 启动器失败取证），**未改产品代码、未新增/修改日志事件**；日志影响：不涉及业务日志路径。清单更新目的：登记这些路径已在真实桌面被实际执行并复核过，而不是只有服务级样本。
+
+- 桌面段实际触发并复核的既有日志族：`agent.access.started/completed/failed/rejected/unknown`（`library.resource.*`、`node.library.*`、`history.*`、`graph.patch`、`node.execute` 等操作）、`project.restore.started/checkpoint_created/completed`（恢复三段与检查点）、`library.materialization_completed/failed`（资源物化）、`media.buffer_import.started/completed/failed`（节点库/物化媒体复制）、`agent.access.task_running/completed/failed`（`run.wait` 终态）。
+- 既有末尾诊断脱敏断言在最终 45 项里继续通过：`diagnostics JSONL exists without prompt/body/user-content leakage`。真实 JSONL 不含剧本文本、用户手工正文、F6 对话正文/会话标题/被拒消息，也不含本轮新增节点正文与配置。
+- 音频族门禁段只走"缺依赖如实跳过"路径：speech/tts/voice-design 均在网关调用前返回，未产生下游请求事件；`run.wait` 终态为 failed、`error` 与执行器文案逐字一致（见 [30 号台账](local-agent-access/30-f7-desktop-segments.md)），`media.list` 前后不变。
+- 测试夹具 `lifecycle.log`（`<dataDir>/lifecycle.log`，记录窗口/退出/powerMonitor/render-process-gone）只写临时数据目录，仅失败时复制到 `qa/` 证据目录；它是验收夹具、不是产品诊断事件，不进入 `diagnostics/` 审计与脱敏范围。
+- 边界：付费供应商请求、安装包诊断包脱敏扫描、真实 MCP 客户端仍未验收；打开中的画布恢复只验证 `RESOURCE_BUSY/desktop-ownership` 拒绝路径（不产生假恢复日志）。
+
 ## 2026-11-08：F7 节点库通用化与历史/恢复
 
 新增外部操作 13 项（node.library.compose/update/delete/get/search/insert、history.list/snapshot.create/snapshot.delete/restore.precheck/restore/recovery.precheck/recovery.resolve），全部沿用既有事件，**未新增事件类型**（新事件需登记 `src/shared/observability/events.ts`，不在本包范围）：
