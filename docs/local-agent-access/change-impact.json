@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "reason": "同步并行提交 bf7e26a（轨道线三项修复：框选消失、音频不播放、连接后拖不动）对受保护源码的影响：仅 renderer 节点 body 的 timeline.tsx / timeline-editor.tsx 呈现与交互修复，不涉及任何外部操作 Schema、不新增/删除操作、不改变节点契约（仍 133 项，contracts.json 无差异）。该提交落在我上一次哈希刷新之后，属时序竞态，非未提交在途改动。",
+  "reason": "MCP 协议层错误结构化（验收修复）：src/local-agent/index.ts 的 CallTool 失败回执从纯文本改为符合 operationResponseSchema 的结构化信封（含 traceId，detail 只放字段路径）。兼容结论：**只影响协议层失败回执的表达形式，不改变任何操作的输入/输出 Schema**（133 项操作、contracts.json 无差异）；对客户端是兼容增强——原先只能在文本里猜，现在可按 error.code 分支。",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
     "src/local-agent/client.ts": "2ee883baf50c348950340c0ba309974b79867d3b31d1fc2e73e0af5465e1fc3a",
-    "src/local-agent/index.ts": "c1b07ac4796e54e21cc3ccda5653b64f5fb5f6e02b242f9a4cf8926cae590fa4",
+    "src/local-agent/index.ts": "5a4153d6417f480c2edeb4552c58e5886486ed2274b8d61f99652b4d89be6d2d",
     "src/main/agent-access/canvas-history-ops.ts": "dd0083a959fd9e4a76d36b0451f6e4b241686cc183c4c98da2113def0c2fc30b",
     "src/main/agent-access/desktop.ts": "ef4e0c49200dd22fce60174ae1ad94964edcf0c3e74370d6bb95b9f8c9acf0e3",
     "src/main/agent-access/diagnostics-ops.ts": "e8ebc1774a21e8142361c61ff306bdb0494a7002b69797e30644ec91b8c87fe1",
