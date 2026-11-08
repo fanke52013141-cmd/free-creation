@@ -135,10 +135,39 @@ const CANVAS_ACTIONS = [
   ['canvas.nodeLibrary.save-node', '右键菜单保存节点到节点库'],
   ['canvas.nodeLibrary.insert', '节点库条目插入画布'],
   ['canvas.snapshot.save-restore', '工作区快照保存/恢复/删除'],
-  ['canvas.view.viewport', '画布缩放/平移/聚焦（呈现层）']
+  ['canvas.view.viewport', '画布缩放/平移/聚焦（呈现层）'],
+  // F9 补齐的读取型业务动作：此前这些 GUI 入口没有独立登记，导致对应外部操作
+  // （chat.read/chat.messages、chat.skill.*、run.get/run.wait、model.list、project.get）
+  // 在分母里没有来源，被反向覆盖检查判为孤儿。
+  ['canvas.chat.read-messages', '对话面板读取会话目录与消息正文'],
+  ['canvas.chat.skill-bind', '对话节点绑定/查看已安装技能版本'],
+  ['canvas.run.observe', '运行时间线/任务状态查询'],
+  ['canvas.model.catalog', '模型设置页读取本地模型与能力验证状态'],
+  ['canvas.project.read-summary', '项目页/打开项目时读取项目摘要']
 ]
 
 const PHASES = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'external', 'excluded']
+
+/**
+ * 三入口一致性的显式例外清单（AGENT_PARITY_SPEC §8「三入口目录」门禁的一部分）。
+ *
+ * 这里只允许两类：
+ * 1) META：协议自省操作——`capability.list` 列出能力、`node.type.list` 列出节点接入状态。
+ *    它们本身就是"目录查询"，不存在对应的 GUI 业务动作。
+ * 2) EXTERNAL_ONLY：外部能做、GUI 当前没有等价入口的操作。**必须写原因与后续处置**，
+ *    不允许悄悄存在（§1.7）；GUI 补入口或下线该操作后，这里要同步删除，
+ *    否则下面的 STALE_EXCEPTION 会报错，避免例外变成永久豁免。
+ */
+const META_OPERATIONS = new Map([
+  ['capability.list', '协议自省：列出当前已开放操作，无对应 GUI 业务动作'],
+  ['node.type.list', '协议自省：列出节点接入状态，GUI 通过节点注册表直接读取']
+])
+const EXTERNAL_ONLY_OPERATIONS = new Map([
+  [
+    'node.library.update',
+    'GUI 节点库面板当前没有重命名入口；外部重命名复用同一 store 写口，待 GUI 补同入口或下线该操作'
+  ]
+])
 
 function main() {
   const channels = parseIpcChannels()
@@ -163,10 +192,44 @@ function main() {
         if (!operations.includes(op)) errors.push(`UNKNOWN_EXTERNAL_OP:${id}:${op}`)
       }
       if (!(entry.external ?? []).length) errors.push(`EXTERNAL_WITHOUT_MAPPING:${id}`)
+      // 三入口一致性：标为已开放的动作必须写清 GUI 入口（空字符串不算）。
+      if (typeof entry.gui !== 'string' || !entry.gui.trim())
+        errors.push(`EXTERNAL_WITHOUT_GUI:${id}`)
     }
     const knownIpc = channels.some(({ family, key }) => `ipc.${family}.${key}` === id)
     const knownCanvas = CANVAS_ACTIONS.some(([cid]) => cid === id)
     if (!knownIpc && !knownCanvas) errors.push(`STALE_ACTION:${id}`)
+  }
+
+  // 反向覆盖：每个已登记操作都必须能被至少一个业务动作解释（否则就是"登记了但没人需要"）。
+  const referenced = new Set()
+  for (const entry of Object.values(actions)) {
+    for (const op of entry.external ?? []) referenced.add(op)
+  }
+  for (const operation of operations) {
+    if (referenced.has(operation)) continue
+    if (META_OPERATIONS.has(operation) || EXTERNAL_ONLY_OPERATIONS.has(operation)) continue
+    errors.push(`ORPHAN_EXTERNAL_OP:${operation}`)
+  }
+  // 例外清单不得腐化：写进清单却已不是操作 / 已被正常映射，都应报错。
+  for (const operation of [...META_OPERATIONS.keys(), ...EXTERNAL_ONLY_OPERATIONS.keys()]) {
+    if (!operations.includes(operation)) errors.push(`STALE_EXCEPTION:${operation}`)
+    else if (referenced.has(operation)) errors.push(`STALE_EXCEPTION_MAPPED:${operation}`)
+  }
+  // CLI/MCP 目录派生自同一 Registry，但两种派生都可能撞名或撞保留字。
+  const mcpNames = new Map()
+  for (const operation of operations) {
+    const mcpName = operation.replaceAll('.', '_')
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(mcpName)) errors.push(`MCP_NAME_INVALID:${operation}:${mcpName}`)
+    if (mcpNames.has(mcpName)) errors.push(`MCP_NAME_DUPLICATE:${mcpName}:${mcpNames.get(mcpName)},${operation}`)
+    else mcpNames.set(mcpName, operation)
+    const tokens = operation.split('.')
+    if (tokens.some((token) => !token)) errors.push(`CLI_TOKEN_EMPTY:${operation}`)
+    // CLI 前两个令牌被保留命令占用（key / contracts / mcp serve），且 `status` 是 app.status 的别名。
+    if (['key', 'contracts', 'mcp'].includes(tokens[0]))
+      errors.push(`CLI_RESERVED_TOKEN:${operation}`)
+    if (tokens[0] === 'status' && operation !== 'app.status')
+      errors.push(`CLI_STATUS_ALIAS_CONFLICT:${operation}`)
   }
 
   if (errors.length) {

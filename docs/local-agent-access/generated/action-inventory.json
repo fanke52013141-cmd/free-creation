@@ -2,16 +2,16 @@
   "schemaVersion": 1,
   "generatedFrom": {
     "ipcChannels": 171,
-    "canvasActions": 35,
-    "externalOperations": 77
+    "canvasActions": 40,
+    "externalOperations": 86
   },
   "totals": {
-    "actions": 206,
+    "actions": 211,
     "byPhase": {
-      "external": 76,
-      "F8": 25,
+      "external": 91,
+      "F8": 11,
+      "excluded": 23,
       "F9": 44,
-      "excluded": 19,
       "F2": 5,
       "F7": 6,
       "F4": 7,
@@ -53,152 +53,206 @@
       "label": "Flow 审核",
       "channel": "flow-agents:review",
       "gui": "Agent Flow 面板",
-      "phase": "F8"
+      "phase": "F8",
+      "note": "本包未开放：AI 审核宿主需要桌面执行宿主的模型端口与能力预检（flow-agents.ipc 内构造），外部进程内重建会绕过工具调用能力门禁；且付费模型路径无实测证据。待注入共享宿主句柄后单独验收（见 28 号台账 §5）"
     },
     "ipc.flowAgents.build": {
       "label": "Flow 建图",
       "channel": "flow-agents:build",
       "gui": "Agent Flow 面板",
-      "phase": "F8"
+      "phase": "F8",
+      "note": "本包未开放：propose 需要模型端口；真正把预览落到画布是 renderer 权威动作（flow-build-actions.ts 的撤销步 + 保存屏障），需要新的桌面握手动作，超出本包文件范围。待 F8 收尾包补 flow-build 桌面动作后开放（见 28 号台账 §5）"
     },
     "ipc.flowAgents.pause": {
       "label": "Flow 暂停",
       "channel": "flowAgents:pause",
       "gui": "Agent Flow 面板",
-      "phase": "F8"
+      "phase": "F8",
+      "note": "本包未开放：暂停只作用于主控 Agent 的进行中运行上下文（协调器实例内存态），外部无法在不冒充内部运行身份的前提下控制它（见 28 号台账 §5）"
     },
     "ipc.flowAgents.publication": {
       "label": "Flow 发布",
       "channel": "flowAgents:publication",
       "gui": "Agent Flow 面板",
-      "phase": "F8"
+      "phase": "F8",
+      "note": "本包未开放：发布是协调器运行期向权威宿主发出的等待/继续信号（main→renderer 事件），依赖内部运行上下文；外部只能观察任务状态，不能代替宿主确认发布（见 28 号台账 §5）"
     },
     "ipc.flowAgents.run": {
       "label": "Flow 运行",
       "channel": "flow-agents:run",
       "gui": "Agent Flow 面板",
-      "phase": "F8"
+      "phase": "F8",
+      "note": "本包未开放：内部 Agent 运行由 flow-agents.ipc 创建的桌面宿主实例独占（模型端口 + 命令交付通道 + 在途运行表）；外部进程内另建实例会与内部运行身份竞争并改写账本事实。需先由 index.ts 注入共享宿主句柄（见 28 号台账 §5）"
     },
     "ipc.flowAgents.inspect": {
       "label": "Flow 查看",
       "channel": "flow-agents:inspect",
       "gui": "Agent Flow 面板",
-      "phase": "F8",
-      "note": "run.get 仅覆盖内部任务基础状态子集"
+      "phase": "external",
+      "external": [
+        "flowAgent.inspect"
+      ],
+      "note": "F8 新增：读取持久化任务观察视图（状态/等待/决策与工具计数/审核反馈），与 GUI 宿主同一 inspect 方法；运行中/待启动任务只回账本事实并标记 ownership=ledger-only，不判定 AGENT_SESSION_LOST、不改写任务状态；run.get 仍只覆盖基础状态子集"
     },
     "ipc.flowAgents.stop": {
       "label": "Flow 停止",
       "channel": "flow-agents:stop",
       "gui": "Agent Flow 面板",
-      "phase": "F8"
+      "phase": "F8",
+      "note": "本包未开放：停止要中止桌面宿主内存里的运行控制器；外部实例只能改账本状态而无法真正停止运行，属于伪造成功（见 28 号台账 §5）"
     },
     "ipc.flowAgents.catalog": {
       "label": "Flow 能力目录",
       "channel": "flow-agents:catalog",
       "gui": "Agent Flow 面板",
-      "phase": "F8"
+      "phase": "external",
+      "external": [
+        "flowAgent.catalog"
+      ],
+      "note": "F8 新增：与 GUI 面板同一目录投影（可用文本模型/受控工具/固定版本技能摘要）；要求项目已在桌面画布打开，不返回技能指令正文、连接地址或配置正文"
     },
     "ipc.flowAgents.collaboration": {
       "label": "Flow 协作",
       "channel": "flow-agents:collaboration",
       "gui": "Agent Flow 面板",
-      "phase": "F8"
+      "phase": "external",
+      "external": [
+        "flowAgent.collaboration"
+      ],
+      "note": "F8 新增：只读协作记录（目标/消息/固定输入/候选成果）；不接受外部写入人工意见、人工选择或继续"
     },
     "ipc.flowAgents.cooperate": {
       "label": "Flow 协作继续",
       "channel": "flow-agents:cooperate",
       "gui": "Agent Flow 面板",
-      "phase": "F8"
+      "phase": "F8",
+      "note": "本包未开放：协作事件没有外部主体身份维度，外部写 note/submit/revise 会与人在画布内的输入不可区分（等于冒充人工输入与人工选择），且 discuss/revise 需要模型端口。需先增加协作者身份与权限契约（见 28 号台账 §5）"
     },
     "ipc.flowCommands.attach": {
       "label": "命令附着",
       "channel": "flow-commands:attach",
       "gui": "Agent Flow 命令",
-      "phase": "F8"
+      "phase": "excluded",
+      "reason": "渲染器命令桥与活动画布的内部绑定通道，不是独立用户业务动作；外部操作一律显式携带 projectId，不存在需要附着的\"外部画布\""
     },
     "ipc.flowCommands.detach": {
       "label": "命令脱离",
       "channel": "flow-commands:detach",
       "gui": "Agent Flow 命令",
-      "phase": "F8"
+      "phase": "excluded",
+      "reason": "渲染器命令桥与活动画布的内部解绑通道，不是独立用户业务动作；外部操作不持有画布绑定"
     },
     "ipc.flowCommands.availability": {
       "label": "命令可用性",
       "channel": "flow-commands:availability",
       "gui": "Agent Flow 命令",
-      "phase": "F8"
+      "phase": "external",
+      "external": [
+        "flow.command.availability"
+      ],
+      "note": "F8（二）：复用账本同一占用/协调范围/审核门禁的只读准入检查；与 GUI 手动运行前检查同源"
     },
     "ipc.flowCommands.dispatch": {
       "label": "命令派发",
       "channel": "flow-commands:dispatch",
       "gui": "Agent Flow 命令",
-      "phase": "F8"
+      "phase": "F8",
+      "note": "F8（二）未开放：需要外部专属租约与向权威渲染器下发 grant 的受控通道；另建通道等于新增外部专用执行器"
     },
     "ipc.flowCommands.grant": {
       "label": "命令授权",
       "channel": "flow-commands:grant",
       "gui": "Agent Flow 命令",
-      "phase": "F8"
+      "phase": "excluded",
+      "reason": "主进程→渲染器的单向授权下发事件，不是可调用动作；外部经 flow.command.lookup/reconcile 读同一账本事实，不原样转发 IPC"
     },
     "ipc.flowCommands.cancel": {
       "label": "命令取消",
       "channel": "flow-commands:cancel",
       "gui": "Agent Flow 命令",
-      "phase": "F8"
+      "phase": "excluded",
+      "reason": "主进程→渲染器的单向取消通知，真实取消在渲染器执行桥完成；外部取消语义由 run.cancel（external_runs）与内部 Agent stop 承担，不转发内部 IPC"
     },
     "ipc.flowCommands.prepare": {
       "label": "人工协作准备",
       "channel": "flow-commands:prepare",
       "gui": "Agent Flow 命令",
-      "phase": "F8"
+      "phase": "F8",
+      "note": "F8（二）未开放：会在账本创建 pending 命令/租约/占用，但外部没有权威渲染器通道执行；见 29 号台账第 3 节"
     },
     "ipc.flowCommands.check": {
       "label": "命令核对",
       "channel": "flow-commands:check",
       "gui": "Agent Flow 命令",
-      "phase": "F8"
+      "phase": "F8",
+      "note": "F8（二）未开放：需要内部 leaseId 且 owner_session 必须匹配内部账本会话，外部无租约"
     },
     "ipc.flowCommands.commit": {
       "label": "协作提交",
       "channel": "flow-commands:commit",
       "gui": "Agent Flow 命令",
-      "phase": "F8"
+      "phase": "external",
+      "external": [
+        "flow.command.reconcile"
+      ],
+      "note": "F8（二）：只按已保存运行事实（runId/commandId/leaseId/输入指纹）结算既有命令；无法确认时保持 pending/unknown"
     },
     "ipc.flowCommands.lookup": {
       "label": "命令查询",
       "channel": "flow-commands:lookup",
       "gui": "Agent Flow 命令",
-      "phase": "F8"
+      "phase": "external",
+      "external": [
+        "flow.command.lookup"
+      ],
+      "note": "F8（二）：按 projectId+commandId 读取既有 Flow 命令账本回执；只读，不创建/不结算/不改写命令"
     },
     "ipc.flowCommands.unknown": {
       "label": "unknown 核对",
       "channel": "flow-commands:unknown",
       "gui": "Agent Flow 命令",
-      "phase": "F8"
+      "phase": "external",
+      "external": [
+        "flow.command.reconcile"
+      ],
+      "note": "F8（二）：GUI 的 unknown 核对=lookup+commit；外部用同一 reconcile，绝不把 unknown 报成成功，也不主动改写既有回执"
     },
     "ipc.flowCommands.abort": {
       "label": "命令放弃",
       "channel": "flow-commands:abort",
       "gui": "Agent Flow 命令",
-      "phase": "F8"
+      "phase": "F8",
+      "note": "F8（二）未开放：需要内部 leaseId 且 admitted=0；允许外部放弃会改写内部命令事实"
     },
     "ipc.flowAssets.submit": {
       "label": "固定资产提交",
       "channel": "flow-assets:submit",
       "gui": "Agent Flow 资产",
-      "phase": "F8"
+      "phase": "external",
+      "external": [
+        "flowAsset.submit"
+      ],
+      "note": "F8 新增：与 GUI 资产面板/命令账本/审核宿主同一 FlowAssetStore；活动画布先经桌面保存屏障，节点端口占用时拒绝，取值只来自已保存画布（外部不可提供），submissionId 由幂等键派生"
     },
     "ipc.flowAssets.list": {
       "label": "固定资产列表",
       "channel": "flow-assets:list",
       "gui": "Agent Flow 资产",
-      "phase": "F8"
+      "phase": "external",
+      "external": [
+        "flowAsset.list"
+      ],
+      "note": "F8 新增：按节点端口列出固定资产版本摘要（序号/画布版本/摘要值），不返回值正文"
     },
     "ipc.flowAssets.read": {
       "label": "固定资产读取",
       "channel": "flow-assets:read",
       "gui": "Agent Flow 资产",
-      "phase": "F8"
+      "phase": "external",
+      "external": [
+        "flowAsset.read"
+      ],
+      "note": "F8 新增：读取固定版本摘要与取值；文本 20k 字符 / JSON 100k 编码字符上限，超出如实拒绝；媒体只回受控 mediaId 与相对引用，不回绝对路径或字节"
     },
     "ipc.project.list": {
       "label": "项目列表",
@@ -1551,6 +1605,54 @@
         "node.get"
       ],
       "note": "F2 新增：persisted 视图任意项目可读；latest 视图限当前打开项目"
+    },
+    "canvas.chat.read-messages": {
+      "label": "对话面板读取会话目录与消息正文",
+      "gui": "对话侧栏",
+      "phase": "external",
+      "external": [
+        "chat.read",
+        "chat.messages"
+      ],
+      "note": "F9 分母补齐：GUI 对话面板读取会话目录与消息；助手回复是模型真实输出投影，不可伪造"
+    },
+    "canvas.chat.skill-bind": {
+      "label": "对话节点绑定/查看已安装技能版本",
+      "gui": "节点设置-技能",
+      "phase": "external",
+      "external": [
+        "chat.skill.list",
+        "chat.skill.bind"
+      ],
+      "note": "F9 分母补齐：技能以固定版本绑定到对话节点，不启动对话"
+    },
+    "canvas.run.observe": {
+      "label": "运行时间线/任务状态查询",
+      "gui": "运行时间线",
+      "phase": "external",
+      "external": [
+        "run.get",
+        "run.wait"
+      ],
+      "note": "F9 分母补齐：任务终态只由宿主报告回填；run.wait 只等待不重放"
+    },
+    "canvas.model.catalog": {
+      "label": "模型设置页读取本地模型与能力验证状态",
+      "gui": "模型设置",
+      "phase": "external",
+      "external": [
+        "model.list"
+      ],
+      "note": "F9 分母补齐：读取本地模型列表，不联网探测、不返回凭据"
+    },
+    "canvas.project.read-summary": {
+      "label": "项目页/打开项目时读取项目摘要",
+      "gui": "项目页",
+      "phase": "external",
+      "external": [
+        "project.get"
+      ],
+      "note": "F9 分母补齐：读取单个项目摘要与图版本"
     }
   }
 }
