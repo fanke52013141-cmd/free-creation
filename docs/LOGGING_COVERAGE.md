@@ -719,3 +719,23 @@ AI 对话工作区视觉重排：移除可见角色标签，保留无障碍消�
 - 失败语义：预检失败=failed（无半条消息、无孤儿媒体）；准入后失联=unknown（幂等重放原回执，不自动重发）；`chat.patch` 与几何 op 混批在 main 预检被拒绝（`MIXED_PATCH_UNSUPPORTED`），避免宿主静默丢弃其余 op。
 - 边界：桌面宿主没有 chat.patch 独立 trace 事件（复用外部接入生命周期 + 既有 `project.save`），未做跨进程 trace 树对齐；模型回复的真实供应商请求未验收（无预算/无已验证连接），详见 [22-f6-closeout-delivery.md](local-agent-access/22-f6-closeout-delivery.md)。
 
+## 2026-11-08 F8（二）Flow 命令账本协作外部接入（flow.command.lookup / availability / reconcile）
+
+- 范围与复用：外部生命周期沿用 dispatch 既有 `agent.access.started/completed/failed/unknown/rejected`（唯一外部终态拥有者，`attributes.operation` 为操作 ID）；账本阶段复用既有 `command.operation.started/completed/failed` 事件族（与 `src/main/ipc/flow-commands.ipc.ts` 同一注册事件），`phase` 取 `lookup / manual-occupancy / saved-receipt`，`attributes` 仅 `commandId / state / versionId / code`；**未新增事件类型，也未重复记同一终态**（每个外部操作一次开始、一次账本阶段终态）。
+- 关联：trace/span 由 dispatch 生成并透传给账本阶段事件，二者共享同一 trace；上下文携带 projectId/nodeId/taskId/runId（受 `safeId` 钳制）。不记录命令输入清单、资产值、用户正文、提示词、回复、路径或凭据；`commandId` 与节点/项目 ID 是受控标识。
+- 失败语义：`lookup`/`availability` 的拒绝=failed（稳定码 `NOT_FOUND / NODE_NOT_FOUND / INVALID_INPUT / FLOW_NODE_OCCUPIED / FLOW_CONTROL_OCCUPIED / FLOW_REVIEW_NOT_READY`）；`reconcile` 无法从已保存运行事实确认时仍按"核对完成"返回，`data.state=pending/unknown` 且 `reason` 为账本稳定码，事件 `state` 属性同步，**绝不把 unknown 记为 success**；日志写入失败不改变外部应答（`emitGatewayEvent` 内部 catch）。
+- 脱敏验证：`test/local-agent-flow-commands-access.test.ts` 断言事件序列化串不含夹具源正文/Agent 目标正文，且幂等重放不再产生第二次账本阶段事件。
+- 未覆盖边界：真实 Electron 桌面段未在本包重跑（本包外部操作不经过渲染器执行，只读账本/按已保存事实结算）；GUI 窗口内既有 renderer 诊断事件不在本清单范围。详见 [29-flow-commands-delivery.md](local-agent-access/29-flow-commands-delivery.md)。
+
+## 2026-11-08 F8（一）：Flow 观察与固定资产外部接入
+
+- 范围与复用：外部 `flowAgent.inspect / catalog / collaboration`（只读观察）与 `flowAsset.submit / list / read`（固定资产）复用 dispatch 现有 `agent.access.started / completed / failed / unknown / rejected` 生命周期；`attributes.operation` 为操作 ID（`flowAgent.inspect` 等），`phase` 沿用既有稳定值（`dispatch / validate / desktop-handshake / task-occupancy / recovery-ownership`），`attributes.code` 为稳定回执码（`FLOW_PROJECT_INACTIVE / FLOW_MODEL_PORT_UNAVAILABLE / AGENT_NODE_MISSING / AGENT_TASK_MISSING / ASSET_PROJECT_MISSING / ASSET_NODE_MISSING / ASSET_PORT_INVALID / ASSET_REVISION_CONFLICT / ASSET_OUTPUT_UNAVAILABLE / ASSET_VALUE_TOO_LARGE / ACTIVE_PROJECT_REQUIRED / REVISION_CONFLICT / RESOURCE_BUSY / INVALID_INPUT`）。**未新增事件类型，也未重复记终态**；读取型操作只有 started → completed 两条。
+- Flow 侧复用既有事件：`flowAgent.catalog` 经 `FlowAgentDesktopHost.catalog` 读技能库时，`FlowSkillStore` 仍发自己的 `skill.library.started/completed`（宿主构造时内置技能幂等导入一次）；外部读取不另发业务终态，避免同一事实两条终态。
+- 脱敏边界：外部接入事件只带 operation / phase / code 与 trace/span/requestId，不记录任务目标正文、协作消息正文与模型回复、固定资产取值（文本/JSON 内容）、项目文件路径、绝对媒体路径或配置正文。固定资产取值只在响应中回给调用方（文本 20k 字符 / JSON 100k 编码字符上限），不写诊断；媒体只回受控 `mediaId`、相对引用、MIME 与摘要。
+- 资产提交路径：活动画布先经桌面 `flush` 保存（与 GUI `ensureCanvasSaved` 同一语义）再按落盘版本提交；占用与恢复副本沿用 dispatch 写入策略（`RESOURCE_BUSY`，phase=`task-occupancy` / `recovery-ownership`）；`FlowAssetStore` 内部仍是同一命令占用与审核结论校验，不因外部入口放宽，失败 detail 只含稳定 code 与阶段名。
+- 运行中任务观察：`flowAgent.inspect` 对 running / 待启动任务只读账本事实（`ownership=ledger-only`），不触发桌面宿主的 `AGENT_SESSION_LOST` 判定（该判定需要宿主进程内运行上下文）；测试断言读取前后 `flow_agent_tasks.state/code` 不变，事件里也不出现任务目标与协作正文。
+- 失败语义：生效前失败=failed（不写版本、不改画布、不写协作记录）；读取超限=failed `ASSET_VALUE_TOO_LARGE`（不截断、不伪装成功）；日志写入失败不改变业务结果（`emitGatewayEvent` 内部 catch）。
+- 验证：`test/local-agent-flow-agents-access.test.ts`（15 项）断言写入成功时事件序列恰为 `agent.access.started` → `agent.access.completed`，且事件序列化串不含交付正文、私有配置与临时数据目录；`flowAgent.inspect` 的运行中分支断言账本状态不变。
+- 未覆盖边界：本包只做服务级验证，无真实 Electron 桌面段；Flow 生命周期（run/pause/stop/cooperate/review/build 提交/publication）未开放，其 `agent.desktop.*`、`agent.runtime.*`、`model.request.*` 日志链路不在本包验收范围。详见 [28-flow-agents-delivery.md](local-agent-access/28-flow-agents-delivery.md)。
+
+
