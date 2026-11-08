@@ -157,11 +157,6 @@ const REFERENCE_KIND_LABEL: Record<TimelineClipKind, string> = {
   audio: '音频'
 }
 
-/** 画面类片段：同一轨道内不允许重叠（重叠语义不明确）。 */
-function isVisualKind(kind: TimelineClipKind): boolean {
-  return kind === 'video' || kind === 'image'
-}
-
 /**
  * 把任意来源的数据规整成合法时间线：丢弃孤儿片段、夹取时长、排序、去重。
  * 这是“读”的唯一入口，卡片与执行器都必须经过它，避免两边口径不一致。
@@ -294,8 +289,8 @@ export function clipsOfTrack(data: TimelineData, trackId: string): TimelineClip[
 }
 
 /**
- * 同轨冲突检查：画面片段（视频/图片）不允许重叠；音频片段允许重叠（混音）。
- * 轨道本身不再区分类型，所以判定依据是「候选片段的种类」，不是轨道。
+ * 同轨冲突检查（2026-11-08 用户裁决）：同一轨道上的片段一律不允许重叠——
+ * 图片/视频/音频一视同仁；需要叠音就放到另一条轨道。
  */
 export function overlappingClips(
   data: TimelineData,
@@ -308,12 +303,10 @@ export function overlappingClips(
   ignoreClipId?: string
 ): TimelineClip[] {
   if (!findTrack(data, candidate.trackId)) return []
-  if (candidate.kind && !isVisualKind(candidate.kind)) return []
   const start = candidate.startMs
   const end = candidate.startMs + candidate.durationMs
   return data.clips.filter((clip) => {
     if (clip.trackId !== candidate.trackId) return false
-    if (!isVisualKind(clip.kind)) return false
     if (ignoreClipId && clip.id === ignoreClipId) return false
     return clip.startMs < end && clipEndMs(clip) > start
   })
@@ -466,9 +459,8 @@ export function resolveClipDurationMs(input: AddClipInput): number {
 }
 
 /**
- * 画面片段落轨避让（2026-11-03 用户反馈）：从期望起点向右找第一个能完整放下
- * durationMs 的空档；音频允许叠放，直接返回期望起点。
- * 拖到已占用的位置时由调用方顺延到该空档，而不是直接拒绝落轨。
+ * 落轨避让（2026-11-08 用户裁决）：同轨不再允许任何重叠，画面和音频都要避让——
+ * 从期望起点向右找第一个能完整放下 durationMs 的空档。
  */
 export function freeStartMsFor(
   data: TimelineData,
@@ -477,12 +469,12 @@ export function freeStartMsFor(
   durationMs: number,
   kind?: TimelineClipKind
 ): number {
+  // kind 保留在签名里兼容既有调用方：2026-11-08 起所有片段一视同仁，不再区分类型避让。
+  void kind
   const start = Math.max(0, Math.round(requestedStartMs))
-  if (kind && !isVisualKind(kind)) return start
   const length = Math.max(1, Math.round(durationMs))
   let cursor = start
   for (const clip of clipsOfTrack(data, trackId)) {
-    if (!isVisualKind(clip.kind)) continue
     if (cursor + length <= clip.startMs) break
     if (cursor < clipEndMs(clip)) cursor = clipEndMs(clip)
   }
@@ -561,18 +553,16 @@ export interface SnapDropInput {
 }
 
 /**
- * 素材落轨的磁吸（2026-11-03 用户反馈「开着吸附，拖进来却没和前面的片段连在一起」）：
- * 轨道上已有画面片段时，落点吸到最近的合法边缘——片段末尾（往后接）或片段开头减时长（往前插），
- * 保证片段首尾相连；空轨保持落点原样，音频允许叠放不参与磁吸。
+ * 素材落轨的磁吸（2026-11-08 用户裁决）：
+ * 1) 落点与同轨已有片段重叠 → 直接吸附到该片段末尾（有内容就接在后面）；
+ * 2) 落在空白区 → 吸到最近的合法边缘（片段起点 / 末端），保证首尾相连；
+ * 3) 音频/图片/视频一视同仁，空轨保持落点原样。
  */
 export function snapDropStartMs(input: SnapDropInput): number {
   const raw = Math.max(0, Math.round(input.rawStartMs))
   const duration = Math.max(1, Math.round(input.durationMs))
-  if (!isVisualKind(input.kind)) {
-    return freeStartMsFor(input.data, input.trackId, raw, duration, input.kind)
-  }
-  const visual = clipsOfTrack(input.data, input.trackId).filter((clip) => isVisualKind(clip.kind))
-  if (visual.length === 0) return raw
+  const clips = clipsOfTrack(input.data, input.trackId)
+  if (clips.length === 0) return raw
   const overlapsAt = (startMs: number): TimelineClip[] =>
     overlappingClips(input.data, {
       trackId: input.trackId,
@@ -580,9 +570,19 @@ export function snapDropStartMs(input: SnapDropInput): number {
       durationMs: duration,
       kind: input.kind
     })
+
+  // 1) 拖到已有内容上：接在这段（最靠后的重叠片段）后面。
+  const hit = clips.filter((clip) => raw < clipEndMs(clip) && raw + duration > clip.startMs)
+  if (hit.length > 0) {
+    const anchor = hit.reduce((best, clip) => (clipEndMs(clip) >= clipEndMs(best) ? clip : best))
+    return freeStartMsFor(input.data, input.trackId, clipEndMs(anchor), duration, input.kind)
+  }
+
+  // 2) 空白区：吸附到最近的不重叠边缘；没有候选就顺延到首个能放下的空档。
   const candidates = new Set<number>([0])
-  for (const clip of visual) {
-    candidates.add(clip.startMs + clip.durationMs)
+  for (const clip of clips) {
+    candidates.add(clip.startMs)
+    candidates.add(clipEndMs(clip))
     candidates.add(clip.startMs - duration)
   }
   let best = raw
@@ -596,7 +596,7 @@ export function snapDropStartMs(input: SnapDropInput): number {
       bestDistance = distance
     }
   }
-  return Math.max(0, Math.round(best))
+  return Math.max(0, Math.round(bestDistance === Number.POSITIVE_INFINITY ? freeStartMsFor(input.data, input.trackId, raw, duration, input.kind) : best))
 }
 
 export function addClip(data: TimelineData, input: AddClipInput): TimelineEditResult {

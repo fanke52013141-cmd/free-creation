@@ -226,7 +226,7 @@ describe('轨道线数据模型 · 片段摆放', () => {
     }
   })
 
-  it('同一条轨道上的画面片段不允许重叠；音频片段可以重叠（混音）', () => {
+  it('同一条轨道上的片段一律不允许重叠（音频也不例外）', () => {
     const first = withVideo(base(), 5000)
     const overlap = addClip(first.data, {
       trackId: trackA(first.data),
@@ -249,17 +249,15 @@ describe('轨道线数据模型 · 片段摆放', () => {
       sourceDurationMs: 5000,
       startMs: 3000
     })
-    expect(audio2.ok).toBe(true)
-    if (audio2.ok) {
-      expect(
-        overlappingClips(audio2.data, {
-          trackId: trackA(audio2.data),
-          startMs: 0,
-          durationMs: 1000,
-          kind: 'audio'
-        })
-      ).toEqual([])
-    }
+    expect(audio2.ok).toBe(false)
+    expect(
+      overlappingClips(audio1.data, {
+        trackId: trackA(audio1.data),
+        startMs: 3000,
+        durationMs: 1000,
+        kind: 'audio'
+      })
+    ).toHaveLength(1)
   })
 })
 
@@ -517,9 +515,9 @@ describe('轨道线数据模型 · 落轨避让（2026-11-03 用户反馈）', (
     expect(freeStartMsFor(data, trackA(data), 3000, 4000, 'video')).toBe(10_000)
   })
 
-  it('音频允许叠放，不做避让', () => {
+  it('音频同样需要避开已有片段', () => {
     const first = withVideo(base(), 5000)
-    expect(freeStartMsFor(first.data, trackA(first.data), 1000, 3000, 'audio')).toBe(1000)
+    expect(freeStartMsFor(first.data, trackA(first.data), 1000, 3000, 'audio')).toBe(5000)
   })
 
   it('落轨时长与 addClip 内部分配一致', () => {
@@ -615,8 +613,10 @@ describe('轨道线数据模型 · 落轨磁吸（2026-11-03 用户反馈「拖�
     const trackId = trackA(second.data)
     // 两个片段之间（4000..10000），放 2000 的片段：最近边缘是 4000（间隔 1000）
     expect(dropStart(second.data, trackId, 5000, 2000)).toBe(4000)
-    // 更靠近第二个片段 → 往前插到 8000
-    expect(dropStart(second.data, trackId, 9000, 2000)).toBe(8000)
+    // 落点与第二段相交 → 按用户裁决直接接到第二段末尾
+    expect(dropStart(second.data, trackId, 9000, 2000)).toBe(14_000)
+    // 落在真正不相交的空隙里 → 吸到最近的合法边缘（第二段起点 - 时长）
+    expect(dropStart(second.data, trackId, 8500, 1000)).toBe(9000)
   })
 
   it('空轨道保持落点原样', () => {
@@ -624,9 +624,15 @@ describe('轨道线数据模型 · 落轨磁吸（2026-11-03 用户反馈「拖�
     expect(dropStart(data, trackA(data), 12_000, 3000)).toBe(12_000)
   })
 
-  it('音频不参与磁吸（允许叠放）', () => {
+  it('音频同样参与磁吸：落在已有片段上会接在片段后面', () => {
     const first = withVideo(base(), 4000)
     const trackId = trackA(first.data)
-    expect(dropStart(first.data, trackId, 1000, 2000, 'audio')).toBe(1000)
+    expect(dropStart(first.data, trackId, 1000, 2000, 'audio')).toBe(4000)
+  })
+
+  it('图片落到音频已占用的轨道也会接到音频后面，不重叠', () => {
+    const audio = withAudio(base(), 0, 4000)
+    const trackId = trackA(audio.data)
+    expect(dropStart(audio.data, trackId, 1000, 2000, 'image')).toBe(4000)
   })
 })
