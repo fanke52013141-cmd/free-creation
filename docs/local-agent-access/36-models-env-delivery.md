@@ -73,7 +73,7 @@ CLI 令牌合法、MCP 名唯一且不与保留命令冲突。
 
 `model.binding.list` 返回 `featureKey`、`modelDefinitionId`、`connectionId`、`modelId`、`operation`、
 `enabled`、`updatedAt`。**不返回** `overrides`（功能级执行参数，可能是任意 JSON）。
-只列已启用绑定（与 `SqliteModelHost.listBindings()` 语义一致——GUID「模型设置」也只展示生效绑定）。
+只列已启用绑定（与 `SqliteModelHost.listBindings()` 语义一致——GUI「模型设置」也只展示生效绑定）。
 
 ### 2.4 绑定解析
 
@@ -100,6 +100,10 @@ CLI 令牌合法、MCP 名唯一且不与保留命令冲突。
 
 `detail` 只带稳定阶段标记（如 `model-resolve:feature-binding`），**不带** `ModelRuntimeError.message`
 （该文案可能包含供应商验证原文）。
+
+检查集与 GUI 完全一致（连接启用、能力已验证、协议适配器已注册、密钥存在）；本操作**不额外**增加
+"模型定义 enabled=false 就拒绝"之类 GUI 解析服务没有的私有规则——否则会出现"GUI 能解析、外部解析不了"
+的新不一致。定义是否启用经 `model.definition.list.enabled` 如实可查。
 
 ### 2.5 环境
 
@@ -152,39 +156,33 @@ CLI 令牌合法、MCP 名唯一且不与保留命令冲突。
 ### 3.2 本包实际运行结果（真实输出）
 
 ```
-> node scripts/run-vitest.cjs run test/local-agent-models-env-access.test.ts --reporter=dot
-Test Files  1 passed (1)
-     Tests  12 passed (12)
+> npm run typecheck
+（typecheck:node / typecheck:web / typecheck:license-protocol / typecheck:issuer 全部通过，退出码 0）
 
-> node scripts/run-vitest.cjs run test/local-agent-parity.test.ts --reporter=dot
-Test Files  1 passed (1)
-     Tests  7 passed (7)
+> node scripts/audit-business-actions.cjs
+Business action audit passed: 171 IPC channels + 40 canvas actions; external ops 95;
+by phase {"external":99,"F8":11,"excluded":23,"F2":5,"F7":6,"F4":7,"F5":19,"F9":36,"F6":3,"F3":2}
+
+> node scripts/run-vitest.cjs run test/local-agent-models-env-access.test.ts \
+    test/local-agent-access.test.ts test/local-agent-parity.test.ts --reporter=dot
+Test Files  3 passed (3)
+     Tests  57 passed (57)
 ```
 
-`test/local-agent-access.test.ts` 中唯一失败项是**契约快照过期门禁自身**（见 3.3），
-其余项目通过：
+说明：57 项 = 本包新增 12 项 + `local-agent-access` 既有 38 项 + `local-agent-parity` 7 项。
+（`local-agent-access.test.ts` 里"契约快照过期"门禁用例在 Lead 重新生成 `generated/contracts.json`
+后已恢复通过；本包没有改快照文件。）
 
-```
-Test Files  1 failed | 1 passed (2)
-     Tests  1 failed | 44 passed (45)
-× blocks stale generated contracts and unacknowledged protected-source changes
-  → expected stderr to contain 'Protected source changed'
-```
+### 3.3 门禁现状（如实记录）
 
-### 3.3 门禁现状（如实记录，不是"全绿"）
-
-- `npm run typecheck:node`：本包两个新文件通过；仓库当前整体仍红，错误来自**并行包**刚登记、
-  尚未接 dispatch 的 3 个操作：
-  `"project.nodeVisibility.get" | "project.nodeVisibility.set" | "diagnostics.query"` 不能赋给 `never`
-  （`service.ts` 的 exhaustive `unhandledOperation(never)`）。已通报 Lead，由对应包补齐落点。
-- `node scripts/audit-business-actions.cjs`：本包 6 个 `external` 映射已被识别（无
-  `ORPHAN_EXTERNAL_OP`/`UNKNOWN_EXTERNAL_OP`/`EXTERNAL_WITHOUT_GUI`）；当前失败来自并行包
-  未映射的 3 个操作：`ORPHAN_EXTERNAL_OP:diagnostics.query`、
-  `ORPHAN_EXTERNAL_OP:project.nodeVisibility.get`、`ORPHAN_EXTERNAL_OP:project.nodeVisibility.set`。
-- `npm run verify:agent-access`：**预期红**——契约快照 `generated/contracts.json` 尚未包含新增操作
-  （本包 + 并行包）。按分工由 Lead 统一执行 `check-agent-access.cjs --write --accept-contract-change`
-  生成聚合产物；本包未改快照、未动 `change-impact.json`。快照生成后，上面 3.2 的快照过期测试项
-  应恢复绿。
+- `npm run typecheck`：**通过**（退出码 0）。
+- `node scripts/audit-business-actions.cjs`：**通过**（171 IPC + 40 画布动作，95 项外部操作；
+  本包 6 个 `external` 映射被识别，无 `ORPHAN_EXTERNAL_OP`/`UNKNOWN_EXTERNAL_OP`/`EXTERNAL_WITHOUT_GUI`）。
+- `npm run verify:agent-access`：当前红在**聚合产物**——`docs/local-agent-access/change-impact.json`
+  的受保护源码哈希落后于本包最后一批编辑（`ops/settings.ts`、`settings-ops.ts`）。
+  按分工该文件由 Lead 统一 `check-agent-access.cjs --write --accept-contract-change --reason "..."` 重生成；
+  本包未改该文件、未改契约快照。快照本身已由 Lead 重新生成并与当前 registry 一致
+  （`check-agent-access.cjs` 的 stale 分支已不再触发）。
 - 真实桌面端到端与真实 MCP 客户端逐动作验收未做（与 F9 其余读取类包同口径）；本包证据为服务级
   真实 SQLite + 真实 main 服务（非 mock）+ CLI/MCP 目录派生门禁。
 

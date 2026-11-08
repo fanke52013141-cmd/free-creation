@@ -8,7 +8,7 @@
 // - 视频引擎：getVideoEngineStatus（本地 CUDA 推理环境，video-depth/video-clay）；
 // - 本地语音：detectIndexTts（IndexTTS 运行时，只投影 ready/state，不返回本机路径）。
 //
-// 边界（详见 docs/local-agent-access/36-models-env-delivery.md 第 5 节）：
+// 边界（详见 docs/local-agent-access/36-models-env-delivery.md 第 4 节「明确不开放」）：
 // - 全部只读：不发供应商请求、不探测远端、不安装/下载、不写凭据与设置；
 // - 去敏用**字段白名单**：地址、鉴权头、metadata、能力 controls、验证 message、
 //   密钥密文/引用一律不投影（连接列表尤其如此）；

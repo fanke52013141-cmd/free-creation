@@ -6,7 +6,7 @@ import { empty, page } from './common'
  * 模型设置与环境（F9）：模型连接/定义/绑定/发现/验证/受控凭据/环境探测/节点可见集/诊断。
  *
  * 本包（F9 二）只开放**读取**类动作，并且刻意排除任何会联网、可能产生供应商费用或
- * 写凭据的动作（详见 docs/local-agent-access/36-models-env-delivery.md 第 5 节）：
+ * 写凭据的动作（详见 docs/local-agent-access/36-models-env-delivery.md 第 4 节「明确不开放」）：
  * - 不开放 models.discover / models.validate / validateAgentToolCalling（会向供应商发请求）；
  * - 不开放「保存 / 删除」连接与定义（受控凭据写入需独立凭据包与去敏契约）；
  * - 不开放 keys.* / license.*（外部不得读写密钥库或绕过授权）。
