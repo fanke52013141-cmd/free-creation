@@ -1736,7 +1736,11 @@
     "canvas.node.result-select": {
       "label": "选择结果版本",
       "gui": "资产节点结果集合",
-      "phase": "F3"
+      "phase": "external",
+      "external": [
+        "graph.patch"
+      ],
+      "note": "F3：经 graph.patch 的 node.select-result op 切换结果版本（与 GUI 资产节点\"选择结果版本\"同一 selectMediaResult）；**只允许在该节点自己的结果集合里选**，集合外的 mediaId 报 RESULT_NOT_FOUND，防止把产物来源换成任意素材"
     },
     "canvas.media.drop-import": {
       "label": "拖放导入素材",

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "F9 网络类 2 项：新增 provider.testConnection 与 model.validate。安全契约：必须显式 confirmNetwork=true 才执行（validate 还需 confirmCost=true），否则拒绝且零请求；外部只给已保存 id（密钥/地址由 main 从设备密钥库读取）；回执去敏（URL/主机名/密钥均抹除）。兼容结论：纯追加（127→129），既有 Schema 未变。真实供应商请求未在本轮执行（测试全部替身化）。",
+  "reason": "F3 结果版本切换：graph.patch 的 ops union 追加 node.select-result 成员（在节点自己的结果集合内切换选中产物）。兼容结论：追加式扩展——既有 6+4 种 op 的字段与语义未变，旧客户端不发送该 op，向后兼容；不改变任何输出 Schema。",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -190,7 +190,7 @@
     "src/shared/agent-access/connection.ts": "8bb5d31fef7898f652008f6fc052e6d384a6ed06f37fe736c87ede870bd13c5e",
     "src/shared/agent-access/desktop.ts": "d2473ba2d371e885e697b0e7a02f6fd3a5ff45a950f59607b137b9ee1df722a3",
     "src/shared/agent-access/generated/node-contracts.generated.ts": "be47137ad867dd8e0823c06f147ab34122b0882f3c1600b6998cc0aa33ba2cb7",
-    "src/shared/agent-access/graph-ops.ts": "53e43b9c23fac367c9430df3126afea42e27ab5103a7f83d4a29a69a82840fd9",
+    "src/shared/agent-access/graph-ops.ts": "79ffcb6725acc9904a876129b72c4c74671645eb6b20c07dd66b6c084c048d1a",
     "src/shared/agent-access/node-actions.ts": "0c635319435f6a220d7639a3497afa2ac84d8cd0aaa378693287eb4c4a3d80ae",
     "src/shared/agent-access/node-contracts.ts": "09e68756867e7ab853594b4f0c0666f229c58cd1b2dcbeda591902e28cf23510",
     "src/shared/agent-access/ops/canvas-history.ts": "1e92e6be1e01a7b44a80247cdddec0bbfa45eadacc2ea951c98413105afd9b26",

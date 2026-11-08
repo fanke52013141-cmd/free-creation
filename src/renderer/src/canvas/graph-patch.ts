@@ -18,6 +18,8 @@ import {
 import { getNodeType, getNodePorts, type NodeTypeSpec } from '../nodes/registry'
 import { createEdge, portPairCompatible } from './graph'
 import type { NodeCardShape } from './NodeCardShape'
+import { parseMediaResultCollection } from '@shared/engine/values'
+import { selectMediaResult } from '../nodes/specs/bodies/shared'
 
 export interface GraphPatchApplyCounts {
   nodeCreated: number
@@ -416,6 +418,31 @@ export function planGraphPatch(
       applySteps.push((ed) => {
         ed.markHistoryStoppingPoint('agent-group-delete')
         ed.ungroupShapes([groupId])
+      })
+      continue
+    }
+    if (op.action === 'node.select-result') {
+      // 与 GUI 资产节点"选择结果版本"同一实现：只在该节点自己的结果集合里切换。
+      // 不允许指向集合外的 mediaId——那等于把产物来源换成任意素材，属于伪造产出。
+      const id = refToId.get(op.nodeId) ?? idOf(op.nodeId)
+      const node = nodes.get(id)
+      if (!node || !node.exists) return fail(index, 'NODE_NOT_FOUND', op.nodeId)
+      const shape = editor.getShape(id) as NodeCardShape | undefined
+      if (!shape) return fail(index, 'NODE_NOT_FOUND', op.nodeId)
+      const collection = parseMediaResultCollection(
+        typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
+      )
+      const item = collection?.results?.find((entry) => entry.mediaId === op.mediaId)
+      if (!item) return fail(index, 'RESULT_NOT_FOUND', op.mediaId)
+      const selected = selectMediaResult(shape, item)
+      counts.nodeUpdated += 1
+      applySteps.push((ed) => {
+        ed.updateShape({
+          id,
+          type: 'node-card',
+          props: selected.props,
+          meta: { ...(shape.meta ?? {}), nodeResult: selected.nodeResult }
+        } as never)
       })
       continue
     }

@@ -135,6 +135,19 @@ const groupDelete = z
   .object({ action: z.literal('group.delete'), groupId: z.string().min(1).max(180) })
   .strict()
 
+/**
+ * 切换结果版本：把节点当前引用切换到它自己结果集合里的另一条产物
+ * （与 GUI 资产节点"选择结果版本"同一 selectMediaResult）。
+ * 只允许在本节点已有的结果集合里选——不能指向任意 mediaId，否则等于换掉了产物来源。
+ */
+const nodeSelectResult = z
+  .object({
+    action: z.literal('node.select-result'),
+    nodeId: z.string().min(1).max(180),
+    mediaId: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/)
+  })
+  .strict()
+
 export const GraphPatchOpSchema = z.discriminatedUnion('action', [
   nodeCreate,
   nodeUpdate,
@@ -145,7 +158,8 @@ export const GraphPatchOpSchema = z.discriminatedUnion('action', [
   nodeDuplicate,
   layoutAlign,
   groupCreate,
-  groupDelete
+  groupDelete,
+  nodeSelectResult
 ])
 export type GraphPatchOp = z.infer<typeof GraphPatchOpSchema>
 

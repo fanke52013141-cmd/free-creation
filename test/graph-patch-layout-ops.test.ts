@@ -243,6 +243,89 @@ describe('layout.align', () => {
   })
 })
 
+describe('node.select-result 结果版本切换', () => {
+  const collection = JSON.stringify({
+    kind: 'media-source',
+    version: 1,
+    at: 1,
+    selectedMediaId: 'media-a',
+    results: [
+      { mediaId: 'media-a', mediaPath: 'projects/p/media/a.png', mime: 'image/png', createdAt: 1 },
+      { mediaId: 'media-b', mediaPath: 'projects/p/media/b.png', mime: 'image/png', createdAt: 2 }
+    ]
+  })
+
+  function imageCard(): MockShape {
+    return {
+      ...card('img', 0, 0),
+      props: {
+        w: 340,
+        h: 260,
+        nodeType: 'image',
+        title: '图片节点',
+        config: '{}',
+        text: '',
+        mediaId: 'media-a',
+        mediaPath: 'projects/p/media/a.png',
+        mediaMime: 'image/png',
+        exec: 'success'
+      },
+      meta: { nodeResult: collection }
+    }
+  }
+
+  it('切到集合内的另一条结果：同时更新 props 与 nodeResult.selectedMediaId', () => {
+    const { editor, updated } = mockEditor([imageCard()])
+    const planned = planGraphPatch(
+      editor,
+      [{ action: 'node.select-result', nodeId: 'shape:img', mediaId: 'media-b' }],
+      []
+    )
+    expect(planned.ok, planned.ok ? '' : JSON.stringify(planned.issue)).toBe(true)
+    if (!planned.ok) return
+    planned.plan.apply(editor)
+    expect(updated).toHaveLength(1)
+    expect(updated[0].props.mediaId).toBe('media-b')
+    expect(updated[0].props.mediaPath).toBe('projects/p/media/b.png')
+    const meta = JSON.parse(updated[0].meta.nodeResult) as { selectedMediaId: string }
+    expect(meta.selectedMediaId).toBe('media-b')
+  })
+
+  it('集合外的 mediaId 被拒（不能把产物来源换成任意素材）', () => {
+    const { editor } = mockEditor([imageCard()])
+    const planned = planGraphPatch(
+      editor,
+      [{ action: 'node.select-result', nodeId: 'shape:img', mediaId: 'media-elsewhere' }],
+      []
+    )
+    expect(planned.ok).toBe(false)
+    if (!planned.ok) expect(planned.issue.code).toBe('RESULT_NOT_FOUND')
+  })
+
+  it('没有结果集合的节点被拒；节点不存在被拒', () => {
+    const plain = mockEditor([card('text-node')])
+    const noCollection = planGraphPatch(
+      plain.editor,
+      [{ action: 'node.select-result', nodeId: 'shape:text-node', mediaId: 'media-a' }],
+      []
+    )
+    expect(noCollection.ok).toBe(false)
+    if (!noCollection.ok) expect(noCollection.issue.code).toBe('RESULT_NOT_FOUND')
+
+    const ghost = planGraphPatch(
+      editorOf(imageCard()),
+      [{ action: 'node.select-result', nodeId: 'shape:ghost', mediaId: 'media-a' }],
+      []
+    )
+    expect(ghost.ok).toBe(false)
+    if (!ghost.ok) expect(ghost.issue.code).toBe('NODE_NOT_FOUND')
+  })
+
+  function editorOf(shape: MockShape) {
+    return mockEditor([shape]).editor
+  }
+})
+
 describe('group.create / group.delete', () => {
   it('组合调用 groupShapes 并把 ref 映射到新 group', () => {
     const editorState = mockEditor([card('a'), card('b')])

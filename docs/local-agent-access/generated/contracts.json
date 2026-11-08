@@ -2291,6 +2291,30 @@
                     "groupId"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "node.select-result"
+                    },
+                    "nodeId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 180
+                    },
+                    "mediaId": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_-]{1,64}$"
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "nodeId",
+                    "mediaId"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             }
