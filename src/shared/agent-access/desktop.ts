@@ -26,7 +26,10 @@ export const DesktopRequestSchema = z
       // publish-authorize 由人在 GUI 上亲眼确认（交互式请求，不占用写入槽）；
       // director-publish 只在人工授权后执行，复用 GUI 同一发布服务。
       'publish-authorize',
-      'director-publish'
+      'director-publish',
+      // F8 收官：把已持久化的 Flow 建图预览交给渲染器权威动作提交到画布
+      // （commitFlowBuild：authorize/confirm + 单撤销步 + 保存屏障）。
+      'flow-build'
     ]),
     nodeId: z.string().optional(),
     agent: SkillAgentConfigSchema.optional(),
@@ -48,7 +51,14 @@ export const DesktopRequestSchema = z
     /** 发布授权协议：待授权请求、发布模式与镜头；方向由 main 决定，外部不可自造授权。 */
     publishRequestId: publishRequestIdSchema.optional(),
     publishMode: PublishModeSchema.optional(),
-    shotId: z.string().min(1).max(80).optional()
+    shotId: z.string().min(1).max(80).optional(),
+    /** flow-build：要提交的已持久化建图预览 ID；预览内容由 main 侧的宿主提供，外部不可自带。 */
+    buildId: z
+      .string()
+      .min(1)
+      .max(160)
+      .regex(/^[a-zA-Z0-9_.:-]+$/)
+      .optional()
   })
   .strict()
 export type DesktopRequest = z.infer<typeof DesktopRequestSchema>

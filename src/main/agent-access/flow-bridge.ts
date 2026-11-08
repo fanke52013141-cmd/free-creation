@@ -7,8 +7,13 @@
  * 账本与运行事实互相覆盖。因此这里只做**发布/获取同一个实例的窄接口**，
  * 外部操作一律经由它调用，绝不 new 第二个宿主。
  *
+ * F8 收官扩展：`FlowBuilderHost` / `FlowReviewHost` 与运行宿主在同一个注册函数里
+ * 创建，持有模型端口与审核证据规则。建图预览/提交与模型审核同样只经这里调用，
+ * 外部不会出现第二个 builder/review 宿主，也不会绕过模型能力预检。
+ *
  * 安全边界：
- * - 端口只暴露 run/pause/stop 与"模型工具调用预检"，不暴露命令派发、租约、账本写口；
+ * - 端口只暴露 run/pause/stop、build/review 与"模型工具调用预检"，不暴露命令派发、
+ *   租约、账本写口、发布授权或人工确认通道；
  * - 端口在应用启动、flowAgents IPC 注册完成后发布；未发布时外部调用返回
  *   FLOW_AGENTS_UNAVAILABLE（如实拒绝，不降级成本地替身）；
  * - 谁可以调用由 agent-access 的传输与授权决定（本地受控套接字 + 授权门禁），
@@ -24,6 +29,18 @@ export interface FlowAgentAccessPort {
    * 预检失败发生在任何模型请求之前（付费路径的第一道闸门）。
    */
   assertAgentScopeToolCalling(projectId: string, nodeId: string): Promise<void>
+  /**
+   * 与 IPC `flowAgents:build` 同一入口（FlowBuilderHost.handle）：inspect/propose/
+   * authorize/confirm/discard 都在这个实例上执行并读写同一个 flow_builds 表。
+   */
+  build(raw: unknown): Promise<unknown>
+  /**
+   * 与 IPC `flowAgents:review` 同一入口（FlowReviewHost.run）：模型审核与决策落库
+   * 只发生在这一个实例；外部只能提交请求、读取报告。
+   */
+  review(raw: unknown): Promise<unknown>
+  /** 与 IPC review 分支同一模型/证据预检；失败发生在任何模型请求之前。 */
+  assertReviewToolCalling(projectId: string, nodeId: string): Promise<void>
 }
 
 let published: FlowAgentAccessPort | null = null

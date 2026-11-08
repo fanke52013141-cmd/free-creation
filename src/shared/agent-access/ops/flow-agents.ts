@@ -70,6 +70,96 @@ const flowTaskView = z
   })
   .strict()
 
+/**
+ * F8 收官：建图预览/提交与模型审核。两者都只经由 flow-bridge 发布的同一宿主实例
+ * （FlowBuilderHost / FlowReviewHost）执行，不另建实例、不伪造运行身份：
+ * - inspect 只读已持久化预览，不调模型、不改画布；
+ * - propose 走与 IPC 入口相同的模型工具调用预检，预检失败时零模型请求；
+ * - commit 只按 buildId 交给渲染器权威动作（commitFlowBuild：单撤销步 + 保存屏障 +
+ *   authorize/confirm），外部不能自带预览内容，也不能把未预览的图直接写进画布；
+ * - review 的结论由模型产生，外部只能提交与读取，**不能改写通过/不通过**。
+ * 未登记的原因见 41 号台账第 5 节：cooperate（协作事件无外部主体身份维度）与
+ * publication（发布需要人工授权 + 渲染器等待/继续协议）。
+ */
+const buildId = flowId
+const buildStepDto = z
+  .object({
+    title: z.string().max(120),
+    goal: z.string().max(4096),
+    mode: z.enum(['autonomous', 'collaborative']),
+    capability: z.string().max(80)
+  })
+  .strict()
+const buildNodeDto = z
+  .object({
+    nodeId: flowId,
+    type: z.string().max(40),
+    title: z.string().max(120),
+    contractVersion: z.number().int().nonnegative(),
+    x: z.number(),
+    y: z.number()
+  })
+  .strict()
+const buildPreviewDto = z
+  .object({
+    buildId,
+    projectId: identifier,
+    nodeId,
+    semanticRevision: flowId,
+    state: z.enum(['preview', 'committed', 'discarded']),
+    plan: z
+      .object({
+        title: z.string().max(120),
+        topology: z.enum(['sequential', 'parallel-fork']),
+        steps: z.array(buildStepDto).max(4)
+      })
+      .strict(),
+    /** 只给节点身份与几何；正文/配置属于建图内容，不进入外部响应与日志。 */
+    nodes: z.array(buildNodeDto).max(64),
+    edges: z
+      .array(
+        z
+          .object({
+            from: z.object({ nodeId: flowId, portId: flowId }).strict(),
+            to: z.object({ nodeId: flowId, portId: flowId }).strict()
+          })
+          .strict()
+      )
+      .max(128)
+  })
+  .strict()
+const reviewDecisionDto = z
+  .object({
+    reviewId: flowId,
+    cycleId: flowId,
+    reviewNodeId: flowId,
+    reviewRevision: z.number().int().nonnegative(),
+    rulesVersion: flowId,
+    passed: z.boolean(),
+    feedback: z.string().max(16384),
+    evidenceScope: z.enum([
+      'complete-text-json',
+      'complete-image',
+      'complete-audio',
+      'sampled',
+      'audio-video-timeline',
+      'partial'
+    ]),
+    subjects: z.array(flowAssetRef).max(128),
+    issues: z
+      .array(
+        z
+          .object({
+            assetId: flowId,
+            versionId: flowId,
+            feedback: z.string().max(4096)
+          })
+          .strict()
+      )
+      .max(128)
+  })
+  .strict()
+
 export const FLOW_AGENTS_OPERATIONS = {
   'flowAgent.inspect': {
     effect: 'read',
@@ -116,6 +206,32 @@ export const FLOW_AGENTS_OPERATIONS = {
     effect: 'write',
     description:
       '停止当前打开的 Agent 任务（与 GUI 停止按钮同一宿主方法）；调用后的终态仍以 flowAgent.inspect 读取的账本事实为准',
+    input: project.extend({ nodeId }).strict()
+  },
+  // F8 收官：建图预览/提交（FlowBuilderHost，启动时创建的同一个实例）。
+  'flowAgent.build.inspect': {
+    effect: 'read',
+    description:
+      '读取 Flow 建图预览（最近一次或指定 buildId）：buildId/状态/计划步骤/节点身份与几何；只读已持久化预览，不调用模型、不修改画布；要求目标项目已在桌面打开',
+    input: project.extend({ nodeId, buildId: flowId.optional() }).strict()
+  },
+  'flowAgent.build.propose': {
+    effect: 'execute',
+    description:
+      '在 builder 角色的 Agent 节点上提交建图目标，由同一桌面宿主的模型端口生成预览并持久化（不落画布）；需要已验证工具调用能力的模型，模型预检失败时零模型请求；request/trace/span 由 main 生成，外部不能自造',
+    input: project.extend({ nodeId }).strict()
+  },
+  'flowAgent.build.commit': {
+    effect: 'write',
+    description:
+      '按 buildId 把已生成的建图预览提交到当前打开的权威画布（复用 GUI 同一 commitFlowBuild：authorize/confirm + 单撤销步 + 保存屏障）；外部不能自带预览内容；已 committed 的重复提交按持久化事实返回，不重复建节点',
+    input: project.extend({ nodeId, buildId }).strict()
+  },
+  // F8 收官：模型审核（FlowReviewHost，同一实例）。审核结论由模型产生，外部只能提交与读取。
+  'flowAgent.review': {
+    effect: 'execute',
+    description:
+      '在 ai-review 节点上提交一次模型审核并读取报告（与 GUI 同一 FlowReviewHost 与同一证据/预算规则）；审核结论由模型产生，外部不能改写为通过；需要已验证工具调用能力的模型，模型预检失败时零模型请求；request/trace/span 由 main 生成',
     input: project.extend({ nodeId }).strict()
   }
 } as const
@@ -215,5 +331,39 @@ export const FLOW_AGENTS_OUTPUTS = {
     .strict(),
   'flowAgent.stop': z
     .object({ projectId: identifier, nodeId, task: flowTaskView })
+    .strict(),
+  'flowAgent.build.inspect': z
+    .object({
+      projectId: identifier,
+      nodeId,
+      graphVersion: z.number().int().nonnegative(),
+      build: buildPreviewDto.nullable()
+    })
+    .strict(),
+  'flowAgent.build.propose': z
+    .object({
+      projectId: identifier,
+      nodeId,
+      graphVersion: z.number().int().nonnegative(),
+      build: buildPreviewDto
+    })
+    .strict(),
+  'flowAgent.build.commit': z
+    .object({
+      projectId: identifier,
+      nodeId,
+      graphVersion: z.number().int().nonnegative(),
+      build: buildPreviewDto,
+      /** 已持久化的建图节点 ID（外部可再用 graph.get/node.get 核对）。 */
+      committedNodeIds: z.array(flowId).max(64)
+    })
+    .strict(),
+  'flowAgent.review': z
+    .object({
+      projectId: identifier,
+      nodeId,
+      graphVersion: z.number().int().nonnegative(),
+      decision: reviewDecisionDto
+    })
     .strict()
 } as const

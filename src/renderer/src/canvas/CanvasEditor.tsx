@@ -1,5 +1,6 @@
 import { reportCanvasFailure } from './canvas-diagnostics'
 import { ensureCanvasSaved } from './flow-asset-actions'
+import { commitFlowBuild } from './flow-build-actions'
 import { useAppStore } from '../stores/app'
 import { nodeTextField } from './node-pointer-policy'
 import { ResourceInsertRequest } from '../library/ResourceInsertRequest'
@@ -78,6 +79,7 @@ import { useSaveCoordinator } from '../stores/save-coordinator'
 import type { ConnectionFrom } from '../stores/connection'
 import { useGatewayStore } from '../stores/gateway'
 import { flowInitialConfig } from '@shared/agent-flow/model-defaults'
+import type { BuildPreview } from '@shared/agent-flow/builder'
 import { useEngineStore } from '../engine/store'
 import { runWorkflow, runWorkflowForNodes, runNodeManually, cancelFlowCommandExecution, iterationBodyNodeIds, isDocumentOutputNode } from '../engine/executor'
 import {
@@ -1138,6 +1140,91 @@ export function CanvasEditor({
               })
               return
             }
+            // ── F8 收官：外部提交建图预览到权威画布 ──
+            // 与 GUI 面板同一 commitFlowBuild（authorize → 语义修订核对 → 单撤销步 →
+            // 保存屏障 → confirm）。main 只给 buildId，预览内容来自 main 侧同一宿主；
+            // 外部不能自带图内容，也不能跳过撤销步、保存屏障或确认。
+            if (request.action === 'flow-build') {
+              const replyFail = (validated: boolean, code: string, detail?: string): void => {
+                window.api.replyLocalAgentDesktop({
+                  requestId: request.requestId,
+                  projectId: project.id,
+                  ok: false,
+                  validated,
+                  errorCode: code,
+                  ...(detail ? { errorDetail: detail.slice(0, 300) } : {})
+                })
+              }
+              const buildId = request.buildId ?? ''
+              const nodeId = request.nodeId ?? ''
+              if (!buildId || !nodeId) {
+                replyFail(true, 'INVALID_INPUT', 'buildId/nodeId missing')
+                return
+              }
+              const inspected = await window.api.buildFlowAgent({
+                projectId: project.id,
+                nodeId,
+                buildId,
+                action: 'inspect'
+              })
+              if (!inspected.ok) {
+                replyFail(true, inspected.error.code, 'build preview read failed')
+                return
+              }
+              const preview = inspected.data
+              if (!preview) {
+                replyFail(true, 'FLOW_BUILD_MISSING', 'no persisted build preview for this buildId')
+                return
+              }
+              if (preview.state === 'committed') {
+                // 持久化事实已是 committed：不重复应用画布变更，只回执已存在的节点 ID。
+                window.api.replyLocalAgentDesktop({
+                  requestId: request.requestId,
+                  projectId: project.id,
+                  ok: true,
+                  graphVersion: graphVersionRef.current,
+                  result: {
+                    buildId,
+                    state: 'committed',
+                    nodeIds: preview.nodes.map((node) => node.id)
+                  }
+                })
+                return
+              }
+              if (preview.state !== 'preview') {
+                replyFail(true, 'FLOW_BUILD_UNCONFIRMED', `build state is ${preview.state}`)
+                return
+              }
+              let committed: BuildPreview
+              try {
+                committed = await commitFlowBuild(editor, preview)
+              } catch (error) {
+                const detail = error instanceof Error ? error.message : '建图提交失败'
+                // 未写入任何建图节点 = 准入前失败（可安全 failed）；已写入但保存/确认失败
+                // = unknown，由 main 按已保存图核对，不能报成功。
+                const applied = preview.nodes.some((node) =>
+                  editor.getShape(node.id as TLShapeId)
+                )
+                replyFail(
+                  !applied,
+                  applied ? 'FLOW_BUILD_COMMIT_FAILED' : 'FLOW_BUILD_COMMIT_REJECTED',
+                  detail
+                )
+                return
+              }
+              window.api.replyLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                ok: true,
+                graphVersion: graphVersionRef.current,
+                result: {
+                  buildId,
+                  state: committed.state,
+                  nodeIds: committed.nodes.map((node) => node.id)
+                }
+              })
+              return
+            }
             // ── F3 execute-nodes：受理回执立即返回；终态经任务报告通道异步回填 ──
             if (request.action === 'execute-nodes') {
               const replyFail = (code: string, detail?: string): void => {
@@ -1348,6 +1435,24 @@ export function CanvasEditor({
                 throw new Error('CANVAS_CHANGED')
               graphVersionRef.current = result.meta.graphVersion
               useAppStore.getState().openProject(result.meta)
+            }
+            // ── 保存屏障（flush）：main 在外部写操作提交前要求"当前画布已落盘" ──
+            // 此前没有这个分支：未匹配的动作只会回当前已保存版本，于是"画布有未保存编辑"
+            // 时外部拿到的版本号与磁盘内容不一致（project.save/rename/export、固定资产提交、
+            // flow.command.dispatch 都会因此读到旧版本或被渲染器的 revision 校验拒绝）。
+            // 与 graph.patch 的 flush 语义一致：只落盘、不改图内容。
+            if (request.action === 'flush') {
+              if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+              saveTimerRef.current = null
+              const flushState = useSaveCoordinator.getState()
+              if (flushState.dirtyVersion !== flushState.persistedVersion) await ensureCanvasSaved()
+              window.api.replyLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                ok: true,
+                graphVersion: graphVersionRef.current
+              })
+              return
             }
             window.api.replyLocalAgentDesktop({
               requestId: request.requestId,

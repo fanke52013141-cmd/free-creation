@@ -27,12 +27,12 @@ import { FlowCoordinatorHost } from '../agent-flow/coordinator-host'
 import type { ModelIdentity } from '../../shared/agent-flow/coordination'
 import type { AgentModelPort } from '../agent-flow/runtime'
 import { FlowBuilderHost } from '../agent-flow/builder-host'
-import { BuildRequestSchema } from '../../shared/agent-flow/builder'
+import { BuildRequestSchema, type BuildRequest } from '../../shared/agent-flow/builder'
 import { FlowReviewHost } from '../agent-flow/review-host'
 import { FlowReviewStore, reviewBinding } from '../agent-flow/review-store'
 import { readStoredNodeRunStatus } from '../../shared/engine/run-status'
 import { AgentNodeConfigSchema, ReviewNodeConfigSchema } from '../../shared/agent-flow/node-contracts'
-import { ReviewRequestSchema } from '../../shared/agent-flow/review'
+import { ReviewRequestSchema, type ReviewRequest } from '../../shared/agent-flow/review'
 import { registerSkillLibraryIpc } from './skill-library.ipc'
 
 export function registerFlowAgentsIpc(
@@ -133,6 +133,37 @@ export function registerFlowAgentsIpc(
           })
       }
     }
+  }
+  /**
+   * 与 IPC review 分支同一预检：ai-review 节点若配置了模型，必须已通过工具调用/
+   * 审核证据验证。IPC 与本地外部接入共用本函数，避免两条入口的模型门禁漂移。
+   */
+  const assertReviewToolCalling = async (
+    projectId: string,
+    nodeId: string
+  ): Promise<void> => {
+    const file = openProject(projectId)
+    const shape = (
+      file?.tldrawSnapshot as {
+        store?: Record<string, { props?: { nodeType?: string; config?: string } }>
+      }
+    )?.store?.[nodeId]
+    if (shape?.props?.nodeType !== 'ai-review') return
+    let rawConfig: unknown
+    try {
+      rawConfig = JSON.parse(shape.props.config ?? '')
+    } catch {
+      throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
+    }
+    const parsed = ReviewNodeConfigSchema.safeParse(rawConfig)
+    if (!parsed.success) throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
+    if (parsed.data.modelDefinitionId)
+      await assertToolCallingModel(parsed.data.modelDefinitionId, {
+        image: ['image', 'sampled-video', 'audio-video'].includes(
+          parsed.data.reviewMode ?? 'text-json'
+        ),
+        audio: ['audio', 'audio-video'].includes(parsed.data.reviewMode ?? 'text-json')
+      })
   }
   const resolveModel = async (
     snapshot: ModelIdentity
@@ -323,31 +354,8 @@ export function registerFlowAgentsIpc(
           await assertAgentScopeToolCalling(build.data.projectId, build.data.nodeId)
         } else if (phase === 'review') {
           const request = ReviewRequestSchema.safeParse(raw)
-          if (request.success) {
-            const file = openProject(request.data.projectId)
-            const shape = (
-              file?.tldrawSnapshot as {
-                store?: Record<string, { props?: { nodeType?: string; config?: string } }>
-              }
-            )?.store?.[request.data.nodeId]
-            if (shape?.props?.nodeType === 'ai-review') {
-              let rawConfig: unknown
-              try {
-                rawConfig = JSON.parse(shape.props.config ?? '')
-              } catch {
-                throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
-              }
-              const parsed = ReviewNodeConfigSchema.safeParse(rawConfig)
-              if (!parsed.success) throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
-              if (parsed.data.modelDefinitionId)
-                await assertToolCallingModel(parsed.data.modelDefinitionId, {
-                  image: ['image', 'sampled-video', 'audio-video'].includes(
-                    parsed.data.reviewMode ?? 'text-json'
-                  ),
-                  audio: ['audio', 'audio-video'].includes(parsed.data.reviewMode ?? 'text-json')
-                })
-            }
-          }
+          if (request.success)
+            await assertReviewToolCalling(request.data.projectId, request.data.nodeId)
         }
         const data =
           phase === 'review'
@@ -423,13 +431,16 @@ export function registerFlowAgentsIpc(
     })
   }
   // F8：把**同一个**宿主实例以窄接口发布给本地外部接入（CLI/MCP）。
-  // 外部 run/pause/stop 一律经由它调用；另建实例会出现两个权威并互相覆盖任务事实。
+  // 外部 run/pause/stop/build/review 一律经由它调用；另建实例会出现两个权威并互相覆盖事实。
   publishFlowAgentAccessPort({
     run: (raw) => host.run(raw),
     pause: (query) => host.pause(query),
     stop: (query) => host.stop(query),
     assertAgentScopeToolCalling: (projectId, nodeId) =>
-      assertAgentScopeToolCalling(projectId, nodeId)
+      assertAgentScopeToolCalling(projectId, nodeId),
+    build: (raw) => builder.handle(raw as BuildRequest),
+    review: (raw) => review.run(raw as ReviewRequest),
+    assertReviewToolCalling: (projectId, nodeId) => assertReviewToolCalling(projectId, nodeId)
   })
   return host
 }

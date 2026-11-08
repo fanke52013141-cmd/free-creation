@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "F8 收官批次新增 4 项操作（flow.command.check/dispatch/abort、node.type.get 节点契约目录），并补 renderer 保存屏障 flush 分支（此前未匹配动作只回已保存版本，导致有未保存编辑时外部读到旧版本）。兼容结论：4 项均为纯追加（106 项操作），既有操作 Schema 逐字节未变，未使用 --accept-contract-change；DB 迁移 M24 为 flow_commands 新增 principal 列（默认 internal，既有行语义不变）。",
+  "reason": "F8 收官第二批：新增 flowAgent.build.inspect/propose/commit 与 flowAgent.review 四项操作（沿用共享宿主端口，commit 经新桌面动作 flow-build 交渲染器同一 commitFlowBuild），并补 renderer 保存屏障 flush 分支。兼容结论：4 项均为纯追加（106 项操作），既有操作 Schema 未变（未使用 --accept-contract-change）；桌面协议新增 action flow-build 与 buildId 字段为可选扩展，旧请求不受影响。",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",

@@ -67,6 +67,16 @@ function publishFakePort(overrides: Partial<FakePort> = {}): FakePort {
     async assertAgentScopeToolCalling(projectId, nodeId) {
       port.prechecks.push({ projectId, nodeId })
       if (port.precheckError) throw port.precheckError
+    },
+    // F8 收官：端口扩展了 build/review（本文件只测运行控制，这里保持最小桩）。
+    async build() {
+      return null
+    },
+    async review() {
+      return null
+    },
+    async assertReviewToolCalling() {
+      return undefined
     }
   })
   return port

@@ -2601,6 +2601,211 @@ async function launchLicensedApp(dataDirectory) {
       )
     }
 
+    // ── 6.14 F8 收官：Flow 建图/审核外部接入（真实画布 + 隔离数据目录无模型）──
+    // 没有已验证模型连接时，propose/review 必须在任何模型请求之前如实失败；
+    // commit 只按 buildId 提交且缺预览时不得触发桌面写入；未开放的 cooperate/publication
+    // 必须明确 UNSUPPORTED_OPERATION，而不是悄悄出现一个外部替身。
+    {
+      const opened = await runCli(directory, ['project', 'open'], {
+        input: { projectId: created.A },
+        idempotencyKey: key()
+      })
+      check(
+        opened.response.status === 'completed',
+        `F8_FLOW_OPEN_A_FAILED:${JSON.stringify(opened.response.error)}`
+      )
+      await page.locator('.node-palette').waitFor({ timeout: 30000 })
+      const flowCall = async (command, input) =>
+        await runCli(directory, command, { input, idempotencyKey: key() })
+      const sourcePatch = await patchWithFreshVersion(directory, created.A, () => [
+        {
+          action: 'node.create',
+          ref: 'f8-source',
+          nodeType: 'text',
+          x: 60,
+          y: 6000,
+          title: 'F8 建图源文本',
+          text: 'F8 建图目标：把这句话模板化。'
+        }
+      ], 'F8_FLOW_SOURCE_PATCH_FAILED')
+      const sourceId = sourcePatch.response.data.created.find((item) => item.ref === 'f8-source').nodeId
+      const builderConfig = {
+        schemaVersion: 1,
+        role: 'builder',
+        interactionMode: 'autonomous',
+        modelDefinitionId: 'missing-model-f8',
+        skills: [],
+        tools: [{ id: 'graph.preview', version: '1' }],
+        allowedNodeIds: [sourceId],
+        maxSteps: 4,
+        relations: []
+      }
+      const reviewConfig = {
+        schemaVersion: 1,
+        rulesVersion: 'builder-review-v1',
+        reviewMode: 'text-json',
+        modelDefinitionId: 'missing-model-f8',
+        rejectPolicy: 'rework',
+        maxReworks: 1,
+        subjectSources: [{ nodeId: sourceId, portId: 'out-text' }],
+        gatedNodeIds: [],
+        relations: []
+      }
+      const nodesPatch = await patchWithFreshVersion(directory, created.A, () => [
+        {
+          action: 'node.create',
+          ref: 'f8-builder',
+          nodeType: 'agent',
+          x: 60,
+          y: 6400,
+          title: 'F8 建图 Agent',
+          text: 'F8 建图目标：把这句话模板化。',
+          config: builderConfig
+        },
+        {
+          action: 'node.create',
+          ref: 'f8-review',
+          nodeType: 'ai-review',
+          x: 480,
+          y: 6400,
+          title: 'F8 审核节点',
+          text: '审核标准：输出必须完整。',
+          config: reviewConfig
+        }
+      ], 'F8_FLOW_NODES_PATCH_FAILED')
+      const builderId = nodesPatch.response.data.created.find((item) => item.ref === 'f8-builder').nodeId
+      const reviewId = nodesPatch.response.data.created.find((item) => item.ref === 'f8-review').nodeId
+
+      // (a) build.inspect 真实画布只读：propose 前没有预览
+      const inspectEmpty = await flowCall(
+        ['flowAgent', 'build', 'inspect'],
+        { projectId: created.A, nodeId: builderId }
+      )
+      check(
+        inspectEmpty.response.status === 'completed' && inspectEmpty.response.data.build === null,
+        `F8_BUILD_INSPECT_EMPTY_INVALID:${JSON.stringify(inspectEmpty.response)}`
+      )
+      // (b) 无已验证模型：propose 在模型预检处失败，不产生预览、不落画布
+      const propose = await flowCall(
+        ['flowAgent', 'build', 'propose'],
+        { projectId: created.A, nodeId: builderId }
+      )
+      check(
+        propose.response.status === 'failed' && propose.response.error?.code === 'AGENT_MODEL_UNAVAILABLE',
+        `F8_BUILD_PROPOSE_NOT_REFUSED:${JSON.stringify(propose.response)}`
+      )
+      const inspectAfterPropose = await flowCall(
+        ['flowAgent', 'build', 'inspect'],
+        { projectId: created.A, nodeId: builderId }
+      )
+      check(
+        inspectAfterPropose.response.status === 'completed' &&
+          inspectAfterPropose.response.data.build === null,
+        `F8_BUILD_PROPOSE_PERSISTED_PREVIEW:${JSON.stringify(inspectAfterPropose.response.data)}`
+      )
+      // 外部不能自造运行身份：requestId 由 main 生成，输入里带它会被 strict Schema 拒绝
+      // （CLI 在本地就拒绝，不会到达业务层）。
+      let forgedIdentityRejected = false
+      try {
+        await flowCall(['flowAgent', 'build', 'propose'], {
+          projectId: created.A,
+          nodeId: builderId,
+          requestId: 'evil-request-1'
+        })
+      } catch (error) {
+        forgedIdentityRejected = /CLI_INVALID_RESULT:2/.test(String(error && error.message))
+      }
+      check(forgedIdentityRejected, 'F8_BUILD_FORGED_IDENTITY_ACCEPTED')
+      // (c) commit：没有持久化预览 → 明确 FLOW_BUILD_MISSING（不触发桌面写入）
+      const commitMissing = await flowCall(
+        ['flowAgent', 'build', 'commit'],
+        { projectId: created.A, nodeId: builderId, buildId: 'build-000000000000000000000000' }
+      )
+      check(
+        commitMissing.response.status === 'failed' &&
+          commitMissing.response.error?.code === 'FLOW_BUILD_MISSING',
+        `F8_BUILD_COMMIT_MISSING_NOT_REFUSED:${JSON.stringify(commitMissing.response)}`
+      )
+      // 非活动画布上的 build 也必须在宿主调用前拒绝
+      const inactiveInspect = await flowCall(
+        ['flowAgent', 'build', 'inspect'],
+        { projectId: created.B, nodeId: builderId }
+      )
+      check(
+        inactiveInspect.response.status === 'failed' &&
+          inactiveInspect.response.error?.code === 'ACTIVE_PROJECT_REQUIRED',
+        `F8_BUILD_INACTIVE_NOT_REFUSED:${JSON.stringify(inactiveInspect.response)}`
+      )
+      receipt.checks.push(
+        'F8 flowAgent.build: inspect reads a real canvas builder node preview (null before propose); propose without a verified tool-calling model is refused at the model gate with AGENT_MODEL_UNAVAILABLE and persists no preview; external-sent request identity is rejected by the strict input schema'
+      )
+      receipt.checks.push(
+        'F8 flowAgent.build.commit: without a persisted preview it is refused with FLOW_BUILD_MISSING before any desktop write; build operations on a non-active canvas are refused with ACTIVE_PROJECT_REQUIRED'
+      )
+
+      // (d) review：真实 ai-review 节点在模型预检处如实失败；非审核节点明确配置错误
+      const reviewCall = await flowCall(
+        ['flowAgent', 'review'],
+        { projectId: created.A, nodeId: reviewId }
+      )
+      check(
+        reviewCall.response.status === 'failed' &&
+          reviewCall.response.error?.code === 'AGENT_MODEL_UNAVAILABLE',
+        `F8_REVIEW_NOT_REFUSED:${JSON.stringify(reviewCall.response)}`
+      )
+      const reviewWrongNode = await flowCall(
+        ['flowAgent', 'review'],
+        { projectId: created.A, nodeId: builderId }
+      )
+      check(
+        reviewWrongNode.response.status === 'failed' &&
+          reviewWrongNode.response.error?.code === 'FLOW_REVIEW_CONFIG_INVALID',
+        `F8_REVIEW_WRONG_NODE:${JSON.stringify(reviewWrongNode.response)}`
+      )
+      // 外部不能把审核结论改成通过：输入 schema 没有 passed/decision 字段（strict 拒绝，
+      // CLI 在本地就拒绝）。
+      let forgedVerdictRejected = false
+      try {
+        await flowCall(['flowAgent', 'review'], {
+          projectId: created.A,
+          nodeId: reviewId,
+          passed: true
+        })
+      } catch (error) {
+        forgedVerdictRejected = /CLI_INVALID_RESULT:2/.test(String(error && error.message))
+      }
+      check(forgedVerdictRejected, 'F8_REVIEW_FORGED_VERDICT_ACCEPTED')
+      receipt.checks.push(
+        'F8 flowAgent.review: a real ai-review node is refused at the model gate with AGENT_MODEL_UNAVAILABLE before any model request; a non-review node is refused with FLOW_REVIEW_CONFIG_INVALID; external input cannot carry a verdict (strict schema rejects the extra field)'
+      )
+
+      // (e) 未开放项必须诚实不可用：CLI 在本地就不接受未登记操作（不会出现外部替身）。
+      for (const command of [['flowAgent', 'cooperate'], ['flowAgent', 'publication']]) {
+        let rejected = false
+        try {
+          await flowCall(command, { projectId: created.A, nodeId: builderId })
+        } catch (error) {
+          rejected = /CLI_INVALID_RESULT:2/.test(String(error && error.message))
+        }
+        check(rejected, `F8_UNREGISTERED_NOT_REFUSED:${command.join('.')}`)
+      }
+      receipt.checks.push(
+        'F8 honest boundary: flowAgent.cooperate / flowAgent.publication are not registered and the CLI refuses them locally (CLI_INVALID_RESULT:2; no external substitute for human decisions or internal publication)'
+      )
+      receipt.flowAgent = {
+        builderNodeId: builderId,
+        reviewNodeId: reviewId,
+        buildInspect: 'null-preview',
+        buildPropose: propose.response.error?.code,
+        buildCommitMissing: commitMissing.response.error?.code,
+        buildInactive: inactiveInspect.response.error?.code,
+        forgedIdentity: forgedIdentityRejected ? 'CLI_LOCAL_REJECTED' : 'ACCEPTED',
+        review: reviewCall.response.error?.code,
+        reviewWrongNode: reviewWrongNode.response.error?.code,
+        forgedVerdict: forgedVerdictRejected ? 'CLI_LOCAL_REJECTED' : 'ACCEPTED'
+      }
+    }
+
     // ── 7. 保存、关闭并重启；重启后图与任务账本一致 ──
     // 运行后的节点状态写入有 800ms 防抖：等版本连续两次读数稳定后再保存。
     const stableVersion = (projectId) => stableProjectVersion(directory, projectId)
@@ -2653,7 +2858,9 @@ async function launchLicensedApp(dataDirectory) {
         .filter({ hasNotText: 'A 前缀' })
         .first()
         .dblclick()
-      await page.locator('textarea.node-textarea').first().fill('人在GUI继续编辑的新正文')
+      // F8 段新建的 Agent 节点也会渲染 textarea.node-textarea（任务目标），
+      // 不能再取全局第一个 textarea；双击后只填当前可见的正文编辑框。
+      await page.locator('textarea.node-textarea:visible').first().fill('人在GUI继续编辑的新正文')
       await page.keyboard.press('Control+Enter')
       // 数据级验证：权威宿主 latest 视图中脚本节点正文已是新内容
       let guiEditAlive = false

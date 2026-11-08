@@ -714,15 +714,12 @@ describe('flowAsset submit/list/read', () => {
 })
 
 describe('unopened Flow lifecycle actions', () => {
-  it('keeps impersonation-prone actions unregistered while run/pause/stop go through the shared host port', async () => {
+  it('keeps impersonation-prone actions unregistered while run/build/review go through the shared host port', async () => {
     // F8 第二批：run/pause/stop 已开放，但只经"启动时创建的那一个宿主实例"的窄接口执行
-    // （见 flow-bridge）；冒充内部运行身份 / 代替人做协作与审核的仍不开放。
-    const notOpened = [
-      'flowAgent.cooperate',
-      'flowAgent.review',
-      'flowAgent.build',
-      'flowAgent.publication'
-    ]
+    // （见 flow-bridge）；F8 收官：build（inspect/propose/commit）与 review 也只经同一
+    // builder/review 宿主端口开放。冒充人工决定或内部运行发布的 cooperate/publication
+    // 仍不开放。
+    const notOpened = ['flowAgent.cooperate', 'flowAgent.publication']
     for (const operationId of notOpened) expect(ACCESS_OPERATIONS).not.toHaveProperty(operationId)
     const capability = await call('capability.list')
     const listed = (capability.data as any).operations.map((item: any) => item.operationId)
@@ -734,6 +731,10 @@ describe('unopened Flow lifecycle actions', () => {
       'flowAgent.run',
       'flowAgent.pause',
       'flowAgent.stop',
+      'flowAgent.build.inspect',
+      'flowAgent.build.propose',
+      'flowAgent.build.commit',
+      'flowAgent.review',
       'flowAsset.submit',
       'flowAsset.list',
       'flowAsset.read'
