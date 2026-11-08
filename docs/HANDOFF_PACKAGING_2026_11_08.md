@@ -15,7 +15,13 @@
 - 分支：`main`
 - 本批 UI/稳定性修复起点：`abeb605`（资源库整体重构）
 - 本批关键收尾提交：`e8f6290`（轨道线吸附/不重叠）
-- 打包前必须确认：`git log -1` 的 HEAD **不早于 `e8f6290`**
+- 打包基线标签：`packaging-2026-11-08`（指向 `75bf7e1`，含本文件）
+- 打包前必须确认：`git log -1` 的 HEAD **不早于 `e8f6290`**；推荐直接 checkout
+  `packaging-2026-11-08`。
+
+> ⚠️ 打包必须用**干净克隆**（`git clone`/新 worktree/CI），不要在带未提交改动的开发目录里
+> 直接 `electron-builder`。当前开发机上可能还有其它并行会话的未提交改动；它们不属于本批
+> 交付，且当前 `npm run lint` 会报错，不能混入安装包。
 
 ---
 
@@ -75,12 +81,23 @@
 ```bash
 git fetch origin
 git status
-git log -1 --oneline          # 确认 HEAD 不早于 e8f6290
+git log -1 --oneline          # 确认 HEAD 不早于 e8f6290，推荐 checkout packaging-2026-11-08
 npm ci                        # 或按仓库约定安装依赖
 npm run typecheck
 npm run lint
 npm run build
 ```
+
+> **随包二进制（必须准备）**：`electron-builder.yml` 通过 `extraResources` 打包
+> `build/bin/dreamina.exe`、`ffmpeg.exe`、`ffprobe.exe`。这些二进制被 `.gitignore` 忽略，
+> **不在仓库里**，打包机必须提前从本机/内部制品库复制到 `build/bin/`，否则安装包会缺少
+> 即梦 CLI 与 FFmpeg，视频截取/抽帧/轨道线合成会失败。打包前执行：
+>
+> ```bash
+> ls build/bin/dreamina.exe build/bin/ffmpeg.exe build/bin/ffprobe.exe
+> ```
+>
+> 缺少时不要开始 electron-builder。
 
 建议再跑：
 
