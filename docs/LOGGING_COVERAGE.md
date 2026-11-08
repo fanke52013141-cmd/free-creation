@@ -1,5 +1,59 @@
 # 日志覆盖清单
 
+## 2026-11-08：F9 收尾——视频引擎安装后台阶段补齐诊断事件（消除既有盲区）
+
+45 号台账登记的盲区：`installVideoEngine()` 的后台阶段（创建 venv / 更新 pip / 安装 PyTorch /
+安装推理依赖 / 检测 CUDA / 下载并校验权重）此前只有内存 `installStatus`，装失败时
+**诊断 JSONL 里没有任何安装生命周期**，GUI 同样缺失——用户装失败只能看到一句文案，无法事后定位
+卡在哪一步。本次补齐，**只加观测，不改安装行为**。
+
+### 新增事件（所属模块 `main/media/video-conversion.ts`，唯一终态拥有者就是该模块）
+
+| 事件 | 级别 | 触发点 | 允许属性 |
+| --- | --- | --- | --- |
+| `video_engine.install.started` | info | 通过 preflight（Python 可用）后开始安装 | `phase` |
+| `video_engine.install.phase` | info | 每个阶段推进 | `phase` |
+| `video_engine.install.completed` | info | venv/pip/torch/依赖/GPU/权重全部完成并写入 ready 标记 | `gpuPresent`、`durationMs` |
+| `video_engine.install.failed` | error | 任一阶段失败 | `phase`、`code` |
+| `video_engine.install.skipped` | info | 已就绪 / 已有安装在跑 | `phase`、`code` |
+
+阶段取值（`phase`）：`preflight` / `venv` / `pip` / `pytorch` / `dependencies` / `gpu-check` /
+`weights`，失败时额外使用 `python-missing` 与 `install`；跳过时为 `already-ready` / `already-installing`。
+
+稳定错误码（`code`）：`PYTHON_REQUIRED`、`GPU_UNAVAILABLE`、`MODEL_DOWNLOAD_FAILED`、
+`MODEL_INTEGRITY_FAILED`、`INSTALL_FAILED`、`ENGINE_ALREADY_READY`、`INSTALL_IN_PROGRESS`。
+
+### 脱敏
+
+事件只带阶段名、稳定码、布尔标记与耗时；**不含**本机绝对路径、pip 输出、下载 URL、
+`--index-url` 参数或权重哈希之外的任何请求细节。`message` 文案沿用 GUI 同一句（已抹除路径）。
+测试断言事件 JSON 不包含数据目录、`huggingface.co`、`download.pytorch.org`、`--index-url`。
+
+### 唯一终态与不重复
+
+- 安装生命周期事件由 `video-conversion.ts` 独自拥有（它是安装的唯一执行者）；
+- 外部 `environment.videoEngine.install` 的 dispatch 生命周期（`agent.access.*`）只代表
+  **操作受理**，不代表安装成功——两者不冲突、不重复记同一终态；
+- 重复调用不会写第二个 `started`（第二次走 `skipped/INSTALL_IN_PROGRESS` 或 `already-ready`）。
+
+### 日志写入失败不改变业务结果
+
+`emitGatewayEvent` 已接住同步异常与异步拒绝（本轮早前修复：异步 sink 的 Promise 拒绝曾被
+忽略，Node 15+ 会视为致命未处理拒绝）。测试覆盖"安装流程在 sink 同步抛错/异步拒绝时仍正常返回"。
+
+### 测试
+
+`test/video-engine-install-diagnostics.test.ts`（5 项）：子进程不可用 → `failed/PYTHON_REQUIRED`
+且**零网络请求**；事件无路径/URL/命令；重复调用不重复 `started`；sink 同步抛错与异步拒绝均不影响
+安装流程。**测试 mock 掉 `child_process.spawn`，绝不触发真实安装与 3.3GB 下载。**
+
+### 未覆盖边界
+
+真实联网安装的成功路径与中途失败恢复未验收（需真实 CUDA 环境与数 GB 下载）；
+安装取消/进度订阅仍未开放（用 `environment.videoEngine.status` 轮询 `progress`）。
+
+---
+
 ## 2026-11-08：F9（四）环境探测补强与视频引擎安装
 
 新增 1 项外部**写**操作 `environment.videoEngine.install`（只受理启动，下载/安装复用 GUI

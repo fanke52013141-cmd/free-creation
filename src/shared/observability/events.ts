@@ -282,6 +282,27 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     def('artifact.recipe_read_failed', 'error', 'main/ipc/media.ipc.ts'),
     def('artifact.recipe_failed', 'error', 'main/ipc/media.ipc.ts'),
     def('library.reuse_preview', 'info', 'main/ipc/library.ipc.ts', { missingCount: 'int' }),
+    // 本地视频推理环境安装（LOGGING_SPEC：异步安装任务必须有开始/阶段/终态）。
+    // 该流程此前只有内存 installStatus，装失败时无法事后定位（GUI 同样缺失）。
+    // attributes 只放阶段与稳定码，不放本机绝对路径、下载命令或权重 URL。
+    def('video_engine.install.started', 'info', 'main/media/video-conversion.ts', {
+      phase: 'short'
+    }),
+    def('video_engine.install.phase', 'info', 'main/media/video-conversion.ts', {
+      phase: 'short'
+    }),
+    def('video_engine.install.completed', 'info', 'main/media/video-conversion.ts', {
+      gpuPresent: 'flag',
+      durationMs: 'int'
+    }),
+    def('video_engine.install.failed', 'error', 'main/media/video-conversion.ts', {
+      phase: 'short',
+      code: 'short'
+    }),
+    def('video_engine.install.skipped', 'info', 'main/media/video-conversion.ts', {
+      phase: 'short',
+      code: 'short'
+    }),
     def('node.completed', 'info', 'renderer/engine/executor.ts', { portCount: 'int' }),
     def('node.failed', 'error', 'renderer/engine/executor.ts'),
     def('node.cancelled', 'info', 'renderer/engine/executor.ts'),
@@ -300,8 +321,7 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
       ...MODEL_ATTRS,
       skillId: 'id'
     }),
-    def('media.batch_delete_started', 'info', 'renderer/canvas/side-panel/AssetsPanel.tsx', { count: 'int' }),
-    def('media.batch_delete_cancelled', 'info', 'renderer/canvas/side-panel/AssetsPanel.tsx', { count: 'int' }),
+    def('media.batch_delete_started', 'info', 'renderer/canvas/side-panel/AssetsPanel.tsx', { count: 'int' }),    def('media.batch_delete_cancelled', 'info', 'renderer/canvas/side-panel/AssetsPanel.tsx', { count: 'int' }),
     def('media.batch_delete_completed', 'info', 'renderer/canvas/side-panel/AssetsPanel.tsx', { count: 'int', deleted: 'int', failed: 'int' }),
     def('media.batch_delete_failed', 'error', 'renderer/canvas/side-panel/AssetsPanel.tsx', { count: 'int', deleted: 'int', failed: 'int' }),
     def('media.export_started', 'info', 'main/ipc/media.ipc.ts', { projectId: 'id', count: 'int' }),

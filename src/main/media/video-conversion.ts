@@ -5,6 +5,8 @@ import { existsSync } from 'fs'
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'fs/promises'
 import { basename, join } from 'path'
 import { getDataDir, getDb } from '../store/db'
+import { emitGatewayEvent } from '../diagnostics/gateway-events'
+import { newTraceId } from '../../shared/observability'
 import { deleteMedia, getMediaAbsPath, saveFileAsset } from '../store/media.repo'
 import type { MediaAsset } from '../../shared/types'
 import type { VideoConversionInput, VideoEngineStatus } from '../../shared/contracts'
@@ -217,9 +219,56 @@ export async function getVideoEngineStatus(): Promise<VideoEngineStatus> {
   return { ...installStatus }
 }
 
+/**
+ * 安装流程诊断（LOGGING_SPEC：异步安装任务必须有开始/阶段/终态）。
+ *
+ * 此前安装全程只有内存 `installStatus`：装失败时用户只看到一句错误，事后无法定位卡在
+ * 创建 venv / pip / PyTorch / 依赖 / 显卡检测 / 权重下载 的哪一步（GUI 同样缺失）。
+ * 这里只记录**阶段与稳定码**，不记录本机绝对路径、下载命令或权重 URL。
+ */
+const installTraceId = (): string => newTraceId()
+let activeInstallTraceId = ''
+
+function traceInstall(
+  stage: 'started' | 'phase' | 'completed' | 'failed' | 'skipped',
+  attributes: Record<string, string | number | boolean>
+): void {
+  const stageName = String(attributes.phase ?? '')
+  emitGatewayEvent(
+    `video_engine.install.${stage}`,
+    stage === 'failed' ? '本地推理环境安装失败' : '本地推理环境安装进度',
+    activeInstallTraceId ? { traceId: activeInstallTraceId } : undefined,
+    {
+      ...(stage === 'completed' ? { status: 'success' as const } : {}),
+      ...(stage === 'failed' ? { status: 'failed' as const } : {}),
+      ...(stage === 'skipped' ? { status: 'skipped' as const } : {}),
+      attributes: { ...attributes, ...(stageName ? {} : {}) }
+    }
+  )
+}
+
+/**
+ * 安装失败 → 稳定错误码（只回码，不回本机路径或命令）。
+ * 与前台安装状态文案分离：状态文案给人看，码给诊断与外部回执用。
+ */
+function classifyInstallFailureCode(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/Python/.test(message)) return 'PYTHON_REQUIRED'
+  if (/CUDA 显卡/.test(message)) return 'GPU_UNAVAILABLE'
+  if (/模型下载失败/.test(message)) return 'MODEL_DOWNLOAD_FAILED'
+  if (/大小校验失败|SHA-256 校验失败/.test(message)) return 'MODEL_INTEGRITY_FAILED'
+  return 'INSTALL_FAILED'
+}
+
 export async function installVideoEngine(): Promise<{ started: boolean }> {
-  if (installPromise || installStarting) return { started: true }
+  if (installPromise || installStarting) {
+    // 已有安装在跑：如实记 skipped（不谎报又启动了一次），也不覆盖在途 trace。
+    traceInstall('skipped', { phase: 'already-installing', code: 'INSTALL_IN_PROGRESS' })
+    return { started: true }
+  }
   installStarting = true
+  const startedAt = Date.now()
+  activeInstallTraceId = installTraceId()
   try {
     if (await runtimeReady()) {
       updateInstallStatus({
@@ -229,8 +278,10 @@ export async function installVideoEngine(): Promise<{ started: boolean }> {
         progress: '',
         message: '本地推理环境已就绪'
       })
+      traceInstall('skipped', { phase: 'already-ready', code: 'ENGINE_ALREADY_READY' })
       return { started: false }
     }
+    traceInstall('started', { phase: 'preflight' })
     const launcher = await resolvePythonLauncher()
     if (!launcher) {
       updateInstallStatus({
@@ -239,6 +290,7 @@ export async function installVideoEngine(): Promise<{ started: boolean }> {
         installing: false,
         message: `未找到 Python ${PYTHON_VERSION}；请先安装 Python ${PYTHON_VERSION}（64 位）后重试`
       })
+      traceInstall('failed', { phase: 'python-missing', code: 'PYTHON_REQUIRED' })
       throw new Error(installStatus.message)
     }
 
@@ -249,6 +301,7 @@ export async function installVideoEngine(): Promise<{ started: boolean }> {
       progress: '创建隔离 Python 环境',
       message: '正在安装；首次下载可能需要一些时间'
     })
+    traceInstall('phase', { phase: 'venv' })
     installPromise = (async () => {
     const root = dataRoot()
     const modelDir = join(root, 'models')
@@ -264,8 +317,10 @@ export async function installVideoEngine(): Promise<{ started: boolean }> {
       if (trimmed) updateInstallStatus({ progress: `${progress} · ${trimmed.slice(-140)}` })
     }
     updateInstallStatus({ progress: '更新 pip' })
+    traceInstall('phase', { phase: 'pip' })
     await runProcess(python, ['-m', 'pip', 'install', '--upgrade', 'pip'], report('更新 pip'))
     updateInstallStatus({ progress: '安装 CUDA 版 PyTorch（约 3.3 GB）' })
+    traceInstall('phase', { phase: 'pytorch' })
     await runProcess(
       python,
       [
@@ -280,6 +335,7 @@ export async function installVideoEngine(): Promise<{ started: boolean }> {
       report('安装 PyTorch')
     )
     updateInstallStatus({ progress: '安装视频推理依赖' })
+    traceInstall('phase', { phase: 'dependencies' })
     await runProcess(
       python,
       [
@@ -295,6 +351,7 @@ export async function installVideoEngine(): Promise<{ started: boolean }> {
       report('安装推理依赖')
     )
     updateInstallStatus({ progress: '检查 CUDA 显卡' })
+    traceInstall('phase', { phase: 'gpu-check' })
     const gpuOutput = await runProcess(python, [
       '-c',
       'import torch; print("CANVAS_GPU=" + (torch.cuda.get_device_name(0) if torch.cuda.is_available() else ""))'
@@ -307,6 +364,7 @@ export async function installVideoEngine(): Promise<{ started: boolean }> {
     if (!gpuName) throw new Error('PyTorch 未检测到可用 CUDA 显卡，无法启用本地视频推理')
 
     updateInstallStatus({ progress: '下载并校验 Video Depth Anything Small 权重' })
+    traceInstall('phase', { phase: 'weights' })
     const response = await fetch(MODEL_URL)
     if (!response.ok) throw new Error(`模型下载失败：HTTP ${response.status}`)
     const bytes = Buffer.from(await response.arrayBuffer())
@@ -328,6 +386,10 @@ export async function installVideoEngine(): Promise<{ started: boolean }> {
       message: `本地推理环境已就绪 · ${gpuName}`,
       gpuName
     })
+    traceInstall('completed', {
+      gpuPresent: true,
+      durationMs: Date.now() - startedAt
+    })
     })()
       .catch((error: unknown) => {
         updateInstallStatus({
@@ -335,6 +397,11 @@ export async function installVideoEngine(): Promise<{ started: boolean }> {
           installing: false,
           progress: '',
           message: error instanceof Error ? error.message : String(error)
+        })
+        // 失败必须留下可定位的阶段与稳定码；message 已是去敏文案（不含绝对路径）。
+        traceInstall('failed', {
+          phase: 'install',
+          code: classifyInstallFailureCode(error)
         })
       })
       .finally(() => {
