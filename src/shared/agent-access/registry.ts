@@ -6,6 +6,7 @@ import {
   nodeActionSummary,
   validateNodeActionMatrix
 } from './node-actions'
+import { validateNodeContractSnapshot } from './node-contracts'
 export { nodeAccessDirectory } from './node-actions'
 import {
   bindings,
@@ -30,6 +31,7 @@ import { PUBLISH_OPERATIONS, PUBLISH_OUTPUTS } from './ops/publish'
 import { SETTINGS_OPERATIONS, SETTINGS_OUTPUTS } from './ops/settings'
 import { DIAGNOSTICS_OPERATIONS, DIAGNOSTICS_OUTPUTS } from './ops/diagnostics'
 import { PROJECT_SETTINGS_OPERATIONS, PROJECT_SETTINGS_OUTPUTS } from './ops/project-settings'
+import { NODE_CATALOG_OPERATIONS, NODE_CATALOG_OUTPUTS } from './ops/node-catalog'
 import { TRANSFER_OPERATIONS, TRANSFER_OUTPUTS } from './ops/transfer'
 import {
   GRAPH_PATCH_MAX_OPS,
@@ -328,6 +330,7 @@ export const ACCESS_OPERATIONS = {
   ...SETTINGS_OPERATIONS,
   ...DIAGNOSTICS_OPERATIONS,
   ...PROJECT_SETTINGS_OPERATIONS,
+  ...NODE_CATALOG_OPERATIONS,
   ...PUBLISH_OPERATIONS
 } as const
 export type AccessOperationId = keyof typeof ACCESS_OPERATIONS
@@ -811,6 +814,7 @@ export const ACCESS_OUTPUTS = {
   ...SETTINGS_OUTPUTS,
   ...DIAGNOSTICS_OUTPUTS,
   ...PROJECT_SETTINGS_OUTPUTS,
+  ...NODE_CATALOG_OUTPUTS,
   ...PUBLISH_OUTPUTS
 } satisfies Record<AccessOperationId, z.ZodType>
 export type AccessOutput<K extends AccessOperationId> = z.infer<(typeof ACCESS_OUTPUTS)[K]>
@@ -904,5 +908,7 @@ export function validateAccessRegistry(
   }
   // 逐节点动作矩阵必须自洽：缺类型/缺动作/非法状态/无证据都会让门禁失败。
   errors.push(...validateNodeActionMatrix())
+  // 节点契约快照必须覆盖全部 Active 节点（漏节点/坏端口都阻断）。
+  errors.push(...validateNodeContractSnapshot())
   return errors
 }

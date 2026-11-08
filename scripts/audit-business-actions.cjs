@@ -143,7 +143,8 @@ const CANVAS_ACTIONS = [
   ['canvas.chat.skill-bind', '对话节点绑定/查看已安装技能版本'],
   ['canvas.run.observe', '运行时间线/任务状态查询'],
   ['canvas.model.catalog', '模型设置页读取本地模型与能力验证状态'],
-  ['canvas.project.read-summary', '项目页/打开项目时读取项目摘要']
+  ['canvas.project.read-summary', '项目页/打开项目时读取项目摘要'],
+  ['canvas.node.contract-panel', '选中节点右侧 I/O 面板的类型/字段/端口/依赖查询（N1）']
 ]
 
 const PHASES = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'external', 'excluded']
@@ -160,7 +161,6 @@ const PHASES = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'external'
  */
 const META_OPERATIONS = new Map([
   ['capability.list', '协议自省：列出当前已开放操作，无对应 GUI 业务动作'],
-  ['node.type.list', '协议自省：列出节点接入状态，GUI 通过节点注册表直接读取']
 ])
 const EXTERNAL_ONLY_OPERATIONS = new Map([
   [

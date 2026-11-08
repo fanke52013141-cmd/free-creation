@@ -67,8 +67,10 @@ const P = (reason: string): NodeActionState => ({ status: 'planned', evidence: r
 const C = (evidence: string): NodeActionState => ({ status: 'contract-tested', evidence })
 const D = (evidence: string): NodeActionState => ({ status: 'desktop-tested', evidence })
 
-const N1_PLANNED = () =>
-  P('缺少"节点类型目录"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）')
+const N1_CONTRACT = () =>
+  C(
+    'node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果'
+  )
 
 /**
  * 按族给出默认动作状态，再对里程碑真实覆盖过的类型逐项覆盖。
@@ -78,7 +80,7 @@ const N1_PLANNED = () =>
  */
 function familyDefaults(family: 'document' | 'media' | 'paid' | 'conversation' | 'agent' | 'director'): Record<NodeActionId, NodeActionState> {
   const common: Record<NodeActionId, NodeActionState> = {
-    N1: N1_PLANNED(),
+    N1: N1_CONTRACT(),
     N2: C(GRAPH_CONTRACT),
     N3: C(GRAPH_CONTRACT),
     N4: C(GRAPH_CONTRACT),
