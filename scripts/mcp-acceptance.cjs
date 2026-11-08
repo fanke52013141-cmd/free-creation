@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty, no-irregular-whitespace */
+﻿/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty, no-irregular-whitespace */
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
 ﻿/**
  * 真实 MCP 客户端验收：把 133 项外部操作逐个过一遍真实 MCP 协议栈
@@ -78,7 +78,7 @@ const GUARDED_OPS = [
   ['graph.patch', { projectId: 'p', expectedGraphVersion: 0, ops: [] }, null],
   ['project.import', { filePath: '/etc/passwd' }, 'PATH_NOT_ALLOWED'],
   ['run.cancel', { projectId: 'p', taskId: 't' }, null],
-  ['canvas.history', { projectId: 'p', expectedGraphVersion: 0, direction: 'undo' }, null],
+
   ['flowAgent.cooperate', { projectId: 'p', nodeId: 'shape:x', action: 'note' }, null],
   ['license.getStatus', {}, null]
 ]

@@ -67,7 +67,7 @@ const P = (reason: string): NodeActionState => ({ status: 'planned', evidence: r
 const C = (evidence: string): NodeActionState => ({ status: 'contract-tested', evidence })
 const D = (evidence: string): NodeActionState => ({ status: 'desktop-tested', evidence })
 
-const N1_CONTRACT = () =>
+const N1_CONTRACT = (): NodeActionState =>
   C(
     'node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果'
   )

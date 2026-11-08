@@ -71,7 +71,11 @@ async function main(): Promise<void> {
       // 协议层失败也必须给**结构化**回执：真实 Agent 客户端要能按 error.code 分支，
       // 不能只收到一串纯文本（否则"参数缺幂等键"和"字段类型不对"无法区分）。
       // detail 只放字段路径，不放请求正文、路径或密钥。
-      const protocolFailure = (code: string, phase: string, detail?: string) => {
+      const protocolFailure = (
+        code: string,
+        phase: string,
+        detail?: string
+      ): { isError: true; structuredContent: Record<string, unknown>; content: Array<{ type: 'text'; text: string }> } => {
         // 必须满足 operationResponseSchema（strict）：含 traceId，且失败态不带 data。
         const failure = {
           apiVersion: 1 as const,
@@ -89,12 +93,16 @@ async function main(): Promise<void> {
       }
       if (!id) return protocolFailure('UNSUPPORTED_OPERATION', 'dispatch')
       const parsed = toolInputSchema(id).safeParse(request.params.arguments)
-      if (!parsed.success)
+      if (!parsed.success) {
+        const issue = parsed.error.issues[0]
+        const path = issue?.path.join('.') || 'input'
+        // 带上原因（zod message 不含具体值），便于客户端直接修正而不是猜。
         return protocolFailure(
           'INVALID_INPUT',
           'validate',
-          parsed.error.issues[0]?.path.join('.') || 'input'
+          (path + ': ' + (issue?.message ?? 'invalid')).slice(0, 200)
         )
+      }
       const response = await callLocalOperation(
         id,
         parsed.data as { input: unknown; requestId?: string; idempotencyKey?: string },

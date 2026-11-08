@@ -1,4 +1,5 @@
-import { z } from 'zod'
+﻿import { z } from 'zod'
+import { OPERATION_REQUIREMENTS } from './metadata'
 import { ACTIVE_NODE_TYPE_IDS } from '../types'
 import {
   NODE_ACTION_IDS,
@@ -403,7 +404,12 @@ export const AccessResponseSchema = z
         code: z.string(),
         phase: z.string(),
         retryable: z.boolean(),
-        detail: z.string().max(300).optional()
+        detail: z.string().max(300).optional(),
+        /**
+         * 版本冲突时服务端看到的**当前**图版本（结构化）。
+         * 客户端拿到它可以直接用该版本重试，不必解析 detail 文本。
+         */
+        currentGraphVersion: z.number().int().nonnegative().optional()
       })
       .strict()
       .optional()
@@ -542,7 +548,14 @@ export const ACCESS_OUTPUTS = {
     })
     .strict(),
   'capability.list': z
-    .object({ operations: z.array(z.json()), limitations: z.array(z.string()) })
+    .object({
+      operations: z.array(z.json()),
+      /** 错误码目录（code/meaning/hint），供客户端做机器可读的错误分支。 */
+      errorCatalog: z
+        .array(z.object({ code: z.string(), meaning: z.string(), hint: z.string() }).strict())
+        .optional(),
+      limitations: z.array(z.string())
+    })
     .strict(),
   'graph.get': z
     .object({
@@ -582,6 +595,11 @@ export const ACCESS_OUTPUTS = {
       created: z
         .array(z.object({ ref: accessClientRef.optional(), nodeId: z.string().max(180) }).strict())
         .max(GRAPH_PATCH_MAX_OPS),
+      /** 本批创建的 tldraw group：供后续 group.delete 解组使用（节点之外的形状没有 nodeId）。 */
+      groups: z
+        .array(z.object({ ref: accessClientRef.optional(), groupId: z.string().max(180) }).strict())
+        .max(GRAPH_PATCH_MAX_OPS)
+        .optional(),
       applied: z
         .object({
           nodeCreated: z.number().int().nonnegative(),
@@ -706,12 +724,16 @@ export const ACCESS_OUTPUTS = {
         .array(
           z
             .object({
+              /** 统一主键别名：与 mediaId 同值，便于跨族统一用 id 寻址。 */
+              id: z.string().max(40),
               mediaId: z.string().max(40),
               kind: z.enum(['image', 'video', 'audio', 'file']),
               mime: z.string().max(120),
               path: z.string().max(300),
               sizeBytes: z.number().int().nonnegative(),
-              name: z.string().max(200)
+              name: z.string().max(200),
+              /** 是否有生成来源（谱系）；有则可用 media.getRecipe 查详情。 */
+              hasRecipe: z.boolean()
             })
             .strict()
         )
@@ -898,13 +920,47 @@ export const NODE_ACCESS_DECLARATIONS = [
 export function nodeAccessDirectorySummary(): ReturnType<typeof nodeActionSummary> {
   return nodeActionSummary()
 }
+/**
+ * 对外广播用的 JSON Schema：把"有默认值却出现在 required 里"的字段从 required 移除。
+ *
+ * 为什么需要：zod 的 `.default()` 在 toJSONSchema 里会同时产生 `default` 与 `required`，
+ * 于是契约说"必填"、实际实现却能省略。自动生成的客户端与 LLM 工具调用会因此多传/误判。
+ * 这里统一以**实际行为**为准：有默认值 = 可省略。
+ */
+export function advertisedJsonSchema(schema: z.ZodType): Record<string, unknown> {
+  const strip = (node: unknown): unknown => {
+    if (Array.isArray(node)) return node.map(strip)
+    if (!node || typeof node !== 'object') return node
+    const record = node as Record<string, unknown>
+    const properties = record.properties
+    let required = Array.isArray(record.required) ? [...(record.required as string[])] : undefined
+    if (required && properties && typeof properties === 'object') {
+      const props = properties as Record<string, unknown>
+      required = required.filter((key) => {
+        const property = props[key]
+        return !(property && typeof property === 'object' && 'default' in (property as object))
+      })
+      if (required.length === 0) delete record.required
+      else record.required = required
+    }
+    for (const key of Object.keys(record)) {
+      if (key === 'required') continue
+      record[key] = strip(record[key])
+    }
+    return record
+  }
+  return strip(z.toJSONSchema(schema)) as Record<string, unknown>
+}
+
 export function operationDirectory(): unknown[] {
   return Object.entries(ACCESS_OPERATIONS).map(([operationId, spec]) => ({
     operationId,
     operationVersion: 1,
     effect: spec.effect,
     description: spec.description,
-    inputSchema: z.toJSONSchema(spec.input),
+    /** 前置条件（需要先满足什么），供 Agent 自描述规划。 */
+    requires: OPERATION_REQUIREMENTS[operationId as AccessOperationId] ?? [],
+    inputSchema: advertisedJsonSchema(spec.input),
     outputSchema: z.toJSONSchema(operationResponseSchema(operationId as AccessOperationId)),
     transports: ['cli', 'mcp-stdio']
   }))

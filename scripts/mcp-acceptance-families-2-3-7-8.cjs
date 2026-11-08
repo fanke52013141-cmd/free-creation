@@ -1,4 +1,4 @@
-/**
+﻿/**
  * MCP 验收 · 第 2/3/7/8 族：媒体、传输、历史快照、诊断与工作区。
  *
  * 真实 MCP 协议栈 + 真实桌面会话，跑完整链路并校验**副作用真实发生**。
@@ -299,12 +299,19 @@ async function main() {
       return { code: response.error.code }
     })
     await history.check('history.recovery.precheck', async () => {
-      // decision 是必填：除非给决策，否则应被 Schema 拒（先验证这一点，再给合法值）
-      const missing = await call('history.recovery.precheck', { projectId })
-      expect(
-        missing?.status === 'failed' && missing.error?.code === 'INVALID_INPUT',
-        '缺 decision 时未按预期被 Schema 拒绝'
-      )
+      // C10 优化后：不传 decision 也能预检（只读事实），返回 requiresDecision
+      const withoutDecision = await call('history.recovery.precheck', { projectId })
+      if (withoutDecision?.status === 'completed') {
+        expect(
+          withoutDecision.data?.requiresDecision === true || withoutDecision.data?.exists === false,
+          '不传 decision 时未标记 requiresDecision'
+        )
+      } else {
+        expect(
+          ['ACTIVE_PROJECT_REQUIRED', 'NOT_FOUND'].includes(withoutDecision.error?.code),
+          '不传 decision 时错误码异常：' + withoutDecision.error?.code
+        )
+      }
       const response = await call('history.recovery.precheck', { projectId, decision: 'discard' })
       if (response?.status === 'completed') return { ok: true }
       allowBusiness(response, ['NOT_FOUND', 'PROJECT_NOT_OPEN', 'NO_RECOVERY_AVAILABLE'], 'history.recovery.precheck')

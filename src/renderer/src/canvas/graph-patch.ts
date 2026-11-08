@@ -31,6 +31,8 @@ export interface GraphPatchApplyCounts {
 
 export interface GraphPatchPlan {
   created: Array<{ ref?: string; nodeId: TLShapeId }>
+  /** 本批创建的 tldraw group（节点之外的形状，供解组使用）。 */
+  groups: Array<{ ref?: string; groupId: TLShapeId }>
   counts: GraphPatchApplyCounts
   apply(editor: Editor): void
 }
@@ -162,6 +164,7 @@ export function planGraphPatch(
   }
 
   const created: Array<{ ref?: string; nodeId: TLShapeId }> = []
+  const createdGroups: Array<{ ref?: string; groupId: TLShapeId }> = []
   const counts: GraphPatchApplyCounts = { nodeCreated: 0, nodeUpdated: 0, nodeDeleted: 0, edgeCreated: 0, edgeDeleted: 0 }
   const applySteps: Array<(editor: Editor) => void> = []
   const fail = (index: number, code: string, detail?: string): GraphPatchPlanResult => ({ ok: false, issue: { index, code, ...(detail ? { detail } : {}) } })
@@ -401,12 +404,15 @@ export function planGraphPatch(
         ids.push(id)
       }
       if (new Set(ids).size !== ids.length) return fail(index, 'DUPLICATE_NODE', 'nodeIds')
-      let groupId: TLShapeId | undefined
+      // tldraw 的 groupShapes 返回 editor 本身（不是新建的 group），所以必须**显式指定** groupId，
+      // 否则拿不到 group 身份，外部组合之后就永远解不了组。
+      const groupId = createShapeId()
       applySteps.push((ed) => {
         ed.markHistoryStoppingPoint('agent-group-create')
-        const groups = ed.groupShapes(ids)
-        groupId = groups[0]?.id
-        if (op.ref && groupId) refToId.set(op.ref, groupId)
+        ed.groupShapes(ids, { groupId })
+        refToId.set(groupId, groupId)
+        createdGroups.push({ ...(op.ref ? { ref: op.ref } : {}), groupId })
+        if (op.ref) refToId.set(op.ref, groupId)
       })
       continue
     }
@@ -568,6 +574,7 @@ export function planGraphPatch(
     ok: true,
     plan: {
       created,
+      groups: createdGroups,
       counts,
       apply(editor: Editor): void {
         for (const step of applySteps) step(editor)

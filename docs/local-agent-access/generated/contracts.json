@@ -6,6 +6,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "分页查询已安装技能的名称、固定版本和摘要，不返回指令正文",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -23,10 +24,6 @@
             "maximum": 100
           }
         },
-        "required": [
-          "offset",
-          "limit"
-        ],
         "additionalProperties": false
       },
       "outputSchema": {
@@ -120,6 +117,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -149,6 +151,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "安装本机 SKILL.md、JSON 技能包或扁平技能目录；name 为独立技能名称；仅支持指令与文本参考，不执行脚本",
+      "requires": [
+        "skillPackage"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -242,6 +247,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -271,6 +281,10 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "分页查询项目已保存的 AI 对话节点及其绑定技能版本；活动画布的未保存修改不在结果中",
+      "requires": [
+        "openProject",
+        "chatNode"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -293,9 +307,7 @@
           }
         },
         "required": [
-          "projectId",
-          "offset",
-          "limit"
+          "projectId"
         ],
         "additionalProperties": false
       },
@@ -412,6 +424,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -441,6 +458,10 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "替换当前打开的 AI 对话节点的完整技能集合（空数组为清空），经桌面保存；必须使用已安装的固定版本，不启动对话",
+      "requires": [
+        "openProject",
+        "chatNode"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -495,8 +516,7 @@
           "projectId",
           "expectedGraphVersion",
           "nodeId",
-          "skills",
-          "maxSteps"
+          "skills"
         ],
         "additionalProperties": false
       },
@@ -600,6 +620,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -629,6 +654,10 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "以独立 name 将指定 AI 对话节点和固定版本技能保存到节点库；排除聊天记录、附件与运行结果",
+      "requires": [
+        "openProject",
+        "chatNode"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -731,6 +760,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -760,6 +794,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "分页查询节点库条目摘要，不返回配置正文",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -777,10 +812,6 @@
             "maximum": 100
           }
         },
-        "required": [
-          "offset",
-          "limit"
-        ],
         "additionalProperties": false
       },
       "outputSchema": {
@@ -873,6 +904,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -902,6 +938,9 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取画布节点/连线/分组的版本化视图（分页）；config 与正文经 node.get 显式读取；latest 视图仅限当前打开项目",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -932,10 +971,7 @@
           }
         },
         "required": [
-          "projectId",
-          "view",
-          "offset",
-          "limit"
+          "projectId"
         ],
         "additionalProperties": false
       },
@@ -1232,6 +1268,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -1261,6 +1302,9 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取单个已保存节点的类型、契约版本、配置、正文、端口与连线引用；运行事实与结果经 run/output 族查询",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -1598,6 +1642,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -1660,6 +1709,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "向当前打开项目提交一批类型化画布编辑（建/改/删节点与连线）；整体校验后原子应用并保存；返回ID映射与保存版本",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -2393,6 +2445,27 @@
                   "additionalProperties": false
                 }
               },
+              "groups": {
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "ref": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_-]{1,64}$"
+                    },
+                    "groupId": {
+                      "type": "string",
+                      "maxLength": 180
+                    }
+                  },
+                  "required": [
+                    "groupId"
+                  ],
+                  "additionalProperties": false
+                }
+              },
               "applied": {
                 "type": "object",
                 "properties": {
@@ -2456,6 +2529,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -2485,6 +2563,10 @@
       "operationVersion": 1,
       "effect": "execute",
       "description": "向当前打开项目提交节点执行（single=仅该节点读取已持久化上游；subgraph=所选节点及其上游闭包）；返回持久任务ID，最终状态以 run.get 为准",
+      "requires": [
+        "openProject",
+        "verifiedModel"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -2523,9 +2605,7 @@
         "required": [
           "projectId",
           "expectedGraphVersion",
-          "nodeIds",
-          "mode",
-          "confirmPaidRerun"
+          "nodeIds"
         ],
         "additionalProperties": false
       },
@@ -2620,6 +2700,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -2649,6 +2734,9 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "等待任务到达终态或超时；返回任务当前状态，不自动重放或取消任务",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -2670,8 +2758,7 @@
         },
         "required": [
           "projectId",
-          "taskId",
-          "timeoutMs"
+          "taskId"
         ],
         "additionalProperties": false
       },
@@ -2801,6 +2888,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -2830,6 +2922,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "请求取消当前打开项目上的在途任务；取消请求与取消确认分开，最终状态以 run.get 为准",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -2925,6 +3020,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -2954,6 +3054,9 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取节点最近一次正式输出投影（确定性文本/JSON/processor/媒体引用等已登记类型）；运行事实来自真实运行记录，不可伪造",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -3114,6 +3217,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -3143,6 +3251,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "把本机文件登记为项目受控媒体（复制入库、去敏索引）；返回受控 mediaId 供节点引用，不接收二进制报文",
+      "requires": [
+        "project"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -3265,6 +3376,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -3294,6 +3410,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "分页读取项目受控媒体摘要（kind/mime/尺寸/相对引用路径），不返回绝对路径或文件正文",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -3316,9 +3433,7 @@
           }
         },
         "required": [
-          "projectId",
-          "offset",
-          "limit"
+          "projectId"
         ],
         "additionalProperties": false
       },
@@ -3369,6 +3484,10 @@
                 "items": {
                   "type": "object",
                   "properties": {
+                    "id": {
+                      "type": "string",
+                      "maxLength": 40
+                    },
                     "mediaId": {
                       "type": "string",
                       "maxLength": 40
@@ -3398,15 +3517,20 @@
                     "name": {
                       "type": "string",
                       "maxLength": 200
+                    },
+                    "hasRecipe": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
+                    "id",
                     "mediaId",
                     "kind",
                     "mime",
                     "path",
                     "sizeBytes",
-                    "name"
+                    "name",
+                    "hasRecipe"
                   ],
                   "additionalProperties": false
                 }
@@ -3434,6 +3558,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -3463,6 +3592,7 @@
       "operationVersion": 1,
       "effect": "delete",
       "description": "删除项目受控媒体（磁盘文件+索引）；mediaId 必须属于指定项目；回执含保存图中引用计数，不校验引用为空（与 GUI 面板删除同一规则）",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -3555,6 +3685,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -3584,6 +3719,10 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取对话节点的会话目录（含活动会话标记与模型配置摘要）；消息正文经 chat.messages 显式读取",
+      "requires": [
+        "openProject",
+        "chatNode"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -3734,6 +3873,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -3763,6 +3907,10 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "分页读取指定会话的消息正文（role/content/意图/附件引用）；助手回复是模型真实输出，不可伪造",
+      "requires": [
+        "openProject",
+        "chatNode"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -3795,9 +3943,7 @@
         },
         "required": [
           "projectId",
-          "nodeId",
-          "offset",
-          "limit"
+          "nodeId"
         ],
         "additionalProperties": false
       },
@@ -3945,6 +4091,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -3974,6 +4125,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "分页读取本地模型ID、启用状态与能力验证状态；不联网探测，不返回凭据、地址或配置",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -3991,10 +4143,6 @@
             "maximum": 100
           }
         },
-        "required": [
-          "offset",
-          "limit"
-        ],
         "additionalProperties": false
       },
       "outputSchema": {
@@ -4129,6 +4277,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -4158,6 +4311,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "分页检索资源库摘要；不返回组件正文、媒体路径或资源包",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -4181,10 +4335,6 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "limit",
-          "includeArchived"
-        ],
         "additionalProperties": false
       },
       "outputSchema": {
@@ -4310,6 +4460,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -4339,6 +4494,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "创建单图图片资源（一张图片+名称）；图片取自本机已存在的文件路径，不接收网络地址、二进制报文或额外组件",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -4451,6 +4607,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -4480,6 +4641,9 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "按项目和taskId读取持久化内部Agent任务基础状态；不含命令、模型媒体任务、正文或控制操作",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -4715,6 +4879,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -4744,6 +4913,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取诊断存储健康计数；不返回事件正文或诊断包，不代表任务执行成功",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -4846,6 +5016,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -4875,6 +5050,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取本地应用版本与实例身份",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -4958,6 +5134,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -4987,6 +5168,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取当前已开放操作及其输入契约",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -5031,6 +5213,29 @@
                   "$ref": "#/$defs/__schema0"
                 }
               },
+              "errorCatalog": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "meaning": {
+                      "type": "string"
+                    },
+                    "hint": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "meaning",
+                    "hint"
+                  ],
+                  "additionalProperties": false
+                }
+              },
               "limitations": {
                 "type": "array",
                 "items": {
@@ -5059,6 +5264,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -5121,6 +5331,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取节点接入状态；本包不开放节点操作",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -5375,6 +5586,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -5404,6 +5620,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "分页读取项目摘要",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -5421,10 +5638,6 @@
             "maximum": 100
           }
         },
-        "required": [
-          "offset",
-          "limit"
-        ],
         "additionalProperties": false
       },
       "outputSchema": {
@@ -5523,6 +5736,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -5552,6 +5770,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取已保存项目摘要与内容数量，不返回原始快照",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -5676,6 +5895,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -5705,6 +5929,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "幂等新建空项目",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -5812,6 +6037,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -5841,6 +6071,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "保存当前画布后在桌面打开项目；等待画布就绪",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -5947,6 +6178,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -5976,6 +6212,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "按版本修改项目名称；活动画布先保存并同步版本",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -6094,6 +6333,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -6123,6 +6367,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "按已保存版本修改项目名称；活动画布经保存握手同步",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -6241,6 +6486,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -6270,6 +6520,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "保存当前权威内容；活动画布等待最新编辑落盘，不接收客户端快照",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -6353,6 +6606,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -6382,6 +6640,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "固定源版本复制项目（媒体ID/引用重映射）；活动源画布先保存，克隆不继承运行任务",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -6500,6 +6759,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -6529,6 +6793,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取删除影响摘要与占用阻塞项，无阻塞时签发短期确认令牌",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -6673,6 +6938,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -6702,6 +6972,7 @@
       "operationVersion": 1,
       "effect": "delete",
       "description": "凭预检令牌硬删除项目；拒绝活动画布、运行/未知占用，令牌过期或事实漂移需重新预检",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -6789,6 +7060,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -6818,6 +7094,9 @@
       "operationVersion": 1,
       "effect": "export",
       "description": "活动画布先保存最新编辑，再导出完整项目到受控目录，不覆盖文件",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -6921,6 +7200,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -6950,6 +7234,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "分页检索资源库摘要（分类/文件夹/集合/类型/归档过滤）；不返回组件正文与媒体路径",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -7013,10 +7298,6 @@
             "maximum": 100
           }
         },
-        "required": [
-          "includeArchived",
-          "limit"
-        ],
         "additionalProperties": false
       },
       "outputSchema": {
@@ -7198,6 +7479,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -7227,6 +7513,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取单个资源详情：组件摘要（角色/类型/哈希/引用）、全部修订与项目使用记录；正文需显式 includeText",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -7245,8 +7532,7 @@
           }
         },
         "required": [
-          "resourceId",
-          "includeText"
+          "resourceId"
         ],
         "additionalProperties": false
       },
@@ -7598,6 +7884,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -7627,6 +7918,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "物化前预检所选组件的资源文件是否存在（与 GUI 复用文件预检同一服务），不复制文件",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -7727,6 +8019,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -7756,6 +8053,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "创建任意类型资源（文本/图片/音频/视频/文件/JSON 组件，可带分类/标签/集合/文件夹）；媒体组件只接受本机已存在文件路径作为导入请求",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -8238,6 +8536,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -8267,6 +8570,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "在指定基础版本上发布新修订（标题/描述/标签/分类/集合同步更新）；components 省略时复用基础版本全部组件",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -8756,6 +9060,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -8785,6 +9094,7 @@
       "operationVersion": 1,
       "effect": "delete",
       "description": "彻底删除一个资源（全部修订/组件/标签/集合与文件夹归属/使用记录，随后清理无引用 blob）；与 GUI 删除同一服务",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -8861,6 +9171,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -8890,6 +9205,7 @@
       "operationVersion": 1,
       "effect": "delete",
       "description": "批量彻底删除资源，逐项回执（单项不存在返回 NOT_FOUND，不静默跳过，不影响其它项）",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -8999,6 +9315,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -9028,6 +9349,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "归档/取消归档资源（可逆的「隐藏」标记）：归档后默认检索不返回，includeArchived 可查回；不删除内容",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -9201,6 +9523,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -9230,6 +9557,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "把资源归入某个资源库文件夹（folderId=null 表示移到资源库根目录）",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -9411,6 +9739,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -9440,6 +9773,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "替换资源的完整收藏集归属（空数组为清空）；收藏集 ID 必须存在",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -9618,6 +9952,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -9647,6 +9986,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取资源库文件夹目录（含上级与资源数量）",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -9760,6 +10100,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -9789,6 +10134,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "新建资源库文件夹；同一上级下不允许重名",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -9896,6 +10242,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -9925,6 +10276,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "重命名资源库文件夹；同一上级下不允许重名",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -10033,6 +10385,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -10062,6 +10419,7 @@
       "operationVersion": 1,
       "effect": "delete",
       "description": "删除资源库文件夹；子文件夹与资源上移到上级目录，不删除任何资源",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -10138,6 +10496,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -10167,6 +10530,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取收藏集目录（含资源数量）",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -10273,6 +10637,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -10302,6 +10671,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "新建收藏集；名称全局唯一",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -10402,6 +10772,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -10431,6 +10806,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取资源分类蓝图目录（含槽位定义，创建资源时用于 metadata.librarySlotId 映射）",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -10592,6 +10968,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -10621,6 +11002,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "按基础版本保存一个新的分类蓝图版本（版本必须为基础版本 +1，防覆盖）",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -10896,6 +11278,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -10925,6 +11312,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "把指定资源版本的所选组件物化到当前打开画布：复制资源文件为项目受控媒体，再经桌面握手创建节点并正式保存；返回逐组件节点映射",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -11125,6 +11515,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -11154,6 +11549,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "补偿性清理一次资源物化复制出的项目媒体（按 usageId 与项目归属核对）；已存在引用或跨项目一律拒绝删除",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -11240,6 +11638,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -11269,6 +11672,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "把项目中选中的多个节点及它们之间的连线保存为节点库组合条目（含媒体引用记录）；排除聊天历史、附件与运行结果",
+      "requires": [
+        "nodeLibraryEntry"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -11376,6 +11782,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -11405,6 +11816,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "重命名节点库条目；条目内容与画布不受影响",
+      "requires": [
+        "nodeLibraryEntry"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -11496,6 +11910,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -11525,6 +11944,9 @@
       "operationVersion": 1,
       "effect": "delete",
       "description": "删除节点库条目；画布上已经插入的节点不受影响",
+      "requires": [
+        "nodeLibraryEntry"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -11601,6 +12023,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -11630,6 +12057,9 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取节点库条目详情（节点类型/标题/尺寸/正文与配置存在性/媒体引用/连线拓扑）；不返回配置与正文内容",
+      "requires": [
+        "nodeLibraryEntry"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -11841,6 +12271,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -11870,6 +12305,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "按条目名称、节点标题与节点类型过滤节点库条目（分页）；不返回配置正文",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -11896,10 +12332,6 @@
             "maximum": 100
           }
         },
-        "required": [
-          "offset",
-          "limit"
-        ],
         "additionalProperties": false
       },
       "outputSchema": {
@@ -12003,6 +12435,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -12032,6 +12469,10 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "把节点库条目实例化到指定项目画布（须先 project.open 到当前画布）：重映射节点 ID、连线与媒体引用，经权威宿主落盘；外部输入只携带媒体 ID",
+      "requires": [
+        "openProject",
+        "nodeLibraryEntry"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -12230,6 +12671,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -12259,6 +12705,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "分页读取项目历史版本快照目录（名称/时间/节点数/可否外部恢复）；不返回快照正文",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -12281,9 +12728,7 @@
           }
         },
         "required": [
-          "projectId",
-          "offset",
-          "limit"
+          "projectId"
         ],
         "additionalProperties": false
       },
@@ -12387,6 +12832,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -12416,6 +12866,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "把项目当前已持久化的画布与图数据保存为命名历史版本快照；聊天正文与运行结果不进入快照，未保存的画布编辑不在其中（GUI 历史坞的快照捕获内存状态）",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -12528,6 +12981,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -12557,6 +13015,7 @@
       "operationVersion": 1,
       "effect": "delete",
       "description": "删除历史版本快照；当前画布与项目内容不受影响",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -12643,6 +13102,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -12672,6 +13136,9 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取历史版本恢复影响（当前/目标节点与连线数、媒体可用性）与占用阻塞项；无阻塞且快照含可恢复图数据时签发短期确认令牌",
+      "requires": [
+        "snapshot"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -12863,6 +13330,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -12892,6 +13364,10 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "凭预检令牌把历史版本恢复为项目正式内容（先保存恢复前检查点，再走正式保存机制）；生效前失败保持原图，令牌过期或事实漂移需重新预检",
+      "requires": [
+        "openProject",
+        "snapshot"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -13012,6 +13488,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -13040,7 +13521,8 @@
       "operationId": "history.recovery.precheck",
       "operationVersion": 1,
       "effect": "read",
-      "description": "按预期的裁决（use/discard）读取关窗冲突恢复副本的事实与阻塞项（是否存在/版本/节点数）；无阻塞时签发短期确认令牌",
+      "description": "读取关窗冲突恢复副本的事实与阻塞项（是否存在/版本/节点数）。**不传 decision 时只读事实**（无需先做决定）；传入 use/discard 且无阻塞时额外签发短期确认令牌供 resolve 使用",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -13058,8 +13540,7 @@
           }
         },
         "required": [
-          "projectId",
-          "decision"
+          "projectId"
         ],
         "additionalProperties": false
       },
@@ -13151,6 +13632,9 @@
                   ]
                 }
               },
+              "requiresDecision": {
+                "type": "boolean"
+              },
               "impactToken": {
                 "type": "string",
                 "minLength": 1,
@@ -13188,6 +13672,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -13217,6 +13706,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "凭预检令牌裁决恢复副本：use=经正式保存把副本落盘并移除副本；discard=丢弃副本、保留磁盘版本。与 GUI 打开项目时的裁决调用同一 repo 服务",
+      "requires": [
+        "pendingRecovery"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -13325,6 +13817,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -13354,6 +13851,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "导入受控导出目录内的完整项目包（.canvasbundle）：先写暂存目录，校验版本/媒体哈希与凭据剥离，媒体ID与相对路径全量重映射后才提交为新项目；失败清理暂存与半个项目",
+      "requires": [
+        "exportRootPackage"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -13502,6 +14002,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -13531,6 +14036,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "导入受控导出目录内的画布结构包（.canvasflow）为新项目：节点/连线/分组与快照经公共清洗后落库，不含媒体文件、运行结果与聊天正文；失败回滚新项目",
+      "requires": [
+        "exportRootPackage"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -13667,6 +14175,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -13696,6 +14209,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "导入受控导出目录内的资源包（.canvaslib）：校验清单格式/版本/逐文件大小与 sha256 后经事务登记为新资源；同一内容包按包哈希拒绝重复导入",
+      "requires": [
+        "exportRootPackage"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -13785,6 +14301,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -13814,6 +14335,7 @@
       "operationVersion": 1,
       "effect": "export",
       "description": "把资源库资源导出为受控导出目录内的资源包（.canvaslib）：临时文件→fsync→排他落位，不覆盖已有文件；返回路径、sha256 与字节数",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -13915,6 +14437,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -13944,6 +14471,9 @@
       "operationVersion": 1,
       "effect": "export",
       "description": "把项目**已保存**的画布结构导出为受控导出目录内的结构包（.canvasflow）：节点/连线/分组与画布快照经公共清洗（不含媒体文件、运行结果、聊天正文），临时文件→fsync→排他落位不覆盖已有文件；返回文件名、sha256、字节数与节点数",
+      "requires": [
+        "savedCanvasSnapshot"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -14042,6 +14572,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -14071,6 +14606,10 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取已保存 Agent Flow 任务的观察视图（状态/等待/决策与工具计数/审核反馈）；只读账本事实，不判定会话存活、不触发会话恢复、不改写任务状态",
+      "requires": [
+        "openProject",
+        "agentNode"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -14346,6 +14885,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -14375,6 +14919,9 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取当前打开画布的 Agent 能力目录（可用文本模型、受控工具、固定版本技能摘要）；要求项目已在桌面打开，不返回技能指令正文",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -14546,6 +15093,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -14575,6 +15127,11 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取指定 Agent 任务的协作记录（目标/消息/固定输入/候选成果）；只读，不接受外部代替人填写意见、选择或继续",
+      "requires": [
+        "openProject",
+        "agentNode",
+        "agentTask"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -14962,6 +15519,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -14991,6 +15553,11 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "向指定 Agent 任务写入一次协作事件（note/discuss/submit/revise），与 GUI 面板同一宿主实例与同一任务表；discuss/revise 可能真实调用模型，故先做模型工具调用预检；事件带 actor=external 标记，与人工输入可区分；不接受伪造 revision/waitRevision（由宿主核对）",
+      "requires": [
+        "openProject",
+        "agentNode",
+        "agentTask"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -15502,6 +16069,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -15531,6 +16103,11 @@
       "operationVersion": 1,
       "effect": "execute",
       "description": "在当前打开的 Agent 节点上启动/继续/对账/恢复内部 Agent 运行（与 GUI 面板同一宿主实例与同一任务账本）；start/continue 先做模型工具调用预检，失败发生在任何模型请求之前；不新建宿主、不伪造运行身份",
+      "requires": [
+        "openProject",
+        "agentNode",
+        "verifiedModel"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -15830,6 +16407,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -15923,6 +16505,11 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "请求暂停当前打开的 Agent 任务（下一次安全点生效）；任务不存在如实返回 NOT_FOUND，不伪造暂停结果",
+      "requires": [
+        "openProject",
+        "agentNode",
+        "agentTask"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -16177,6 +16764,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -16206,6 +16798,11 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "停止当前打开的 Agent 任务（与 GUI 停止按钮同一宿主方法）；调用后的终态仍以 flowAgent.inspect 读取的账本事实为准",
+      "requires": [
+        "openProject",
+        "agentNode",
+        "agentTask"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -16460,6 +17057,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -16489,6 +17091,10 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取 Flow 建图预览（最近一次或指定 buildId）：buildId/状态/计划步骤/节点身份与几何；只读已持久化预览，不调用模型、不修改画布；要求目标项目已在桌面打开",
+      "requires": [
+        "openProject",
+        "agentNode"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -16792,6 +17398,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -16821,6 +17432,11 @@
       "operationVersion": 1,
       "effect": "execute",
       "description": "在 builder 角色的 Agent 节点上提交建图目标，由同一桌面宿主的模型端口生成预览并持久化（不落画布）；需要已验证工具调用能力的模型，模型预检失败时零模型请求；request/trace/span 由 main 生成，外部不能自造",
+      "requires": [
+        "openProject",
+        "agentNode",
+        "verifiedModel"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -17111,6 +17727,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -17140,6 +17761,11 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "按 buildId 把已生成的建图预览提交到当前打开的权威画布（复用 GUI 同一 commitFlowBuild：authorize/confirm + 单撤销步 + 保存屏障）；外部不能自带预览内容；已 committed 的重复提交按持久化事实返回，不重复建节点",
+      "requires": [
+        "openProject",
+        "agentNode",
+        "buildPreview"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -17448,6 +18074,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -17477,6 +18108,11 @@
       "operationVersion": 1,
       "effect": "execute",
       "description": "在 ai-review 节点上提交一次模型审核并读取报告（与 GUI 同一 FlowReviewHost 与同一证据/预算规则）；审核结论由模型产生，外部不能改写为通过；需要已验证工具调用能力的模型，模型预检失败时零模型请求；request/trace/span 由 main 生成",
+      "requires": [
+        "openProject",
+        "agentNode",
+        "verifiedModel"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -17701,6 +18337,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -17730,6 +18371,9 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "按项目与 commandId 读取既有 Flow 命令的账本回执（状态/运行/输出版本引用）；只读事实，不创建、不结算、不改写命令",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -17899,6 +18543,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -17928,6 +18577,9 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "核对节点当前是否可执行：复用账本同一占用、协调控制范围与审核门禁；只读检查，不占用、不执行。不可用时返回与 GUI 相同的稳定拒绝码",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -18021,6 +18673,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -18050,6 +18707,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "按已保存运行事实核对既有 Flow 命令并结算账本回执；只有运行记录的 runId/命令/租约/输入指纹全部一致时才推进状态，无法确认时保持 pending/unknown 并回传稳定原因，绝不把 unknown 报成成功；需要幂等键",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -18259,6 +18919,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -18288,6 +18953,10 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "只读核对既有 Flow 命令：读取账本回执，并在回滚事务内用同一账本结算规则预演\"现在结算会得到什么状态\"（不落账、不改写命令、不产生输出版本）；无法结算时回传稳定原因，供 reconcile 决定是否提交",
+      "requires": [
+        "openProject",
+        "command"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -18512,6 +19181,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -18541,6 +19215,10 @@
       "operationVersion": 1,
       "effect": "execute",
       "description": "把一条外部派发请求交给当前活动画布执行：main 生成命令/任务/运行身份并先保存画布，按已保存图计算语义版本，账本记录 principal=external 后经既有渲染器 grant 通道执行；受理只表示已交给渲染器，最终状态用 lookup/check 读、reconcile 结算；付费目标必须 confirmPaidTarget=true",
+      "requires": [
+        "openProject",
+        "command"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -18631,8 +19309,7 @@
           "agentNodeId",
           "targetNodeId",
           "contractVersion",
-          "inputs",
-          "confirmPaidTarget"
+          "inputs"
         ],
         "additionalProperties": false
       },
@@ -18730,6 +19407,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -18759,6 +19441,10 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "放弃一条外部派发且**从未准入**的 Flow 命令（principal=external、admitted=0、pending/unknown）；已准入或已终态一律拒绝，绝不改写已执行事实；需要幂等键",
+      "requires": [
+        "openProject",
+        "command"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -18928,6 +19614,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -18957,6 +19648,10 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "把项目已保存画布上某节点端口的结果固化为固定资产版本（幂等 submissionId）；活动画布先经桌面保存屏障，节点有未核对命令时拒绝，不接收外部提供的取值",
+      "requires": [
+        "openProject",
+        "node"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -19116,6 +19811,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -19145,6 +19845,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "按节点端口列出固定资产版本摘要（序号/画布版本/摘要值），不返回取值正文；最多 100 条",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -19320,6 +20021,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -19349,6 +20055,10 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取固定资产版本摘要与固定取值（文本/JSON 上限 20k 字符或 100k 编码字符，超出如实拒绝）；媒体只返回受控 mediaId 与相对引用，不返回绝对路径或字节",
+      "requires": [
+        "openProject",
+        "flowAsset"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -19543,6 +20253,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -19605,6 +20320,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "分页读取本机模型供应商连接的去敏摘要（ID/名称/协议/启用状态/时间）；字段白名单投影，不返回地址、鉴权头、密钥密文或密钥引用，不联网探测",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -19622,10 +20338,6 @@
             "maximum": 100
           }
         },
-        "required": [
-          "offset",
-          "limit"
-        ],
         "additionalProperties": false
       },
       "outputSchema": {
@@ -19732,6 +20444,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -19761,6 +20478,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "分页读取模型定义（可按 connectionId 过滤）的能力声明与验证状态；不返回能力控制参数、元数据、验证原文或密钥材料，不联网探测",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -19783,10 +20501,6 @@
             "maxLength": 200
           }
         },
-        "required": [
-          "offset",
-          "limit"
-        ],
         "additionalProperties": false
       },
       "outputSchema": {
@@ -20029,6 +20743,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -20058,6 +20777,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "分页读取已启用的默认功能绑定（featureKey → 连接/模型/能力）；执行参数 overrides 与模型元数据不返回",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -20075,10 +20795,6 @@
             "maximum": 100
           }
         },
-        "required": [
-          "offset",
-          "limit"
-        ],
         "additionalProperties": false
       },
       "outputSchema": {
@@ -20204,6 +20920,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -20233,6 +20954,10 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "按 featureKey（可选显式 provider::model 目标）解析实际执行会用的 provider/model；复用 GUI 同一解析服务（含能力验证与密钥存在性检查），只返回去敏目标，不发起任何供应商请求",
+      "requires": [
+        "savedConnection",
+        "modelDefinition"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -20368,6 +21093,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -20397,6 +21127,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "只读探测本机媒体工具（FFmpeg/FFprobe/audio-separator）与本地推理环境（Python/GPU/IndexTTS）就绪状态；不安装、不下载、不联网，缺依赖如实报告不可用",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -20575,6 +21306,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -20604,6 +21340,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "只读读取视频引擎（本地 CUDA 推理环境，video-depth/video-clay 使用）的安装与就绪状态；不触发安装、下载或任何模型调用",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -20688,6 +21425,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -20717,6 +21459,10 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "启动本地视频推理环境安装（联网下载 CUDA/PyTorch 依赖与校验后的模型权重并写入应用数据目录，需要本机 Python 3.12）；必须显式 confirmInstall=true，否则拒绝且不启动任何下载；只受理启动，不等待安装完成，进度与就绪经 environment.videoEngine.status 读取",
+      "requires": [
+        "pythonRuntime",
+        "installConfirm"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -20726,9 +21472,6 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "confirmInstall"
-        ],
         "additionalProperties": false
       },
       "outputSchema": {
@@ -20804,6 +21547,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -20833,6 +21581,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取调色板（一级分类 Dock）的本机偏好：分类显示顺序与名称覆盖；这是纯界面业务偏好，不含项目数据、不含密钥",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -20919,6 +21668,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -20948,6 +21702,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "保存调色板偏好（分类显示顺序 + 可选名称覆盖）。与 GUI 调色板设置同一归一化：忽略未知分类、自动去重、缺失分类补默认顺序；幂等，同幂等键重放不产生第二次写入",
+      "requires": [
+        "none"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -21069,6 +21826,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -21098,6 +21860,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "按 trace/run/request/节点/级别/时间窗分页查询已落盘的结构化诊断事件；复用 GUI 同一诊断存储与脱敏（不返回提示词、模型回复正文、密钥或原始请求响应），服务不可用时如实报错而不是空结果",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -21151,10 +21914,6 @@
             "maximum": 200
           }
         },
-        "required": [
-          "offset",
-          "limit"
-        ],
         "additionalProperties": false
       },
       "outputSchema": {
@@ -21445,6 +22204,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -21474,6 +22238,9 @@
       "operationVersion": 1,
       "effect": "export",
       "description": "把指定范围的诊断事件导出为诊断包（zip）到**受控导出目录**（复用 GUI 同一 exportBundle 与脱敏规则）；范围可为一次流程(traceId)、一次运行(runId)或时间窗，可组合；回执给文件名/sha256/字节数/事件数，不接受任意输出路径也不覆盖已有文件",
+      "requires": [
+        "diagnosticsStore"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -21602,6 +22369,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -21631,6 +22403,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取项目已保存的节点可见集（预设/可见类型/节点集版本）与当前可创建类型；旧项目从未保存过配置时如实表达\"全部可创建节点可见\"，不伪造 general 预设",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -21798,6 +22571,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -21827,6 +22605,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "替换项目的节点可见集（决定调色板里出现哪些节点）；只接受当前可创建类型 ID，未知/重复/空集合显式拒绝；经项目正式保存机制落盘，重开项目后生效",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -21982,6 +22763,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -22011,6 +22797,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取某类节点的契约：契约版本、端口（输入/输出、类型、必填、基数、Schema）、初始配置、执行方式、输出真值来源与是否需要动态端口二次读取；不需要创建实例",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -22355,6 +23142,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -22384,6 +23176,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "创建或更新模型供应商连接；可选写入 API Key（写入设备绑定密钥库，明文不回传、不进日志）。连接协议/地址/头或密钥发生变化会清除该连接的模型验证与功能绑定，回执如实标记",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -22597,6 +23390,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -22626,6 +23424,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "查询某个连接是否已保存 API Key：只返回是否存在与不可逆指纹，不返回明文、不返回端点或请求头",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -22718,6 +23517,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -22747,6 +23551,7 @@
       "operationVersion": 1,
       "effect": "delete",
       "description": "删除模型供应商连接及其下所有模型定义（连带清理验证与功能绑定）；连接不存在如实 NOT_FOUND",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -22829,6 +23634,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -22858,6 +23668,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "创建或更新模型定义（必须绑定既有连接，能力声明非空）；不涉及凭据；能力变化会清除对应验证与绑定",
+      "requires": [
+        "savedConnection"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -22949,12 +23762,7 @@
                 }
               },
               "required": [
-                "operation",
-                "asynchronous",
-                "streaming",
-                "acceptedAssetKinds",
-                "producedAssetKinds",
-                "controls"
+                "operation"
               ],
               "additionalProperties": false
             }
@@ -23107,6 +23915,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -23136,6 +23949,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "删除单个模型定义（连带清理其验证、工具调用验证与功能绑定）；不存在如实 NOT_FOUND",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -23212,6 +24026,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -23241,6 +24060,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "批量删除模型定义（与 GUI 多选删除同一 deleteModels）；不存在的 ID 计入 notFound 而不是让整批失败，回执逐项可核对",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -23330,6 +24150,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -23359,6 +24184,10 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "保存功能默认绑定（featureKey + 连接 + 模型定义 + 操作）。**只有该模型该操作已通过验证才成立**：外部无法自行验证模型，因此未验证一律拒绝，不伪造\"已绑定可用\"",
+      "requires": [
+        "savedConnection",
+        "modelDefinition"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -23534,6 +24363,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -23563,6 +24397,10 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取某个项目媒体的生成来源（产物谱系）：生产者节点、运行ID、操作与参数摘要；媒体不属于该项目或没有来源时如实返回 found=false，不伪造谱系。生成来源只能由执行器写入，外部不可写",
+      "requires": [
+        "project",
+        "projectMedia"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -23736,6 +24574,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -23798,6 +24641,9 @@
       "operationVersion": 1,
       "effect": "export",
       "description": "把项目媒体（可指定 mediaIds，省略=全部）批量导出到受控导出目录下的新子目录：同名文件自动加序号后缀、绝不覆盖已有文件；逐项回执成功/失败文件名，不用总数掩盖个别失败",
+      "requires": [
+        "project"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -23947,6 +24793,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -23976,6 +24827,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "把项目里已登记的受控媒体采集为资源库资源（复制文件入库，生成来源随之迁移）；媒体必须属于该项目，外部只提供 mediaId 与可选文案，不提供路径；素材缺失/超限如实失败",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -24092,6 +24944,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -24121,6 +24978,7 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "把项目中选定的画布节点快照采集为一份独立版本化资源；每个节点的 nodeId 必须真实存在于该项目、nodeType 必须与持久化数据一致、引用的 mediaId 必须属于该项目，外部不能提交伪造的节点或跨项目媒体",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -24282,6 +25140,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -24311,6 +25174,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "在当前打开的画布上执行一步撤销或重做（与 GUI 历史坞同一 editor 历史栈）；只回滚画布编辑，不会撤销已发生的模型调用或发布副作用；expectedGraphVersion 为**建议值**（只拒绝超前版本；保存屏障会推进版本，严格相等会使调用永远失败）；执行后保存并返回新的图版本",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -24415,6 +25281,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -24444,6 +25315,9 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "保存并关闭当前打开的项目画布，回到项目列表（与 GUI 项目菜单\"返回\"同一动作）；只能关闭当前打开的画布，未打开的项目不会被误关",
+      "requires": [
+        "openProject"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -24520,6 +25394,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -24549,6 +25428,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "分页读取供应商目录（新目录优先，旧 providers 表保留为遗留档案）；只返回 id/名称/协议/模型数/是否有密钥/是否遗留，不返回地址、鉴权头或密钥材料，不联网探测",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -24570,11 +25450,6 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "offset",
-          "limit",
-          "includeLegacy"
-        ],
         "additionalProperties": false
       },
       "outputSchema": {
@@ -24702,6 +25577,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -24731,6 +25611,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "只读读取**节点执行实际可用**的供应商目录（已验证接管的目录档案）；与 GUI 节点模型选择器同一来源，不返回地址或密钥，不联网探测",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -24831,6 +25712,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -24860,6 +25746,7 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取\"可导出为凭据包\"的连接清单（用于凭据包导出前的选择）；只返回连接 id/名称/协议与模型数，不返回任何密钥材料或地址",
+      "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -24960,6 +25847,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -24989,6 +25881,10 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "测试已保存供应商连接是否可用（向供应商 /models 发一次请求）；必须显式 confirmNetwork=true 才执行，否则拒绝且不发任何请求；外部只给供应商 id，密钥与地址由 main 从设备密钥库读取；回执只给可用性与模型数量",
+      "requires": [
+        "savedProvider",
+        "networkConfirm"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -25003,8 +25899,7 @@
           }
         },
         "required": [
-          "providerId",
-          "confirmNetwork"
+          "providerId"
         ],
         "additionalProperties": false
       },
@@ -25080,6 +25975,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -25109,6 +26009,12 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "对某个模型定义做真实能力验证（会向供应商发起真实请求、**可能产生费用**）；必须同时显式 confirmNetwork=true 与 confirmCost=true 才执行，否则拒绝且不发任何请求；外部只给连接与模型定义 id，不提供密钥",
+      "requires": [
+        "savedConnection",
+        "modelDefinition",
+        "networkConfirm",
+        "costConfirm"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -25138,9 +26044,7 @@
         "required": [
           "connectionId",
           "modelDefinitionId",
-          "operation",
-          "confirmNetwork",
-          "confirmCost"
+          "operation"
         ],
         "additionalProperties": false
       },
@@ -25225,6 +26129,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -25254,6 +26163,10 @@
       "operationVersion": 1,
       "effect": "export",
       "description": "把选定的供应商连接导出为凭据包（.cskeys）到受控导出目录（复用 GUI 同一 exportProviders 与加密格式）：需要解封密码；回执给文件名/sha256/字节数/连接数，不回传包正文",
+      "requires": [
+        "activeLicense",
+        "savedConnection"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -25357,6 +26270,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -25386,6 +26304,10 @@
       "operationVersion": 1,
       "effect": "export",
       "description": "把选定的已保存连接封成凭据包（.cskeys）写入受控导出目录：需要解封密码与接收设备的凭证文件名（服务端从受控目录读取，不接受任意路径）；回执给文件名/sha256/字节数/包ID/连接数/到期时间，不回传包正文",
+      "requires": [
+        "activeLicense",
+        "recipientCredential"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -25506,6 +26428,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -25535,6 +26462,10 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "预览受控目录内的凭据包（只读，不解密落库）：需要解封密码；返回包 ID/签发设备摘要/到期/连接清单/是否已导入，不含任何密钥材料",
+      "requires": [
+        "activeLicense",
+        "keyPackage"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -25666,6 +26597,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -25695,6 +26631,11 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "在当前打开的导演台节点上申请发布（frame=静帧 PNG，video=WebM 预演）；只创建待人工授权的请求，不渲染、不改变画布，授权与拒绝由 GUI 中的人决定",
+      "requires": [
+        "openProject",
+        "directorNode",
+        "shot"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -25729,8 +26670,7 @@
         "required": [
           "projectId",
           "expectedGraphVersion",
-          "nodeId",
-          "mode"
+          "nodeId"
         ],
         "additionalProperties": false
       },
@@ -25844,6 +26784,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -25873,6 +26818,9 @@
       "operationVersion": 1,
       "effect": "read",
       "description": "读取一次发布申请的授权与执行状态（待授权/已授权/已拒绝/已过期/执行中/已完成/失败）；完成态返回正式产物媒体引用",
+      "requires": [
+        "publishRequest"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -26032,6 +26980,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -26061,6 +27014,10 @@
       "operationVersion": 1,
       "effect": "write",
       "description": "人工授权后执行发布：用与 GUI 相同的发布服务渲染并写入节点正式结果；未授权、已拒绝或已过期一律拒绝，不重放、不重复发布",
+      "requires": [
+        "publishRequest",
+        "humanAuthorization"
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -26210,6 +27167,11 @@
               "detail": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [

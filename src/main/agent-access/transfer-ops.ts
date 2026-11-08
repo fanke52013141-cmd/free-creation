@@ -80,6 +80,7 @@ function resolveControlledPackage(
   allowedExtensions: readonly string[]
 ): TransferOutcome<ResolvedPackage> {
   const input = typeof rawPath === 'string' ? rawPath.trim() : ''
+  // eslint-disable-next-line no-control-regex -- 控制字符就是要拒绝的输入
   if (!input || input.length > 1000 || /[\u0000-\u001f]/.test(input))
     return fail('INVALID_INPUT', 'package-path', 'filePath')
   let root: string
@@ -371,20 +372,41 @@ export function importLibraryPackage(
 }
 
 /** 结构包导出：把**已保存**画布结构导出到受控目录（临时文件→fsync→排他落位，不覆盖）。 */
-export function exportStructurePackage(
+export async function exportStructurePackage(
   input: Record<string, unknown>,
-  exportRoot: string
-): TransferOutcome<AccessOutput<'project.exportStructure'>> {
+  exportRoot: string,
+  desktop?: {
+    run: (request: {
+      action: 'flush'
+      projectId: string
+      expectedGraphVersion?: number
+    }) => Promise<{ graphVersion: number }>
+  }
+): Promise<TransferOutcome<AccessOutput<'project.exportStructure'>>> {
   const projectId = typeof input.projectId === 'string' ? input.projectId : ''
   if (!/^[a-zA-Z0-9_-]{1,80}$/.test(projectId))
     return fail('INVALID_INPUT', 'structure-export', 'projectId')
   const fileName = typeof input.fileName === 'string' ? input.fileName : ''
   if (!/^[a-zA-Z0-9_-]{1,100}\.canvasflow$/.test(fileName))
     return fail('INVALID_INPUT', 'structure-export', 'fileName')
-  const file = projects.openProject(projectId)
+  let file = projects.openProject(projectId)
   if (!file) return fail('NOT_FOUND', 'structure-export', 'projectId')
-  // 结构包必须携带画布快照；项目从未保存过 tldraw 快照（例如只经外部 graph.patch 建过图、
-  // 或旧格式项目）时无法导出，如实报明确原因而不是让它变成模糊的"包内容无效"。
+  // 结构包必须携带画布快照。若当前没有快照（例如项目只在外部建过图、从未在界面保存过），
+  // 先经权威宿主做一次保存屏障：它会带上一份完整的 tldraw 快照。这样外部导出就不再
+  // 依赖"必须先有人打开界面保存一次"。
+  if ((!file.tldrawSnapshot || typeof file.tldrawSnapshot !== 'object') && desktop) {
+    try {
+      await desktop.run({
+        action: 'flush',
+        projectId,
+        expectedGraphVersion: file.meta.graphVersion
+      })
+    } catch {
+      // 保存屏障失败不在这里判死：下面仍会按"没有快照"如实拒绝。
+    }
+    file = projects.openProject(projectId)
+    if (!file) return fail('NOT_FOUND', 'structure-export', 'projectId')
+  }
   const snapshot = file.tldrawSnapshot
   if (!snapshot || typeof snapshot !== 'object')
     return fail(

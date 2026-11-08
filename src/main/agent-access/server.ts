@@ -10,6 +10,7 @@ import {
   writeFileSync
 } from 'node:fs'
 import { isAbsolute, join, relative } from 'node:path'
+import { assertLicenseActive } from '../security/license/gate'
 import { tmpdir } from 'node:os'
 import { ACCESS_MAX_BYTES } from '../../shared/agent-access/registry'
 import { acquireProcessLock } from '../store/process-lock'
@@ -27,6 +28,8 @@ export async function startLocalAccessServer(options: {
   desktop?: AccessDesktop
   diagnostics?: Pick<DiagnosticsService, 'health'> | null
 }): Promise<LocalAccessServer> {
+  // 授权守卫（方案 §3.3）：外部接入只在有效授权下开启。
+  assertLicenseActive('agent.access.start')
   const ownership = acquireProcessLock('local-agent-access-server')
   const instanceId = randomUUID()
   const token = randomBytes(32).toString('hex')

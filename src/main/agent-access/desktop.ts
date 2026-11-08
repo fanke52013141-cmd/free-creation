@@ -14,7 +14,9 @@ export class DesktopAccessError extends Error {
   constructor(
     readonly code: string,
     readonly unknownOutcome = false,
-    readonly detail?: string
+    readonly detail?: string,
+    /** 版本冲突时宿主报告的当前图版本（结构化回传，客户端可直接用它重试）。 */
+    readonly currentGraphVersion?: number
   ) {
     super(code)
   }
@@ -106,7 +108,9 @@ export function createAccessDesktop(getWindow: () => BrowserWindow | null): Acce
         new DesktopAccessError(
           reply.errorCode ?? 'DESKTOP_OPERATION_FAILED',
           reply.validated !== true,
-          reply.errorDetail
+          reply.errorDetail,
+          // 版本冲突时把宿主看到的当前版本带上，客户端无需解析 detail 文本
+          reply.errorCode === 'REVISION_CONFLICT' ? reply.graphVersion : undefined
         ),
         undefined
       )

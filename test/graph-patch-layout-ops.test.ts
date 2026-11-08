@@ -339,6 +339,10 @@ describe('group.create / group.delete', () => {
     planned.plan.apply(editorState.editor)
     expect(editorState.grouped).toHaveLength(1)
     expect(editorState.grouped[0].sort()).toEqual(['shape:a', 'shape:b'])
+    // 组合结果必须回传 groupId（否则外部拿到组合后无法解组）
+    expect(planned.plan.groups).toHaveLength(1)
+    expect(planned.plan.groups[0].ref).toBe('g1')
+    expect(typeof planned.plan.groups[0].groupId).toBe('string')
 
     // 用 ref 解组：同一批内 group.create 之后能引用 g1
     const ungroup = planGraphPatch(editorState.editor, [{ action: 'group.delete', groupId: 'g1' }], [])

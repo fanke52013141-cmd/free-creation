@@ -1,4 +1,4 @@
-import { supportsSampledVideoReview } from '../../shared/agent-flow/video-review'
+﻿import { supportsSampledVideoReview } from '../../shared/agent-flow/video-review'
 import { supportsReviewAudioInput } from '../../shared/agent-flow/media-review'
 import { ipcMain, type BrowserWindow } from 'electron'
 import { IPC, type IpcEnvelope } from '../../shared/contracts'
@@ -441,7 +441,8 @@ export function registerFlowAgentsIpc(
     build: (raw) => builder.handle(raw as BuildRequest),
     review: (raw) => review.run(raw as ReviewRequest),
     assertReviewToolCalling: (projectId, nodeId) => assertReviewToolCalling(projectId, nodeId),
-    cooperate: (raw) => host.cooperate(raw)
+    cooperate: (raw) => host.cooperate(raw),
+    collaboration: (query) => host.collaboration(query)
   })
   return host
 }

@@ -257,6 +257,7 @@ async function cooperateFlowAgent(
   input: Record<string, unknown>,
   _context: FlowAgentOperationContext
 ): Promise<unknown> {
+  void _context
   const port = flowAgentAccessPort()
   if (!port) refuse('FLOW_AGENTS_UNAVAILABLE', 'flow agent host is not running in this instance')
   const projectId = input.projectId as string
@@ -279,6 +280,10 @@ async function cooperateFlowAgent(
   if (!parsed.success)
     refuse('AGENT_INPUT_INVALID', parsed.error.issues[0]?.path.join('.') ?? 'collaboration')
   const collaboration = parsed.data
+  // 先确认该节点确实有持久化任务：否则宿主会抛非分类错误，最终被账本记成 unknown，
+  // 调用方无法区分"没发生"和"不确定"。这里提前给稳定码 AGENT_TASK_MISSING。
+  const existing = port.collaboration({ projectId, nodeId })
+  if (!existing) refuse('AGENT_TASK_MISSING', 'cooperate: the node has no persisted Agent task yet')
   if (collaboration.action === 'discuss' || collaboration.action === 'revise')
     await port.assertAgentScopeToolCalling(collaboration.projectId, collaboration.nodeId)
   const view = (await port.cooperate({ ...collaboration, actor: 'external' })) as {

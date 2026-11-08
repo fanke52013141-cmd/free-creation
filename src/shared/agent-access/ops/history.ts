@@ -1,4 +1,4 @@
-import { z } from 'zod'
+﻿import { z } from 'zod'
 import { identifier, project } from './common'
 
 /**
@@ -94,8 +94,8 @@ export const HISTORY_OPERATIONS = {
   'history.recovery.precheck': {
     effect: 'read',
     description:
-      '按预期的裁决（use/discard）读取关窗冲突恢复副本的事实与阻塞项（是否存在/版本/节点数）；无阻塞时签发短期确认令牌',
-    input: project.extend({ decision: z.enum(['use', 'discard']) }).strict()
+      '读取关窗冲突恢复副本的事实与阻塞项（是否存在/版本/节点数）。**不传 decision 时只读事实**（无需先做决定）；传入 use/discard 且无阻塞时额外签发短期确认令牌供 resolve 使用',
+    input: project.extend({ decision: z.enum(['use', 'discard']).optional() }).strict()
   },
   'history.recovery.resolve': {
     effect: 'write',
@@ -175,6 +175,8 @@ export const HISTORY_OUTPUTS = {
       copyNodeCount: z.number().int().nonnegative().nullable(),
       copyUpdatedAt: z.number().nullable(),
       blockers: recoveryBlockers,
+      /** 未传 decision 时为 true：只读事实，需再次调用并带 decision 才能拿令牌。 */
+      requiresDecision: z.boolean().optional(),
       impactToken: impactToken.optional(),
       expiresAt: z.number().int().positive().optional()
     })

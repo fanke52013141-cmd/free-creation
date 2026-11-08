@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Flow Agent 运行控制的**共享宿主端口**（F8）。
  *
  * 为什么需要它：内部 Agent 运行由 `registerFlowAgentsIpc` 启动时创建的那一个
@@ -47,6 +47,8 @@ export interface FlowAgentAccessPort {
    * 必须先过 assertAgentScopeToolCalling（付费路径的第一道闸门，由外部实现调用）。
    */
   cooperate(raw: unknown): Promise<unknown>
+  /** 读取某节点当前的协作视图；没有持久化任务时返回 null（用于在写协作事件前给稳定错误码）。 */
+  collaboration(query: { projectId: string; nodeId: string }): unknown
 }
 
 let published: FlowAgentAccessPort | null = null

@@ -1,4 +1,4 @@
-// F7 历史与恢复：外部操作复用 GUI 历史坞/恢复副本的同一服务与存储规则。
+﻿// F7 历史与恢复：外部操作复用 GUI 历史坞/恢复副本的同一服务与存储规则。
 //
 // 关键口径（见 docs/local-agent-access/25-node-library-history-delivery.md）：
 // - 快照仍存 `history_snapshots`（workspace-state.repo）；本包新增的 `graph_json`
@@ -447,6 +447,9 @@ function recoveryPrecheck(
     blockers
   }
   if (!copy || blockers.length) return base
+  // 未指定裁决时只返回事实：预检不该强迫调用方先做决定。
+  if (input.decision !== 'use' && input.decision !== 'discard')
+    return { ...base, requiresDecision: true }
   const facts: RecoveryFacts = {
     decision: input.decision as 'use' | 'discard',
     copyGraphVersion: copy.meta.graphVersion,

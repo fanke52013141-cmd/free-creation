@@ -1,4 +1,4 @@
-import { FlowSkillStore } from '../agent-flow/skill-store'
+﻿import { FlowSkillStore } from '../agent-flow/skill-store'
 import { accessSkillAgent, chatNodeAgent, installAccessSkill, skillSummary } from './skills'
 import { listWorkflowTemplates, saveWorkflowTemplate } from '../store/workspace-state.repo'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
@@ -42,8 +42,10 @@ import { newTraceId, newSpanId } from '../../shared/observability'
 import { getDb, getSetting, setSetting } from '../store/db'
 import * as projects from '../store/projects.repo'
 import { deleteMedia, importMedia, listMedia } from '../store/media.repo'
+import { listArtifactRecipes } from '../store/artifact-recipes.repo'
 import { exportProject } from '../store/transfer'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
+import { ACCESS_ERROR_CATALOG } from '../../shared/agent-access/metadata'
 import { assertLicenseActive } from '../security/license/gate'
 import { DesktopAccessError, type AccessDesktop } from './desktop'
 import { runNodeLibraryOperation } from './node-library-ops'
@@ -111,9 +113,23 @@ class AccessFailure extends Error {
   constructor(
     readonly code: string,
     readonly phase: string,
-    readonly detail?: string
+    readonly detail?: string,
+    /** 版本冲突时宿主报告的当前图版本（结构化回传，客户端可直接用它重试）。 */
+    readonly currentGraphVersion?: number
   ) {
     super(code)
+  }
+}
+
+/** 本项目里有生成谱系（recipe）的媒体 ID 集合：供 media.list 标注 hasRecipe。 */
+function mediaIdsWithRecipe(projectId: string): string[] {
+  try {
+    return listArtifactRecipes(projectId)
+      .map((recipe) => String(recipe.mediaId ?? ''))
+      .filter((mediaId) => mediaId.length > 0)
+  } catch {
+    // 谱系表缺失/损坏不应让列表失败：退化为"未知即没有"，并保持列表可用。
+    return []
   }
 }
 
@@ -271,7 +287,11 @@ export class LocalAccessService {
       )
     }
     try {
-      if (!parsed.success) throw new AccessFailure('INVALID_INPUT', 'validate')
+      if (!parsed.success) {
+        const issue = parsed.error.issues[0]
+        const path = issue?.path.join('.') ?? 'request'
+        throw new AccessFailure('INVALID_INPUT', 'validate', `${path}: ${issue?.message ?? 'invalid'}`.slice(0, 200))
+      }
       const request = parsed.data
       if (request.expectedDataStoreId !== this.dataStoreId)
         throw new AccessFailure('INSTANCE_MISMATCH', 'connect')
@@ -280,7 +300,16 @@ export class LocalAccessService {
       const operationId = request.operationId as AccessOperationId
       const spec = ACCESS_OPERATIONS[operationId]
       const checked = spec.input.safeParse(request.input)
-      if (!checked.success) throw new AccessFailure('INVALID_INPUT', 'validate')
+      if (!checked.success) {
+        // 带上是哪个字段、为什么不行（zod message 不含具体值，不会泄漏业务数据）。
+        const issue = checked.error.issues[0]
+        const path = issue?.path.join('.') ?? 'input'
+        throw new AccessFailure(
+          'INVALID_INPUT',
+          'validate',
+          `${path}: ${issue?.message ?? 'invalid'}`.slice(0, 200)
+        )
+      }
       if (spec.effect !== 'read') {
         key = request.idempotencyKey
         if (!key) throw new AccessFailure('IDEMPOTENCY_REQUIRED', 'validate')
@@ -526,6 +555,7 @@ export class LocalAccessService {
           throw new AccessFailure('REVISION_CONFLICT', 'patch-verify')
         const payload = (patchResult.result ?? {}) as {
           created?: Array<{ ref?: string; nodeId?: string }>
+          groups?: Array<{ ref?: string; groupId?: string }>
           counts?: Partial<Record<'nodeCreated' | 'nodeUpdated' | 'nodeDeleted' | 'edgeCreated' | 'edgeDeleted', number>>
         }
         const createdNodes = (payload.created ?? []).filter((c): c is { ref?: string; nodeId: string } =>
@@ -546,6 +576,12 @@ export class LocalAccessService {
           graphVersion: patchResult.graphVersion,
           saved: true,
           created: createdNodes.map((c) => ({ ...(c.ref ? { ref: c.ref } : {}), nodeId: c.nodeId })),
+          // group 形状只存在于画布快照里、不在节点表中，main 侧无法核对也不需要核对；
+          // 但必须回传给外部，否则组合之后拿不到 groupId 就无法解组（group.delete 不可达）。
+          groups: (payload.groups ?? []).filter(
+            (group): group is { ref?: string; groupId: string } =>
+              typeof (group as { groupId?: unknown }).groupId === 'string'
+          ),
           applied: counts
         }
       } else if (
@@ -1023,7 +1059,12 @@ export class LocalAccessService {
     } catch (error) {
       const known =
         error instanceof DesktopAccessError && !error.unknownOutcome
-          ? new AccessFailure(error.code, 'desktop-handshake', error.detail)
+          ? new AccessFailure(
+              error.code,
+              'desktop-handshake',
+              error.detail,
+              error.currentGraphVersion
+            )
           : error instanceof AccessFailure
             ? error
             : error instanceof AgentRuntimeError
@@ -1047,7 +1088,13 @@ export class LocalAccessService {
         phase:
           known?.phase ?? (error instanceof DesktopAccessError ? 'desktop-handshake' : 'storage'),
         retryable: false,
-        ...(known?.detail ? { detail: known.detail } : {})
+        ...(known?.detail ? { detail: known.detail } : {}),
+        // 版本冲突：把当前版本结构化回传，客户端可直接用它重试（不必解析 detail 文本）。
+        ...(known?.currentGraphVersion !== undefined
+          ? { currentGraphVersion: known.currentGraphVersion }
+          : error instanceof DesktopAccessError && error.currentGraphVersion !== undefined
+            ? { currentGraphVersion: error.currentGraphVersion }
+            : {})
       }
       delete base.data
       if (claimed && key) {
@@ -1299,18 +1346,22 @@ export class LocalAccessService {
       case 'media.list': {
         if (!projects.getProject(id)) throw new AccessFailure('NOT_FOUND', 'read')
         const all = listMedia(id)
+        // 一次查出本项目"有生成谱系"的媒体，避免 Agent 逐条再调 getRecipe 试探。
+        const withRecipe = new Set(mediaIdsWithRecipe(id))
         return {
           projectId: id,
           total: all.length,
           items: all
             .slice(input.offset as number, (input.offset as number) + (input.limit as number))
             .map((asset) => ({
+              id: asset.id,
               mediaId: asset.id,
               kind: asset.kind,
               mime: asset.mime,
               path: asset.path,
               sizeBytes: asset.sizeBytes,
-              name: (asset.name ?? '').slice(0, 200)
+              name: (asset.name ?? '').slice(0, 200),
+              hasRecipe: withRecipe.has(asset.id)
             }))
         }
       }
@@ -1697,6 +1748,8 @@ export class LocalAccessService {
       case 'capability.list':
         return {
           operations: operationDirectory(),
+          // 机器可读的错误码目录：Agent 可以据此分支，而不是靠猜文本。
+          errorCatalog: ACCESS_ERROR_CATALOG,
           limitations: [
             'DESKTOP_HANDSHAKE_REQUIRED',
             'EXPORT_DIRECTORY_ONLY',
@@ -1839,7 +1892,8 @@ export class LocalAccessService {
         return outcome.data
       }
       case 'project.exportStructure': {
-        const outcome = exportStructurePackage(input, this.exportRoot)
+        // 缺画布快照时先经权威宿主做一次保存屏障（外部不再依赖"先人工打开保存一次"）。
+        const outcome = await exportStructurePackage(input, this.exportRoot, this.options.desktop)
         if (!outcome.ok) throw new AccessFailure(outcome.code, outcome.phase, outcome.detail)
         return outcome.data
       }

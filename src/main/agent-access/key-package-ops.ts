@@ -44,6 +44,7 @@ function writeControlled(
   const bytes = Buffer.from(text, 'utf8')
   if (bytes.length <= 0) refuse('EXPORT_FAILED', 'empty-package')
   // 排他创建：并发下也不会覆盖已有文件。
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- 排他写文件需同步 fs；此处 require 与模块其余 ESM 导入并存
   const { writeFileSync, openSync, closeSync, fsyncSync } = require('node:fs') as typeof import('node:fs')
   const fd = openSync(target, 'wx')
   try {

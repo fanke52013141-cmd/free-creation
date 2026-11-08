@@ -86,6 +86,8 @@ function stubPort(overrides: Partial<FlowAgentAccessPort> = {}) {
     review: vi.fn(async () => ({})),
     assertReviewToolCalling: vi.fn(async () => undefined),
     cooperate,
+    // 协作前会先读一次现有任务：默认有任务，缺任务场景由用例覆盖。
+    collaboration: vi.fn(() => view),
     ...overrides
   }
   publishFlowAgentAccessPort(port)
@@ -238,5 +240,20 @@ describe('flowAgent.cooperate', () => {
     })
     expect(response.status).toBe('failed')
     expect(response.error?.code).toBe('FLOW_AGENT_REPLY_INVALID')
+  })
+
+  it('节点没有持久化任务时给稳定码 AGENT_TASK_MISSING（不再是 unknown）', async () => {
+    const projectId = seedProject()
+    const { cooperate } = stubPort({ collaboration: vi.fn(() => null) as never })
+    const response = await write('flowAgent.cooperate', {
+      projectId,
+      nodeId: 'shape:agent',
+      action: 'note',
+      ...baseCollaboration
+    })
+    expect(response.status).toBe('failed')
+    expect(response.error?.code).toBe('AGENT_TASK_MISSING')
+    // 关键：没有任务时不得写入任何协作事件
+    expect(cooperate).not.toHaveBeenCalled()
   })
 })

@@ -1072,6 +1072,9 @@ export function CanvasEditor({
                   projectId: project.id,
                   ok: false,
                   validated,
+                  // 失败也带上当前版本：版本冲突时 main 会把它作为结构化
+                  // error.currentGraphVersion 回传，客户端可直接用它重试。
+                  graphVersion: graphVersionRef.current,
                   errorCode: code,
                   ...(detail ? { errorDetail: detail.slice(0, 300) } : {})
                 })
@@ -1135,6 +1138,10 @@ export function CanvasEditor({
                   created: replanned.plan.created.map((created) => ({
                     ...(created.ref ? { ref: created.ref } : {}),
                     nodeId: created.nodeId
+                  })),
+                  groups: replanned.plan.groups.map((group) => ({
+                    ...(group.ref ? { ref: group.ref } : {}),
+                    groupId: group.groupId
                   })),
                   counts: replanned.plan.counts
                 }
@@ -1445,7 +1452,8 @@ export function CanvasEditor({
                   requestId: request.requestId,
                   projectId: project.id,
                   ok,
-                  ...(ok ? { graphVersion: graphVersionRef.current } : {}),
+                  // 成功与失败都带上当前版本：客户端拿到它可以直接重试，不必解析 detail 文本。
+                  graphVersion: graphVersionRef.current,
                   ...(ok
                     ? {}
                     : {
