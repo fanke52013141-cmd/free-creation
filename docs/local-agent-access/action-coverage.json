@@ -1157,7 +1157,11 @@
       "label": "凭据包导入",
       "channel": "gateway:keys:import-package",
       "gui": "凭据包",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "provider.package.import"
+      ],
+      "note": "F9：导入凭据包（复用同一 KeyPackageService.applyKeyPackageImport）。必须 confirmImport=true，且会弹 GUI 人工确认框，**只有人点允许才解密落库**；回执给包ID/新增/更新/模型数，不含密钥"
     },
     "ipc.keys.providers": {
       "label": "供应商列表",
@@ -1183,13 +1187,21 @@
       "label": "供应商保存",
       "channel": "gateway:providers:save",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "provider.save"
+      ],
+      "note": "F9：新建/更新供应商连接（复用 GUI 同一 saveProvider）；更新时 apiKey 留空=保留已保存密钥；**回执不回显密钥**，只给 id/名称/协议/模型数/是否有密钥"
     },
     "ipc.keys.deleteProvider": {
       "label": "供应商删除",
       "channel": "gateway:providers:delete",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "provider.delete"
+      ],
+      "note": "F9：删除已保存供应商（复用同一 deleteProvider）；不存在如实 NOT_FOUND"
     },
     "ipc.keys.exportProviders": {
       "label": "供应商导出",
@@ -1205,7 +1217,11 @@
       "label": "供应商导入",
       "channel": "gateway:providers:import",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "provider.package.importProviders"
+      ],
+      "note": "F9：导入旧版供应商包（复用同一 importProviders）；同样需要 confirmImport=true + GUI 人工确认"
     },
     "ipc.keys.testProvider": {
       "label": "供应商测试",
@@ -1221,20 +1237,31 @@
       "label": "供应商探测",
       "channel": "gateway:providers:probe",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "provider.probe"
+      ],
+      "note": "F9：对**已保存**供应商做连通性探测（复用同一 probeProvider），只做免费/只读探测、allowCost 恒 false；必须显式 confirmNetwork=true；外部只给 providerId，密钥由 main 读取"
     },
     "ipc.keys.dreaminaLoginStart": {
       "label": "Dreamina 登录开始",
       "channel": "gateway:dreamina:login:start",
       "gui": "登录窗口",
-      "phase": "F9",
-      "note": "需真实人工登录，提供等待/继续协作协议"
+      "phase": "external",
+      "note": "F9：发起即梦设备流登录（复用同一 startDreaminaLogin），返回验证地址与用户码；已有有效登录返回 already；**不伪造登录状态**，必须由人在浏览器完成授权；需 confirmNetwork",
+      "external": [
+        "dreamina.login.start"
+      ]
     },
     "ipc.keys.dreaminaLoginCheck": {
       "label": "Dreamina 登录检查",
       "channel": "gateway:dreamina:login:check",
       "gui": "登录窗口",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "dreamina.login.check"
+      ],
+      "note": "F9：查询即梦登录结果（复用同一 checkDreaminaLogin），只如实反映本机 CLI 状态；需 confirmNetwork"
     },
     "ipc.keys.chatStart": {
       "label": "对话请求",

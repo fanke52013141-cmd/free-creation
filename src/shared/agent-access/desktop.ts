@@ -1,4 +1,4 @@
-import { z } from 'zod'
+﻿import { z } from 'zod'
 import { SkillAgentConfigSchema } from '../skill-agent'
 import { GraphPatchOpsSchema, GRAPH_VIEW_MAX_NODES, mediaResolutionSchema } from './graph-ops'
 import { PublishModeSchema, publishRequestIdSchema } from './publish'
@@ -34,7 +34,9 @@ export const DesktopRequestSchema = z
       // 撤销重做必须由权威宿主执行——历史栈在 editor 里，main 自己维护一份必然与 GUI 分叉；
       // 关闭项目需要 renderer 先保存再回到项目列表（否则关掉画布会丢未保存编辑）。
       'history',
-      'close-project'
+      'close-project',
+      // F9 收尾：敏感动作（凭据包导入等）由**人在 GUI 亲确认**后才放行。
+      'confirm-sensitive'
     ]),
     nodeId: z.string().optional(),
     agent: SkillAgentConfigSchema.optional(),
@@ -65,7 +67,12 @@ export const DesktopRequestSchema = z
       .regex(/^[a-zA-Z0-9_.:-]+$/)
       .optional(),
     /** history：撤销还是重做。 */
-    direction: z.enum(['undo', 'redo']).optional()
+    direction: z.enum(['undo', 'redo']).optional(),
+    /** confirm-sensitive：确认框文案（只承载人读文本，不含密钥/路径敏感信息）。 */
+    confirmTitle: z.string().max(120).optional(),
+    confirmMessage: z.string().max(1000).optional(),
+    confirmText: z.string().max(40).optional(),
+    cancelText: z.string().max(40).optional()
   })
   .strict()
 export type DesktopRequest = z.infer<typeof DesktopRequestSchema>

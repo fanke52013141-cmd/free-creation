@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 凭据包服务的**共享实例桥**（F9 收尾）。
  *
  * 为什么需要它：`KeyPackageService` 在 `src/main/index.ts` 里与设备密钥库、授权服务、
@@ -32,6 +32,12 @@ export interface KeysPackageAccessPort {
     connections: Array<{ id: string; name: string; protocol: string; baseUrl: string; modelCount: number }>
     alreadyImported: boolean
   }>
+  /** 应用导入（**必须先经人在 GUI 确认**；overwriteConfirmed 由确认结果决定）。 */
+  applyKeyPackageImport(input: {
+    packageText: string
+    password: string
+    overwriteConfirmed: boolean
+  }): Promise<{ packageId: string; added: number; updated: number; modelCount: number }>
   /** 可导出连接清单（与 GUI 同一 listExportableConnections）。 */
   listExportableConnections(): Promise<
     Array<{ id: string; name: string; protocol: string; baseUrl: string; modelCount: number }>

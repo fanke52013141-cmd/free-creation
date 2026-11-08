@@ -1,4 +1,4 @@
-﻿import { FlowSkillStore } from '../agent-flow/skill-store'
+import { FlowSkillStore } from '../agent-flow/skill-store'
 import { accessSkillAgent, chatNodeAgent, installAccessSkill, skillSummary } from './skills'
 import { listWorkflowTemplates, saveWorkflowTemplate } from '../store/workspace-state.repo'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
@@ -64,6 +64,7 @@ import { LIBRARY_CAPTURE_OPERATION_IDS, runLibraryCaptureOperation } from './lib
 import { CANVAS_HISTORY_OPERATION_IDS, runCanvasHistoryOperation } from './canvas-history-ops'
 import { PROVIDER_OPERATION_IDS, runProviderOperation } from './providers-ops'
 import { PROVIDER_NETWORK_OPERATION_IDS, runProviderNetworkOperation } from './provider-network-ops'
+import { PROVIDER_ADMIN_OPERATION_IDS, runProviderAdminOperation } from './provider-admin-ops'
 import { KEY_PACKAGE_OPERATION_IDS, runKeyPackageOperation } from './key-package-ops'
 import { runProjectSettingsOperation } from './project-settings-ops'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
@@ -1018,6 +1019,13 @@ export class LocalAccessService {
         // F9：供应商连通性测试与模型真实验证。默认不执行——必须显式 confirmNetwork=true
         // （validate 还需 confirmCost=true），否则拒绝且不发任何请求（用户已授权此边界）。
         result = await runProviderNetworkOperation(operationId, input)
+      } else if (PROVIDER_ADMIN_OPERATION_IDS.has(operationId)) {
+        // F9 收尾：供应商管理与凭据包导入（导入需人在 GUI 确认）。
+        result = await runProviderAdminOperation(operationId, input, {
+          exportRoot: this.exportRoot,
+          activeProjectId: this.options.activeProjectId,
+          desktop: this.options.desktop
+        })
       } else if (KEY_PACKAGE_OPERATION_IDS.has(operationId)) {
         // F9：凭据包导出/预览侧（用户已批准"导出与预览开放、导入需人工确认"）。
         // 复用 keys-bridge 发布的同一个 KeyPackageService；回执不返回包正文。
@@ -1998,6 +2006,13 @@ export class LocalAccessService {
       case 'provider.package.export':
       case 'provider.package.seal':
       case 'provider.package.preview':
+      case 'provider.save':
+      case 'provider.delete':
+      case 'provider.probe':
+      case 'provider.package.import':
+      case 'provider.package.importProviders':
+      case 'dreamina.login.start':
+      case 'dreamina.login.check':
         // F9：凭据包导出/预览在 dispatch 分组分支执行（需要受控导出目录与共享服务实例）。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'chat.read': {

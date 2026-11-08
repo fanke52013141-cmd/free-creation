@@ -955,6 +955,23 @@ export function CanvasEditor({
               return
             }
             // ── F6 收尾：导演台发布授权（交互式请求）──
+            // F9 收尾：敏感动作（凭据包导入等）必须由**人在 GUI 亲眼确认**。
+            // 复用 GUI 自己的确认弹窗；外部没有伪造这一步的通道。
+            if (request.action === 'confirm-sensitive') {
+              const allowed = await useConfirmStore.getState().confirm({
+                title: (request.confirmTitle ?? '外部敏感操作').slice(0, 120),
+                message: (request.confirmMessage ?? '外部 Agent 请求执行一个敏感操作。').slice(0, 1000),
+                confirmText: (request.confirmText ?? '允许').slice(0, 40),
+                cancelText: (request.cancelText ?? '拒绝').slice(0, 40)
+              })
+              window.api.replyLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                ok: allowed,
+                graphVersion: graphVersionRef.current
+              })
+              return
+            }
             // manual-publish 的授权必须来自人：这里复用 GUI 自己的确认弹窗，
             // 外部无法伪造这一步（它没有 renderer 回复通道），也不占用写入槽。
             if (request.action === 'publish-authorize') {
