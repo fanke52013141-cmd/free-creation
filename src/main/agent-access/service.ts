@@ -676,14 +676,17 @@ export class LocalAccessService {
               const published = PublishHostResultSchema.safeParse(reply.result)
               if (!published.success)
                 throw new AccessFailure('STORAGE_INCONSISTENT', 'publish-verify', 'host result invalid')
-              // 保存屏障之后核对：正式发布记录必须真的落到持久化节点里。
+              // 保存屏障之后核对：正式发布记录必须真的落到持久化数据里。
+              // 注意运行事实在 tldraw 快照的 shape meta 里（与 output.get 同一投影来源），
+              // 不在 project.json 的节点字段上——真实桌面验收发现此处最初读错了存储。
               const savedFile = projects.openProject(id)
-              const savedNode = savedFile?.nodes.find((candidate) => candidate.id === row.node_id)
-              const savedMeta = (savedNode?.meta ?? {}) as Record<string, unknown>
+              const projection = savedFile ? buildProjectionShape(savedFile, row.node_id) : null
               let persisted: ReturnType<typeof parseDirectorPublishRecord> = null
               try {
                 persisted = parseDirectorPublishRecord(
-                  typeof savedMeta.nodeResult === 'string' ? JSON.parse(savedMeta.nodeResult) : null
+                  typeof projection?.meta?.nodeResult === 'string'
+                    ? JSON.parse(String(projection.meta.nodeResult))
+                    : null
                 )
               } catch {
                 persisted = null

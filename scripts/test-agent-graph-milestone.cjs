@@ -481,7 +481,7 @@ async function launchLicensedApp(dataDirectory) {
       // (a) quad 四点透视裁剪：合法点集 → 成功且产物落盘
       {
         const version = await stable(created.A)
-        const patched = await runCli(directory, ['graph', 'patch'], {
+        const patchArgs = {
           input: {
             projectId: created.A,
             expectedGraphVersion: version,
@@ -492,8 +492,15 @@ async function launchLicensedApp(dataDirectory) {
             ]
           },
           idempotencyKey: key()
-        })
-        check(patched.response.status === 'completed', `QUAD_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
+        }
+      let patched = await runCli(directory, ['graph', 'patch'], patchArgs)
+      // GUI 防抖保存可能在稳定读数与准入之间推进版本：预检冲突无副作用，重读后重试。
+      for (let retry = 0; retry < 3 && patched.response.status !== 'completed' && patched.response.error?.code === 'REVISION_CONFLICT'; retry += 1) {
+        await new Promise((done) => setTimeout(done, 1200))
+        patchArgs.input.expectedGraphVersion = await stable(created.A)
+        patchArgs.idempotencyKey = key()
+        patched = await runCli(directory, ['graph', 'patch'], patchArgs)
+      }        check(patched.response.status === 'completed', `QUAD_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
         const qNode = patched.response.data.created.find((c) => c.ref === 'q-crop')
         const waited = await executeAnd(created.A, patched.response.data.graphVersion, qNode.nodeId, 'QUAD')
         check(waited.response.data.state === 'completed', `QUAD_DID_NOT_COMPLETE:${waited.response.data.state}:${waited.response.data.error}`)
@@ -506,7 +513,7 @@ async function launchLicensedApp(dataDirectory) {
       // (b) 坐标越界钳制：越界 rect 被规范层钳制后成功（与 GUI 同一解析）
       {
         const version = await stable(created.A)
-        const patched = await runCli(directory, ['graph', 'patch'], {
+        const patchArgs = {
           input: {
             projectId: created.A,
             expectedGraphVersion: version,
@@ -517,8 +524,15 @@ async function launchLicensedApp(dataDirectory) {
             ]
           },
           idempotencyKey: key()
-        })
-        check(patched.response.status === 'completed', `CLAMP_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
+        }
+      let patched = await runCli(directory, ['graph', 'patch'], patchArgs)
+      // GUI 防抖保存可能在稳定读数与准入之间推进版本：预检冲突无副作用，重读后重试。
+      for (let retry = 0; retry < 3 && patched.response.status !== 'completed' && patched.response.error?.code === 'REVISION_CONFLICT'; retry += 1) {
+        await new Promise((done) => setTimeout(done, 1200))
+        patchArgs.input.expectedGraphVersion = await stable(created.A)
+        patchArgs.idempotencyKey = key()
+        patched = await runCli(directory, ['graph', 'patch'], patchArgs)
+      }        check(patched.response.status === 'completed', `CLAMP_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
         const oNode = patched.response.data.created.find((c) => c.ref === 'o-crop')
         const waited = await executeAnd(created.A, patched.response.data.graphVersion, oNode.nodeId, 'CLAMP')
         // 越界 rect 在执行期由与 GUI 同一 parseImageCropConfig 钳制（配置保存原值，
@@ -541,7 +555,7 @@ async function launchLicensedApp(dataDirectory) {
         const gridMediaId = imported.response.data.mediaId
         const version = await stable(created.A)
         const before = await mediaCount(created.A)
-        const patched = await runCli(directory, ['graph', 'patch'], {
+        const patchArgs = {
           input: {
             projectId: created.A,
             expectedGraphVersion: version,
@@ -552,8 +566,15 @@ async function launchLicensedApp(dataDirectory) {
             ]
           },
           idempotencyKey: key()
-        })
-        check(patched.response.status === 'completed', `SPLIT_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
+        }
+      let patched = await runCli(directory, ['graph', 'patch'], patchArgs)
+      // GUI 防抖保存可能在稳定读数与准入之间推进版本：预检冲突无副作用，重读后重试。
+      for (let retry = 0; retry < 3 && patched.response.status !== 'completed' && patched.response.error?.code === 'REVISION_CONFLICT'; retry += 1) {
+        await new Promise((done) => setTimeout(done, 1200))
+        patchArgs.input.expectedGraphVersion = await stable(created.A)
+        patchArgs.idempotencyKey = key()
+        patched = await runCli(directory, ['graph', 'patch'], patchArgs)
+      }        check(patched.response.status === 'completed', `SPLIT_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
         const gNode = patched.response.data.created.find((c) => c.ref === 'g-split')
         const waited = await executeAnd(created.A, patched.response.data.graphVersion, gNode.nodeId, 'SPLIT')
         check(waited.response.data.state === 'completed', `SPLIT_DID_NOT_COMPLETE:${waited.response.data.state}:${waited.response.data.error}`)
@@ -574,7 +595,7 @@ async function launchLicensedApp(dataDirectory) {
         const badMediaId = imported.response.data.mediaId
         const version = await stable(created.A)
         const before = await mediaCount(created.A)
-        const patched = await runCli(directory, ['graph', 'patch'], {
+        const patchArgs = {
           input: {
             projectId: created.A,
             expectedGraphVersion: version,
@@ -585,8 +606,15 @@ async function launchLicensedApp(dataDirectory) {
             ]
           },
           idempotencyKey: key()
-        })
-        check(patched.response.status === 'completed', `BAD_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
+        }
+      let patched = await runCli(directory, ['graph', 'patch'], patchArgs)
+      // GUI 防抖保存可能在稳定读数与准入之间推进版本：预检冲突无副作用，重读后重试。
+      for (let retry = 0; retry < 3 && patched.response.status !== 'completed' && patched.response.error?.code === 'REVISION_CONFLICT'; retry += 1) {
+        await new Promise((done) => setTimeout(done, 1200))
+        patchArgs.input.expectedGraphVersion = await stable(created.A)
+        patchArgs.idempotencyKey = key()
+        patched = await runCli(directory, ['graph', 'patch'], patchArgs)
+      }        check(patched.response.status === 'completed', `BAD_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
         const bNode = patched.response.data.created.find((c) => c.ref === 'b-split')
         const waited = await executeAnd(created.A, patched.response.data.graphVersion, bNode.nodeId, 'BADSPLIT')
         check(waited.response.data.state === 'failed', `BADSPLIT_NOT_FAILED:${waited.response.data.state}`)
@@ -646,7 +674,7 @@ async function launchLicensedApp(dataDirectory) {
       {
         const videoId = await importFixture(created.A, 'qa-fixtures/media/video/V-AV.mp4', '验收视频')
         const version = await stable(created.A)
-        const patched = await runCli(directory, ['graph', 'patch'], {
+        const patchArgs = {
           input: {
             projectId: created.A,
             expectedGraphVersion: version,
@@ -657,8 +685,15 @@ async function launchLicensedApp(dataDirectory) {
             ]
           },
           idempotencyKey: key()
-        })
-        check(patched.response.status === 'completed', `FRAME_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
+        }
+      let patched = await runCli(directory, ['graph', 'patch'], patchArgs)
+      // GUI 防抖保存可能在稳定读数与准入之间推进版本：预检冲突无副作用，重读后重试。
+      for (let retry = 0; retry < 3 && patched.response.status !== 'completed' && patched.response.error?.code === 'REVISION_CONFLICT'; retry += 1) {
+        await new Promise((done) => setTimeout(done, 1200))
+        patchArgs.input.expectedGraphVersion = await stable(created.A)
+        patchArgs.idempotencyKey = key()
+        patched = await runCli(directory, ['graph', 'patch'], patchArgs)
+      }        check(patched.response.status === 'completed', `FRAME_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
         const fNode = patched.response.data.created.find((c) => c.ref === 'v-frame')
         const waited = await executeAnd(created.A, patched.response.data.graphVersion, fNode.nodeId, 'FRAME')
         check(waited.response.data.state === 'completed', `FRAME_DID_NOT_COMPLETE:${waited.response.data.state}:${waited.response.data.error}`)
@@ -674,7 +709,7 @@ async function launchLicensedApp(dataDirectory) {
         const videoId = await importFixture(created.A, 'qa-fixtures/media/video/V-AV.mp4', '截取源视频')
         const version = await stable(created.A)
         const before = await mediaCount(created.A)
-        const patched = await runCli(directory, ['graph', 'patch'], {
+        const patchArgs = {
           input: {
             projectId: created.A,
             expectedGraphVersion: version,
@@ -685,8 +720,15 @@ async function launchLicensedApp(dataDirectory) {
             ]
           },
           idempotencyKey: key()
-        })
-        check(patched.response.status === 'completed', `CLIP_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
+        }
+      let patched = await runCli(directory, ['graph', 'patch'], patchArgs)
+      // GUI 防抖保存可能在稳定读数与准入之间推进版本：预检冲突无副作用，重读后重试。
+      for (let retry = 0; retry < 3 && patched.response.status !== 'completed' && patched.response.error?.code === 'REVISION_CONFLICT'; retry += 1) {
+        await new Promise((done) => setTimeout(done, 1200))
+        patchArgs.input.expectedGraphVersion = await stable(created.A)
+        patchArgs.idempotencyKey = key()
+        patched = await runCli(directory, ['graph', 'patch'], patchArgs)
+      }        check(patched.response.status === 'completed', `CLIP_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
         const clipNode = patched.response.data.created.find((c) => c.ref === 'c-clip')
         const waited = await executeAnd(created.A, patched.response.data.graphVersion, clipNode.nodeId, 'CLIP')
         check(waited.response.data.state === 'completed', `CLIP_DID_NOT_COMPLETE:${waited.response.data.state}:${waited.response.data.error}`)
@@ -709,7 +751,7 @@ async function launchLicensedApp(dataDirectory) {
       {
         const audioId = await importFixture(created.A, 'qa-fixtures/media/audio/A-MIX.wav', '调整源音频')
         const version = await stable(created.A)
-        const patched = await runCli(directory, ['graph', 'patch'], {
+        const patchArgs = {
           input: {
             projectId: created.A,
             expectedGraphVersion: version,
@@ -720,8 +762,15 @@ async function launchLicensedApp(dataDirectory) {
             ]
           },
           idempotencyKey: key()
-        })
-        check(patched.response.status === 'completed', `ADJUST_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
+        }
+      let patched = await runCli(directory, ['graph', 'patch'], patchArgs)
+      // GUI 防抖保存可能在稳定读数与准入之间推进版本：预检冲突无副作用，重读后重试。
+      for (let retry = 0; retry < 3 && patched.response.status !== 'completed' && patched.response.error?.code === 'REVISION_CONFLICT'; retry += 1) {
+        await new Promise((done) => setTimeout(done, 1200))
+        patchArgs.input.expectedGraphVersion = await stable(created.A)
+        patchArgs.idempotencyKey = key()
+        patched = await runCli(directory, ['graph', 'patch'], patchArgs)
+      }        check(patched.response.status === 'completed', `ADJUST_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
         const sNode = patched.response.data.created.find((c) => c.ref === 's-adjust')
         const waited = await executeAnd(created.A, patched.response.data.graphVersion, sNode.nodeId, 'ADJUST')
         check(waited.response.data.state === 'completed', `ADJUST_DID_NOT_COMPLETE:${waited.response.data.state}:${waited.response.data.error}`)
@@ -761,7 +810,7 @@ async function launchLicensedApp(dataDirectory) {
           ],
           references: [{ mediaId: videoId, mediaPath: '', name: '验收素材', kind: 'video' }]
         })
-        const patched = await runCli(directory, ['graph', 'patch'], {
+        const patchArgs = {
           input: {
             projectId: created.A,
             expectedGraphVersion: version,
@@ -770,8 +819,15 @@ async function launchLicensedApp(dataDirectory) {
             ]
           },
           idempotencyKey: key()
-        })
-        check(patched.response.status === 'completed', `TIMELINE_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
+        }
+      let patched = await runCli(directory, ['graph', 'patch'], patchArgs)
+      // GUI 防抖保存可能在稳定读数与准入之间推进版本：预检冲突无副作用，重读后重试。
+      for (let retry = 0; retry < 3 && patched.response.status !== 'completed' && patched.response.error?.code === 'REVISION_CONFLICT'; retry += 1) {
+        await new Promise((done) => setTimeout(done, 1200))
+        patchArgs.input.expectedGraphVersion = await stable(created.A)
+        patchArgs.idempotencyKey = key()
+        patched = await runCli(directory, ['graph', 'patch'], patchArgs)
+      }        check(patched.response.status === 'completed', `TIMELINE_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
         const tlNode = patched.response.data.created.find((c) => c.ref === 'tl')
         // 编辑结构读取核对：node.get 返回的正文与提交一致（轨道/片段真实承载）
         const tlRead = await runCli(directory, ['node', 'get'], { input: { projectId: created.A, nodeId: tlNode.nodeId } })
@@ -1218,6 +1274,187 @@ async function launchLicensedApp(dataDirectory) {
       )
       receipt.checks.push(
         'F6 chat guard: a chat.patch mixed with geometry ops is rejected before admission (MIXED_PATCH_UNSUPPORTED); neither a node nor a message is half-applied'
+      )
+    }
+
+    // ── 6.9 F6 收尾：导演台外部发布授权（manual-publish 必须由人授权）──
+    // 外部只能 prepare（登记待授权请求）→ 人在 GUI 确认弹窗点「允许发布」→ continue 才执行；
+    // 发布渲染与正式记录写入复用 GUI 面板同一发布服务；node.execute 永远不发布。
+    {
+      const stable = (projectId) => stableProjectVersion(directory, projectId)
+      // (a) 外部创建导演台节点并正式保存
+      let directorNodeId = ''
+      for (let attempt = 0; attempt < 6 && !directorNodeId; attempt++) {
+        if (attempt > 0) await new Promise((done) => setTimeout(done, 1200))
+        const expectedGraphVersion = await stable(created.A)
+        const patched = await runCli(directory, ['graph', 'patch'], {
+          input: {
+            projectId: created.A,
+            expectedGraphVersion,
+            ops: [
+              {
+                action: 'node.create',
+                ref: 'f6-director',
+                nodeType: 'director',
+                x: 760,
+                y: 380,
+                title: 'F6 发布授权验收'
+              }
+            ]
+          },
+          idempotencyKey: key()
+        })
+        if (patched.response.status === 'completed') {
+          directorNodeId =
+            patched.response.data.created.find((item) => item.ref === 'f6-director')?.nodeId ?? ''
+        } else if (patched.response.error?.code !== 'REVISION_CONFLICT') {
+          throw new Error(`F6_PUBLISH_NODE_CREATE_FAILED:${JSON.stringify(patched.response.error)}`)
+        }
+      }
+      check(Boolean(directorNodeId), 'F6_PUBLISH_NODE_MAPPING_MISSING')
+
+      // 申请发布以权威读数为版本；GUI 防抖保存可能在读取与准入之间推进版本，
+      // 预检冲突无副作用，用新幂等键重试。授权与版本绑定，版本漂移必须重新申请。
+      const prepareOnce = async () => {
+        let lastError = null
+        for (let attempt = 0; attempt < 6; attempt++) {
+          if (attempt > 0) await new Promise((done) => setTimeout(done, 1200))
+          const expectedGraphVersion = await stable(created.A)
+          const prepared = await runCli(directory, ['director', 'publish', 'prepare'], {
+            input: { projectId: created.A, nodeId: directorNodeId, mode: 'frame', expectedGraphVersion },
+            idempotencyKey: key()
+          })
+          if (prepared.response.status === 'completed') return { prepared, expectedGraphVersion }
+          lastError = prepared.response.error
+          if (lastError?.code !== 'REVISION_CONFLICT')
+            throw new Error(`F6_PUBLISH_PREPARE_FAILED:${JSON.stringify(lastError)}`)
+        }
+        throw new Error(`F6_PUBLISH_PREPARE_FAILED:REVISION_CONFLICT:${JSON.stringify(lastError)}`)
+      }
+      const waitStatus = async (publishRequestId, expected, attempts = 40) => {
+        for (let attempt = 0; attempt < attempts; attempt++) {
+          const status = await runCli(directory, ['director', 'publish', 'status'], {
+            input: { projectId: created.A, publishRequestId }
+          })
+          if (
+            status.response.status === 'completed' &&
+            status.response.data.status === expected
+          )
+            return status.response.data
+          await new Promise((done) => setTimeout(done, 500))
+        }
+        return null
+      }
+
+      // (b) 授权 → 执行。版本若在人工确认期间前进，按“必须重新申请”重来。
+      let publishRequestId = ''
+      let continueInput = null
+      let continued = null
+      for (let attempt = 0; attempt < 3 && !continued; attempt++) {
+        const prepared = await prepareOnce()
+        publishRequestId = prepared.prepared.response.data.publishRequestId
+        check(
+          prepared.prepared.response.data.status === 'awaiting-authorization' &&
+            prepared.prepared.response.data.authorizationRequired === true,
+          `F6_PUBLISH_NOT_AWAITING_AUTHORIZATION:${JSON.stringify(prepared.prepared.response.data)}`
+        )
+        // 人真的在 GUI 上确认：复用应用自己的确认弹窗（外部没有授权通道）。
+        const dialog = page.locator('.confirm-dialog')
+        await dialog.waitFor({ timeout: 20000 })
+        const dialogText = (await dialog.textContent()) ?? ''
+        check(dialogText.includes('外部发布请求'), `F6_PUBLISH_GUI_CONFIRM_TEXT:${dialogText.slice(0, 80)}`)
+        await dialog.locator('.confirm-btn.primary').click()
+        const authorized = await waitStatus(publishRequestId, 'authorized')
+        check(Boolean(authorized), 'F6_PUBLISH_NOT_AUTHORIZED_AFTER_GUI_CLICK')
+        const versionNow = await stable(created.A)
+        if (versionNow !== prepared.expectedGraphVersion) continue
+        const idempotencyKey = key()
+        const input = {
+          projectId: created.A,
+          publishRequestId,
+          expectedGraphVersion: prepared.expectedGraphVersion
+        }
+        const result = await runCli(directory, ['director', 'publish', 'continue'], {
+          input,
+          idempotencyKey
+        })
+        if (result.response.status === 'completed') {
+          continued = { result, input, idempotencyKey }
+          continueInput = input
+        } else if (result.response.error?.code !== 'REVISION_CONFLICT') {
+          throw new Error(`F6_PUBLISH_CONTINUE_FAILED:${JSON.stringify(result.response.error)}`)
+        }
+      }
+      check(Boolean(continued), 'F6_PUBLISH_CONTINUE_NEVER_COMPLETED')
+      const artifact = continued.result.response.data.artifact
+      check(
+        Boolean(artifact?.mediaId) && artifact.mime === 'image/png',
+        `F6_PUBLISH_ARTIFACT_INVALID:${JSON.stringify(artifact)}`
+      )
+      check(
+        existsSync(join(directory, artifact.mediaPath.replace(/\//g, sep))),
+        'F6_PUBLISH_ARTIFACT_MISSING_ON_DISK'
+      )
+      // 正式输出投影：manual-publish 门控的导演台输出必须指向这次发布的帧。
+      const published = await runCli(directory, ['output', 'get'], {
+        input: { projectId: created.A, nodeId: directorNodeId }
+      })
+      check(
+        published.response.status === 'completed' &&
+          published.response.data.outputSource === 'manual-publish',
+        `F6_PUBLISH_OUTPUT_FAILED:${JSON.stringify(published.response.error)}`
+      )
+      const projected = (published.response.data.outputs ?? []).filter(
+        (entry) => entry.mediaId === artifact.mediaId
+      )
+      check(projected.length > 0, 'F6_PUBLISH_OUTPUT_NOT_PROJECTED')
+      // 幂等重放：同一幂等键返回原回执，不再渲染第二份产物。
+      const replay = await runCli(directory, ['director', 'publish', 'continue'], {
+        input: continueInput,
+        idempotencyKey: continued.idempotencyKey
+      })
+      check(
+        replay.response.status === 'completed' &&
+          replay.response.data.artifact.mediaId === artifact.mediaId,
+        `F6_PUBLISH_REPLAY_DIVERGED:${JSON.stringify(replay.response.error)}`
+      )
+
+      // (c) 人拒绝：请求作废，continue 被拒，且不产生第二份产物。
+      const secondPrepared = await prepareOnce()
+      const secondRequestId = secondPrepared.prepared.response.data.publishRequestId
+      await page.locator('.confirm-dialog').waitFor({ timeout: 20000 })
+      await page.locator('.confirm-dialog .confirm-btn.cancel').click()
+      const denied = await waitStatus(secondRequestId, 'denied')
+      check(Boolean(denied), 'F6_PUBLISH_NOT_DENIED')
+      const deniedContinue = await runCli(directory, ['director', 'publish', 'continue'], {
+        input: {
+          projectId: created.A,
+          publishRequestId: secondRequestId,
+          expectedGraphVersion: secondPrepared.expectedGraphVersion
+        },
+        idempotencyKey: key()
+      })
+      check(
+        deniedContinue.response.status === 'failed' &&
+          deniedContinue.response.error?.code === 'PUBLISH_DENIED',
+        `F6_PUBLISH_DENIED_CONTINUE:${JSON.stringify(deniedContinue.response.error)}`
+      )
+
+      receipt.publish = {
+        nodeId: directorNodeId,
+        publishRequestId,
+        artifact,
+        outputSource: published.response.data.outputSource,
+        deniedCode: deniedContinue.response.error?.code
+      }
+      receipt.checks.push(
+        'F6 publish: manual-publish is not smuggled through node.execute; the external prepare only registers a pending request and a human authorizes it in the GUI confirm dialog'
+      )
+      receipt.checks.push(
+        'F6 publish: after human authorization the host renders with the same GUI publish service, writes the formal publish record, the artifact exists on disk and output.get projects it as manual-publish'
+      )
+      receipt.checks.push(
+        'F6 publish: when the human denies, the request is revoked and continue fails with PUBLISH_DENIED without producing a second artifact'
       )
     }
 

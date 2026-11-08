@@ -21,6 +21,7 @@ import {
   parseDirectorProject
 } from '../src/shared/director-data'
 import { directorExecutor } from '../src/shared/engine/executors/director'
+import { readSnapshotShapeMeta } from '../src/shared/agent-access/run-ops'
 
 let directory: string
 let service: LocalAccessService
@@ -140,9 +141,14 @@ function publishDesktop(
           mime: imported.asset.mime
         }
       })
-      ;(node.meta as Record<string, unknown>).nodeResult = JSON.stringify(record)
+      // 与真实 renderer 一致：运行事实/发布记录写在 tldraw 快照的 shape meta 里，
+      // 不在 project.json 的节点字段上（output.get 也是从快照 meta 投影）。
       const saved = saveProject({
         id: projectId,
+        tldrawSnapshot: {
+          schema: { schemaVersion: 2, sequences: {} },
+          store: { [node.id]: { type: 'node-card', id: node.id, meta: { nodeResult: JSON.stringify(record) } } }
+        },
         graph: { nodes: file.nodes, edges: file.edges, groups: file.groups }
       })
       if (!saved) throw new Error('save failed')
@@ -351,9 +357,11 @@ describe('director.publish 授权协议', () => {
     expect(data.artifact.mediaId).toMatch(/^[a-zA-Z0-9_-]+$/)
     expect(data.artifact.mime).toBe('image/png')
     expect(mock.state.publishCalls).toBe(1)
-    // 正式发布记录确实写进了持久化节点，而不是只停留在回执里。
-    const savedNode = openProject(project.id)!.nodes.find((node) => node.id === 'shape:d1')!
-    const record = JSON.parse(String((savedNode.meta as Record<string, unknown>).nodeResult))
+    // 正式发布记录确实写进了持久化数据（快照 shape meta，与 output.get 同一来源），
+    // 而不是只停留在回执里。
+    const savedFile = openProject(project.id)!
+    const snapshotMeta = readSnapshotShapeMeta(savedFile, 'shape:d1') ?? {}
+    const record = JSON.parse(String(snapshotMeta.nodeResult))
     expect(record.frame.mediaId).toBe(data.artifact.mediaId)
     // 同幂等键重放：同一份回执，不再调用宿主。
     const replay = await call(

@@ -49,13 +49,28 @@ GUI 原本只有一条发布路径：人打开「3D 预演台」工作区，手�
   9) 跨项目读请求 `NOT_FOUND`；
   10) `directorExecutor` 未发布/修订漂移都返回 `skipped`（node.execute 不是发布路径）。
 - `npm run typecheck`（node + web）通过；`node scripts/audit-business-actions.cjs` 通过（external 映射含三条新操作）。
+- **真实 Electron 桌面段（6.9，集成阶段补）**：`node scripts/test-agent-graph-milestone.cjs` →
+  `passed，checks=28`。发布相关的三项检查：
+  1. 外部创建导演台节点并保存 → `director.publish.prepare` 只登记待授权请求（`awaiting-authorization`），
+     GUI 真实弹出同一确认弹窗（断言语义），外部没有授权通道；
+  2. playwright 点击「允许发布」→ `status` 变为 `authorized` → `continue` 经权威宿主用同一发布服务
+     渲染并写正式记录 → 产物落盘（`projects/<id>/media/<id>.png`）→ `output.get` 以
+     `manual-publish` 投影出该帧；同幂等键重放不再渲染第二份；
+  3. 人点「拒绝」→ 请求作废 → `continue` 返回 `PUBLISH_DENIED`，不产生第二份产物。
+  证据：`qa/local-agent-access/milestone-a-b-c/report.json` 的 `publish` 段
+  （artifact + outputSource + deniedCode）。
 
-## 4. 尚未支持 / 仅服务级验证
+**桌面段抓到的真实缺陷（已修）**：`continue` 的"保存屏障后核对"最初读
+`project.json` 的节点 `meta.nodeResult`，但运行事实实际保存在 **tldraw 快照的 shape meta** 里
+（`output.get` 也是从那里投影）。服务级测试的宿主替身当时也照着重写了错误位置，所以两边
+一起"假通过"；改为统一走共享 `buildProjectionShape` / `readSnapshotShapeMeta`，并把替身
+改成与真实 renderer 一致（写快照 meta）。这条缺陷说明：**桌面证据不能由服务级替身替代**。
 
-1. **真实 Electron 桌面端到端（授权弹窗点击 → 渲染 → 产物落盘 → GUI 卡片状态）尚未在本包跑通**：需要构建后由里程碑/桌面脚本验证，本包目前是服务级 + 共享发布实现的单元级证据。已如实登记，不计入“桌面已验收”。
-2. **3D 白模发布仍未对外开放**：外部发布固定走 2D 预演渲染（`PUBLISH_VIEWPORT_UNAVAILABLE` 不会伪造文件）；3D 需要用户已打开工作区并挂载 WebGL 视口，属于 GUI 手动路径。
-3. **整段序列导出（sequence）未纳入协议**：面板有「导出整段」，本包只开放 `frame` / `video` 两种模式；序列导出需要与镜头序列、时长和渲染成本一起定义，留待后续包。
-4. **付费供应商链路未涉及**：导演台发布是本地渲染 + 受控媒体导入，不触发模型计费；付费模型执行仍未验收。
+## 4. 尚未支持 / 仅本地验证
+
+1. **3D 白模发布仍未对外开放**：外部发布固定走 2D 预演渲染（`PUBLISH_VIEWPORT_UNAVAILABLE` 不会伪造文件）；3D 需要用户已打开工作区并挂载 WebGL 视口，属于 GUI 手动路径。
+2. **整段序列导出（sequence）未纳入协议**：面板有「导出整段」，本包只开放 `frame` / `video` 两种模式；序列导出需要与镜头序列、时长和渲染成本一起定义，留待后续包。
+3. **付费供应商链路未涉及**：导演台发布是本地渲染 + 受控媒体导入，不触发模型计费；付费模型执行仍未验收。
 
 ## 5. 下一包目标
 

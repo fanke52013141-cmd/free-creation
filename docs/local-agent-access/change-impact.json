@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "F7 批次新增 40 项外部操作（资源库 20：CRUD/分类/文件夹/集合/批量删除/物化；节点库 6：compose/update/delete/get/search/insert；历史与恢复 7：snapshot/restore/recovery 三段令牌；包传输 4：project.import/importStructure/library.import/library.export；F6 收尾导演台发布授权 3：prepare/status/continue）。兼容结论：未使用 --accept-contract-change——既有 37 项操作的 inputSchema/outputSchema 逐字节未变（各包均已用--snapshot-file 临时文件做过 changed existing=0 的独立核对），本次为纯追加（37→77）；DB 演进均为新增（M22 director_publish_requests、M23 history_snapshots.graph_json），无破坏性迁移；node.library.save 旧 chat 预设语义一行未改。",
+  "reason": "F6 收尾集成修复：导演台发布 continue 的保存屏障后核对改走共享 buildProjectionShape/readSnapshotShapeMeta——运行事实在 tldraw 快照 shape meta 而非 project.json 节点字段（真实桌面验收 6.9 段抓到的缺陷）。兼容结论：Registry 与 77 项操作 Schema 完全未变（contracts.json 无差异），仅受保护源码内容修复 + 测试替身改为与真实 renderer 一致；无契约/兼容变更。",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "97d2ffb5e2403b33a2d3ac8ab3eee8272f78cf948e4c73ab53cc662bd73a5a6f",
@@ -15,7 +15,7 @@
     "src/main/agent-access/reports.ts": "acb0e123a75747ca4c582569d284a8fecb69892a01b300da095dbe64d8733458",
     "src/main/agent-access/runs.ts": "ba6049e884e8b0621cee7d6b90c74683d1444e64596babc88e1cbff038b05e46",
     "src/main/agent-access/server.ts": "cee6b0ee7ec382a2e0b9dc54c76399a3488c3f588e109215b20acaa4a05bb431",
-    "src/main/agent-access/service.ts": "40e98478df4b7984f6a38025fbb4bdf9a188cf44d0af2405a0c551dd69669c3d",
+    "src/main/agent-access/service.ts": "47868c7e0d214deaf916648e20052db8c6c7cca7123e7ba0d34ac001747f3568",
     "src/main/agent-access/skills.ts": "1edbde79022baf6791578e158d68c9cbfe4527c39339a8e6ec27aec95909279b",
     "src/main/agent-access/transfer-ops.ts": "508d214b5842a83936fe7fd6858b2a0bb6dfe1c99ac5a21c515eb8a192f9c10d",
     "src/main/agent-flow/agent-fixed-input-acceptance.ts": "affdeef59ed58505bbf33e9696bd8c57c95e98950ab2db3a332275a42d8876c1",

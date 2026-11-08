@@ -12,7 +12,7 @@
 | 业务动作分母（IPC + 画布动作） | 171 + 35 | 171 + 35（不变） |
 | external 映射的动作 | 41 | **76** |
 | 接入测试 | 73 | **116** |
-| 真实桌面里程碑检查 | 20 | **25**（真实 Electron + 授权协作激活） |
+| 真实桌面里程碑检查 | 20 | **28**（真实 Electron + 授权协作激活） |
 | 契约兼容 | — | 既有 37 项 inputSchema/outputSchema **逐字节未变**（纯追加，未用 `--accept-contract-change`） |
 
 本轮提交：
@@ -54,7 +54,7 @@
 - `npm run verify:logging` → 通过（无日志旁路）
 - 11 个接入测试文件 → **116 passed / 116**
 - `npm run build` → 通过
-- `node scripts/test-agent-graph-milestone.cjs` → **passed，checks=25**（真实 Electron、
+- `node scripts/test-agent-graph-milestone.cjs` → **passed，checks=28**（真实 Electron、
   独立数据目录、授权协作激活）；证据 `qa/local-agent-access/milestone-a-b-c/report.json`
   与截图 `milestone-f6-chat-dialog.png`（`qa/` 目录不入库，证据为本机产物）
 
@@ -81,8 +81,8 @@
 2. **F7 三包的真实桌面端到端未跑**：资源库物化、节点库组合保存→插入另一画布、
    历史恢复与检查点回退，目前都是服务级 + 受控宿主替身证据。里程碑新增的 5 项只覆盖
    chat.patch/附件；这三条的桌面段仍待补。
-3. **导演台发布授权的真实桌面段未跑**：授权弹窗点击→渲染→产物→GUI 卡片状态只有
-   服务级 + 共享发布实现的单元证据（共享实现本身已被 GUI 面板复用）。
+3. ~~导演台发布授权的真实桌面段未跑~~ **已跑（6.9 段，checks 28）**：含人在 GUI 点「允许发布」/
+   「拒绝」两条真实路径；该段抓到一个真实缺陷（核对读错存储位置），已修并改测试替身。
 4. 3D 白模发布未对外开放（需已挂载 WebGL 视口）；整段序列导出未纳入协议。
 5. 打开中的画布无法外部恢复（需 F9 `project.close` 或新桌面动作），当前如实拒绝。
 6. `keys.importProviders` / `workspace.import` 仍阻断；`project.exportStructure` 外部
