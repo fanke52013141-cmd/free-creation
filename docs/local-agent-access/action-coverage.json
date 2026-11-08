@@ -34,15 +34,23 @@
       "label": "Flow 审核",
       "channel": "flow-agents:review",
       "gui": "Agent Flow 面板",
-      "phase": "F8",
-      "note": "本包未开放：AI 审核宿主需要桌面执行宿主的模型端口与能力预检（flow-agents.ipc 内构造），外部进程内重建会绕过工具调用能力门禁；且付费模型路径无实测证据。待注入共享宿主句柄后单独验收（见 28 号台账 §5）"
+      "phase": "external",
+      "external": [
+        "flowAgent.review"
+      ],
+      "note": "F8 收官：只经 flow-bridge 发布的同一 FlowReviewHost 执行（不另建实例）；先走与 IPC 同一模型/证据预检，预检失败零模型请求；requestId/trace/span 由 main 生成；审核结论由模型产生，外部不能改写通过/不通过。付费模型成功路径未实测"
     },
     "ipc.flowAgents.build": {
       "label": "Flow 建图",
       "channel": "flow-agents:build",
       "gui": "Agent Flow 面板",
-      "phase": "F8",
-      "note": "本包未开放：propose 需要模型端口；真正把预览落到画布是 renderer 权威动作（flow-build-actions.ts 的撤销步 + 保存屏障），需要新的桌面握手动作，超出本包文件范围。待 F8 收尾包补 flow-build 桌面动作后开放（见 28 号台账 §5）"
+      "phase": "external",
+      "external": [
+        "flowAgent.build.inspect",
+        "flowAgent.build.propose",
+        "flowAgent.build.commit"
+      ],
+      "note": "F8 收官：inspect/propose 只经同一 FlowBuilderHost（与 IPC 同一入口）；propose 先走模型工具调用预检（失败零模型请求，需已验证模型，付费路径未实测）；commit 只按 buildId 经新桌面握手 flow-build 触发渲染器 commitFlowBuild（authorize/confirm + 单撤销步 + 保存屏障），main 再以持久化 committed 状态与已保存节点核对，外部不能自带图内容"
     },
     "ipc.flowAgents.pause": {
       "label": "Flow 暂停",
@@ -59,7 +67,7 @@
       "channel": "flowAgents:publication",
       "gui": "Agent Flow 面板",
       "phase": "F8",
-      "note": "本包未开放：发布是协调器运行期向权威宿主发出的等待/继续信号（main→renderer 事件），依赖内部运行上下文；外部只能观察任务状态，不能代替宿主确认发布（见 28 号台账 §5）"
+      "note": "F8 收官仍不开放：发布是协调器运行期向权威宿主发出的等待/继续信号（main→renderer 事件），确认条件依赖渲染器保存后的内部运行事实；外部替宿主回执等于伪造内部运行身份。若后续需要，必须按导演台发布授权协议另建 prepare/authorize/continue 契约（见 41 号台账 §5）"
     },
     "ipc.flowAgents.run": {
       "label": "Flow 运行",
@@ -116,7 +124,7 @@
       "channel": "flow-agents:cooperate",
       "gui": "Agent Flow 面板",
       "phase": "F8",
-      "note": "本包未开放：协作事件没有外部主体身份维度，外部写 note/submit/revise 会与人在画布内的输入不可区分（等于冒充人工输入与人工选择），且 discuss/revise 需要模型端口。需先增加协作者身份与权限契约（见 28 号台账 §5）"
+      "note": "F8 收官仍不开放：协作事件（FlowAgentCollaboration / CollaborationEvent）没有外部主体身份维度——note/submit/revise 写入后与人在画布内的输入不可区分；且 note 需要一条正在等待的协作任务（无模型运行无法产生）。若需开放，先给协作事件加 actor/source 契约并让 GUI 呈现，再单独验收（见 41 号台账 §5）"
     },
     "ipc.flowCommands.attach": {
       "label": "命令附着",
@@ -146,8 +154,11 @@
       "label": "命令派发",
       "channel": "flow-commands:dispatch",
       "gui": "Agent Flow 命令",
-      "phase": "F8",
-      "note": "F8（二）未开放：需要外部专属租约与向权威渲染器下发 grant 的受控通道；另建通道等于新增外部专用执行器"
+      "phase": "external",
+      "note": "F8 收官：经共享权威端口复用同一账本会话；main 生成命令/任务/运行身份、先 flush、principal=external，付费族目标需 confirmPaidTarget；受理只表示已交给渲染器，最终状态由 lookup/check/reconcile 读账本事实",
+      "external": [
+        "flow.command.dispatch"
+      ]
     },
     "ipc.flowCommands.grant": {
       "label": "命令授权",
@@ -167,15 +178,21 @@
       "label": "人工协作准备",
       "channel": "flow-commands:prepare",
       "gui": "Agent Flow 命令",
-      "phase": "F8",
-      "note": "F8（二）未开放：会在账本创建 pending 命令/租约/占用，但外部没有权威渲染器通道执行；见 29 号台账第 3 节"
+      "phase": "external",
+      "note": "F8 收官：不单独开放（外部只准备不交付会留下无法执行的占用）；等价能力并入 flow.command.dispatch 的 prepareExternal 第一阶段",
+      "external": [
+        "flow.command.dispatch"
+      ]
     },
     "ipc.flowCommands.check": {
       "label": "命令核对",
       "channel": "flow-commands:check",
       "gui": "Agent Flow 命令",
-      "phase": "F8",
-      "note": "F8（二）未开放：需要内部 leaseId 且 owner_session 必须匹配内部账本会话，外部无租约"
+      "phase": "external",
+      "note": "F8 收官：外部无租约，只做只读结算预演（回滚事务内复用账本 commit 规则，不落账）；准入仍由内部渲染器执行",
+      "external": [
+        "flow.command.check"
+      ]
     },
     "ipc.flowCommands.commit": {
       "label": "协作提交",
@@ -211,8 +228,11 @@
       "label": "命令放弃",
       "channel": "flow-commands:abort",
       "gui": "Agent Flow 命令",
-      "phase": "F8",
-      "note": "F8（二）未开放：需要内部 leaseId 且 admitted=0；允许外部放弃会改写内部命令事实"
+      "phase": "external",
+      "note": "F8 收官：只允许放弃 principal=external、admitted=0 的 pending/unknown 命令；已准入可能已执行必须 reconcile，committed/failed/cancelled 一律拒绝",
+      "external": [
+        "flow.command.abort"
+      ]
     },
     "ipc.flowAssets.submit": {
       "label": "固定资产提交",
@@ -1670,6 +1690,16 @@
         "project.get"
       ],
       "note": "F9 分母补齐：读取单个项目摘要与图版本"
+    },
+    "canvas.node.contract-panel": {
+      "label": "节点契约面板（类型/字段/端口/依赖查询）",
+      "gui": "选中节点右侧 I/O 面板",
+      "phase": "external",
+      "external": [
+        "node.type.list",
+        "node.type.get"
+      ],
+      "note": "N1：不创建实例即可查询类型契约；数据来自生成快照（漂移门禁 test/node-contracts-export.test.ts）；动态端口节点导出的是默认配置结果，实例端口请用 node.get 读取"
     }
   }
 }

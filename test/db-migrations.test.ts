@@ -45,11 +45,16 @@ describe('SQLite user_version migrations', () => {
     expect(schemas.some((sql) => sql.includes('CREATE TABLE flow_coordination_runs'))).toBe(true)
     expect(schemas.some((sql) => sql.includes('CREATE TABLE flow_builds'))).toBe(true)
     expect(schemas.some((sql) => sql.includes('CREATE TABLE process_locks'))).toBe(true)
-    expect(schemas.at(-4)).toContain('agent_tool_calling_validations')
-    expect(schemas.at(-3)).toContain('local_agent_operations')
-    expect(schemas.at(-2)).toContain('secret_vault')
-    expect(schemas.at(-2)).toContain('key_imports')
-    expect(schemas.at(-1)).toContain('CREATE TABLE external_runs')
+    // 尾部断言随迁移增长同步维护：M18 工具调用验证 → M19 外部回执 → M20 密钥库 →
+    // M21 外部运行账本 → M22 发布授权账本 → M23 历史快照图数据 → M24 命令主体标记。
+    expect(schemas.at(-7)).toContain('agent_tool_calling_validations')
+    expect(schemas.at(-6)).toContain('local_agent_operations')
+    expect(schemas.at(-5)).toContain('secret_vault')
+    expect(schemas.at(-5)).toContain('key_imports')
+    expect(schemas.at(-4)).toContain('CREATE TABLE external_runs')
+    expect(schemas.at(-3)).toContain('director_publish_requests')
+    expect(schemas.at(-2)).toContain('ADD COLUMN graph_json')
+    expect(schemas.at(-1)).toContain('principal')
   })
 
   it('每个迁移整体包在单个事务里：迁移语句与 user_version 推进同提交', () => {
@@ -168,7 +173,16 @@ describe('SQLite user_version migrations', () => {
 
     // 排除破坏后重跑：M9 的数据拷贝依赖 M7 的集合表，补齐前置后直接补到最新版本，
     // 验证失败不留半迁移状态、可安全重跑（R-11 的核心保证）。
+    // 说明：M23 给 history_snapshots 加列，该表由 M2 创建；本夹具从 version 7 起步，
+    // 故按"真实 v7 库里必然存在"的事实补齐这张前置表。flow_commands 由更晚的迁移创建，
+    // 重跑时会被正常建出来，不要在这里预建（否则 CREATE 冲突）。
     sqlite.exec('DROP TABLE library_revision_blueprints')
+    sqlite.exec(
+      `CREATE TABLE history_snapshots (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL, label TEXT NOT NULL,
+        snapshot TEXT NOT NULL, node_count INTEGER NOT NULL, created_at INTEGER NOT NULL
+      )`
+    )
     sqlite.exec(
       'CREATE TABLE library_collections (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)'
     )

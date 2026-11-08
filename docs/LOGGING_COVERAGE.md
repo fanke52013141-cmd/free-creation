@@ -784,4 +784,60 @@ AI 对话工作区视觉重排：移除可见角色标签，保留无障碍消�
 - 验证：`test/local-agent-flow-agents-access.test.ts`（15 项）断言写入成功时事件序列恰为 `agent.access.started` → `agent.access.completed`，且事件序列化串不含交付正文、私有配置与临时数据目录；`flowAgent.inspect` 的运行中分支断言账本状态不变。
 - 未覆盖边界：本包只做服务级验证，无真实 Electron 桌面段；Flow 生命周期（run/pause/stop/cooperate/review/build 提交/publication）未开放，其 `agent.desktop.*`、`agent.runtime.*`、`model.request.*` 日志链路不在本包验收范围。详见 [28-flow-agents-delivery.md](local-agent-access/28-flow-agents-delivery.md)。
 
+## 2026-11-08 F8 收官续：Flow 命令只读结算预演（flow.command.check）
+
+- 范围与复用：`flow.command.check`（read）沿用 dispatch 既有 `agent.access.started/completed/failed` 生命周期（`attributes.operation=flow.command.check`，唯一外部终态拥有者）；账本阶段复用既有 `command.operation.started/completed/failed` 事件族，新增固定 `phase=reconcile-preview`，`attributes` 仅 `commandId / state / versionId / code`。**未新增事件类型，也未重复记终态**：每个外部 check 一次 started + 一次 completed/failed。
+- 只读语义：check 在回滚事务内调用账本 `commit` 预演结算结果后整体回滚；不写命令回执、不生成输出版本、不改占用。事件 `state` 记录命令**当前**状态；无法结算时 `status=unknown`（不记 success），可结算/终态时 `status=success`。
+- 关联与脱敏：trace/span 来自 dispatch 并透传给账本阶段事件；上下文只带 projectId/nodeId/taskId/runId（`safeId` 钳制）。不记录命令输入清单、资产值、用户正文、提示词、模型回复、路径或凭据；预演生成的临时输出版本 ID 不进入响应与日志。
+- 失败语义：未知命令=`failed NOT_FOUND`；非法参数=`failed INVALID_INPUT`；日志写入失败不改变外部应答（`emitGatewayEvent` 内部 catch）。
+- 验证：`test/local-agent-flow-commands-access.test.ts` 7 项全过；其中新增用例断言 check 前后 `flow_commands` 行与 `flow_asset_versions/submissions` 计数完全不变，预演 `wouldResultState` 与随后 `reconcile` 的真实落账状态一致。
+- 未覆盖边界：真实 Electron 桌面段未重跑（本操作只读账本/已保存事实）；`prepare`/`dispatch`/`abort` 的外部主体与共享端口设计待 Lead 迁移，当前未登记，故其日志路径不在本清单。详见 [29-flow-commands-delivery.md](local-agent-access/29-flow-commands-delivery.md) 第 9 节。
+
+## 2026-11-08 F8 收官：Flow 建图预览/提交与模型审核外部接入
+
+- 范围与复用：新增外部操作 `flowAgent.build.inspect / propose / commit` 与 `flowAgent.review`
+  （`src/main/agent-access/flow-agent-build-ops.ts`），复用 dispatch 现有
+  `agent.access.started/completed/failed/unknown` 生命周期；`attributes.operation` 为操作 ID，
+  `phase` 沿用 `validate / precheck / desktop-handshake` 等既有稳定值，`code` 为稳定回执码
+  （`FLOW_AGENTS_UNAVAILABLE / ACTIVE_PROJECT_REQUIRED / AGENT_MODEL_UNAVAILABLE /
+  AGENT_MODEL_TOOL_UNVERIFIED / FLOW_BUILD_MISSING / FLOW_BUILD_UNCONFIRMED /
+  FLOW_REVIEW_CONFIG_INVALID / STORAGE_INCONSISTENT / OUTCOME_UNKNOWN` 等）。**未新增事件类型**。
+- propose/review 的模型调用成功后走既有 `model.request.*` 与 `agent.desktop.*`（宿主侧）事件；
+  本包不新增模型请求旁路。未发布共享宿主端口时只在 dispatch 生命周期里记失败码，不伪造宿主。
+- 脱敏边界：不记录建图目标/计划/节点正文/配置、审核 criteria/feedback/资产正文、模型提示词
+  与回复、文件路径或凭据；commit 的桌面握手只携带 projectId/nodeId/buildId，承载业务内容的
+  预览由 main 侧宿主按 buildId 读取，不进入桌面载荷与日志。
+- 失败语义：模型预检失败 = failed 且零模型请求；提交缺预览/非活动画布 = failed 且零桌面写入；
+  桌面超时/失联 = unknown（不自动重发、不记成功）；提交后以持久化 committed 与已保存节点
+  核对，不一致记 `STORAGE_INCONSISTENT` failed。日志写入失败不改变业务结果。
+- 验证：`test/local-agent-flow-agent-build-access.test.ts` 16 项（含端口未发布、预检零请求、
+  commit 缺预览、unknown、持久化核对、审核结论不可改写）；真实 Electron 里程碑 6.14 段验证
+  `AGENT_MODEL_UNAVAILABLE` / `FLOW_BUILD_MISSING` / `ACTIVE_PROJECT_REQUIRED` /
+  `FLOW_REVIEW_CONFIG_INVALID` / `INVALID_INPUT` 与未登记操作本地拒绝。
+- 未覆盖边界：propose/review/commit 的**成功**模型与真实落盘路径未验收（无已验证模型/预算），
+  其 `model.request.*` 与真实 commit 保存事件不在本包证据内；桌面 `flow-build` 动作没有独立
+  诊断事件（与 graph-patch 桌面动作一致，复用外部接入生命周期 + `project.save`）。详见
+  [41-flow-agent-build-delivery.md](local-agent-access/41-flow-agent-build-delivery.md) 第 4、5 节。
+
+## 2026-11-08 F8 收官第三轮：外部命令派发与放弃（flow.command.dispatch / abort）
+
+- 范围与复用：`flow.command.dispatch`（execute）与 `flow.command.abort`（write）沿用 dispatch 既有
+  `agent.access.started/completed/failed/unknown` 生命周期（唯一外部终态拥有者，`attributes.operation`
+  为操作 ID）；账本阶段复用既有 `command.operation.started/completed/failed` 事件族，新增固定
+  `phase=dispatch`（Started/completed/failed 成对）与 `phase=abandon`，`attributes` 仅
+  `commandId / state / code`。**未新增事件类型，也未重复记终态**：每次外部调用一次 started +
+  一次 completed/failed；渲染器 grant 的既有 `command.operation.*`（IPC 入口）保持原样。
+- 关联与语义：trace/span 来自 dispatch 并透传给账本阶段事件；上下文携带 projectId/nodeId/taskId/runId
+  （`safeId` 钳制），`commandId` 由 main 生成。dispatch 的 completed 事件 `state=pending`
+  （只表示已持久受理并交给渲染器，**不代表执行完成**）；abort 的 completed 事件 `state=skipped`。
+  下发失联按 unknown 记录（保留 pending，由既有 arm 定时器/外部核对转 unknown），绝不记 success。
+- 脱敏：不记录命令输入清单、固定资产取值、Agent 目标正文、提示词、模型回复、项目/媒体路径或凭据；
+  账本 `principal` 只入库，不进入事件。日志写入失败不改变外部应答（`emitGatewayEvent` 内部 catch）。
+- 验证：`test/local-agent-flow-commands-access.test.ts` 12 项全过；其中断言 dispatch 受理事件
+  `state=pending`、`agent.access.*` 生命周期成对，且事件序列化串不含夹具正文/资产值；
+  abort 拒绝路径只记录稳定 code（不记录回执正文）。
+- 未覆盖边界：真实 Electron 桌面段（真实 grant/执行/保存）未重跑；付费族只验证确认闸门，未触达供应商；
+  renderer `flush` 无强制保存分支（外部 dispatch 在未保存编辑时会被渲染器 revision 校验如实
+  skipped/unknown），详见 [29-flow-commands-delivery.md](local-agent-access/29-flow-commands-delivery.md) 第 10.5 节。
+
 

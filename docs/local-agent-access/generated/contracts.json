@@ -15674,6 +15674,1247 @@
       ]
     },
     {
+      "operationId": "flowAgent.build.inspect",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "读取 Flow 建图预览（最近一次或指定 buildId）：buildId/状态/计划步骤/节点身份与几何；只读已持久化预览，不调用模型、不修改画布；要求目标项目已在桌面打开",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "nodeId": {
+            "type": "string",
+            "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+          },
+          "buildId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-zA-Z0-9_.:-]+$"
+          }
+        },
+        "required": [
+          "projectId",
+          "nodeId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "flowAgent.build.inspect"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "nodeId": {
+                "type": "string",
+                "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+              },
+              "graphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "build": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "buildId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      },
+                      "projectId": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+                      },
+                      "nodeId": {
+                        "type": "string",
+                        "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+                      },
+                      "semanticRevision": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "preview",
+                          "committed",
+                          "discarded"
+                        ]
+                      },
+                      "plan": {
+                        "type": "object",
+                        "properties": {
+                          "title": {
+                            "type": "string",
+                            "maxLength": 120
+                          },
+                          "topology": {
+                            "type": "string",
+                            "enum": [
+                              "sequential",
+                              "parallel-fork"
+                            ]
+                          },
+                          "steps": {
+                            "maxItems": 4,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "title": {
+                                  "type": "string",
+                                  "maxLength": 120
+                                },
+                                "goal": {
+                                  "type": "string",
+                                  "maxLength": 4096
+                                },
+                                "mode": {
+                                  "type": "string",
+                                  "enum": [
+                                    "autonomous",
+                                    "collaborative"
+                                  ]
+                                },
+                                "capability": {
+                                  "type": "string",
+                                  "maxLength": 80
+                                }
+                              },
+                              "required": [
+                                "title",
+                                "goal",
+                                "mode",
+                                "capability"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "title",
+                          "topology",
+                          "steps"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "nodes": {
+                        "maxItems": 64,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "nodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "type": {
+                              "type": "string",
+                              "maxLength": 40
+                            },
+                            "title": {
+                              "type": "string",
+                              "maxLength": 120
+                            },
+                            "contractVersion": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "x": {
+                              "type": "number"
+                            },
+                            "y": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "nodeId",
+                            "type",
+                            "title",
+                            "contractVersion",
+                            "x",
+                            "y"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "edges": {
+                        "maxItems": 128,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "from": {
+                              "type": "object",
+                              "properties": {
+                                "nodeId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 160,
+                                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                },
+                                "portId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 160,
+                                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                }
+                              },
+                              "required": [
+                                "nodeId",
+                                "portId"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "to": {
+                              "type": "object",
+                              "properties": {
+                                "nodeId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 160,
+                                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                },
+                                "portId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 160,
+                                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                }
+                              },
+                              "required": [
+                                "nodeId",
+                                "portId"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "from",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "buildId",
+                      "projectId",
+                      "nodeId",
+                      "semanticRevision",
+                      "state",
+                      "plan",
+                      "nodes",
+                      "edges"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "projectId",
+              "nodeId",
+              "graphVersion",
+              "build"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "flowAgent.build.propose",
+      "operationVersion": 1,
+      "effect": "execute",
+      "description": "在 builder 角色的 Agent 节点上提交建图目标，由同一桌面宿主的模型端口生成预览并持久化（不落画布）；需要已验证工具调用能力的模型，模型预检失败时零模型请求；request/trace/span 由 main 生成，外部不能自造",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "nodeId": {
+            "type": "string",
+            "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+          }
+        },
+        "required": [
+          "projectId",
+          "nodeId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "flowAgent.build.propose"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "nodeId": {
+                "type": "string",
+                "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+              },
+              "graphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "build": {
+                "type": "object",
+                "properties": {
+                  "buildId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                  },
+                  "projectId": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+                  },
+                  "nodeId": {
+                    "type": "string",
+                    "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+                  },
+                  "semanticRevision": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "preview",
+                      "committed",
+                      "discarded"
+                    ]
+                  },
+                  "plan": {
+                    "type": "object",
+                    "properties": {
+                      "title": {
+                        "type": "string",
+                        "maxLength": 120
+                      },
+                      "topology": {
+                        "type": "string",
+                        "enum": [
+                          "sequential",
+                          "parallel-fork"
+                        ]
+                      },
+                      "steps": {
+                        "maxItems": 4,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "title": {
+                              "type": "string",
+                              "maxLength": 120
+                            },
+                            "goal": {
+                              "type": "string",
+                              "maxLength": 4096
+                            },
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "autonomous",
+                                "collaborative"
+                              ]
+                            },
+                            "capability": {
+                              "type": "string",
+                              "maxLength": 80
+                            }
+                          },
+                          "required": [
+                            "title",
+                            "goal",
+                            "mode",
+                            "capability"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "title",
+                      "topology",
+                      "steps"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "nodes": {
+                    "maxItems": 64,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "nodeId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160,
+                          "pattern": "^[a-zA-Z0-9_.:-]+$"
+                        },
+                        "type": {
+                          "type": "string",
+                          "maxLength": 40
+                        },
+                        "title": {
+                          "type": "string",
+                          "maxLength": 120
+                        },
+                        "contractVersion": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "nodeId",
+                        "type",
+                        "title",
+                        "contractVersion",
+                        "x",
+                        "y"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "edges": {
+                    "maxItems": 128,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "from": {
+                          "type": "object",
+                          "properties": {
+                            "nodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "portId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            }
+                          },
+                          "required": [
+                            "nodeId",
+                            "portId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "to": {
+                          "type": "object",
+                          "properties": {
+                            "nodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "portId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            }
+                          },
+                          "required": [
+                            "nodeId",
+                            "portId"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "from",
+                        "to"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "buildId",
+                  "projectId",
+                  "nodeId",
+                  "semanticRevision",
+                  "state",
+                  "plan",
+                  "nodes",
+                  "edges"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "projectId",
+              "nodeId",
+              "graphVersion",
+              "build"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "flowAgent.build.commit",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "按 buildId 把已生成的建图预览提交到当前打开的权威画布（复用 GUI 同一 commitFlowBuild：authorize/confirm + 单撤销步 + 保存屏障）；外部不能自带预览内容；已 committed 的重复提交按持久化事实返回，不重复建节点",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "nodeId": {
+            "type": "string",
+            "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+          },
+          "buildId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-zA-Z0-9_.:-]+$"
+          }
+        },
+        "required": [
+          "projectId",
+          "nodeId",
+          "buildId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "flowAgent.build.commit"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "nodeId": {
+                "type": "string",
+                "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+              },
+              "graphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "build": {
+                "type": "object",
+                "properties": {
+                  "buildId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                  },
+                  "projectId": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+                  },
+                  "nodeId": {
+                    "type": "string",
+                    "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+                  },
+                  "semanticRevision": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "preview",
+                      "committed",
+                      "discarded"
+                    ]
+                  },
+                  "plan": {
+                    "type": "object",
+                    "properties": {
+                      "title": {
+                        "type": "string",
+                        "maxLength": 120
+                      },
+                      "topology": {
+                        "type": "string",
+                        "enum": [
+                          "sequential",
+                          "parallel-fork"
+                        ]
+                      },
+                      "steps": {
+                        "maxItems": 4,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "title": {
+                              "type": "string",
+                              "maxLength": 120
+                            },
+                            "goal": {
+                              "type": "string",
+                              "maxLength": 4096
+                            },
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "autonomous",
+                                "collaborative"
+                              ]
+                            },
+                            "capability": {
+                              "type": "string",
+                              "maxLength": 80
+                            }
+                          },
+                          "required": [
+                            "title",
+                            "goal",
+                            "mode",
+                            "capability"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "title",
+                      "topology",
+                      "steps"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "nodes": {
+                    "maxItems": 64,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "nodeId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160,
+                          "pattern": "^[a-zA-Z0-9_.:-]+$"
+                        },
+                        "type": {
+                          "type": "string",
+                          "maxLength": 40
+                        },
+                        "title": {
+                          "type": "string",
+                          "maxLength": 120
+                        },
+                        "contractVersion": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "nodeId",
+                        "type",
+                        "title",
+                        "contractVersion",
+                        "x",
+                        "y"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "edges": {
+                    "maxItems": 128,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "from": {
+                          "type": "object",
+                          "properties": {
+                            "nodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "portId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            }
+                          },
+                          "required": [
+                            "nodeId",
+                            "portId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "to": {
+                          "type": "object",
+                          "properties": {
+                            "nodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "portId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            }
+                          },
+                          "required": [
+                            "nodeId",
+                            "portId"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "from",
+                        "to"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "buildId",
+                  "projectId",
+                  "nodeId",
+                  "semanticRevision",
+                  "state",
+                  "plan",
+                  "nodes",
+                  "edges"
+                ],
+                "additionalProperties": false
+              },
+              "committedNodeIds": {
+                "maxItems": 64,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                }
+              }
+            },
+            "required": [
+              "projectId",
+              "nodeId",
+              "graphVersion",
+              "build",
+              "committedNodeIds"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "flowAgent.review",
+      "operationVersion": 1,
+      "effect": "execute",
+      "description": "在 ai-review 节点上提交一次模型审核并读取报告（与 GUI 同一 FlowReviewHost 与同一证据/预算规则）；审核结论由模型产生，外部不能改写为通过；需要已验证工具调用能力的模型，模型预检失败时零模型请求；request/trace/span 由 main 生成",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "nodeId": {
+            "type": "string",
+            "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+          }
+        },
+        "required": [
+          "projectId",
+          "nodeId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "flowAgent.review"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "nodeId": {
+                "type": "string",
+                "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+              },
+              "graphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "decision": {
+                "type": "object",
+                "properties": {
+                  "reviewId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                  },
+                  "cycleId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                  },
+                  "reviewNodeId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                  },
+                  "reviewRevision": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "rulesVersion": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                  },
+                  "passed": {
+                    "type": "boolean"
+                  },
+                  "feedback": {
+                    "type": "string",
+                    "maxLength": 16384
+                  },
+                  "evidenceScope": {
+                    "type": "string",
+                    "enum": [
+                      "complete-text-json",
+                      "complete-image",
+                      "complete-audio",
+                      "sampled",
+                      "audio-video-timeline",
+                      "partial"
+                    ]
+                  },
+                  "subjects": {
+                    "maxItems": 128,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "assetId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160,
+                          "pattern": "^[a-zA-Z0-9_.:-]+$"
+                        },
+                        "versionId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160,
+                          "pattern": "^[a-zA-Z0-9_.:-]+$"
+                        },
+                        "sourceNodeId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160,
+                          "pattern": "^[a-zA-Z0-9_.:-]+$"
+                        },
+                        "sourcePortId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160,
+                          "pattern": "^[a-zA-Z0-9_.:-]+$"
+                        }
+                      },
+                      "required": [
+                        "assetId",
+                        "versionId",
+                        "sourceNodeId",
+                        "sourcePortId"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "issues": {
+                    "maxItems": 128,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "assetId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160,
+                          "pattern": "^[a-zA-Z0-9_.:-]+$"
+                        },
+                        "versionId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160,
+                          "pattern": "^[a-zA-Z0-9_.:-]+$"
+                        },
+                        "feedback": {
+                          "type": "string",
+                          "maxLength": 4096
+                        }
+                      },
+                      "required": [
+                        "assetId",
+                        "versionId",
+                        "feedback"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "reviewId",
+                  "cycleId",
+                  "reviewNodeId",
+                  "reviewRevision",
+                  "rulesVersion",
+                  "passed",
+                  "feedback",
+                  "evidenceScope",
+                  "subjects",
+                  "issues"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "projectId",
+              "nodeId",
+              "graphVersion",
+              "decision"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
       "operationId": "flow.command.lookup",
       "operationVersion": 1,
       "effect": "read",
@@ -16189,6 +17430,675 @@
               "state",
               "commitAttempted",
               "receipt"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "flow.command.check",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "只读核对既有 Flow 命令：读取账本回执，并在回滚事务内用同一账本结算规则预演\"现在结算会得到什么状态\"（不落账、不改写命令、不产生输出版本）；无法结算时回传稳定原因，供 reconcile 决定是否提交",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "commandId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+          }
+        },
+        "required": [
+          "projectId",
+          "commandId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "flow.command.check"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "commandId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "unknown",
+                  "committed",
+                  "failed",
+                  "cancelled",
+                  "skipped"
+                ]
+              },
+              "alreadySettled": {
+                "type": "boolean"
+              },
+              "wouldSettle": {
+                "type": "boolean"
+              },
+              "wouldResultState": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "unknown",
+                  "committed",
+                  "failed",
+                  "cancelled",
+                  "skipped"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "receipt": {
+                "type": "object",
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+                  },
+                  "commandId": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                  },
+                  "taskId": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                  },
+                  "targetNodeId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 180
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "unknown",
+                      "committed",
+                      "failed",
+                      "cancelled",
+                      "skipped"
+                    ]
+                  },
+                  "runId": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                  },
+                  "nodeExecutionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "inputFingerprint": {
+                    "type": "string",
+                    "pattern": "^v1:[0-9a-f]{16}$"
+                  },
+                  "outputRefs": {
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "assetId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[a-zA-Z0-9_.:-]+$"
+                        },
+                        "versionId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[a-zA-Z0-9_.:-]+$"
+                        },
+                        "sourceNodeId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[a-zA-Z0-9_.:-]+$"
+                        },
+                        "sourcePortId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[a-zA-Z0-9_.:-]+$"
+                        }
+                      },
+                      "required": [
+                        "assetId",
+                        "versionId",
+                        "sourceNodeId",
+                        "sourcePortId"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "graphVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "code": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  }
+                },
+                "required": [
+                  "projectId",
+                  "commandId",
+                  "taskId",
+                  "targetNodeId",
+                  "state",
+                  "runId",
+                  "outputRefs"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "projectId",
+              "commandId",
+              "state",
+              "alreadySettled",
+              "wouldSettle",
+              "receipt"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "flow.command.dispatch",
+      "operationVersion": 1,
+      "effect": "execute",
+      "description": "把一条外部派发请求交给当前活动画布执行：main 生成命令/任务/运行身份并先保存画布，按已保存图计算语义版本，账本记录 principal=external 后经既有渲染器 grant 通道执行；受理只表示已交给渲染器，最终状态用 lookup/check 读、reconcile 结算；付费目标必须 confirmPaidTarget=true",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "agentNodeId": {
+            "type": "string",
+            "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+          },
+          "targetNodeId": {
+            "type": "string",
+            "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+          },
+          "contractVersion": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "inputs": {
+            "maxItems": 16,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "targetPortId": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                },
+                "assets": {
+                  "minItems": 1,
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "assetId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      },
+                      "versionId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      },
+                      "sourceNodeId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      },
+                      "sourcePortId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      }
+                    },
+                    "required": [
+                      "assetId",
+                      "versionId",
+                      "sourceNodeId",
+                      "sourcePortId"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "targetPortId",
+                "assets"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "confirmPaidTarget": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projectId",
+          "agentNodeId",
+          "targetNodeId",
+          "contractVersion",
+          "inputs",
+          "confirmPaidTarget"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "flow.command.dispatch"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "commandId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+              },
+              "taskId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+              },
+              "runId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+              },
+              "targetNodeId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 180
+              },
+              "graphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "accepted": {
+                "type": "boolean",
+                "const": true
+              },
+              "state": {
+                "type": "string",
+                "const": "pending"
+              }
+            },
+            "required": [
+              "projectId",
+              "commandId",
+              "taskId",
+              "runId",
+              "targetNodeId",
+              "graphVersion",
+              "accepted",
+              "state"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "flow.command.abort",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "放弃一条外部派发且**从未准入**的 Flow 命令（principal=external、admitted=0、pending/unknown）；已准入或已终态一律拒绝，绝不改写已执行事实；需要幂等键",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "commandId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+          }
+        },
+        "required": [
+          "projectId",
+          "commandId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "flow.command.abort"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "commandId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+              },
+              "taskId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+              },
+              "targetNodeId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 180
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "unknown",
+                  "committed",
+                  "failed",
+                  "cancelled",
+                  "skipped"
+                ]
+              },
+              "runId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+              },
+              "nodeExecutionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "inputFingerprint": {
+                "type": "string",
+                "pattern": "^v1:[0-9a-f]{16}$"
+              },
+              "outputRefs": {
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "assetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "versionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "sourceNodeId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "sourcePortId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    }
+                  },
+                  "required": [
+                    "assetId",
+                    "versionId",
+                    "sourceNodeId",
+                    "sourcePortId"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "graphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              }
+            },
+            "required": [
+              "projectId",
+              "commandId",
+              "taskId",
+              "targetNodeId",
+              "state",
+              "runId",
+              "outputRefs"
             ],
             "additionalProperties": false
           },
@@ -18729,6 +20639,379 @@
       ]
     },
     {
+      "operationId": "node.type.get",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "读取某类节点的契约：契约版本、端口（输入/输出、类型、必填、基数、Schema）、初始配置、执行方式、输出真值来源与是否需要动态端口二次读取；不需要创建实例",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "typeId": {
+            "type": "string",
+            "enum": [
+              "text",
+              "image",
+              "image-crop",
+              "image-split",
+              "image-gen",
+              "image-edit",
+              "website",
+              "video",
+              "video-asset",
+              "video-frame",
+              "video-clip",
+              "video-depth",
+              "video-clay",
+              "timeline",
+              "audio",
+              "sound-adjust",
+              "file",
+              "speech",
+              "tts",
+              "voice-design",
+              "chat",
+              "processor",
+              "code",
+              "json",
+              "structured",
+              "storyboard",
+              "ai-process",
+              "iterate",
+              "director",
+              "agent",
+              "state-machine",
+              "ai-review"
+            ]
+          }
+        },
+        "required": [
+          "typeId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "node.type.get"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "typeId": {
+                "type": "string",
+                "enum": [
+                  "text",
+                  "image",
+                  "image-crop",
+                  "image-split",
+                  "image-gen",
+                  "image-edit",
+                  "website",
+                  "video",
+                  "video-asset",
+                  "video-frame",
+                  "video-clip",
+                  "video-depth",
+                  "video-clay",
+                  "timeline",
+                  "audio",
+                  "sound-adjust",
+                  "file",
+                  "speech",
+                  "tts",
+                  "voice-design",
+                  "chat",
+                  "processor",
+                  "code",
+                  "json",
+                  "structured",
+                  "storyboard",
+                  "ai-process",
+                  "iterate",
+                  "director",
+                  "agent",
+                  "state-machine",
+                  "ai-review"
+                ]
+              },
+              "contractVersion": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "category": {
+                "type": "string",
+                "maxLength": 40
+              },
+              "creatable": {
+                "type": "boolean"
+              },
+              "defaultSize": {
+                "type": "object",
+                "properties": {
+                  "w": {
+                    "type": "number"
+                  },
+                  "h": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "w",
+                  "h"
+                ],
+                "additionalProperties": false
+              },
+              "sizePolicy": {
+                "type": "string",
+                "enum": [
+                  "standard",
+                  "content",
+                  "free"
+                ]
+              },
+              "executionMode": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "manual-publish",
+                  "display-only"
+                ]
+              },
+              "outputSource": {
+                "type": "string",
+                "enum": [
+                  "run",
+                  "document"
+                ]
+              },
+              "executionDisabledReason": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "initialConfig": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 8000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "dynamicPorts": {
+                "type": "boolean"
+              },
+              "ports": {
+                "type": "object",
+                "properties": {
+                  "in": {
+                    "maxItems": 32,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "dir": {
+                          "type": "string",
+                          "enum": [
+                            "in",
+                            "out"
+                          ]
+                        },
+                        "type": {
+                          "type": "string",
+                          "maxLength": 40
+                        },
+                        "required": {
+                          "type": "boolean"
+                        },
+                        "cardinality": {
+                          "type": "string",
+                          "enum": [
+                            "one",
+                            "many"
+                          ]
+                        },
+                        "name": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "description": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "schema": {
+                          "type": "string",
+                          "maxLength": 120
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "dir",
+                        "type",
+                        "required",
+                        "cardinality"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "out": {
+                    "maxItems": 32,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "dir": {
+                          "type": "string",
+                          "enum": [
+                            "in",
+                            "out"
+                          ]
+                        },
+                        "type": {
+                          "type": "string",
+                          "maxLength": 40
+                        },
+                        "required": {
+                          "type": "boolean"
+                        },
+                        "cardinality": {
+                          "type": "string",
+                          "enum": [
+                            "one",
+                            "many"
+                          ]
+                        },
+                        "name": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "description": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "schema": {
+                          "type": "string",
+                          "maxLength": 120
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "dir",
+                        "type",
+                        "required",
+                        "cardinality"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "in",
+                  "out"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "typeId",
+              "contractVersion",
+              "label",
+              "description",
+              "category",
+              "creatable",
+              "defaultSize",
+              "sizePolicy",
+              "executionMode",
+              "outputSource",
+              "initialConfig",
+              "dynamicPorts",
+              "ports"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
       "operationId": "director.publish.prepare",
       "operationVersion": 1,
       "effect": "write",
@@ -19281,8 +21564,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -19329,8 +21612,8 @@
       ],
       "summary": {
         "desktopTested": 6,
-        "contractTested": 1,
-        "planned": 1,
+        "contractTested": 2,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -19341,8 +21624,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -19389,8 +21672,8 @@
       ],
       "summary": {
         "desktopTested": 5,
-        "contractTested": 2,
-        "planned": 1,
+        "contractTested": 3,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -19401,8 +21684,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -19449,8 +21732,8 @@
       ],
       "summary": {
         "desktopTested": 5,
-        "contractTested": 2,
-        "planned": 1,
+        "contractTested": 3,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -19461,8 +21744,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -19509,8 +21792,8 @@
       ],
       "summary": {
         "desktopTested": 3,
-        "contractTested": 4,
-        "planned": 1,
+        "contractTested": 5,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -19521,8 +21804,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -19569,8 +21852,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 4,
-        "planned": 4,
+        "contractTested": 5,
+        "planned": 3,
         "notApplicable": 0
       }
     },
@@ -19581,8 +21864,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -19629,8 +21912,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 4,
-        "planned": 4,
+        "contractTested": 5,
+        "planned": 3,
         "notApplicable": 0
       }
     },
@@ -19641,8 +21924,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -19689,8 +21972,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 7,
-        "planned": 1,
+        "contractTested": 8,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -19701,8 +21984,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -19749,8 +22032,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 4,
-        "planned": 4,
+        "contractTested": 5,
+        "planned": 3,
         "notApplicable": 0
       }
     },
@@ -19761,8 +22044,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -19809,8 +22092,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 7,
-        "planned": 1,
+        "contractTested": 8,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -19821,8 +22104,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -19869,8 +22152,8 @@
       ],
       "summary": {
         "desktopTested": 2,
-        "contractTested": 5,
-        "planned": 1,
+        "contractTested": 6,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -19881,8 +22164,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -19929,8 +22212,8 @@
       ],
       "summary": {
         "desktopTested": 2,
-        "contractTested": 5,
-        "planned": 1,
+        "contractTested": 6,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -19941,8 +22224,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -19989,8 +22272,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 4,
-        "planned": 4,
+        "contractTested": 5,
+        "planned": 3,
         "notApplicable": 0
       }
     },
@@ -20001,8 +22284,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -20049,8 +22332,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 4,
-        "planned": 4,
+        "contractTested": 5,
+        "planned": 3,
         "notApplicable": 0
       }
     },
@@ -20061,8 +22344,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -20109,8 +22392,8 @@
       ],
       "summary": {
         "desktopTested": 4,
-        "contractTested": 3,
-        "planned": 1,
+        "contractTested": 4,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -20121,8 +22404,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -20169,8 +22452,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 7,
-        "planned": 1,
+        "contractTested": 8,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -20181,8 +22464,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -20229,8 +22512,8 @@
       ],
       "summary": {
         "desktopTested": 2,
-        "contractTested": 5,
-        "planned": 1,
+        "contractTested": 6,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -20241,8 +22524,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -20289,8 +22572,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 7,
-        "planned": 1,
+        "contractTested": 8,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -20301,8 +22584,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -20349,8 +22632,8 @@
       ],
       "summary": {
         "desktopTested": 3,
-        "contractTested": 2,
-        "planned": 3,
+        "contractTested": 3,
+        "planned": 2,
         "notApplicable": 0
       }
     },
@@ -20361,8 +22644,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -20409,8 +22692,8 @@
       ],
       "summary": {
         "desktopTested": 2,
-        "contractTested": 3,
-        "planned": 3,
+        "contractTested": 4,
+        "planned": 2,
         "notApplicable": 0
       }
     },
@@ -20421,8 +22704,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -20469,8 +22752,8 @@
       ],
       "summary": {
         "desktopTested": 2,
-        "contractTested": 3,
-        "planned": 3,
+        "contractTested": 4,
+        "planned": 2,
         "notApplicable": 0
       }
     },
@@ -20481,8 +22764,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -20529,8 +22812,8 @@
       ],
       "summary": {
         "desktopTested": 4,
-        "contractTested": 2,
-        "planned": 2,
+        "contractTested": 3,
+        "planned": 1,
         "notApplicable": 0
       }
     },
@@ -20541,8 +22824,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -20589,8 +22872,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 7,
-        "planned": 1,
+        "contractTested": 8,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -20601,8 +22884,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -20649,8 +22932,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 7,
-        "planned": 1,
+        "contractTested": 8,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -20661,8 +22944,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -20709,8 +22992,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 7,
-        "planned": 1,
+        "contractTested": 8,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -20721,8 +23004,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -20769,8 +23052,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 7,
-        "planned": 1,
+        "contractTested": 8,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -20781,8 +23064,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -20829,8 +23112,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 7,
-        "planned": 1,
+        "contractTested": 8,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -20841,8 +23124,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -20889,8 +23172,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 7,
-        "planned": 1,
+        "contractTested": 8,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -20901,8 +23184,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -20949,8 +23232,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 7,
-        "planned": 1,
+        "contractTested": 8,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -20961,8 +23244,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -21009,8 +23292,8 @@
       ],
       "summary": {
         "desktopTested": 2,
-        "contractTested": 4,
-        "planned": 2,
+        "contractTested": 5,
+        "planned": 1,
         "notApplicable": 0
       }
     },
@@ -21021,8 +23304,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -21069,8 +23352,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 5,
-        "planned": 2,
+        "contractTested": 6,
+        "planned": 1,
         "notApplicable": 1
       }
     },
@@ -21081,8 +23364,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -21129,8 +23412,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 3,
-        "planned": 4,
+        "contractTested": 4,
+        "planned": 3,
         "notApplicable": 1
       }
     },
@@ -21141,8 +23424,8 @@
         {
           "actionId": "N1",
           "label": "查询类型、默认值、字段、端口与依赖",
-          "status": "planned",
-          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
         },
         {
           "actionId": "N2",
@@ -21189,8 +23472,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 3,
-        "planned": 4,
+        "contractTested": 4,
+        "planned": 3,
         "notApplicable": 1
       }
     }

@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 23
+export const DB_SCHEMA_VERSION = 24
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -493,6 +493,14 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   // 没有可外部恢复的图（未保存编辑下拍的快照或历史旧行），GUI 恢复不受影响。
   (database) => {
     database.exec('ALTER TABLE history_snapshots ADD COLUMN graph_json TEXT;')
+  },
+  // M24: 命令账本的调用主体标记（F8 收官）。外部入口只能操作自己创建的命令：
+  // 既有行默认 internal；只有 principal=external 且从未准入的命令才允许外部放弃。
+  (database) => {
+    database.exec(
+      `ALTER TABLE flow_commands ADD COLUMN principal TEXT NOT NULL DEFAULT 'internal'
+        CHECK (principal IN ('internal','external'));`
+    )
   }
 ]
 

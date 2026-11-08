@@ -50,6 +50,8 @@ import { runNodeLibraryOperation } from './node-library-ops'
 import { runHistoryOperation } from './history-ops'
 import { FLOW_AGENT_OPERATION_IDS, runFlowAgentOperation } from './flow-agents-ops'
 import { FLOW_AGENT_RUN_OPERATION_IDS, runFlowAgentRunOperation } from './flow-agent-run-ops'
+import { FLOW_AGENT_BUILD_OPERATION_IDS, runFlowAgentBuildOperation } from './flow-agent-build-ops'
+import { nodeContract } from '../../shared/agent-access/node-contracts'
 import { FLOW_ASSET_OPERATION_IDS, runFlowAssetOperation } from './flow-assets-ops'
 import { isFlowCommandOperation, runFlowCommandOperation } from './flow-commands-ops'
 import { isSettingsOperation, runSettingsOperation } from './settings-ops'
@@ -325,8 +327,9 @@ export class LocalAccessService {
       // run.cancel 是对在途任务的控制操作，豁免占用检查（否则取消不了自己要停的任务）。
       // history.recovery.resolve 同理：它是"解决恢复副本"的操作，本身必须能在副本存在时执行；
       // 其他写操作（含 project.delete/export/其他 history 写）仍照旧被恢复副本阻断。
-      // flow.command.reconcile 同理：它的目标就是结算一条 pending/unknown 的既有命令，
-      // 若按占用拒绝会永远无法核对；账本 commit 仍只按已保存事实推进，不伪造成功。
+      // flow.command.reconcile / flow.command.abort 同理：目标就是结算/放弃一条
+      // pending/unknown 的既有命令，若按占用拒绝就永远无法处理；账本仍只按已保存事实
+      // 推进（reconcile）或只放弃从未准入的外部命令（abort），不伪造成功。
       // F8：flowAgent.run/pause/stop 的作用对象就是账本里的那条 Agent 任务——run 要启动/继续
       // 它、pause/stop 要控制它；若按"存在活动任务"拒绝，就永远无法操作自己刚创建的任务。
       if (
@@ -335,6 +338,7 @@ export class LocalAccessService {
         operationId !== 'run.cancel' &&
         operationId !== 'history.recovery.resolve' &&
         operationId !== 'flow.command.reconcile' &&
+        operationId !== 'flow.command.abort' &&
         operationId !== 'flowAgent.run' &&
         operationId !== 'flowAgent.pause' &&
         operationId !== 'flowAgent.stop'
@@ -927,12 +931,24 @@ export class LocalAccessService {
         result = await runFlowAgentRunOperation(operationId, input, {
           activeProjectId: this.options.activeProjectId
         })
+      } else if (FLOW_AGENT_BUILD_OPERATION_IDS.has(operationId)) {
+        // F8（收官）：建图预览/提交与模型审核同样只经 flow-bridge 发布的同一 builder/review
+        // 宿主；propose/review 先走与 IPC 相同的模型能力预检，commit 走渲染器权威动作
+        // commitFlowBuild（authorize/confirm + 单撤销步 + 保存屏障）并由 main 核对落盘事实。
+        result = await runFlowAgentBuildOperation(operationId, input, {
+          activeProjectId: this.options.activeProjectId,
+          desktop: this.options.desktop,
+          diagnostics: { traceId: base.traceId, spanId }
+        })
       } else if (isFlowCommandOperation(operationId)) {
-        // F8（二）：Flow 命令账本协作只读/结算**既有**命令（flow-commands-ops.ts）；
-        // 不创建命令/租约、不向渲染器下发 grant，因此不存在冒充内部 Agent 会话的路径。
-        result = runFlowCommandOperation(operationId, input, {
+        // F8（二/收官）：Flow 命令账本协作（flow-commands-ops.ts）。读/结算类只操作既有命令；
+        // 派发/放弃经共享权威端口复用 registerFlowCommandsIpc 的同一账本会话，
+        // 外部命令以 principal='external' 入库，运行身份全部由 main 生成。
+        result = await runFlowCommandOperation(operationId, input, {
           traceId: base.traceId,
-          spanId
+          spanId,
+          activeProjectId: () => this.options.activeProjectId(),
+          desktop: this.options.desktop
         })
       } else if (isSettingsOperation(operationId)) {
         // F9（二）：模型目录/绑定与环境状态读取直接复用 GUI 同一 main 服务
@@ -1643,6 +1659,13 @@ export class LocalAccessService {
       case 'node.type.list':
         // F9：逐节点逐动作矩阵（N1–N8）——不再一律报 planned，状态与证据可审计。
         return { nodes: nodeAccessDirectory(), summary: nodeAccessDirectorySummary() }
+      case 'node.type.get': {
+        // N1：不创建实例即可查询类型契约（端口/初始配置/执行方式/输出真值来源）。
+        // 数据来自生成快照，快照由 test/node-contracts-export.test.ts 做漂移门禁。
+        const contract = nodeContract(input.typeId as string)
+        if (!contract) throw new AccessFailure('UNSUPPORTED_CONTRACT', 'node-type-read')
+        return contract
+      }
       case 'project.list': {
         const all = projects.listProjects()
         return {
@@ -1805,6 +1828,10 @@ export class LocalAccessService {
       case 'flowAgent.run':
       case 'flowAgent.pause':
       case 'flowAgent.stop':
+      case 'flowAgent.build.inspect':
+      case 'flowAgent.build.propose':
+      case 'flowAgent.build.commit':
+      case 'flowAgent.review':
       case 'flowAsset.submit':
       case 'flowAsset.list':
       case 'flowAsset.read':
@@ -1813,7 +1840,10 @@ export class LocalAccessService {
       case 'flow.command.lookup':
       case 'flow.command.availability':
       case 'flow.command.reconcile':
-        // F8（二）：命令账本协作在 dispatch 分组分支委托 flow-commands-ops 执行，不落在这里。
+      case 'flow.command.check':
+      case 'flow.command.dispatch':
+      case 'flow.command.abort':
+        // F8（二/收官）：命令账本协作在 dispatch 分组分支委托 flow-commands-ops 执行，不落在这里。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'model.connection.list':
       case 'model.definition.list':

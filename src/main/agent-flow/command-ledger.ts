@@ -58,6 +58,8 @@ interface Row {
   state: FlowCommandReceipt['state']
   receipt_json: string
   admitted: number
+  /** M24：调用主体。既有行与所有内部调用默认 'internal'；外部端口创建的命令为 'external'。 */
+  principal: 'internal' | 'external'
 }
 type SavedShape = NodeShape & { id: string; type: string; meta?: Record<string, unknown> }
 function fail(code: string, phase: string): never {
@@ -499,7 +501,10 @@ export class FlowCommandLedger {
     }
     return resolvedInputs
   }
-  prepare(raw: NodeExecuteCommand): FlowCommandPrepareResult {
+  prepare(
+    raw: NodeExecuteCommand,
+    principal: 'internal' | 'external' = 'internal'
+  ): FlowCommandPrepareResult {
     const command = NodeExecuteCommandSchema.parse(raw)
     const signature = nodeCommandIntentSignature(command)
     return this.db.transaction(() => {
@@ -508,7 +513,8 @@ export class FlowCommandLedger {
         .prepare('SELECT * FROM flow_commands WHERE project_id = ? AND command_id = ?')
         .get(command.projectId, command.commandId) as Row | undefined
       if (previous) {
-        if (previous.signature !== signature) fail('FLOW_COMMAND_CONFLICT', 'dedupe')
+        if (previous.signature !== signature || previous.principal !== principal)
+          fail('FLOW_COMMAND_CONFLICT', 'dedupe')
         return {
           state: previous.state,
           receipt: JSON.parse(previous.receipt_json)
@@ -585,7 +591,7 @@ export class FlowCommandLedger {
       }
       this.db
         .prepare(
-          'INSERT INTO flow_commands(project_id, command_id, signature, command_json, target_node_id, task_id, lease_id, owner_session, run_id, state, receipt_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+          'INSERT INTO flow_commands(project_id, command_id, signature, command_json, target_node_id, task_id, lease_id, owner_session, run_id, state, receipt_json, created_at, principal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         )
         .run(
           command.projectId,
@@ -599,7 +605,8 @@ export class FlowCommandLedger {
           runId,
           'pending',
           JSON.stringify(receipt),
-          Date.now()
+          Date.now(),
+          principal
         )
       const grant: FlowCommandGrant = { command, leaseId, runId, inputs }
       return { state: 'ready', grant } as const
@@ -678,6 +685,34 @@ export class FlowCommandLedger {
     const receipt = JSON.parse(row.receipt_json) as FlowCommandReceipt
     if (receipt.state !== 'pending') return receipt
     return this.update(row, { ...receipt, state: 'unknown', code: 'FLOW_RESULT_UNCONFIRMED' })
+  }
+  /**
+   * F8 收官：外部主体放弃一条**尚未开始**的命令。
+   *
+   * 只允许 principal='external'、admitted=0、state 为 pending 或 unknown：
+   * - unknown 且 admitted=0 表示渲染器从未准入，必然未执行，可以安全放弃；
+   * - admitted=1（无论 pending/unknown）可能已执行，只能 commit 核对，不能放弃；
+   * - 已终态（committed/failed/cancelled/skipped）一律拒绝，绝不改写。
+   * 放弃后 state=skipped，账本的 pending/unknown 占用随即释放；重复放弃幂等返回原回执。
+   */
+  abandonExternal(raw: CommandLookup): FlowCommandReceipt {
+    const input = CommandLookupSchema.parse(raw)
+    return this.db.transaction(() => {
+      const row = this.row(input)
+      const receipt = JSON.parse(row.receipt_json) as FlowCommandReceipt
+      if (row.principal !== 'external') fail('FLOW_COMMAND_NOT_EXTERNAL', 'abandon')
+      // 重复放弃：返回同一份回执，不产生第二次状态迁移。
+      if (receipt.code === 'FLOW_EXTERNAL_ABANDONED' && row.state === 'skipped') return receipt
+      if (row.state !== 'pending' && row.state !== 'unknown')
+        fail('FLOW_COMMAND_NOT_PENDING', 'abandon')
+      if (row.admitted !== 0) fail('FLOW_COMMAND_ALREADY_ADMITTED', 'abandon')
+      return this.update(row, {
+        ...receipt,
+        state: 'skipped',
+        code: 'FLOW_EXTERNAL_ABANDONED',
+        outputRefs: []
+      })
+    })()
   }
   /** Only saved, matching execution facts can commit; no caller-supplied body/status is accepted. */
   commit(raw: CommandLookup): FlowCommandReceipt {

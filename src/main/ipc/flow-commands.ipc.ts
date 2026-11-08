@@ -13,6 +13,7 @@ import { FlowAssetError } from '../../shared/agent-flow/assets'
 import { newSpanId, newTraceId } from '../../shared/observability'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import { FlowCommandLedger } from '../agent-flow/command-ledger'
+import { publishFlowCommandAccessPort } from '../agent-access/flow-command-bridge'
 import { getDb } from '../store/db'
 import { openProject } from '../store/projects.repo'
 import { stopAgentVideos } from '../agent-flow/video-tasks'
@@ -282,6 +283,24 @@ export function registerFlowCommandsIpc(
         await new Promise((done) => setTimeout(done, 100))
       }
     }
+  })
+  // F8 收官：把**同一个**账本会话与既有 grant 下发通道以窄接口发布给本地外部接入。
+  // 外部 dispatch 只能记录 principal='external' 的命令，并沿用同一条渲染器交付/准入/结算链路；
+  // 未发布（非桌面启动阶段）时外部操作如实返回 FLOW_COMMANDS_UNAVAILABLE，不降级成本地替身。
+  publishFlowCommandAccessPort({
+    isActive: (projectId) => activeProjectId === projectId,
+    prepareExternal: (raw) => ledger.prepare(raw, 'external'),
+    send: (grant) => {
+      const target = window()
+      if (activeProjectId !== grant.command.projectId)
+        throw new FlowCommandError('FLOW_PROJECT_INACTIVE', 'dispatch')
+      if (!target || target.isDestroyed())
+        throw new FlowCommandError('FLOW_DESKTOP_UNAVAILABLE', 'dispatch')
+      // 与 IPC dispatch 相同：先 arm 超时，再下发；任何失败都保留 pending 由定时器转 unknown。
+      arm(grant)
+      target.webContents.send(IPC.flowCommands.grant, grant)
+    },
+    abandonExternal: (input) => ledger.abandonExternal(input)
   })
   return ledger
 }
