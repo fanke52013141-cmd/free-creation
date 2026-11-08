@@ -5056,7 +5056,7 @@ button {
   padding: 9px 12px;
   border: 1px solid var(--canvas-selection-edge);
   border-radius: 18px;
-  background: var(--canvas-selection-fill);
+  background: var(--node-surface, #151922);
   box-shadow: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
@@ -5088,6 +5088,13 @@ button {
   border-color: transparent;
   background: rgba(255, 255, 255, 0.08);
   color: #f8fafc;
+}
+
+/* 组合操作保留实色底，脱离多选图标时也能清楚辨认。 */
+.multiselect-toolbar .ms-group,
+.multiselect-toolbar .ms-ungroup {
+  border-color: var(--canvas-selection-edge);
+  background: var(--node-surface, #151922);
 }
 
 .multiselect-toolbar .ms-btn:active:not(:disabled) {
