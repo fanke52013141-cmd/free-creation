@@ -60,6 +60,7 @@ import {
   DETERMINISTIC_OUTPUT_SOURCES
 } from '../../shared/agent-access/run-ops'
 import { DETERMINISTIC_PROJECTIONS } from '../../shared/engine/deterministic-projections'
+import { parseChat as parseChatShared, chatConversations as chatConversationsShared } from '../../shared/engine/chat-data'
 
 class AccessFailure extends Error {
   constructor(
@@ -345,6 +346,7 @@ export class LocalAccessService {
           string,
           { mediaId: string; mediaPath: string; mediaMime: string; name?: string }
         > = {}
+        const chatMediaResolutions: typeof mediaResolutions = {}
         for (const op of input.ops as GraphPatchOp[]) {
           const mediaRef = op.action === 'node.create' || op.action === 'node.update' ? op.media : undefined
           if (!mediaRef || mediaResolutions[mediaRef.mediaId]) continue
@@ -357,13 +359,35 @@ export class LocalAccessService {
             ...(asset.name ? { name: asset.name.slice(0, 200) } : {})
           }
         }
+        // F6：chat.patch 预检——目标必须是对话节点；附件 mediaId 解析同媒体规则。
+        for (const op of input.ops as GraphPatchOp[]) {
+          if (op.action !== 'chat.patch') continue
+          const chatNode = current.nodes.find((candidate) => candidate.id === op.nodeId)
+          if (!chatNode || chatNode.type !== 'chat')
+            throw new AccessFailure('CHAT_NODE_REQUIRED', 'precheck', op.nodeId.slice(0, 60))
+          for (const chatOp of op.ops) {
+            if (chatOp.action !== 'chat.message.append' || !chatOp.message.images) continue
+            for (const image of chatOp.message.images) {
+              const asset = listMedia(id).find((candidate) => candidate.id === image.mediaId)
+              if (!asset)
+                throw new AccessFailure('MEDIA_NOT_FOUND', 'precheck', image.mediaId)
+              chatMediaResolutions[image.mediaId] = {
+                mediaId: asset.id,
+                mediaPath: asset.path,
+                mediaMime: asset.mime,
+                ...(asset.name ? { name: asset.name.slice(0, 200) } : {})
+              }
+            }
+          }
+        }
         const patchResult = await this.options.desktop.run(
           {
             action: 'graph-patch',
             projectId: id,
             ops: input.ops as GraphPatchOp[],
             expectedGraphVersion: input.expectedGraphVersion as number,
-            ...(Object.keys(mediaResolutions).length ? { mediaResolutions } : {})
+            ...(Object.keys(mediaResolutions).length ? { mediaResolutions } : {}),
+            ...(Object.keys(chatMediaResolutions).length ? { mediaResolutions: chatMediaResolutions } : {})
           },
           (version) => {
             if (this.options.activeProjectId() !== id)
@@ -1263,6 +1287,86 @@ export class LocalAccessService {
       case 'run.cancel':
         // 同上：执行与取消需要权威宿主握手，在 dispatch 分支处理。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
+      case 'chat.read': {
+        const file = projects.openProject(id)
+        if (!file) throw new AccessFailure('NOT_FOUND', 'read')
+        const chatNode = file.nodes.find((candidate) => candidate.id === input.nodeId)
+        if (!chatNode) throw new AccessFailure('NODE_NOT_FOUND', 'read')
+        if (chatNode.type !== 'chat')
+          throw new AccessFailure('CHAT_NODE_REQUIRED', 'read', chatNode.type.slice(0, 40))
+        let modelKey = ''
+        const rawConfig = chatNode.params.config
+        if (typeof rawConfig === 'string' && rawConfig.trim()) {
+          try {
+            const parsedConfig = JSON.parse(rawConfig) as { modelKey?: unknown }
+            if (typeof parsedConfig.modelKey === 'string')
+              modelKey = parsedConfig.modelKey.slice(0, 200)
+          } catch {
+            modelKey = ''
+          }
+        }
+        const readData = parseChatShared(chatNode.content.kind === 'text' ? chatNode.content.text : '')
+        const conversations = chatConversationsShared(readData)
+        return {
+          projectId: id,
+          graphVersion: file.meta.graphVersion,
+          nodeId: chatNode.id,
+          modelKey,
+          system: readData.system.slice(0, 2000),
+          activeConversationId: readData.activeConversationId ?? null,
+          conversations: conversations.slice(0, 50).map((conversation) => ({
+            id: conversation.id.slice(0, 80),
+            title: conversation.title.slice(0, 120),
+            messageCount: conversation.messages.length,
+            createdAt: conversation.createdAt,
+            updatedAt: conversation.updatedAt,
+            active:
+              conversation.id ===
+              (readData.activeConversationId ?? conversations[0]?.id)
+          }))
+        }
+      }
+      case 'chat.messages': {
+        const file = projects.openProject(id)
+        if (!file) throw new AccessFailure('NOT_FOUND', 'read')
+        const chatNode = file.nodes.find((candidate) => candidate.id === input.nodeId)
+        if (!chatNode) throw new AccessFailure('NODE_NOT_FOUND', 'read')
+        if (chatNode.type !== 'chat') throw new AccessFailure('CHAT_NODE_REQUIRED', 'read')
+        const msgData = parseChatShared(chatNode.content.kind === 'text' ? chatNode.content.text : '')
+        const conversations = chatConversationsShared(msgData)
+        const requested =
+          typeof input.sessionId === 'string' ? input.sessionId : msgData.activeConversationId
+        const conversation =
+          conversations.find((candidate) => candidate.id === requested) ?? conversations[0]
+        if (!conversation) throw new AccessFailure('NOT_FOUND', 'chat-session')
+        const messages = conversation.messages.slice(
+          input.offset as number,
+          (input.offset as number) + (input.limit as number)
+        )
+        return {
+          projectId: id,
+          nodeId: chatNode.id,
+          sessionId: conversation.id,
+          total: conversation.messages.length,
+          offset: input.offset as number,
+          messages: messages.map((message) => ({
+            role: message.role,
+            content: message.content,
+            ...(message.reasoning ? { reasoning: message.reasoning.slice(0, 20000) } : {}),
+            ...(message.intent ? { intent: message.intent } : {}),
+            ...(message.images?.length
+              ? {
+                  images: message.images.slice(0, 8).map((image) => ({
+                    mediaId: image.mediaId,
+                    mediaPath: image.mediaPath,
+                    name: (image.name ?? '').slice(0, 200),
+                    mime: image.mime
+                  }))
+                }
+              : {})
+          }))
+        }
+      }
     }
     return unhandledOperation(operation)
   }

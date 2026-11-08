@@ -1275,27 +1275,49 @@
     "canvas.chat.send": {
       "label": "发送对话消息",
       "gui": "对话侧栏",
-      "phase": "F6"
+      "phase": "external",
+      "external": [
+        "graph.patch",
+        "node.execute"
+      ],
+      "note": "F6：消息经 chat.patch chat.message.append 追加，发送经 node.execute（同一 chatExecutor，最终回复经 chat.messages 读取）"
     },
     "canvas.chat.cancel": {
       "label": "取消对话",
       "gui": "对话侧栏",
-      "phase": "F6"
+      "phase": "external",
+      "external": [
+        "run.cancel"
+      ],
+      "note": "F6：与运行取消同一 run.cancel 协议（请求与确认分离）"
     },
     "canvas.chat.edit-message": {
       "label": "编辑/重新生成消息",
       "gui": "对话侧栏",
-      "phase": "F6"
+      "phase": "external",
+      "external": [
+        "graph.patch"
+      ],
+      "note": "F6：chat.message.edit/truncate 与 GUI 同一 editChatMessage/截断语义（分支语义保留）"
     },
     "canvas.chat.attachments": {
       "label": "对话附件",
       "gui": "对话侧栏",
-      "phase": "F6"
+      "phase": "external",
+      "external": [
+        "graph.patch"
+      ],
+      "note": "F6：图片附件 mediaId 引用经 main 归属预检（同媒体规则），存储事实由宿主注入"
     },
     "canvas.chat.image-gen": {
       "label": "对话内生图",
       "gui": "对话侧栏",
-      "phase": "F6"
+      "phase": "external",
+      "external": [
+        "graph.patch",
+        "node.execute"
+      ],
+      "note": "F6：intent=image 消息与生图技能走同一执行器路径；付费供应商验收待预算"
     },
     "canvas.storyboard.edit": {
       "label": "分镜板编辑",

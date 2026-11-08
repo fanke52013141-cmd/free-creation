@@ -180,6 +180,20 @@ export const ACCESS_OPERATIONS = {
       '删除项目受控媒体（磁盘文件+索引）；mediaId 必须属于指定项目；回执含保存图中引用计数，不校验引用为空（与 GUI 面板删除同一规则）',
     input: project.extend({ mediaId: z.string().regex(/^[a-zA-Z0-9_-]{1,40}$/) }).strict()
   },
+  'chat.read': {
+    effect: 'read',
+    description:
+      '读取对话节点的会话目录（含活动会话标记与模型配置摘要）；消息正文经 chat.messages 显式读取',
+    input: project.extend({ nodeId }).strict()
+  },
+  'chat.messages': {
+    effect: 'read',
+    description:
+      '分页读取指定会话的消息正文（role/content/意图/附件引用）；助手回复是模型真实输出，不可伪造',
+    input: project
+      .extend({ nodeId, sessionId: z.string().min(1).max(80).optional(), offset: z.number().int().min(0).max(10000).default(0), limit: z.number().int().min(1).max(200).default(50) })
+      .strict()
+  },
   'model.list': {
     effect: 'read',
     description: '分页读取本地模型ID、启用状态与能力验证状态；不联网探测，不返回凭据、地址或配置',
@@ -598,6 +612,60 @@ export const ACCESS_OUTPUTS = {
       sizeBytes: z.number().int().nonnegative(),
       name: z.string().max(200),
       textContent: z.string().max(20000).optional()
+    })
+    .strict(),
+  'chat.read': z
+    .object({
+      projectId: identifier,
+      graphVersion: z.number().int().nonnegative(),
+      nodeId,
+      modelKey: z.string().max(200),
+      system: z.string().max(2000),
+      activeConversationId: z.string().max(80).nullable(),
+      conversations: z.array(
+        z.object({
+          id: z.string().max(80),
+          title: z.string().max(120),
+          messageCount: z.number().int().nonnegative(),
+          createdAt: z.number(),
+          updatedAt: z.number(),
+          active: z.boolean()
+        }).strict()
+      ).max(50)
+    })
+    .strict(),
+  'chat.messages': z
+    .object({
+      projectId: identifier,
+      nodeId,
+      sessionId: z.string().max(80),
+      total: z.number().int().nonnegative(),
+      offset: z.number().int().nonnegative(),
+      messages: z
+        .array(
+          z
+            .object({
+              role: z.enum(['system', 'user', 'assistant']),
+              content: z.string(),
+              reasoning: z.string().optional(),
+              intent: z.string().max(40).optional(),
+              images: z
+                .array(
+                  z
+                    .object({
+                      mediaId: z.string().max(160),
+                      mediaPath: z.string().max(300),
+                      name: z.string().max(200),
+                      mime: z.string().max(120)
+                    })
+                    .strict()
+                )
+                .max(8)
+                .optional()
+            })
+            .strict()
+        )
+        .max(200)
     })
     .strict(),
   'media.delete': z

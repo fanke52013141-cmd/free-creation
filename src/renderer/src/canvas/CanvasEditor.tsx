@@ -49,6 +49,7 @@ import { mergeUnsavedLocalRecords, countRestorableRecords } from './external-rel
 import { NODE_PORT_OUTSET } from './edge-geometry'
 import { assetNodeTypeFor } from './asset-node-type'
 import { planGraphPatch } from './graph-patch'
+import { planChatPatch } from './chat-patch'
 import { toGraphView } from '@shared/agent-access/graph-ops'
 import type { AiProcessConfig } from '../engine/executors/aiProcess'
 import { markUndoPoint } from './history'
@@ -870,6 +871,74 @@ export function CanvasEditor({
                   unsaved: save.dirtyVersion !== save.persistedVersion,
                   ...view
                 }
+              })
+              return
+            }
+            // ── F6 chat.patch：对话节点会话/消息结构编辑（与 GUI 同一 chat-data 解析）──
+            if (request.action === 'graph-patch' && (request.ops ?? []).some((op) => (op as { action?: string }).action === 'chat.patch')) {
+              const replyFail = (validated: boolean, code: string, detail?: string): void => {
+                window.api.replyLocalAgentDesktop({
+                  requestId: request.requestId,
+                  projectId: project.id,
+                  ok: false,
+                  validated,
+                  errorCode: code,
+                  ...(detail ? { errorDetail: detail.slice(0, 300) } : {})
+                })
+              }
+              const chatOps = (request.ops ?? []).filter(
+                (op) => (op as { action?: string }).action === 'chat.patch'
+              ) as Array<{ action: 'chat.patch'; nodeId: string; ops: unknown }>
+              // main 预检已确认 chat.patch 的 nodeId 都是对话节点；宿主再核对类型。
+              for (const entry of chatOps) {
+                const target = editor.getShape<NodeCardShape>(entry.nodeId as TLShapeId)
+                if (!target || target.type !== 'node-card' || target.props.nodeType !== 'chat') {
+                  replyFail(true, 'CHAT_NODE_REQUIRED', entry.nodeId)
+                  return
+                }
+              }
+              if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+              saveTimerRef.current = null
+              const preSave = useSaveCoordinator.getState()
+              if (preSave.dirtyVersion !== preSave.persistedVersion) await ensureCanvasSaved()
+              if (editorRef.current !== editor || useAppStore.getState().currentProject?.id !== project.id)
+                throw new Error('CANVAS_CHANGED')
+              if (graphVersionRef.current !== request.expectedGraphVersion) {
+                replyFail(true, 'REVISION_CONFLICT', `expected ${request.expectedGraphVersion}, current ${graphVersionRef.current}`)
+                return
+              }
+              const admission = await window.api.commitLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                graphVersion: graphVersionRef.current
+              })
+              if (!admission.ok || Date.now() >= request.expiresAt || editorRef.current !== editor || useAppStore.getState().currentProject?.id !== project.id)
+                throw new Error('CHAT_PATCH_NOT_ADMITTED')
+              // 逐条应用；任一失败按 unknown 核对（准入后语义）。
+              for (const entry of chatOps) {
+                const target = editor.getShape<NodeCardShape>(entry.nodeId as TLShapeId)
+                if (!target || target.type !== 'node-card' || target.props.nodeType !== 'chat') {
+                  replyFail(false, 'CHAT_NODE_REQUIRED', entry.nodeId)
+                  return
+                }
+                const planned = planChatPatch(target.props.text ?? '', entry.ops as never)
+                if (!planned.ok) {
+                  replyFail(false, planned.issue.code, `op[${planned.issue.index}]`)
+                  return
+                }
+                editor.updateShape({
+                  id: target.id,
+                  type: 'node-card',
+                  props: { text: planned.nextText }
+                })
+              }
+              markUndoPoint(editor, 'agent-chat-patch')
+              await ensureCanvasSaved()
+              window.api.replyLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                ok: true,
+                graphVersion: graphVersionRef.current
               })
               return
             }

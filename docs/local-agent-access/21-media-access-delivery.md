@@ -103,3 +103,34 @@ F5：视频/音频/时间线接入——video-asset 导入、video-frame/video-c
 ## 7. 下一工作包
 
 F5 余项：audio 素材节点链路、speech/tts 付费供应商验收（待预算授权）；随后 F6 对话/Skill/3D。
+
+---
+
+# F6 第一批交付：AI 对话节点会话/消息外部协议
+
+日期：2026-11-08。基线：F5（`7fb8be1`）。
+
+## 1. 实际完成的业务动作（GUI / CLI / MCP 状态）
+
+| 业务动作 | GUI | CLI | MCP | 公共实现 |
+| --- | --- | --- | --- | --- |
+| 会话目录读取 | ✅ 对话侧栏 | ✅ chat.read | ✅ chat_read | 共享 chat-data（目录不含正文） |
+| 消息正文读取（分页） | ✅ | ✅ chat.messages | ✅ chat_messages | 助手回复是模型真实输出投影，不可伪造 |
+| 会话新建/切换/重命名/删除 | ✅ | ✅ graph.patch chat.patch | ✅ 同左 | 权威宿主经 planChatPatch（同一 parseChat/editChatConversation 函数族） |
+| 追加用户消息（含生图意图/图片附件） | ✅ | ✅ 同左 | ✅ 同左 | 附件 mediaId 归属预检（同媒体规则），外部输入只有 ID |
+| 编辑/截断消息（分支语义） | ✅ | ✅ 同左 | ✅ 同左 | editChatMessage/截断与 GUI 同一函数（分支语义保留、压缩摘要失效） |
+| 发送/重新生成 | ✅ | ✅ node.execute | ✅ 同左 | 同一 chatExecutor；取消走 run.cancel；回复经 chat.messages 读取 |
+
+Registry 37 项操作。已修复真实缺陷：删除唯一会话时 sessionized 会从镜像字段再造 legacy-current，导致出现 2 个会话——改为直接构造单一空白会话。
+
+## 2. 验证证据
+
+- test/local-agent-chat-access.test.ts 4 项通过（目录脱敏、会话操作矩阵、消息分支语义、附件归属）；全部接入测试 75 项通过。
+- verify:agent-access（37 操作）、typecheck、audit（33 项 external）通过。
+- chat.patch 权威宿主路径目前为服务级 mock 验收；真实 Electron 画布端到端随 F6 收尾桌面脚本。
+
+## 3. 尚未支持 / 仅模拟验证
+
+1. 对话**发送的模型回复**需要已验证模型连接；本地无供应商凭据时执行如实失败（依赖门禁与 GUI 一致），付费验收待预算授权。
+2. 附件图片在宿主端写入 mediaPath/mime 的注入尚未实测（载荷通道已实现，随桌面验收）。
+3. 代码/循环/网址节点、导演台编辑发布在 F6 后续批次。

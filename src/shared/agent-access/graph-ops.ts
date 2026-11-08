@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ACTIVE_NODE_TYPE_IDS } from '../types'
+import { ChatPatchOpsSchema } from './chat-ops'
 
 // 图编辑公共契约（F1/F2）：main 预检、renderer 权威应用、CLI/MCP 输入共用同一 Schema。
 // graph.patch 只接收有限的 typed 操作；不接收整份 tldraw 快照或任意 meta 覆盖。
@@ -80,12 +81,19 @@ const edgeDelete = z
   .object({ action: z.literal('edge.delete'), edgeId: accessNodeId })
   .strict()
 
+// chat.* 操作：只针对对话节点（main 预检校验 nodeId 为 chat 类型）；
+// 结构编辑走权威宿主同一 chat-data 解析，不绕过会话语义。
+const chatNodeOp = z
+  .object({ action: z.literal('chat.patch'), nodeId: z.string().min(1).max(180), ops: ChatPatchOpsSchema })
+  .strict()
+
 export const GraphPatchOpSchema = z.discriminatedUnion('action', [
   nodeCreate,
   nodeUpdate,
   nodeDelete,
   edgeCreate,
-  edgeDelete
+  edgeDelete,
+  chatNodeOp
 ])
 export type GraphPatchOp = z.infer<typeof GraphPatchOpSchema>
 

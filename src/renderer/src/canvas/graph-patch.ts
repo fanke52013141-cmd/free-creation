@@ -304,7 +304,8 @@ export function planGraphPatch(
       })
       continue
     }
-    // edge.create
+    // edge.create（chat.patch 由权威宿主单独分支处理，不进入几何规划）
+    if (op.action !== 'edge.create') return fail(index, 'INVALID_INPUT')
     const fromId = refToId.get(op.from.nodeId) ?? idOf(op.from.nodeId)
     const toId = refToId.get(op.to.nodeId) ?? idOf(op.to.nodeId)
     const fromNode = nodes.get(fromId)
