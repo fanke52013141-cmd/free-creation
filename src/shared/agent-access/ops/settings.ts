@@ -78,6 +78,12 @@ export const SETTINGS_OPERATIONS = {
     description:
       '只读读取视频引擎（本地 CUDA 推理环境，video-depth/video-clay 使用）的安装与就绪状态；不触发安装、下载或任何模型调用',
     input: empty
+  },
+  'environment.videoEngine.install': {
+    effect: 'write',
+    description:
+      '启动本地视频推理环境安装（联网下载 CUDA/PyTorch 依赖与校验后的模型权重并写入应用数据目录，需要本机 Python 3.12）；必须显式 confirmInstall=true，否则拒绝且不启动任何下载；只受理启动，不等待安装完成，进度与就绪经 environment.videoEngine.status 读取',
+    input: z.object({ confirmInstall: z.boolean().default(false) }).strict()
   }
 } as const
 
@@ -89,11 +95,26 @@ const toolCapability = z
   })
   .strict()
 
+/** FFmpeg/FFprobe 额外带版本号（`-version` 的首行版本令牌），便于外部判断工具代次。 */
+const versionedToolCapability = toolCapability
+  .extend({ version: z.string().max(120).optional() })
+  .strict()
+
+/** 视频引擎阶段：ready=就绪；installing=正在安装；python-ready=有 Python 可装/待修复；python-missing=缺 Python；unsupported-platform=平台不支持。 */
+const videoEnginePhase = z.enum([
+  'ready',
+  'installing',
+  'python-ready',
+  'python-missing',
+  'unsupported-platform'
+])
+
 const videoEngineReadiness = z
   .object({
     pythonAvailable: z.boolean(),
     ready: z.boolean(),
     installing: z.boolean(),
+    phase: videoEnginePhase,
     gpuName: z.string().max(200).optional()
   })
   .strict()
@@ -212,8 +233,8 @@ export const SETTINGS_OUTPUTS = {
     .strict(),
   'environment.local': z
     .object({
-      ffmpeg: toolCapability,
-      ffprobe: toolCapability,
+      ffmpeg: versionedToolCapability,
+      ffprobe: versionedToolCapability,
       audioSeparator: toolCapability,
       videoEngine: videoEngineReadiness,
       indexTts: indexTtsReadiness
@@ -227,6 +248,17 @@ export const SETTINGS_OUTPUTS = {
       progress: z.string().max(300),
       message: z.string().max(600),
       gpuName: z.string().max(200).optional()
+    })
+    .strict(),
+  'environment.videoEngine.install': z
+    .object({
+      /** true 仅表示"本次调用启动了安装"；false = 已就绪或已有安装在进行（不谎报已开始）。 */
+      started: z.boolean(),
+      ready: z.boolean(),
+      installing: z.boolean(),
+      pythonAvailable: z.boolean(),
+      /** GUI 同款状态文案（已去敏，不含本机绝对路径或密钥）。 */
+      message: z.string().max(600)
     })
     .strict()
 } as const

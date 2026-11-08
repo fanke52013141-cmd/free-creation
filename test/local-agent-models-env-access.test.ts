@@ -1,14 +1,16 @@
-// F9（二）「模型设置」与「环境」读取类外部接入测试。
+// F9（二/四）「模型设置」与「环境」动作外部接入测试。
 //
-// 覆盖（与 docs/local-agent-access/36-models-env-delivery.md 的验收清单一一对应）：
+// 覆盖（与 docs/local-agent-access/36 与 45 号台账的验收清单一一对应）：
 // - 空库返回空列表且结构正确；
 // - 写入连接/定义/绑定后能读到，并用明显假密钥标记断言**返回 JSON 字符串不含密钥明文**；
 // - model.definition.list 按 connectionId 过滤；
 // - model.binding.resolve 在未绑定/已绑定/显式目标/无凭据时分别如实返回；
-// - environment.local 在缺外部依赖时如实报 unavailable 而不是报错；
+// - environment.local 在缺外部依赖时如实报 unavailable 而不是报错；探测补强后带 FFmpeg/FFprobe
+//   版本与 videoEngine.phase，且不泄漏本机绝对路径；
+// - environment.videoEngine.install：未确认 0 次调用安装实现、确认后只受理启动、已就绪/已在装
+//   started=false、缺 Python → PYTHON_REQUIRED、并发只启动一次、幂等重放不重复触发；
 // - 非法参数、跨实例拒绝、未知字段（含 projectId）拒绝；
-// - 全部 6 项不触发任何 fetch（不联网、不产生供应商请求，语音克隆/音色设计/视频生成
-//   三类只做代码层接通，不做真实调用）；
+// - 读取类操作不触发任何 fetch；安装实现本身在测试里被替身替换，**绝不真的联网安装**；
 // - 事件只带 operation/phase/code 等稳定字段，不含密钥原文。
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -17,8 +19,38 @@ import { basename, join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { closeDb, getDataDir, getDb } from '../src/main/store/db'
 import { LocalAccessService } from '../src/main/agent-access/service'
+import { runSettingsOperation } from '../src/main/agent-access/settings-ops'
 import { setGatewayEventSink } from '../src/main/diagnostics/gateway-events'
 import { SqliteModelHost } from '../src/main/model-host/sqlite-model-host'
+
+/**
+ * 视频引擎安装替身：测试**绝不**真的联网安装。
+ * - 默认 statusMode='real'：getVideoEngineStatus 委托真实实现（只读探测，不联网）；
+ * - statusMode='fake'：使用 fixture 状态，模拟"正在安装/已就绪/缺 Python"等分支；
+ * - installVideoEngine 永远走替身，只计数与改 fixture 状态。
+ */
+const engineFixture = vi.hoisted(() => ({
+  installCalls: 0,
+  statusMode: 'real' as 'real' | 'fake',
+  status: null as Record<string, unknown> | null,
+  install: async (): Promise<{ started: boolean }> => ({ started: true })
+}))
+
+vi.mock('../src/main/media/video-conversion', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/main/media/video-conversion')>()
+  return {
+    ...actual,
+    getVideoEngineStatus: async () => {
+      if (engineFixture.statusMode === 'fake' && engineFixture.status)
+        return { ...engineFixture.status } as never
+      return actual.getVideoEngineStatus()
+    },
+    installVideoEngine: async () => {
+      engineFixture.installCalls += 1
+      return engineFixture.install()
+    }
+  }
+})
 
 let directory: string
 let service: LocalAccessService
@@ -31,15 +63,31 @@ const originalIndexTtsScanRoots = process.env.CANVAS_STUDIO_INDEXTTS_SCAN_ROOTS
 /** 假密钥标记：出现在任何响应/事件里都等于去敏失败。 */
 const FAKE_SECRET = 'sk-FAKE-SECRET-MARKER-123'
 
-function call(operationId: string, input: unknown = {}) {
+const key = (): string => `${Date.now()}:${randomUUID()}`
+
+function call(operationId: string, input: unknown = {}, idempotencyKey?: string) {
   return service.dispatch({
     apiVersion: 1,
     operationVersion: 1,
     operationId,
     input,
     requestId: randomUUID(),
-    expectedDataStoreId: service.dataStoreId
+    expectedDataStoreId: service.dataStoreId,
+    ...(idempotencyKey ? { idempotencyKey } : {})
   })
+}
+
+/** 让视频引擎状态进入可控替身模式（默认真实只读探测）。 */
+function fakeEngineStatus(patch: Record<string, unknown> = {}): void {
+  engineFixture.statusMode = 'fake'
+  engineFixture.status = {
+    pythonAvailable: true,
+    ready: false,
+    installing: false,
+    progress: '',
+    message: '尚未安装本地推理环境',
+    ...patch
+  }
 }
 
 function textCapability(): {
@@ -110,6 +158,10 @@ beforeEach(() => {
   // IndexTTS 探测按设计不缓存且会扫描本机安装位置；测试用官方环境变量把扫描根收敛到
   // 临时目录（引擎自己文档里就是给测试隔离用的），保证结果与本机真实安装无关。
   process.env.CANVAS_STUDIO_INDEXTTS_SCAN_ROOTS = directory
+  engineFixture.installCalls = 0
+  engineFixture.statusMode = 'real'
+  engineFixture.status = null
+  engineFixture.install = async () => ({ started: true })
   events.length = 0
   setGatewayEventSink({
     emit: (event) => {
@@ -411,21 +463,37 @@ describe('F9 本机环境状态（只读）', () => {
     const response = await call('environment.local')
     expect(response.status, JSON.stringify(response.error)).toBe('completed')
     const data = response.data as {
-      ffmpeg: { available: boolean; message: string }
-      ffprobe: { available: boolean; message: string }
+      ffmpeg: { available: boolean; message: string; version?: string }
+      ffprobe: { available: boolean; message: string; version?: string }
       audioSeparator: { available: boolean; message: string }
-      videoEngine: { pythonAvailable: boolean; ready: boolean; installing: boolean; gpuName?: string }
+      videoEngine: {
+        pythonAvailable: boolean
+        ready: boolean
+        installing: boolean
+        phase: string
+        gpuName?: string
+      }
       indexTts: { ready: boolean; state: string }
     }
     expect(data.ffmpeg.available).toBe(false)
     expect(data.ffmpeg.message).toContain('FFmpeg')
+    expect(data.ffmpeg.version).toBeUndefined()
     expect(data.ffprobe.available).toBe(false)
+    expect(data.ffprobe.version).toBeUndefined()
     expect(data.audioSeparator.available).toBe(false)
     expect(data.audioSeparator.message).toContain('audio-separator')
     // 全新数据目录没有本地推理环境：ready 必须为 false，且不声称在安装。
     expect(data.videoEngine.ready).toBe(false)
     expect(data.videoEngine.installing).toBe(false)
     expect(typeof data.videoEngine.pythonAvailable).toBe('boolean')
+    // phase 是状态机投影：就绪 / 安装中 / 有 Python 可装 / 缺 Python / 平台不支持。
+    expect(['ready', 'installing', 'python-ready', 'python-missing', 'unsupported-platform']).toContain(
+      data.videoEngine.phase
+    )
+    expect(data.videoEngine.phase).not.toBe('ready')
+    expect(data.videoEngine.phase).not.toBe('installing')
+    if (data.videoEngine.pythonAvailable) expect(data.videoEngine.phase).toBe('python-ready')
+    else expect(['python-missing', 'unsupported-platform']).toContain(data.videoEngine.phase)
     // 本地 IndexTTS：只给粗粒度就绪状态（字段白名单），不返回解释器/模型目录。
     expect(Object.keys(data.indexTts).sort()).toEqual(['ready', 'state'])
     expect(['ready', 'incomplete', 'missing']).toContain(data.indexTts.state)
@@ -436,6 +504,31 @@ describe('F9 本机环境状态（只读）', () => {
     expect(events.some((event) => String(event?.event ?? '').includes('agent.access.completed'))).toBe(
       true
     )
+  })
+
+  it('探测补强：FFmpeg/FFprobe 可用时带版本，输出仍不含本机路径', async () => {
+    const response = await call('environment.local')
+    expect(response.status, JSON.stringify(response.error)).toBe('completed')
+    const data = response.data as {
+      ffmpeg: { available: boolean; message: string; version?: string }
+      ffprobe: { available: boolean; message: string; version?: string }
+    }
+    for (const [label, tool] of [
+      ['ffmpeg', data.ffmpeg],
+      ['ffprobe', data.ffprobe]
+    ] as const) {
+      if (tool.available) {
+        // 可用时版本来自同一二进制 `-version`，只取版本令牌，不带构建 URL 或路径。
+        expect(typeof tool.version, `${label} 缺少版本`).toBe('string')
+        expect(String(tool.version).length).toBeGreaterThan(0)
+        expect(String(tool.version)).not.toContain(directory)
+        expect(String(tool.version)).not.toContain(':\\')
+      } else {
+        expect(tool.version, `${label} 缺失时不应带版本`).toBeUndefined()
+        expect(tool.message.length).toBeGreaterThan(0)
+      }
+    }
+    expect(JSON.stringify(response)).not.toContain(directory)
   })
 
   it('视频引擎状态只读返回安装/就绪字段，不安装不下载', async () => {
@@ -468,6 +561,10 @@ describe('F9 参数与实例边界', () => {
       ],
       ['environment.local', { install: true }],
       ['environment.videoEngine.status', { download: true }],
+      // 安装只接受 confirmInstall 布尔开关：URL/镜像/路径等自定义下载源一律拒绝。
+      ['environment.videoEngine.install', { confirmInstall: 'yes' }],
+      ['environment.videoEngine.install', { confirmInstall: true, mirror: 'https://evil.invalid' }],
+      ['environment.videoEngine.install', { projectId: 'project-fixture' }],
       // 环境类操作没有项目作用域：附带 projectId 必须按未知字段拒绝，而不是被静默忽略。
       ['environment.local', { projectId: 'project-fixture' }],
       ['model.definition.list', { projectId: 'project-fixture' }]
@@ -478,7 +575,7 @@ describe('F9 参数与实例边界', () => {
     }
   })
 
-  it('跨实例（dataStoreId 不符）拒绝，且 6 项操作全程不发起任何 fetch', async () => {
+  it('跨实例（dataStoreId 不符）拒绝；读取类操作与安装启动全程不发起任何 fetch', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
     seedCatalog()
     for (const [operation, input] of [
@@ -492,7 +589,14 @@ describe('F9 参数与实例边界', () => {
       const response = await call(operation, input)
       expect(response.status, `${operation}: ${JSON.stringify(response.error)}`).toBe('completed')
     }
-    // 语音克隆/音色设计/视频生成三类只做代码层接通：本包不产生任何供应商请求。
+    // 安装走替身：本包在任何路径都不产生供应商请求（语音克隆/音色设计/视频生成同样只做代码层接通）。
+    fakeEngineStatus()
+    engineFixture.install = async () => {
+      engineFixture.status = { ...engineFixture.status, installing: true }
+      return { started: true }
+    }
+    const install = await call('environment.videoEngine.install', { confirmInstall: true }, key())
+    expect(install.status, JSON.stringify(install.error)).toBe('completed')
     expect(fetchSpy).not.toHaveBeenCalled()
 
     const other = await service.dispatch({
@@ -522,5 +626,203 @@ describe('F9 参数与实例边界', () => {
     const serialized = JSON.stringify(events)
     for (const secret of [FAKE_SECRET, 'private.example.invalid', 'PRIVATE-VALIDATION-MESSAGE'])
       expect(serialized).not.toContain(secret)
+  })
+})
+
+describe('F9 视频引擎安装（write，只受理启动）', () => {
+  const installOp = 'environment.videoEngine.install'
+
+  it('未确认时拒绝且安装实现 0 次调用（不启动任何下载）', async () => {
+    fakeEngineStatus()
+    // 缺省 / 显式 false 都拒绝，错误码稳定且可执行。
+    for (const input of [{}, { confirmInstall: false }] as const) {
+      const response = await call(installOp, input, key())
+      expect(response.status).toBe('failed')
+      expect(response.error?.code).toBe('INSTALL_CONFIRM_REQUIRED')
+    }
+    // 不接受自定义下载地址/镜像/路径：未知字段按 strict 拒绝，同样不调用安装实现。
+    const customSource = await call(
+      installOp,
+      { confirmInstall: true, url: 'https://evil.invalid/model.bin' },
+      key()
+    )
+    expect(customSource.status).toBe('failed')
+    expect(customSource.error?.code).toBe('INVALID_INPUT')
+    expect(engineFixture.installCalls).toBe(0)
+  })
+
+  it('确认后只受理启动：started=true 且状态随即为进行中，不等待安装完成', async () => {
+    fakeEngineStatus()
+    engineFixture.install = async () => {
+      engineFixture.status = {
+        ...engineFixture.status,
+        installing: true,
+        message: '正在安装；首次下载可能需要一些时间'
+      }
+      return { started: true }
+    }
+    const started = await call(installOp, { confirmInstall: true }, key())
+    expect(started.status, JSON.stringify(started.error)).toBe('completed')
+    expect(started.data).toEqual({
+      started: true,
+      ready: false,
+      installing: true,
+      pythonAvailable: true,
+      message: '正在安装；首次下载可能需要一些时间'
+    })
+    expect(engineFixture.installCalls).toBe(1)
+    // 已有安装在进行的重复确认：started=false，不启动第二次安装。
+    const repeat = await call(installOp, { confirmInstall: true }, key())
+    expect(repeat.status).toBe('completed')
+    expect(repeat.data).toMatchObject({ started: false, installing: true })
+    expect(engineFixture.installCalls).toBe(1)
+  })
+
+  it('已就绪或已在安装时 started=false，且不重复调用安装实现', async () => {
+    fakeEngineStatus({ ready: true, message: '本地推理环境已就绪', gpuName: 'Fixture GPU' })
+    const ready = await call(installOp, { confirmInstall: true }, key())
+    expect(ready.status).toBe('completed')
+    expect(ready.data).toEqual({
+      started: false,
+      ready: true,
+      installing: false,
+      pythonAvailable: true,
+      message: '本地推理环境已就绪'
+    })
+    expect(engineFixture.installCalls).toBe(0)
+
+    fakeEngineStatus({ installing: true, message: '正在安装；首次下载可能需要一些时间' })
+    const installing = await call(installOp, { confirmInstall: true }, key())
+    expect(installing.data).toMatchObject({ started: false, installing: true })
+    expect(engineFixture.installCalls).toBe(0)
+  })
+
+  it('缺 Python 时稳定失败 PYTHON_REQUIRED，并带 GUI 同一句下一步', async () => {
+    fakeEngineStatus({
+      pythonAvailable: false,
+      message: '需要先安装 Python 3.12，然后再安装本地推理环境'
+    })
+    engineFixture.install = async () => {
+      engineFixture.status = {
+        ...engineFixture.status,
+        pythonAvailable: false,
+        installing: false,
+        message: '未找到 Python 3.12；请先安装 Python 3.12（64 位）后重试'
+      }
+      throw new Error('未找到 Python 3.12；请先安装 Python 3.12（64 位）后重试')
+    }
+    const failed = await call(installOp, { confirmInstall: true }, key())
+    expect(failed.status).toBe('failed')
+    expect(failed.error?.code).toBe('PYTHON_REQUIRED')
+    // 可执行下一步与 GUI 提示逐字一致（不含路径、密钥或原始异常栈）。
+    expect(failed.error?.detail).toContain('Python 3.12')
+    expect(failed.error?.detail).toContain('请先安装')
+    expect(failed.error?.retryable).toBe(false)
+    expect(engineFixture.installCalls).toBe(1)
+  })
+
+  it('并发确认只启动一次安装：后来者等待同一尝试并如实回报 started=false', async () => {
+    fakeEngineStatus()
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolveGate) => {
+      release = resolveGate
+    })
+    engineFixture.install = async () => {
+      await gate
+      engineFixture.status = {
+        ...engineFixture.status,
+        installing: true,
+        message: '正在安装；首次下载可能需要一些时间'
+      }
+      return { started: true }
+    }
+    // 直接经分组实现并发调用：dispatch 级写锁另有测试（同一项目/全局写互斥）。
+    const first = runSettingsOperation(installOp, { confirmInstall: true }) as Promise<{
+      started: boolean
+      installing: boolean
+    }>
+    const second = runSettingsOperation(installOp, { confirmInstall: true }) as Promise<{
+      started: boolean
+      installing: boolean
+    }>
+    await Promise.resolve()
+    release()
+    const [a, b] = await Promise.all([first, second])
+    expect(engineFixture.installCalls).toBe(1)
+    expect([a.started, b.started].sort()).toEqual([false, true])
+    expect(a.installing).toBe(true)
+    expect(b.installing).toBe(true)
+  })
+
+  it('dispatch 级并发写只让一个请求进入（另一个 RESOURCE_BUSY），安装至多启动一次', async () => {
+    fakeEngineStatus()
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolveGate) => {
+      release = resolveGate
+    })
+    engineFixture.install = async () => {
+      await gate
+      engineFixture.status = {
+        ...engineFixture.status,
+        installing: true,
+        message: '正在安装；首次下载可能需要一些时间'
+      }
+      return { started: true }
+    }
+    const pending = [
+      call(installOp, { confirmInstall: true }, key()),
+      call(installOp, { confirmInstall: true }, key())
+    ]
+    release()
+    const results = await Promise.all(pending)
+    expect(results.filter((result) => result.status === 'completed')).toHaveLength(1)
+    const rejected = results.find((result) => result.status !== 'completed')!
+    expect(rejected.error?.code).toBe('RESOURCE_BUSY')
+    expect(engineFixture.installCalls).toBe(1)
+  })
+
+  it('幂等重放不重复触发安装，回执与首次一致', async () => {
+    fakeEngineStatus()
+    engineFixture.install = async () => {
+      engineFixture.status = {
+        ...engineFixture.status,
+        installing: true,
+        message: '正在安装；首次下载可能需要一些时间'
+      }
+      return { started: true }
+    }
+    const admission = key()
+    const first = await call(installOp, { confirmInstall: true }, admission)
+    expect(first.status, JSON.stringify(first.error)).toBe('completed')
+    expect(first.idempotencyKey).toBe(admission)
+    const replay = await call(installOp, { confirmInstall: true }, admission)
+    expect(replay.status).toBe('completed')
+    expect(replay.idempotencyKey).toBe(admission)
+    expect(replay.data).toEqual(first.data)
+    expect(engineFixture.installCalls).toBe(1)
+  })
+
+  it('安装启动事件只带稳定字段，响应不含本机路径或密钥', async () => {
+    fakeEngineStatus()
+    engineFixture.install = async () => {
+      engineFixture.status = {
+        ...engineFixture.status,
+        installing: true,
+        message: '正在安装；首次下载可能需要一些时间'
+      }
+      return { started: true }
+    }
+    const response = await call(installOp, { confirmInstall: true }, key())
+    expect(response.status).toBe('completed')
+    const serialized = JSON.stringify([response, events])
+    expect(serialized).not.toContain(directory)
+    expect(serialized).not.toContain(FAKE_SECRET)
+    const operationEvents = events.filter(
+      (event) => (event?.attributes ?? {}).operation === installOp
+    )
+    expect(operationEvents.length).toBeGreaterThanOrEqual(2)
+    expect(
+      operationEvents.some((event) => String(event.event) === 'agent.access.completed')
+    ).toBe(true)
   })
 })

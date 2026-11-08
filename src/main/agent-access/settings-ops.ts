@@ -1,28 +1,37 @@
-// F9（二）「模型设置」与「环境」页读取类动作的外部实现。
+// F9（二/四）「模型设置」与「环境」页动作的外部实现。
 //
 // 三入口同一实现：本模块不写执行器、不直写 SQLite、不复制 GUI 规则，
 // 只把 GUI 页面背后的 main 服务按去敏字段投影出来：
 // - 连接/定义/绑定：SqliteModelHost（与 ipc/models.ipc.ts 的 list* 同一仓储）；
 // - 绑定解析：ModelRuntime.resolveForExecution（与 GUI models.bindings:resolve 同一解析服务）；
-// - 本机能力：getLocalMediaCapabilities（FFmpeg/FFprobe/audio-separator）；
-// - 视频引擎：getVideoEngineStatus（本地 CUDA 推理环境，video-depth/video-clay）；
+// - 本机能力：getLocalMediaCapabilities + ffmpeg-runner（FFmpeg/FFprobe 版本）；
+// - 视频引擎：getVideoEngineStatus / installVideoEngine（本地 CUDA 推理环境，video-depth/video-clay）；
 // - 本地语音：detectIndexTts（IndexTTS 运行时，只投影 ready/state，不返回本机路径）。
 //
-// 边界（详见 docs/local-agent-access/36-models-env-delivery.md 第 4 节「明确不开放」）：
-// - 全部只读：不发供应商请求、不探测远端、不安装/下载、不写凭据与设置；
+// 边界（详见 docs/local-agent-access/36-models-env-delivery.md 第 4 节与 45 号台账）：
+// - 除 `environment.videoEngine.install`（必须 confirmInstall=true 才启动、下载逻辑完全复用
+//   installVideoEngine，不接收任何 URL/路径/镜像参数）外全部只读；
 // - 去敏用**字段白名单**：地址、鉴权头、metadata、能力 controls、验证 message、
-//   密钥密文/引用一律不投影（连接列表尤其如此）；
+//   密钥密文/引用、本机绝对路径一律不投影；
 // - resolve 内部会读取密钥做"存在性检查"（GUI 同款语义），但密钥只存在于函数局部，
 //   响应里只有 providerId/modelId；不把 `resolved` 整体展开，避免未来加字段时泄漏。
 import type { Capability, ModelOperation } from '@free-creation/model-contracts'
 import { ModelRuntimeError, type ModelRuntime, type ResolvedModelTarget } from '@free-creation/model-runtime'
 import type { AccessOperationId } from '../../shared/agent-access/registry'
+import type { VideoEngineStatus } from '../../shared/contracts'
 import { createDesktopModelRuntime } from '../model-host/runtime'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
 import { detectIndexTts } from '../media/indextts-engine'
+import {
+  FFMPEG_MISSING_HINT,
+  FFPROBE_MISSING_HINT,
+  resolveFfmpegBinary,
+  resolveFfprobeBinary,
+  runProcess
+} from '../media/ffmpeg-runner'
 import { getLocalMediaCapabilities } from '../media/video-transform'
-import { getVideoEngineStatus } from '../media/video-conversion'
-import { getDb } from '../store/db'
+import { getVideoEngineStatus, installVideoEngine } from '../media/video-conversion'
+import { getDataDir, getDb } from '../store/db'
 import { DesktopAccessError } from './desktop'
 
 export type SettingsOperationId =
@@ -32,18 +41,20 @@ export type SettingsOperationId =
   | 'model.binding.resolve'
   | 'environment.local'
   | 'environment.videoEngine.status'
+  | 'environment.videoEngine.install'
 
-const SETTINGS_READ_OPERATIONS: ReadonlySet<AccessOperationId> = new Set<AccessOperationId>([
+const SETTINGS_OPERATION_IDS: ReadonlySet<AccessOperationId> = new Set<AccessOperationId>([
   'model.connection.list',
   'model.definition.list',
   'model.binding.list',
   'model.binding.resolve',
   'environment.local',
-  'environment.videoEngine.status'
+  'environment.videoEngine.status',
+  'environment.videoEngine.install'
 ])
 
 export function isSettingsOperation(id: AccessOperationId): id is SettingsOperationId {
-  return SETTINGS_READ_OPERATIONS.has(id)
+  return SETTINGS_OPERATION_IDS.has(id)
 }
 
 function refuse(code: string, phase: string, detail?: string): never {
@@ -60,6 +71,46 @@ function modelHost(): SqliteModelHost {
 }
 
 const bounded = (value: string, max: number): string => value.slice(0, max)
+
+/**
+ * GUI 状态文案可能带本机绝对路径（pip/解释器/venv 输出）。对外统一抹掉：
+ * 应用数据目录 → `[数据目录]`，Windows 盘符路径与常见 POSIX 目录 → `[本机路径]`。
+ * 只做展示脱敏，不改变状态判断本身。
+ */
+function sanitizeProbeMessage(value: string): string {
+  const text = typeof value === 'string' ? value : ''
+  let scrubbed = text
+  try {
+    const dataDir = getDataDir()
+    if (dataDir) scrubbed = scrubbed.split(dataDir).join('[数据目录]')
+  } catch {
+    // 数据目录未就绪时不做前缀替换；后面的绝对路径规则仍生效。
+  }
+  return scrubbed
+    .replace(/[A-Za-z]:\\[^\s"'<>|，。；]*/g, '[本机路径]')
+    .replace(/\/(?:home|Users|tmp|var|opt|mnt|usr)\/[^\s"'<>|，。；]*/g, '[本机路径]')
+}
+
+/** 视频引擎阶段（与状态字段一一对应，供外部不读 message 也能判断下一步）。 */
+function videoEnginePhase(
+  status: VideoEngineStatus
+): 'ready' | 'installing' | 'python-ready' | 'python-missing' | 'unsupported-platform' {
+  if (status.ready) return 'ready'
+  if (status.installing) return 'installing'
+  if (!status.pythonAvailable && process.platform === 'darwin') return 'unsupported-platform'
+  return status.pythonAvailable ? 'python-ready' : 'python-missing'
+}
+
+/** 读 `-version` 首行的版本令牌；读不到版本不影响可用性判断（缺失提示与 GUI 同一句）。 */
+async function toolVersion(binary: string, missingHint: string): Promise<string | undefined> {
+  try {
+    const output = await runProcess(binary, ['-version'], missingHint, { timeoutMs: 5000 })
+    const version = /version\s+(\S+)/i.exec(output)?.[1]?.trim()
+    return version ? bounded(version, 120) : undefined
+  } catch {
+    return undefined
+  }
+}
 
 /** 能力投影：只保留能力声明本身；controls（任意执行参数）不对外。 */
 function capabilityDto(capability: Capability): {
@@ -244,15 +295,27 @@ async function localEnvironment(): Promise<unknown> {
   // 不安装、不下载、不做推理；缺依赖如实返回 available=false，不让整个操作失败。
   // IndexTTS 探测按 GUI 同款规则不缓存且可能扫描本机安装位置（有界），因此这里只投影
   // 粗粒度就绪状态，不返回解释器/模型目录（GUI 文案里含本机绝对路径）。
+  // FFmpeg/FFprobe 额外用同一个二进制读 `-version`（同一 ffmpeg-runner 与同一句缺失提示），
+  // 让外部能判断工具代次；audio-separator 没有稳定版本接口，只保留可用性。
   try {
-    const [media, engine, indexTts] = await Promise.all([
+    const [media, engine, indexTts, ffmpegVersion, ffprobeVersion] = await Promise.all([
       getLocalMediaCapabilities(),
       getVideoEngineStatus(),
-      detectIndexTts()
+      detectIndexTts(),
+      toolVersion(resolveFfmpegBinary(), FFMPEG_MISSING_HINT),
+      toolVersion(resolveFfprobeBinary(), FFPROBE_MISSING_HINT)
     ])
     return {
-      ffmpeg: { available: media.ffmpeg.available, message: bounded(media.ffmpeg.message, 600) },
-      ffprobe: { available: media.ffprobe.available, message: bounded(media.ffprobe.message, 600) },
+      ffmpeg: {
+        available: media.ffmpeg.available,
+        message: bounded(media.ffmpeg.message, 600),
+        ...(media.ffmpeg.available && ffmpegVersion ? { version: ffmpegVersion } : {})
+      },
+      ffprobe: {
+        available: media.ffprobe.available,
+        message: bounded(media.ffprobe.message, 600),
+        ...(media.ffprobe.available && ffprobeVersion ? { version: ffprobeVersion } : {})
+      },
       audioSeparator: {
         available: media.audioSeparator.available,
         message: bounded(media.audioSeparator.message, 600)
@@ -261,6 +324,7 @@ async function localEnvironment(): Promise<unknown> {
         pythonAvailable: engine.pythonAvailable,
         ready: engine.ready,
         installing: engine.installing,
+        phase: videoEnginePhase(engine),
         ...(engine.gpuName ? { gpuName: bounded(engine.gpuName, 200) } : {})
       },
       indexTts: {
@@ -285,12 +349,94 @@ async function videoEngineStatus(): Promise<unknown> {
       pythonAvailable: status.pythonAvailable,
       ready: status.ready,
       installing: status.installing,
-      progress: bounded(status.progress, 300),
-      message: bounded(status.message, 600),
+      progress: bounded(sanitizeProbeMessage(status.progress), 300),
+      message: bounded(sanitizeProbeMessage(status.message), 600),
       ...(status.gpuName ? { gpuName: bounded(status.gpuName, 200) } : {})
     }
   } catch {
     refuse('ENVIRONMENT_PROBE_FAILED', 'environment-probe')
+  }
+}
+
+/** 一次「启动安装」尝试的结果；failure 存在时由调用方翻译成稳定错误码（不写假成功）。 */
+interface InstallStartOutcome {
+  started: boolean
+  status: VideoEngineStatus
+  failure?: { code: string; detail: string }
+}
+
+/**
+ * 同一进程内共享的启动尝试：并发调用不启动第二个安装；后来者等待同一次尝试后如实回报。
+ * 这里只覆盖"启动"窗口（installVideoEngine 立即返回，安装本身在后台继续）；
+ * 安装进行中的重复调用由 getVideoEngineStatus().installing 分流为 started=false。
+ */
+let installStartAttempt: Promise<InstallStartOutcome> | null = null
+
+/** 缺 Python 是 GUI 安装路径唯一会同步抛出的可预期失败；其余不把原始异常文本回给外部。 */
+function classifyInstallFailure(status: VideoEngineStatus | null): { code: string; detail: string } {
+  const message = status?.message?.trim() ?? ''
+  if (/python/i.test(message)) {
+    return {
+      code: 'PYTHON_REQUIRED',
+      detail: message || '未找到本机 Python 3.12；请先安装 Python 3.12（64 位）后重试'
+    }
+  }
+  return {
+    code: 'INSTALL_START_FAILED',
+    detail: '本地推理环境安装启动失败，请稍后用 environment.videoEngine.status 核对状态'
+  }
+}
+
+async function startInstall(): Promise<InstallStartOutcome> {
+  let before: VideoEngineStatus
+  try {
+    before = await getVideoEngineStatus()
+  } catch {
+    refuse('ENVIRONMENT_PROBE_FAILED', 'environment-install')
+  }
+  // 已就绪或已有安装：不重复启动；started=false 如实表达，不谎报"已开始"。
+  if (before.ready || before.installing) return { started: false, status: before }
+  try {
+    // 复用 GUI 同一安装实现：不接收 URL/镜像/路径参数，下载目标与完整性校验由它固定。
+    const result = await installVideoEngine()
+    return { started: result.started, status: await getVideoEngineStatus().catch(() => before) }
+  } catch {
+    const status = await getVideoEngineStatus().catch(() => before)
+    return { started: false, status, failure: classifyInstallFailure(status) }
+  }
+}
+
+function installDto(started: boolean, status: VideoEngineStatus): unknown {
+  return {
+    started,
+    ready: status.ready,
+    installing: status.installing,
+    pythonAvailable: status.pythonAvailable,
+    message: bounded(sanitizeProbeMessage(status.message), 600)
+  }
+}
+
+async function videoEngineInstall(input: Record<string, unknown>): Promise<unknown> {
+  // 未确认：连安装实现都不调用——0 次网络下载、0 次本机环境写入。
+  if (input.confirmInstall !== true)
+    refuse('INSTALL_CONFIRM_REQUIRED', 'environment-install', 'confirmInstall=true')
+
+  const inFlight = installStartAttempt
+  if (inFlight) {
+    // 并发调用：等待同一次启动尝试，但本次没有发起安装，started 必须为 false。
+    const shared = await inFlight
+    if (shared.failure) refuse(shared.failure.code, 'environment-install', shared.failure.detail)
+    return installDto(false, shared.status)
+  }
+
+  const attempt = startInstall()
+  installStartAttempt = attempt
+  try {
+    const outcome = await attempt
+    if (outcome.failure) refuse(outcome.failure.code, 'environment-install', outcome.failure.detail)
+    return installDto(outcome.started, outcome.status)
+  } finally {
+    if (installStartAttempt === attempt) installStartAttempt = null
   }
 }
 
@@ -312,5 +458,7 @@ export function runSettingsOperation(
       return localEnvironment()
     case 'environment.videoEngine.status':
       return videoEngineStatus()
+    case 'environment.videoEngine.install':
+      return videoEngineInstall(input)
   }
 }

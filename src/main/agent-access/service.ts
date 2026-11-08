@@ -56,6 +56,7 @@ import { FLOW_ASSET_OPERATION_IDS, runFlowAssetOperation } from './flow-assets-o
 import { isFlowCommandOperation, runFlowCommandOperation } from './flow-commands-ops'
 import { isSettingsOperation, runSettingsOperation } from './settings-ops'
 import { runDiagnosticsOperation } from './diagnostics-ops'
+import { MODEL_ADMIN_OPERATION_IDS, runModelAdminOperation } from './model-admin-ops'
 import { runProjectSettingsOperation } from './project-settings-ops'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
 import { FlowTaskStore } from '../agent-flow/task-store'
@@ -955,6 +956,11 @@ export class LocalAccessService {
         // （SqliteModelHost、ModelRuntime.resolveForExecution、媒体/推理环境探测）；
         // 全部只读，不发供应商请求、不写凭据，不落 execute 的普通分支。
         result = await runSettingsOperation(operationId, input)
+      } else if (MODEL_ADMIN_OPERATION_IDS.has(operationId)) {
+        // F9（四）：模型连接与受控凭据写入复用 SqliteModelHost（GUI 模型设置同一实现）。
+        // 明文密钥只在本进程内用于写入/计算指纹，不回传、不进日志；模型验证与发现
+        // 需要供应商请求，未在本批开放，因此外部也无法"自行验证"。
+        result = await runModelAdminOperation(operationId, input)
       } else if (
         operationId === 'diagnostics.query' ||
         operationId === 'project.nodeVisibility.get' ||
@@ -1851,7 +1857,17 @@ export class LocalAccessService {
       case 'model.binding.resolve':
       case 'environment.local':
       case 'environment.videoEngine.status':
-        // F9（二）：模型目录/绑定与环境状态读取在 dispatch 分组分支委托 settings-ops 执行，不落在这里。
+      case 'environment.videoEngine.install':
+        // F9（二/四）：模型目录、环境状态读取与视频引擎安装启动在 dispatch 分组分支委托
+        // settings-ops 执行，不落在这里。
+        throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
+      case 'model.connection.save':
+      case 'model.credential.status':
+      case 'model.connection.delete':
+      case 'model.definition.save':
+      case 'model.definition.delete':
+      case 'model.binding.save':
+        // F9（四）：模型连接与受控凭据写入委托 model-admin-ops 执行，不落在这里。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'node.execute':
       case 'run.cancel':
