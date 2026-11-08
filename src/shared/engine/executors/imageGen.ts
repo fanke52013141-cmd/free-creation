@@ -50,6 +50,10 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
   const batchId = `img-${ctx.node.id}-${ctx.runId ?? ''}`
   const capabilities = imageCapabilitiesFor(option.provider.specId, option.model.id)
   const config = normalizeImageGenerationConfig(data, capabilities)
+  // 用户选了当前模型不支持的档位（例如切换模型后残留的即梦专属 1.5k）：不发送给供应商，
+  // 但留一条安全诊断，不静默假装按用户档位出图。
+  if (config.resolution && !capabilities.resolutions.includes(config.resolution))
+    ctx.trace?.('capability', 'info', `分辨率 ${config.resolution} 不被当前模型支持，本次不发送`)
   const bundlePrompt = promptBundleText(inputJson(ctx.inputs, 'in-prompt')[0])
   const prompt = mergedPrompt(
     ctx.shape.props.text,
@@ -86,8 +90,11 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
               ...(capabilities.forwardsAspectRatio && config.aspectRatio !== 'auto'
                 ? { aspectRatio: config.aspectRatio }
                 : {}),
-              // 分辨率与透明背景都是用户意图；能力表不支持时既不发送也不出现在提交入参里。
-              ...(capabilities.resolutions.length > 0 && config.resolution
+              // 分辨率档位按"解析后的真实模型"能力表放行：模型切换或外部配置里残留的
+              // 其他模型专属档位（如即梦 5.0Pro 独有的 1.5k）不得发给不支持它的供应商。
+              ...(capabilities.resolutions.length > 0 &&
+              config.resolution &&
+              capabilities.resolutions.includes(config.resolution)
                 ? { resolution: config.resolution }
                 : {}),
               ...(capabilities.supportsTransparentBackground && config.background

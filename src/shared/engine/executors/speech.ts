@@ -4,14 +4,17 @@
 // backend 派生，执行器同样只读取当前 backend 真正需要的输入——不按上游节点标题
 // 或类型猜测，也不会把某家供应商的参数发给另一家。
 import {
+  SPEECH_EMOTIONS,
   VOLC_REFERENCE_AUDIO_MAX_COUNT,
+  isSpeechEmotionSupported,
   parseSpeechConfig,
-  SPEECH_TEXT_LIMITS
+  SPEECH_TEXT_LIMITS,
+  type SpeechConfig
 } from '@shared/speech'
 import { parseVoiceProfile } from '@shared/voice-design'
 import { inputJson, inputMedia, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
-import { mergedPrompt } from '../helpers'
+import { mergedPrompt, parseJsonObj } from '../helpers'
 import { readNodeConfig } from '../node-config'
 import { appendMediaResult, serializeMediaResultCollection } from '../values'
 import { featureKeyOf, resolveFeatureOption } from '../models'
@@ -118,9 +121,19 @@ export const speechExecutor = async (ctx: NodeExecutionContext): Promise<NodeExe
     : null
   if (ctx.gateway.resolveModelFeature && !option) return { status: 'skipped', reason: '功能 speech.synthesize 尚未绑定已验证语音模型' }
   if (!ctx.gateway.resolveModelFeature && !config.providerId) return { status: 'skipped', reason: '未选择语音模型' }
+  // config.modelId 为空（按功能绑定解析模型）时，parseSpeechConfig 只能拿默认模型猜
+  // emotion 是否被支持；这里按配置里的合法原始值 + 解析到的真实模型再确认一次，避免绑定到
+  // 2.6 系列（唯一声明 emotional 的模型）时把用户填的情绪参数静默丢掉。
+  const rawEmotion = ((): SpeechConfig['emotion'] => {
+    const emotion = parseJsonObj(readNodeConfig(ctx.shape))?.emotion
+    return SPEECH_EMOTIONS.some((item) => item.value === emotion)
+      ? (emotion as SpeechConfig['emotion'])
+      : config.emotion
+  })()
   const effectiveConfig = option ? {
     ...config,
-    backend: option.provider.specId === 'minimax' ? 'minimax' : option.provider.specId === 'volc-speech' ? 'volc' : config.backend
+    backend: option.provider.specId === 'minimax' ? 'minimax' : option.provider.specId === 'volc-speech' ? 'volc' : config.backend,
+    emotion: isSpeechEmotionSupported(option.model.id, rawEmotion) ? rawEmotion : ''
   } : config
 
   const limit = SPEECH_TEXT_LIMITS[effectiveConfig.backend]
