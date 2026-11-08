@@ -38,6 +38,7 @@ import { LIBRARY_CAPTURE_OPERATIONS, LIBRARY_CAPTURE_OUTPUTS } from './ops/libra
 import { CANVAS_HISTORY_OPERATIONS, CANVAS_HISTORY_OUTPUTS } from './ops/canvas-history'
 import { PROVIDER_OPERATIONS, PROVIDER_OUTPUTS } from './ops/providers'
 import { PROVIDER_NETWORK_OPERATIONS, PROVIDER_NETWORK_OUTPUTS } from './ops/provider-network'
+import { KEY_PACKAGE_OPERATIONS, KEY_PACKAGE_OUTPUTS } from './ops/key-package'
 import { TRANSFER_OPERATIONS, TRANSFER_OUTPUTS } from './ops/transfer'
 import {
   GRAPH_PATCH_MAX_OPS,
@@ -343,6 +344,7 @@ export const ACCESS_OPERATIONS = {
   ...CANVAS_HISTORY_OPERATIONS,
   ...PROVIDER_OPERATIONS,
   ...PROVIDER_NETWORK_OPERATIONS,
+  ...KEY_PACKAGE_OPERATIONS,
   ...PUBLISH_OPERATIONS
 } as const
 export type AccessOperationId = keyof typeof ACCESS_OPERATIONS
@@ -833,6 +835,7 @@ export const ACCESS_OUTPUTS = {
   ...CANVAS_HISTORY_OUTPUTS,
   ...PROVIDER_OUTPUTS,
   ...PROVIDER_NETWORK_OUTPUTS,
+  ...KEY_PACKAGE_OUTPUTS,
   ...PUBLISH_OUTPUTS
 } satisfies Record<AccessOperationId, z.ZodType>
 export type AccessOutput<K extends AccessOperationId> = z.infer<(typeof ACCESS_OUTPUTS)[K]>

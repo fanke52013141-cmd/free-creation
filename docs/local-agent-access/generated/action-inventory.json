@@ -3,14 +3,14 @@
   "generatedFrom": {
     "ipcChannels": 171,
     "canvasActions": 42,
-    "externalOperations": 130
+    "externalOperations": 133
   },
   "totals": {
     "actions": 213,
     "byPhase": {
-      "external": 162,
+      "external": 165,
       "excluded": 30,
-      "F9": 21
+      "F9": 18
     }
   },
   "actions": {
@@ -1149,13 +1149,21 @@
       "label": "凭据封包",
       "channel": "gateway:keys:seal-package",
       "gui": "凭据包",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "provider.package.seal"
+      ],
+      "note": "F9：为接收设备封包（复用 GUI 同一 sealKeyPackageForRecipient，走设备绑定与授权门禁）；接收凭证从受控目录按文件名读取（不接受任意路径）；回执给包ID/连接数/到期/指纹，不回传包正文"
     },
     "ipc.keys.previewPackage": {
       "label": "凭据包预览",
       "channel": "gateway:keys:preview-package",
       "gui": "凭据包",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "provider.package.preview"
+      ],
+      "note": "F9：只读预览受控目录内的凭据包（不解密落库）；返回包ID/签发设备摘要/到期/连接清单/是否已导入，连接只暴露主机名而不暴露完整 URL"
     },
     "ipc.keys.importPackage": {
       "label": "凭据包导入",
@@ -1199,7 +1207,11 @@
       "label": "供应商导出",
       "channel": "gateway:providers:export",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "provider.package.export"
+      ],
+      "note": "F9：把选定连接导出为凭据包（.cskeys）到**受控导出目录**（复用 GUI 同一 exportProviders 与同一加密格式）；需要解封密码；回执给文件名/sha256/字节数/连接数，不回传包正文；不覆盖已有文件"
     },
     "ipc.keys.importProviders": {
       "label": "供应商导入",

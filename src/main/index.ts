@@ -11,6 +11,7 @@ import { registerProjectIpc } from './ipc/project.ipc'
 import { startLocalAccessServer, type LocalAccessServer } from './agent-access/server'
 import { createAccessDesktop } from './agent-access/desktop'
 import { registerLocalAgentTaskReports } from './agent-access/reports'
+import { publishKeysPackageAccessPort } from './agent-access/keys-bridge'
 import { emitDomainEvent } from './diagnostics/ipc-domain-events'
 import { registerFlowAssetsIpc } from './ipc/flow-assets.ipc'
 import { registerFlowCommandsIpc } from './ipc/flow-commands.ipc'
@@ -40,7 +41,8 @@ import { createDesktopModelRuntime } from './model-host/runtime'
 import { closeDb, getDataDir, getDb, getProjectsDir } from './store/db'
 import { acquireProcessLock, type ProcessLock } from './store/process-lock'
 import { checkWorkspaceHealth, sweepStaleVideoTempFiles } from './store/workspace-health'
-import { bootstrapLegacyProvidersToCatalog } from './gateway/providers.repo'
+import { bootstrapLegacyProvidersToCatalog, saveProvider } from './gateway/providers.repo'
+import { DREAMINA_IMAGE_MODELS, DREAMINA_VIDEO_MODELS } from '../shared/dreamina-models'
 import { DISTRIBUTION_EDITION } from '../shared/edition'
 import { SecretVault, setActiveVault } from './security/keystore/vault'
 import { migrateSecretsToVault } from './security/keystore/migrate'
@@ -463,6 +465,28 @@ app.whenReady().then(async () => {
   await initDiagnostics()
 
   const database = getDb()
+  // 发行版：预置即梦供应商与模型清单——客户打开模型设置即可见「即梦（本机 CLI）」，
+  // 只需点「登录即梦」完成本机 OAuth 即可使用（CLI 已随包内置，无需下载）。
+  if (DISTRIBUTION_EDITION) {
+    const dreaminaRow = database.prepare('SELECT id FROM providers WHERE id = ?').get('dreamina')
+    if (!dreaminaRow) {
+      try {
+        await saveProvider({
+          id: 'dreamina',
+          name: '即梦（本机 CLI）',
+          specId: 'dreamina',
+          baseURL: '',
+          models: [
+            ...DREAMINA_IMAGE_MODELS.map((id) => ({ id, modality: 'image' as const })),
+            ...DREAMINA_VIDEO_MODELS.map((id) => ({ id, modality: 'video' as const }))
+          ]
+        })
+        log.info('distribution: 已预置即梦供应商（登录后即可使用）')
+      } catch (error) {
+        log.warn(`distribution: 即梦供应商预置失败：${String((error as Error).message).slice(0, 120)}`)
+      }
+    }
+  }
   // P2 设备绑定密钥库：迁移在激活后的启动事务中执行（方案 §4.3）；
   // 失败的行保留原值并计入 pending，下次启动重试。plain:/裸值曾在磁盘上
   // 存在过可复制明文，结果里带轮换提示。
@@ -590,6 +614,9 @@ app.whenReady().then(async () => {
   })
   : null
   registerGatewayIpc(mainWindow, keysService ?? undefined)
+  // F9 收尾：把**同一个** KeyPackageService 发布给 agent-access（导出/预览侧），
+  // 外部入口经 keys-bridge 调用它；不另建实例、不绕开设备绑定与授权门禁。
+  if (keysService) publishKeysPackageAccessPort(keysService)
   registerFlowAssetsIpc(() => mainWindow)
   registerFlowCommandsIpc(
     () => mainWindow,
