@@ -84,7 +84,7 @@ function parseRegistryOperations() {
       }
       if (end < 0) throw new Error(`Registry operation block not terminated: ${path.basename(file)}`)
       scannedBlocks++
-      const re = /'([a-z_.]+)':\s*\{/g
+      const re = /'([a-zA-Z_.]+)':\s*\{/g
       let m
       while ((m = re.exec(src.slice(objStart, end)))) ids.push(m[1])
     }

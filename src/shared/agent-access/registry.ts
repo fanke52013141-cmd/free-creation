@@ -317,13 +317,16 @@ export const ACCESS_OPERATIONS = {
 } as const
 export type AccessOperationId = keyof typeof ACCESS_OPERATIONS
 
-// F7 未验收前不开放“包传输”类导入（完整项目包/资源包/凭据包按计划单独验收）；
-// 单文件素材登记（media.import）是普通业务动作，不受此限——按明确范围判定，
-// 不再用名称子串一票否决（一致性计划 F1 要求）。
+// 包传输类导入按明确能力范围判定，不用名称子串一票否决（一致性计划 F1 要求）。
+// 2026-11-08 F7 独立验收后，完整项目包/结构包/资源包导入与资源包导出已解除阻断：
+// 它们复用 GUI 同一 store 服务，并且外部入口只接受受控导出目录内的包文件
+// （暂存、媒体 ID/相对路径全量重映射、凭据剥离、失败清理、sha256/字节回执）。
+// 仍阻断的两项不在本包范围，需要单独的安全设计与验收：
+// - keys.importProviders：供应商凭据包导入会越过密钥库/设备授权边界，涉及明文解密与
+//   设备绑定，必须按 F9「受控凭据配置」独立设计，不能借项目/资源包通道旁路。
+// - workspace.import：工作区导入涉及跨项目合并、冲突裁决与运行/审核事实边界，
+//   尚无与 GUI 同源的合并服务，须在 F8/F9 单独验收后再开放。
 const PACKAGE_IMPORT_BLOCKLIST: ReadonlySet<string> = new Set([
-  'project.import',
-  'project.importStructure',
-  'library.import',
   'keys.importProviders',
   'workspace.import'
 ])

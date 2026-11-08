@@ -734,7 +734,11 @@ describe('local Agent vertical slice', () => {
     expect(validateAccessRegistry(['text'], ['text', 'text'])).toContain('DUPLICATE_NODE')
     expect(nodeAccessDirectory()).toHaveLength(32)
     expect(nodeAccessDirectory().every((n) => n.actions === 'planned')).toBe(true)
-    expect(Object.keys(ACCESS_OPERATIONS)).not.toContain('project.import')
+    // F7 解黑：受控导出目录内的包导入已开放；凭据包/工作区导入仍按明确能力范围阻断。
+    for (const packageImport of ['project.import', 'project.importStructure', 'library.import'])
+      expect(Object.keys(ACCESS_OPERATIONS)).toContain(packageImport)
+    for (const blockedImport of ['keys.importProviders', 'workspace.import'])
+      expect(Object.keys(ACCESS_OPERATIONS)).not.toContain(blockedImport)
     expect(
       toolInputSchema('project.create').safeParse({
         input: { name: 'ok', snapshot: {} },
@@ -973,7 +977,8 @@ describe('local Agent vertical slice', () => {
         )
       ).error?.code
     ).toBe('INVALID_INPUT')
-    expect((await call('project.import', {})).error?.code).toBe('UNSUPPORTED_OPERATION')
+    // 解黑后仍无“任意导入”后门：空输入在 schema 校验阶段被拒，只有受控目录内的包路径可进入业务。
+    expect((await call('project.import', {})).error?.code).toBe('INVALID_INPUT')
     expect(
       (
         await service.dispatch({
