@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "F5/F4 动作路由批次：不新增 Registry 操作（仍 117），只把 GUI 入口为",
+  "reason": "F9 收尾：安装后台诊断事件（video-conversion.ts 新增 5 个事件写入与 classifyInstallFailureCode，observability/events.ts 登记 5 个事件定义）。兼容结论：未改动任何外部操作的输入/输出 Schema（仍 117 项，contracts.json 无差异），仅受保护源码内容变化 + 事件注册表新增登记；测试已覆盖事件脱敏与",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -107,7 +107,7 @@
     "src/main/media/text-decode.ts": "91425315281d19389c0faa5d2736aaed8acec6cadc4dd7a6ecdae80c8316c7c1",
     "src/main/media/timeline-compose.ts": "de3ff387bb8d3f20861c54fdc8db53a76da5ae12bb3af96f4bbe900ad534911a",
     "src/main/media/tts-transform.ts": "48f02a4744da46dae1765ef1cc3c2c1ff564688d6ddf65aedef9eed90571cab8",
-    "src/main/media/video-conversion.ts": "4ad1e8bfc625bafdce61d071720ab0b2f21eb1c89aa8b9d2e5c36695345b007e",
+    "src/main/media/video-conversion.ts": "a3c72f727b150310974e77f7c3d63de83539aebac3653f7c3ad62dce803a8e05",
     "src/main/media/video-transform.ts": "d69981dcadd484f72e1701e17a799d2e70f9df82f09b455daf0eae60c28b3cca",
     "src/main/model-host/sqlite-model-host.ts": "2a5440490231bf075b048f7f860a8a97e71424d0f8bd113e27aeced972db3794",
     "src/main/store/db-migrations.ts": "cce11b6b6b508713aa88dd58ebf7ae075d871b39f2d96b99ea6b3f2bf34606ad",
@@ -259,7 +259,7 @@
     "src/shared/node-schemas.ts": "8cfee69c687bbe9c3b6cfbac800ac1458b28a4a353145d0d0c93451295de6c07",
     "src/shared/observability/context.ts": "cdf1a70c0b0393892142a2efaf7870399971a0c3b33842631130d48ddf468951",
     "src/shared/observability/errors.ts": "829f7dd82c35db25926a5a7bd67ceadeba4bdc0984e005462ecc93132e6cef23",
-    "src/shared/observability/events.ts": "3e4e22db9d7551be4b3534b192474a369adb44263bad93ce7c34a90e86b057be",
+    "src/shared/observability/events.ts": "6b577706f8705b46768ec0e6e35dbc102c762b1689acffa57c101830df7518b6",
     "src/shared/observability/ids.ts": "7def76e572e1c7866fd9732f2264454e47cd43c77566ec103fd7dac95d31c882",
     "src/shared/observability/index.ts": "2f03ca0f3c35217c4471492b968f0753e6c0d3ea01fa855c3ab085689c47af21",
     "src/shared/observability/limits.ts": "ed0484324eaa3d28554ec76dd9a4eb274035703096f2350005fcfa3508b4f9c6",
