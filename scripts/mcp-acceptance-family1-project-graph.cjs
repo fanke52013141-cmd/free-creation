@@ -25,12 +25,18 @@ const electron = require('electron')
 const appRoot = resolve('.')
 const cliPath = join(appRoot, 'out/main/local-agent.js')
 const key = () => `${Date.now()}:${randomUUID()}`
-const licensedSecurityDir = join(
-  process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'),
-  'canvas-studio',
-  'data',
-  'security'
-)
+const licensedSecurityDir = (() => {
+  const roaming = process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming')
+  const candidates = [
+    join(roaming, 'canvas-studio', 'data', 'security'),
+    join(roaming, 'Electron', 'data', 'security'),
+    join(roaming, 'canvas-studio', 'security')
+  ]
+  for (const candidate of candidates) {
+    if (existsSync(join(candidate, 'license-current.json'))) return candidate
+  }
+  return candidates[0]
+})()
 
 async function main() {
   const directory = await mkdtemp(join(tmpdir(), 'canvas-accept-family1-'))

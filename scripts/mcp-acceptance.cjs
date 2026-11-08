@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty, no-irregular-whitespace */
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
 ﻿/**
  * 真实 MCP 客户端验收：把 133 项外部操作逐个过一遍真实 MCP 协议栈
  * （@modelcontextprotocol/sdk Client + StdioClientTransport，不是直接调服务）。
@@ -30,12 +32,18 @@ const cliPath = join(appRoot, 'out/main/local-agent.js')
 const key = () => `${Date.now()}:${randomUUID()}`
 
 /** 本机已激活授权的 security 目录（设备绑定，同一机器有效）。 */
-const licensedSecurityDir = join(
-  process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'),
-  'canvas-studio',
-  'data',
-  'security'
-)
+const licensedSecurityDir = (() => {
+  const roaming = process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming')
+  const candidates = [
+    join(roaming, 'canvas-studio', 'data', 'security'),
+    join(roaming, 'Electron', 'data', 'security'),
+    join(roaming, 'canvas-studio', 'security')
+  ]
+  for (const candidate of candidates) {
+    if (existsSync(join(candidate, 'license-current.json'))) return candidate
+  }
+  return candidates[0]
+})()
 
 /** 只读操作：可安全真实调用。 */
 const READ_OPS = [
