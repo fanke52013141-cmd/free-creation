@@ -67,6 +67,19 @@ function visualClipAtPlayhead(data: TimelineData, playheadMs: number): TimelineC
   return null
 }
 
+/** 播放头位置上的音频片段（跳过静音/隐藏轨道）：用于全屏预览的音频播放。 */
+export function audioClipAtPlayhead(data: TimelineData, playheadMs: number): TimelineClip | null {
+  for (let index = data.tracks.length - 1; index >= 0; index -= 1) {
+    const track = data.tracks[index]
+    if (!track.visible || track.muted) continue
+    const clips = clipsOfTrack(data, track.id).filter(
+      (clip) => clip.kind === 'audio' && clipCovers(clip, playheadMs)
+    )
+    if (clips.length > 0) return clips[clips.length - 1]
+  }
+  return null
+}
+
 function sourceTimeAt(clip: TimelineClip, playheadMs: number): number {
   return Math.max(0, playheadMs - clip.startMs + clip.inMs)
 }
@@ -119,6 +132,7 @@ export function TimelineEditorStage({
     count: number
   } | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   const stageRef = useRef<HTMLDivElement | null>(null)
   const ghostRef = useRef<{ x: number; y: number; assets: TimelineEditorAsset[] } | null>(null)
   const playStartedAtRef = useRef(0)
@@ -129,6 +143,8 @@ export function TimelineEditorStage({
   const totalMs = timelineDurationMs(data)
   const clip = visualClipAtPlayhead(data, playheadMs)
   const previewUrl = clip?.mediaPath ? mediaUrl(clip.mediaPath) : null
+  const audioClip = audioClipAtPlayhead(data, playheadMs)
+  const audioUrl = audioClip?.mediaPath ? mediaUrl(audioClip.mediaPath) : null
   const aspectRatio = ASPECTS.find((item) => item.id === aspect)?.ratio ?? '16 / 9'
 
   // 播放推进：以墙钟时间为准，视频只做低频纠偏（避免每帧 seek 造成卡顿）。
@@ -171,7 +187,24 @@ export function TimelineEditorStage({
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.volume = volume / 100
-  }, [volume, previewUrl])
+    if (audioRef.current) audioRef.current.volume = volume / 100
+  }, [volume, previewUrl, audioUrl])
+
+  // 音频轨在全屏预览里也要出声：跟随播放头 seek，播放/暂停与视频一致。
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio || !audioClip) return
+    const target = sourceTimeAt(audioClip, playheadMs) / 1000
+    if (Math.abs(audio.currentTime - target) > 0.35) {
+      try {
+        audio.currentTime = target
+      } catch {
+        // 元数据未就绪时忽略，下一次播放头变化再同步。
+      }
+    }
+    if (playing) void audio.play().catch(() => undefined)
+    else audio.pause()
+  }, [audioClip, playheadMs, playing])
 
   // ── 多选（保持点击顺序）与长按拖动 ────────────────────────────────
   const orderOf = (id: string): number => selectedIds.indexOf(id)
@@ -462,9 +495,18 @@ export function TimelineEditorStage({
                     preload="auto"
                   />
                 )
+              ) : audioClip && audioUrl ? (
+                <div className="tl-preview-audio" aria-label="音频预览">
+                  <span className="tl-preview-audio-icon">
+                    <Icon name="audio" size={30} />
+                  </span>
+                  <span className="tl-preview-audio-name">{audioClip.name}</span>
+                  <span className="tl-preview-audio-hint">音频轨 · 播放时出声</span>
+                </div>
               ) : (
                 <p className="tl-preview-empty">没有媒体可供预览</p>
               )}
+              <audio ref={audioRef} src={audioUrl ?? undefined} preload="auto" hidden />
             </div>
             <span className="tl-preview-badge">{resolution}</span>
           </div>

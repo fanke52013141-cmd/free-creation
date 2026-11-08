@@ -933,7 +933,7 @@ function TimelineRefStrip({
   }
 
   return (
-    <div className="tl-refs" data-node-pointer="control" aria-label="引用素材">
+    <div className="tl-refs" aria-label="引用素材">
       <span className="tl-refs-title">引用素材</span>
       <div className="tl-refs-list">
         {assets.map((asset) => (
@@ -1361,15 +1361,9 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
   // 避免级联渲染，也保证「点击画布空白后 Delete 回到画布的删除语义」。
   const activeClipId = nodeSelected ? selectedClipId : null
 
-  // 选中片段期间让画布进入「编辑态」：tldraw 在编辑态会关闭自己的键盘快捷键，
-  // 这样 Delete 不会被画布拿去删节点，只由时间线自己处理片段删除。
-  useEffect(() => {
-    if (activeClipId) editor.setEditingShape(shape.id)
-    else if (editor.getEditingShapeId() === shape.id) editor.setEditingShape(null)
-    return () => {
-      if (editor.getEditingShapeId() === shape.id) editor.setEditingShape(null)
-    }
-  }, [activeClipId, editor, shape.id])
+  // 2026-11-08：不再用 setEditingShape 抢占键盘。Delete/Backspace 已在上面的捕获阶段
+  // 拦截（window keydown capture），足够阻止画布删节点；强行进入编辑态会让 tldraw
+  // 的框选/拖动异常（用户反馈框选轨道线时选框消失、节点拖不动）。
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {

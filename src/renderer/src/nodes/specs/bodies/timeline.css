@@ -1221,6 +1221,39 @@
   object-fit: contain;
 }
 
+/* 音频轨预览：全屏播放器里没有画面时也要能播、能看出正在播的是什么。 */
+.tl-preview-audio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px;
+  color: #9fb0c4;
+  text-align: center;
+}
+.tl-preview-audio-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgb(35 154 211 / 12%);
+  color: #6fd0f5;
+  box-shadow: inset 0 0 0 1px rgb(35 154 211 / 25%);
+}
+.tl-preview-audio-name {
+  max-width: 80%;
+  overflow: hidden;
+  color: #e6edf7;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tl-preview-audio-hint {
+  color: #8a97a8;
+  font-size: 11px;
+}
+
 .tl-preview-frame:fullscreen {
   width: 100vw;
   height: 100vh;
