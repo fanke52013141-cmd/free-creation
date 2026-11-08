@@ -82,6 +82,7 @@ import { flowInitialConfig } from '@shared/agent-flow/model-defaults'
 import type { BuildPreview } from '@shared/agent-flow/builder'
 import { useEngineStore } from '../engine/store'
 import { runWorkflow, runWorkflowForNodes, runNodeManually, cancelFlowCommandExecution, iterationBodyNodeIds, isDocumentOutputNode } from '../engine/executor'
+import { recoverRunningNodes } from '../engine/recoverVideoRuns'
 import {
   runPreparedFlowNodeCommand,
   reportFlowBridgeFailure,
@@ -2348,7 +2349,9 @@ export function CanvasEditor({
     editor.user.updateUserPreferences({ colorScheme: 'dark' })
     if (initialSnapshot) {
       try {
-        const repairedSnapshot = repairTldrawSnapshot(initialSnapshot, { interruptRunning: true })
+        // 保留 running 状态：视频任务可能仍在主进程轮询；加载完成后由
+        // recoverRunningNodes 按持久化 taskId 接回，无任务号的才标记中断。
+        const repairedSnapshot = repairTldrawSnapshot(initialSnapshot)
         editor.store.loadStoreSnapshot(editor.store.migrateSnapshot(repairedSnapshot as never))
       } catch {
         reportCanvasFailure(project.id, 'mount-restore')
@@ -2370,6 +2373,9 @@ export function CanvasEditor({
     // 退役旧“分组节点”：成员关系迁移为 tldraw 原生 group；旧“合成节点”直接移出画布。
     const migratedGroups = migrateRetiredNodes(editor)
     if (migratedGroups > 0) toast(`已将 ${migratedGroups} 个旧分组迁移为画布分组状态`)
+
+    // 后台仍在生成的视频任务：按持久化 taskId 接回；其余 running 记录标记中断。
+    disposers.push(recoverRunningNodes(editor, project.id))
 
     // 兼容旧版本由 tldraw 默认粘贴产生的原生 image shape：成功落盘后再替换为图片节点。
     const rawImages = editor.getCurrentPageShapes().filter((shape) => shape.type === 'image')
