@@ -59,3 +59,41 @@
 ## 8. 下一工作包
 
 F5：视频/音频/时间线接入——video-asset 导入、video-frame/video-clip/sound-adjust 本地执行（ffmpeg 已在本机 PATH 验证可用）、timeline 轨道/片段编辑（graph.patch 配置通道）与合成、任务恢复。
+
+---
+
+# F5 第一批交付：本地视频/音频节点执行桌面验收
+
+日期：2026-11-08。基线：F4（`deed9cf`）。
+
+## 1. 实际完成的业务动作（GUI / CLI / MCP 状态）
+
+| 业务动作 | GUI | CLI | MCP | 公共实现 |
+| --- | --- | --- | --- | --- |
+| 视频素材导入与节点引用 | ✅ | ✅ media.import + graph.patch media | ✅ 同左 | 与图片同一媒体登记服务 |
+| 抽帧（指定时刻） | ✅ video-frame 节点执行 | ✅ node.execute(single) | ✅ 同左 | 同一 executor + ffmpeg；2000ms 帧产物 PNG 落盘并索引 |
+| 视频截取（画面+音频双产物） | ✅ video-clip 节点执行 | ✅ 同左 | ✅ 同左 | 3s–6s 区间，产物时长与区间一致（ffprobe 实测 3s）；画面/音频分端口投影（runId 圈定，R-06） |
+| 声音调整（倍速） | ✅ sound-adjust 节点执行 | ✅ 同左 | ✅ 同左 | 2× 倍速产物时长 5.006s（源 10s），与 GUI 同一 ffmpeg 管线 |
+
+共享确定性投影新增 video-frame/video-clip/sound-adjust/video-depth/video-clay（与 GUI specs 同语义）；output.get 的 UNSUPPORTED_CONTRACT 边界相应收窄。
+
+## 2. 验证证据
+
+- 里程碑脚本 19 项检查全部通过（qa/local-agent-access/milestone-a-b-c/report.json），含 F5 三段（frame/clip/adjust）。
+- 产物时长用 ffprobe 独立核验（clip=3s、adjust≈5s），不依赖自报回执。
+- verify:agent-access 通过（35 操作）；typecheck 通过。
+
+## 3. 过程发现
+
+- video-clip 的 keepVideo/keepAudio 开关仅在 version=3 配置下生效（v2 历史语义不同）——外部契约必须携带 version 字段，已按 GUI 解析规则对齐。
+
+## 4. 尚未支持 / 仅模拟验证
+
+1. video（付费生视频）、speech/tts/voice-design（付费语音）未做真实供应商验收。
+2. video-depth/video-clay 需要本地 Python/GPU 依赖，本机未验收（依赖探测 F9）。
+3. timeline 轨道/片段编辑接入（graph.patch 配置通道）与合成渲染在 F5 第二批。
+4. 取消清理（迟到产物删除）随长任务验收。
+
+## 5. 下一工作包
+
+F5 第二批：timeline 轨道/片段/入出点编辑接入（graph.patch config 通道承载 timeline JSON）+ 合成渲染桌面验收；audio 素材节点链路。

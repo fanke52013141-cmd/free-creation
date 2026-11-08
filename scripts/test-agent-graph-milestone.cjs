@@ -586,6 +586,141 @@ async function launchLicensedApp(dataDirectory) {
       }
     }
 
+    // ── 6.7 F5 视频/音频：抽帧 / 截取双产物 / 声音调整（本机 ffmpeg）──
+    {
+      const stable = async (projectId) => {
+        let previous = -1
+        for (let i = 0; i < 15; i++) {
+          const probe = await runCli(directory, ['project', 'get'], { input: { projectId } })
+          const current = probe.response.data.meta.graphVersion
+          if (current === previous) return current
+          previous = current
+          await new Promise((done) => setTimeout(done, 900))
+        }
+        return previous
+      }
+      const executeAnd = async (projectId, version, nodeId, label) => {
+        const executed = await runCli(directory, ['node', 'execute'], {
+          input: { projectId, expectedGraphVersion: version, nodeIds: [nodeId], mode: 'single', confirmPaidRerun: false },
+          idempotencyKey: key()
+        })
+        check(executed.response.status === 'completed', `${label}_SUBMIT_FAILED:${JSON.stringify(executed.response.error)}`)
+        const waited = await runCli(directory, ['run', 'wait'], { input: { projectId, taskId: executed.response.data.taskId, timeoutMs: 90000 } }, 120000)
+        return waited
+      }
+      const mediaCount = async (projectId) => {
+        const listed = await runCli(directory, ['media', 'list'], { input: { projectId, limit: 200 } })
+        return listed.response.data.total
+      }
+      const importFixture = async (projectId, relPath, name) => {
+        const imported = await runCli(directory, ['media', 'import'], { input: { projectId, filePath: join(appRoot, relPath), name }, idempotencyKey: key() })
+        check(imported.response.status === 'completed', `${name}_IMPORT_FAILED:${JSON.stringify(imported.response.error)}`)
+        return imported.response.data.mediaId
+      }
+      const artifactOnDisk = (mediaPath) => existsSync(join(directory, (mediaPath ?? '').replace(/\//g, sep)))
+
+      // (a) 视频素材导入 + 抽帧：指定 2000ms 时刻 → PNG 产物
+      {
+        const videoId = await importFixture(created.A, 'qa-fixtures/media/video/V-AV.mp4', '验收视频')
+        const version = await stable(created.A)
+        const patched = await runCli(directory, ['graph', 'patch'], {
+          input: {
+            projectId: created.A,
+            expectedGraphVersion: version,
+            ops: [
+              { action: 'node.create', ref: 'v-src', nodeType: 'video-asset', x: 60, y: 3500, media: { mediaId: videoId } },
+              { action: 'node.create', ref: 'v-frame', nodeType: 'video-frame', x: 480, y: 3500, config: { mode: 'custom', timeMs: 2000, format: 'png' } },
+              { action: 'edge.create', from: { nodeId: 'v-src', portId: 'out-video' }, to: { nodeId: 'v-frame', portId: 'in-video' } }
+            ]
+          },
+          idempotencyKey: key()
+        })
+        check(patched.response.status === 'completed', `FRAME_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
+        const fNode = patched.response.data.created.find((c) => c.ref === 'v-frame')
+        const waited = await executeAnd(created.A, patched.response.data.graphVersion, fNode.nodeId, 'FRAME')
+        check(waited.response.data.state === 'completed', `FRAME_DID_NOT_COMPLETE:${waited.response.data.state}:${waited.response.data.error}`)
+        const output = await runCli(directory, ['output', 'get'], { input: { projectId: created.A, nodeId: fNode.nodeId } })
+        const frame = (output.response.data.outputs || []).find((o) => o.portId === 'out-image')
+        check(frame && frame.mime === 'image/png' && artifactOnDisk(frame.mediaPath), `FRAME_ARTIFACT_INVALID:${JSON.stringify(output.response.data.outputs)}`)
+        receipt.frame = { mediaId: frame && frame.mediaId }
+        receipt.checks.push('F5 video-frame: 2000ms frame extraction from imported video materializes an indexed PNG')
+      }
+
+      // (b) 视频截取：3s–6s，保留画面+音频 → 同一区间双产物
+      {
+        const videoId = await importFixture(created.A, 'qa-fixtures/media/video/V-AV.mp4', '截取源视频')
+        const version = await stable(created.A)
+        const before = await mediaCount(created.A)
+        const patched = await runCli(directory, ['graph', 'patch'], {
+          input: {
+            projectId: created.A,
+            expectedGraphVersion: version,
+            ops: [
+              { action: 'node.create', ref: 'c-src', nodeType: 'video-asset', x: 60, y: 3900, media: { mediaId: videoId } },
+              { action: 'node.create', ref: 'c-clip', nodeType: 'video-clip', x: 480, y: 3900, config: { version: 3, startMs: 3000, endMs: 6000, keepVideo: true, keepAudio: true, includeAudio: true } },
+              { action: 'edge.create', from: { nodeId: 'c-src', portId: 'out-video' }, to: { nodeId: 'c-clip', portId: 'in-video' } }
+            ]
+          },
+          idempotencyKey: key()
+        })
+        check(patched.response.status === 'completed', `CLIP_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
+        const clipNode = patched.response.data.created.find((c) => c.ref === 'c-clip')
+        const waited = await executeAnd(created.A, patched.response.data.graphVersion, clipNode.nodeId, 'CLIP')
+        check(waited.response.data.state === 'completed', `CLIP_DID_NOT_COMPLETE:${waited.response.data.state}:${waited.response.data.error}`)
+        const after = await mediaCount(created.A)
+        check(after === before + 2, `CLIP_ASSET_COUNT:${before}->${after}`)
+        const output = await runCli(directory, ['output', 'get'], { input: { projectId: created.A, nodeId: clipNode.nodeId } })
+        const outputs = output.response.data.outputs || []
+        const outVideo = outputs.find((o) => o.portId === 'out-video')
+        const outAudio = outputs.find((o) => o.portId === 'out-audio')
+        check(outVideo && (outVideo.mime || '').startsWith('video/') && artifactOnDisk(outVideo.mediaPath), `CLIP_VIDEO_INVALID:${JSON.stringify(outputs)}`)
+        check(outAudio && (outAudio.mime || '').startsWith('audio/') && artifactOnDisk(outAudio.mediaPath), `CLIP_AUDIO_INVALID:${JSON.stringify(outputs)}`)
+        // 产物时长与区间一致（3s）
+        const probeDuration = (relPath) => {
+          const abs = join(directory, (relPath ?? '').replace(/\//g, sep))
+          try {
+            const out = require('node:child_process').execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', abs], { encoding: 'utf8', timeout: 20000 })
+            return Number(out.trim())
+          } catch { return null }
+        }
+        const clipSec = probeDuration(outVideo.mediaPath)
+        check(clipSec !== null && Math.abs(clipSec - 3) < 0.6, `CLIP_DURATION_MISMATCH:${clipSec}`)
+        receipt.clip = { videoMediaId: outVideo && outVideo.mediaId, audioMediaId: outAudio && outAudio.mediaId, durationSec: clipSec }
+        receipt.checks.push('F5 video-clip: 3s-6s clip materializes both video and audio artifacts of matching range and duration')
+      }
+
+      // (c) 声音调整：视频源倍速 2.0 → 产物时长减半；音频源也各验一条
+      {
+        const audioId = await importFixture(created.A, 'qa-fixtures/media/audio/A-MIX.wav', '调整源音频')
+        const version = await stable(created.A)
+        const patched = await runCli(directory, ['graph', 'patch'], {
+          input: {
+            projectId: created.A,
+            expectedGraphVersion: version,
+            ops: [
+              { action: 'node.create', ref: 's-src', nodeType: 'audio', x: 60, y: 4300, media: { mediaId: audioId } },
+              { action: 'node.create', ref: 's-adjust', nodeType: 'sound-adjust', x: 480, y: 4300, config: { mode: 'rate', rate: 2.0, volumePercent: 100, targetDurationMs: 0 } },
+              { action: 'edge.create', from: { nodeId: 's-src', portId: 'out-audio' }, to: { nodeId: 's-adjust', portId: 'in-audio' } }
+            ]
+          },
+          idempotencyKey: key()
+        })
+        check(patched.response.status === 'completed', `ADJUST_PATCH_FAILED:${JSON.stringify(patched.response.error)}`)
+        const sNode = patched.response.data.created.find((c) => c.ref === 's-adjust')
+        const waited = await executeAnd(created.A, patched.response.data.graphVersion, sNode.nodeId, 'ADJUST')
+        check(waited.response.data.state === 'completed', `ADJUST_DID_NOT_COMPLETE:${waited.response.data.state}:${waited.response.data.error}`)
+        const output = await runCli(directory, ['output', 'get'], { input: { projectId: created.A, nodeId: sNode.nodeId } })
+        const adjusted = (output.response.data.outputs || []).find((o) => o.portId === 'out-audio')
+        check(adjusted && (adjusted.mime || '').startsWith('audio/') && artifactOnDisk(adjusted.mediaPath), `ADJUST_ARTIFACT_INVALID:${JSON.stringify(output.response.data.outputs)}`)
+        const abs = join(directory, (adjusted.mediaPath ?? '').replace(/\//g, sep))
+        const out = require('node:child_process').execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', abs], { encoding: 'utf8', timeout: 20000 })
+        const duration = Number(out.trim())
+        check(Math.abs(duration - 5) < 0.8, `ADJUST_RATE_MISMATCH:${duration}`)
+        receipt.adjust = { mediaId: adjusted.mediaId, durationSec: duration }
+        receipt.checks.push('F5 sound-adjust: 2x rate adjustment halves duration via the same ffmpeg pipeline as GUI')
+      }
+    }
+
     // ── 7. 保存、关闭并重启；重启后图与任务账本一致 ──
     // 运行后的节点状态写入有 800ms 防抖：等版本连续两次读数稳定后再保存。
     const stableVersion = async (projectId) => {

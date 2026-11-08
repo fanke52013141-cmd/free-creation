@@ -38,6 +38,12 @@ export const DETERMINISTIC_PROJECTIONS = {
   'video-asset': projectVideoAssetOutputs,
   // 轨道线成片走与视频生成相同的 out-video 投影：只认最近一次成功运行的产物。
   timeline: projectVideoOutputs,
+  // F5：抽帧/截取/声音调整/深度/白模与 GUI specs 同一投影语义。
+  'video-frame': projectVideoFrameOutputs,
+  'video-clip': projectVideoClipOutputs,
+  'sound-adjust': projectSoundAdjustOutputs,
+  'video-depth': projectVideoAiOutputsShared,
+  'video-clay': projectVideoAiOutputsShared,
   'ai-review': projectReviewOutputs,
   agent: projectAgentOutputs,
   text: projectTextOutputs,
@@ -47,7 +53,7 @@ export const DETERMINISTIC_PROJECTIONS = {
 
 function latestResultMediaOutput(
   shape: NodeShape,
-  kind: 'image' | 'audio',
+  kind: 'image' | 'audio' | 'video',
   portId: string
 ): RawNodeOutputs {
   const item = parseMediaResultCollection(shape.meta?.nodeResult ?? '')?.results.at(-1)
@@ -105,6 +111,79 @@ export function projectImageSplitOutputs(shape: NodeShape): RawNodeOutputs {
 
 export function projectImageEditOutputs(shape: NodeShape): RawNodeOutputs {
   return latestResultMediaOutput(shape, 'image', 'out-image')
+}
+
+/** 抽帧：最近一次成功运行产出的帧图片（与 GUI projectVideoFrameOutputs 同语义）。 */
+export function projectVideoFrameOutputs(shape: NodeShape): RawNodeOutputs {
+  return latestResultMediaOutput(shape, 'image', 'out-image')
+}
+
+/** 深度/白模本地转换：一次运行发布一条独立 MP4，经 out-video 投影。 */
+export function projectVideoAiOutputsShared(shape: NodeShape): RawNodeOutputs {
+  return latestResultMediaOutput(shape, 'video', 'out-video')
+}
+
+/**
+ * 视频截取（契约 v5）一次运行可物化画面与音频两条产物：按本次运行 runId 圈定，
+ * 再按 MIME 主类型各取最近一条；无匹配 runId 的旧数据回退原行为（R-06）。
+ */
+export function projectVideoClipOutputs(shape: NodeShape): RawNodeOutputs {
+  const collection = parseMediaResultCollection(shape.meta?.nodeResult ?? '')
+  const results = collection?.results
+  if (!results?.length) return latestResultMediaOutput(shape, 'video', 'out-video')
+  // 与 GUI readNodeRunRecord 同一识别规则：合法运行记录才可作为圈定依据。
+  const runMeta = shape.meta?.nodeRun
+  const run =
+    runMeta && typeof runMeta === 'object' && readStoredNodeRunStatus(runMeta)
+      ? (runMeta as { runId?: unknown; status?: unknown })
+      : null
+  if (run && run.status === 'failed') return {}
+  const currentRunResults =
+    run && typeof run.runId === 'string'
+      ? results.filter((item) => item.runId === run.runId)
+      : []
+  const effective = currentRunResults.length > 0 ? currentRunResults : results
+  const byKind = (kind: 'video' | 'audio') =>
+    effective.filter((item) => (item.mime ?? '').startsWith(`${kind}/`)).at(-1)
+  const output: RawNodeOutputs = {}
+  const name = shape.props.title ? { name: shape.props.title } : {}
+  for (const [kind, portId] of [
+    ['video', 'out-video'],
+    ['audio', 'out-audio']
+  ] as const) {
+    const item = byKind(kind)
+    if (item)
+      output[portId] = {
+        kind,
+        mediaId: item.mediaId,
+        mediaPath: item.mediaPath,
+        mime: item.mime,
+        ...name
+      }
+  }
+  return output
+}
+
+/** 声音调整一次只处理一种源媒体；按产物 MIME 决定投给 out-audio 还是 out-video。 */
+export function projectSoundAdjustOutputs(shape: NodeShape): RawNodeOutputs {
+  const result = parseMediaResultCollection(shape.meta?.nodeResult ?? '')?.results.at(-1)
+  if (!result) return {}
+  const kind = result.mime.startsWith('video/')
+    ? 'video'
+    : result.mime.startsWith('audio/')
+      ? 'audio'
+      : null
+  if (!kind) return {}
+  const portId = kind === 'audio' ? 'out-audio' : 'out-video'
+  return {
+    [portId]: {
+      kind,
+      mediaId: result.mediaId,
+      mediaPath: result.mediaPath,
+      mime: result.mime,
+      ...(shape.props.title ? { name: shape.props.title } : {})
+    }
+  }
 }
 
 export function projectTtsOutputs(shape: NodeShape): RawNodeOutputs {
