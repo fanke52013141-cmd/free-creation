@@ -29,7 +29,8 @@ describe('统一画布视觉基础', () => {
     // 2026-11-07：关闭态触发器必须单行省略，不能把长模型名换成两排。
     expect(foundation).toMatch(/\.app-select-trigger\s*\{[^}]*white-space:\s*nowrap/)
     expect(foundation).toContain('.app-select-trigger > span:first-child')
-    expect(appSelect).toContain('title={triggerTitle}')
+    expect(appSelect).toContain('selectTriggerTitle(selectedOption')
+    expect(appSelect).toContain('title={selectTriggerTitle(selectedOption, triggerProps.title)}')
     expect(foundation).toContain(".app-select-item[data-state='checked']")
     expect(
       readFileSync(resolve(root, 'src/renderer/src/assets/ui-surfaces.css'), 'utf8')

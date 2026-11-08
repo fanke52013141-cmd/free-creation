@@ -91,6 +91,19 @@ function collectOptions(children: ReactNode): NativeOption[] {
 }
 
 /**
+ * 关闭态触发器只显示一行，title 提供完整文案（长模型名不被截断到读不全）。
+ * 调用方显式 title 与完整 label 不同时合并展示，避免丢信息。
+ */
+function selectTriggerTitle(option: NativeOption | undefined, fallback?: string): string | undefined {
+  const label =
+    typeof option?.label === 'string' ? option.label : option?.triggerLabel ?? ''
+  if (!label) return fallback
+  return fallback && fallback !== label && !label.includes(fallback)
+    ? `${label}（${fallback}）`
+    : label
+}
+
+/**
  * Shared single-select control. It retains the project's existing <option> call-site API while
  * rendering an accessible Radix listbox in a body portal with collision-aware placement.
  */
@@ -116,19 +129,6 @@ export function AppSelect({
   const contentRef = useRef<HTMLDivElement>(null)
   const selectedValue = value === undefined ? uncontrolledValue : value
   const selectedOption = options.find((option) => option.value === selectedValue)
-  // 触发器只显示一行：完整文案用于 title 悬浮提示，避免长模型名把下拉撑成两行。
-  const selectedLabelText =
-    typeof selectedOption?.label === 'string'
-      ? selectedOption.label
-      : selectedOption?.triggerLabel ?? ''
-  const triggerTitle = selectedLabelText
-    ? triggerProps.title &&
-      triggerProps.title !== selectedLabelText &&
-      !selectedLabelText.includes(triggerProps.title)
-      ? `${selectedLabelText}（${triggerProps.title}）`
-      : selectedLabelText
-    : triggerProps.title
-
   const closeSelect = useCallback((): void => {
     if (activeAppSelect?.owner === owner.current) activeAppSelect = null
     setOpen(false)
@@ -209,7 +209,7 @@ export function AppSelect({
         }}
         className={`app-select app-select-trigger ${className}`.trim()}
         aria-haspopup="listbox"
-        title={triggerTitle}
+        title={selectTriggerTitle(selectedOption, triggerProps.title)}
       >
         {/* 有 triggerLabel 的选项：关闭态显示短标签（如仅模型名），下拉里仍展示完整 label */}
         <Select.Value placeholder={selectedValue}>
