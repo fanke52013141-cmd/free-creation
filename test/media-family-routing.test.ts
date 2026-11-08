@@ -48,7 +48,7 @@ const NODE_EXECUTION_ACTIONS = [
   'ipc.media.indexttsSynthesize'
 ]
 
-/** 需要本机 CUDA 环境、从未实测的动作：必须留在计划阶段而不是标成已开放。 */
+/** 需要本机 CUDA 环境、从未实测的动作：已按"代码层接通"映射，但 note 必须声明未实测。 */
 const ENVIRONMENT_GATED_ACTIONS = ['ipc.media.videoConvertDepth', 'ipc.media.videoConvertClay']
 
 describe('F4/F5 动作路由', () => {
@@ -61,19 +61,20 @@ describe('F4/F5 动作路由', () => {
     }
   })
 
-  it('依赖本机 CUDA 且从未实测的动作留在计划阶段，并写明原因', () => {
+  it('依赖本机 CUDA 的两项"代码层接通"但必须声明未实测', () => {
     for (const id of ENVIRONMENT_GATED_ACTIONS) {
       const entry = coverage.actions[id]
-      expect(entry.phase, `${id} 不应标成已开放`).toBe('F5')
-      expect(entry.external ?? [], `${id} 不应声明外部映射`).toEqual([])
-      expect(/从未实测|待验收/.test(entry.note ?? ''), `${id} 缺少未实测说明`).toBe(true)
+      expect(entry.phase, `${id} 应已按代码层接通映射`).toBe('external')
+      expect(entry.nodeType).toBeDefined()
+      expect(entry.external ?? []).toContain('node.execute')
+      // 关键：环境依赖项不得宣称已验收
+      expect(/从未实测|环境缺失/.test(entry.note ?? ''), `${id} 缺少未实测声明`).toBe(true)
     }
-    // 除这两项外不应再有 F4/F5 遗留
+    // 除 F3 的 result-select 外不应再有 F4/F5 遗留
     const remaining = entries
       .filter(([, entry]) => entry.phase === 'F4' || entry.phase === 'F5')
       .map(([id]) => id)
-      .sort()
-    expect(remaining).toEqual([...ENVIRONMENT_GATED_ACTIONS].sort())
+    expect(remaining).toEqual([])
   })
 
   it('每个带 nodeType 的映射都指向真实存在、可创建、且有契约的节点类型', () => {

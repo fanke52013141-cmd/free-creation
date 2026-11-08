@@ -644,15 +644,29 @@
       "label": "深度视频转换",
       "channel": "media:video-convert-depth",
       "gui": "video-depth 节点执行",
-      "phase": "F5",
-      "note": "F5 待验收：GUI 该动作是「深度视频转换」节点执行，但需要本机 Python + CUDA 推理环境（先经 environment.videoEngine.install 安装），且 video-depth 从未实测 —— 在环境未就绪时 node.execute 只会如实失败，因此不把它标成已开放"
+      "phase": "external",
+      "note": "F5：深度视频转换经 node.execute 发起（代码层已接通）。需先经 environment.videoEngine.install 装好本机 Python+CUDA 推理环境；**环境缺失时如实失败、真实转换从未实测**，不得宣称已验收",
+      "nodeType": "video-depth",
+      "external": [
+        "node.execute",
+        "run.get",
+        "run.wait",
+        "output.get"
+      ]
     },
     "ipc.media.videoConvertClay": {
       "label": "白模视频转换",
       "channel": "media:video-convert-clay",
       "gui": "video-clay 节点执行",
-      "phase": "F5",
-      "note": "F5 待验收：GUI 该动作是「白模视频转换」节点执行，但需要本机 Python + CUDA 推理环境（先经 environment.videoEngine.install 安装），且 video-clay 从未实测 —— 在环境未就绪时 node.execute 只会如实失败，因此不把它标成已开放"
+      "phase": "external",
+      "note": "F5：白模视频转换经 node.execute 发起（代码层已接通）。需先经 environment.videoEngine.install 装好本机 Python+CUDA 推理环境；**环境缺失时如实失败、真实转换从未实测**，不得宣称已验收",
+      "nodeType": "video-clay",
+      "external": [
+        "node.execute",
+        "run.get",
+        "run.wait",
+        "output.get"
+      ]
     },
     "ipc.media.videoConvertCancel": {
       "label": "转换取消",
@@ -1110,8 +1124,11 @@
       "label": "密钥连接列表",
       "channel": "gateway:keys:list-connections",
       "gui": "模型设置",
-      "phase": "F9",
-      "note": "对外按去敏连接身份暴露（model 连接族）"
+      "phase": "external",
+      "note": "F9：可导出为凭据包的连接清单（导出前选择用），只给 id/名称/协议/模型数，不含密钥",
+      "external": [
+        "provider.exportableConnections"
+      ]
     },
     "ipc.keys.sealPackage": {
       "label": "凭据封包",
@@ -1135,13 +1152,21 @@
       "label": "供应商列表",
       "channel": "gateway:providers:list",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "provider.list"
+      ],
+      "note": "F9：供应商目录读取（新目录优先，旧 providers 表保留为遗留档案）；字段白名单只给 id/名称/协议/模型数/是否有密钥/是否遗留，不返回地址、鉴权头或密钥材料，不联网探测"
     },
     "ipc.keys.executableProviders": {
       "label": "可执行供应商",
       "channel": "gateway:providers:executable",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "provider.listExecutable"
+      ],
+      "note": "F9：节点执行实际可用的供应商目录（与 GUI 节点模型选择器同一来源），不返回地址或密钥"
     },
     "ipc.keys.saveProvider": {
       "label": "供应商保存",
