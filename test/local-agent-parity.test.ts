@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { closeDb, getDataDir } from '../src/main/store/db'
+import { openProject } from '../src/main/store/projects.repo'
 import { LocalAccessService } from '../src/main/agent-access/service'
 import { setGatewayEventSink } from '../src/main/diagnostics/gateway-events'
 import {
@@ -120,5 +121,38 @@ describe('运行时目录与 Registry 一致', () => {
     expect(data.dataStoreId).toBe(service.dataStoreId)
     expect(data.apiVersion).toBe(1)
     expect(data.nextIdempotencyKey).toMatch(/^\d{13}:[a-f0-9-]{36}$/)
+  })
+
+  it('外部 project.create 与 GUI 新建项目得到相同的节点可见集（预设 all = 全部可创建类型）', async () => {
+    // 回归背景：外部创建曾落到 general 预设（24 类），用户在 GUI 打开后发现
+    // 裁剪/拆分/截取/音色设计/导演台等 8 类节点"不见了"——同一个业务动作在
+    // 两个入口给出不同的默认可见集，属于三入口不一致。
+    const created = await service.dispatch({
+      apiVersion: 1,
+      operationVersion: 1,
+      operationId: 'project.create',
+      input: { name: '可见集一致性' },
+      requestId: randomUUID(),
+      expectedDataStoreId: service.dataStoreId,
+      idempotencyKey: `${Date.now()}:${randomUUID()}`
+    })
+    expect(created.status, JSON.stringify(created.error)).toBe('completed')
+    const projectId = (created.data as { meta: { id: string } }).meta.id
+    const file = openProject(projectId)!
+    expect(file.workspaceProfile?.presetId).toBe('all')
+    const visible = new Set(file.workspaceProfile?.visibleNodeTypeIds ?? [])
+    for (const type of ACTIVE_NODE_TYPE_IDS) expect(visible.has(type), `缺少 ${type}`).toBe(true)
+    // 明确守住此前缺失的 8 类（高级节点必须默认可见，否则用户以为功能被砍）。
+    for (const type of [
+      'image-crop',
+      'image-split',
+      'video-clip',
+      'video-depth',
+      'video-clay',
+      'voice-design',
+      'director',
+      'ai-process'
+    ])
+      expect(visible.has(type), `高级节点 ${type} 不在默认可见集`).toBe(true)
   })
 })

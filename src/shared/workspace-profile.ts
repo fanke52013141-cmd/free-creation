@@ -1,3 +1,5 @@
+import { DISTRIBUTION_EDITION, DISTRIBUTION_HIDDEN_NODE_TYPES } from './edition'
+import { ACTIVE_NODE_TYPE_IDS } from './types'
 /** Per-project node visibility. IDs are stable node protocol IDs, never labels. */
 export interface WorkspaceProfile {
   schemaVersion: 1
@@ -35,11 +37,38 @@ export const GENERAL_WORKSPACE_NODE_TYPES = [
   'code'
 ] as const
 
+/**
+ * 与 GUI「新建项目」同一默认：预设 `all`，可见集合 = 全部当前可创建节点。
+ *
+ * 为什么需要它：GUI 的新建项目对话框默认 `presetId: 'all'` + 全部可创建节点，
+ * 而外部 `project.create` 此前落到 `defaultWorkspaceProfile()`（`general` 预设，
+ * 只有 24 个常用节点）。于是同一个业务动作"创建项目"在两个入口得到不同的节点可见集：
+ * CLI/MCP 建的项目打开后调色板里没有裁剪/拆分/截取/音色设计/导演台等 8 类节点，
+ * 用户会以为功能缺失（实际是可见集不同）。外部入口必须与 GUI 对齐。
+ *
+ * 发行版（`CANVAS_DISTRIBUTION=1`）沿用同一条裁剪清单；常规开发/测试构建不裁剪。
+ */
+export function allWorkspaceProfile(): WorkspaceProfile {
+  const creatable = DISTRIBUTION_EDITION
+    ? ACTIVE_NODE_TYPE_IDS.filter((type) => !DISTRIBUTION_HIDDEN_NODE_TYPES.has(type))
+    : [...ACTIVE_NODE_TYPE_IDS]
+  return {
+    schemaVersion: 1,
+    presetId: 'all',
+    visibleNodeTypeIds: creatable,
+    nodeSetRevision: WORKSPACE_NODE_SET_REVISION
+  }
+}
+
 export function defaultWorkspaceProfile(): WorkspaceProfile {
+    // 发行版：默认可见集合排除裁剪节点（与调色板过滤同一清单）。
+    const visibleTypes = DISTRIBUTION_EDITION
+      ? GENERAL_WORKSPACE_NODE_TYPES.filter((type) => !DISTRIBUTION_HIDDEN_NODE_TYPES.has(type))
+      : [...GENERAL_WORKSPACE_NODE_TYPES]
   return {
     schemaVersion: 1,
     presetId: 'general',
-    visibleNodeTypeIds: [...GENERAL_WORKSPACE_NODE_TYPES],
+    visibleNodeTypeIds: visibleTypes,
     nodeSetRevision: WORKSPACE_NODE_SET_REVISION
   }
 }

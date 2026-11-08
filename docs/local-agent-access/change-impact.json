@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "F9（一）三入口目录一致性门禁：审计脚本新增孤儿操作/例外腐化/CLI 保留字/MCP 撞名/外部动作缺 GUI 入口五类检查；action-coverage 补齐 5 个读取型分母（chat 会话/技能、run 观察、model 目录、project 摘要）；新增运行时 parity 测试。同时把并行开发中的 F8 flow commands（lookup/availability/reconcile 3 项，additive）与 flow agents 登记写入快照。兼容结论：既有操作 Schema 除新增外逐字节未变（未使用 --accept-contract-change），操作数 77→86；本提交只含上述门禁与分母文件，flow 源码见其独立提交。",
+  "reason": "修复三入口不一致：外部 project.create 在未给节点可见集时改用 allWorkspaceProfile()（预设 all = 全部 32 类可创建节点），与 GUI 新建项目对齐；此前落到 general 预设（24 类），导致 CLI/MCP 建的项目在 GUI 打开后缺少裁剪/拆分/截取/音色设计/导演台等 8 类节点入口。兼容结论：无操作 Schema 变化（86 项不变），仅创建项目时的默认 workspaceProfile 取值与 GUI 对齐；老项目已保存的可见集不受影响。",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "97d2ffb5e2403b33a2d3ac8ab3eee8272f78cf948e4c73ab53cc662bd73a5a6f",
@@ -106,7 +106,7 @@
     "src/main/store/db.ts": "00d4366589b48881808f9669330ea040dab7ff049e7d5d160145ee6dc8f5598f",
     "src/main/store/library.repo.ts": "38ec0e5212f74866fcc0a71d7e73a2a8c87fdcdddd2326963e9aa3795bfe04dd",
     "src/main/store/process-lock.ts": "ad98b5d869a954ba0e3a83e4a52fe12c40e3d9921b4379a5df81b7fa64038dfd",
-    "src/main/store/projects.repo.ts": "31dd64b9febbb7844a718521e6e2e65bad8c77f415ba47962982b656b152e42d",
+    "src/main/store/projects.repo.ts": "414502b44ac96c2ac681b0faf253e4c0c5c540fb94af8c8d94371e320ecaa29a",
     "src/main/store/transfer.ts": "9bb2c234482ddb97a70fbaee3ebd28a38f975f23fa5647239d1da17b42f0d4da",
     "src/preload/index.ts": "50ac184b2f23b8860e71dbb311886169c08df7eec71fe25780a7e6bd9330a17a",
     "src/renderer/src/App.tsx": "2c668996c4a04a85c27e9bedc3845c2265c6e0a90e64ad5efbd267b127e9e3d5",

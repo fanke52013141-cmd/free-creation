@@ -20,7 +20,11 @@ import {
 import { basename, join } from 'path'
 import type { ProjectFile, ProjectMeta } from '../../shared/types'
 import type { WorkspaceProfile } from '../../shared/workspace-profile'
-import { defaultWorkspaceProfile, normalizeWorkspaceProfile } from '../../shared/workspace-profile'
+import {
+  allWorkspaceProfile,
+  defaultWorkspaceProfile,
+  normalizeWorkspaceProfile
+} from '../../shared/workspace-profile'
 import { remapMediaReferences } from '../../shared/media-reference-remap'
 import {
   GraphVersionConflictError,
@@ -255,9 +259,12 @@ export function createProject(
   if (!/^[a-zA-Z0-9_-]{1,80}$/.test(id)) throw new Error('INVALID_PROJECT_ID')
   if (getProject(id) || existsSync(projectDir(id))) throw new Error('PROJECT_ALREADY_EXISTS')
   const now = Date.now()
+  // 未显式给节点可见集时，与 GUI「新建项目」保持同一默认（预设 all = 全部可创建节点）。
+  // 此前这里落到 general 预设（24 类），导致外部 project.create 建的项目打开后
+  // 调色板缺少裁剪/拆分/截取/音色设计/导演台等节点，被误认为功能缺失。
   const profile = workspaceProfile
     ? normalizeWorkspaceProfile(workspaceProfile)
-    : defaultWorkspaceProfile()
+    : allWorkspaceProfile()
   if (!profile) throw new Error('工作台节点配置无效')
   mkdirSync(join(projectDir(id), 'media'), { recursive: true })
 
