@@ -26227,11 +26227,9 @@
             "maxLength": 60
           },
           "confirmNetwork": {
-            "default": false,
             "type": "boolean"
           },
           "confirmCost": {
-            "default": false,
             "type": "boolean"
           }
         },
@@ -26305,6 +26303,288 @@
               "operation",
               "status",
               "message"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "model.discover",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "拉取某个已保存连接在供应商侧的可用模型列表（与 GUI「拉取可用模型」同一实现：同一端点绑定校验、同一诊断事件）；会向供应商发请求，必须显式 confirmNetwork=true 才执行；外部只给 connectionId，不提供密钥或地址",
+      "requires": [],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "confirmNetwork": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "connectionId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "model.discover"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "connectionId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "models": {
+                "maxItems": 500,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "name": {
+                      "type": "string",
+                      "maxLength": 200
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "connectionId",
+              "models",
+              "total"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "model.validateAgentToolCalling",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "验证某个文本模型是否支持 Agent 强制结构化工具调用与工具结果往返（与 GUI「验证 Agent 工具调用」同一实现）；会向供应商发真实请求、**可能产生费用**，必须同时显式 confirmNetwork=true 与 confirmCost=true；结果写入该模型的工具调用验证快照",
+      "requires": [],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "modelDefinitionId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "confirmNetwork": {
+            "type": "boolean"
+          },
+          "confirmCost": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "connectionId",
+          "modelDefinitionId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "model.validateAgentToolCalling"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "connectionId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "modelDefinitionId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "verified",
+                  "failed"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 400
+              },
+              "action": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "checkedAt": {
+                "type": "string",
+                "maxLength": 60
+              }
+            },
+            "required": [
+              "connectionId",
+              "modelDefinitionId",
+              "status",
+              "message",
+              "checkedAt"
             ],
             "additionalProperties": false
           },

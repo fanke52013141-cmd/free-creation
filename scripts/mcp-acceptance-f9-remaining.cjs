@@ -1,4 +1,4 @@
-﻿/**
+/**
  * F9 剩余可做项验收：供应商管理（3）+ 凭据包导入闸门（2）+ 即梦登录闸门（2）。
  *
  * 真实 MCP 协议栈 + 真实桌面会话。
@@ -138,6 +138,42 @@ async function main() {
       const response = await call('provider.probe', { providerId: 'acc-admin-1' })
       expect(response?.status === 'failed', '未确认却执行了探测')
       expect(response.error?.code === 'NETWORK_CONFIRM_REQUIRED', `错误码=${response.error?.code}`)
+      return { code: response.error.code }
+    })
+
+    // ── 批 4 解锁项：模型发现 / Agent 工具调用验证（与 GUI 共用同一实现）──
+    await check('model.discover 未确认必须拒绝（零请求）', async () => {
+      const response = await call('model.discover', { connectionId: 'acc-conn' })
+      expect(response?.status === 'failed', '未确认却发起了拉取请求')
+      expect(response.error?.code === 'NETWORK_CONFIRM_REQUIRED', `错误码=${response.error?.code}`)
+      return { code: response.error.code }
+    })
+
+    await check('model.validateAgentToolCalling 需网络+费用双重确认', async () => {
+      const noNetwork = await call('model.validateAgentToolCalling', {
+        connectionId: 'acc-conn',
+        modelDefinitionId: 'acc-model'
+      })
+      expect(noNetwork.error?.code === 'NETWORK_CONFIRM_REQUIRED', `code=${noNetwork.error?.code}`)
+      const noCost = await call('model.validateAgentToolCalling', {
+        connectionId: 'acc-conn',
+        modelDefinitionId: 'acc-model',
+        confirmNetwork: true
+      })
+      expect(noCost.error?.code === 'COST_CONFIRM_REQUIRED', `code=${noCost.error?.code}`)
+      return { network: noNetwork.error.code, cost: noCost.error.code }
+    })
+
+    await check('model.discover 确认后对不存在的连接给稳定码', async () => {
+      const response = await call('model.discover', {
+        connectionId: 'no-such-conn',
+        confirmNetwork: true
+      })
+      expect(response?.status === 'failed', `不应成功：${JSON.stringify(response?.data)}`)
+      expect(
+        ['DISCOVERY_FAILED', 'NOT_FOUND', 'MODEL_CONFIGURATION_ERROR'].includes(response.error?.code),
+        `错误码=${response.error?.code}`
+      )
       return { code: response.error.code }
     })
 

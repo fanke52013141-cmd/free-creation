@@ -1470,7 +1470,11 @@
       "label": "模型发现",
       "channel": "models:connections:discover",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "model.discover"
+      ],
+      "note": "F9：拉取已保存连接在供应商侧的可用模型列表。与 GUI「拉取可用模型」**共用同一实现**（端点绑定校验：密钥来源必须与目标 URL 一致；同一诊断事件）；需 confirmNetwork；外部只给 connectionId，不提供密钥或地址；供应商失败给稳定码 DISCOVERY_FAILED"
     },
     "ipc.models.validate": {
       "label": "模型验证",
@@ -1486,7 +1490,11 @@
       "label": "Agent 工具调用验证",
       "channel": "models:definitions:validate-agent-tool-calling",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "model.validateAgentToolCalling"
+      ],
+      "note": "F9：验证模型是否支持 Agent 强制结构化工具调用与工具结果往返。与 GUI「验证 Agent 工具调用」**共用同一实现**（含能力/协议校验与 revision 防护）；会真实请求且可能计费，需 confirmNetwork+confirmCost；结果写入该模型的工具调用验证快照"
     },
     "ipc.models.saveBinding": {
       "label": "默认绑定保存",

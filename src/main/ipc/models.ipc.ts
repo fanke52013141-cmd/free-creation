@@ -1,4 +1,4 @@
-// IPC surface for the reusable model catalog. This is intentionally separate from gateway.ipc:
+﻿// IPC surface for the reusable model catalog. This is intentionally separate from gateway.ipc:
 // callers configure named connections and model definitions, then verify each exact capability.
 import { ipcMain } from 'electron'
 import { emitDomainEvent } from '../diagnostics/ipc-domain-events'
@@ -6,9 +6,8 @@ import type { ModelRuntime } from '@free-creation/model-runtime'
 import { IPC, type DeleteModelConnectionInput, type DeleteModelDefinitionInput, type DeleteModelDefinitionsInput, type DiscoverModelDefinitionsInput, type DiscoveredModel, type IpcEnvelope, type ResolveModelFeatureInput, type ResolvedModelFeature, type SaveModelConnectionInput, type SaveModelDefinitionInput, type SaveModelFeatureBindingInput, type ValidateModelDefinitionInput } from '../../shared/contracts'
 import type { Connection, ModelDefinition } from '@free-creation/model-contracts'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
-import { createCatalogChatModel } from '../gateway/factory'
-import { probeAgentModel } from '../agent-flow/model-probe'
-import { newSpanId, newTraceId } from '../../shared/observability'
+import { discoverConnectionModels } from '../model-host/discovery'
+import { validateAgentToolCallingOnHost } from '../model-host/agent-tool-calling'
 import { validateViduBaseURL } from '../gateway/vidu-cli'
 
 const ok = <T>(data: T): IpcEnvelope<T> => ({ ok: true, data })
@@ -28,11 +27,11 @@ export function registerModelIpc(host: SqliteModelHost, runtime: ModelRuntime): 
     ok(host.listModels(connectionId))
   )
   ipcMain.handle(IPC.models.bindings, (): IpcEnvelope<import('@free-creation/model-contracts').FeatureBinding[]> => ok(host.listBindings()))
-  ipcMain.handle(IPC.models.saveConnection, (_event, input: SaveModelConnectionInput): IpcEnvelope<Connection> => {
+  ipcMain.handle(IPC.models.saveConnection, async (_event, input: SaveModelConnectionInput): Promise<IpcEnvelope<Connection>> => {
     try {
       required(input.id, '连接 ID'); required(input.name, '连接名称'); required(input.baseUrl, 'Base URL')
       if (input.protocol === 'vidu-cli') validateViduBaseURL(input.baseUrl)
-      return ok(host.saveConnection(input))
+      return ok(await host.saveConnection(input))
     } catch (error) { return fail(error) }
   })
   ipcMain.handle(IPC.models.saveDefinition, (_event, input: SaveModelDefinitionInput): IpcEnvelope<ModelDefinition> => {
@@ -62,27 +61,8 @@ export function registerModelIpc(host: SqliteModelHost, runtime: ModelRuntime): 
   ipcMain.handle(IPC.models.discover, async (_event, input: DiscoverModelDefinitionsInput): Promise<IpcEnvelope<DiscoveredModel[]>> => {
     try {
       required(input.connectionId, '连接 ID')
-      const connection = await host.getConnection(input.connectionId)
-      if (!connection) throw new Error('连接不存在')
-      if (connection.protocol === 'vidu-cli') return ok([{ id: '3.4', name: 'Vidu Q4（图片参考生视频）' }, { id: '3.2', name: 'Vidu Q3（文生/首帧/首尾帧/参考生视频）' }])
-      if (!['openai-compatible', 'openai', 'openrouter', 'toapis', 'custom'].includes(connection.protocol)) {
-        throw new Error('此协议未提供统一的模型列表接口；请手动添加模型 ID')
-      }
-      const secret = await host.readSecret(input.connectionId)
-      if (!secret) throw new Error('请先保存 API Key，再拉取可用模型')
-      const response = await fetch(`${connection.baseUrl.replace(/\/+$/, '')}/models`, {
-        headers: { Authorization: `Bearer ${secret}`, ...connection.headers }, signal: AbortSignal.timeout(20_000)
-      })
-      if (!response.ok) throw new Error(`拉取模型失败（HTTP ${response.status}）`)
-      const payload = await response.json() as { data?: Array<{ id?: unknown; name?: unknown }> }
-      const seen = new Set<string>()
-      const models = (Array.isArray(payload.data) ? payload.data : []).flatMap((item) => {
-        const id = typeof item.id === 'string' ? item.id.trim() : ''
-        if (!id || seen.has(id)) return []
-        seen.add(id)
-        return [{ id, name: typeof item.name === 'string' && item.name.trim() ? item.name.trim() : id }]
-      })
-      return ok(models)
+      // 与外部接入 model.discover 共用同一实现（端点绑定/诊断事件/错误文案都在里面）。
+      return ok(await discoverConnectionModels(host, input.connectionId))
     } catch (error) { return fail(error) }
   })
   ipcMain.handle(IPC.models.validate, async (_event, input: ValidateModelDefinitionInput) => {
@@ -106,92 +86,10 @@ export function registerModelIpc(host: SqliteModelHost, runtime: ModelRuntime): 
     }
   })
   ipcMain.handle(IPC.models.validateAgentToolCalling, async (_event, input) => {
-    const context = { traceId: newTraceId(), spanId: newSpanId() }
-    emitDomainEvent('configuration.validation_started', 'Agent 工具调用能力验证开始', {
-      context,
-      connectionId: input?.connectionId,
-      attributes: { modelId: input?.modelDefinitionId }
-    })
     try {
-      if (input?.allowCost !== true)
-        throw new Error('Agent 工具调用验证会向供应商发送真实请求，必须显式确认')
-      const connectionId = required(input.connectionId, '连接 ID')
-      const modelDefinitionId = required(input.modelDefinitionId, '模型定义 ID')
-      const modelDefinition = await host.getModel(modelDefinitionId)
-      if (
-        !modelDefinition?.enabled ||
-        modelDefinition.connectionId !== connectionId ||
-        !modelDefinition.capabilities.some((capability) => capability.operation === 'text.generate')
-      )
-        throw new Error('所选文本模型不可用，请检查模型设置')
-      const connection = await host.getConnection(connectionId)
-      if (!connection?.enabled) throw new Error('模型连接不可用，请检查模型设置')
-      if (!['openai', 'openai-compatible', 'openrouter', 'toapis'].includes(connection.protocol))
-        throw new Error('当前连接协议未适配 Agent 工具调用验证')
-      let address: URL
-      try {
-        address = new URL(connection.baseUrl)
-      } catch {
-        throw new Error('模型连接地址无效，请检查模型设置')
-      }
-      const local = ['localhost', '127.0.0.1', '[::1]'].includes(address.hostname)
-      const secret = await host.readSecret(connectionId)
-      if (!secret && !local) throw new Error('模型密钥不可用，请在模型设置中重新保存')
-      const revisions = host.getAgentToolCallingRevisions(connectionId, modelDefinitionId)
-      if (!revisions) throw new Error('模型连接或模型定义已更改，请重新验证')
-      const report = await probeAgentModel(
-        createCatalogChatModel({
-          connectionId,
-          baseURL: connection.baseUrl,
-          apiKey: secret ?? undefined,
-          headers: connection.headers,
-          modelId: modelDefinition.modelId
-        }),
-        context,
-        AbortSignal.timeout(65_000),
-        { providerId: connectionId, modelId: modelDefinitionId }
-      )
-      const checkedAt = new Date().toISOString()
-      const verified =
-        report.structuredToolCall === 'verified' && report.toolResultRoundTrip === 'verified'
-      const result = {
-        status: verified ? 'verified' as const : 'failed' as const,
-        message: verified
-          ? 'Agent 结构化工具调用与工具结果往返均已验证'
-          : report.structuredToolCall !== 'verified'
-            ? '模型未通过强制结构化工具调用验证'
-            : '模型未通过工具结果往返验证',
-        ...(!verified ? { action: '检查模型和连接配置后重试，或选择其他文本模型' } : {}),
-        checkedAt
-      }
-      host.saveAgentToolCallingValidation({
-        connectionId,
-        modelDefinitionId,
-        snapshot: {
-          status: result.status,
-          message: result.message,
-          checkedAt,
-          ...(verified ? { verifiedAt: checkedAt } : {})
-        },
-        expectedConnectionRevision: revisions.connectionRevision,
-        expectedModelRevision: revisions.modelRevision
-      })
-      emitDomainEvent('configuration.validation_completed', 'Agent 工具调用能力验证完成', {
-        context,
-        status: verified ? 'success' : 'failed',
-        connectionId,
-        attributes: { modelId: modelDefinitionId }
-      })
-      return ok(result)
-    } catch (error) {
-      emitDomainEvent('configuration.validation_failed', 'Agent 工具调用能力验证失败', {
-        context,
-        error,
-        connectionId: input?.connectionId,
-        attributes: { modelId: input?.modelDefinitionId }
-      })
-      return fail(error)
-    }
+      // 与外部接入共用同一实现（含 allowCost 闸门、能力/协议校验、revision 防护）。
+      return ok(await validateAgentToolCallingOnHost(host, input))
+    } catch (error) { return fail(error) }
   })
   ipcMain.handle(IPC.models.saveBinding, (_event, input: SaveModelFeatureBindingInput) => {
     try {

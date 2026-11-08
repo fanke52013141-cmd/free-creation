@@ -32,8 +32,27 @@ export const PROVIDER_NETWORK_OPERATIONS = {
         connectionId: identifier,
         modelDefinitionId: identifier,
         operation: z.string().min(1).max(60),
-        confirmNetwork: z.boolean().default(false),
-        confirmCost: z.boolean().default(false)
+        confirmNetwork: z.boolean().optional(),
+        confirmCost: z.boolean().optional()
+      })
+      .strict()
+  },
+  'model.discover': {
+    effect: 'write',
+    description:
+      '拉取某个已保存连接在供应商侧的可用模型列表（与 GUI「拉取可用模型」同一实现：同一端点绑定校验、同一诊断事件）；会向供应商发请求，必须显式 confirmNetwork=true 才执行；外部只给 connectionId，不提供密钥或地址',
+    input: z.object({ connectionId: identifier, confirmNetwork: z.boolean().optional() }).strict()
+  },
+  'model.validateAgentToolCalling': {
+    effect: 'write',
+    description:
+      '验证某个文本模型是否支持 Agent 强制结构化工具调用与工具结果往返（与 GUI「验证 Agent 工具调用」同一实现）；会向供应商发真实请求、**可能产生费用**，必须同时显式 confirmNetwork=true 与 confirmCost=true；结果写入该模型的工具调用验证快照',
+    input: z
+      .object({
+        connectionId: identifier,
+        modelDefinitionId: identifier,
+        confirmNetwork: z.boolean().optional(),
+        confirmCost: z.boolean().optional()
       })
       .strict()
   }
@@ -56,6 +75,25 @@ export const PROVIDER_NETWORK_OUTPUTS = {
       operation: z.string().max(60),
       status: z.enum(['verified', 'failed', 'pending']),
       message: z.string().max(400)
+    })
+    .strict(),
+  'model.discover': z
+    .object({
+      connectionId: identifier,
+      models: z
+        .array(z.object({ id: z.string().max(200), name: z.string().max(200) }).strict())
+        .max(500),
+      total: z.number().int().nonnegative()
+    })
+    .strict(),
+  'model.validateAgentToolCalling': z
+    .object({
+      connectionId: identifier,
+      modelDefinitionId: identifier,
+      status: z.enum(['verified', 'failed']),
+      message: z.string().max(400),
+      action: z.string().max(200).optional(),
+      checkedAt: z.string().max(60)
     })
     .strict()
 } as const

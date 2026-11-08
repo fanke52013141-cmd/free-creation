@@ -5,7 +5,8 @@ import { nanoid } from 'nanoid'
 import type { GatewayModelInfo, ProviderConfig, ProviderSummary } from '../../shared/types'
 import type { SaveProviderInput } from '../../shared/contracts'
 import { getDb } from '../store/db'
-import { decryptSecret, encryptionAvailable, encryptSecret, isEncryptedSecret } from './keycrypto'
+import { decryptSecret, encryptionAvailable, encryptSecret, isEncryptedSecret, parseVaultRef, vaultRef } from './keycrypto'
+import { getActiveVault } from '../security/keystore/vault'
 import { driverForSpec } from '../../shared/provider-driver'
 import type { Capability, Connection, ModelOperation } from '@free-creation/model-contracts'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
@@ -72,7 +73,17 @@ function catalogModels(row: CatalogRow): GatewayModelInfo[] {
   return [...byModality.entries()].map(([modality, verifiedOperations]) => ({ id: row.model_id, name: row.model_name, modality, operations: verifiedOperations }))
 }
 
-function catalogConfigs(onlyId?: string): ProviderConfig[] {
+/** 读取连接密钥：vault 引用走设备密钥库；兼容尚未迁移的 enc:/plain:/裸值。 */
+async function readConnectionSecret(connectionId: string, ref: string | null): Promise<string> {
+  const parsed = parseVaultRef(ref)
+  if (parsed) {
+    const vault = getActiveVault()
+    return vault ? ((await vault.readSecret('connection', connectionId)) ?? '') : ''
+  }
+  return decryptSecret(ref)
+}
+
+async function catalogConfigs(onlyId?: string): Promise<ProviderConfig[]> {
   const grouped = new Map<string, ProviderConfig>()
   for (const row of catalogRows()) {
     if (onlyId && row.connection_id !== onlyId) continue
@@ -80,7 +91,7 @@ function catalogConfigs(onlyId?: string): ProviderConfig[] {
     if (!models.length) continue
     const current = grouped.get(row.connection_id)
     if (current) { current.models.push(...models); continue }
-    grouped.set(row.connection_id, { id: row.connection_id, name: row.name, specId: catalogSpec(row.protocol), baseURL: row.base_url, apiKey: decryptSecret(row.secret_ref), models, createdAt: Date.parse(row.created_at) || Date.now() })
+    grouped.set(row.connection_id, { id: row.connection_id, name: row.name, specId: catalogSpec(row.protocol), baseURL: row.base_url, apiKey: await readConnectionSecret(row.connection_id, row.secret_ref), models, createdAt: Date.parse(row.created_at) || Date.now() })
   }
   return [...grouped.values()].map((p) => ({ ...p, models: p.models.filter((m, i, list) => list.findIndex((x) => x.id === m.id && x.modality === m.modality) === i) }))
 }
@@ -98,7 +109,7 @@ export interface LegacyCatalogEntry {
  * 把旧配置同步到目录连接供用户验证；保留旧记录，配置或模型清单变化时清掉过期验证，
  * 绝不把“已保存”冒充为“已验证”。
  */
-export function bootstrapLegacyProvidersToCatalog(host: SqliteModelHost): LegacyCatalogEntry[] {
+export async function bootstrapLegacyProvidersToCatalog(host: SqliteModelHost): Promise<LegacyCatalogEntry[]> {
   const protocolFor = (specId: ProviderConfig['specId']): Connection['protocol'] => {
     if (specId === 'vidu') return 'vidu-cli'
     if (specId === 'minimax') return 'minimax'
@@ -136,7 +147,7 @@ export function bootstrapLegacyProvidersToCatalog(host: SqliteModelHost): Legacy
     .prepare('SELECT id FROM providers ORDER BY created_at ASC')
     .all() as Array<{ id: string }>
   for (const row of legacyRows) {
-    const provider = getProvider(row.id)
+    const provider = await getProvider(row.id)
     if (!provider?.apiKey) continue
     const connectionId = `legacy-${provider.id}`
     const protocol = protocolFor(provider.specId)
@@ -145,7 +156,8 @@ export function bootstrapLegacyProvidersToCatalog(host: SqliteModelHost): Legacy
       .get(connectionId) as
       | { protocol: Connection['protocol']; base_url: string; secret_ref: string | null }
       | undefined
-    const secretChanged = !currentConnection || decryptSecret(currentConnection.secret_ref) !== provider.apiKey
+    const secretChanged =
+      !currentConnection || (await readConnectionSecret(connectionId, currentConnection.secret_ref)) !== provider.apiKey
     const currentModels = host.listModels(connectionId)
     const nextModelIds = new Set(provider.models.map((model) => model.id))
     const currentModelIds = new Set(currentModels.map((model) => model.modelId))
@@ -172,7 +184,7 @@ export function bootstrapLegacyProvidersToCatalog(host: SqliteModelHost): Legacy
       getDb().prepare('DELETE FROM model_feature_bindings WHERE connection_id = ?').run(connectionId)
       getDb().prepare('DELETE FROM model_validations WHERE connection_id = ?').run(connectionId)
     }
-    host.saveConnection({
+    await host.saveConnection({
       id: connectionId,
       name: provider.name,
       protocol,
@@ -266,18 +278,23 @@ function toSummary(row: ProviderRow): ProviderSummary {
       : [],
     createdAt: row.created_at,
     // 密文存在不等于当前桌面环境能解密。若 DPAPI/安全存储上下文已变化，仍把它
-    // 显示为“已保存”会让用户选中模型后只得到一条无 Key 的失败请求。
-    hasApiKey: Boolean(decryptSecret(row.api_key_ref))
+    // 显示为"已保存"会让用户选中模型后只得到一条无 Key 的失败请求。
+    //
+    // P2 起密钥写在**设备绑定 vault** 里，`api_key_ref` 是 `vault:provider:<id>` 指针，
+    // 不是可解密文——只用 decryptSecret 判断会把"有密钥"误报成 false。
+    // 因此：vault 指针只要格式合法就视为已保存（是否真能读取由 getProvider/请求时校验）。
+    hasApiKey:
+      parseVaultRef(row.api_key_ref) !== null || Boolean(decryptSecret(row.api_key_ref))
   }
 }
 
 /** Renderer-facing settings summary; legacy data remains visible but is never node-executable. */
-export function listProviders(): ProviderSummary[] {
+export async function listProviders(): Promise<ProviderSummary[]> {
   const rows = getDb()
     .prepare('SELECT * FROM providers ORDER BY created_at ASC')
     .all() as ProviderRow[]
   const legacy = rows.map(toSummary)
-  const catalog = catalogConfigs().map((p) => ({ id: p.id, name: p.name, specId: p.specId, baseURL: p.baseURL, models: p.models, createdAt: p.createdAt, hasApiKey: Boolean(p.apiKey) }))
+  const catalog = (await catalogConfigs()).map((p) => ({ id: p.id, name: p.name, specId: p.specId, baseURL: p.baseURL, models: p.models, createdAt: p.createdAt, hasApiKey: Boolean(p.apiKey) }))
   // 接管是逐能力完成的：图片已经验收进新目录时，不能把尚未接管的文本/语音档案
   // 一并藏掉。相同“模型 ID + 模态”则由已验证目录档案取代旧行；其余旧档案保留到
   // 自己通过真实验收。这样既不出现同一模型的双份选择，也不会在半程接管时断业务。
@@ -294,37 +311,60 @@ export function listProviders(): ProviderSummary[] {
 }
 
 /** The sole source used by canvas node selectors and executors. */
-export function listVerifiedProviders(): ProviderSummary[] {
-  return catalogConfigs().map((p) => ({ id: p.id, name: p.name, specId: p.specId, baseURL: p.baseURL, models: p.models, createdAt: p.createdAt, hasApiKey: Boolean(p.apiKey) }))
+export async function listVerifiedProviders(): Promise<ProviderSummary[]> {
+  return (await catalogConfigs()).map((p) => ({ id: p.id, name: p.name, specId: p.specId, baseURL: p.baseURL, models: p.models, createdAt: p.createdAt, hasApiKey: Boolean(p.apiKey) }))
 }
 
-export function getProvider(id: string): ProviderConfig | null {
+export async function getProvider(id: string): Promise<ProviderConfig | null> {
   // 节点只允许使用已验证目录中的模型，运行时必须取同一连接的 URL 和密钥。
   // 旧 providers 表可能碰巧有同 ID 的残留行，不能让它覆盖目录连接。
-  const catalog = catalogConfigs(id).find((provider) => provider.id === id)
+  const catalog = (await catalogConfigs(id)).find((provider) => provider.id === id)
   if (catalog) return catalog
   const row = getDb().prepare('SELECT * FROM providers WHERE id = ?').get(id) as
     ProviderRow | undefined
-  return row ? toConfig(row, decryptSecret(row.api_key_ref)) : null
+  if (!row) return null
+  const ref = row.api_key_ref
+  const parsed = parseVaultRef(ref)
+  const apiKey = parsed
+    ? ((await getActiveVault()?.readSecret('provider', id)) ?? '')
+    : decryptSecret(ref)
+  return toConfig(row, apiKey)
 }
 
-export function saveProvider(input: SaveProviderInput): ProviderSummary {
+export async function saveProvider(input: SaveProviderInput): Promise<ProviderSummary> {
   const models = input.models.map(normalizeModel).filter((m): m is GatewayModelInfo => m !== null)
   const id = input.id ?? nanoid(10)
-  const existing = input.id ? getProvider(input.id) : null
+  const existing = input.id ? await getProvider(input.id) : null
   const apiKey = input.apiKey?.trim() ?? ''
   // 本机 CLI 通道（即梦）没有 API Key：凭据是机器上的 OAuth 登录态，不是密钥列。
   if (driverForSpec(input.specId) !== 'local-cli' && !apiKey && !existing)
     throw new Error('新建供应商必须提供 API Key')
 
-  // F11 修复：读取原始行（而非解密后的 ProviderConfig），编辑未提交新 key 时
-  // 把库里的 api_key_ref 逐字节原样写回。此前经 decryptSecret → encryptSecret
-  // 往返，safeStorage 暂不可用时解密返回空串，空串被当作"用户清除"重新加密
-  // 落盘，密文永久丢失。
+  // F11 修复仍适用：未提交新 key 时保留库里 api_key_ref 原值。P2 起新 key 写入
+  // 设备绑定 vault（来源绑定该供应商 baseURL），引用列存 vault: 指针。
   const existingRow = input.id
     ? (getDb().prepare('SELECT * FROM providers WHERE id = ?').get(id) as ProviderRow | undefined)
     : undefined
-  const apiKeyRef = apiKey ? encryptSecret(apiKey) : existingRow ? existingRow.api_key_ref : null
+  let apiKeyRef: string | null
+  if (apiKey) {
+    const vault = getActiveVault()
+    const baseURL = input.baseURL.trim().replace(/\/+$/, '')
+    if (vault) {
+      await vault.writeSecret({
+        kind: 'provider',
+        id,
+        origin: originOfSafe(baseURL),
+        source: 'local',
+        scope: 'app.run',
+        plain: apiKey
+      })
+      apiKeyRef = vaultRef('provider', id)
+    } else {
+      apiKeyRef = encryptSecret(apiKey)
+    }
+  } else {
+    apiKeyRef = existingRow ? existingRow.api_key_ref : null
+  }
 
   const row: ProviderRow = {
     id,
@@ -346,14 +386,28 @@ export function saveProvider(input: SaveProviderInput): ProviderSummary {
     .run(row)
   const saved = getDb().prepare('SELECT * FROM providers WHERE id = ?').get(id) as ProviderRow
   const summary = toSummary(saved)
-  bootstrapLegacyProvidersToCatalog(new SqliteModelHost(getDb()))
+  await bootstrapLegacyProvidersToCatalog(new SqliteModelHost(getDb()))
   return summary
 }
 
-export function deleteProvider(id: string): boolean {
+export async function deleteProvider(id: string): Promise<boolean> {
   const res = getDb().prepare('DELETE FROM providers WHERE id = ?').run(id)
   new SqliteModelHost(getDb()).deleteConnection(`legacy-${id}`)
+  const vault = getActiveVault()
+  if (vault) {
+    await vault.deleteSecret('provider', id)
+    await vault.deleteSecret('connection', `legacy-${id}`)
+  }
   return res.changes > 0
+}
+
+function originOfSafe(baseUrl: string): string {
+  try {
+    const url = new URL(baseUrl)
+    return `${url.protocol}//${url.host}`
+  } catch {
+    return 'unknown'
+  }
 }
 
 /**

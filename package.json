@@ -23,8 +23,13 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck:model": "npm --prefix packages/model-contracts run typecheck && npm --prefix packages/model-runtime run typecheck",
-    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "typecheck:license-protocol": "npm --prefix packages/license-protocol run typecheck",
+    "typecheck:issuer": "tsc --noEmit -p tools/cs-issuer/tsconfig.json",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web && npm run typecheck:license-protocol && npm run typecheck:issuer",
     "test": "node scripts/run-vitest.cjs run --maxWorkers=1 --minWorkers=1",
+    "test:license": "node scripts/run-vitest.cjs run test/license-protocol.test.ts test/license-device.test.ts test/license-device-live.test.ts test/license-service.test.ts test/license-issuer.test.ts",
+    "security:issuer": "node --experimental-transform-types --no-warnings tools/cs-issuer/cli.ts",
+    "test:license-electron": "node scripts/test-license-electron.cjs",
     "test:model": "npm --prefix packages/model-runtime run test",
     "test:browser-ui": "node scripts/test-browser-node-ui.cjs",
     "test:browser-node-standard": "node scripts/test-browser-node-standard.cjs",
@@ -60,6 +65,7 @@
     "build:desktop-latest": "npm run build && electron-builder --dir --config.directories.output=dist/current-source-release --config.electronDist=node_modules/electron/dist",
     "desktop:install-latest-shortcut": "powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts/install-latest-desktop-shortcut.ps1",
     "build:win": "npm run build && electron-builder --win",
+    "build:distribution": "node scripts/build-distribution.cjs",
     "build:mac": "electron-vite build && electron-builder --mac",
     "build:linux": "electron-vite build && electron-builder --linux",
     "test:optimization-ui": "node scripts/run-optimization-ui-gate.cjs",
@@ -94,7 +100,9 @@
     "test:r09-soak:smoke": "node scripts/run-r09-soak.cjs --duration-seconds=60 --max-epochs=3 --interval-ms=0",
     "verify:agent-access": "node scripts/check-agent-access.cjs",
     "agent:cli": "node out/main/local-agent.js",
-    "test:local-agent-access": "node scripts/test-local-agent-access.cjs"
+    "test:local-agent-access": "node scripts/test-local-agent-access.cjs",
+    "verify:acceptance": "node scripts/verify-acceptance.cjs",
+    "verify:acceptance:fast": "node scripts/verify-acceptance.cjs --fast"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.34",

@@ -2005,6 +2005,8 @@ export class LocalAccessService {
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'provider.testConnection':
       case 'model.validate':
+      case 'model.discover':
+      case 'model.validateAgentToolCalling':
         // F9：需要显式确认才联网，在 dispatch 分组分支执行。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'provider.package.export':

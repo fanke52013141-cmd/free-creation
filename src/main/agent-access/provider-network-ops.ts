@@ -8,6 +8,8 @@
 import type { AccessOperationId } from '../../shared/agent-access/registry'
 import { testProvider } from '../gateway/factory'
 import { createDesktopModelRuntime } from '../model-host/runtime'
+import { discoverConnectionModels } from '../model-host/discovery'
+import { validateAgentToolCallingOnHost } from '../model-host/agent-tool-calling'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
 import { getDb } from '../store/db'
 import type { ModelOperation } from '@free-creation/model-contracts'
@@ -16,7 +18,9 @@ import { DesktopAccessError } from './desktop'
 
 export const PROVIDER_NETWORK_OPERATION_IDS: ReadonlySet<AccessOperationId> = new Set([
   'provider.testConnection',
-  'model.validate'
+  'model.validate',
+  'model.discover',
+  'model.validateAgentToolCalling'
 ] as AccessOperationId[])
 
 function refuse(code: string, detail?: string): never {
@@ -68,25 +72,76 @@ export async function runProviderNetworkOperation(
   }
 
   // model.validate：会真实调用模型，必须再确认一次费用。
-  if (input.confirmCost !== true)
-    refuse('COST_CONFIRM_REQUIRED', 'model validation may incur supplier cost; pass confirmCost: true')
-  const connectionId = input.connectionId as string
-  const modelDefinitionId = input.modelDefinitionId as string
-  const operation = input.operation as ModelOperation
-  try {
-    const host = new SqliteModelHost(getDb())
-    const runtime = createDesktopModelRuntime(host)
-    const result = await runtime.validateModel(connectionId, modelDefinitionId, operation)
-    const status =
-      result?.status === 'verified' ? 'verified' : result?.status === 'failed' ? 'failed' : 'pending'
-    return {
-      connectionId,
-      modelDefinitionId,
-      operation: String(operation),
-      status,
-      message: safeMessage(result?.message ?? '')
+  if (operationId === 'model.validate') {
+    if (input.confirmCost !== true)
+      refuse('COST_CONFIRM_REQUIRED', 'model validation may incur supplier cost; pass confirmCost: true')
+    const connectionId = input.connectionId as string
+    const modelDefinitionId = input.modelDefinitionId as string
+    const operation = input.operation as ModelOperation
+    try {
+      const host = new SqliteModelHost(getDb())
+      const runtime = createDesktopModelRuntime(host)
+      const result = await runtime.validateModel(connectionId, modelDefinitionId, operation)
+      const status =
+        result?.status === 'verified' ? 'verified' : result?.status === 'failed' ? 'failed' : 'pending'
+      return {
+        connectionId,
+        modelDefinitionId,
+        operation: String(operation),
+        status,
+        message: safeMessage(result?.message ?? '')
+      }
+    } catch (error) {
+      refuse('VALIDATION_FAILED', safeMessage(error))
     }
-  } catch (error) {
-    refuse('VALIDATION_FAILED', safeMessage(error))
+  }
+
+  // model.discover：拉取供应商模型列表（同一实现，同一端点绑定校验）。
+  if (operationId === 'model.discover') {
+    const connectionId = input.connectionId as string
+    try {
+      const host = new SqliteModelHost(getDb())
+      const models = await discoverConnectionModels(host, connectionId)
+      return {
+        connectionId,
+        models: models.slice(0, 500).map((model) => ({
+          id: String(model.id).slice(0, 200),
+          name: String(model.name).slice(0, 200)
+        })),
+        total: models.length
+      }
+    } catch (error) {
+      // 供应商拒绝/网络失败是**业务结果**：给可分支的稳定码，不把错误文案当机密封死。
+      refuse('DISCOVERY_FAILED', safeMessage(error))
+    }
+  }
+
+  // model.validateAgentToolCalling：真实请求、可能计费 → 双重确认。
+  if (input.confirmCost !== true)
+    refuse(
+      'COST_CONFIRM_REQUIRED',
+      'agent tool-calling validation sends real supplier requests; pass confirmCost: true'
+    )
+  {
+    const connectionId = input.connectionId as string
+    const modelDefinitionId = input.modelDefinitionId as string
+    try {
+      const host = new SqliteModelHost(getDb())
+      const result = await validateAgentToolCallingOnHost(host, {
+        connectionId,
+        modelDefinitionId,
+        allowCost: true
+      })
+      return {
+        connectionId,
+        modelDefinitionId,
+        status: result.status,
+        message: safeMessage(result.message),
+        ...(result.action ? { action: safeMessage(result.action) } : {}),
+        checkedAt: result.checkedAt
+      }
+    } catch (error) {
+      refuse('VALIDATION_FAILED', safeMessage(error))
+    }
   }
 }

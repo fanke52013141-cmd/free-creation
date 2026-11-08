@@ -24,14 +24,17 @@ vi.mock('../src/main/store/db', () => ({
 
 vi.mock('../src/main/gateway/keycrypto', () => ({
   decryptSecret: () => 'sk-should-never-leave-main',
-  encryptSecret: (value: string) => `enc:${value}`
+  encryptSecret: (value: string) => `enc:${value}`,
+  // 真实模块导出 parseVaultRef（判断 P2 的 vault: 指针）；本用例的 ref 是旧式密文，
+  // 因此返回 null 表示"不是 vault 指针"，走 decryptSecret 分支。
+  parseVaultRef: () => null
 }))
 
 import { listProviders } from '../src/main/gateway/providers.repo'
 
 describe('供应商公开摘要', () => {
-  it('列表不解密也不返回 API Key，仅报告是否已配置', () => {
-    const [provider] = listProviders()
+  it('列表不解密也不返回 API Key，仅报告是否已配置', async () => {
+    const [provider] = await listProviders()
     expect(provider).toMatchObject({
       id: 'provider-1',
       hasApiKey: true,

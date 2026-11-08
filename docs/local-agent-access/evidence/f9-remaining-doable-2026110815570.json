@@ -1,0 +1,134 @@
+{
+  "checks": [
+    {
+      "name": "provider.save 保存连接且回执不回显密钥",
+      "ok": true,
+      "detail": {
+        "id": "acc-admin-1",
+        "modelCount": 1
+      }
+    },
+    {
+      "name": "provider.save 更新时留空 apiKey 保留原密钥",
+      "ok": true,
+      "detail": {
+        "name": "验收供应商-改名"
+      }
+    },
+    {
+      "name": "provider.probe 未确认联网必须拒绝",
+      "ok": true,
+      "detail": {
+        "code": "NETWORK_CONFIRM_REQUIRED"
+      }
+    },
+    {
+      "name": "model.discover 未确认必须拒绝（零请求）",
+      "ok": true,
+      "detail": {
+        "code": "NETWORK_CONFIRM_REQUIRED"
+      }
+    },
+    {
+      "name": "model.validateAgentToolCalling 需网络+费用双重确认",
+      "ok": true,
+      "detail": {
+        "network": "NETWORK_CONFIRM_REQUIRED",
+        "cost": "COST_CONFIRM_REQUIRED"
+      }
+    },
+    {
+      "name": "model.discover 确认后对不存在的连接给稳定码",
+      "ok": true,
+      "detail": {
+        "code": "DISCOVERY_FAILED"
+      }
+    },
+    {
+      "name": "provider.probe 确认后只探测已保存供应商（不发起计费调用）",
+      "ok": true,
+      "detail": {
+        "items": 0,
+        "summary": "该供应商没有可用的免费探测项（未发起任何请求）；如需验证可用性请用 provider.testConnection 或 model.validate"
+      }
+    },
+    {
+      "name": "provider.delete 删除后目录里消失",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "name": "provider.delete 不存在的 id 如实 NOT_FOUND",
+      "ok": true,
+      "detail": {
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "name": "provider.package.import 未确认必须拒绝（且不读文件）",
+      "ok": true,
+      "detail": {
+        "code": "IMPORT_CONFIRM_REQUIRED"
+      }
+    },
+    {
+      "name": "provider.package.import 确认后仍要求文件存在",
+      "ok": true,
+      "detail": {
+        "code": "INPUT_NOT_FOUND"
+      }
+    },
+    {
+      "name": "provider.package.importProviders 未确认必须拒绝",
+      "ok": true,
+      "detail": {
+        "code": "IMPORT_CONFIRM_REQUIRED"
+      }
+    },
+    {
+      "name": "provider.package.import 走到人工确认（无人在场时不落库）",
+      "ok": true,
+      "detail": {
+        "code": "PACKAGE_INVALID"
+      }
+    },
+    {
+      "name": "dreamina.login.start 未确认联网必须拒绝",
+      "ok": true,
+      "detail": {
+        "code": "NETWORK_CONFIRM_REQUIRED"
+      }
+    },
+    {
+      "name": "dreamina.login.check 未确认联网必须拒绝",
+      "ok": true,
+      "detail": {
+        "code": "NETWORK_CONFIRM_REQUIRED"
+      }
+    },
+    {
+      "name": "dreamina.login.start 确认后如实反映本机状态（不伪造成功）",
+      "ok": true,
+      "detail": {
+        "status": "already"
+      }
+    },
+    {
+      "name": "diagnostics.exportNodeRun 导出节点诊断且抹掉正文",
+      "ok": true,
+      "detail": {
+        "fileName": "text-shape-3ytPTZ_wZB3CwoGP33_zs-diagnostics.json",
+        "runCount": 0
+      }
+    }
+  ],
+  "failures": [],
+  "notes": [
+    "provider.probe 对不可达地址返回 []",
+    "provider.package.import 假包返回：PACKAGE_INVALID",
+    "dreamina.login.start 返回 already（本机已有有效登录态）"
+  ],
+  "total": 17,
+  "passed": 17,
+  "failed": 0
+}
