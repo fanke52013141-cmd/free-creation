@@ -47,6 +47,9 @@ import { assertLicenseActive } from '../security/license/gate'
 import { DesktopAccessError, type AccessDesktop } from './desktop'
 import { runNodeLibraryOperation } from './node-library-ops'
 import { runHistoryOperation } from './history-ops'
+import { FLOW_AGENT_OPERATION_IDS, runFlowAgentOperation } from './flow-agents-ops'
+import { FLOW_ASSET_OPERATION_IDS, runFlowAssetOperation } from './flow-assets-ops'
+import { isFlowCommandOperation, runFlowCommandOperation } from './flow-commands-ops'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
 import { FlowTaskStore } from '../agent-flow/task-store'
 import type { DiagnosticsService } from '../diagnostics/service'
@@ -317,11 +320,14 @@ export class LocalAccessService {
       // run.cancel 是对在途任务的控制操作，豁免占用检查（否则取消不了自己要停的任务）。
       // history.recovery.resolve 同理：它是"解决恢复副本"的操作，本身必须能在副本存在时执行；
       // 其他写操作（含 project.delete/export/其他 history 写）仍照旧被恢复副本阻断。
+      // flow.command.reconcile 同理：它的目标就是结算一条 pending/unknown 的既有命令，
+      // 若按占用拒绝会永远无法核对；账本 commit 仍只按已保存事实推进，不伪造成功。
       if (
         id &&
         spec.effect !== 'read' &&
         operationId !== 'run.cancel' &&
-        operationId !== 'history.recovery.resolve'
+        operationId !== 'history.recovery.resolve' &&
+        operationId !== 'flow.command.reconcile'
       )
         this.assertNoActiveTasks(id)
       const active = this.options.activeProjectId()
@@ -889,6 +895,29 @@ export class LocalAccessService {
               ...f7Context,
               desktop: this.options.desktop
             })
+      } else if (
+        FLOW_AGENT_OPERATION_IDS.has(operationId) ||
+        FLOW_ASSET_OPERATION_IDS.has(operationId)
+      ) {
+        // F8（一）：Flow 观察与固定资产操作复用 desktop-host / asset-store 的同一实现
+        // （flow-agents-ops.ts / flow-assets-ops.ts），不新增外部专用执行路径。
+        const flowContext = {
+          activeProjectId: this.options.activeProjectId,
+          desktop: this.options.desktop,
+          requestId: request.requestId,
+          ...(key ? { idempotencyKey: key } : {}),
+          diagnostics: { traceId: base.traceId, spanId }
+        }
+        result = FLOW_AGENT_OPERATION_IDS.has(operationId)
+          ? await runFlowAgentOperation(operationId, input, flowContext)
+          : await runFlowAssetOperation(operationId, input, flowContext)
+      } else if (isFlowCommandOperation(operationId)) {
+        // F8（二）：Flow 命令账本协作只读/结算**既有**命令（flow-commands-ops.ts）；
+        // 不创建命令/租约、不向渲染器下发 grant，因此不存在冒充内部 Agent 会话的路径。
+        result = runFlowCommandOperation(operationId, input, {
+          traceId: base.traceId,
+          spanId
+        })
       } else result = await this.execute(operationId, input)
       base.status = 'completed'
       // Repositories use optional undefined properties; the wire contract is JSON.
@@ -1725,6 +1754,19 @@ export class LocalAccessService {
       }
       case 'graph.patch':
         // graph.patch 在 dispatch 中经权威宿主握手执行，不落在这里。
+        throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
+      case 'flowAgent.inspect':
+      case 'flowAgent.catalog':
+      case 'flowAgent.collaboration':
+      case 'flowAsset.submit':
+      case 'flowAsset.list':
+      case 'flowAsset.read':
+        // F8（一）：Flow 观察/固定资产在 dispatch 分组分支委托 flow-*-ops 执行，不落在这里。
+        throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
+      case 'flow.command.lookup':
+      case 'flow.command.availability':
+      case 'flow.command.reconcile':
+        // F8（二）：命令账本协作在 dispatch 分组分支委托 flow-commands-ops 执行，不落在这里。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'node.execute':
       case 'run.cancel':
