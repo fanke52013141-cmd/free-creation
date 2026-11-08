@@ -22399,6 +22399,140 @@
       ]
     },
     {
+      "operationId": "diagnostics.exportNodeRun",
+      "operationVersion": 1,
+      "effect": "export",
+      "description": "把某个节点最近一次运行与历史运行（≤13 条）导出为节点诊断 JSON 到**受控导出目录**：记录由权威宿主提供（与 GUI 面板\"导出诊断信息\"同一来源），节点正文/密钥/媒体内容在导出前被脱敏；回执给文件名/sha256/字节数/运行条数，不接受任意输出路径",
+      "requires": [],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "nodeId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 180
+          }
+        },
+        "required": [
+          "projectId",
+          "nodeId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "diagnostics.exportNodeRun"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "fileName": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "byteSize": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "runCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "nodeType": {
+                "type": "string",
+                "maxLength": 80
+              }
+            },
+            "required": [
+              "fileName",
+              "sha256",
+              "byteSize",
+              "runCount",
+              "nodeType"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
       "operationId": "project.nodeVisibility.get",
       "operationVersion": 1,
       "effect": "read",
@@ -26498,6 +26632,9 @@
                 "type": "string",
                 "pattern": "^[a-zA-Z0-9_-]{1,80}$"
               },
+              "probeSupported": {
+                "type": "boolean"
+              },
               "summary": {
                 "type": "string",
                 "maxLength": 600
@@ -26536,6 +26673,7 @@
             },
             "required": [
               "providerId",
+              "probeSupported",
               "summary",
               "items"
             ],

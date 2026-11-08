@@ -35,8 +35,10 @@ export const DesktopRequestSchema = z
       // 关闭项目需要 renderer 先保存再回到项目列表（否则关掉画布会丢未保存编辑）。
       'history',
       'close-project',
-      // F9 收尾：敏感动作（凭据包导入等）由**人在 GUI 亲确认**后才放行。
-      'confirm-sensitive'
+      // F9 收尾：敏感动作（凭据包导入等）由**人在 GUI 亲眼确认**后才放行。
+      'confirm-sensitive',
+      // F9 收尾：取节点的运行记录（含历史），供外部导出节点诊断用。
+      'read-node-runs'
     ]),
     nodeId: z.string().optional(),
     agent: SkillAgentConfigSchema.optional(),

@@ -1,4 +1,5 @@
-import { z } from 'zod'
+﻿import { z } from 'zod'
+import { identifier } from './common'
 
 /**
  * 诊断查询族（F9，diagnostics 族）。
@@ -109,6 +110,12 @@ export const DIAGNOSTICS_OPERATIONS = {
         label: z.string().trim().max(120).optional()
       })
       .strict()
+  },
+  'diagnostics.exportNodeRun': {
+    effect: 'export',
+    description:
+      '把某个节点最近一次运行与历史运行（≤13 条）导出为节点诊断 JSON 到**受控导出目录**：记录由权威宿主提供（与 GUI 面板"导出诊断信息"同一来源），节点正文/密钥/媒体内容在导出前被脱敏；回执给文件名/sha256/字节数/运行条数，不接受任意输出路径',
+    input: z.object({ projectId: identifier, nodeId: z.string().min(1).max(180) }).strict()
   }
 } as const
 
@@ -145,6 +152,16 @@ export const DIAGNOSTICS_OUTPUTS = {
           until: epochMs.optional()
         })
         .strict()
+    })
+    .strict(),
+  'diagnostics.exportNodeRun': z
+    .object({
+      /** 受控导出目录内的文件名；不返回绝对路径。 */
+      fileName: z.string().max(200),
+      sha256: z.string().regex(/^[a-f0-9]{64}$/),
+      byteSize: z.number().int().positive(),
+      runCount: z.number().int().nonnegative(),
+      nodeType: z.string().max(80)
     })
     .strict()
 } as const

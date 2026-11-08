@@ -1527,7 +1527,11 @@
       "label": "节点运行导出",
       "channel": "diagnostics:node-run:export",
       "gui": "运行时间线",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "diagnostics.exportNodeRun"
+      ],
+      "note": "F9：导出单节点运行诊断到受控目录。记录来源与 GUI「导出诊断信息」相同（权威宿主的 nodeRun/nodeRunHistory），报告构造与 GUI **共用同一份实现**；节点正文作为脱敏值传入、导出前被抹掉；不覆盖已有文件，回执给文件名/sha256/字节数/运行条数"
     },
     "ipc.diagnostics.event": {
       "label": "诊断事件上报",

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * F9 剩余可做项验收：供应商管理（3）+ 凭据包导入闸门（2）+ 即梦登录闸门（2）。
  *
  * 真实 MCP 协议栈 + 真实桌面会话。
@@ -246,6 +246,93 @@ async function main() {
       expect(response.error?.code, '失败但无错误码')
       report.notes.push('dreamina.login.start 失败码：' + response.error.code)
       return { code: response.error.code }
+    })
+
+    // ── diagnostics.exportNodeRun：真实执行一次节点再导出，验证脱敏 ──
+    await check('diagnostics.exportNodeRun 导出节点诊断且抹掉正文', async () => {
+      const SECRET_TEXT = 'F9-EXPORT-SECRET-TEXT-0001'
+      const patched = await call('graph.patch', {
+        projectId: project.meta.id,
+        expectedGraphVersion: await (async () => {
+          let previous = -1
+          for (let attempt = 0; attempt < 12; attempt += 1) {
+            const response = await call('graph.get', {
+              projectId: project.meta.id,
+              view: 'latest',
+              offset: 0,
+              limit: 1
+            })
+            const value = response?.data?.graphVersion
+            const unsaved = response?.data?.unsaved
+            if (Number.isInteger(value) && value === previous && unsaved === false) return value
+            previous = Number.isInteger(value) ? value : previous
+            await new Promise((done) => setTimeout(done, 700))
+          }
+          return previous
+        })(),
+        ops: [
+          {
+            action: 'node.create',
+            ref: 'diag',
+            nodeType: 'text',
+            x: 0,
+            y: 0,
+            title: '诊断节点',
+            text: SECRET_TEXT
+          }
+        ]
+      })
+      if (patched?.error?.code === 'REVISION_CONFLICT') {
+        const retry = await call('graph.patch', {
+          projectId: project.meta.id,
+          expectedGraphVersion: patched.error.currentGraphVersion,
+          ops: [
+            {
+              action: 'node.create',
+              ref: 'diag',
+              nodeType: 'text',
+              x: 0,
+              y: 0,
+              title: '诊断节点',
+              text: SECRET_TEXT
+            }
+          ]
+        })
+        ok(retry, 'graph.patch for exportNodeRun')
+      } else {
+        ok(patched, 'graph.patch for exportNodeRun')
+      }
+      const graph = ok(
+        await call('graph.get', { projectId: project.meta.id, view: 'latest', offset: 0, limit: 10 }),
+        'graph.get after patch'
+      )
+      const nodeId = (graph.nodes ?? []).find((node) => node.title === '诊断节点')?.nodeId
+      expect(nodeId, '找不到诊断节点')
+
+      const exported = await call('diagnostics.exportNodeRun', {
+        projectId: project.meta.id,
+        nodeId
+      })
+      // 允许"该节点还没有运行记录"这类业务拒绝，但不允许协议层纯文本错误
+      if (exported?.status !== 'completed') {
+        expect(
+          !String(exported?.error?.code ?? '').startsWith('PLAIN_TEXT:'),
+          '协议层纯文本错误：' + exported?.error?.code
+        )
+        report.notes.push('diagnostics.exportNodeRun 返回：' + exported?.error?.code)
+        return { code: exported?.error?.code }
+      }
+      const data = exported.data
+      const target = join(directory, 'agent-exports', data.fileName)
+      expect(existsSync(target), '诊断文件不存在')
+      const text = await readFile(target, 'utf8')
+      // 报告含中文：必须比字节数而不是字符数
+      expect(Buffer.byteLength(text, 'utf8') === data.byteSize, '字节数与回执不符')
+      expect(!text.includes(SECRET_TEXT), '导出文件泄漏了节点正文')
+      expect(!text.includes('"sk-'), '导出文件泄漏了密钥形态')
+      const parsed = JSON.parse(text)
+      expect(parsed.format === 'canvas-studio-node-diagnostics-v1', '报告格式不符')
+      return { fileName: data.fileName, runCount: data.runCount }
     })
   } catch (error) {
     failed += 1

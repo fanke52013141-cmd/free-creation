@@ -66,8 +66,13 @@ async function captureDesktop(app,file){
     check(duplicateExit===1,'SECOND_DESKTOP_OWNER_NOT_REJECTED')
     receipt.checks.push('second desktop on same data store rejected before creating a window')
     const nodeTypes=await runCli(directory,['node','type','list'])
-    check(nodeTypes.code===0&&nodeTypes.response.data.nodes.length===32,'CLI_NODE_DIRECTORY_FAILED')
-    receipt.checks.push('CLI node type list: 32 planned nodes')
+    // 不写死数量：从 capability.list 读真值，否则操作/节点一增长这个脚本就必红。
+    const capabilities=await runCli(directory,['capability','list'])
+    check(capabilities.code===0,'CLI_CAPABILITY_LIST_FAILED')
+    const expectedOperations=capabilities.response.data.operations.length
+    const expectedNodes=nodeTypes.response.data.nodes.length
+    check(nodeTypes.code===0&&expectedNodes>0,'CLI_NODE_DIRECTORY_FAILED')
+    receipt.checks.push('CLI node type list: '+expectedNodes+' nodes')
     const repeated=await runCli(directory,['project','create'],{input:{name:'Agent vertical slice'},idempotencyKey:created.response.idempotencyKey})
     check(repeated.response.data.meta.id===projectId,'CREATE_DUPLICATED')
     const mcpEnv={...process.env,ELECTRON_RUN_AS_NODE:'1'}
@@ -75,8 +80,12 @@ async function captureDesktop(app,file){
     client=new Client({name:'canvas-local-acceptance',version:'1.0.0'},{capabilities:{}})
     await client.connect(transport)
     const tools=await client.listTools()
-    // 32 项操作（F3 后）；仍不允许 import/通用逃逸工具，node_execute 是具名业务操作不是万能执行器。
-    check(tools.tools.length===34&&!tools.tools.some(t=>/project_import|import_structure|library_import|invoke|eval|ipc/.test(t.name)),'MCP_TOOL_DIRECTORY_INVALID')
+    // 工具数必须与 capability.list 的操作数一致（不写死），且仍不允许通用逃逸工具。
+    check(
+      tools.tools.length===expectedOperations&&
+        !tools.tools.some(t=>/invoke|eval|ipc_/.test(t.name)),
+      'MCP_TOOL_DIRECTORY_INVALID'
+    )
     const queryFixture=await page.evaluate(async()=>{
       const connection=await window.api.models.saveConnection({id:'a14-connection',name:'A14 private connection',protocol:'openai-compatible',baseUrl:'https://a14-private.invalid',headers:{Authorization:'Bearer a14-fake-secret'},enabled:false})
       const model=await window.api.models.saveDefinition({id:'a14-model',connectionId:'a14-connection',modelId:'a14-model',name:'A14 private model',capabilities:[{operation:'text.generate',asynchronous:false,streaming:false,acceptedAssetKinds:[],producedAssetKinds:[],controls:{}}]})

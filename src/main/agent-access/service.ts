@@ -1040,6 +1040,7 @@ export class LocalAccessService {
       } else if (
         operationId === 'diagnostics.query' ||
         operationId === 'diagnostics.exportBundle' ||
+        operationId === 'diagnostics.exportNodeRun' ||
         operationId === 'project.nodeVisibility.get' ||
         operationId === 'project.nodeVisibility.set'
       ) {
@@ -1053,7 +1054,9 @@ export class LocalAccessService {
         result = operationId.startsWith('diagnostics.')
           ? await runDiagnosticsOperation(operationId, input, {
               diagnostics: f9ReadContext.diagnostics,
-              exportRoot: this.exportRoot
+              exportRoot: this.exportRoot,
+              activeProjectId: this.options.activeProjectId,
+              ...(this.options.desktop ? { desktop: this.options.desktop } : {})
             })
           : runProjectSettingsOperation(operationId, input, f9ReadContext)
       } else result = await this.execute(operationId, input)
@@ -1739,6 +1742,7 @@ export class LocalAccessService {
         return accessDiagnosticsSummary(this.options.diagnostics)
       case 'diagnostics.query':
       case 'diagnostics.exportBundle':
+      case 'diagnostics.exportNodeRun':
       case 'workspace.palettePreferences.get':
       case 'workspace.palettePreferences.save':
       case 'project.nodeVisibility.get':

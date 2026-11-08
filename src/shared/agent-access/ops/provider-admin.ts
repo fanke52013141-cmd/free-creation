@@ -1,4 +1,4 @@
-﻿import { z } from 'zod'
+import { z } from 'zod'
 import { identifier } from './common'
 
 /**
@@ -87,6 +87,8 @@ export const PROVIDER_ADMIN_OUTPUTS = {
   'provider.probe': z
     .object({
       providerId: identifier,
+      /** false = 该供应商没有可用的免费探测项（未发起任何请求），并不代表"探测通过"。 */
+      probeSupported: z.boolean(),
       /** 汇总文案（已去敏，不含地址与密钥）。 */
       summary: z.string().max(600),
       items: z

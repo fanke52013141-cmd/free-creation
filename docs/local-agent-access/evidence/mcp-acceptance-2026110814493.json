@@ -1,0 +1,841 @@
+{
+  "startedAt": "2026-11-08T13:58:24.292Z",
+  "dataDirectory": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\canvas-mcp-acceptance-s0rmyK",
+  "toolCount": 133,
+  "checks": [
+    {
+      "name": "MCP 初始化握手",
+      "ok": true
+    },
+    {
+      "name": "tools/list 返回工具数 = 133",
+      "ok": true,
+      "detail": "133"
+    },
+    {
+      "name": "所有工具都有 object 型 inputSchema",
+      "ok": true
+    },
+    {
+      "name": "project.create 经 MCP 成功并返回项目 ID",
+      "ok": true,
+      "detail": "{\"apiVersion\":1,\"requestId\":\"eb40f4a6-11e7-4fae-a20e-38d9cdd9efe2\",\"operationId\":\"project.create\",\"traceId\":\"trace-6f52f53a-f942-4775-b508-c3021b2b94aa\",\"status\":\"completed\",\"idempotencyKey\":\"1794146312626:2ab877e0-fa3b-4e78-ba28-6a1ae33b7c93\",\"data\":{\"meta\":{\"id\":\"axH3eCCB9nxz\",\"name\":\"MCP 验收项目\",\"c"
+    },
+    {
+      "name": "project.open 经 MCP 在真实桌面中打开画布",
+      "ok": true,
+      "detail": "\"\""
+    },
+    {
+      "name": "读操作 app.status",
+      "ok": true
+    },
+    {
+      "name": "读操作 capability.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 node.type.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 node.type.get",
+      "ok": true
+    },
+    {
+      "name": "读操作 project.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 model.connection.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 model.definition.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 model.binding.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 environment.local",
+      "ok": true
+    },
+    {
+      "name": "读操作 environment.videoEngine.status",
+      "ok": true
+    },
+    {
+      "name": "读操作 provider.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 provider.listExecutable",
+      "ok": true
+    },
+    {
+      "name": "读操作 provider.exportableConnections",
+      "ok": true
+    },
+    {
+      "name": "读操作 workspace.palettePreferences.get",
+      "ok": true
+    },
+    {
+      "name": "读操作 diagnostics.query",
+      "ok": true
+    },
+    {
+      "name": "读操作 library.resource.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 library.folder.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 library.collection.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 flowAgent.catalog",
+      "ok": true
+    },
+    {
+      "name": "读操作 history.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 skill.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 chat.skill.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 node.library.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 graph.get",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 node.get",
+      "ok": true,
+      "detail": "业务拒绝 NODE_NOT_FOUND"
+    },
+    {
+      "name": "只读扫描 run.wait",
+      "ok": true,
+      "detail": "业务拒绝 NOT_FOUND"
+    },
+    {
+      "name": "只读扫描 output.get",
+      "ok": true,
+      "detail": "业务拒绝 NODE_NOT_FOUND"
+    },
+    {
+      "name": "只读扫描 media.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 chat.read",
+      "ok": true,
+      "detail": "业务拒绝 NODE_NOT_FOUND"
+    },
+    {
+      "name": "只读扫描 chat.messages",
+      "ok": true,
+      "detail": "业务拒绝 NODE_NOT_FOUND"
+    },
+    {
+      "name": "只读扫描 model.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 library.search",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 run.get",
+      "ok": true,
+      "detail": "业务拒绝 NOT_FOUND"
+    },
+    {
+      "name": "只读扫描 diagnostics.summary",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 app.status",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 capability.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 node.type.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 project.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 project.get",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 project.delete.precheck",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 library.resource.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 library.resource.get",
+      "ok": true,
+      "detail": "业务拒绝 NOT_FOUND"
+    },
+    {
+      "name": "只读扫描 library.folder.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 library.collection.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 library.category.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 node.library.get",
+      "ok": true,
+      "detail": "业务拒绝 NOT_FOUND"
+    },
+    {
+      "name": "只读扫描 node.library.search",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 history.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 history.restore.precheck",
+      "ok": true,
+      "detail": "业务拒绝 NOT_FOUND"
+    },
+    {
+      "name": "只读扫描 history.recovery.precheck",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 flowAgent.inspect",
+      "ok": true,
+      "detail": "业务拒绝 AGENT_NODE_MISSING"
+    },
+    {
+      "name": "只读扫描 flowAgent.catalog",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 flowAgent.collaboration",
+      "ok": true,
+      "detail": "业务拒绝 AGENT_NODE_MISSING"
+    },
+    {
+      "name": "只读扫描 flowAgent.build.inspect",
+      "ok": true,
+      "detail": "业务拒绝 STORAGE_UNAVAILABLE"
+    },
+    {
+      "name": "只读扫描 flow.command.lookup",
+      "ok": true,
+      "detail": "业务拒绝 NOT_FOUND"
+    },
+    {
+      "name": "只读扫描 flow.command.availability",
+      "ok": true,
+      "detail": "业务拒绝 NODE_NOT_FOUND"
+    },
+    {
+      "name": "只读扫描 flow.command.check",
+      "ok": true,
+      "detail": "业务拒绝 NOT_FOUND"
+    },
+    {
+      "name": "只读扫描 flowAsset.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 flowAsset.read",
+      "ok": true,
+      "detail": "业务拒绝 ASSET_VERSION_MISSING"
+    },
+    {
+      "name": "只读扫描 model.connection.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 model.definition.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 model.binding.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 model.binding.resolve",
+      "ok": true,
+      "detail": "业务拒绝 MODEL_BINDING_NOT_FOUND"
+    },
+    {
+      "name": "只读扫描 environment.local",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 environment.videoEngine.status",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 workspace.palettePreferences.get",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 diagnostics.query",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 project.nodeVisibility.get",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 node.type.get",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 model.credential.status",
+      "ok": true,
+      "detail": "业务拒绝 NOT_FOUND"
+    },
+    {
+      "name": "只读扫描 media.getRecipe",
+      "ok": true,
+      "detail": "业务拒绝 MEDIA_NOT_FOUND"
+    },
+    {
+      "name": "只读扫描 provider.list",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 provider.listExecutable",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 provider.exportableConnections",
+      "ok": true
+    },
+    {
+      "name": "只读扫描 provider.package.preview",
+      "ok": true,
+      "detail": "业务拒绝 INPUT_NOT_FOUND"
+    },
+    {
+      "name": "只读扫描 director.publish.status",
+      "ok": true,
+      "detail": "业务拒绝 NOT_FOUND"
+    },
+    {
+      "name": "拦住 environment.videoEngine.install（期望 INSTALL_CONFIRM_REQUIRED）",
+      "ok": true,
+      "detail": "实际 code=INSTALL_CONFIRM_REQUIRED"
+    },
+    {
+      "name": "拦住 provider.testConnection（期望 NETWORK_CONFIRM_REQUIRED）",
+      "ok": true,
+      "detail": "实际 code=NETWORK_CONFIRM_REQUIRED"
+    },
+    {
+      "name": "拦住 model.validate（期望 NETWORK_CONFIRM_REQUIRED）",
+      "ok": true,
+      "detail": "实际 code=NETWORK_CONFIRM_REQUIRED"
+    },
+    {
+      "name": "拦住 provider.package.preview（不得成功）",
+      "ok": true,
+      "detail": "status=failed code=INPUT_NOT_FOUND"
+    },
+    {
+      "name": "拦住 graph.patch（不得成功）",
+      "ok": true,
+      "detail": "status=failed code=INVALID_INPUT"
+    },
+    {
+      "name": "拦住 project.import（期望 PATH_NOT_ALLOWED）",
+      "ok": true,
+      "detail": "实际 code=PATH_NOT_ALLOWED"
+    },
+    {
+      "name": "拦住 run.cancel（不得成功）",
+      "ok": true,
+      "detail": "status=failed code=NOT_FOUND"
+    },
+    {
+      "name": "拦住 flowAgent.cooperate（不得成功）",
+      "ok": true,
+      "detail": "status=failed code=INVALID_INPUT"
+    },
+    {
+      "name": "拦住 license.getStatus（不得成功）",
+      "ok": true,
+      "detail": "status=failed code=UNSUPPORTED_OPERATION"
+    }
+  ],
+  "failures": [],
+  "guarded": [
+    {
+      "operationId": "environment.videoEngine.install",
+      "status": "failed",
+      "code": "INSTALL_CONFIRM_REQUIRED"
+    },
+    {
+      "operationId": "provider.testConnection",
+      "status": "failed",
+      "code": "NETWORK_CONFIRM_REQUIRED"
+    },
+    {
+      "operationId": "model.validate",
+      "status": "failed",
+      "code": "NETWORK_CONFIRM_REQUIRED"
+    },
+    {
+      "operationId": "provider.package.preview",
+      "status": "failed",
+      "code": "INPUT_NOT_FOUND"
+    },
+    {
+      "operationId": "graph.patch",
+      "status": "failed",
+      "code": "INVALID_INPUT"
+    },
+    {
+      "operationId": "project.import",
+      "status": "failed",
+      "code": "PATH_NOT_ALLOWED"
+    },
+    {
+      "operationId": "run.cancel",
+      "status": "failed",
+      "code": "NOT_FOUND"
+    },
+    {
+      "operationId": "flowAgent.cooperate",
+      "status": "failed",
+      "code": "INVALID_INPUT"
+    },
+    {
+      "operationId": "license.getStatus",
+      "status": "failed",
+      "code": "UNSUPPORTED_OPERATION"
+    }
+  ],
+  "uncovered": [
+    "skill_list",
+    "skill_install",
+    "chat_skill_list",
+    "chat_skill_bind",
+    "node_library_save",
+    "node_library_list",
+    "graph_get",
+    "node_get",
+    "node_execute",
+    "run_wait",
+    "output_get",
+    "media_import",
+    "media_list",
+    "media_delete",
+    "chat_read",
+    "chat_messages",
+    "model_list",
+    "library_search",
+    "library_create_resource",
+    "run_get",
+    "diagnostics_summary",
+    "project_get",
+    "project_create",
+    "project_open",
+    "project_update",
+    "project_rename",
+    "project_save",
+    "project_clone",
+    "project_delete_precheck",
+    "project_delete",
+    "project_export",
+    "library_resource_get",
+    "library_resource_preview_files",
+    "library_resource_create",
+    "library_resource_publish",
+    "library_resource_delete",
+    "library_resource_delete_many",
+    "library_resource_archive",
+    "library_resource_set_folder",
+    "library_resource_set_collections",
+    "library_folder_create",
+    "library_folder_rename",
+    "library_folder_delete",
+    "library_collection_create",
+    "library_category_list",
+    "library_category_save",
+    "library_resource_materialize",
+    "library_materialization_discard",
+    "node_library_compose",
+    "node_library_update",
+    "node_library_delete",
+    "node_library_get",
+    "node_library_search",
+    "node_library_insert",
+    "history_snapshot_create",
+    "history_snapshot_delete",
+    "history_restore_precheck",
+    "history_restore",
+    "history_recovery_precheck",
+    "history_recovery_resolve",
+    "project_importStructure",
+    "library_import",
+    "library_export",
+    "project_exportStructure",
+    "flowAgent_inspect",
+    "flowAgent_collaboration",
+    "flowAgent_run",
+    "flowAgent_pause",
+    "flowAgent_stop",
+    "flowAgent_build_inspect",
+    "flowAgent_build_propose",
+    "flowAgent_build_commit",
+    "flowAgent_review",
+    "flow_command_lookup",
+    "flow_command_availability",
+    "flow_command_reconcile",
+    "flow_command_check",
+    "flow_command_dispatch",
+    "flow_command_abort",
+    "flowAsset_submit",
+    "flowAsset_list",
+    "flowAsset_read",
+    "model_binding_resolve",
+    "workspace_palettePreferences_save",
+    "diagnostics_exportBundle",
+    "project_nodeVisibility_get",
+    "project_nodeVisibility_set",
+    "model_connection_save",
+    "model_credential_status",
+    "model_connection_delete",
+    "model_definition_save",
+    "model_definition_delete",
+    "model_definition_deleteMany",
+    "model_binding_save",
+    "media_getRecipe",
+    "media_batchExport",
+    "library_captureProjectMedia",
+    "library_captureProjectNodes",
+    "canvas_history",
+    "project_close",
+    "provider_package_export",
+    "provider_package_seal",
+    "director_publish_prepare",
+    "director_publish_status",
+    "director_publish_continue"
+  ],
+  "licensed": true,
+  "readSweep": [
+    {
+      "operationId": "skill.list",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "chat.skill.list",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "node.library.list",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "graph.get",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "node.get",
+      "status": "failed",
+      "code": "NODE_NOT_FOUND"
+    },
+    {
+      "operationId": "run.wait",
+      "status": "failed",
+      "code": "NOT_FOUND"
+    },
+    {
+      "operationId": "output.get",
+      "status": "failed",
+      "code": "NODE_NOT_FOUND"
+    },
+    {
+      "operationId": "media.list",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "chat.read",
+      "status": "failed",
+      "code": "NODE_NOT_FOUND"
+    },
+    {
+      "operationId": "chat.messages",
+      "status": "failed",
+      "code": "NODE_NOT_FOUND"
+    },
+    {
+      "operationId": "model.list",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "library.search",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "run.get",
+      "status": "failed",
+      "code": "NOT_FOUND"
+    },
+    {
+      "operationId": "diagnostics.summary",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "app.status",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "capability.list",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "node.type.list",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "project.list",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "project.get",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "project.delete.precheck",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "library.resource.list",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "library.resource.get",
+      "status": "failed",
+      "code": "NOT_FOUND"
+    },
+    {
+      "operationId": "library.folder.list",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "library.collection.list",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "library.category.list",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "node.library.get",
+      "status": "failed",
+      "code": "NOT_FOUND"
+    },
+    {
+      "operationId": "node.library.search",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "history.list",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "history.restore.precheck",
+      "status": "failed",
+      "code": "NOT_FOUND"
+    },
+    {
+      "operationId": "history.recovery.precheck",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "flowAgent.inspect",
+      "status": "failed",
+      "code": "AGENT_NODE_MISSING"
+    },
+    {
+      "operationId": "flowAgent.catalog",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "flowAgent.collaboration",
+      "status": "failed",
+      "code": "AGENT_NODE_MISSING"
+    },
+    {
+      "operationId": "flowAgent.build.inspect",
+      "status": "failed",
+      "code": "STORAGE_UNAVAILABLE"
+    },
+    {
+      "operationId": "flow.command.lookup",
+      "status": "failed",
+      "code": "NOT_FOUND"
+    },
+    {
+      "operationId": "flow.command.availability",
+      "status": "failed",
+      "code": "NODE_NOT_FOUND"
+    },
+    {
+      "operationId": "flow.command.check",
+      "status": "failed",
+      "code": "NOT_FOUND"
+    },
+    {
+      "operationId": "flowAsset.list",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "flowAsset.read",
+      "status": "failed",
+      "code": "ASSET_VERSION_MISSING"
+    },
+    {
+      "operationId": "model.connection.list",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "model.definition.list",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "model.binding.list",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "model.binding.resolve",
+      "status": "failed",
+      "code": "MODEL_BINDING_NOT_FOUND"
+    },
+    {
+      "operationId": "environment.local",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "environment.videoEngine.status",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "workspace.palettePreferences.get",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "diagnostics.query",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "project.nodeVisibility.get",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "node.type.get",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "model.credential.status",
+      "status": "failed",
+      "code": "NOT_FOUND"
+    },
+    {
+      "operationId": "media.getRecipe",
+      "status": "failed",
+      "code": "MEDIA_NOT_FOUND"
+    },
+    {
+      "operationId": "provider.list",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "provider.listExecutable",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "provider.exportableConnections",
+      "status": "completed",
+      "code": ""
+    },
+    {
+      "operationId": "provider.package.preview",
+      "status": "failed",
+      "code": "INPUT_NOT_FOUND"
+    },
+    {
+      "operationId": "director.publish.status",
+      "status": "failed",
+      "code": "NOT_FOUND"
+    }
+  ],
+  "finishedAt": "2026-11-08T13:58:34.495Z",
+  "passed": 90,
+  "failed": 0
+}

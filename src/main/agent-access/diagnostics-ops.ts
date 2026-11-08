@@ -1,4 +1,4 @@
-// F9（三）诊断查询：外部操作复用 main 的 DiagnosticsService.query（GUI 运行中心同一条
+﻿// F9（三）诊断查询：外部操作复用 main 的 DiagnosticsService.query（GUI 运行中心同一条
 // 读取路径与同一份已脱敏存储），不另建日志读取器、不读 electron-log 明文、不读项目数据。
 //
 // 关键口径：
@@ -16,9 +16,14 @@ import type { DiagnosticsEvent } from '../../shared/observability'
 import { DIAGNOSTICS_EVENTS } from '../../shared/observability'
 import { redactDiagnosticText } from '../../shared/diagnostics'
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { DesktopAccessError } from './desktop'
+import { app } from 'electron'
+import {
+  buildNodeRunDiagnosticsReport,
+  safeRunFilename
+} from '../diagnostics/node-run-export'
+import { DesktopAccessError, type AccessDesktop } from './desktop'
 
 const MESSAGE_MAX_CHARS = 500
 const ATTRIBUTE_MAX_KEYS = 32
@@ -33,6 +38,9 @@ export interface DiagnosticsOperationContext {
   diagnostics: unknown
   /** 受控导出目录（服务启动时 realpath 固定）；导出包只能写在这里。 */
   exportRoot: string
+  /** 节点运行记录的来源：权威宿主（与 GUI 面板"导出诊断信息"同一份数据）。 */
+  activeProjectId?: () => string | null
+  desktop?: AccessDesktop
 }
 
 interface DiagnosticsQueryHost {
@@ -243,6 +251,79 @@ async function exportDiagnosticsBundle(
   }
 }
 
+/**
+ * 节点运行诊断导出：记录由权威宿主提供（与 GUI「导出诊断信息」同一份 nodeRun/nodeRunHistory），
+ * 报告构造与 GUI 共用 `buildNodeRunDiagnosticsReport`，落位固定在受控导出目录、不覆盖已有文件。
+ * 节点正文作为 redactValues 传入，导出前被抹掉——所以报告里不会出现提示词或正文。
+ */
+async function exportNodeRunDiagnostics(
+  input: Record<string, unknown>,
+  context: DiagnosticsOperationContext
+): Promise<unknown> {
+  const projectId = input.projectId as string
+  const nodeId = input.nodeId as string
+  const active = context.activeProjectId?.() ?? null
+  if (active !== projectId)
+    refuse('ACTIVE_PROJECT_REQUIRED', 'project.open the target canvas first')
+  if (!context.desktop) refuse('DESKTOP_UNAVAILABLE', 'authoritative host is not running')
+  let reply: { graphVersion: number; result?: unknown }
+  try {
+    reply = await context.desktop.run({ action: 'read-node-runs', projectId, nodeId }, undefined, 30000)
+  } catch (error) {
+    if (error instanceof DesktopAccessError) throw error
+    refuse('NODE_RUNS_UNAVAILABLE', error instanceof Error ? error.message.slice(0, 120) : undefined)
+  }
+  const payload = (reply.result ?? {}) as {
+    nodeType?: string
+    nodeTitle?: string
+    runs?: unknown[]
+    redactValues?: unknown[]
+  }
+  const runs = Array.isArray(payload.runs) ? (payload.runs as never[]) : []
+  const report = buildNodeRunDiagnosticsReport({
+    projectId,
+    nodeId,
+    nodeType: String(payload.nodeType ?? 'unknown').slice(0, 80),
+    ...(typeof payload.nodeTitle === 'string' ? { nodeTitle: payload.nodeTitle } : {}),
+    runs,
+    ...(Array.isArray(payload.redactValues)
+      ? { redactValues: payload.redactValues.filter((v): v is string => typeof v === 'string') }
+      : {}),
+    app: {
+      version: app.getVersion(),
+      packaged: app.isPackaged,
+      platform: process.platform,
+      arch: process.arch,
+      electron: process.versions.electron,
+      chromium: process.versions.chrome,
+      node: process.versions.node
+    }
+  })
+  const nodeType = String(payload.nodeType ?? 'node')
+  const fileName = `${safeRunFilename(nodeType)}-${safeRunFilename(nodeId)}-diagnostics.json`
+  const target = join(context.exportRoot, fileName)
+  if (existsSync(target)) refuse('OUTPUT_EXISTS', fileName)
+  const bytes = Buffer.from(`${JSON.stringify(report, null, 2)}\n`, 'utf8')
+  if (bytes.length <= 0) refuse('EXPORT_FAILED', 'empty-report')
+  // 排他创建：并发下也不会覆盖已有文件。
+  const fd = openSync(target, 'wx')
+  try {
+    writeFileSync(fd, bytes)
+    fsyncSync(fd)
+  } finally {
+    closeSync(fd)
+  }
+  return {
+    fileName,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+    byteSize: bytes.length,
+    runCount: Array.isArray((report as { runs?: unknown[] }).runs)
+      ? (report as { runs: unknown[] }).runs.length
+      : 0,
+    nodeType: nodeType.slice(0, 80)
+  }
+}
+
 /** diagnostics.* 的统一入口。 */
 export async function runDiagnosticsOperation(
   operation: string,
@@ -254,6 +335,8 @@ export async function runDiagnosticsOperation(
       return queryDiagnostics(input, context)
     case 'diagnostics.exportBundle':
       return exportDiagnosticsBundle(input, context)
+    case 'diagnostics.exportNodeRun':
+      return exportNodeRunDiagnostics(input, context)
     default:
       throw new DesktopAccessError('UNSUPPORTED_OPERATION', false, 'diagnostics-dispatch')
   }

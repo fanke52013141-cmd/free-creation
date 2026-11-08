@@ -12,11 +12,11 @@ import type {
   ExportDiagnosticsBundleResult,
   ExportNodeRunDiagnosticsInput,
   IpcEnvelope,
-  NodeRunDiagnosticRecord,
   NodeRunLogEventInput,
   ReportDiagnosticsEventsInput
 } from '../../shared/contracts'
 import type { DiagnosticsService } from '../diagnostics/service'
+import { buildNodeRunDiagnosticsReport } from '../diagnostics/node-run-export'
 
 let diagnosticsService: DiagnosticsService | null = null
 
@@ -72,61 +72,6 @@ function reportRendererEvent(input: NodeRunLogEventInput): IpcEnvelope<boolean> 
   if (input.level === 'error') log.error(JSON.stringify(event))
   else log.info(JSON.stringify(event))
   return ok(true)
-}
-
-function sanitizeRun(
-  run: ExportNodeRunDiagnosticsInput['runs'][number],
-  privateValues: readonly string[]
-): NodeRunDiagnosticRecord {
-  const trace = Array.isArray(run.trace)
-    ? run.trace.slice(-80).map((entry) => ({
-        at: Number.isFinite(entry.at) ? entry.at : 0,
-        phase: bounded(entry.phase, 40),
-        level: entry.level === 'error' ? ('error' as const) : ('info' as const),
-        message: bounded(entry.message, 500, privateValues)
-      }))
-    : []
-  const inputs = Object.fromEntries(
-    Object.entries(run.inputs ?? {}).slice(0, 100).map(([portId, sources]) => [
-      bounded(portId, 80),
-      (Array.isArray(sources) ? sources : []).slice(0, 50).map((source) => ({
-        nodeId: bounded(source.nodeId),
-        portId: bounded(source.portId, 80)
-      }))
-    ])
-  )
-  return {
-    runId: bounded(run.runId),
-    status: bounded(run.status, 24),
-    startedAt: Number.isFinite(run.startedAt) ? run.startedAt : 0,
-    ...(Number.isFinite(run.finishedAt) ? { finishedAt: run.finishedAt } : {}),
-    ...(Number.isFinite(run.durationMs) ? { durationMs: run.durationMs } : {}),
-    inputs,
-    ...(Array.isArray(run.outputPorts)
-      ? { outputPorts: run.outputPorts.slice(0, 50).map((value) => bounded(value, 80)) }
-      : {}),
-    ...(run.error
-      ? {
-          error: {
-            phase: bounded(run.error.phase, 40),
-            reason: bounded(run.error.reason, 500, privateValues)
-          }
-        }
-      : {}),
-    ...(run.target
-      ? {
-          target: {
-            operation: bounded(run.target.operation, 80),
-            ...(run.target.featureKey ? { featureKey: bounded(run.target.featureKey, 120) } : {}),
-            ...(run.target.providerId ? { providerId: bounded(run.target.providerId) } : {}),
-            ...(run.target.providerName ? { providerName: bounded(run.target.providerName) } : {}),
-            ...(run.target.modelId ? { modelId: bounded(run.target.modelId) } : {}),
-            ...(run.target.modelName ? { modelName: bounded(run.target.modelName) } : {})
-          }
-        }
-      : {}),
-    trace
-  }
 }
 
 export function registerDiagnosticsIpc(): void {
@@ -228,9 +173,6 @@ export function registerDiagnosticsIpc(): void {
       }
       const window = BrowserWindow.fromWebContents(event.sender)
       const filename = `${safeFilename(input.nodeType)}-${safeFilename(input.nodeId)}-diagnostics.json`
-      const privateValues = (Array.isArray(input.redactValues) ? input.redactValues : [])
-        .filter((value): value is string => typeof value === 'string' && value.length >= 3)
-        .slice(0, 100)
       const options = {
         title: '导出节点诊断信息',
         defaultPath: join(app.getPath('downloads'), filename),
@@ -241,9 +183,15 @@ export function registerDiagnosticsIpc(): void {
         : await dialog.showSaveDialog(options)
       if (selection.canceled || !selection.filePath) return err('CANCELLED', '已取消导出')
 
-      const report = {
-        format: 'canvas-studio-node-diagnostics-v1',
-        exportedAt: new Date().toISOString(),
+      // 报告构造与外部导出**共用同一份实现**（src/main/diagnostics/node-run-export.ts），
+      // 保证 GUI 导出与 MCP 导出的脱敏与结构完全一致。
+      const report = buildNodeRunDiagnosticsReport({
+        projectId: input.projectId,
+        nodeId: input.nodeId,
+        nodeType: input.nodeType,
+        ...(input.nodeTitle ? { nodeTitle: input.nodeTitle } : {}),
+        runs: input.runs,
+        ...(Array.isArray(input.redactValues) ? { redactValues: input.redactValues } : {}),
         app: {
           version: app.getVersion(),
           packaged: app.isPackaged,
@@ -252,26 +200,15 @@ export function registerDiagnosticsIpc(): void {
           electron: process.versions.electron,
           chromium: process.versions.chrome,
           node: process.versions.node
-        },
-        projectId: bounded(input.projectId),
-        node: {
-          id: bounded(input.nodeId),
-          type: bounded(input.nodeType, 80),
-          title: bounded(input.nodeTitle, 160)
-        },
-        privacy: {
-          promptOrTextLogging: 'not intentional; current node text is redacted before export',
-          includesMediaContent: false,
-          includesApiKeys: false
-        },
-        runs: input.runs.map((run) => sanitizeRun(run, privateValues))
-      }
+        }
+      })
 
       try {
         await writeFile(selection.filePath, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
+        const exported = report as { node: { type: string }; runs: unknown[] }
         log.info('[diagnostics] node run report exported', {
-          nodeType: report.node.type,
-          runCount: report.runs.length
+          nodeType: exported.node.type,
+          runCount: exported.runs.length
         })
         return ok({ path: selection.filePath })
       } catch (error) {

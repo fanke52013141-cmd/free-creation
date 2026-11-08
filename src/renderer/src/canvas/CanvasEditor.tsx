@@ -1,5 +1,6 @@
 import { reportCanvasFailure } from './canvas-diagnostics'
 import { ensureCanvasSaved } from './flow-asset-actions'
+import { readNodeRunHistory, readNodeRunRecord } from '../engine/runRecord'
 import { commitFlowBuild } from './flow-build-actions'
 import { useAppStore } from '../stores/app'
 import { nodeTextField } from './node-pointer-policy'
@@ -955,6 +956,45 @@ export function CanvasEditor({
               return
             }
             // ── F6 收尾：导演台发布授权（交互式请求）──
+            // F9 收尾：把节点的运行记录交给 main 导出（外部导出节点诊断用）。
+            // 记录来源与 GUI 面板的"导出诊断信息"完全相同（readNodeRunRecord/History）。
+            if (request.action === 'read-node-runs') {
+              const nodeId = request.nodeId as TLShapeId | undefined
+              const target = nodeId ? editor.getShape<NodeCardShape>(nodeId) : undefined
+              if (!target || target.type !== 'node-card') {
+                window.api.replyLocalAgentDesktop({
+                  requestId: request.requestId,
+                  projectId: project.id,
+                  ok: false,
+                  validated: true,
+                  graphVersion: graphVersionRef.current,
+                  errorCode: 'NODE_NOT_FOUND',
+                  errorDetail: String(request.nodeId ?? '').slice(0, 80)
+                })
+                return
+              }
+              const latest = readNodeRunRecord(target.meta?.nodeRun)
+              const history = readNodeRunHistory(target.meta?.nodeRunHistory)
+              const records = latest
+                ? [latest, ...history.filter((record) => record.runId !== latest.runId)].slice(0, 13)
+                : history.slice(0, 13)
+              window.api.replyLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                ok: true,
+                graphVersion: graphVersionRef.current,
+                result: {
+                  nodeType: target.props.nodeType,
+                  nodeTitle: target.props.title,
+                  runs: records,
+                  // 节点正文作为脱敏值一起交给 main：导出前会被抹掉，不会进入报告。
+                  redactValues: [target.props.text].filter(
+                    (value): value is string => typeof value === 'string' && value.length >= 3
+                  )
+                }
+              })
+              return
+            }
             // F9 收尾：敏感动作（凭据包导入等）必须由**人在 GUI 亲眼确认**。
             // 复用 GUI 自己的确认弹窗；外部没有伪造这一步的通道。
             if (request.action === 'confirm-sensitive') {

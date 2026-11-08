@@ -129,16 +129,17 @@ export async function runProviderAdminOperation(
       models: provider.models as never,
       allowCost: false
     } as never)
-    return {
-      providerId,
-      summary: safeMessage(result?.summary ?? ''),
-      items: (result?.items ?? []).slice(0, 100).map((item) => ({
-        id: String(item.id ?? '').slice(0, 120),
-        label: String(item.label ?? '').slice(0, 200),
-        outcome: String(item.probe ?? 'unknown').slice(0, 60),
-        ...(item.cost ? { cost: String(item.cost).slice(0, 20) } : {})
-      }))
-    }
+    const items = (result?.items ?? []).slice(0, 100).map((item) => ({
+      id: String(item.id ?? '').slice(0, 120),
+      label: String(item.label ?? '').slice(0, 200),
+      outcome: String(item.probe ?? 'unknown').slice(0, 60),
+      ...(item.cost ? { cost: String(item.cost).slice(0, 20) } : {})
+    }))
+    // 空结果必须说清楚：分不清"探测通过但无项目"和"该供应商根本不支持探测"会让调用方误判。
+    const summary = items.length
+      ? safeMessage(result?.summary ?? '')
+      : '该供应商没有可用的免费探测项（未发起任何请求）；如需验证可用性请用 provider.testConnection 或 model.validate'
+    return { providerId, probeSupported: items.length > 0, summary, items }
   }
 
   if (operationId === 'provider.package.import') {
