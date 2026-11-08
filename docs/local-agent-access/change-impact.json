@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "F9 剩余收敛：新增 4 项操作（调色板偏好读/写、诊断包导出、模型定义批量删除）。兼容结论：均为纯追加（113→117），既有操作 Schema 逐字节未变，未使用 --accept-contract-change；诊断导出复用 GUI 同一 exportBundle 与脱敏，输出位置由 main 固定在受控导出目录。",
+  "reason": "F5/F4 动作路由批次：不新增 Registry 操作（仍 117），只把 GUI 入口为",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",

@@ -8,13 +8,12 @@
   "totals": {
     "actions": 213,
     "byPhase": {
-      "external": 120,
+      "external": 139,
       "F8": 2,
-      "excluded": 23,
+      "excluded": 28,
       "F2": 5,
       "F7": 6,
-      "F4": 7,
-      "F5": 19,
+      "F5": 2,
       "F9": 26,
       "F6": 3,
       "F3": 2
@@ -468,7 +467,8 @@
       "label": "项目文件检查",
       "channel": "media:check-project-files",
       "gui": "项目媒体管理",
-      "phase": "F4"
+      "phase": "excluded",
+      "note": "项目文件检查：内部维护/自检路径（启动与诊断触发），不是用户业务动作"
     },
     "ipc.media.saveRecipe": {
       "label": "产物配方保存",
@@ -496,82 +496,127 @@
       "label": "媒体导入(缓冲)",
       "channel": "media:import-buffer",
       "gui": "拖放/剪贴板导入",
-      "phase": "F4"
+      "phase": "external",
+      "external": [
+        "media.import"
+      ],
+      "note": "F4 路由：拖放/剪贴板导入与 media.import 是同一媒体登记服务（外部只带路径，字节不过线）"
     },
     "ipc.media.imageCrop": {
       "label": "图片裁剪",
       "channel": "media:image-crop",
       "gui": "image-crop 节点执行",
-      "phase": "F4",
-      "note": "经节点执行接入，不单独开媒体直调"
+      "phase": "external",
+      "note": "F5/F4 路由：GUI 该动作就是「图片裁剪」节点执行，外部等价路径为 node.execute（执行该类型节点）+ output.get 读取正式产物；本地确定性执行，已由真实桌面里程碑逐动作验收",
+      "nodeType": "image-crop",
+      "external": [
+        "node.execute",
+        "output.get"
+      ]
     },
     "ipc.media.imageSplit": {
       "label": "图片拆分",
       "channel": "media:image-split",
       "gui": "image-split 节点执行",
-      "phase": "F4"
+      "phase": "external",
+      "nodeType": "image-split",
+      "external": [
+        "node.execute",
+        "output.get"
+      ],
+      "note": "F5/F4 路由：GUI 该动作就是「图片拆分」节点执行，外部等价路径为 node.execute（执行该类型节点）+ output.get 读取正式产物；本地确定性执行，已由真实桌面里程碑逐动作验收"
     },
     "ipc.media.videoFrame": {
       "label": "视频抽帧",
       "channel": "media:video-frame",
       "gui": "video-frame 节点执行",
-      "phase": "F5"
+      "phase": "external",
+      "nodeType": "video-frame",
+      "external": [
+        "node.execute",
+        "output.get"
+      ],
+      "note": "F5/F4 路由：GUI 该动作就是「视频抽帧」节点执行，外部等价路径为 node.execute（执行该类型节点）+ output.get 读取正式产物；本地确定性执行，已由真实桌面里程碑逐动作验收"
     },
     "ipc.media.videoClip": {
       "label": "视频截取",
       "channel": "media:video-clip",
       "gui": "video-clip 节点执行",
-      "phase": "F5"
+      "phase": "external",
+      "nodeType": "video-clip",
+      "external": [
+        "node.execute",
+        "output.get"
+      ],
+      "note": "F5/F4 路由：GUI 该动作就是「视频截取」节点执行，外部等价路径为 node.execute（执行该类型节点）+ output.get 读取正式产物；本地确定性执行，已由真实桌面里程碑逐动作验收"
     },
     "ipc.media.videoAudio": {
       "label": "提取视频音频",
       "channel": "media:video-audio",
       "gui": "历史入口",
       "phase": "excluded",
-      "reason": "video-audio 节点 2026-09-18 退役，截取音频并入视频截取；仅旧项目读取兼容"
+      "reason": "video-audio 节点 2026-09-18 退役，截取音频并入视频截取；仅旧项目读取兼容",
+      "note": "video-audio 节点 2026-09-18 退役，截取音频并入视频截取；仅旧项目读取兼容"
     },
     "ipc.media.soundAdjust": {
       "label": "声音调整",
       "channel": "media:sound-adjust",
       "gui": "sound-adjust 节点执行",
-      "phase": "F5"
+      "phase": "external",
+      "nodeType": "sound-adjust",
+      "external": [
+        "node.execute",
+        "output.get"
+      ],
+      "note": "F5/F4 路由：GUI 该动作就是「声音调整」节点执行，外部等价路径为 node.execute（执行该类型节点）+ output.get 读取正式产物；本地确定性执行，已由真实桌面里程碑逐动作验收"
     },
     "ipc.media.videoProbe": {
       "label": "视频探测",
       "channel": "media:video-probe",
       "gui": "视频节点预览",
-      "phase": "F5"
+      "phase": "excluded",
+      "note": "视频探测：导入登记时已完成，界面探测仅用于预览呈现，无独立业务语义"
     },
     "ipc.media.timelineCompose": {
       "label": "时间线合成",
       "channel": "media:timeline-compose",
       "gui": "timeline 节点执行",
-      "phase": "F5"
+      "phase": "external",
+      "nodeType": "timeline",
+      "external": [
+        "node.execute",
+        "output.get"
+      ],
+      "note": "F5/F4 路由：GUI 该动作就是「时间线合成」节点执行，外部等价路径为 node.execute（执行该类型节点）+ output.get 读取正式产物；本地确定性执行，已由真实桌面里程碑逐动作验收"
     },
     "ipc.media.probeMetadata": {
       "label": "媒体元数据探测",
       "channel": "media:probe-metadata",
       "gui": "素材导入",
-      "phase": "F4"
+      "phase": "excluded",
+      "note": "媒体元数据探测：media.import 登记时已返回 kind/mime/size，界面探测不构成独立业务动作"
     },
     "ipc.media.videoThumbnails": {
       "label": "视频缩略图",
       "channel": "media:video-thumbnails",
       "gui": "视频预览",
-      "phase": "F5"
+      "phase": "excluded",
+      "note": "视频缩略图：纯预览呈现（界面渲染用），不产生正式产物，不需要外部等价"
     },
     "ipc.media.audioWaveform": {
       "label": "音频波形",
       "channel": "media:audio-waveform",
       "gui": "音频预览",
-      "phase": "F5"
+      "phase": "excluded",
+      "note": "音频波形：纯预览呈现（界面渲染用），不产生正式产物，不需要外部等价"
     },
     "ipc.media.vocalSeparate": {
       "label": "人声分离",
       "channel": "media:vocal-separate",
       "gui": "历史入口",
       "phase": "excluded",
-      "reason": "vocal-separate 节点退役；历史项目读取兼容，不恢复新建入口"
+      "reason": "vocal-separate 节点退役；历史项目读取兼容，不恢复新建入口",
+      "note": "vocal-separate 节点退役；历史项目读取兼容，不恢复新建入口"
     },
     "ipc.media.localCapabilities": {
       "label": "本机能力查询",
@@ -604,32 +649,43 @@
       "label": "深度视频转换",
       "channel": "media:video-convert-depth",
       "gui": "video-depth 节点执行",
-      "phase": "F5"
+      "phase": "F5",
+      "note": "F5 待验收：GUI 该动作是「深度视频转换」节点执行，但需要本机 Python + CUDA 推理环境（先经 environment.videoEngine.install 安装），且 video-depth 从未实测 —— 在环境未就绪时 node.execute 只会如实失败，因此不把它标成已开放"
     },
     "ipc.media.videoConvertClay": {
       "label": "白模视频转换",
       "channel": "media:video-convert-clay",
       "gui": "video-clay 节点执行",
-      "phase": "F5"
+      "phase": "F5",
+      "note": "F5 待验收：GUI 该动作是「白模视频转换」节点执行，但需要本机 Python + CUDA 推理环境（先经 environment.videoEngine.install 安装），且 video-clay 从未实测 —— 在环境未就绪时 node.execute 只会如实失败，因此不把它标成已开放"
     },
     "ipc.media.videoConvertCancel": {
       "label": "转换取消",
       "channel": "media:video-convert-cancel",
       "gui": "转换进度",
-      "phase": "F5"
+      "phase": "external",
+      "external": [
+        "run.cancel"
+      ],
+      "note": "F5 路由：转换取消对应外部任务族（run.get/run.wait/run.cancel）；取消请求与确认分离，终态由 run.get 读账本事实，不把 unknown 报成成功"
     },
     "ipc.media.cancelTransforms": {
       "label": "批量转换取消",
       "channel": "media:cancel-transforms",
       "gui": "转换进度",
-      "phase": "F5"
+      "phase": "external",
+      "external": [
+        "run.cancel"
+      ],
+      "note": "F5 路由：批量转换取消对应外部任务族（run.get/run.wait/run.cancel）；取消请求与确认分离，终态由 run.get 读账本事实，不把 unknown 报成成功"
     },
     "ipc.media.pick": {
       "label": "系统文件选择",
       "channel": "media:pick",
       "gui": "文件对话框",
       "phase": "excluded",
-      "reason": "系统对话框按规范以明确路径/资源ID输入等价替代（F4 起随 media.import 提供）"
+      "reason": "系统对话框按规范以明确路径/资源ID输入等价替代（F4 起随 media.import 提供）",
+      "note": "系统对话框按规范以明确路径/资源ID输入等价替代（F4 起随 media.import 提供）"
     },
     "ipc.media.list": {
       "label": "媒体列表",
@@ -656,21 +712,24 @@
       "channel": "media:reveal",
       "gui": "素材菜单",
       "phase": "excluded",
-      "reason": "桌面呈现辅助；产物位置由导出/读取接口提供"
+      "reason": "桌面呈现辅助；产物位置由导出/读取接口提供",
+      "note": "桌面呈现辅助；产物位置由导出/读取接口提供"
     },
     "ipc.media.copyPath": {
       "label": "复制路径",
       "channel": "media:copy-path",
       "gui": "素材菜单",
       "phase": "excluded",
-      "reason": "桌面呈现辅助；路径可由媒体引用读取获得"
+      "reason": "桌面呈现辅助；路径可由媒体引用读取获得",
+      "note": "桌面呈现辅助；路径可由媒体引用读取获得"
     },
     "ipc.media.open": {
       "label": "系统打开文件",
       "channel": "media:open",
       "gui": "素材菜单",
       "phase": "excluded",
-      "reason": "桌面呈现辅助；预览/导出由业务接口提供"
+      "reason": "桌面呈现辅助；预览/导出由业务接口提供",
+      "note": "桌面呈现辅助；预览/导出由业务接口提供"
     },
     "ipc.media.batchExport": {
       "label": "素材批量导出",
@@ -683,19 +742,32 @@
       "channel": "media:tts-generate",
       "gui": "旧通道",
       "phase": "excluded",
-      "reason": "由 speech/tts 节点执行统一接入（F5），此通道为历史保留"
+      "reason": "由 speech/tts 节点执行统一接入（F5），此通道为历史保留",
+      "note": "由 speech/tts 节点执行统一接入（F5），此通道为历史保留"
     },
     "ipc.media.indexttsDetect": {
       "label": "IndexTTS 检测",
       "channel": "media:indextts-detect",
       "gui": "本地语音环境",
-      "phase": "F5"
+      "phase": "external",
+      "external": [
+        "environment.local"
+      ],
+      "note": "F5 路由：IndexTTS 检测并入 environment.local 的本机能力投影（只回 ready/state，不返回本机路径）"
     },
     "ipc.media.indexttsSynthesize": {
       "label": "IndexTTS 合成",
       "channel": "media:indextts-synthesize",
       "gui": "本地语音合成",
-      "phase": "F5"
+      "phase": "external",
+      "nodeType": "speech",
+      "external": [
+        "node.execute",
+        "run.get",
+        "run.wait",
+        "output.get"
+      ],
+      "note": "F5/F4 路由：GUI 该动作就是「本地 IndexTTS 合成（speech 的本地后端）」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
     },
     "ipc.workspace.listTemplates": {
       "label": "节点库列表",
@@ -1026,7 +1098,8 @@
       "channel": "gateway:keys:export-credential",
       "gui": "设备授权流程",
       "phase": "excluded",
-      "reason": "密钥/凭据导出仅限设备授权签发流程，不开放为外部业务操作（安全边界）"
+      "reason": "密钥/凭据导出仅限设备授权签发流程，不开放为外部业务操作（安全边界）",
+      "note": "密钥/凭据导出仅限设备授权签发流程，不开放为外部业务操作（安全边界）"
     },
     "ipc.keys.listConnections": {
       "label": "密钥连接列表",
@@ -1131,56 +1204,114 @@
       "label": "生图请求",
       "channel": "gateway:image:generate",
       "gui": "image-gen 节点执行",
-      "phase": "F4"
+      "phase": "external",
+      "nodeType": "image-gen",
+      "external": [
+        "node.execute",
+        "run.get",
+        "run.wait",
+        "output.get"
+      ],
+      "note": "F5/F4 路由：GUI 该动作就是「生图」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
     },
     "ipc.keys.imageEdit": {
       "label": "P图请求",
       "channel": "gateway:image:edit",
       "gui": "image-edit 节点执行",
-      "phase": "F4"
+      "phase": "external",
+      "nodeType": "image-edit",
+      "external": [
+        "node.execute",
+        "run.get",
+        "run.wait",
+        "output.get"
+      ],
+      "note": "F5/F4 路由：GUI 该动作就是「P图」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
     },
     "ipc.keys.videoSubmit": {
       "label": "视频提交",
       "channel": "gateway:video:submit",
       "gui": "video 节点执行",
-      "phase": "F5"
+      "phase": "external",
+      "nodeType": "video",
+      "external": [
+        "node.execute",
+        "run.get",
+        "run.wait",
+        "output.get"
+      ],
+      "note": "F5/F4 路由：GUI 该动作就是「视频生成」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
     },
     "ipc.keys.videoCancel": {
       "label": "视频取消",
       "channel": "gateway:video:cancel",
       "gui": "视频任务",
-      "phase": "F5"
+      "phase": "external",
+      "external": [
+        "run.cancel"
+      ],
+      "note": "F5 路由：视频取消对应外部任务族（run.get/run.wait/run.cancel）；取消请求与确认分离，终态由 run.get 读账本事实，不把 unknown 报成成功"
     },
     "ipc.keys.videoTask": {
       "label": "视频任务查询",
       "channel": "gateway:video:task",
       "gui": "视频任务",
-      "phase": "F5"
+      "phase": "external",
+      "external": [
+        "run.get",
+        "run.wait"
+      ],
+      "note": "F5 路由：视频任务查询对应外部任务族（run.get/run.wait/run.cancel）；取消请求与确认分离，终态由 run.get 读账本事实，不把 unknown 报成成功"
     },
     "ipc.keys.audioGenerate": {
       "label": "音频生成",
       "channel": "gateway:audio:generate",
       "gui": "tts 节点执行",
-      "phase": "F5"
+      "phase": "external",
+      "nodeType": "tts",
+      "external": [
+        "node.execute",
+        "run.get",
+        "run.wait",
+        "output.get"
+      ],
+      "note": "F5/F4 路由：GUI 该动作就是「声音复刻」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
     },
     "ipc.keys.speechGenerate": {
       "label": "语音合成",
       "channel": "gateway:speech:generate",
       "gui": "speech 节点执行",
-      "phase": "F5"
+      "phase": "external",
+      "nodeType": "speech",
+      "external": [
+        "node.execute",
+        "run.get",
+        "run.wait",
+        "output.get"
+      ],
+      "note": "F5/F4 路由：GUI 该动作就是「语音合成」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
     },
     "ipc.keys.voiceDesign": {
       "label": "音色设计",
       "channel": "gateway:voice:design",
       "gui": "voice-design 节点执行",
-      "phase": "F5"
+      "phase": "external",
+      "nodeType": "voice-design",
+      "external": [
+        "node.execute",
+        "run.get",
+        "run.wait",
+        "output.get"
+      ],
+      "note": "F5/F4 路由：GUI 该动作就是「音色设计」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
     },
     "ipc.keys.event": {
       "label": "网关流事件",
       "channel": "gateway:event",
       "gui": "流式呈现",
       "phase": "excluded",
-      "reason": "renderer 流式事件通道；外部经 run 事件/结果协议读取（F3/F6），不原样转发 IPC"
+      "reason": "renderer 流式事件通道；外部经 run 事件/结果协议读取（F3/F6），不原样转发 IPC",
+      "note": "renderer 流式事件通道；外部经 run 事件/结果协议读取（F3/F6），不原样转发 IPC"
     },
     "ipc.models.connections": {
       "label": "模型连接列表",
