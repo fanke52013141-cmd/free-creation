@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "F3 结果版本切换：graph.patch 的 ops union 追加 node.select-result 成员（在节点自己的结果集合内切换选中产物）。兼容结论：追加式扩展——既有 6+4 种 op 的字段与语义未变，旧客户端不发送该 op，向后兼容；不改变任何输出 Schema。",
+  "reason": "同步并行提交 4604df5（引用候选菜单单行呈现：长标题省略、完整内容悬浮查看）对受保护源码的影响：仅 src/renderer/src/nodes/specs/bodies/ImageMentionPrompt.tsx 的呈现层改动，不涉及任何外部操作的输入/输出 Schema、不新增/删除操作、不改变节点契约（操作数仍 129 项，contracts.json 无差异）。该提交落在我上一次哈希刷新（19:35）与提交（19:37）之间，属时序竞态，非未提交在途改动。",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -142,7 +142,7 @@
     "src/renderer/src/nodes/specs/agentFlow.tsx": "026deec0bacce71ddae36c035811059d7f21421e357d20dabd6061240a8f6fbe",
     "src/renderer/src/nodes/specs/agentFlowDiagnostics.ts": "6cc3721701ff31c4fd6522558afa1c6b46d05ac4b6d03a6952112262d1e773e8",
     "src/renderer/src/nodes/specs/agentFlowEditors.tsx": "527718988777334b40e4e4cb200c3d54cde7078386af5a8769237e47d3869fd7",
-    "src/renderer/src/nodes/specs/bodies/ImageMentionPrompt.tsx": "9f82db6896ee306ae7d6ca41ac80d95f741475fb873301b03035980cd101080c",
+    "src/renderer/src/nodes/specs/bodies/ImageMentionPrompt.tsx": "5748dc56de07d357ca3ef06fcf0e74960c11cd8e61378fd93388a657097c8761",
     "src/renderer/src/nodes/specs/bodies/SkillAgentSettings.tsx": "129919ac364b2d2c9fa0b7afb2f455711fd2fca898ac33551c676c8e76082737",
     "src/renderer/src/nodes/specs/bodies/aiProcess.tsx": "52a168aabe587cb480b20b6f48b94c6c45569d1cae94242ba7f1db54826b3a5b",
     "src/renderer/src/nodes/specs/bodies/audio.tsx": "6beba539037bbe1bc25090847b78a58602492d6edfe7e03badd9e18b4b0a2090",
