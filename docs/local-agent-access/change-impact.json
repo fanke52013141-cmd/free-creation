@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "F9 凭据包导出/预览侧 3 项：新增 provider.package.export / .seal / .preview（用户已批准导出与预览开放、导入需人工确认，后者未开放）。复用 GUI 同一 exportProviders 与 KeyPackageService（经 keys-bridge 发布同一实例）；回执只给受控目录文件名+指纹，不回传包正文；接收凭证按受控目录文件名读取，不接受任意路径。兼容结论：纯追加（130→133），既有 Schema 未变。",
+  "reason": "同步并行提交 bf7e26a（轨道线三项修复：框选消失、音频不播放、连接后拖不动）对受保护源码的影响：仅 renderer 节点 body 的 timeline.tsx / timeline-editor.tsx 呈现与交互修复，不涉及任何外部操作 Schema、不新增/删除操作、不改变节点契约（仍 133 项，contracts.json 无差异）。该提交落在我上一次哈希刷新之后，属时序竞态，非未提交在途改动。",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -172,8 +172,8 @@
     "src/renderer/src/nodes/specs/bodies/structured.tsx": "0a2c31e8d158c14ac69ba61dff8b07e6032d503316e3d2471b945c1cf321f3c1",
     "src/renderer/src/nodes/specs/bodies/text.tsx": "c6691c3391df796f67396df675579ec14793814ab2542a27f2285377a9670763",
     "src/renderer/src/nodes/specs/bodies/timeline-editor-shared.ts": "f1f39061e851875ba968f5990d99a2c8b86b8fa2fd4e9d97d5590efa141392cd",
-    "src/renderer/src/nodes/specs/bodies/timeline-editor.tsx": "4d04fea297bbe53187c527eb1ce50d69344e78c1d5d87bb155638af67d29d9ef",
-    "src/renderer/src/nodes/specs/bodies/timeline.tsx": "68282af831e4e7ac42bbb7f31858c7727e7564e5b39de2ffad13e68f5e907abb",
+    "src/renderer/src/nodes/specs/bodies/timeline-editor.tsx": "2054fd0581b4fa0230bb50a7a6a06483ed58570ea487a7f998ed50565dbe5d15",
+    "src/renderer/src/nodes/specs/bodies/timeline.tsx": "a3df32d928e5d3f51358fdf58bd39ba2427f57088cc2814894480c91bb4dce88",
     "src/renderer/src/nodes/specs/bodies/tts.tsx": "fc9b03d42680d0890cb6d980625e8064dc0c2211455e88fa3c43b2de44690495",
     "src/renderer/src/nodes/specs/bodies/video-ai.tsx": "4fb088a718ed9da5e2bb00b3f3f7984ccc07c8e070697b327c477b1a8941f076",
     "src/renderer/src/nodes/specs/bodies/video-transforms.tsx": "229c1d305ed0a10ec52b69816dc5ad8b910ceeb10f9db4defe04172f1dc8b5fa",
