@@ -13,7 +13,9 @@ import {
   skillSummary,
   templateSummary
 } from './ops/common'
-import { FLOW_OPERATIONS, FLOW_OUTPUTS } from './ops/flow'
+import { FLOW_AGENTS_OPERATIONS, FLOW_AGENTS_OUTPUTS } from './ops/flow-agents'
+import { FLOW_ASSETS_OPERATIONS, FLOW_ASSETS_OUTPUTS } from './ops/flow-assets'
+import { FLOW_COMMANDS_OPERATIONS, FLOW_COMMANDS_OUTPUTS } from './ops/flow-commands'
 import { HISTORY_OPERATIONS, HISTORY_OUTPUTS } from './ops/history'
 import { LIBRARY_OPERATIONS, LIBRARY_OUTPUTS } from './ops/library'
 import { NODE_LIBRARY_OPERATIONS, NODE_LIBRARY_OUTPUTS } from './ops/node-library'
@@ -311,7 +313,9 @@ export const ACCESS_OPERATIONS = {
   ...NODE_LIBRARY_OPERATIONS,
   ...HISTORY_OPERATIONS,
   ...TRANSFER_OPERATIONS,
-  ...FLOW_OPERATIONS,
+  ...FLOW_AGENTS_OPERATIONS,
+  ...FLOW_COMMANDS_OPERATIONS,
+  ...FLOW_ASSETS_OPERATIONS,
   ...SETTINGS_OPERATIONS,
   ...PUBLISH_OPERATIONS
 } as const
@@ -758,7 +762,9 @@ export const ACCESS_OUTPUTS = {
   ...NODE_LIBRARY_OUTPUTS,
   ...HISTORY_OUTPUTS,
   ...TRANSFER_OUTPUTS,
-  ...FLOW_OUTPUTS,
+  ...FLOW_AGENTS_OUTPUTS,
+  ...FLOW_COMMANDS_OUTPUTS,
+  ...FLOW_ASSETS_OUTPUTS,
   ...SETTINGS_OUTPUTS,
   ...PUBLISH_OUTPUTS
 } satisfies Record<AccessOperationId, z.ZodType>

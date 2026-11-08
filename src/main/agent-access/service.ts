@@ -134,6 +134,17 @@ const FLUSH_HANDSHAKE_OPERATIONS: ReadonlySet<AccessOperationId> = new Set([
   'chat.skill.bind'
 ] as AccessOperationId[])
 
+/**
+ * 必须独占应用级状态的写入（F8 按项目锁的例外）。
+ *
+ * `project.open` 会切换"应用当前的权威画布"，它是应用级事实而不是某个项目的事实：
+ * 两个项目同时 open 会互相抢活动画布，因此仍用全局锁把它们串起来。
+ * 其余带 projectId 的写入按项目互斥，不同项目可以并行。
+ */
+const GLOBAL_LOCK_OPERATIONS: ReadonlySet<AccessOperationId> = new Set([
+  'project.open'
+] as AccessOperationId[])
+
 /** F7 节点库/历史操作：在 dispatch 内带 trace/span 与占用回调执行（见 case 分支），不另建执行器。 */
 const F7_DISPATCH_OPERATIONS: ReadonlySet<AccessOperationId> = new Set([
   'node.library.compose',
@@ -156,7 +167,19 @@ export class LocalAccessService {
   readonly dataStoreId: string
   private readonly hmacKey: string
   private readonly exportRoot: string
-  private mutating = false
+  /**
+   * 按项目互斥的写入锁（F8）：不同项目的写入可以并行，同一项目仍严格串行。
+   *
+   * 改造前的单一 `mutating` 标志把整个服务变成"同时只能有一个写操作"，于是给项目 B
+   * 导入媒体会被项目 A 的一次保存挡住（RESOURCE_BUSY），多画布批量作业只能串行。
+   * 锁键规则：
+   * - 输入里有 projectId 的写操作 → 锁该项目；
+   * - 没有 projectId 的写操作（技能安装、包导入导出、资源库全局写入）→ 全局锁，
+   *   语义与改造前一致（全局存储在项目之间是共享事实，不能并行改）；
+   * - GLOBAL_LOCK_OPERATIONS（如 project.open）→ 全局锁，因为它改的是应用级活动画布。
+   */
+  private readonly mutationLocks = new Set<string>()
+  private static readonly GLOBAL_MUTATION_LOCK = '*'
 
   constructor(private readonly options: LocalAccessOptions) {
     this.dataStoreId = getSetting('local-agent-data-store-id') ?? randomUUID()
@@ -203,6 +226,7 @@ export class LocalAccessService {
     let claimed = false
     let started = false
     let ownsMutation = false
+    let mutationLock: string | undefined
     let metadataCommitted = false
     const spanId = newSpanId()
     const diagnostic = (stage: string, code?: string, phase = 'dispatch'): void => {
@@ -283,8 +307,12 @@ export class LocalAccessService {
       const input = checked.data as Record<string, unknown>
       const id = input.projectId as string | undefined
       if (spec.effect !== 'read') {
-        if (this.mutating) throw new AccessFailure('RESOURCE_BUSY', 'operation-occupancy')
-        this.mutating = ownsMutation = true
+        mutationLock =
+          id && !GLOBAL_LOCK_OPERATIONS.has(operationId)
+            ? id
+            : LocalAccessService.GLOBAL_MUTATION_LOCK
+        this.acquireMutationLock(mutationLock)
+        ownsMutation = true
       }
       // run.cancel 是对在途任务的控制操作，豁免占用检查（否则取消不了自己要停的任务）。
       // history.recovery.resolve 同理：它是"解决恢复副本"的操作，本身必须能在副本存在时执行；
@@ -914,8 +942,26 @@ export class LocalAccessService {
       )
       return base
     } finally {
-      if (ownsMutation) this.mutating = false
+      // 异常路径也必须释放：否则一次失败的写操作会把该项目的后续写入永久堵死。
+      if (ownsMutation && mutationLock) this.releaseMutationLock(mutationLock)
     }
+  }
+
+  private acquireMutationLock(lockKey: string): void {
+    const global = LocalAccessService.GLOBAL_MUTATION_LOCK
+    if (lockKey === global) {
+      // 全局写入要求没有其他写入在飞：保持改造前的独占语义。
+      if (this.mutationLocks.size > 0)
+        throw new AccessFailure('RESOURCE_BUSY', 'operation-occupancy')
+    } else if (this.mutationLocks.has(global) || this.mutationLocks.has(lockKey)) {
+      // 同一项目仍严格串行；全局写入在飞时也不允许项目写入插入。
+      throw new AccessFailure('RESOURCE_BUSY', 'operation-occupancy')
+    }
+    this.mutationLocks.add(lockKey)
+  }
+
+  private releaseMutationLock(lockKey: string): void {
+    this.mutationLocks.delete(lockKey)
   }
 
   private finish(key: string, response: AccessResponse): void {
