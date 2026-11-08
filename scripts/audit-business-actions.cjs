@@ -50,28 +50,51 @@ function parseIpcChannels() {
 }
 
 function parseRegistryOperations() {
-  const src = fs.readFileSync(registryPath, 'utf8')
-  const marker = 'export const ACCESS_OPERATIONS = {'
-  const start = src.indexOf(marker)
-  const objStart = start + marker.length - 1
-  let depth = 0
-  let end = -1
-  for (let i = objStart; i < src.length; i++) {
-    const c = src[i]
-    if (c === '{') depth++
-    else if (c === '}') {
-      depth--
-      if (depth === 0) {
-        end = i
-        break
+  // 操作按业务族拆分在 src/shared/agent-access/ops/*，registry.ts 只做组装；
+  // 审计必须扫描全部登记文件，不能只看 registry.ts 里的内联操作（否则分母被悄悄缩小）。
+  const opsDirectory = path.join(root, 'src/shared/agent-access/ops')
+  const files = [
+    registryPath,
+    ...fs
+      .readdirSync(opsDirectory)
+      .filter((name) => name.endsWith('.ts'))
+      .sort()
+      .map((name) => path.join(opsDirectory, name))
+  ]
+  const ids = []
+  let scannedBlocks = 0
+  for (const file of files) {
+    const src = fs.readFileSync(file, 'utf8')
+    const markerRe = /export const ([A-Z_]+)_OPERATIONS = \{/g
+    let marker
+    while ((marker = markerRe.exec(src))) {
+      const objStart = marker.index + marker[0].length - 1
+      let depth = 0
+      let end = -1
+      for (let i = objStart; i < src.length; i++) {
+        const c = src[i]
+        if (c === '{') depth++
+        else if (c === '}') {
+          depth--
+          if (depth === 0) {
+            end = i
+            break
+          }
+        }
       }
+      if (end < 0) throw new Error(`Registry operation block not terminated: ${path.basename(file)}`)
+      scannedBlocks++
+      const re = /'([a-z_.]+)':\s*\{/g
+      let m
+      while ((m = re.exec(src.slice(objStart, end)))) ids.push(m[1])
     }
   }
-  const ids = []
-  const re = /'([a-z_.]+)':\s*\{/g
-  let m
-  while ((m = re.exec(src.slice(objStart, end)))) ids.push(m[1])
   if (ids.length === 0) throw new Error('Registry operation parse produced no entries')
+  if (new Set(ids).size !== ids.length) {
+    const seen = new Set()
+    const duplicates = ids.filter((id) => (seen.has(id) ? true : (seen.add(id), false)))
+    throw new Error(`Registry operation declared twice: ${duplicates.join(',')}`)
+  }
   return ids
 }
 

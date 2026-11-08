@@ -1,6 +1,25 @@
 import { z } from 'zod'
 import { ACTIVE_NODE_TYPE_IDS } from '../types'
-import { SkillBindingSchema } from '../agent-flow/runtime-contracts'
+import {
+  bindings,
+  empty,
+  identifier,
+  metadata,
+  nodeId,
+  page,
+  project,
+  revision,
+  savedMetadata,
+  skillSummary,
+  templateSummary
+} from './ops/common'
+import { FLOW_OPERATIONS, FLOW_OUTPUTS } from './ops/flow'
+import { HISTORY_OPERATIONS, HISTORY_OUTPUTS } from './ops/history'
+import { LIBRARY_OPERATIONS, LIBRARY_OUTPUTS } from './ops/library'
+import { NODE_LIBRARY_OPERATIONS, NODE_LIBRARY_OUTPUTS } from './ops/node-library'
+import { PUBLISH_OPERATIONS, PUBLISH_OUTPUTS } from './ops/publish'
+import { SETTINGS_OPERATIONS, SETTINGS_OUTPUTS } from './ops/settings'
+import { TRANSFER_OPERATIONS, TRANSFER_OUTPUTS } from './ops/transfer'
 import {
   GRAPH_PATCH_MAX_OPS,
   GRAPH_VIEW_MAX_EDGES,
@@ -21,36 +40,6 @@ import {
 export const ACCESS_API_VERSION = 1
 export const ACCESS_MAX_BYTES = 1024 * 1024
 export const ACCESS_KEY_TTL_MS = 30 * 24 * 60 * 60 * 1000
-const identifier = z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/)
-const empty = z.object({}).strict()
-const project = z.object({ projectId: identifier }).strict()
-const revision = project.extend({ expectedGraphVersion: z.number().int().nonnegative() }).strict()
-const page = z
-  .object({
-    offset: z.number().int().min(0).max(100000).default(0),
-    limit: z.number().int().min(1).max(100).default(50)
-  })
-  .strict()
-
-const nodeId = z.string().regex(/^shape:[a-zA-Z0-9_-]{1,160}$/)
-const skillSummary = z
-  .object({
-    id: z.string(),
-    version: z.string(),
-    name: z.string(),
-    description: z.string(),
-    contentHash: z.string()
-  })
-  .strict()
-const bindings = z.array(SkillBindingSchema).max(8)
-const templateSummary = z
-  .object({
-    id: identifier,
-    name: z.string(),
-    createdAt: z.number(),
-    nodeCount: z.number().int().nonnegative()
-  })
-  .strict()
 
 export const ACCESS_OPERATIONS = {
   'skill.list': {
@@ -315,7 +304,16 @@ export const ACCESS_OPERATIONS = {
     input: revision
       .extend({ fileName: z.string().regex(/^[a-zA-Z0-9_-]{1,100}\.canvasbundle$/) })
       .strict()
-  }
+  },
+  // 以下按业务族拆分到 ./ops/*，各族维护自己的操作与输出 Schema；
+  // 对外的 operationDirectory/契约快照必须与拆分前等价。
+  ...LIBRARY_OPERATIONS,
+  ...NODE_LIBRARY_OPERATIONS,
+  ...HISTORY_OPERATIONS,
+  ...TRANSFER_OPERATIONS,
+  ...FLOW_OPERATIONS,
+  ...SETTINGS_OPERATIONS,
+  ...PUBLISH_OPERATIONS
 } as const
 export type AccessOperationId = keyof typeof ACCESS_OPERATIONS
 
@@ -377,17 +375,6 @@ export const AccessResponseSchema = z
   })
   .strict()
 
-const metadata = z
-  .object({
-    id: identifier,
-    name: z.string(),
-    createdAt: z.number(),
-    updatedAt: z.number(),
-    graphVersion: z.number().int().nonnegative(),
-    coverMediaId: z.string().optional()
-  })
-  .strict()
-const savedMetadata = z.object({ meta: metadata, saved: z.literal(true) }).strict()
 export const ACCESS_OUTPUTS = {
   'skill.list': z
     .object({ items: z.array(skillSummary).max(100), total: z.number().int().nonnegative() })
@@ -763,7 +750,14 @@ export const ACCESS_OUTPUTS = {
       sha256: z.string().regex(/^[a-f0-9]{64}$/),
       missingMediaCount: z.literal(0)
     })
-    .strict()
+    .strict(),
+  ...LIBRARY_OUTPUTS,
+  ...NODE_LIBRARY_OUTPUTS,
+  ...HISTORY_OUTPUTS,
+  ...TRANSFER_OUTPUTS,
+  ...FLOW_OUTPUTS,
+  ...SETTINGS_OUTPUTS,
+  ...PUBLISH_OUTPUTS
 } satisfies Record<AccessOperationId, z.ZodType>
 export type AccessOutput<K extends AccessOperationId> = z.infer<(typeof ACCESS_OUTPUTS)[K]>
 
