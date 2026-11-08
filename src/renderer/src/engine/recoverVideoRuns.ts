@@ -3,7 +3,12 @@
 // config.taskId 重新接上原任务：成功则把结果写回节点，失败/取消则如实落状态，
 // 避免把仍在后台生成的任务误标成「应用关闭…已取消」。
 import type { Editor, TLShapeId } from 'tldraw'
-import { readNodeRunRecord, appendNodeRunHistory, type NodeRunRecord } from './runRecord'
+import {
+  readNodeRunRecord,
+  appendNodeRunHistory,
+  appendNodeRunTrace,
+  type NodeRunRecord
+} from './runRecord'
 import { parseVideoGen } from '@shared/engine/helpers'
 import { readNodeConfig } from '@shared/engine/node-config'
 import {
@@ -15,6 +20,8 @@ import { toast } from '../stores/toast'
 const POLL_MS = 3_000
 const MAX_WAIT_MS = 31 * 60 * 1000
 const INTERRUPTED_REASON = '应用关闭或重启中断了上次运行，请重新运行'
+const UNRECOVERABLE_VIDEO_REASON =
+  '未找到可恢复的任务号（可能由旧版本发起）；后台任务可能仍在校验中，请先到运行中心核对原任务，避免重复计费后再重跑'
 
 function isRunningStatus(status: string): boolean {
   return status === 'running' || status === 'pending' || status === 'queued'
@@ -141,6 +148,7 @@ export function recoverRunningNodes(editor: Editor, projectId: string): () => vo
 
   // 重新进入项目时仍处于 running/pending 的节点：有持久化 taskId 就接回原任务，
   // 没有（例如旧版本记录或非视频节点）才按旧逻辑标记中断。
+  let attached = 0
   for (const shape of editor.getCurrentPageShapes()) {
     if (shape.type !== 'node-card') continue
     const run = readNodeRunRecord(shape.meta?.nodeRun)
@@ -148,14 +156,18 @@ export function recoverRunningNodes(editor: Editor, projectId: string): () => vo
     if (!isRunningStatus(exec) && run?.status !== 'running') continue
     const data = parseVideoGen(readNodeConfig(shape))
     if (data.taskId) {
-      const startedRun: NodeRunRecord =
+      const startedRun = appendNodeRunTrace(
         run ??
-        ({
-          runId: `recovered-${String(shape.id).slice(-8)}`,
-          status: 'running',
-          startedAt: Date.now(),
-          inputs: {}
-        } satisfies NodeRunRecord)
+          ({
+            runId: `recovered-${String(shape.id).slice(-8)}`,
+            status: 'running',
+            startedAt: Date.now(),
+            inputs: {}
+          } satisfies NodeRunRecord),
+        'execution',
+        'info',
+        '重新进入项目，已接回后台视频任务'
+      )
       editor.updateShape({
         id: shape.id,
         type: 'node-card',
@@ -163,14 +175,25 @@ export function recoverRunningNodes(editor: Editor, projectId: string): () => vo
         meta: { ...(shape.meta ?? {}), nodeRun: JSON.parse(JSON.stringify(startedRun)) }
       })
       recoverOne(shape.id, data.taskId, startedRun)
+      attached += 1
     } else {
-      commitRun(shape.id, run ?? {
-        runId: `interrupted-${String(shape.id).slice(-8)}`,
-        status: 'running',
-        startedAt: Date.now(),
-        inputs: {}
-      }, 'cancelled', { reason: INTERRUPTED_REASON })
+      const reason = shape.props.nodeType === 'video' ? UNRECOVERABLE_VIDEO_REASON : INTERRUPTED_REASON
+      const interrupted = appendNodeRunTrace(
+        run ?? {
+          runId: `interrupted-${String(shape.id).slice(-8)}`,
+          status: 'running',
+          startedAt: Date.now(),
+          inputs: {}
+        },
+        'execution',
+        'error',
+        reason
+      )
+      commitRun(shape.id, interrupted, 'cancelled', { reason })
     }
+  }
+  if (attached > 0) {
+    toast(`已接回 ${attached} 个后台视频任务，完成后自动写回画布`)
   }
 
   void projectId

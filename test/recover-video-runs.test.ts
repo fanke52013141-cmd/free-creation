@@ -11,7 +11,7 @@ vi.mock('../src/renderer/src/stores/toast', () => ({
 interface FakeShape {
   id: TLShapeId
   type: 'node-card'
-  props: { exec: string; title: string; text: string; config: string }
+  props: { exec: string; nodeType?: string; title: string; text: string; config: string }
   meta: Record<string, unknown>
 }
 
@@ -35,6 +35,7 @@ function runningShape(taskId?: string): FakeShape {
     type: 'node-card',
     props: {
       exec: 'running',
+      nodeType: 'video',
       title: '视频生成',
       text: '一只猫',
       config: JSON.stringify({ modelKey: 'model', params: {}, ...(taskId ? { taskId } : {}) })
@@ -90,7 +91,7 @@ describe('recoverRunningNodes', () => {
       'cancelled'
     )
     expect((shape.meta.nodeRun as { error?: { reason: string } }).error?.reason).toContain(
-      '应用关闭或重启'
+      '未找到可恢复的任务号'
     )
   })
 })
