@@ -12,7 +12,12 @@ import {
 import type { GatewayDiagnosticsContext } from '../../shared/contracts'
 
 export interface GatewayEventSink {
-  emit(event: DiagnosticsEventInput | null): void
+  /**
+   * 允许返回 Promise：异步诊断写入失败必须被这里吞掉（见 emitGatewayEvent 末尾），
+   * 否则日志故障会变成未处理拒绝——Node 15+ 默认把未处理拒绝当致命错误，直接违反
+   * LOGGING_SPEC「日志写入失败不能改变业务结果」。
+   */
+  emit(event: DiagnosticsEventInput | null): void | Promise<void>
 }
 
 let sink: GatewayEventSink | null = null
@@ -117,7 +122,11 @@ export function emitGatewayEvent(
     let enriched = built
     if (enriched && phase) enriched = { ...enriched, phase }
     const withAttempt = enriched && attempt !== undefined ? { ...enriched, attempt } : enriched
-    sink?.emit(withAttempt)
+    // 异步 sink：把返回的 Promise 接住，避免诊断写入失败变成未处理拒绝（会杀掉进程）。
+    // 只有"确实返回了 thenable"才接管，普通同步 sink 的行为完全不变。
+    const emitted = sink?.emit(withAttempt) as unknown
+    if (emitted && typeof (emitted as Promise<unknown>).then === 'function')
+      void (emitted as Promise<unknown>).catch(() => undefined)
   } catch {
     // 日志失败不改变业务路径。
   }

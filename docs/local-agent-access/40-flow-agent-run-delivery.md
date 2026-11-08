@@ -63,6 +63,8 @@
    外部写 note/submit 会与人工输入不可区分，需要先定协作者身份契约。
 3. `flowAgent.review` / `flowAgent.build`（建图提交）/ `publication` 仍未开放：
    前者需同一宿主模型端口与工具调用预检的完整路径，后者需要新的渲染器权威桌面动作。
-4. `flow.command.dispatch/prepare/check/abort` 仍未开放：需要外部主体 + 租约协议（含 DB 迁移）。
+4. `flow.command.dispatch/prepare/check/abort`：**已在 F8 收官批次开放**（`check/dispatch/abort`
+   登记，prepare 并入 dispatch），见 [29 号台账第 10 节](29-flow-commands-delivery.md)；
+   外部主体以 `principal='external'` 标记进账本，abort 只对未准入命令生效。
 5. 真实桌面段未跑（本包是服务级 + 端口注入证据）；桌面段需要先在 GUI 配好已验证模型，
    属于用户自测范围。
