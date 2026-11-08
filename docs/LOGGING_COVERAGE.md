@@ -1,5 +1,41 @@
 # 日志覆盖清单
 
+## 2026-11-08：F9（三）诊断查询与项目节点可见集
+
+新增外部操作 3 项（`diagnostics.query`、`project.nodeVisibility.get`、`project.nodeVisibility.set`），沿用既有事件、**未新增事件类型**（新事件需登记 `src/shared/observability/events.ts`，不在本包文件范围）：
+
+- 生命周期：复用 `agent.access.started/completed/failed/rejected/unknown`（operation/phase/code + trace/span），唯一终态由 dispatch 拥有，业务模块不重复记终态。
+- 诊断查询是**只读**动作：不写业务日志、不把查询结果回灌诊断存储（避免"看日志产生日志"的环）；查询失败/服务不可用由 `agent.access.failed` + 稳定错误码（`DIAGNOSTICS_UNAVAILABLE`/`QUERY_FAILED`/`INVALID_INPUT`）表达。输出侧二次脱敏与白名单投影（`redactDiagnosticText` + 事件注册表 attributes 白名单；message ≤500 字符、attributes 值 ≤256；不返回 safeStack、未登记属性、未知字段），已用假密钥 `sk-…`、`apiKey=`、`Bearer`、私有提示词占位符与伪造 safeStack 私有路径断言。
+- 可见集写入复用 `projects.repo.saveWorkspaceProfile` 正式保存路径（写锁 + tmp/rename + 索引时间更新，不推进 graphVersion）；该路径**当前没有专属注册事件**，可见证据 = `agent.access.completed` + 回执（`added`/`removed`/`desktopReloadRequired`）+ 项目文件事实。缺口登记为后续项：新增 `project.workspace_profile.changed` 需事件注册表单一所有者批准；未用业务 `console.log` 冒充。
+- 脱敏边界：可见集只处理节点类型 ID 与预设名，不含节点标题/正文/路径/密钥；诊断查询不返回项目文件、媒体、数据库或 main.log 明文。本包零模型调用。
+- 覆盖范围：服务级定向测试 9 项（真实 DiagnosticsService + 内存文件系统；真实 `projects.repo` 与项目文件），**真实 Electron 桌面 JSONL 实测未做**，本小节的"已覆盖"指代码路径、事件配对与脱敏断言，不含桌面实测。详见 [F9（三）台账](local-agent-access/37-diagnostics-visibility-delivery.md)。
+
+## 2026-11-08：F9（二）模型目录与环境读取外部接入
+
+新增 6 项只读外部操作（`model.connection.list` / `model.definition.list` / `model.binding.list` /
+`model.binding.resolve` / `environment.local` / `environment.videoEngine.status`），
+全部复用 main 既有服务（`SqliteModelHost`、`ModelRuntime.resolveForExecution`、
+`getLocalMediaCapabilities`、`getVideoEngineStatus`），**未新增或修改任何日志事件类型**；
+日志影响 = 复用接入公共生命周期，不新增旁路。详见 [36 号台账](local-agent-access/36-models-env-delivery.md)。
+
+- 生命周期：6 个操作由 dispatch 统一记 `agent.access.started/completed/failed`（`attributes.operation`、
+  `phase`、稳定 `code` 与 trace/span），唯一终态由 dispatch 拥有，`settings-ops.ts` 不重复记终态。
+- 失败阶段只有稳定码：`MODEL_BINDING_NOT_FOUND`、`MODEL_OPERATION_MISMATCH`、`MODEL_TARGET_NOT_FOUND`、
+  `MODEL_NOT_VERIFIED`、`MODEL_NOT_CONFIGURED`、`INVALID_INPUT`、`INSTANCE_MISMATCH`；
+  `detail` 只带 `model-resolve:feature-binding` 这类阶段标记，**不带** `ModelRuntimeError.message`
+  （可能含供应商验证原文）。
+- 脱敏：事件/错误 detail 不含连接名与地址、鉴权头、metadata、能力 controls、模型展示名、验证 message、
+  密钥明文/密文/引用；`model.binding.resolve` 内部读取密钥只做存在性检查，密钥不进入任何事件或响应
+  （定向测试断言响应 + 事件 JSON 均不含明显假密钥/地址/验证原文）。
+- 只读事实：6 个操作不发任何 fetch（测试用 `fetch` spy 断言 0 次），不安装/下载；
+  `environment.*` 只 spawn 本机 `ffmpeg -version` / `py -3.12 --version` /
+  `python -c "import indextts"` 并读取本地就绪文件，探测失败只体现在响应的 GUI 同款提示与
+  dispatch 失败终态，不新增逐工具高频事件；IndexTTS 只投影 `ready/state`，不返回解释器与模型目录
+  路径（GUI 详情文案含本机绝对路径）。
+- 覆盖边界：`license.guard.skipped`（debug）会在解析路径记录 `operation='model.secret.read'`，
+  属开发/测试路径未注入门禁时的既有留痕，不含密钥；真实 Electron 桌面与真实 MCP 客户端的逐动作
+  JSONL 比对未做（与 F9 其余读取类包同口径），本小节"已覆盖"指代码路径与定向测试证据。
+
 ## 2026-11-08：F7 桌面补验（音频族 / 资源库物化 / 节点库实例化 / 历史恢复）
 
 本轮只改验收脚本 `scripts/test-agent-graph-milestone.cjs`（新增 6.10–6.13 真实 Electron 桌面段 + 启动器失败取证），**未改产品代码、未新增/修改日志事件**；日志影响：不涉及业务日志路径。清单更新目的：登记这些路径已在真实桌面被实际执行并复核过，而不是只有服务级样本。

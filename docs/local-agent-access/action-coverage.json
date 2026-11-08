@@ -266,7 +266,12 @@
       "label": "工作区配置保存",
       "channel": "project:workspace-profile:save",
       "gui": "画布工作区设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "project.nodeVisibility.get",
+        "project.nodeVisibility.set"
+      ],
+      "note": "F9：同一 workspaceProfile 事实读/写。get 等价于 GUI 打开项目后读取当前可见集（旧项目无配置时如实返回 legacy-all-visible=全部可创建节点）；set 替换可见集并经 projects.repo.saveWorkspaceProfile 正式保存（不推进 graphVersion），未知/重复/空集合显式拒绝"
     },
     "ipc.project.rename": {
       "label": "项目重命名",
@@ -524,13 +529,19 @@
       "label": "本机能力查询",
       "channel": "media:local-capabilities",
       "gui": "媒体执行前置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "environment.local"
+      ]
     },
     "ipc.media.videoEngineStatus": {
       "label": "视频引擎状态",
       "channel": "media:video-engine-status",
       "gui": "环境状态",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "environment.videoEngine.status"
+      ]
     },
     "ipc.media.videoEngineInstall": {
       "label": "视频引擎安装",
@@ -1116,7 +1127,10 @@
       "label": "模型连接列表",
       "channel": "models:connections:list",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "model.connection.list"
+      ]
     },
     "ipc.models.saveConnection": {
       "label": "模型连接保存",
@@ -1128,7 +1142,10 @@
       "label": "模型定义列表",
       "channel": "models:definitions:list",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "model.definition.list"
+      ]
     },
     "ipc.models.saveDefinition": {
       "label": "模型定义保存",
@@ -1182,13 +1199,19 @@
       "label": "默认绑定列表",
       "channel": "models:bindings:list",
       "gui": "模型设置",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "model.binding.list"
+      ]
     },
     "ipc.models.resolveBinding": {
       "label": "默认绑定解析",
       "channel": "models:bindings:resolve",
       "gui": "节点模型解析",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "model.binding.resolve"
+      ]
     },
     "ipc.diagnostics.nodeRunEvent": {
       "label": "节点运行事件上报",
@@ -1214,7 +1237,11 @@
       "label": "诊断查询",
       "channel": "diagnostics:query",
       "gui": "诊断面板",
-      "phase": "F9"
+      "phase": "external",
+      "external": [
+        "diagnostics.query"
+      ],
+      "note": "F9：复用 main DiagnosticsService.query（GUI 运行中心 RunTimeline 同一读取路径与同一份已脱敏存储）；分页有界，不可用时如实报 DIAGNOSTICS_UNAVAILABLE。导出类动作（diagnostics:export-bundle / diagnostics:export-node-run）本轮不开放：GUI 走原生保存对话框，外部等价物需单列受控导出契约，见台账 37"
     },
     "ipc.diagnostics.health": {
       "label": "诊断健康",

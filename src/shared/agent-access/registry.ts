@@ -1,6 +1,13 @@
 import { z } from 'zod'
 import { ACTIVE_NODE_TYPE_IDS } from '../types'
 import {
+  NODE_ACTION_IDS,
+  NODE_ACTION_STATUSES,
+  nodeActionSummary,
+  validateNodeActionMatrix
+} from './node-actions'
+export { nodeAccessDirectory } from './node-actions'
+import {
   bindings,
   empty,
   identifier,
@@ -21,6 +28,8 @@ import { LIBRARY_OPERATIONS, LIBRARY_OUTPUTS } from './ops/library'
 import { NODE_LIBRARY_OPERATIONS, NODE_LIBRARY_OUTPUTS } from './ops/node-library'
 import { PUBLISH_OPERATIONS, PUBLISH_OUTPUTS } from './ops/publish'
 import { SETTINGS_OPERATIONS, SETTINGS_OUTPUTS } from './ops/settings'
+import { DIAGNOSTICS_OPERATIONS, DIAGNOSTICS_OUTPUTS } from './ops/diagnostics'
+import { PROJECT_SETTINGS_OPERATIONS, PROJECT_SETTINGS_OUTPUTS } from './ops/project-settings'
 import { TRANSFER_OPERATIONS, TRANSFER_OUTPUTS } from './ops/transfer'
 import {
   GRAPH_PATCH_MAX_OPS,
@@ -317,6 +326,8 @@ export const ACCESS_OPERATIONS = {
   ...FLOW_COMMANDS_OPERATIONS,
   ...FLOW_ASSETS_OPERATIONS,
   ...SETTINGS_OPERATIONS,
+  ...DIAGNOSTICS_OPERATIONS,
+  ...PROJECT_SETTINGS_OPERATIONS,
   ...PUBLISH_OPERATIONS
 } as const
 export type AccessOperationId = keyof typeof ACCESS_OPERATIONS
@@ -696,11 +707,43 @@ export const ACCESS_OUTPUTS = {
         z
           .object({
             typeId: z.enum(ACTIVE_NODE_TYPE_IDS),
-            actions: z.literal('planned'),
-            reason: z.literal('NODE_ACCESS_NOT_IMPLEMENTED')
+            contractVersion: z.number().int().nonnegative().optional(),
+            actions: z.array(
+              z
+                .object({
+                  actionId: z.enum(NODE_ACTION_IDS),
+                  label: z.string().max(120),
+                  status: z.enum(NODE_ACTION_STATUSES),
+                  evidence: z.string().min(4).max(300)
+                })
+                .strict()
+            ),
+            summary: z
+              .object({
+                desktopTested: z.number().int().nonnegative(),
+                contractTested: z.number().int().nonnegative(),
+                planned: z.number().int().nonnegative(),
+                notApplicable: z.number().int().nonnegative()
+              })
+              .strict()
           })
           .strict()
-      )
+      ),
+      summary: z
+        .object({
+          nodes: z.number().int().nonnegative(),
+          actions: z.number().int().nonnegative(),
+          byStatus: z
+            .object({
+              'desktop-tested': z.number().int().nonnegative(),
+              'contract-tested': z.number().int().nonnegative(),
+              implemented: z.number().int().nonnegative(),
+              planned: z.number().int().nonnegative(),
+              'not-applicable': z.number().int().nonnegative()
+            })
+            .strict()
+        })
+        .strict()
     })
     .strict(),
   'project.list': z
@@ -766,6 +809,8 @@ export const ACCESS_OUTPUTS = {
   ...FLOW_COMMANDS_OUTPUTS,
   ...FLOW_ASSETS_OUTPUTS,
   ...SETTINGS_OUTPUTS,
+  ...DIAGNOSTICS_OUTPUTS,
+  ...PROJECT_SETTINGS_OUTPUTS,
   ...PUBLISH_OUTPUTS
 } satisfies Record<AccessOperationId, z.ZodType>
 export type AccessOutput<K extends AccessOperationId> = z.infer<(typeof ACCESS_OUTPUTS)[K]>
@@ -825,16 +870,8 @@ export const NODE_ACCESS_DECLARATIONS = [
   'ai-review'
 ] as const
 
-export function nodeAccessDirectory(): Array<{
-  typeId: string
-  actions: 'planned'
-  reason: string
-}> {
-  return NODE_ACCESS_DECLARATIONS.map((typeId) => ({
-    typeId,
-    actions: 'planned',
-    reason: 'NODE_ACCESS_NOT_IMPLEMENTED'
-  }))
+export function nodeAccessDirectorySummary(): ReturnType<typeof nodeActionSummary> {
+  return nodeActionSummary()
 }
 export function operationDirectory(): unknown[] {
   return Object.entries(ACCESS_OPERATIONS).map(([operationId, spec]) => ({
@@ -865,5 +902,7 @@ export function validateAccessRegistry(
       errors.push(`INVALID_OPERATION:${id}`)
     if (PACKAGE_IMPORT_BLOCKLIST.has(id)) errors.push(`EXCLUDED_OPERATION:${id}`)
   }
+  // 逐节点动作矩阵必须自洽：缺类型/缺动作/非法状态/无证据都会让门禁失败。
+  errors.push(...validateNodeActionMatrix())
   return errors
 }

@@ -7,6 +7,42 @@ const crypto = require('node:crypto')
 const cp = require('node:child_process')
 const ts = require('typescript')
 const root = path.resolve(__dirname, '..')
+// 操作登记文件（src/shared/agent-access/ops/*）允许复用共享契约 Schema（例如
+// @free-creation/model-contracts），这样外部 Schema 与 GUI 用的是同一份 zod 定义，
+// 不会因为"为了能在门禁里跑"而复制一份而漂移。本进程用 tsconfig 的 paths 做解析，
+// 只在维护期生效，不影响应用运行时。
+const tsconfigPath = path.join(root, 'tsconfig.node.json')
+let workspacePaths = {
+  '@shared/*': ['src/shared/*'],
+  '@free-creation/model-contracts': ['packages/model-contracts/src/index.ts'],
+  '@free-creation/model-runtime': ['packages/model-runtime/src/index.ts'],
+  '@free-creation/license-protocol': ['packages/license-protocol/src/index.ts']
+}
+try {
+  const parsed = JSON.parse(fs.readFileSync(tsconfigPath, 'utf8'))
+  if (parsed?.compilerOptions?.paths) workspacePaths = parsed.compilerOptions.paths
+} catch {
+  // 读不到 tsconfig 时用上面的默认映射（与 tsconfig.node.json 保持一致）。
+}
+const NodeModule = require('node:module')
+const resolveFilename = NodeModule._resolveFilename
+NodeModule._resolveFilename = function (request, ...rest) {
+  for (const [pattern, targets] of Object.entries(workspacePaths)) {
+    const target = Array.isArray(targets) ? targets[0] : undefined
+    if (!target) continue
+    if (pattern.includes('*')) {
+      const [prefix, suffix = ''] = pattern.split('*')
+      if (!request.startsWith(prefix) || !request.endsWith(suffix)) continue
+      const middle = request.slice(prefix.length, request.length - suffix.length)
+      const absolute = path.resolve(root, String(target).replace('*', middle))
+      if (fs.existsSync(absolute)) return absolute
+    } else if (pattern === request) {
+      const absolute = path.resolve(root, String(target))
+      if (fs.existsSync(absolute)) return absolute
+    }
+  }
+  return resolveFilename.call(this, request, ...rest)
+}
 require.extensions['.ts'] = (module, file) => {
   const output = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true }

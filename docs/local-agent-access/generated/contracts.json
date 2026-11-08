@@ -5057,26 +5057,162 @@
                         "ai-review"
                       ]
                     },
-                    "actions": {
-                      "type": "string",
-                      "const": "planned"
+                    "contractVersion": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
                     },
-                    "reason": {
-                      "type": "string",
-                      "const": "NODE_ACCESS_NOT_IMPLEMENTED"
+                    "actions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "actionId": {
+                            "type": "string",
+                            "enum": [
+                              "N1",
+                              "N2",
+                              "N3",
+                              "N4",
+                              "N5",
+                              "N6",
+                              "N7",
+                              "N8"
+                            ]
+                          },
+                          "label": {
+                            "type": "string",
+                            "maxLength": 120
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "desktop-tested",
+                              "contract-tested",
+                              "implemented",
+                              "planned",
+                              "not-applicable"
+                            ]
+                          },
+                          "evidence": {
+                            "type": "string",
+                            "minLength": 4,
+                            "maxLength": 300
+                          }
+                        },
+                        "required": [
+                          "actionId",
+                          "label",
+                          "status",
+                          "evidence"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "desktopTested": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "contractTested": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "planned": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "notApplicable": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "desktopTested",
+                        "contractTested",
+                        "planned",
+                        "notApplicable"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
                     "typeId",
                     "actions",
-                    "reason"
+                    "summary"
                   ],
                   "additionalProperties": false
                 }
+              },
+              "summary": {
+                "type": "object",
+                "properties": {
+                  "nodes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "actions": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "byStatus": {
+                    "type": "object",
+                    "properties": {
+                      "desktop-tested": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "contract-tested": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "implemented": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "planned": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "not-applicable": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "desktop-tested",
+                      "contract-tested",
+                      "implemented",
+                      "planned",
+                      "not-applicable"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "nodes",
+                  "actions",
+                  "byStatus"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
-              "nodes"
+              "nodes",
+              "summary"
             ],
             "additionalProperties": false
           },
@@ -15786,6 +15922,1855 @@
       ]
     },
     {
+      "operationId": "model.connection.list",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "分页读取本机模型供应商连接的去敏摘要（ID/名称/协议/启用状态/时间）；字段白名单投影，不返回地址、鉴权头、密钥密文或密钥引用，不联网探测",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "offset",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "model.connection.list"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "connections": {
+                "maxItems": 100,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "name": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "protocol": {
+                      "type": "string",
+                      "maxLength": 40
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "maxLength": 40
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "maxLength": 40
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "protocol",
+                    "enabled"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "reachability": {
+                "type": "string",
+                "const": "not-probed"
+              }
+            },
+            "required": [
+              "connections",
+              "total",
+              "reachability"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "model.definition.list",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "分页读取模型定义（可按 connectionId 过滤）的能力声明与验证状态；不返回能力控制参数、元数据、验证原文或密钥材料，不联网探测",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "connectionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "offset",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "model.definition.list"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "models": {
+                "maxItems": 100,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "connectionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "modelId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "name": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "connectionEnabled": {
+                      "type": "boolean"
+                    },
+                    "capabilitiesTruncated": {
+                      "type": "boolean"
+                    },
+                    "capabilities": {
+                      "maxItems": 32,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "operation": {
+                            "type": "string",
+                            "enum": [
+                              "text.generate",
+                              "text.embed",
+                              "image.generate",
+                              "image.edit",
+                              "video.generate",
+                              "speech.synthesize",
+                              "speech.transcribe",
+                              "voice.clone",
+                              "voice.design"
+                            ]
+                          },
+                          "asynchronous": {
+                            "type": "boolean"
+                          },
+                          "streaming": {
+                            "type": "boolean"
+                          },
+                          "acceptedAssetKinds": {
+                            "maxItems": 12,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "maxLength": 20
+                            }
+                          },
+                          "producedAssetKinds": {
+                            "maxItems": 12,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "maxLength": 20
+                            }
+                          }
+                        },
+                        "required": [
+                          "operation",
+                          "asynchronous",
+                          "streaming",
+                          "acceptedAssetKinds",
+                          "producedAssetKinds"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "validation": {
+                      "maxItems": 12,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "operation": {
+                            "type": "string",
+                            "enum": [
+                              "text.generate",
+                              "text.embed",
+                              "image.generate",
+                              "image.edit",
+                              "video.generate",
+                              "speech.synthesize",
+                              "speech.transcribe",
+                              "voice.clone",
+                              "voice.design"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "unverified",
+                              "validating",
+                              "verified",
+                              "failed",
+                              "unsupported"
+                            ]
+                          },
+                          "checkedAt": {
+                            "type": "string",
+                            "maxLength": 40
+                          },
+                          "verifiedAt": {
+                            "type": "string",
+                            "maxLength": 40
+                          }
+                        },
+                        "required": [
+                          "operation",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "agentToolCalling": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "unverified",
+                            "validating",
+                            "verified",
+                            "failed",
+                            "unsupported"
+                          ]
+                        },
+                        "checkedAt": {
+                          "type": "string",
+                          "maxLength": 40
+                        },
+                        "verifiedAt": {
+                          "type": "string",
+                          "maxLength": 40
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "connectionId",
+                    "modelId",
+                    "name",
+                    "enabled",
+                    "connectionEnabled",
+                    "capabilitiesTruncated",
+                    "capabilities",
+                    "validation",
+                    "agentToolCalling"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "reachability": {
+                "type": "string",
+                "const": "not-probed"
+              }
+            },
+            "required": [
+              "models",
+              "total",
+              "reachability"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "model.binding.list",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "分页读取已启用的默认功能绑定（featureKey → 连接/模型/能力）；执行参数 overrides 与模型元数据不返回",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "offset",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "model.binding.list"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "bindings": {
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "featureKey": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "modelDefinitionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "connectionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "modelId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "operation": {
+                      "type": "string",
+                      "enum": [
+                        "text.generate",
+                        "text.embed",
+                        "image.generate",
+                        "image.edit",
+                        "video.generate",
+                        "speech.synthesize",
+                        "speech.transcribe",
+                        "voice.clone",
+                        "voice.design"
+                      ]
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "maxLength": 40
+                    }
+                  },
+                  "required": [
+                    "featureKey",
+                    "modelDefinitionId",
+                    "connectionId",
+                    "modelId",
+                    "operation",
+                    "enabled"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "reachability": {
+                "type": "string",
+                "const": "not-probed"
+              }
+            },
+            "required": [
+              "bindings",
+              "total",
+              "reachability"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "model.binding.resolve",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "按 featureKey（可选显式 provider::model 目标）解析实际执行会用的 provider/model；复用 GUI 同一解析服务（含能力验证与密钥存在性检查），只返回去敏目标，不发起任何供应商请求",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "featureKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "text.generate",
+              "text.embed",
+              "image.generate",
+              "image.edit",
+              "video.generate",
+              "speech.synthesize",
+              "speech.transcribe",
+              "voice.clone",
+              "voice.design"
+            ]
+          },
+          "modelKey": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 400,
+            "pattern": "^[^:]{1,200}::.+$"
+          }
+        },
+        "required": [
+          "featureKey",
+          "operation"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "model.binding.resolve"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "featureKey": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "providerId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "modelId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "text.generate",
+                  "text.embed",
+                  "image.generate",
+                  "image.edit",
+                  "video.generate",
+                  "speech.synthesize",
+                  "speech.transcribe",
+                  "voice.clone",
+                  "voice.design"
+                ]
+              },
+              "modelKey": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 400
+              },
+              "resolvedFrom": {
+                "type": "string",
+                "enum": [
+                  "explicit-target",
+                  "feature-binding"
+                ]
+              }
+            },
+            "required": [
+              "featureKey",
+              "providerId",
+              "modelId",
+              "operation",
+              "modelKey",
+              "resolvedFrom"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "environment.local",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "只读探测本机媒体工具（FFmpeg/FFprobe/audio-separator）与本地推理环境（Python/GPU/IndexTTS）就绪状态；不安装、不下载、不联网，缺依赖如实报告不可用",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "environment.local"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "ffmpeg": {
+                "type": "object",
+                "properties": {
+                  "available": {
+                    "type": "boolean"
+                  },
+                  "message": {
+                    "type": "string",
+                    "maxLength": 600
+                  }
+                },
+                "required": [
+                  "available",
+                  "message"
+                ],
+                "additionalProperties": false
+              },
+              "ffprobe": {
+                "type": "object",
+                "properties": {
+                  "available": {
+                    "type": "boolean"
+                  },
+                  "message": {
+                    "type": "string",
+                    "maxLength": 600
+                  }
+                },
+                "required": [
+                  "available",
+                  "message"
+                ],
+                "additionalProperties": false
+              },
+              "audioSeparator": {
+                "type": "object",
+                "properties": {
+                  "available": {
+                    "type": "boolean"
+                  },
+                  "message": {
+                    "type": "string",
+                    "maxLength": 600
+                  }
+                },
+                "required": [
+                  "available",
+                  "message"
+                ],
+                "additionalProperties": false
+              },
+              "videoEngine": {
+                "type": "object",
+                "properties": {
+                  "pythonAvailable": {
+                    "type": "boolean"
+                  },
+                  "ready": {
+                    "type": "boolean"
+                  },
+                  "installing": {
+                    "type": "boolean"
+                  },
+                  "gpuName": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "pythonAvailable",
+                  "ready",
+                  "installing"
+                ],
+                "additionalProperties": false
+              },
+              "indexTts": {
+                "type": "object",
+                "properties": {
+                  "ready": {
+                    "type": "boolean"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "ready",
+                      "incomplete",
+                      "missing"
+                    ]
+                  }
+                },
+                "required": [
+                  "ready",
+                  "state"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "ffmpeg",
+              "ffprobe",
+              "audioSeparator",
+              "videoEngine",
+              "indexTts"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "environment.videoEngine.status",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "只读读取视频引擎（本地 CUDA 推理环境，video-depth/video-clay 使用）的安装与就绪状态；不触发安装、下载或任何模型调用",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "environment.videoEngine.status"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "pythonAvailable": {
+                "type": "boolean"
+              },
+              "ready": {
+                "type": "boolean"
+              },
+              "installing": {
+                "type": "boolean"
+              },
+              "progress": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 600
+              },
+              "gpuName": {
+                "type": "string",
+                "maxLength": 200
+              }
+            },
+            "required": [
+              "pythonAvailable",
+              "ready",
+              "installing",
+              "progress",
+              "message"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "diagnostics.query",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "按 trace/run/request/节点/级别/时间窗分页查询已落盘的结构化诊断事件；复用 GUI 同一诊断存储与脱敏（不返回提示词、模型回复正文、密钥或原始请求响应），服务不可用时如实报错而不是空结果",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "traceId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:-]{1,160}$"
+          },
+          "runId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:-]{1,160}$"
+          },
+          "requestId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:-]{1,160}$"
+          },
+          "nodeId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:-]{1,160}$"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "debug",
+              "info",
+              "warn",
+              "error",
+              "fatal"
+            ]
+          },
+          "since": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4102444800000
+          },
+          "until": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4102444800000
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5000
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "required": [
+          "offset",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "diagnostics.query"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "events": {
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "eventId": {
+                      "type": "string",
+                      "maxLength": 160
+                    },
+                    "event": {
+                      "type": "string",
+                      "maxLength": 120
+                    },
+                    "level": {
+                      "type": "string",
+                      "enum": [
+                        "debug",
+                        "info",
+                        "warn",
+                        "error",
+                        "fatal"
+                      ]
+                    },
+                    "phase": {
+                      "type": "string",
+                      "maxLength": 40
+                    },
+                    "message": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "maxLength": 40
+                    },
+                    "receivedAt": {
+                      "type": "string",
+                      "maxLength": 40
+                    },
+                    "process": {
+                      "type": "string",
+                      "enum": [
+                        "main",
+                        "renderer",
+                        "worker"
+                      ]
+                    },
+                    "sessionId": {
+                      "type": "string",
+                      "maxLength": 160
+                    },
+                    "traceId": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "spanId": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "parentSpanId": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "runId": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "nodeExecutionId": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "taskId": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "projectId": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "nodeId": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "nodeType": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "success",
+                        "failed",
+                        "cancelled",
+                        "skipped",
+                        "interrupted",
+                        "unknown"
+                      ]
+                    },
+                    "durationMs": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "correlationMissing": {
+                      "type": "boolean"
+                    },
+                    "attributes": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 256
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "boolean"
+                          }
+                        ]
+                      }
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "maxLength": 64
+                        },
+                        "category": {
+                          "type": "string",
+                          "maxLength": 32
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "httpStatus": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "sourceCode": {
+                          "type": "string",
+                          "maxLength": 64
+                        },
+                        "causeCode": {
+                          "type": "string",
+                          "maxLength": 64
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "category",
+                        "retryable"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "eventId",
+                    "event",
+                    "level",
+                    "message",
+                    "receivedAt",
+                    "process",
+                    "sessionId"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "returned": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "limit": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "truncated": {
+                "type": "boolean"
+              },
+              "nextOffset": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "badLines": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "scannedShards": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "const": "diagnostics-store"
+              },
+              "redaction": {
+                "type": "string",
+                "const": "event-whitelist@1"
+              }
+            },
+            "required": [
+              "events",
+              "returned",
+              "offset",
+              "limit",
+              "truncated",
+              "nextOffset",
+              "badLines",
+              "scannedShards",
+              "source",
+              "redaction"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "project.nodeVisibility.get",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "读取项目已保存的节点可见集（预设/可见类型/节点集版本）与当前可创建类型；旧项目从未保存过配置时如实表达\"全部可创建节点可见\"，不伪造 general 预设",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "project.nodeVisibility.get"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "graphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "profile": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "presetId": {
+                        "type": "string",
+                        "enum": [
+                          "general",
+                          "image",
+                          "video",
+                          "audio",
+                          "all",
+                          "custom"
+                        ]
+                      },
+                      "visibleNodeTypeIds": {
+                        "maxItems": 200,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                        }
+                      },
+                      "nodeSetRevision": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "presetId",
+                      "visibleNodeTypeIds",
+                      "nodeSetRevision"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "effectiveVisibleNodeTypeIds": {
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                }
+              },
+              "savedButNotCreatable": {
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                }
+              },
+              "creatableNodeTypeIds": {
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                }
+              },
+              "visibleCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "creatableCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "saved-profile",
+                  "legacy-all-visible"
+                ]
+              }
+            },
+            "required": [
+              "projectId",
+              "graphVersion",
+              "profile",
+              "effectiveVisibleNodeTypeIds",
+              "savedButNotCreatable",
+              "creatableNodeTypeIds",
+              "visibleCount",
+              "creatableCount",
+              "source"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "project.nodeVisibility.set",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "替换项目的节点可见集（决定调色板里出现哪些节点）；只接受当前可创建类型 ID，未知/重复/空集合显式拒绝；经项目正式保存机制落盘，重开项目后生效",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "visibleNodeTypeIds": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+            }
+          }
+        },
+        "required": [
+          "projectId",
+          "visibleNodeTypeIds"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "project.nodeVisibility.set"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "graphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "saved": {
+                "type": "boolean",
+                "const": true
+              },
+              "profile": {
+                "type": "object",
+                "properties": {
+                  "presetId": {
+                    "type": "string",
+                    "enum": [
+                      "general",
+                      "image",
+                      "video",
+                      "audio",
+                      "all",
+                      "custom"
+                    ]
+                  },
+                  "visibleNodeTypeIds": {
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                    }
+                  },
+                  "nodeSetRevision": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "presetId",
+                  "visibleNodeTypeIds",
+                  "nodeSetRevision"
+                ],
+                "additionalProperties": false
+              },
+              "visibleCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "added": {
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                }
+              },
+              "removed": {
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                }
+              },
+              "desktopReloadRequired": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "projectId",
+              "graphVersion",
+              "saved",
+              "profile",
+              "visibleCount",
+              "added",
+              "removed",
+              "desktopReloadRequired"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
       "operationId": "director.publish.prepare",
       "operationVersion": 1,
       "effect": "write",
@@ -16333,163 +18318,1923 @@
   "nodes": [
     {
       "typeId": "text",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 3,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §execute（批量建图含文本节点）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §execute（正文/配置与 GUI 同源）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §execute（文本→处理→JSON 连线）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §execute（确定性文本流程执行）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §execute（正式输出读取）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §cancel（终态/未知任务拒绝与取消契约）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 6,
+        "contractTested": 1,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "image",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 3,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §crop（媒体登记→素材节点引用）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §crop（mediaId 引用与媒体归属）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §crop（素材→裁剪连线）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "contract-tested",
+          "evidence": "本地媒体执行器服务级测试（ffmpeg 路径见里程碑 §frame/clip/adjust）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §crop（正式产物读取）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "run.get/run.wait/run.cancel 服务级测试（external_runs）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §nodeLibrary（图片节点参与组合保存与实例化）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 5,
+        "contractTested": 2,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "image-crop",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 2,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §crop/§quad（裁剪节点创建与 quad 参数）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §clamp（越界坐标由同一解析钳制）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §crop/§quad（本地裁剪执行）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §crop（产物落盘与索引）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "run.get/run.wait/run.cancel 服务级测试（external_runs）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §nodeLibrary（裁剪节点组合实例化）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 5,
+        "contractTested": 2,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "image-split",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 3,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §split（拆分节点创建）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §split（4 资产拆分与失败回滚）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §split（选中格投影）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "run.get/run.wait/run.cancel 服务级测试（external_runs）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 3,
+        "contractTested": 4,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "image-gen",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 3,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "planned",
+          "evidence": "付费生图从未实测（无预算）；用户允许最小图片生成测试，尚未执行"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "planned",
+          "evidence": "无真实产物"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "planned",
+          "evidence": "长任务取消/恢复未验收（需真实付费任务）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 4,
+        "planned": 4,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "image-edit",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 2,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "planned",
+          "evidence": "付费供应商执行从未实测（无预算授权）；仅验证了缺模型/凭据时在付费调用前如实拒绝"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "planned",
+          "evidence": "无真实产物可投影；output.get 对未运行的付费节点不伪造输出"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "planned",
+          "evidence": "长任务取消/恢复未验收（需真实付费任务）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 4,
+        "planned": 4,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "website",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 1,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "contract-tested",
+          "evidence": "test/ 执行器/输出投影服务级测试（同一实现，无桌面逐动作证据）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "contract-tested",
+          "evidence": "output.get 服务级投影测试（确定性族）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "run.get/run.wait/run.cancel 服务级测试（external_runs）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 7,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "video",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 7,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "planned",
+          "evidence": "付费供应商执行从未实测（无预算授权）；仅验证了缺模型/凭据时在付费调用前如实拒绝"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "planned",
+          "evidence": "无真实产物可投影；output.get 对未运行的付费节点不伪造输出"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "planned",
+          "evidence": "长任务取消/恢复未验收（需真实付费任务）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 4,
+        "planned": 4,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "video-asset",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 2,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "contract-tested",
+          "evidence": "本地媒体执行器服务级测试（ffmpeg 路径见里程碑 §frame/clip/adjust）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "contract-tested",
+          "evidence": "output.get 媒体投影服务级测试"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "run.get/run.wait/run.cancel 服务级测试（external_runs）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 7,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "video-frame",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 4,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §frame（2000ms 抽帧真实执行）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §frame（PNG 产物读取）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "run.get/run.wait/run.cancel 服务级测试（external_runs）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 2,
+        "contractTested": 5,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "video-clip",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 5,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §clip（3–6s 截取双产物，ffprobe 独立核验）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §clip（画面+音频双产物投影）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "run.get/run.wait/run.cancel 服务级测试（external_runs）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 2,
+        "contractTested": 5,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "video-depth",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 1,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "planned",
+          "evidence": "付费供应商执行从未实测（无预算授权）；仅验证了缺模型/凭据时在付费调用前如实拒绝"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "planned",
+          "evidence": "无真实产物可投影；output.get 对未运行的付费节点不伪造输出"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "planned",
+          "evidence": "长任务取消/恢复未验收（需真实付费任务）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 4,
+        "planned": 4,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "video-clay",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 1,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "planned",
+          "evidence": "付费供应商执行从未实测（无预算授权）；仅验证了缺模型/凭据时在付费调用前如实拒绝"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "planned",
+          "evidence": "无真实产物可投影；output.get 对未运行的付费节点不伪造输出"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "planned",
+          "evidence": "长任务取消/恢复未验收（需真实付费任务）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 4,
+        "planned": 4,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "timeline",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 1,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §timeline（轨道/片段结构编辑经 text 通道）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §timeline（同一 normalizeTimeline 解析）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §timeline（合成成片独立资产）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §timeline（成片 out-video 投影）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "run.get/run.wait/run.cancel 服务级测试（external_runs）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 4,
+        "contractTested": 3,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "audio",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 3,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "contract-tested",
+          "evidence": "本地媒体执行器服务级测试（ffmpeg 路径见里程碑 §frame/clip/adjust）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "contract-tested",
+          "evidence": "output.get 媒体投影服务级测试"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "run.get/run.wait/run.cancel 服务级测试（external_runs）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 7,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "sound-adjust",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 1,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §adjust（2× 倍速，产物时长实测）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §adjust（MIME 路由端口投影）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "run.get/run.wait/run.cancel 服务级测试（external_runs）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 2,
+        "contractTested": 5,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "file",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 2,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "contract-tested",
+          "evidence": "本地媒体执行器服务级测试（ffmpeg 路径见里程碑 §frame/clip/adjust）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "contract-tested",
+          "evidence": "output.get 媒体投影服务级测试"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "run.get/run.wait/run.cancel 服务级测试（external_runs）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 7,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "speech",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 4,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §audioFamily（外部创建 + GUI 可见）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §audioFamily（配置 JSON 读回）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §audioFamily（缺绑定模型时在付费调用前如实 skipped，文案与 GUI 一致）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "planned",
+          "evidence": "无真实产物可投影；output.get 对未运行的付费节点不伪造输出"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "planned",
+          "evidence": "长任务取消/恢复未验收（需真实付费任务）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 3,
+        "contractTested": 2,
+        "planned": 3,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "tts",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 4,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §audioFamily（外部创建 + GUI 可见）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §audioFamily（缺参考语音/模型时如实 skipped，零付费调用）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "planned",
+          "evidence": "无真实产物可投影；output.get 对未运行的付费节点不伪造输出"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "planned",
+          "evidence": "长任务取消/恢复未验收（需真实付费任务）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 2,
+        "contractTested": 3,
+        "planned": 3,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "voice-design",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 1,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §audioFamily（外部创建 + GUI 可见）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §audioFamily（voice.design 未绑定时如实 skipped）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "planned",
+          "evidence": "无真实产物可投影；output.get 对未运行的付费节点不伪造输出"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "planned",
+          "evidence": "长任务取消/恢复未验收（需真实付费任务）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 2,
+        "contractTested": 3,
+        "planned": 3,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "chat",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 1,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §chat（真实画布创建对话节点）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §chat（会话/消息结构经 chat.patch 编辑）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §chat（无已验证模型时与 GUI 同因失败，不伪造回复）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §chat（chat.messages 读回，附件路径/MIME 由宿主注入）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "planned",
+          "evidence": "对话流式取消仅 GUI 侧验证（chatCancel 仍 F6），外部未接通"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 4,
+        "contractTested": 2,
+        "planned": 2,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "processor",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 1,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "contract-tested",
+          "evidence": "test/ 执行器/输出投影服务级测试（同一实现，无桌面逐动作证据）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "contract-tested",
+          "evidence": "output.get 服务级投影测试（确定性族）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "run.get/run.wait/run.cancel 服务级测试（external_runs）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 7,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "code",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 3,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "contract-tested",
+          "evidence": "test/ 执行器/输出投影服务级测试（同一实现，无桌面逐动作证据）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "contract-tested",
+          "evidence": "output.get 服务级投影测试（确定性族）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "run.get/run.wait/run.cancel 服务级测试（external_runs）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 7,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "json",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 1,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "contract-tested",
+          "evidence": "test/ 执行器/输出投影服务级测试（同一实现，无桌面逐动作证据）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "contract-tested",
+          "evidence": "output.get 服务级投影测试（确定性族）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "run.get/run.wait/run.cancel 服务级测试（external_runs）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 7,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "structured",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 1,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "contract-tested",
+          "evidence": "test/ 执行器/输出投影服务级测试（同一实现，无桌面逐动作证据）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "contract-tested",
+          "evidence": "output.get 服务级投影测试（确定性族）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "run.get/run.wait/run.cancel 服务级测试（external_runs）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 7,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "storyboard",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 1,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "contract-tested",
+          "evidence": "test/ 执行器/输出投影服务级测试（同一实现，无桌面逐动作证据）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "contract-tested",
+          "evidence": "output.get 服务级投影测试（确定性族）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "run.get/run.wait/run.cancel 服务级测试（external_runs）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 7,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "ai-process",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 1,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "contract-tested",
+          "evidence": "test/ 执行器/输出投影服务级测试（同一实现，无桌面逐动作证据）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "contract-tested",
+          "evidence": "output.get 服务级投影测试（确定性族）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "run.get/run.wait/run.cancel 服务级测试（external_runs）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 7,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "iterate",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 2,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "contract-tested",
+          "evidence": "test/ 执行器/输出投影服务级测试（同一实现，无桌面逐动作证据）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "contract-tested",
+          "evidence": "output.get 服务级投影测试（确定性族）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "run.get/run.wait/run.cancel 服务级测试（external_runs）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 7,
+        "planned": 1,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "director",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 3,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §publish（人工授权后经宿主渲染并写正式发布记录）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "desktop-tested",
+          "evidence": "qa/local-agent-access/milestone-a-b-c/report.json §publish（output.get 以 manual-publish 投影已发布帧）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "planned",
+          "evidence": "发布授权有等待/继续协议，但发布任务的取消/恢复未实现"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "contract-tested",
+          "evidence": "node.library.compose/insert 服务级测试（全类型通用保存）"
+        }
+      ],
+      "summary": {
+        "desktopTested": 2,
+        "contractTested": 4,
+        "planned": 2,
+        "notApplicable": 0
+      }
     },
     {
       "typeId": "agent",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 1,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "planned",
+          "evidence": "内部 Agent 运行由桌面宿主实例独占，外部创建/运行未开放（F8 剩余）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "planned",
+          "evidence": "run/pause/stop/review 需要共享宿主句柄与外部主体协议，尚未开放"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "contract-tested",
+          "evidence": "output.get 服务级投影测试（确定性族）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "planned",
+          "evidence": "Agent 任务状态/暂停/停止需共享宿主句柄，外部只能读账本事实（F8 剩余）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "not-applicable",
+          "evidence": "Agent/状态机/审核节点的运行身份不可由外部伪造，节点库组合只保存结构与配置"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 3,
+        "planned": 4,
+        "notApplicable": 1
+      }
     },
     {
       "typeId": "state-machine",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 1,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "planned",
+          "evidence": "内部 Agent 运行由桌面宿主实例独占，外部创建/运行未开放（F8 剩余）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "planned",
+          "evidence": "run/pause/stop/review 需要共享宿主句柄与外部主体协议，尚未开放"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "contract-tested",
+          "evidence": "output.get 服务级投影测试（确定性族）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "planned",
+          "evidence": "Agent 任务状态/暂停/停止需共享宿主句柄，外部只能读账本事实（F8 剩余）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "not-applicable",
+          "evidence": "Agent/状态机/审核节点的运行身份不可由外部伪造，节点库组合只保存结构与配置"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 3,
+        "planned": 4,
+        "notApplicable": 1
+      }
     },
     {
       "typeId": "ai-review",
-      "actions": "planned",
-      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+      "contractVersion": 1,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "planned",
+          "evidence": "缺少\"节点类型目录\"外部操作：main 无法导入 renderer 的 TSX 规格，需先做共享节点契约抽取（F1 遗留项）"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "planned",
+          "evidence": "内部 Agent 运行由桌面宿主实例独占，外部创建/运行未开放（F8 剩余）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "planned",
+          "evidence": "run/pause/stop/review 需要共享宿主句柄与外部主体协议，尚未开放"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "contract-tested",
+          "evidence": "output.get 服务级投影测试（确定性族）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "planned",
+          "evidence": "Agent 任务状态/暂停/停止需共享宿主句柄，外部只能读账本事实（F8 剩余）"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "not-applicable",
+          "evidence": "Agent/状态机/审核节点的运行身份不可由外部伪造，节点库组合只保存结构与配置"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 3,
+        "planned": 4,
+        "notApplicable": 1
+      }
     }
   ]
 }

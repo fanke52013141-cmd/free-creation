@@ -105,13 +105,28 @@ describe('运行时目录与 Registry 一致', () => {
     expect(data.limitations).toContain('DESKTOP_HANDSHAKE_REQUIRED')
   })
 
-  it('node.type.list 覆盖全部 32 类 Active 节点且如实标 planned', async () => {
+  it('node.type.list 覆盖全部 32 类 Active 节点并给出逐动作状态与证据', async () => {
     const response = await call('node.type.list')
     expect(response.status).toBe('completed')
-    const data = response.data as { nodes: Array<{ typeId: string; actions: string }> }
+    const data = response.data as {
+      nodes: Array<{
+        typeId: string
+        actions: Array<{ actionId: string; status: string; evidence: string }>
+        summary: Record<string, number>
+      }>
+      summary: { nodes: number; actions: number; byStatus: Record<string, number> }
+    }
     expect(data.nodes).toEqual(nodeAccessDirectory())
     expect(data.nodes).toHaveLength(ACTIVE_NODE_TYPE_IDS.length)
-    for (const node of data.nodes) expect(node.actions).toBe('planned')
+    for (const node of data.nodes) {
+      expect(node.actions).toHaveLength(8)
+      for (const action of node.actions) expect(action.evidence.length).toBeGreaterThan(3)
+    }
+    // 汇总计数必须与逐节点相加一致（发布报告靠它算覆盖率）。
+    expect(data.summary.nodes).toBe(ACTIVE_NODE_TYPE_IDS.length)
+    expect(data.summary.actions).toBe(ACTIVE_NODE_TYPE_IDS.length * 8)
+    const total = Object.values(data.summary.byStatus).reduce((sum, count) => sum + count, 0)
+    expect(total).toBe(data.summary.actions)
   })
 
   it('app.status 暴露的实例身份与请求校验一致', async () => {

@@ -728,12 +728,24 @@ describe('local Agent vertical slice', () => {
     expect((await call('project.list')).data).toMatchObject({ total: 1 })
   })
 
-  it('declares all Active nodes as planned, only finite operations and strict input/output schemas', async () => {
+  it('declares all Active nodes with a machine-readable action matrix, only finite operations and strict schemas', async () => {
     expect(validateAccessRegistry()).toEqual([])
     expect(validateAccessRegistry(['new-node'], [])).toContain('UNDECLARED_NODE:new-node')
     expect(validateAccessRegistry(['text'], ['text', 'text'])).toContain('DUPLICATE_NODE')
-    expect(nodeAccessDirectory()).toHaveLength(32)
-    expect(nodeAccessDirectory().every((n) => n.actions === 'planned')).toBe(true)
+    // F9：节点目录不再是"一律 planned"，而是逐节点 N1–N8 状态 + 可复核证据。
+    const directory = nodeAccessDirectory()
+    expect(directory).toHaveLength(32)
+    for (const node of directory) {
+      expect(node.actions).toHaveLength(8)
+      for (const action of node.actions) {
+        expect(['desktop-tested', 'contract-tested', 'implemented', 'planned', 'not-applicable']).toContain(
+          action.status
+        )
+        expect(action.evidence.length).toBeGreaterThan(3)
+      }
+      // 每类节点都必须已经至少有一部分证据，不允许整行占位。
+      expect(node.summary.planned).toBeLessThan(8)
+    }
     // F7 解黑：受控导出目录内的包导入已开放；凭据包/工作区导入仍按明确能力范围阻断。
     for (const packageImport of ['project.import', 'project.importStructure', 'library.import'])
       expect(Object.keys(ACCESS_OPERATIONS)).toContain(packageImport)

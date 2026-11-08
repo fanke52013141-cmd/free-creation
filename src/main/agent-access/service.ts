@@ -23,6 +23,7 @@ import {
   ACCESS_OPERATIONS,
   AccessRequestSchema,
   nodeAccessDirectory,
+  nodeAccessDirectorySummary,
   operationDirectory,
   operationResponseSchema,
   type AccessOperationId,
@@ -50,6 +51,9 @@ import { runHistoryOperation } from './history-ops'
 import { FLOW_AGENT_OPERATION_IDS, runFlowAgentOperation } from './flow-agents-ops'
 import { FLOW_ASSET_OPERATION_IDS, runFlowAssetOperation } from './flow-assets-ops'
 import { isFlowCommandOperation, runFlowCommandOperation } from './flow-commands-ops'
+import { isSettingsOperation, runSettingsOperation } from './settings-ops'
+import { runDiagnosticsOperation } from './diagnostics-ops'
+import { runProjectSettingsOperation } from './project-settings-ops'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
 import { FlowTaskStore } from '../agent-flow/task-store'
 import type { DiagnosticsService } from '../diagnostics/service'
@@ -918,6 +922,28 @@ export class LocalAccessService {
           traceId: base.traceId,
           spanId
         })
+      } else if (isSettingsOperation(operationId)) {
+        // F9（二）：模型目录/绑定与环境状态读取直接复用 GUI 同一 main 服务
+        // （SqliteModelHost、ModelRuntime.resolveForExecution、媒体/推理环境探测）；
+        // 全部只读，不发供应商请求、不写凭据，不落 execute 的普通分支。
+        result = await runSettingsOperation(operationId, input)
+      } else if (
+        operationId === 'diagnostics.query' ||
+        operationId === 'project.nodeVisibility.get' ||
+        operationId === 'project.nodeVisibility.set'
+      ) {
+        // F9（三）：诊断查询复用 main 的 DiagnosticsService.query（GUI 运行中心同一读取路径
+        // 与同一份已脱敏存储）；节点可见集读/写走 projects.repo 的正式读/保存机制。
+        // 全部实现只有一份（diagnostics-ops.ts / project-settings-ops.ts），不建外部专用执行器。
+        const f9ReadContext = {
+          activeProjectId: this.options.activeProjectId,
+          diagnostics: this.options.diagnostics
+        }
+        result = operationId.startsWith('diagnostics.')
+          ? await runDiagnosticsOperation(operationId, input, {
+              diagnostics: f9ReadContext.diagnostics
+            })
+          : runProjectSettingsOperation(operationId, input, f9ReadContext)
       } else result = await this.execute(operationId, input)
       base.status = 'completed'
       // Repositories use optional undefined properties; the wire contract is JSON.
@@ -1579,6 +1605,11 @@ export class LocalAccessService {
       }
       case 'diagnostics.summary':
         return accessDiagnosticsSummary(this.options.diagnostics)
+      case 'diagnostics.query':
+      case 'project.nodeVisibility.get':
+      case 'project.nodeVisibility.set':
+        // F9（三）：在 dispatch 分组分支里执行（需要 trace/span 与装配层依赖），不落在这里。
+        throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'app.status':
         return {
           instanceId: this.options.instanceId,
@@ -1598,7 +1629,8 @@ export class LocalAccessService {
           ]
         }
       case 'node.type.list':
-        return { nodes: nodeAccessDirectory() }
+        // F9：逐节点逐动作矩阵（N1–N8）——不再一律报 planned，状态与证据可审计。
+        return { nodes: nodeAccessDirectory(), summary: nodeAccessDirectorySummary() }
       case 'project.list': {
         const all = projects.listProjects()
         return {
@@ -1767,6 +1799,14 @@ export class LocalAccessService {
       case 'flow.command.availability':
       case 'flow.command.reconcile':
         // F8（二）：命令账本协作在 dispatch 分组分支委托 flow-commands-ops 执行，不落在这里。
+        throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
+      case 'model.connection.list':
+      case 'model.definition.list':
+      case 'model.binding.list':
+      case 'model.binding.resolve':
+      case 'environment.local':
+      case 'environment.videoEngine.status':
+        // F9（二）：模型目录/绑定与环境状态读取在 dispatch 分组分支委托 settings-ops 执行，不落在这里。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'node.execute':
       case 'run.cancel':
