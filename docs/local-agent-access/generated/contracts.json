@@ -7338,6 +7338,10 @@
                 "items": {
                   "type": "object",
                   "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+                    },
                     "resourceId": {
                       "type": "string",
                       "pattern": "^[a-zA-Z0-9_-]{1,80}$"
@@ -7431,6 +7435,7 @@
                     }
                   },
                   "required": [
+                    "id",
                     "resourceId",
                     "title",
                     "formPreset",
@@ -7568,6 +7573,10 @@
           "data": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
               "resourceId": {
                 "type": "string",
                 "pattern": "^[a-zA-Z0-9_-]{1,80}$"
@@ -7849,6 +7858,7 @@
               }
             },
             "required": [
+              "id",
               "resourceId",
               "title",
               "formPreset",
@@ -8220,6 +8230,10 @@
           "data": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
               "resourceId": {
                 "type": "string",
                 "pattern": "^[a-zA-Z0-9_-]{1,80}$"
@@ -8501,6 +8515,7 @@
               }
             },
             "required": [
+              "id",
               "resourceId",
               "title",
               "formPreset",
@@ -8744,6 +8759,10 @@
           "data": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
               "resourceId": {
                 "type": "string",
                 "pattern": "^[a-zA-Z0-9_-]{1,80}$"
@@ -9025,6 +9044,7 @@
               }
             },
             "required": [
+              "id",
               "resourceId",
               "title",
               "formPreset",
@@ -9400,6 +9420,10 @@
           "data": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
               "resourceId": {
                 "type": "string",
                 "pattern": "^[a-zA-Z0-9_-]{1,80}$"
@@ -9493,6 +9517,7 @@
               }
             },
             "required": [
+              "id",
               "resourceId",
               "title",
               "formPreset",
@@ -9616,6 +9641,10 @@
           "data": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
               "resourceId": {
                 "type": "string",
                 "pattern": "^[a-zA-Z0-9_-]{1,80}$"
@@ -9709,6 +9738,7 @@
               }
             },
             "required": [
+              "id",
               "resourceId",
               "title",
               "formPreset",
@@ -9829,6 +9859,10 @@
           "data": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
               "resourceId": {
                 "type": "string",
                 "pattern": "^[a-zA-Z0-9_-]{1,80}$"
@@ -9922,6 +9956,7 @@
               }
             },
             "required": [
+              "id",
               "resourceId",
               "title",
               "formPreset",
@@ -10036,6 +10071,10 @@
                 "items": {
                   "type": "object",
                   "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+                    },
                     "folderId": {
                       "type": "string",
                       "pattern": "^[a-zA-Z0-9_-]{1,80}$"
@@ -10068,6 +10107,7 @@
                     }
                   },
                   "required": [
+                    "id",
                     "folderId",
                     "name",
                     "parentId",
@@ -10186,6 +10226,10 @@
           "data": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
               "folderId": {
                 "type": "string",
                 "pattern": "^[a-zA-Z0-9_-]{1,80}$"
@@ -10218,6 +10262,7 @@
               }
             },
             "required": [
+              "id",
               "folderId",
               "name",
               "parentId",
@@ -10329,6 +10374,10 @@
           "data": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
               "folderId": {
                 "type": "string",
                 "pattern": "^[a-zA-Z0-9_-]{1,80}$"
@@ -10361,6 +10410,7 @@
               }
             },
             "required": [
+              "id",
               "folderId",
               "name",
               "parentId",
@@ -10580,6 +10630,10 @@
                 "items": {
                   "type": "object",
                   "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+                    },
                     "collectionId": {
                       "type": "string",
                       "pattern": "^[a-zA-Z0-9_-]{1,80}$"
@@ -10605,6 +10659,7 @@
                     }
                   },
                   "required": [
+                    "id",
                     "collectionId",
                     "name",
                     "description",
@@ -10723,6 +10778,10 @@
           "data": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
               "collectionId": {
                 "type": "string",
                 "pattern": "^[a-zA-Z0-9_-]{1,80}$"
@@ -10748,6 +10807,7 @@
               }
             },
             "required": [
+              "id",
               "collectionId",
               "name",
               "description",

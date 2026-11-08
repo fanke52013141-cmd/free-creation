@@ -1,4 +1,4 @@
-import { z } from 'zod'
+﻿import { z } from 'zod'
 import { categorySchema } from '../../library/blueprint'
 import { empty, identifier } from './common'
 
@@ -304,6 +304,8 @@ const categoryOut = z
 
 const resourceSummaryDto = z
   .object({
+    /** 主键别名（=resourceId）：跨族统一用 id 寻址。 */
+    id: identifier,
     resourceId: identifier,
     title: z.string().max(200),
     formPreset: formPresetOut,
@@ -353,6 +355,8 @@ const resourceDetailDto = resourceSummaryDto
 
 const folderDto = z
   .object({
+    /** 主键别名（=folderId）。 */
+    id: identifier,
     folderId: identifier,
     name: z.string().max(100),
     parentId: identifier.nullable(),
@@ -364,6 +368,8 @@ const folderDto = z
 
 const collectionDto = z
   .object({
+    /** 主键别名（=collectionId）。 */
+    id: identifier,
     collectionId: identifier,
     name: z.string().max(100),
     description: z.string().max(2000),

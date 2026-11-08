@@ -1,4 +1,4 @@
-// 资源库外部接入（F7）：全类型资源 CRUD、分类/文件夹/集合、修订、归档、批量删除与物化。
+﻿// 资源库外部接入（F7）：全类型资源 CRUD、分类/文件夹/集合、修订、归档、批量删除与物化。
 //
 // 设计边界（与 AGENT_PARITY_SPEC §3/§5、AGENTS.md 保持一致）：
 // 1) 业务实现只有一份：全部直接调用 GUI 使用的 store 服务
@@ -259,6 +259,8 @@ function findDetail(resourceId: string, revisionId?: string): LibraryResourceDet
 
 function summaryDto(detail: LibraryResourceSummary): LibraryResourceSummaryDto {
   return {
+    // 主键别名：跨族统一用 id 寻址（与 media.list / project.list 一致）。
+    id: detail.id,
     resourceId: detail.id,
     title: detail.title.slice(0, 200),
     formPreset: detail.formPreset,
@@ -345,6 +347,7 @@ function detailDto(detail: LibraryResourceDetail, includeText: boolean): Library
 
 function folderDto(folder: LibraryFolder): LibraryFolderDto {
   return {
+    id: folder.id,
     folderId: folder.id,
     name: folder.name.slice(0, 100),
     parentId: folder.parentId,
@@ -356,6 +359,7 @@ function folderDto(folder: LibraryFolder): LibraryFolderDto {
 
 function collectionDto(collection: LibraryCollection): LibraryCollectionDto {
   return {
+    id: collection.id,
     collectionId: collection.id,
     name: collection.name.slice(0, 100),
     description: collection.description.slice(0, 2000),
