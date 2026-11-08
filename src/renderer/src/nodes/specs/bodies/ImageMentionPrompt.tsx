@@ -174,6 +174,7 @@ export function ImageMentionPrompt({
             <button
               key={item.token}
               type="button"
+              title={item.title || item.name || item.token}
               onPointerDown={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
