@@ -3,13 +3,13 @@
   "generatedFrom": {
     "ipcChannels": 171,
     "canvasActions": 40,
-    "externalOperations": 95
+    "externalOperations": 98
   },
   "totals": {
     "actions": 211,
     "byPhase": {
-      "external": 99,
-      "F8": 11,
+      "external": 102,
+      "F8": 8,
       "excluded": 23,
       "F2": 5,
       "F7": 6,
@@ -65,10 +65,13 @@
     },
     "ipc.flowAgents.pause": {
       "label": "Flow 暂停",
-      "channel": "flowAgents:pause",
       "gui": "Agent Flow 面板",
-      "phase": "F8",
-      "note": "本包未开放：暂停只作用于主控 Agent 的进行中运行上下文（协调器实例内存态），外部无法在不冒充内部运行身份的前提下控制它（见 28 号台账 §5）"
+      "phase": "external",
+      "external": [
+        "flowAgent.pause"
+      ],
+      "note": "F8：与 GUI 暂停按钮同一宿主方法；下一次安全点生效；任务不存在 NOT_FOUND",
+      "channel": "flowAgents:pause"
     },
     "ipc.flowAgents.publication": {
       "label": "Flow 发布",
@@ -79,10 +82,13 @@
     },
     "ipc.flowAgents.run": {
       "label": "Flow 运行",
-      "channel": "flow-agents:run",
       "gui": "Agent Flow 面板",
-      "phase": "F8",
-      "note": "本包未开放：内部 Agent 运行由 flow-agents.ipc 创建的桌面宿主实例独占（模型端口 + 命令交付通道 + 在途运行表）；外部进程内另建实例会与内部运行身份竞争并改写账本事实。需先由 index.ts 注入共享宿主句柄（见 28 号台账 §5）"
+      "phase": "external",
+      "external": [
+        "flowAgent.run"
+      ],
+      "note": "F8：外部只经启动时创建的那一个宿主实例运行；start/continue 先做模型工具调用预检，预检失败时零模型请求；运行身份 requestId/trace/span 由 main 生成",
+      "channel": "flow-agents:run"
     },
     "ipc.flowAgents.inspect": {
       "label": "Flow 查看",
@@ -96,10 +102,13 @@
     },
     "ipc.flowAgents.stop": {
       "label": "Flow 停止",
-      "channel": "flow-agents:stop",
       "gui": "Agent Flow 面板",
-      "phase": "F8",
-      "note": "本包未开放：停止要中止桌面宿主内存里的运行控制器；外部实例只能改账本状态而无法真正停止运行，属于伪造成功（见 28 号台账 §5）"
+      "phase": "external",
+      "external": [
+        "flowAgent.stop"
+      ],
+      "note": "F8：与 GUI 停止按钮同一宿主方法；终态仍以 flowAgent.inspect 的账本事实为准",
+      "channel": "flow-agents:stop"
     },
     "ipc.flowAgents.catalog": {
       "label": "Flow 能力目录",

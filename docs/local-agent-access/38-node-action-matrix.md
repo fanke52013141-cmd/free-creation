@@ -42,8 +42,10 @@
 - 音频三族（speech/tts/voice-design）的 N2/N3/N5 标 `desktop-tested` 是**门禁语义**而非产出语义：
   里程碑验证的是"外部能创建、GUI 可见、缺模型时在付费调用前如实跳过、零副作用"，
   证据里写清了这一点，不冒充"生成成功"；
-- Agent/状态机/审核三类：外部不能伪造内部运行身份，N2/N5/N7 标 `planned` 并写明需要共享宿主
-  句柄与外部主体协议；N8 标 `not-applicable` 并给理由。
+- Agent/状态机/审核三类：外部不能伪造内部运行身份；状态机与审核的 N2/N5/N7 标 `planned`，
+  N8 标 `not-applicable` 并给理由。**agent 节点的 N5/N7 已在 F8 第二批升级为 `contract-tested`**
+  （`flowAgent.run/pause/stop` 经共享宿主端口执行、预检失败零模型请求；真实长任务未实测，
+  见 [40 号台账](40-flow-agent-run-delivery.md)）。
 
 ## 4. 顺手修的基础设施问题
 

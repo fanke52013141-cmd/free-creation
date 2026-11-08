@@ -14716,6 +14716,964 @@
       ]
     },
     {
+      "operationId": "flowAgent.run",
+      "operationVersion": 1,
+      "effect": "execute",
+      "description": "在当前打开的 Agent 节点上启动/继续/对账/恢复内部 Agent 运行（与 GUI 面板同一宿主实例与同一任务账本）；start/continue 先做模型工具调用预检，失败发生在任何模型请求之前；不新建宿主、不伪造运行身份",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "nodeId": {
+            "type": "string",
+            "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "start",
+              "continue",
+              "reconcile",
+              "restore"
+            ]
+          },
+          "eventId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-zA-Z0-9_.:-]+$"
+          },
+          "expectedTaskId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-zA-Z0-9_.:-]+$"
+          },
+          "expectedWaitRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "projectId",
+          "nodeId",
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "flowAgent.run"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "nodeId": {
+                "type": "string",
+                "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+              },
+              "task": {
+                "type": "object",
+                "properties": {
+                  "taskId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "ready",
+                      "running",
+                      "waiting",
+                      "blocked",
+                      "completed",
+                      "failed",
+                      "cancelled"
+                    ]
+                  },
+                  "waitKind": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "human",
+                          "reconcile"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "waitRevision": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "decisions": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "tools": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "code": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "prepared": {
+                    "type": "boolean"
+                  },
+                  "phase": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "recovery": {
+                    "type": "object",
+                    "properties": {
+                      "reasons": {
+                        "maxItems": 8,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 80
+                        }
+                      },
+                      "canRestore": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "reasons",
+                      "canRestore"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "reviewFeedback": {
+                    "type": "object",
+                    "properties": {
+                      "reviewNodeId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      },
+                      "reviewId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      },
+                      "feedback": {
+                        "type": "string",
+                        "maxLength": 16384
+                      },
+                      "round": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "state": {
+                        "type": "string",
+                        "maxLength": 40
+                      },
+                      "subjects": {
+                        "maxItems": 128,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "assetId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "versionId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "sourceNodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "sourcePortId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            }
+                          },
+                          "required": [
+                            "assetId",
+                            "versionId",
+                            "sourceNodeId",
+                            "sourcePortId"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "reviewNodeId",
+                      "reviewId",
+                      "feedback",
+                      "round",
+                      "state",
+                      "subjects"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "taskId",
+                  "state",
+                  "waitKind",
+                  "waitRevision",
+                  "decisions",
+                  "tools"
+                ],
+                "additionalProperties": false
+              },
+              "refs": {
+                "maxItems": 64,
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "outputs": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema1"
+                }
+              }
+            },
+            "required": [
+              "projectId",
+              "nodeId",
+              "task",
+              "refs",
+              "outputs"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "__schema0": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            ]
+          },
+          "__schema1": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema1"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema1"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "flowAgent.pause",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "请求暂停当前打开的 Agent 任务（下一次安全点生效）；任务不存在如实返回 NOT_FOUND，不伪造暂停结果",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "nodeId": {
+            "type": "string",
+            "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+          }
+        },
+        "required": [
+          "projectId",
+          "nodeId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "flowAgent.pause"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "nodeId": {
+                "type": "string",
+                "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+              },
+              "task": {
+                "type": "object",
+                "properties": {
+                  "taskId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "ready",
+                      "running",
+                      "waiting",
+                      "blocked",
+                      "completed",
+                      "failed",
+                      "cancelled"
+                    ]
+                  },
+                  "waitKind": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "human",
+                          "reconcile"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "waitRevision": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "decisions": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "tools": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "code": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "prepared": {
+                    "type": "boolean"
+                  },
+                  "phase": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "recovery": {
+                    "type": "object",
+                    "properties": {
+                      "reasons": {
+                        "maxItems": 8,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 80
+                        }
+                      },
+                      "canRestore": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "reasons",
+                      "canRestore"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "reviewFeedback": {
+                    "type": "object",
+                    "properties": {
+                      "reviewNodeId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      },
+                      "reviewId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      },
+                      "feedback": {
+                        "type": "string",
+                        "maxLength": 16384
+                      },
+                      "round": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "state": {
+                        "type": "string",
+                        "maxLength": 40
+                      },
+                      "subjects": {
+                        "maxItems": 128,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "assetId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "versionId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "sourceNodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "sourcePortId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            }
+                          },
+                          "required": [
+                            "assetId",
+                            "versionId",
+                            "sourceNodeId",
+                            "sourcePortId"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "reviewNodeId",
+                      "reviewId",
+                      "feedback",
+                      "round",
+                      "state",
+                      "subjects"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "taskId",
+                  "state",
+                  "waitKind",
+                  "waitRevision",
+                  "decisions",
+                  "tools"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "projectId",
+              "nodeId",
+              "task"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "flowAgent.stop",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "停止当前打开的 Agent 任务（与 GUI 停止按钮同一宿主方法）；调用后的终态仍以 flowAgent.inspect 读取的账本事实为准",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "nodeId": {
+            "type": "string",
+            "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+          }
+        },
+        "required": [
+          "projectId",
+          "nodeId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "flowAgent.stop"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "nodeId": {
+                "type": "string",
+                "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+              },
+              "task": {
+                "type": "object",
+                "properties": {
+                  "taskId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "ready",
+                      "running",
+                      "waiting",
+                      "blocked",
+                      "completed",
+                      "failed",
+                      "cancelled"
+                    ]
+                  },
+                  "waitKind": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "human",
+                          "reconcile"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "waitRevision": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "decisions": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "tools": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "code": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "prepared": {
+                    "type": "boolean"
+                  },
+                  "phase": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "recovery": {
+                    "type": "object",
+                    "properties": {
+                      "reasons": {
+                        "maxItems": 8,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 80
+                        }
+                      },
+                      "canRestore": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "reasons",
+                      "canRestore"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "reviewFeedback": {
+                    "type": "object",
+                    "properties": {
+                      "reviewNodeId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      },
+                      "reviewId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      },
+                      "feedback": {
+                        "type": "string",
+                        "maxLength": 16384
+                      },
+                      "round": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "state": {
+                        "type": "string",
+                        "maxLength": 40
+                      },
+                      "subjects": {
+                        "maxItems": 128,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "assetId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "versionId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "sourceNodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "sourcePortId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            }
+                          },
+                          "required": [
+                            "assetId",
+                            "versionId",
+                            "sourceNodeId",
+                            "sourcePortId"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "reviewNodeId",
+                      "reviewId",
+                      "feedback",
+                      "round",
+                      "state",
+                      "subjects"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "taskId",
+                  "state",
+                  "waitKind",
+                  "waitRevision",
+                  "decisions",
+                  "tools"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "projectId",
+              "nodeId",
+              "task"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
       "operationId": "flow.command.lookup",
       "operationVersion": 1,
       "effect": "read",
@@ -20087,8 +21045,8 @@
         {
           "actionId": "N5",
           "label": "执行、显式发布或作为素材输出",
-          "status": "planned",
-          "evidence": "run/pause/stop/review 需要共享宿主句柄与外部主体协议，尚未开放"
+          "status": "contract-tested",
+          "evidence": "flowAgent.run 经共享宿主端口启动/继续（与 GUI 同一实例）；start/continue 先做工具调用预检，预检失败时零模型请求（test/local-agent-flow-agent-run-access.test.ts）"
         },
         {
           "actionId": "N6",
@@ -20099,8 +21057,8 @@
         {
           "actionId": "N7",
           "label": "状态、任务、取消、暂停与恢复",
-          "status": "planned",
-          "evidence": "Agent 任务状态/暂停/停止需共享宿主句柄，外部只能读账本事实（F8 剩余）"
+          "status": "contract-tested",
+          "evidence": "flowAgent.inspect/pause/stop 与 GUI 同一宿主方法（服务级测试）；真实长任务暂停/停止/恢复未在桌面实测"
         },
         {
           "actionId": "N8",
@@ -20111,8 +21069,8 @@
       ],
       "summary": {
         "desktopTested": 0,
-        "contractTested": 3,
-        "planned": 4,
+        "contractTested": 5,
+        "planned": 2,
         "notApplicable": 1
       }
     },

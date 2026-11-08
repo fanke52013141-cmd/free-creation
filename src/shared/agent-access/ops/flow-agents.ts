@@ -12,10 +12,13 @@ import { identifier, nodeId, project } from './common'
  * - collaboration 走 `FlowAgentDesktopHost.collaboration`（只读，不写人工意见/选择）。
  *
  * 未登记（原因见 docs/local-agent-access/28-flow-agents-delivery.md 第 5 节）：
- * run / pause / stop / cooperate / review / build 提交 / publication —— 它们的权威
- * 宿主是 flow-agents.ipc 里创建的桌面实例（模型端口、命令交付通道、进行中运行上下文），
- * 外部进程内另建实例会与内部运行身份竞争并改写账本事实；建图提交还要新增权威宿主
- * 桌面动作。需要后续包先注入共享宿主句柄再逐项开放。
+ * cooperate / review / build 提交 / publication —— 协作事件没有外部主体身份维度
+ * （外部写 note/submit 会与人工输入不可区分）、审核与建图提交还需要同一宿主模型端口
+ * 与新的渲染器权威动作。
+ *
+ * F8 第二批已开放 run / pause / stop：它们**复用 flow-agents IPC 创建的那一个宿主实例**
+ * （经 src/main/agent-access/flow-bridge.ts 的窄接口发布），不另建宿主、不伪造内部身份；
+ * start/continue 仍先走与 IPC 入口同一的模型工具调用预检。
  *
  * 新增操作的方法：在本文件的 `FLOW_AGENTS_OPERATIONS` 里登记
  * { effect, description, input }，并在 `FLOW_AGENTS_OUTPUTS` 里给出输出 Schema
@@ -84,6 +87,35 @@ export const FLOW_AGENTS_OPERATIONS = {
     effect: 'read',
     description:
       '读取指定 Agent 任务的协作记录（目标/消息/固定输入/候选成果）；只读，不接受外部代替人填写意见、选择或继续',
+    input: project.extend({ nodeId }).strict()
+  },
+  // F8：运行控制。它们只经由"启动时创建的那一个宿主实例"执行（见 flow-bridge），
+  // 因此不会出现两个权威；start/continue 的第一道闸门是模型工具调用预检，
+  // 预检失败发生在任何模型请求之前（付费路径不会被偷偷触发）。
+  'flowAgent.run': {
+    effect: 'execute',
+    description:
+      '在当前打开的 Agent 节点上启动/继续/对账/恢复内部 Agent 运行（与 GUI 面板同一宿主实例与同一任务账本）；start/continue 先做模型工具调用预检，失败发生在任何模型请求之前；不新建宿主、不伪造运行身份',
+    input: project
+      .extend({
+        nodeId,
+        action: z.enum(['start', 'continue', 'reconcile', 'restore']),
+        eventId: flowId.optional(),
+        expectedTaskId: flowId.optional(),
+        expectedWaitRevision: z.number().int().nonnegative().optional()
+      })
+      .strict()
+  },
+  'flowAgent.pause': {
+    effect: 'write',
+    description:
+      '请求暂停当前打开的 Agent 任务（下一次安全点生效）；任务不存在如实返回 NOT_FOUND，不伪造暂停结果',
+    input: project.extend({ nodeId }).strict()
+  },
+  'flowAgent.stop': {
+    effect: 'write',
+    description:
+      '停止当前打开的 Agent 任务（与 GUI 停止按钮同一宿主方法）；调用后的终态仍以 flowAgent.inspect 读取的账本事实为准',
     input: project.extend({ nodeId }).strict()
   }
 } as const
@@ -166,5 +198,22 @@ export const FLOW_AGENTS_OUTPUTS = {
       inputs: z.array(flowAssetRef).max(256),
       candidates: z.array(flowAssetRef).max(128)
     })
+    .strict(),
+  'flowAgent.run': z
+    .object({
+      projectId: identifier,
+      nodeId,
+      task: flowTaskView,
+      /** 本次运行产生的固定资产引用（结构与宿主持有的一致，外部只读）。 */
+      refs: z.array(z.json()).max(64),
+      /** out-text / out-json 等端口产物（只读投影，不改画布）。 */
+      outputs: z.record(z.string(), z.json())
+    })
+    .strict(),
+  'flowAgent.pause': z
+    .object({ projectId: identifier, nodeId, task: flowTaskView })
+    .strict(),
+  'flowAgent.stop': z
+    .object({ projectId: identifier, nodeId, task: flowTaskView })
     .strict()
 } as const

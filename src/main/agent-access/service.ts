@@ -49,6 +49,7 @@ import { DesktopAccessError, type AccessDesktop } from './desktop'
 import { runNodeLibraryOperation } from './node-library-ops'
 import { runHistoryOperation } from './history-ops'
 import { FLOW_AGENT_OPERATION_IDS, runFlowAgentOperation } from './flow-agents-ops'
+import { FLOW_AGENT_RUN_OPERATION_IDS, runFlowAgentRunOperation } from './flow-agent-run-ops'
 import { FLOW_ASSET_OPERATION_IDS, runFlowAssetOperation } from './flow-assets-ops'
 import { isFlowCommandOperation, runFlowCommandOperation } from './flow-commands-ops'
 import { isSettingsOperation, runSettingsOperation } from './settings-ops'
@@ -326,12 +327,17 @@ export class LocalAccessService {
       // 其他写操作（含 project.delete/export/其他 history 写）仍照旧被恢复副本阻断。
       // flow.command.reconcile 同理：它的目标就是结算一条 pending/unknown 的既有命令，
       // 若按占用拒绝会永远无法核对；账本 commit 仍只按已保存事实推进，不伪造成功。
+      // F8：flowAgent.run/pause/stop 的作用对象就是账本里的那条 Agent 任务——run 要启动/继续
+      // 它、pause/stop 要控制它；若按"存在活动任务"拒绝，就永远无法操作自己刚创建的任务。
       if (
         id &&
         spec.effect !== 'read' &&
         operationId !== 'run.cancel' &&
         operationId !== 'history.recovery.resolve' &&
-        operationId !== 'flow.command.reconcile'
+        operationId !== 'flow.command.reconcile' &&
+        operationId !== 'flowAgent.run' &&
+        operationId !== 'flowAgent.pause' &&
+        operationId !== 'flowAgent.stop'
       )
         this.assertNoActiveTasks(id)
       const active = this.options.activeProjectId()
@@ -915,6 +921,12 @@ export class LocalAccessService {
         result = FLOW_AGENT_OPERATION_IDS.has(operationId)
           ? await runFlowAgentOperation(operationId, input, flowContext)
           : await runFlowAssetOperation(operationId, input, flowContext)
+      } else if (FLOW_AGENT_RUN_OPERATION_IDS.has(operationId)) {
+        // F8（第二批）：Agent 运行控制只经由启动时创建的那一个宿主实例（flow-bridge 窄接口），
+        // 外部不新建宿主、不自造运行身份；start/continue 先走与 IPC 入口相同的模型工具调用预检。
+        result = await runFlowAgentRunOperation(operationId, input, {
+          activeProjectId: this.options.activeProjectId
+        })
       } else if (isFlowCommandOperation(operationId)) {
         // F8（二）：Flow 命令账本协作只读/结算**既有**命令（flow-commands-ops.ts）；
         // 不创建命令/租约、不向渲染器下发 grant，因此不存在冒充内部 Agent 会话的路径。
@@ -1790,10 +1802,13 @@ export class LocalAccessService {
       case 'flowAgent.inspect':
       case 'flowAgent.catalog':
       case 'flowAgent.collaboration':
+      case 'flowAgent.run':
+      case 'flowAgent.pause':
+      case 'flowAgent.stop':
       case 'flowAsset.submit':
       case 'flowAsset.list':
       case 'flowAsset.read':
-        // F8（一）：Flow 观察/固定资产在 dispatch 分组分支委托 flow-*-ops 执行，不落在这里。
+        // F8：Flow 观察/运行控制/固定资产在 dispatch 分组分支委托 flow-*-ops 执行，不落在这里。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'flow.command.lookup':
       case 'flow.command.availability':

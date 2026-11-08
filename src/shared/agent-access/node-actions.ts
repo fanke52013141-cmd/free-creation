@@ -263,7 +263,20 @@ const NODE_TABLE: Record<string, Overrides> = {
     }
   },
   // 内部 Agent / 状态机 / 审核
-  agent: { contractVersion: 1, family: 'agent' },
+  agent: {
+    contractVersion: 1,
+    family: 'agent',
+    extra: {
+      // F8 第二批：运行控制已开放，但真实 Agent 运行需要已验证的工具调用模型，
+      // 目前只有"预检失败时零模型请求"的服务级证据，因此不写 desktop-tested。
+      N5: C(
+        'flowAgent.run 经共享宿主端口启动/继续（与 GUI 同一实例）；start/continue 先做工具调用预检，预检失败时零模型请求（test/local-agent-flow-agent-run-access.test.ts）'
+      ),
+      N7: C(
+        'flowAgent.inspect/pause/stop 与 GUI 同一宿主方法（服务级测试）；真实长任务暂停/停止/恢复未在桌面实测'
+      )
+    }
+  },
   'state-machine': { contractVersion: 1, family: 'agent' },
   'ai-review': { contractVersion: 1, family: 'agent' },
   // 导演台

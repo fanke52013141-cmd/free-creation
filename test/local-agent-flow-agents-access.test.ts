@@ -714,11 +714,10 @@ describe('flowAsset submit/list/read', () => {
 })
 
 describe('unopened Flow lifecycle actions', () => {
-  it('are not registered, so external callers cannot impersonate the internal run owner', async () => {
+  it('keeps impersonation-prone actions unregistered while run/pause/stop go through the shared host port', async () => {
+    // F8 第二批：run/pause/stop 已开放，但只经"启动时创建的那一个宿主实例"的窄接口执行
+    // （见 flow-bridge）；冒充内部运行身份 / 代替人做协作与审核的仍不开放。
     const notOpened = [
-      'flowAgent.run',
-      'flowAgent.pause',
-      'flowAgent.stop',
       'flowAgent.cooperate',
       'flowAgent.review',
       'flowAgent.build',
@@ -732,6 +731,9 @@ describe('unopened Flow lifecycle actions', () => {
       'flowAgent.inspect',
       'flowAgent.catalog',
       'flowAgent.collaboration',
+      'flowAgent.run',
+      'flowAgent.pause',
+      'flowAgent.stop',
       'flowAsset.submit',
       'flowAsset.list',
       'flowAsset.read'
@@ -742,11 +744,26 @@ describe('unopened Flow lifecycle actions', () => {
     const { taskId } = seedTask(projectId, 'running')
     active = projectId
     const before = taskRow(taskId)
-    // 外部尝试"运行/停止/审核/协作继续"：Registry 直接拒绝，且账本事实不变。
-    for (const operationId of ['flowAgent.run', 'flowAgent.stop', 'flowAgent.cooperate']) {
+    // 冒充型动作：Registry 直接拒绝，账本事实不变。
+    for (const operationId of notOpened) {
       const result = await call(operationId, { projectId, nodeId: 'shape:agent1' }, key())
       expect(result.status).toBe('failed')
       expect(result.error?.code).toBe('UNSUPPORTED_OPERATION')
+    }
+    // 运行控制在本用例里没有发布宿主端口（测试未注入）：必须如实拒绝，
+    // 仍然不改写账本。不新建宿主、不伪造任务——"同一实例"的完整证据见
+    // test/local-agent-flow-agent-run-access.test.ts。
+    const unavailable = await call(
+      'flowAgent.run',
+      { projectId, nodeId: 'shape:agent1', action: 'start' },
+      key()
+    )
+    expect(unavailable.status).toBe('failed')
+    expect(unavailable.error?.code).toBe('FLOW_AGENTS_UNAVAILABLE')
+    for (const operationId of ['flowAgent.pause', 'flowAgent.stop']) {
+      const result = await call(operationId, { projectId, nodeId: 'shape:agent1' }, key())
+      expect(result.status).toBe('failed')
+      expect(result.error?.code).toBe('FLOW_AGENTS_UNAVAILABLE')
     }
     expect(taskRow(taskId)).toEqual(before)
   })

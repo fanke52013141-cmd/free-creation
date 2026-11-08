@@ -12,6 +12,7 @@ import { flowAgentFailureMessage } from '../../shared/agent-flow/failure-message
 import { FlowCommandError } from '../../shared/agent-flow/commands'
 import { FlowAssetError } from '../../shared/agent-flow/assets'
 import { FlowAgentDesktopHost } from '../agent-flow/desktop-host'
+import { publishFlowAgentAccessPort } from '../agent-access/flow-bridge'
 import type { FlowCommandDesktop } from './flow-commands.ipc'
 import { getDb } from '../store/db'
 import { openProject, projectJsonPath } from '../store/projects.repo'
@@ -421,5 +422,14 @@ export function registerFlowAgentsIpc(
       }
     })
   }
+  // F8：把**同一个**宿主实例以窄接口发布给本地外部接入（CLI/MCP）。
+  // 外部 run/pause/stop 一律经由它调用；另建实例会出现两个权威并互相覆盖任务事实。
+  publishFlowAgentAccessPort({
+    run: (raw) => host.run(raw),
+    pause: (query) => host.pause(query),
+    stop: (query) => host.stop(query),
+    assertAgentScopeToolCalling: (projectId, nodeId) =>
+      assertAgentScopeToolCalling(projectId, nodeId)
+  })
   return host
 }
