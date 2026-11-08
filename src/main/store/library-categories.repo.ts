@@ -94,6 +94,13 @@ export function listCategories(): LibraryCategory[] {
       .all() as Array<{ body_json: string }>
   ).map((row) => parseCategory(JSON.parse(row.body_json)))
 }
+/** 分类当前最新版本号（不含种子初始化写入）；接入层用它把“版本漂移”判为冲突而不是覆盖。 */
+export function latestCategoryVersion(categoryId: string): number | null {
+  const row = getDb()
+    .prepare('SELECT MAX(version) AS version FROM library_category_versions WHERE category_id = ?')
+    .get(categoryId) as { version: number | null }
+  return row.version ?? null
+}
 export function getCategory(id: string, version: number): LibraryCategory {
   const row = getDb()
     .prepare(

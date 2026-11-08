@@ -4,7 +4,7 @@ import { revisionCategory, pinCategory, importRevisionCategory, exportCategoryVe
 import { createHash } from 'crypto'
 import AdmZip from 'adm-zip'
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from 'fs'
-import { basename, extname, join } from 'path'
+import { basename, extname, isAbsolute, join, relative } from 'path'
 import { nanoid } from 'nanoid'
 import type {
   CreateLibraryCollectionInput,
@@ -286,7 +286,8 @@ function validateComponents(components: LibraryComponentInput[]): LibraryCompone
   })
 }
 
-function validatePresetContents(preset: LibraryPreset, components: LibraryComponentInput[]): void {
+/** 资源内容规则唯一实现：GUI 表单提交、资源包导入与外部接入前置校验共用同一函数。 */
+export function validatePresetContents(preset: LibraryPreset, components: LibraryComponentInput[]): void {
   const valid = validateComponents(components)
   if (preset === 'image' && !valid.some((component) => component.valueType === 'image')) {
     throw new Error('图片资源至少需要一张图片')
@@ -776,13 +777,49 @@ export function deleteResource(id: string): boolean {
     database.prepare('DELETE FROM library_blobs WHERE id = ?').run(blobId)
     if (blob?.path) {
       try {
-        rmSync(blob.path, { force: true })
+        // blob.path 是相对数据目录的受控路径；历史行若为绝对路径则按原样删除。
+        const dataDirectory = getDataDir()
+        const target = isAbsolute(blob.path) ? blob.path : join(dataDirectory, blob.path)
+        // 只允许删除数据目录内的 blob：即使数据库行被篡改，也不能越界删用户文件。
+        const inside = relative(dataDirectory, target)
+        if (!inside || inside.startsWith('..') || isAbsolute(inside)) continue
+        rmSync(target, { force: true })
       } catch {
         // 清理失败不改变删除结果；孤儿文件留给后续清理。
       }
     }
   }
   return true
+}
+
+/** 资源被哪些项目物化/使用过（只读投影，不含项目媒体 ID 与路径）。 */
+export function listResourceUsages(resourceId: string): Array<{
+  projectId: string
+  revisionId: string
+  createdAt: number
+  lastUsedAt: number
+  materializedNodeCount: number
+}> {
+  const rows = getDb().prepare(
+    `SELECT project_id, revision_id, materialized_node_ids_json, created_at, last_used_at
+     FROM library_usages WHERE resource_id = ? ORDER BY last_used_at DESC LIMIT 50`
+  ).all(resourceId) as Array<{
+    project_id: string
+    revision_id: string
+    materialized_node_ids_json: string
+    created_at: number
+    last_used_at: number
+  }>
+  return rows.map((row) => {
+    const nodes = parseJson<unknown>(row.materialized_node_ids_json, [])
+    return {
+      projectId: row.project_id,
+      revisionId: row.revision_id,
+      createdAt: row.created_at,
+      lastUsedAt: row.last_used_at,
+      materializedNodeCount: Array.isArray(nodes) ? nodes.length : 0
+    }
+  })
 }
 
 export function listCollections(): LibraryCollection[] {

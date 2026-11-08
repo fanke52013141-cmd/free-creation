@@ -122,6 +122,21 @@ export async function materializeResource(input: {
   }
 }
 
+/** 外部物化在权威宿主创建节点后回填绑定；只更新本项目的 usage 行，不改变节点/媒体事实。 */
+export function recordMaterializedNodes(input: {
+  projectId: string
+  usageId: string
+  nodeIds: string[]
+}): boolean {
+  if (!input?.projectId || !input.usageId) return false
+  const ids = [...new Set(input.nodeIds.filter((id) => typeof id === 'string' && id.startsWith('shape:')))].slice(0, 200)
+  if (ids.length === 0) return false
+  const result = getDb()
+    .prepare('UPDATE library_usages SET materialized_node_ids_json = ? WHERE id = ? AND project_id = ?')
+    .run(JSON.stringify(ids), input.usageId, input.projectId)
+  return result.changes > 0
+}
+
 /** Compensation is limited to the fresh materialization identified by project and usage. */
 export async function discardMaterialization(input: {
   projectId: string
