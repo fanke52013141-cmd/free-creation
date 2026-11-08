@@ -68,10 +68,33 @@ async function main(): Promise<void> {
       const id = Object.keys(ACCESS_OPERATIONS).find(
         (id) => id.replaceAll('.', '_') === request.params.name
       ) as AccessOperationId | undefined
-      if (!id) return { isError: true, content: [{ type: 'text', text: 'UNSUPPORTED_OPERATION' }] }
+      // 协议层失败也必须给**结构化**回执：真实 Agent 客户端要能按 error.code 分支，
+      // 不能只收到一串纯文本（否则"参数缺幂等键"和"字段类型不对"无法区分）。
+      // detail 只放字段路径，不放请求正文、路径或密钥。
+      const protocolFailure = (code: string, phase: string, detail?: string) => {
+        // 必须满足 operationResponseSchema（strict）：含 traceId，且失败态不带 data。
+        const failure = {
+          apiVersion: 1 as const,
+          requestId: String(request.params.arguments?.requestId ?? '') || `mcp-${Date.now()}`,
+          operationId: id ?? String(request.params.name),
+          traceId: 'unavailable',
+          status: 'failed' as const,
+          error: { code, phase, retryable: false, ...(detail ? { detail } : {}) }
+        }
+        return {
+          isError: true,
+          structuredContent: failure,
+          content: [{ type: 'text' as const, text: JSON.stringify(failure) }]
+        }
+      }
+      if (!id) return protocolFailure('UNSUPPORTED_OPERATION', 'dispatch')
       const parsed = toolInputSchema(id).safeParse(request.params.arguments)
       if (!parsed.success)
-        return { isError: true, content: [{ type: 'text', text: 'INVALID_INPUT' }] }
+        return protocolFailure(
+          'INVALID_INPUT',
+          'validate',
+          parsed.error.issues[0]?.path.join('.') || 'input'
+        )
       const response = await callLocalOperation(
         id,
         parsed.data as { input: unknown; requestId?: string; idempotencyKey?: string },
