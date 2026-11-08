@@ -43,7 +43,9 @@ it('accepts only matching main-frame sender, project and request', async () => {
     code: 'RESOURCE_BUSY'
   })
   f.reply(payload)
-  await expect(result).resolves.toBe(4)
+  // 协议早已升级为返回 { graphVersion, result? }（main 需要同时拿到版本与载荷），
+  // 这里的旧断言还在等数字，属于测试没跟上实现——不是产品回退。
+  await expect(result).resolves.toMatchObject({ graphVersion: 4 })
 })
 it('expires authorization and rejects late metadata commits after timeout', async () => {
   const f = fixture(),
@@ -74,7 +76,7 @@ it('commits once and waits for renderer version acknowledgement', async () => {
   expect(ipc.handle.get(ACCESS_DESKTOP_COMMIT)!(f.event, payload).ok).toBe(true)
   expect(ipc.handle.get(ACCESS_DESKTOP_COMMIT)!(f.event, payload).ok).toBe(false)
   f.reply({ ...payload, graphVersion: 8, ok: true })
-  await expect(result).resolves.toBe(8)
+  await expect(result).resolves.toMatchObject({ graphVersion: 8 })
   expect(commit).toHaveBeenCalledTimes(1)
 })
 it('classifies renderer loss as unknown and releases the bounded request', async () => {

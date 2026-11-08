@@ -69,9 +69,14 @@ function start(directory: string, mode: string, label = mode) {
     for (const line of lines) if (line.trim()) records.push(JSON.parse(line))
     for (const listener of listeners) listener()
   })
+  let stderrTail = ''
+  child.stderr?.on('data', (chunk) => {
+    stderrTail = (stderrTail + String(chunk)).slice(-800)
+  })
   const exited = new Promise<void>((done) =>
     child.once('close', () => {
       closed = true
+      if (stderrTail) records.push({ __stderr: stderrTail })
       for (const listener of listeners) listener()
       done()
     })
@@ -89,7 +94,10 @@ function start(directory: string, mode: string, label = mode) {
           clearTimeout(timer)
           listeners.delete(check)
           if (record) done(record)
-          else reject(new Error(`EARLY_EXIT_${mode}_${key}`))
+          else {
+            const errRecord = records.find((r) => typeof r.__stderr === 'string') as { __stderr?: string } | undefined
+            reject(new Error(`EARLY_EXIT_${mode}_${key}: ${errRecord?.__stderr?.slice(-500) ?? '(no stderr)'}`))
+          }
         }
       }
       listeners.add(check)
@@ -353,11 +361,19 @@ describe('C4 independent process recovery contention', () => {
   it('concurrent v16 starters recheck schema inside the migration write lock', async () => {
     const directory = await setup()
     withDb(directory, (db) => {
-      // setup() creates the current schema; remove M17-M19 additions so
-      // this fixture represents the actual persisted v16 schema before racing starters.
+      // setup() creates the current schema; strip the additions from every migration
+      // after v16 so this fixture really represents the persisted v16 schema before
+      // racing starters. 新增 M17 之后的迁移时，必须同步在下面补齐它的"回退"语句，
+      // 否则重跑迁移会撞上"表已存在/列已存在"，让这个并发用例变成假失败。
       db.exec(`DROP TABLE process_locks;
         DROP TABLE local_agent_operations;
+        DROP TABLE secret_vault;
+        DROP TABLE key_imports;
         DROP TABLE agent_tool_calling_validations;
+        DROP TABLE external_runs;
+        DROP TABLE director_publish_requests;
+        ALTER TABLE history_snapshots DROP COLUMN graph_json;
+        ALTER TABLE flow_commands DROP COLUMN principal;
         ALTER TABLE model_connections DROP COLUMN agent_tool_calling_revision;
         ALTER TABLE model_definitions DROP COLUMN agent_tool_calling_revision;`)
       db.pragma('user_version=16')

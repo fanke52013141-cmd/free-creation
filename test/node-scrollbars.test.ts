@@ -7,10 +7,12 @@ const stylesheet = read('src/renderer/src/assets/scrollbars.css')
 describe('全局隐藏滚动条规则', () => {
   it('应用入口加载公共规则，未来区域自动继承', () => {
     expect(read('src/renderer/src/main.tsx')).toContain("import './assets/scrollbars.css'")
-    expect(stylesheet).toMatch(/\*\s*\{/)
+    // 规则带资源库例外（用户要求的"批量管理快速浏览"豁免），因此不再是无条件 `* {`；
+    // 仍然要求它是一条全局规则并覆盖所有非例外区域。
+    expect(stylesheet).toContain('*:not(.library-resource-browser) {')
     expect(stylesheet).toContain('scrollbar-width: none !important')
     expect(stylesheet).toContain('scrollbar-gutter: auto !important')
-    expect(stylesheet).toContain('*::-webkit-scrollbar')
+    expect(stylesheet).toContain('*:not(.library-resource-browser)::-webkit-scrollbar')
     expect(stylesheet).toContain('display: none !important')
   })
   it('保留 overflow 和交互，不再创建可见阅读滑块', () => {
