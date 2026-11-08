@@ -1455,11 +1455,14 @@ export function CanvasEditor({
                       })
                 })
               }
-              if (graphVersionRef.current !== request.expectedGraphVersion) {
+              // 版本只作建议值：撤销/重做操作的是**编辑器自己的历史栈**，不会覆盖别人的内容，
+              // 因此允许"期望版本低于当前"（保存屏障会推进版本，严格相等会让 Agent 永远追不上），
+              // 只拒绝"期望版本超前"（那才是真正的状态错乱）。
+              if ((request.expectedGraphVersion ?? 0) > graphVersionRef.current) {
                 replyHistory(
                   false,
                   'REVISION_CONFLICT',
-                  `expected ${request.expectedGraphVersion}, current ${graphVersionRef.current}`
+                  `expected ${request.expectedGraphVersion} is ahead of current ${graphVersionRef.current}`
                 )
                 return
               }

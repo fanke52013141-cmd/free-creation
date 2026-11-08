@@ -17,7 +17,7 @@ export const CANVAS_HISTORY_OPERATIONS = {
   'canvas.history': {
     effect: 'write',
     description:
-      '在当前打开的画布上执行一步撤销或重做（与 GUI 历史坞同一 editor 历史栈）；只回滚画布编辑，不会撤销已发生的模型调用或发布副作用；执行后保存并返回新的图版本',
+      '在当前打开的画布上执行一步撤销或重做（与 GUI 历史坞同一 editor 历史栈）；只回滚画布编辑，不会撤销已发生的模型调用或发布副作用；expectedGraphVersion 为**建议值**（只拒绝超前版本；保存屏障会推进版本，严格相等会使调用永远失败）；执行后保存并返回新的图版本',
     input: z
       .object({
         projectId: identifier,
