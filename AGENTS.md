@@ -48,7 +48,12 @@ renderer 的 `emitDiagnosticsEvent` 和 main 的诊断入口。实际验收范�
 不得在 React 组件中绕过 executor 调用模型，不得按上游节点标题或类型猜测输入，不得用
 快捷按钮隐式产生未声明的业务输出。任何新处理能力必须是独立节点或明确的工作流模板。
 
-## Agent 对接已下线（2026-09-17）
+## 旧 Agent 接入历史与当前接入
+
+2026-11-07：用户目标已升级为全软件 GUI／CLI／MCP 业务能力一致。当前维护要求见
+[一致性规范](AGENT_PARITY_SPEC.md)，实施见[完整开发计划](docs/local-agent-access/15-gui-cli-mcp-parity-plan.md)
+及[32类节点动作计划](docs/local-agent-access/16-node-action-coverage.md)。当前已有25项外部操作，
+不代表全软件或全部节点已接通；旧最小包排除项不能继续作为永久不接入的依据。
 
 2026-10-24 接续：用户已授权按 [本地外部接入规范](AGENT_ACCESS_SPEC.md) 落地 A0 + A1 最小纵向包。
 旧系统仍保持下线；新增本地接入的实际支持、验证和边界以
@@ -56,7 +61,7 @@ renderer 的 `emitDiagnosticsEvent` 和 main 的诊断入口。实际验收范�
 
 后续用户已授权A1.1，桌面打开、名称更新与活动画布保存/导出以[接续台账](docs/local-agent-access/06-a1-1-desktop-projects.md)为准。前包关闭项目限制保留为历史基线，不用于否定接续中已验收的支持。
 
-Agent/CLI/MCP/headless 的全部实现代码已从本仓库移除（`src/capabilities`、`src/application`、
+历史上旧 Agent/CLI/MCP/headless 实现已从本仓库移除（`src/capabilities`、`src/application`、
 `src/cli`、`src/mcp`、`src/main/headless`、`test/agent`、`generated/` 及相关脚本与 CI 步骤）。
 原因：项目未稳定前对接反复返工，且 headless 链路存在契约缺口（详见
 `docs/HANDOFF_2026_09_15_CODE_REVIEW.md` F05–F09）。旧对接规划和旧 Agent 专用交接
@@ -64,9 +69,18 @@ Agent/CLI/MCP/headless 的全部实现代码已从本仓库移除（`src/capabil
 
 ## 本地外部 Agent 接入同步维护
 
-新增功能、修改业务/执行/数据路径或修复故障前，必须阅读 `AGENT_ACCESS_SPEC.md`，
+> **铁律（用户 2026-11-08 明确要求，最高优先级）**：凡改动"用户能做的业务动作"，必须在**同一次提交**里
+> 把 CLI / MCP 对接一起改完并验证；不允许任何"人能做、Agent 不能做（或反之）"的缺口。
+> 完整规则见 [`docs/local-agent-access/65-AGENT-PARITY-IRON-RULE.md`](docs/local-agent-access/65-AGENT-PARITY-IRON-RULE.md)；
+> 提交前必跑 `npm run guard:agent-parity`，红则不许提交。例外只能用于"尚不可发布的能力"，
+> 且须用户明确接受范围与期限并记入例外清单。
+
+新增功能、修改业务/执行/数据路径或修复故障前，必须阅读 `AGENT_PARITY_SPEC.md`（先看 §0 铁律）、`AGENT_ACCESS_SPEC.md`，
 核对 `docs/local-agent-access/02-capability-matrix.md`，并完成
 `docs/templates/AGENT_ACCESS_CHANGE_TEMPLATE.md` 的影响检查。
+今后新增GUI业务能力或节点专有动作，必须同包提供CLI和MCP调用、公共契约与三入口一致性验证；
+不得只新增planned声明便发布GUI功能。既有欠账按完整计划迁移；特殊例外须用户明确接受范围及期限。
+不涉及业务语义的样式/静态文案可说明不涉及；确认、审核、版本、占用及授权规则在三个入口保持一致。
 受影响操作与节点须同包更新公共契约、支持状态、Schema、兼容说明、测试、日志覆盖和文档；
 纯样式或文案可说明“不涉及”。不得在 MCP/CLI/API 中另写执行器、直写项目快照/数据库，
 或绕过占用、版本、审核、固定资产和人工门禁。
