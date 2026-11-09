@@ -476,9 +476,22 @@ export function CanvasEditor({
     }
   }, [project.id, providers])
 
+  // 调试钩子：本地验收脚本据此确定性地选择/读取画布状态（不参与业务逻辑）。
+  useEffect(() => {
+    if (!editorInstance) return
+    ;(window as unknown as { __canvasEditor?: Editor }).__canvasEditor = editorInstance
+    return () => {
+      delete (window as unknown as { __canvasEditor?: Editor }).__canvasEditor
+    }
+  }, [editorInstance])
+
   // Ctrl / Cmd + 框选 = **加选**（2026-11-09 用户需求）。
-  // tldraw 原生只认 Shift 加选；这里在按下瞬间记住既有选择，松手后（等 tldraw 处理完
-  // pointerup 再合并，否则会被它随后写入的选择覆盖）把新框到的并入。
+  //
+  // tldraw 的语义与我们想要的不同：Brushing 里 Shift 才是加选，Ctrl 是"包裹模式"
+  // （只选完全框住的形状，且会替换原选择）。所以之前只做"松手后合并"没用——
+  // Ctrl 框选可能一个都没选中。这里改为：
+  //   按下（Ctrl）时记住已选 → 松手瞬间（捕获阶段，早于 tldraw 清理）取出框选矩形 →
+  //   自己按"矩形与节点相交"计算并集（不依赖 tldraw 的包裹模式）→ 合并进选择。
   useEffect(() => {
     const el = wrapRef.current
     if (!el || !editorInstance) return
@@ -495,15 +508,31 @@ export function CanvasEditor({
       const editor = editorRef.current
       active = false
       if (!editor) return
-      // 延迟到 tldraw 的 pointerup/选择更新之后执行；再多合并一次以覆盖拖拽结束时的二次选择。
-      const merge = (): void => {
-        const current = editor.getSelectedShapeIds()
-        const union = [...new Set([...base, ...current])]
-        if (union.length !== current.length) editor.select(...union)
-      }
-      window.setTimeout(merge, 0)
-      window.setTimeout(merge, 60)
+      const state = editor.getInstanceState()
+      const brush = state.brush as { x: number; y: number; w: number; h: number } | null
+      const rect = brush && brush.w > 1 && brush.h > 1 ? { ...brush } : null
+      const baseCopy = base
       base = []
+      const merge = (): void => {
+        const selected = new Set<TLShapeId>([...baseCopy, ...editor.getSelectedShapeIds()])
+        if (rect) {
+          const maxX = rect.x + rect.w
+          const maxY = rect.y + rect.h
+          for (const shape of editor.getCurrentPageShapes()) {
+            if (shape.type !== 'node-card' && shape.type !== 'group') continue
+            const bounds = editor.getShapePageBounds(shape.id)
+            if (!bounds) continue
+            const intersects =
+              bounds.x <= maxX && bounds.maxX >= rect.x && bounds.y <= maxY && bounds.maxY >= rect.y
+            if (intersects) selected.add(shape.id)
+          }
+        }
+        const current = editor.getSelectedShapeIds()
+        if (selected.size !== current.length) editor.select(...selected)
+      }
+      // tldraw 会在自己的 pointerup 里改写选择：稍后再合并两次，确保最终结果正确。
+      window.setTimeout(merge, 0)
+      window.setTimeout(merge, 80)
     }
     el.addEventListener('pointerdown', onPointerDown, { capture: true })
     window.addEventListener('pointerup', onPointerUp, { capture: true })
