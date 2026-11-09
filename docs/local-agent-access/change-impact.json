@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "开发构建授权便利化：src/main/index.ts 的授权引导新增两项仅未打包构建生效的能力——① 读本机 .canvas-license-dev.json 的 trustedRootStore 覆盖信任根（gitignored，一次配置长期有效）；② CANVAS_LICENSE_DEV_BYPASS=1 跳过门禁（调试用，日志留痕）。发布包（app.isPackaged）一律忽略，不影响授权安全。同时新增 scripts/license-tool.cjs（check/backup/restore/repair）与 qa/activate-dev-license.cjs 的 --store 参数。兼容结论：不改变任何外部操作 Schema（仍 143 项），仅开发期行为便利化。",
+  "reason": "修复用户报障：供应商配置导入被错误要求 credentials.export（导出/签发）能力，导致普通已激活设备（仅 app.run）永远导不进自己导出的 .canvasproviders；同时 UI 把「导入配置」入口一并隐藏。改为：导入只要求授权有效且已激活（等价手工填密钥），导出仍要求 credentials.export；UI 始终显示导入、导出按能力显示。兼容结论：不改变任何外部操作 Schema（仍 143 项），仅修正权限判定与入口可见性；安全边界未放宽（导入仍需有效授权 + 文件密码）。",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -88,7 +88,7 @@
     "src/main/gateway/image.ts": "cb5dc930a46e504d7a3b1aa50f55a190a364871c58deaa4ba39f1ce35f3e923a",
     "src/main/gateway/keycrypto.ts": "cdbdd2d9ee95f826a969e381a9ef02c5abc3e4db69db39c00bdc50b2068fe972",
     "src/main/gateway/provider-check.ts": "70228496747e958f6ef4a3bd1b385b7f6ca36ace744280d3389399d6d1ace59a",
-    "src/main/gateway/provider-transfer.ts": "0a3b9d0b9f63bb8d1a46a669e17459399bdb53df04ddda8b694ff90883f633b8",
+    "src/main/gateway/provider-transfer.ts": "fcc0cfcf23ab1f54dee6736fd61977485beb52e388375c7c611cecd955f8311d",
     "src/main/gateway/providers.repo.ts": "d402bc40ee586e1618441090e6d8054c66537c2a09e62912a20468aaceb16cf8",
     "src/main/gateway/upstream-fetch.ts": "bf3f59d221f614d5f72801025511da332bd8321537db75bcef75ebd10a840b6c",
     "src/main/gateway/video-materialization.ts": "7109c33a35d971c5df5f6093334d5b4075e101180dfd8d95b0c20caf23e9e63d",

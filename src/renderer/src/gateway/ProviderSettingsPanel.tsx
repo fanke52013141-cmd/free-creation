@@ -689,14 +689,19 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                 )}
               </div>
             )}
-            {!picking && !selecting && (DISTRIBUTION_EDITION || canIssueKeys) && (
+            {/* 导入 = 接收别人给的配置（等价手工填密钥），任何已激活设备都应可见；
+                导出 = 把本机密钥发给别人，只对发放员/发行版开放。两者此前共用条件，
+                导致普通设备连自己导出的文件都导不回来（2026-11-09 修正）。 */}
+            {!picking && !selecting && (
               <div className="gw-provider-transfer-actions">
                 <button className="btn-ghost small" onClick={() => beginProviderTransfer('import')}>
                   导入配置
                 </button>
-                <button className="btn-ghost small" onClick={() => beginProviderTransfer('export')}>
-                  导出配置
-                </button>
+                {(DISTRIBUTION_EDITION || canIssueKeys) && (
+                  <button className="btn-ghost small" onClick={() => beginProviderTransfer('export')}>
+                    导出配置
+                  </button>
+                )}
               </div>
             )}
             {selecting && (

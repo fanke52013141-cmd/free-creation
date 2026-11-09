@@ -167,14 +167,18 @@ describe('供应商配置传输（直发版/发放员）', () => {
     expect(payload.providers[0].apiKey).toBe('selected-secret')
   })
 
-  it('授权版使用者（无 credentials.export）导出与导入均拒绝', async () => {
+  it('授权版使用者（无 credentials.export）只能导入、不能导出', async () => {
+    // 2026-11-09 修正：导入=接收别人给的配置（等价手工填密钥），不该要求导出/签发能力；
+    // 只有导出（把本机密钥发给别人）才需要 credentials.export。
+    // 旧断言"导入也拒绝"正是用户报障的根因——自己导出的文件永远导不回来。
     state.capabilities = ['app.run']
     await expect(exportProviders(file, 'test-password-123', ['selected'])).rejects.toThrow(
       /credentials\.export/
     )
-    await expect(importProviders(join(dir, 'x.canvasproviders'), 'test-password-123')).rejects.toThrow(
-      /credentials\.export/
-    )
+    // 导入：不得因能力被拒。缺失文件走到读文件的 ENOENT，说明已经越过权限闸门。
+    await expect(
+      importProviders(join(dir, 'x.canvasproviders'), 'test-password-123')
+    ).rejects.not.toThrow(/credentials\.export/)
   })
 
   it('非法选择（空列表/重复/超限）直接拒绝且不读仓库', async () => {

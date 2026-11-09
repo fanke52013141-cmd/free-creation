@@ -32,12 +32,22 @@ function originOfSafe(baseUrl: string): string {
  */
 
 /** 授权版门控：使用者拒绝；发放员与发行版放行。 */
+/**
+ * 配置传输的权限判定。
+ *
+ * **导入与导出不是同一种权限**（2026-11-09 修正）：
+ * - 导出 = 把本机密钥发给别人 → 需要 `credentials.export`（只有发放员/发行版具备）；
+ * - 导入 = 接收别人给的配置，等价于手工填写密钥 → 只要求**授权有效且已激活**，
+ *   不应要求 `credentials.export`。此前两者共用同一判定，导致普通已激活设备
+ *   永远导不进自己之前导出的文件（用户实际遇到的故障）。
+ */
 function ensureTransferAllowed(operation: 'provider.export' | 'provider.import'): void {
   assertLicenseActive(operation)
   if (DISTRIBUTION_EDITION) return
+  if (operation === 'provider.import') return
   const snapshot = licenseSnapshot()
   if (snapshot.state !== 'active' || !snapshot.capabilities.includes('credentials.export')) {
-    throw new Error('当前授权不具备配置传输能力（credentials.export）')
+    throw new Error('当前授权不具备配置导出能力（credentials.export）')
   }
 }
 
