@@ -68,7 +68,7 @@ function CredentialDialog(props: { onClose: () => void }): React.ReactElement {
   }
 
   return (
-    <DialogShell title="导出接收设备凭证" onClose={props.onClose}>
+    <DialogShell title="导出设备凭证" onClose={props.onClose}>
       <p className="gw-keys-hint">
         凭证包含本机有效授权与设备公钥，发给发放员后即可接收密钥包。凭证不包含任何 API Key。
       </p>
@@ -253,9 +253,9 @@ function ImportDialog(props: { onClose: () => void }): React.ReactElement {
 
   if (!preview) {
     return (
-      <DialogShell title="导入密钥包" onClose={props.onClose}>
+      <DialogShell title="导入设备密钥包" onClose={props.onClose}>
         <p className="gw-keys-hint">
-          选择发放员提供的密钥包文件并输入发放密码。只有被指定的设备且密码正确才能解封。
+          发放员用你的设备凭证签发的密钥包。只有本机且密码正确才能解封；文件被别人拿走也导不进去。
         </p>
         <label className="gw-transfer-field">
           <span>发放密码</span>

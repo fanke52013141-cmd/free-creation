@@ -674,34 +674,63 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                 )}
               </div>
             )}
-            {!picking && !selecting && !DISTRIBUTION_EDITION && (
-              <div className="gw-provider-transfer-actions">
-                <button className="btn-ghost small" onClick={() => setKeysDialog('credential')}>
-                  导出接收凭证
-                </button>
-                <button className="btn-ghost small" onClick={() => setKeysDialog('import')}>
-                  导入密钥包
-                </button>
-                {canIssueKeys && (
-                  <button className="btn-ghost small" onClick={() => setKeysDialog('export')}>
-                    发放密钥包
+            {/* 两条通道语义不同，用户 2026-11-09 反馈"分不清"：
+                · 配置文件（.canvasproviders）：发放员给你「文件 + 密码」，任何已激活设备都能导入；
+                · 设备专属密钥包（.cskeys）：先导出本机凭证 → 发放员为**这台设备**签发，
+                  文件即使泄露，别的设备也导不进去。 */}
+            {!picking && !selecting && (
+              <div className="gw-provider-transfer-group">
+                <span className="gw-provider-transfer-label">配置文件（文件 + 密码）</span>
+                <div className="gw-provider-transfer-actions">
+                  <button
+                    className="btn-ghost small"
+                    title="选择供应商配置文件并输入密码；任何已激活设备都能导入"
+                    onClick={() => beginProviderTransfer('import')}
+                  >
+                    导入配置
                   </button>
-                )}
+                  {(DISTRIBUTION_EDITION || canIssueKeys) && (
+                    <button
+                      className="btn-ghost small"
+                      title="把所选供应商（含密钥）加密成配置文件，别人用密码导入"
+                      onClick={() => beginProviderTransfer('export')}
+                    >
+                      导出配置
+                    </button>
+                  )}
+                </div>
               </div>
             )}
-            {/* 导入 = 接收别人给的配置（等价手工填密钥），任何已激活设备都应可见；
-                导出 = 把本机密钥发给别人，只对发放员/发行版开放。两者此前共用条件，
-                导致普通设备连自己导出的文件都导不回来（2026-11-09 修正）。 */}
-            {!picking && !selecting && (
-              <div className="gw-provider-transfer-actions">
-                <button className="btn-ghost small" onClick={() => beginProviderTransfer('import')}>
-                  导入配置
-                </button>
-                {(DISTRIBUTION_EDITION || canIssueKeys) && (
-                  <button className="btn-ghost small" onClick={() => beginProviderTransfer('export')}>
-                    导出配置
+            {!picking && !selecting && !DISTRIBUTION_EDITION && (
+              <div className="gw-provider-transfer-group">
+                <span className="gw-provider-transfer-label">
+                  设备专属（更安全，需发放员配合）
+                </span>
+                <div className="gw-provider-transfer-actions">
+                  <button
+                    className="btn-ghost small"
+                    title="导出本机设备凭证，交给发放员"
+                    onClick={() => setKeysDialog('credential')}
+                  >
+                    导出凭证
                   </button>
-                )}
+                  <button
+                    className="btn-ghost small"
+                    title="导入只对本机有效的密钥包（需先用凭证让发放员签发）"
+                    onClick={() => setKeysDialog('import')}
+                  >
+                    导入密钥包
+                  </button>
+                  {canIssueKeys && (
+                    <button
+                      className="btn-ghost small"
+                      title="用接收设备的凭证，为它签发专属密钥包"
+                      onClick={() => setKeysDialog('export')}
+                    >
+                      发放密钥包
+                    </button>
+                  )}
+                </div>
               </div>
             )}
             {selecting && (

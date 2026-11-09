@@ -9498,7 +9498,8 @@ select:focus-visible {
    按钮按内容宽度排列、内部永不折行；按钮数量变化时也不会被拉成一整行。 */
 .gw-provider-transfer-actions {
   display: flex;
-  flex-wrap: nowrap;
+  /* 放不下时整颗按钮换到下一行（按钮内部仍 nowrap），避免文字被裁切 */
+  flex-wrap: wrap;
   justify-content: flex-start;
 }
 
@@ -9506,6 +9507,24 @@ select:focus-visible {
   flex: 0 0 auto;
   min-width: 0;
   white-space: nowrap;
+}
+
+/* 两条导入通道（配置文件 / 设备专属密钥包）需要分组说明，否则用户分不清区别。 */
+.gw-provider-transfer-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+.gw-provider-transfer-group .gw-provider-transfer-actions {
+  border-top: none;
+  padding-top: 0;
+}
+.gw-provider-transfer-label {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .gw-transfer-mask {
