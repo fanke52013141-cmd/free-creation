@@ -1013,13 +1013,12 @@ select:focus-visible {
 
 .canvas-group-outline {
   position: absolute;
-  border: 1px solid rgba(231, 238, 247, 0.18);
+  /* 2026-11-09 用户反馈：分组框原来的深色渐变底像给节点"盖了一层蒙版"，节点变糊。
+     改为**只有细虚线边框**，不填充、不遮罩，节点保持完全清晰；分组靠边框+标签表达。 */
+  border: 1px dashed rgba(231, 238, 247, 0.26);
   border-radius: calc(18px * var(--group-zoom, 1));
-  /* 2026-11-06 用户裁决：分组容器补一层接近节点卡片的深色底，遮挡时能看清边界。 */
-  background: linear-gradient(180deg, rgba(27, 32, 43, 0.55), rgba(21, 25, 34, 0.55));
-  box-shadow:
-    inset 0 1px rgba(255, 255, 255, 0.025),
-    0 12px 30px rgba(0, 0, 0, 0.08);
+  background: transparent;
+  box-shadow: none;
 }
 
 /* 分组名标签：位于框上边缘外 26px 处（与 GroupOutlineLayer 的双击命中带
@@ -13037,4 +13036,38 @@ canvas.tl-canvas-indicators {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 背景板（backdrop）标签与工具栏色板。2026-11-09 用户需求：
+   淡色可伸缩矩形用于归类，节点保持清晰，不被蒙版覆盖。 */
+.backdrop-label {
+  position: absolute;
+  left: 14px;
+  top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  user-select: none;
+}
+.backdrop-label-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+.ms-swatch {
+  width: 18px;
+  height: 18px;
+  margin: 0 1px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.ms-swatch:hover {
+  border-color: rgba(255, 255, 255, 0.5);
 }

@@ -1,6 +1,12 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import type { Editor, TLShapeId } from 'tldraw'
 import { Icon } from '../components/Icon'
+import {
+  BACKDROP_COLOR_KEYS,
+  BACKDROP_PALETTE,
+  type BackdropColorKey,
+  type BackdropShape
+} from './BackdropShape'
 
 interface MultiSelectToolbarProps {
   editor: Editor
@@ -25,6 +31,7 @@ export function MultiSelectToolbar({
 }: MultiSelectToolbarProps): React.JSX.Element | null {
   const [selectedIds, setSelectedIds] = useState<TLShapeId[]>([])
   const [selectedGroupIds, setSelectedGroupIds] = useState<TLShapeId[]>([])
+  const [selectedBackdropIds, setSelectedBackdropIds] = useState<TLShapeId[]>([])
 
   useEffect((): (() => void) => {
     const update = (): void => {
@@ -42,14 +49,17 @@ export function MultiSelectToolbar({
           )
           .map((s) => s.id)
       )
+      // 单独选中背景板时给颜色/删除操作（背景板可自由改色与缩放）。
+      setSelectedBackdropIds(selected.filter((s) => s.type === 'backdrop').map((s) => s.id))
     }
     update()
     const unsub = editor.store.listen(update, { scope: 'session' })
     return unsub
   }, [editor])
 
-  // 单选时工具栏没有任何可用操作，不能留下空的灰色圆角岛。
-  if (selectedIds.length < 2 && selectedGroupIds.length === 0) return null
+  // 单选节点时没有任何批量操作；但选中背景板时仍有"改色/删除"可用。
+  if (selectedIds.length < 2 && selectedGroupIds.length === 0 && selectedBackdropIds.length === 0)
+    return null
 
   const getBounds = (): ShapeBounds[] =>
     selectedIds.map((id) => {
@@ -119,6 +129,66 @@ export function MultiSelectToolbar({
   const handleGroup = (): void => {
     editor.markHistoryStoppingPoint('group-nodes')
     editor.groupShapes(selectedIds)
+  }
+
+  /**
+   * 背景板（2026-11-09 用户需求）：
+   * 把所选节点铺到一块**淡色可伸缩矩形**上做归类。矩形位于节点下方、可自由拖拽变宽变高；
+   * 与「组合」不同，它不会给节点盖蒙版，也不会把节点变成子元素（节点保持独立清晰）。
+   */
+  const handleCreateBackdrop = (): void => {
+    const bounds = getBounds()
+    if (!bounds.length) return
+    const PAD_X = 44
+    const PAD_TOP = 56
+    const PAD_BOTTOM = 36
+    const minX = Math.min(...bounds.map((b) => b.x))
+    const minY = Math.min(...bounds.map((b) => b.y))
+    const maxX = Math.max(...bounds.map((b) => b.x + b.w))
+    const maxY = Math.max(...bounds.map((b) => b.y + b.h))
+    // 已有背景板覆盖同一区域时不再叠新板，改成把节点"塞进"那块板的范围（更符合归类直觉）。
+    const existing = editor
+      .getCurrentPageShapes()
+      .filter((shape): shape is BackdropShape => shape.type === 'backdrop')
+      .find((shape) => {
+        const box = editor.getShapePageBounds(shape.id)
+        return box && box.x <= minX + 8 && box.y <= minY + 8 && box.maxX >= maxX - 8 && box.maxY >= maxY - 8
+      })
+    editor.markHistoryStoppingPoint('create-backdrop')
+    if (existing && existing.props.w >= maxX - minX + 2 * PAD_X) {
+      editor.select(...selectedIds)
+      return
+    }
+    const color: BackdropColorKey =
+      BACKDROP_COLOR_KEYS[editor.getCurrentPageShapes().filter((s) => s.type === 'backdrop').length % BACKDROP_COLOR_KEYS.length] ?? 'teal'
+    const backdrop = editor.createShape<BackdropShape>({
+      type: 'backdrop',
+      x: minX - PAD_X,
+      y: minY - PAD_TOP,
+      props: {
+        w: maxX - minX + PAD_X * 2,
+        h: maxY - minY + PAD_TOP + PAD_BOTTOM,
+        color,
+        label: '背景板'
+      }
+    })
+    editor.sendToBack([backdrop.id as TLShapeId])
+    // 创建后保持原有节点选择，方便继续操作。
+    editor.select(...selectedIds)
+  }
+
+  const handleBackdropColor = (color: BackdropColorKey): void => {
+    if (!selectedBackdropIds.length) return
+    editor.markHistoryStoppingPoint('backdrop-color')
+    editor.updateShapes(
+      selectedBackdropIds.map((id) => ({ id, type: 'backdrop' as const, props: { color } }))
+    )
+  }
+
+  const handleDeleteBackdrop = (): void => {
+    if (!selectedBackdropIds.length) return
+    editor.markHistoryStoppingPoint('delete-backdrop')
+    editor.deleteShapes(selectedBackdropIds)
   }
 
   const handleUngroup = (): void => {
@@ -192,6 +262,15 @@ export function MultiSelectToolbar({
               >
                 <Icon name="group" size={16} />
               </button>
+              <button
+                className="ms-btn ms-backdrop"
+                data-tool="backdrop"
+                aria-label="背景板"
+                title="把所选节点铺到一块淡色背景板上（可自由拉伸，用于归类）"
+                onClick={handleCreateBackdrop}
+              >
+                <Icon name="frame" size={16} />
+              </button>
               <span className="ms-divider" />
               <button
                 className="ms-btn ms-run"
@@ -200,6 +279,31 @@ export function MultiSelectToolbar({
                 onClick={() => onRunFlow(selectedIds)}
               >
                 <Icon name="play" size={16} />
+              </button>
+            </>
+          )}
+          {/* 选中背景板时：改色 + 删除（不与节点多选操作混在一起）。 */}
+          {selectedBackdropIds.length > 0 && (
+            <>
+              {BACKDROP_COLOR_KEYS.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  className="ms-swatch"
+                  aria-label={`背景板颜色 ${key}`}
+                  title={`背景板颜色：${key}`}
+                  onClick={() => handleBackdropColor(key)}
+                  style={{ background: BACKDROP_PALETTE[key].dot }}
+                />
+              ))}
+              <button
+                className="ms-btn ms-backdrop-delete"
+                type="button"
+                aria-label="删除背景板"
+                title="删除背景板（不会删除节点）"
+                onClick={handleDeleteBackdrop}
+              >
+                <Icon name="close" size={16} />
               </button>
             </>
           )}
