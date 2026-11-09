@@ -9494,8 +9494,18 @@ select:focus-visible {
   border-top: 1px solid var(--line);
 }
 
+/* 2026-11-09 用户反馈：窄栏里"导出接收凭证"折成两行很难看。
+   改为等宽自适应网格：每个按钮内部永不折行，空间不够时整颗按钮换到下一行。 */
+.gw-provider-transfer-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  align-items: stretch;
+}
+
 .gw-provider-transfer-actions button {
   flex: 1;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .gw-transfer-mask {
@@ -9571,6 +9581,79 @@ select:focus-visible {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+/* 密钥包对话框（P2）。2026-11-09 用户反馈修正：
+   ① 动作区按钮此前是裸 <button>（无类名 → 像可点的文字），统一用设计系统按钮；
+   ② 标题/按钮里的英文后缀全部去掉；
+   ③ 供应商面板底部入口在窄栏里折成两行，这里强制单行等宽。 */
+.gw-keys-dialog {
+  width: min(100%, 480px);
+}
+.gw-keys-dialog > h3 {
+  margin: 0 0 12px;
+  color: var(--txt);
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.gw-keys-hint {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.gw-keys-steps {
+  margin: 0 0 14px;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.gw-keys-meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+.gw-transfer-actions .btn-primary,
+.gw-transfer-actions .btn-ghost {
+  white-space: nowrap;
+}
+
+/* 2026-11-09 用户要求：对话框里的按钮必须"一眼看出是按钮"。
+   产品规范禁止给按钮加边框（ui-surfaces.css: button { border: 0 !important }），
+   因此用"面"表达层级：主按钮品牌色，次要按钮浅灰面 + 文字色提亮。
+   此前 .btn-ghost 是透明背景，在深色对话框里和纯文字没区别。 */
+.gw-keys-dialog .gw-transfer-actions .btn-primary {
+  min-width: 96px;
+  height: 36px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 18px;
+}
+.gw-keys-dialog .gw-transfer-actions .btn-ghost {
+  min-width: 76px;
+  height: 36px;
+  font-size: 13px;
+  padding: 0 16px;
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--txt);
+}
+.gw-keys-dialog .gw-transfer-actions .btn-ghost:hover {
+  background: rgba(148, 163, 184, 0.26);
+}
+.gw-provider-transfer-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.gw-provider-transfer-actions .btn-ghost {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .gw-item {

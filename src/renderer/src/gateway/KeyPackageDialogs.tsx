@@ -1,8 +1,8 @@
 /**
  * P2 密钥包三步流对话框（方案 §4.1）。
  *
- * - credential：导出接收设备凭证（.csdevcred）——任何已激活设备可用；
- * - export：发放员导出密钥包（.cskeys）——仅 credentials.export 能力可见入口；
+ * - credential：导出接收设备凭证——任何已激活设备可用；
+ * - export：发放员导出密钥包——仅 credentials.export 能力可见入口；
  *   密码 + 确认 + 连接多选（显示模型数，默认全不选，至少选一项）；
  * - import：导入密钥包——密码解封 → 预览 → 确认落库（覆盖/重导需显式确认）。
  *
@@ -73,11 +73,11 @@ function CredentialDialog(props: { onClose: () => void }): React.ReactElement {
         凭证包含本机有效授权与设备公钥，发给发放员后即可接收密钥包。凭证不包含任何 API Key。
       </p>
       {error && <div className="gw-transfer-error">{error}</div>}
-      <div className="gw-transfer-actions-row">
-        <button type="button" onClick={submit} disabled={busy}>
-          {busy ? '导出中…' : '导出凭证（.csdevcred）'}
+      <div className="gw-transfer-actions">
+        <button type="button" className="btn-primary" onClick={submit} disabled={busy}>
+          {busy ? '导出中…' : '导出凭证'}
         </button>
-        <button type="button" className="secondary" onClick={props.onClose}>
+        <button type="button" className="btn-ghost" onClick={props.onClose}>
           取消
         </button>
       </div>
@@ -147,7 +147,7 @@ function ExportDialog(props: { onClose: () => void }): React.ReactElement {
   }
 
   return (
-    <DialogShell title="发放密钥包（.cskeys）" onClose={props.onClose}>
+    <DialogShell title="发放密钥包" onClose={props.onClose}>
       <ol className="gw-keys-steps">
         <li>设置发放密码（20–256 字节，通过独立渠道交给接收者）</li>
         <li>选择接收设备凭证文件（接收方在「导出接收设备凭证」生成）</li>
@@ -197,11 +197,11 @@ function ExportDialog(props: { onClose: () => void }): React.ReactElement {
         ))}
       </fieldset>
       {error && <div className="gw-transfer-error">{error}</div>}
-      <div className="gw-transfer-actions-row">
-        <button type="button" onClick={submit} disabled={!canSubmit}>
+      <div className="gw-transfer-actions">
+        <button type="button" className="btn-primary" onClick={submit} disabled={!canSubmit}>
           {busy ? '发放中…' : `发放所选（${selected.size}）`}
         </button>
-        <button type="button" className="secondary" onClick={props.onClose}>
+        <button type="button" className="btn-ghost" onClick={props.onClose}>
           取消
         </button>
       </div>
@@ -253,9 +253,9 @@ function ImportDialog(props: { onClose: () => void }): React.ReactElement {
 
   if (!preview) {
     return (
-      <DialogShell title="导入密钥包（.cskeys）" onClose={props.onClose}>
+      <DialogShell title="导入密钥包" onClose={props.onClose}>
         <p className="gw-keys-hint">
-          选择发放员提供的 .cskeys 文件并输入发放密码。只有被指定的设备且密码正确才能解封。
+          选择发放员提供的密钥包文件并输入发放密码。只有被指定的设备且密码正确才能解封。
         </p>
         <label className="gw-transfer-field">
           <span>发放密码</span>
@@ -267,11 +267,11 @@ function ImportDialog(props: { onClose: () => void }): React.ReactElement {
           />
         </label>
         {error && <div className="gw-transfer-error">{error}</div>}
-        <div className="gw-transfer-actions-row">
-          <button type="button" onClick={decode} disabled={busy || password.length === 0}>
+        <div className="gw-transfer-actions">
+          <button type="button" className="btn-primary" onClick={decode} disabled={busy || password.length === 0}>
             {busy ? '解封中…' : '解封并预览'}
           </button>
-          <button type="button" className="secondary" onClick={props.onClose}>
+          <button type="button" className="btn-ghost" onClick={props.onClose}>
             取消
           </button>
         </div>
@@ -318,15 +318,16 @@ function ImportDialog(props: { onClose: () => void }): React.ReactElement {
         </label>
       )}
       {error && <div className="gw-transfer-error">{error}</div>}
-      <div className="gw-transfer-actions-row">
+      <div className="gw-transfer-actions">
         <button
           type="button"
+          className="btn-primary"
           onClick={apply}
           disabled={busy || (needsOverwriteConfirm && !overwriteConfirmed)}
         >
           {busy ? '导入中…' : '确认导入'}
         </button>
-        <button type="button" className="secondary" onClick={props.onClose}>
+        <button type="button" className="btn-ghost" onClick={props.onClose}>
           取消
         </button>
       </div>
