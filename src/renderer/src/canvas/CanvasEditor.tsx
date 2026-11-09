@@ -1,4 +1,4 @@
-import { reportCanvasFailure } from './canvas-diagnostics'
+﻿import { reportCanvasFailure } from './canvas-diagnostics'
 import { ensureCanvasSaved } from './flow-asset-actions'
 import { readNodeRunHistory, readNodeRunRecord } from '../engine/runRecord'
 import { commitFlowBuild } from './flow-build-actions'
@@ -485,18 +485,77 @@ export function CanvasEditor({
     }
   }, [editorInstance])
 
-  // Ctrl / Cmd + 框选 = **加选**（2026-11-09 用户需求）。
+  // Ctrl / Cmd + 框选 = **加选**（2026-11-09 需求；2026-11-10 改为拖动过程中实时并入）。
   //
-  // tldraw 的语义与我们想要的不同：Brushing 里 Shift 才是加选，Ctrl 是"包裹模式"
-  // （只选完全框住的形状，且会替换原选择）。所以之前只做"松手后合并"没用——
-  // Ctrl 框选可能一个都没选中。这里改为：
-  //   按下（Ctrl）时记住已选 → 松手瞬间（捕获阶段，早于 tldraw 清理）取出框选矩形 →
-  //   自己按"矩形与节点相交"计算并集（不依赖 tldraw 的包裹模式）→ 合并进选择。
+  // tldraw 的语义：Brushing 里 Shift 才是加选；Ctrl 是"包裹模式"（只选完全框住的形状，
+  // 且每一帧都用框内结果**替换**选择）。所以只做"松手后合并"会让原选择在拖动中消失。
+  // 这里在拖动过程中持续把「按下时已选 + 框选矩形相交的形状 + tldraw 当前选择」合并回选择，
+  // 让原选择全程保持高亮；松手后再兜底合并一次。
   useEffect(() => {
     const el = wrapRef.current
     if (!el || !editorInstance) return
     let base: TLShapeId[] = []
     let active = false
+    let frame = 0
+
+    /**
+     * 期望选择集：base + 框选矩形相交的节点/分组 + tldraw 当前选择。
+     * 分组内的节点用**分组 id**代替节点 id，避免 tldraw 里"同时选中分组与子节点"的非法组合。
+     */
+    const desiredSelection = (
+      editor: Editor,
+      rect: { x: number; y: number; w: number; h: number } | null,
+      baseIds: readonly TLShapeId[] = base
+    ): TLShapeId[] => {
+      const selected = new Set<TLShapeId>([...baseIds, ...editor.getSelectedShapeIds()])
+      if (rect) {
+        const maxX = rect.x + rect.w
+        const maxY = rect.y + rect.h
+        for (const shape of editor.getCurrentPageShapes()) {
+          if (shape.type !== 'node-card' && shape.type !== 'group') continue
+          const bounds = editor.getShapePageBounds(shape.id)
+          if (!bounds) continue
+          if (!(bounds.x <= maxX && bounds.maxX >= rect.x && bounds.y <= maxY && bounds.maxY >= rect.y))
+            continue
+          // 节点在分组内时，选分组本身，保持 tldraw 选择结构合法。
+          const parentId = (shape as { parentId?: unknown }).parentId
+          if (
+            shape.type === 'node-card' &&
+            typeof parentId === 'string' &&
+            editor.getShape(parentId as TLShapeId)?.type === 'group'
+          ) {
+            selected.add(parentId as TLShapeId)
+          } else {
+            selected.add(shape.id)
+          }
+        }
+      }
+      return [...selected]
+    }
+
+    const apply = (): void => {
+      const editor = editorRef.current
+      if (!editor || !active) return
+      const state = editor.getInstanceState()
+      const brush = state.brush as { x: number; y: number; w: number; h: number } | null
+      const rect = brush && brush.w > 1 && brush.h > 1 ? { ...brush } : null
+      const desired = desiredSelection(editor, rect)
+      const current = editor.getSelectedShapeIds()
+      if (desired.length === current.length) return
+      editor.select(...desired)
+    }
+
+    const scheduleApply = (): void => {
+      if (!active || frame) return
+      frame = window.requestAnimationFrame(() => {
+        frame = 0
+        apply()
+      })
+    }
+    const onPointerMove = (): void => scheduleApply()
+    // tldraw 每次移动都会用自己的结果覆盖选择；没有后续 pointermove 时（例如停顿/截图），
+    // 只靠 pointermove 补不回来。这里监听选择变化，一旦发现被覆盖就立刻并回 base。
+    const unsubscribeSelection = editorInstance.store.listen(scheduleApply, { scope: 'session' })
     const onPointerDown = (event: PointerEvent): void => {
       if (event.button !== 0) return
       const additive = event.ctrlKey || event.metaKey
@@ -506,41 +565,40 @@ export function CanvasEditor({
     const onPointerUp = (): void => {
       if (!active) return
       const editor = editorRef.current
+      // 松手瞬间把 base 与框选矩形固定下来：tldraw 随后的 pointerup 会清空 brush，
+      // 而下面延迟执行的合并如果读实时 base，会拿到已经清空的数组。
+      const finalBase = [...base]
+      const stateAtUp = editor?.getInstanceState()
+      const brushAtUp = stateAtUp?.brush as { x: number; y: number; w: number; h: number } | null
+      const rectAtUp = brushAtUp && brushAtUp.w > 1 && brushAtUp.h > 1 ? { ...brushAtUp } : null
+      apply()
       active = false
-      if (!editor) return
-      const state = editor.getInstanceState()
-      const brush = state.brush as { x: number; y: number; w: number; h: number } | null
-      const rect = brush && brush.w > 1 && brush.h > 1 ? { ...brush } : null
-      const baseCopy = base
       base = []
-      const merge = (): void => {
-        const selected = new Set<TLShapeId>([...baseCopy, ...editor.getSelectedShapeIds()])
-        if (rect) {
-          const maxX = rect.x + rect.w
-          const maxY = rect.y + rect.h
-          for (const shape of editor.getCurrentPageShapes()) {
-            if (shape.type !== 'node-card' && shape.type !== 'group') continue
-            const bounds = editor.getShapePageBounds(shape.id)
-            if (!bounds) continue
-            const intersects =
-              bounds.x <= maxX && bounds.maxX >= rect.x && bounds.y <= maxY && bounds.maxY >= rect.y
-            if (intersects) selected.add(shape.id)
-          }
-        }
-        const current = editor.getSelectedShapeIds()
-        if (selected.size !== current.length) editor.select(...selected)
+      if (frame) {
+        window.cancelAnimationFrame(frame)
+        frame = 0
       }
-      // tldraw 会在自己的 pointerup 里改写选择：稍后再合并两次，确保最终结果正确。
+      // tldraw 会在自己的 pointerup 里再写一次选择，稍后兜底合并。
+      if (!editor) return
+      const merge = (): void => {
+        const desired = desiredSelection(editor, rectAtUp, finalBase)
+        const current = editor.getSelectedShapeIds()
+        if (desired.length !== current.length) editor.select(...desired)
+      }
       window.setTimeout(merge, 0)
       window.setTimeout(merge, 80)
     }
     el.addEventListener('pointerdown', onPointerDown, { capture: true })
+    window.addEventListener('pointermove', onPointerMove, { capture: true })
     window.addEventListener('pointerup', onPointerUp, { capture: true })
     window.addEventListener('pointercancel', onPointerUp, { capture: true })
     return () => {
       el.removeEventListener('pointerdown', onPointerDown, { capture: true })
+      window.removeEventListener('pointermove', onPointerMove, { capture: true })
       window.removeEventListener('pointerup', onPointerUp, { capture: true })
       window.removeEventListener('pointercancel', onPointerUp, { capture: true })
+      unsubscribeSelection()
+      if (frame) window.cancelAnimationFrame(frame)
     }
   }, [editorInstance])
 
