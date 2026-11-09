@@ -1,7 +1,8 @@
 // 视频生成在退出项目/返回首页后会继续在主进程轮询（main.gateway.video 的 pollLoop），
 // 但 renderer 的等待循环随画布卸载而丢失。重新进入项目时，这里按节点持久化的
-// config.taskId 重新接上原任务：成功则把结果写回节点，失败/取消则如实落状态，
-// 避免把仍在后台生成的任务误标成「应用关闭…已取消」。
+// meta.videoTaskId 重新接上原任务：成功则把结果写回节点，失败/取消则如实落状态，
+// 避免把仍在后台生成的任务误标成「应用关闭…已取消」。旧版本把任务号写在 config.taskId，
+// 保留读取回退，避免升级后无法接回既有任务。
 import type { Editor, TLShapeId } from 'tldraw'
 import {
   readNodeRunRecord,
@@ -154,8 +155,12 @@ export function recoverRunningNodes(editor: Editor, projectId: string): () => vo
     const run = readNodeRunRecord(shape.meta?.nodeRun)
     const exec = shape.props.exec
     if (!isRunningStatus(exec) && run?.status !== 'running') continue
-    const data = parseVideoGen(readNodeConfig(shape))
-    if (data.taskId) {
+    const legacyTaskId = parseVideoGen(readNodeConfig(shape)).taskId
+    const taskId =
+      typeof shape.meta?.videoTaskId === 'string' && shape.meta.videoTaskId
+        ? shape.meta.videoTaskId
+        : legacyTaskId
+    if (taskId) {
       const startedRun = appendNodeRunTrace(
         run ??
           ({
@@ -174,7 +179,7 @@ export function recoverRunningNodes(editor: Editor, projectId: string): () => vo
         props: { exec: 'running' },
         meta: { ...(shape.meta ?? {}), nodeRun: JSON.parse(JSON.stringify(startedRun)) }
       })
-      recoverOne(shape.id, data.taskId, startedRun)
+      recoverOne(shape.id, taskId, startedRun)
       attached += 1
     } else {
       const reason = shape.props.nodeType === 'video' ? UNRECOVERABLE_VIDEO_REASON : INTERRUPTED_REASON

@@ -52,6 +52,8 @@ export interface NodeShape {
 export interface NodeMetaPatch {
   agentTask?: string
   nodeExtra?: string
+  /** 视频供应商任务号：仅供退出/重进后接回后台任务，不属于节点配置意图。 */
+  videoTaskId?: string
   /** 状态机节点权威实例（仅 stateMachineExecutor 写入）。 */
   stateMachine?: string
   /** 状态机节点待应用人工事件；执行器消费后写空串清除（tldraw meta 浅合并，删键不生效）。 */

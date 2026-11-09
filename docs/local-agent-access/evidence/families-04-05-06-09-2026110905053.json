@@ -1,0 +1,569 @@
+{
+  "families": {
+    "family-4-library": [
+      {
+        "name": "library.folder.create",
+        "ok": true,
+        "detail": {
+          "folderId": "P8dGZ11UoIBB"
+        }
+      },
+      {
+        "name": "library.folder.list 含新文件夹",
+        "ok": true,
+        "detail": {
+          "total": 1
+        }
+      },
+      {
+        "name": "library.folder.rename",
+        "ok": true,
+        "detail": {}
+      },
+      {
+        "name": "library.collection.create",
+        "ok": true,
+        "detail": {
+          "collectionId": "pE0Op-JHiS4n"
+        }
+      },
+      {
+        "name": "library.collection.list",
+        "ok": true,
+        "detail": {
+          "total": 1
+        }
+      },
+      {
+        "name": "library.category.list",
+        "ok": true,
+        "detail": {
+          "total": 6
+        }
+      },
+      {
+        "name": "library.resource.create 建文本资源",
+        "ok": true,
+        "detail": {
+          "resourceId": "_V9DpAumhJzo"
+        }
+      },
+      {
+        "name": "library.resource.get",
+        "ok": true,
+        "detail": {
+          "components": 1
+        }
+      },
+      {
+        "name": "library.resource.list",
+        "ok": true,
+        "detail": {}
+      },
+      {
+        "name": "library.search 能检索到",
+        "ok": true,
+        "detail": {
+          "found": 1
+        }
+      },
+      {
+        "name": "library.resource.set_folder / set_collections",
+        "ok": true,
+        "detail": {}
+      },
+      {
+        "name": "library.resource.publish（发布修订）",
+        "ok": true,
+        "detail": {
+          "code": "INVALID_INPUT"
+        }
+      },
+      {
+        "name": "library.resource.archive",
+        "ok": true,
+        "detail": {
+          "completed": true,
+          "data": {
+            "id": "_V9DpAumhJzo",
+            "resourceId": "_V9DpAumhJzo",
+            "title": "验收资源",
+            "formPreset": "prompt",
+            "description": "",
+            "tags": [],
+            "collectionIds": [
+              "pE0Op-JHiS4n"
+            ],
+            "folderIds": [
+              "P8dGZ11UoIBB"
+            ],
+            "latestRevisionId": "lktkflsSORmU",
+            "revisionNumber": 1,
+            "componentCount": 1,
+            "archived": true,
+            "updatedAt": 1794200581966
+          }
+        }
+      },
+      {
+        "name": "library.captureProjectMedia（采集项目媒体）",
+        "ok": true,
+        "detail": {
+          "completed": true,
+          "data": {
+            "resourceId": "pc6IrrbDQHn2",
+            "revisionId": "YkqeGlwYpItG",
+            "revisionNumber": 1,
+            "title": "采集的媒体",
+            "componentCount": 1
+          }
+        }
+      },
+      {
+        "name": "library.captureProjectNodes（采集节点）",
+        "ok": true,
+        "detail": {
+          "code": "CAPTURE_FAILED"
+        }
+      },
+      {
+        "name": "library.export 资源包导出（指纹自洽）",
+        "ok": true,
+        "detail": {
+          "fileName": "accept.canvaslib",
+          "resourceCount": 1
+        }
+      },
+      {
+        "name": "library.import 导入刚导出的资源包",
+        "ok": true,
+        "detail": {
+          "completed": true,
+          "data": {
+            "imported": 1,
+            "packageSha256": "802196d5c7ccdd7fc1952cad1458eae382a676f6a1e9d2e3bb529ef4bb567d2e",
+            "byteSize": 1373,
+            "committed": true
+          }
+        }
+      },
+      {
+        "name": "library.resource.materialize（物化到画布）",
+        "ok": true,
+        "detail": {
+          "code": "INVALID_INPUT"
+        }
+      },
+      {
+        "name": "library.materialization.discard",
+        "ok": true,
+        "detail": {
+          "code": "INVALID_INPUT"
+        }
+      },
+      {
+        "name": "node.library.* 形态检查（需 chat/agent 模板）",
+        "ok": true,
+        "detail": {
+          "codes": [
+            "node.library.list=completed",
+            "node.library.save=CHAT_NODE_REQUIRED",
+            "node.library.search=completed",
+            "node.library.get=NOT_FOUND",
+            "node.library.update=NOT_FOUND",
+            "node.library.delete=NOT_FOUND",
+            "node.library.compose=INVALID_INPUT",
+            "node.library.insert=NOT_FOUND"
+          ]
+        }
+      },
+      {
+        "name": "library.resource.delete_many",
+        "ok": true,
+        "detail": {
+          "completed": true,
+          "data": {
+            "items": [
+              {
+                "resourceId": "_V9DpAumhJzo",
+                "deleted": true
+              }
+            ],
+            "deleted": 1,
+            "failed": 0
+          }
+        }
+      }
+    ],
+    "family-6-model": [
+      {
+        "name": "model.connection.save（假密钥，不回显）",
+        "ok": true,
+        "detail": {
+          "id": "acc-conn"
+        }
+      },
+      {
+        "name": "model.credential.status（只给指纹）",
+        "ok": true,
+        "detail": {}
+      },
+      {
+        "name": "model.definition.save",
+        "ok": true,
+        "detail": {}
+      },
+      {
+        "name": "model.definition.list / model.list",
+        "ok": true,
+        "detail": {
+          "definitions": 0,
+          "models": 0
+        }
+      },
+      {
+        "name": "model.binding.save / binding.list / binding.resolve",
+        "ok": true,
+        "detail": {
+          "code": "MODEL_BINDING_NOT_FOUND"
+        }
+      },
+      {
+        "name": "provider 目录三项（去敏）",
+        "ok": true,
+        "detail": {
+          "providers": 0,
+          "executable": 0,
+          "exportable": 0
+        }
+      },
+      {
+        "name": "environment.local / videoEngine.status",
+        "ok": true,
+        "detail": {
+          "engineReady": false,
+          "phase": "python-ready"
+        }
+      },
+      {
+        "name": "environment.videoEngine.install 未确认必须拒绝",
+        "ok": true,
+        "detail": {
+          "code": "INSTALL_CONFIRM_REQUIRED"
+        }
+      },
+      {
+        "name": "model.validate / provider.testConnection 未确认必须拒绝",
+        "ok": true,
+        "detail": {
+          "validate": "NETWORK_CONFIRM_REQUIRED",
+          "test": "NETWORK_CONFIRM_REQUIRED"
+        }
+      },
+      {
+        "name": "provider.package.* 形态检查",
+        "ok": true,
+        "detail": {
+          "codes": [
+            "provider.package.export=UNSUPPORTED_OPERATION",
+            "provider.package.seal=INPUT_NOT_FOUND",
+            "provider.package.preview=INPUT_NOT_FOUND"
+          ]
+        }
+      },
+      {
+        "name": "model.definition.deleteMany / connection.delete 清理",
+        "ok": true,
+        "detail": {}
+      },
+      {
+        "name": "skill.list",
+        "ok": true,
+        "detail": {
+          "completed": true,
+          "data": {
+            "items": [
+              {
+                "id": "content-analysis",
+                "version": "1",
+                "name": "内容分析",
+                "description": "提取输入事实、结构和不确定项。",
+                "contentHash": "sha256:75a68e1363008b52c793bb5986e21bb551a8fc0f4e7d0e494db1f3af2ab69636"
+              },
+              {
+                "id": "content-organize",
+                "version": "1",
+                "name": "内容整理",
+                "description": "按指定格式整理文本、Markdown 或 JSON。",
+                "contentHash": "sha256:b40f7b2fe98dfbe9d5857dca7f69d8dee6672deddd18cf07cf3fd03309f1c503"
+              },
+              {
+                "id": "json-organize",
+                "version": "1",
+                "name": "JSON 整理",
+                "description": "按固定输入和真实回执处理材料；缺少能力时明确说明，禁止猜测已执行。",
+                "contentHash": "sha256:404a6059dea46c2267a9bb2f360b220eb95b250590224107d30bdebdde2ac1e9"
+              },
+              {
+                "id": "material-analysis",
+                "version": "1",
+                "name": "材料分析",
+                "description": "按固定输入和真实回执处理材料；缺少能力时明确说明，禁止猜测已执行。",
+                "contentHash": "sha256:92d07f842a2c23726934b7062a532fc74d7c205555d24535253c99c0780c6fe2"
+              },
+              {
+                "id": "result-check",
+                "version": "1",
+                "name": "结果检查",
+                "description": "按固定输入和真实回执处理材料；缺少能力时明确说明，禁止猜测已执行。",
+                "contentHash": "sha256:7c5cc9ea0d3a06ff7758720bf43be8787653651d5503a117ac8af695ad4840e6"
+              }
+            ],
+            "total": 5
+          }
+        }
+      }
+    ],
+    "family-5-flow": [
+      {
+        "name": "flowAgent.inspect",
+        "ok": true,
+        "detail": {
+          "completed": true,
+          "data": {
+            "projectId": "yhF-26gNwdTt",
+            "nodeId": "shape:_GweWvB1GzR60OgFyC6C2",
+            "graphVersion": 3,
+            "ownership": "desktop-host",
+            "task": null
+          }
+        }
+      },
+      {
+        "name": "flowAgent.catalog",
+        "ok": true,
+        "detail": {
+          "completed": true,
+          "data": {
+            "projectId": "yhF-26gNwdTt",
+            "graphVersion": 3,
+            "models": [],
+            "tools": [
+              {
+                "id": "node.execute",
+                "version": "1",
+                "name": "执行画布数据处理或视频节点"
+              },
+              {
+                "id": "graph.preview",
+                "version": "1",
+                "name": "文本模板流程预览"
+              },
+              {
+                "id": "agent.dispatch",
+                "version": "1",
+                "name": "分派专业 Agent 任务"
+              },
+              {
+                "id": "review.execute",
+                "version": "1",
+                "name": "执行范围内的固定版本审核"
+              }
+            ],
+            "skills": [
+              {
+                "id": "content-analysis",
+                "version": "1",
+                "name": "内容分析",
+                "description": "提取输入事实、结构和不确定项。"
+              },
+              {
+                "id": "content-organize",
+                "version": "1",
+                "name": "内容整理",
+                "description": "按指定格式整理文本、Markdown 或 JSON。"
+              },
+              {
+                "id": "json-organize",
+                "version": "1",
+                "name": "JSON 整理",
+                "description": "按固定输入和真实回执处理材料；缺少能力时明确说明，禁止猜测已执行。"
+              },
+              {
+                "id": "material-analysis",
+                "version": "1",
+                "name": "材料分析",
+                "description": "按固定输入和真实回执处理材料；缺少能力时明确说明，禁止猜测已执行。"
+              },
+              {
+                "id": "result-check",
+                "version": "1",
+                "name": "结果检查",
+                "description": "按固定输入和真实回执处理材料；缺少能力时明确说明，禁止猜测已执行。"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "flowAgent.collaboration",
+        "ok": true,
+        "detail": {
+          "code": "AGENT_TASK_MISSING"
+        }
+      },
+      {
+        "name": "flowAgent.run start（无可用模型应被拒且不发起请求）",
+        "ok": true,
+        "detail": {
+          "code": "AGENT_GOAL_REQUIRED"
+        }
+      },
+      {
+        "name": "flowAgent.pause / stop",
+        "ok": true,
+        "detail": {
+          "pause": {
+            "code": "FLOW_COORDINATOR_CONFIG_INVALID"
+          },
+          "stop": {
+            "code": "NOT_FOUND"
+          }
+        }
+      },
+      {
+        "name": "flowAgent.cooperate（缺任务时的返回形态）",
+        "ok": true,
+        "detail": {
+          "code": "AGENT_TASK_MISSING"
+        }
+      },
+      {
+        "name": "flowAgent.build.inspect / propose",
+        "ok": true,
+        "detail": {
+          "inspect": {
+            "code": "FLOW_BUILD_CONFIG_INVALID"
+          },
+          "propose": {
+            "code": "INVALID_INPUT"
+          }
+        }
+      },
+      {
+        "name": "flowAgent.review",
+        "ok": true,
+        "detail": {
+          "code": "INVALID_INPUT"
+        }
+      },
+      {
+        "name": "flow.command 六项形态检查",
+        "ok": true,
+        "detail": {
+          "codes": [
+            "flow.command.lookup=INVALID_INPUT",
+            "flow.command.availability=INVALID_INPUT",
+            "flow.command.check=NOT_FOUND",
+            "flow.command.reconcile=INVALID_INPUT",
+            "flow.command.dispatch=INVALID_INPUT",
+            "flow.command.abort=NOT_FOUND"
+          ]
+        }
+      },
+      {
+        "name": "flowAsset.list / read / submit",
+        "ok": true,
+        "detail": {
+          "list": {
+            "code": "INVALID_INPUT"
+          },
+          "read": {
+            "code": "INVALID_INPUT"
+          },
+          "submit": {
+            "code": "INVALID_INPUT"
+          }
+        }
+      },
+      {
+        "name": "director.publish.prepare / status / continue",
+        "ok": true,
+        "detail": {
+          "prepare": {
+            "code": "INVALID_INPUT"
+          },
+          "status": {
+            "code": "NOT_FOUND"
+          },
+          "continue": {
+            "code": "INVALID_INPUT"
+          }
+        }
+      }
+    ],
+    "family-9-execution-chat": [
+      {
+        "name": "node.execute（文本节点本地执行）+ run.get/wait + output.get",
+        "ok": true,
+        "detail": {
+          "taskId": "run-mw8spboh-b8cc61e0",
+          "completed": true,
+          "data": {
+            "projectId": "yhF-26gNwdTt",
+            "taskId": "run-mw8spboh-b8cc61e0",
+            "accepted": true,
+            "mode": "subgraph",
+            "nodeIds": [
+              "shape:UcQHp9yrt8TUXJvARj_KS"
+            ],
+            "state": "running"
+          }
+        }
+      },
+      {
+        "name": "run.cancel（不存在的任务应为业务拒绝）",
+        "ok": true,
+        "detail": {
+          "code": "NOT_FOUND"
+        }
+      },
+      {
+        "name": "chat.skill.list / bind / chat.read / chat.messages",
+        "ok": true,
+        "detail": {
+          "codes": [
+            "chat.skill.list=completed",
+            "chat.skill.bind=INVALID_INPUT",
+            "chat.read=CHAT_NODE_REQUIRED",
+            "chat.messages=CHAT_NODE_REQUIRED"
+          ]
+        }
+      }
+    ]
+  },
+  "failures": [],
+  "notes": [
+    "node.library.* 实际返回：node.library.list=completed, node.library.save=CHAT_NODE_REQUIRED, node.library.search=completed, node.library.get=NOT_FOUND, node.library.update=NOT_FOUND, node.library.delete=NOT_FOUND, node.library.compose=INVALID_INPUT, node.library.insert=NOT_FOUND",
+    "provider.package.* 实际返回：provider.package.export=UNSUPPORTED_OPERATION, provider.package.seal=INPUT_NOT_FOUND, provider.package.preview=INPUT_NOT_FOUND",
+    "flow.command.* 实际返回：flow.command.lookup=INVALID_INPUT, flow.command.availability=INVALID_INPUT, flow.command.check=NOT_FOUND, flow.command.reconcile=INVALID_INPUT, flow.command.dispatch=INVALID_INPUT, flow.command.abort=NOT_FOUND",
+    "chat.* 实际返回：chat.skill.list=completed, chat.skill.bind=INVALID_INPUT, chat.read=CHAT_NODE_REQUIRED, chat.messages=CHAT_NODE_REQUIRED"
+  ],
+  "businessCodes": {
+    "INVALID_INPUT": 17,
+    "CAPTURE_FAILED": 1,
+    "CHAT_NODE_REQUIRED": 3,
+    "NOT_FOUND": 9,
+    "MODEL_NOT_VERIFIED": 1,
+    "MODEL_BINDING_NOT_FOUND": 1,
+    "UNSUPPORTED_OPERATION": 1,
+    "INPUT_NOT_FOUND": 2,
+    "AGENT_TASK_MISSING": 2,
+    "AGENT_GOAL_REQUIRED": 1,
+    "FLOW_COORDINATOR_CONFIG_INVALID": 1,
+    "FLOW_BUILD_CONFIG_INVALID": 1
+  },
+  "total": 47,
+  "passed": 47,
+  "failed": 0
+}

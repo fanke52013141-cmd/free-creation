@@ -11,7 +11,13 @@ import { createProject, openProject, saveProject } from '../src/main/store/proje
 import { LocalAccessService } from '../src/main/agent-access/service'
 import { setGatewayEventSink } from '../src/main/diagnostics/gateway-events'
 import type { AccessDesktop } from '../src/main/agent-access/desktop'
-import { getExternalRun, reportExternalRun } from '../src/main/agent-access/runs'
+import {
+  createExternalRun,
+  getExternalRun,
+  reportExternalRun,
+  requestExternalRunCancel,
+  settleOrphanedExternalRuns
+} from '../src/main/agent-access/runs'
 
 let directory: string
 let service: LocalAccessService
@@ -314,5 +320,30 @@ describe('local Agent run access', () => {
     expect((output.data as any).outputs).toEqual([
       { portId: 'out-json', kind: 'json', json: { shots: [1, 2] } }
     ])
+  })
+
+  it('settles orphaned non-terminal runs on host startup and never rewrites terminal rows', async () => {
+    const p = createProject('结算')
+    saveProject({ id: p.id, graph: { nodes: [textNode('a', 'x')], edges: [], groups: [] } })!
+    const running = createExternalRun({ projectId: p.id, mode: 'single', nodeIds: ['shape:a'] })
+    reportExternalRun(running.id, 'running')
+    const requested = createExternalRun({ projectId: p.id, mode: 'single', nodeIds: ['shape:a'] })
+    reportExternalRun(requested.id, 'running')
+    requestExternalRunCancel(requested.id)
+    const cancelled = createExternalRun({ projectId: p.id, mode: 'single', nodeIds: ['shape:a'] })
+    reportExternalRun(cancelled.id, 'cancelled')
+
+    const settled = settleOrphanedExternalRuns()
+    expect(settled.map((row) => row.id).sort()).toEqual([running.id, requested.id].sort())
+    expect(settled.map((row) => row.from).sort()).toEqual(['cancel-requested', 'running'])
+    expect(getExternalRun(running.id)).toMatchObject({
+      status: 'failed',
+      error: 'HOST_RESTARTED'
+    })
+    expect(getExternalRun(requested.id)).toMatchObject({ status: 'failed', error: 'HOST_RESTARTED' })
+    expect(getExternalRun(cancelled.id)?.status).toBe('cancelled')
+    // 再次启动不重复结算，终态行不被改写。
+    expect(settleOrphanedExternalRuns()).toEqual([])
+    expect(getExternalRun(cancelled.id)?.error).toBeNull()
   })
 })

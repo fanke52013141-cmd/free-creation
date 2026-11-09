@@ -1,0 +1,24 @@
+{
+  "status": "passed",
+  "mode": "source-build",
+  "checks": [
+    "CLI create",
+    "second desktop on same data store rejected before creating a window",
+    "CLI node type list: 32 nodes",
+    "A1.4 read-only model/library parity, diagnostic health and scoped missing run via real CLI/MCP",
+    "A12 single-image library create via CLI+MCP: digest parity, searchable summary, idempotency guard, source path never echoed",
+    "MCP SDK initialize/list/call; cross-transport idempotency",
+    "MCP rename → CLI save/export; bundle same revision/name",
+    "closed UI rename shares snapshot transaction; stale external revision rejected",
+    "Agent opens desktop; active MCP metadata update; export flushes unsaved UI text at acknowledged revision",
+    "Agent switches projects after flush and reopens preserved UI text",
+    "CLI clone at flushed revision; precheck token guards; confirmed delete with durable receipt",
+    "offline error + durable receipt after app restart",
+    "actual JSONL lifecycle + content redaction"
+  ],
+  "activeExport": {
+    "status": "completed",
+    "sourceGraphVersion": 8,
+    "latestUnsavedTextVerified": true
+  }
+}

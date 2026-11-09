@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
 /**
  * 探针：失败的 canvas.history 请求是否推进图版本？
  * 若每次失败都 +1，说明"读→写"永远追不上（这是真实缺陷，不是测试问题）。

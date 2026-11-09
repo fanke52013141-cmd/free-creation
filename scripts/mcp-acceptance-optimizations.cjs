@@ -1,4 +1,5 @@
-﻿/**
+﻿/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
+/**
  * 验证 ABC 三组优化是否真的生效（真实 MCP 协议栈）。
  *
  * 逐条对应优化项：
@@ -290,11 +291,11 @@ async function main() {
 
     // A3：cooperate 稳定码
     await check('A3 cooperate 缺任务返回 AGENT_TASK_MISSING', async () => {
-      const patched = await call('graph.patch', {
-        projectId,
-        expectedGraphVersion: await version(projectId),
-        ops: [{ action: 'node.create', ref: 'agent', nodeType: 'agent', x: 0, y: 300, title: 'Agent 节点' }]
-      })
+      const ops = [{ action: 'node.create', ref: 'agent', nodeType: 'agent', x: 0, y: 300, title: 'Agent 节点' }]
+      let patched = await call('graph.patch', { projectId, expectedGraphVersion: await version(projectId), ops })
+      // 保存屏障可能在稳定读数之后再次推进版本：用服务端回传的当前版本重试（同 A1/A2 模式）。
+      if (patched?.error?.code === 'REVISION_CONFLICT')
+        patched = await call('graph.patch', { projectId, expectedGraphVersion: patched.error.currentGraphVersion, ops })
       const data = ok(patched, 'graph.patch agent node')
       const agentNodeId = (data.created ?? [])[0]?.nodeId
       expect(agentNodeId, '缺少 Agent 节点 ID')

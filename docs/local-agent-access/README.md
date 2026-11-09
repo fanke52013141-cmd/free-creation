@@ -8,6 +8,10 @@
 | [一致性规范](../../AGENT_PARITY_SPEC.md) | 完整目标、三个入口同源、后续功能同包维护与发布要求 |
 | [完整开发计划](15-gui-cli-mcp-parity-plan.md) | 现状、架构、多画布、F0–F10落地与验收 |
 | [32类节点动作表](16-node-action-coverage.md) | 每个节点必须接入的编辑、执行、结果和专有动作 |
+| [详细测试计划](66-parity-test-plan.md) | 按F0–F10组织的分层验收、必测场景、故障/人工/付费专项与发布判据 |
+| [R1 基线测试报告](67-r1-baseline-test-report.md) | 2026-11-09 基线重跑实测：门禁/单测/8批验收/里程碑结果、当日分母、发现与修复、边界 |
+| [R2 缺口测试报告](68-r2-gap-report.md) | 2026-11-09 GUI反向腿/崩溃重启/画布切换补测；2个真实缺陷修复、1个验证链回归修复、取消语义观察项与证据 |
+| [视频 Flow 回归修复](69-video-flow-revision-fix.md) | 2026-11-09 taskId 写 config 污染命令修订/输入指纹 → unknown 保持失败；移入 meta + 修订归一化，11 个脚本转绿 |
 | [当前25项能力](14-current-capabilities.md) | 当前可调用范围，不把计划接口当可用接口 |
 | [Skill与节点库交付](13-chat-skills-node-library.md) | 新增6项操作、参数和真实验证边界 |
 

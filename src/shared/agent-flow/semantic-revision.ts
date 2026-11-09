@@ -15,6 +15,22 @@ export function canonicalFlowJson(value: unknown): string {
   if (encoded === undefined) throw new Error('FLOW_INTENT_INVALID')
   return encoded
 }
+/**
+ * 运行时续跑标记不是业务意图：视频执行会把供应商 taskId 写入 config 以便重进项目后接回。
+ * 该写入发生在命令下发之后，若参与修订比较会让同一命令在提交时被误判为"画布已变更"。
+ */
+function semanticConfig(type: string, config: unknown): unknown {
+  if (type !== 'video' || typeof config !== 'string') return config
+  try {
+    const parsed: unknown = JSON.parse(config || '{}')
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return config
+    const record = { ...(parsed as Record<string, unknown>) }
+    delete record.taskId
+    return canonicalFlowJson(record)
+  } catch {
+    return config
+  }
+}
 /** Main-only fingerprint. It must be recomputed from the saved project before dispatch. */
 export function semanticProjectPayload(project: ProjectFile): unknown {
   const snapshot = project.tldrawSnapshot as { store?: Record<string, unknown> } | undefined
@@ -77,10 +93,19 @@ export function semanticProjectPayload(project: ProjectFile): unknown {
             exclusiveGroup
           })
         ),
-        params: node.params,
+        // 项目节点的 params 与卡片 props.config 同步保存；视频续跑标记同样不属于意图。
+        params:
+          node.type === 'video' &&
+          node.params &&
+          typeof (node.params as { config?: unknown }).config === 'string'
+            ? {
+                ...node.params,
+                config: semanticConfig('video', (node.params as { config: string }).config)
+              }
+            : node.params,
         content: node.content,
         title: shape.props.title,
-        config: shape.props.config,
+        config: semanticConfig(node.type, shape.props.config),
         text: shape.props.text,
         mediaId: shape.props.mediaId,
         mediaPath: shape.props.mediaPath,

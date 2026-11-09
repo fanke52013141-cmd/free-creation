@@ -1,16 +1,17 @@
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
 /**
  * MCP SSE 传输验收：给只支持 SSE 的客户端用。
  *
  * 断言：
  * 1) `mcp serve --transport sse` 启动后把 {url, token} 打到 stdout；
- * 2) 真实 SSE 客户端能用该 url+token 连上，tools/list = 141 项；
+ * 2) 真实 SSE 客户端能用该 url+token 连上，tools/list 与契约快照一致；
  * 3) 能真实调用一个只读操作（capability.list）；
  * 4) **不带令牌 / 错误令牌必须 401**（这是新增监听面的安全底线）；
  * 5) stdio 传输仍然可用（回归）。
  */
 const { spawn } = require('node:child_process')
 const { cp, mkdir, mkdtemp, readFile, rm, writeFile } = require('node:fs/promises')
-const { existsSync } = require('node:fs')
+const { existsSync, readFileSync } = require('node:fs')
 const { resolve, join } = require('node:path')
 const { tmpdir, homedir } = require('node:os')
 const { randomUUID } = require('node:crypto')
@@ -22,6 +23,8 @@ const { SSEClientTransport } = require('@modelcontextprotocol/sdk/client/sse.js'
 const electron = require('electron')
 const appRoot = resolve('.')
 const cliPath = join(appRoot, 'out/main/local-agent.js')
+// 期望工具数以门禁契约快照为唯一事实源，不再硬编码。
+const expectedToolCount = JSON.parse(readFileSync(join(appRoot, 'docs/local-agent-access/generated/contracts.json'), 'utf8')).operations.length
 const key = () => `${Date.now()}:${randomUUID()}`
 const licensedSecurityDir = (() => {
   const roaming = process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming')
@@ -132,7 +135,7 @@ async function main() {
       return { status: response.status }
     })
 
-    await check('真实 SSE 客户端可连上并列出 141 项工具', async () => {
+    await check(`真实 SSE 客户端可连上并列出 ${expectedToolCount} 项工具`, async () => {
       // 记录一次完整的发现行（重新启动一个独立进程，确保能拿到 token）
       const probe = spawn(
         electron,
@@ -162,7 +165,7 @@ async function main() {
       const sseClient = new Client({ name: 'sse-acceptance', version: '1.0.0' }, { capabilities: {} })
       await sseClient.connect(transport)
       const tools = await sseClient.listTools()
-      expect(tools.tools.length === 141, `工具数=${tools.tools.length}，期望 141`)
+      expect(tools.tools.length === expectedToolCount, `工具数=${tools.tools.length}，期望 ${expectedToolCount}`)
       const response = await sseClient.callTool({ name: 'capability_list', arguments: { input: {} } })
       const structured = response.structuredContent
       expect(structured?.status === 'completed', 'capability.list 未成功：' + JSON.stringify(structured?.error))

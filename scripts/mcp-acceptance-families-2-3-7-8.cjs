@@ -1,4 +1,5 @@
-﻿/**
+﻿/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
+/**
  * MCP 验收 · 第 2/3/7/8 族：媒体、传输、历史快照、诊断与工作区。
  *
  * 真实 MCP 协议栈 + 真实桌面会话，跑完整链路并校验**副作用真实发生**。
@@ -7,7 +8,7 @@
  */
 const { _electron } = require('playwright')
 const { cp, mkdir, mkdtemp, readFile, writeFile, rm, readdir, stat } = require('node:fs/promises')
-const { existsSync } = require('node:fs')
+const { existsSync, readFileSync } = require('node:fs')
 const { resolve, join, basename } = require('node:path')
 const { tmpdir, homedir } = require('node:os')
 const { randomUUID, createHash } = require('node:crypto')
@@ -17,6 +18,8 @@ const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio
 const electron = require('electron')
 const appRoot = resolve('.')
 const cliPath = join(appRoot, 'out/main/local-agent.js')
+// 期望操作数以门禁契约快照为唯一事实源，不再硬编码。
+const expectedOperationCount = JSON.parse(readFileSync(join(appRoot, 'docs/local-agent-access/generated/contracts.json'), 'utf8')).operations.length
 const key = () => `${Date.now()}:${randomUUID()}`
 const licensedSecurityDir = (() => {
   const roaming = process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming')
@@ -332,10 +335,10 @@ async function main() {
       expect(data?.instanceId || data?.version, '回执缺基础状态')
       return { version: data.version }
     })
-    await diag.check('capability.list 操作数与门禁一致（133）', async () => {
+    await diag.check(`capability.list 操作数与门禁一致（${expectedOperationCount}）`, async () => {
       const data = ok(await call('capability.list', {}), 'capability.list')
       const operations = data?.operations ?? []
-      expect(operations.length === 133, `操作数=${operations.length}`)
+      expect(operations.length === expectedOperationCount, `操作数=${operations.length}`)
       return { operations: operations.length }
     })
     await diag.check('node.type.list 返回 32 类节点', async () => {

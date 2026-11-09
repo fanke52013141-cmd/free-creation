@@ -79,6 +79,24 @@ describe('recoverRunningNodes', () => {
     expect((shape.meta.nodeRun as { status: string }).status).toBe('success')
   })
 
+  it('优先使用 meta.videoTaskId（新写入路径）接回后台任务', async () => {
+    const shape = runningShape('legacy-task')
+    shape.meta.videoTaskId = 'meta-task'
+    const editor = fakeEditor([shape])
+    const videoTask = vi.fn(async () => ({
+      ok: true,
+      data: { id: 'meta-task', status: 'success', mediaId: 'media-2', mediaPath: 'projects/b.mp4' }
+    }))
+    ;(window as unknown as { api: unknown }).api = { gateway: { videoTask } }
+
+    const stop = recoverRunningNodes(editor, 'project-1')
+    await vi.advanceTimersByTimeAsync(3_100)
+    stop()
+
+    expect(videoTask).toHaveBeenCalledWith('meta-task')
+    expect(shape.props.exec).toBe('success')
+  })
+
   it('没有任务号的 running 节点仍按中断标记为 cancelled', () => {
     const shape = runningShape()
     const editor = fakeEditor([shape])

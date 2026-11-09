@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
 /**
  * F9 剩余可做项验收：供应商管理（3）+ 凭据包导入闸门（2）+ 即梦登录闸门（2）。
  *

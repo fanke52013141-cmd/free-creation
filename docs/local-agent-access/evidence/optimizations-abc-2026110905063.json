@@ -1,0 +1,80 @@
+{
+  "checks": [
+    {
+      "name": "A4 有默认值的字段不再出现在 required",
+      "ok": true,
+      "detail": {
+        "required": [
+          "projectId"
+        ],
+        "defaultedFields": 3
+      }
+    },
+    {
+      "name": "B6/B7 capability.list 带 requires 与 errorCatalog",
+      "ok": true,
+      "detail": {
+        "errorCodes": 33,
+        "operationsWithRequires": 71,
+        "nodeLibrarySave": [
+          "openProject",
+          "chatNode"
+        ]
+      }
+    },
+    {
+      "name": "A1 版本冲突返回结构化 currentGraphVersion",
+      "ok": true,
+      "detail": {
+        "currentGraphVersion": 0
+      }
+    },
+    {
+      "name": "B8 INVALID_INPUT 的 detail 含字段与原因",
+      "ok": true,
+      "detail": {
+        "detail": "input.ops: Too small: expected array to have >=1 items"
+      }
+    },
+    {
+      "name": "A2 group.create 回传 groupId，可据此解组",
+      "ok": true,
+      "detail": {
+        "groupId": "shape:pw9CoVVleBdMYVNixmGFa"
+      }
+    },
+    {
+      "name": "C11 media.list 条目带 id 与 hasRecipe",
+      "ok": true,
+      "detail": {
+        "id": "UZvaB1icEO",
+        "hasRecipe": false
+      }
+    },
+    {
+      "name": "C10 recovery.precheck 不传 decision 也能读事实",
+      "ok": true,
+      "detail": {
+        "exists": false
+      }
+    },
+    {
+      "name": "A3 cooperate 缺任务返回 AGENT_TASK_MISSING",
+      "ok": true,
+      "detail": {
+        "code": "AGENT_TASK_MISSING"
+      }
+    },
+    {
+      "name": "C9 exportStructure 自动补保存屏障后可导出",
+      "ok": true,
+      "detail": {
+        "nodeCount": 3
+      }
+    }
+  ],
+  "failures": [],
+  "total": 9,
+  "passed": 9,
+  "failed": 0
+}

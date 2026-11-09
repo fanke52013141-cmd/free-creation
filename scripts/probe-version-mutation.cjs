@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
 /**
  * 对照实验：连续调用 graph.get（latest）是否会推进图版本？
  * 读操作不应该改变版本；若每次读都 +1，说明读路径上有保存副作用（真实缺陷）。

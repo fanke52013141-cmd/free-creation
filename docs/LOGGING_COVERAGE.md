@@ -1,5 +1,48 @@
 # 日志覆盖清单
 
+## 2026-11-09：视频 Agent Flow 回归修复（taskId 移出 config）
+
+行为修复：视频供应商任务号从节点 `config` 改存 `meta.videoTaskId`，语义修订对遗留
+`config.taskId` 取忽略策略。修复后 Flow 命令提交不再被运行期标记误判为"画布/输入已变更"，
+unknown 分支恢复到 `waiting/reconcile`。**不新增诊断事件**：修复路径复用既有
+`command.operation.started/failed`（`saved-revision` / `saved-input` 不再出现）与运行记录，
+不记录提示词、任务正文或供应商任务号。细节与证据见
+[69 视频 Flow 回归修复](local-agent-access/69-video-flow-revision-fix.md)。
+
+## 2026-11-09：R2 缺口验收——宿主重启结算遗留外部任务（附带 run.wait 长轮询连接超时修复）
+
+问题（R2 实测复现）：`external_runs` 的终态只能由宿主回执推进。桌面被硬杀或正常退出时若有在途
+任务，行会停在 `accepted/running/cancel-requested`；重启后 `taskOccupied` 会把该画布的所有非读
+操作**永久**拒绝（`RESOURCE_BUSY/task-occupancy`），`run.get` 仍报 `running` 且 `error=null`，
+等于把画布锁死。修复：接入服务取得 `local-agent-access-server` 进程锁后（此刻必然是唯一存活
+宿主）把所有非终态行结算为 `failed/HOST_RESTARTED`；保留行、不删除、不重放、不补产物，已终态行
+不改写。桌面首次启动传入 `settleOrphanedRuns: true`，测试内的服务重启不结算。
+
+### 新增事件（`src/main/agent-access/server.ts`，宿主启动路径）
+
+| 事件 | 级别 | 触发点 | 允许属性 |
+| --- | --- | --- | --- |
+| `agent.access.runs_settled` | info | 启动结算且存在遗留行 | `count`、`states`（来源状态名集合） |
+
+- **不含**项目/节点/任务 ID、路径、正文、提示词或运行细节；只在结算条数 >0 时发一次。
+- **不重复终态**：该事件只记录"启动时结算无宿主遗留行"这一事实；被结算任务原本就没有终态回执
+  （宿主已死），不把它当作某次执行的成功/失败结果，也不替代 `agent.access.*` 操作生命周期。
+- 日志写入失败不影响结算与接入启动（`emitDomainEvent` 内部吞掉异常）。
+
+### 同（R2）：`run.wait` 长轮询连接超时修复（不新增事件）
+
+契约允许 `run.wait` 最长 120s，但服务端每个接入 socket 空闲 15s 即销毁、CLI/MCP 客户端也按
+15s 超时，长等待必然得到 `OUTCOME_UNKNOWN/connect`。修复：服务端在收到请求后把等待上限放宽到
+`RUN_WAIT_MAX_TIMEOUT_MS + 90s`；客户端按请求的 `timeoutMs + 30s` 设置。纯连接行为，不新增
+事件、不改变任何业务终态与错误码语义。
+
+### 验证与边界
+
+单测覆盖结算（非终态→failed/HOST_RESTARTED、终态不改写、重复启动不重复结算）；R2 缺口脚本 B 段
+真实硬杀→重启：`failed/HOST_RESTARTED`、占用解除、零重放、可重新执行；C 段用 90s `run.wait`
+验证长等待不再被切断。证据与未覆盖边界见
+[R2 缺口测试报告](local-agent-access/68-r2-gap-report.md)。
+
 ## 2026-11-08：F9 收尾——视频引擎安装后台阶段补齐诊断事件（消除既有盲区）
 
 45 号台账登记的盲区：`installVideoEngine()` 的后台阶段（创建 venv / 更新 pip / 安装 PyTorch /

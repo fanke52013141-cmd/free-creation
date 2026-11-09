@@ -2872,6 +2872,10 @@ if (
         ...(per02Debug ? { per02Debug } : {}),
         ...(Array.isArray(panelChurnFailures) ? { rendererFailures: panelChurnFailures } : {}),
         errorName: error instanceof Error ? error.name : 'unknown',
+        // 非稳定码异常（超时/断言描述）必须留下消息，否则报告只剩 AGENT_ACCEPTANCE_FAILED。
+        ...(error instanceof Error && !/^[A-Z0-9_]+$/.test(error.message)
+          ? { testFailureMessage: error.message.slice(0, 240) }
+          : {}),
         ...(agentPanelChurn && error instanceof Error
           ? { testFailureMessage: error.message.slice(0, 240) }
           : {}),

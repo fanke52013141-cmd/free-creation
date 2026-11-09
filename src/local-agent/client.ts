@@ -9,6 +9,7 @@ import {
   type AccessResponse
 } from '../shared/agent-access/registry'
 import { ConnectionDescriptorSchema } from '../shared/agent-access/connection'
+import { RUN_WAIT_MAX_TIMEOUT_MS } from '../shared/agent-access/run-ops'
 
 export function defaultDataDirectory(): string {
   if (process.env.CANVAS_DATA_DIR) return process.env.CANVAS_DATA_DIR
@@ -73,7 +74,13 @@ export async function callLocalOperation(
     }
     const disconnected = (): void =>
       finish(failure(sent ? 'OUTCOME_UNKNOWN' : 'APP_NOT_RUNNING', sent))
-    socket.setTimeout(15000, disconnected)
+    // run.wait 是长轮询：等待期间没有下行流量，超时必须覆盖请求的等待时长。
+    const waitInput = args.input as { timeoutMs?: unknown }
+    const requestedWaitMs =
+      operationId === 'run.wait' && typeof waitInput?.timeoutMs === 'number'
+        ? Math.min(waitInput.timeoutMs, RUN_WAIT_MAX_TIMEOUT_MS)
+        : 0
+    socket.setTimeout(requestedWaitMs > 0 ? requestedWaitMs + 30_000 : 15000, disconnected)
     socket.on('error', disconnected)
     socket.on('close', disconnected)
     socket.on('connect', () => {

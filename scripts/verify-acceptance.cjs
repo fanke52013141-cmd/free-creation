@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * 统一验收入口：串行跑全部真实 MCP / 桌面验收脚本，最后汇总。
  *
@@ -23,7 +24,9 @@ const ALL = [
   { name: 'gap-fill', script: 'scripts/mcp-acceptance-gap-fill.cjs', timeout: 15 * 60_000 },
   { name: 'f9-remaining', script: 'scripts/mcp-acceptance-f9-remaining.cjs', timeout: 20 * 60_000 },
   { name: 'optimizations', script: 'scripts/mcp-acceptance-optimizations.cjs', timeout: 20 * 60_000 },
-  { name: 'sse', script: 'scripts/mcp-acceptance-sse.cjs', timeout: 15 * 60_000 }
+  { name: 'sse', script: 'scripts/mcp-acceptance-sse.cjs', timeout: 15 * 60_000 },
+  // R2 缺口：GUI 反向腿 / 双画布并发 / 崩溃重启（真实桌面 + CLI）。
+  { name: 'parity-gaps', script: 'scripts/test-agent-parity-gaps.cjs', timeout: 25 * 60_000 }
 ]
 const FAST = ['protocol', 'optimizations']
 

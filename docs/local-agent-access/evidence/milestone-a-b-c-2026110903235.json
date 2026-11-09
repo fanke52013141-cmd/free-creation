@@ -1,0 +1,27 @@
+{
+  "status": "failed",
+  "checks": [
+    "created three independent project canvases via CLI",
+    "serially opened A/B/C and applied atomic batch graph patches with id mapping",
+    "idempotency: same key replays the original receipt without duplicating nodes",
+    "illegal operations leave no half-applied graph (reference + compatibility)"
+  ],
+  "projects": {
+    "A": {
+      "id": "0SxDWblefEzf",
+      "name": "角色素材",
+      "graphVersion": 6
+    },
+    "B": {
+      "id": "SZKdAt6JFTFr",
+      "name": "视频剪辑",
+      "graphVersion": 1
+    },
+    "C": {
+      "id": "m8ye1D8krLpi",
+      "name": "配音",
+      "graphVersion": 1
+    }
+  },
+  "error": "Cannot read properties of undefined (reading 'graphVersion')"
+}

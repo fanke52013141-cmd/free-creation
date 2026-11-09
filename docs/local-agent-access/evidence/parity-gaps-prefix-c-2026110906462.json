@@ -1,0 +1,70 @@
+{
+  "startedAt": "2026-11-09T04:33:36.442Z",
+  "sections": {
+    "C": {
+      "name": "C 画布切换与隔离",
+      "checks": [
+        "A 运行中切画布被 RESOURCE_BUSY 拒绝，A 任务仍在账本（不被带走）"
+      ]
+    }
+  },
+  "checks": [
+    {
+      "code": "MACHINE_NOT_LICENSED",
+      "ok": true,
+      "detail": "C:\\Users\\Administrator\\AppData\\Roaming\\canvas-studio\\data\\security"
+    },
+    {
+      "code": "PROJECT_CREATE_FAILED",
+      "ok": true
+    },
+    {
+      "code": "PROJECT_CREATE_FAILED",
+      "ok": true
+    },
+    {
+      "code": "PROJECT_CREATE_FAILED",
+      "ok": true
+    },
+    {
+      "code": "PROJECT_OPEN_FAILED",
+      "ok": true
+    },
+    {
+      "code": "MEDIA_IMPORT_FAILED",
+      "ok": true
+    },
+    {
+      "code": "CLIP_NODE_MISSING",
+      "ok": true,
+      "detail": "[{\"ref\":\"src\",\"nodeId\":\"shape:b-44W79JE3qrECirIzvCS\"},{\"ref\":\"c1\",\"nodeId\":\"shape:9Bdn1Xfsk0psW0WJRfOgq\"},{\"ref\":\"c2\",\"nodeId\":\"shape:3Un39duy0hna8_ROn7WeP\"},{\"ref\":\"c3\",\"nodeId\":\"shape:0Xk8nwBW2gV6KgLAmSI5M\"}]"
+    },
+    {
+      "code": "EXECUTE_REJECTED",
+      "ok": true
+    },
+    {
+      "code": "EXECUTE_NOT_ACCEPTED",
+      "ok": true,
+      "detail": "{\"projectId\":\"yNbY3AL60ig0\",\"taskId\":\"run-mw8rnpu4-81e0a1e9\",\"accepted\":true,\"mode\":\"subgraph\",\"nodeIds\":[\"shape:0Xk8nwBW2gV6KgLAmSI5M\"],\"state\":\"running\"}"
+    },
+    {
+      "code": "C_INFLIGHT_SWITCH_NOT_BLOCKED",
+      "ok": true,
+      "detail": "{\"apiVersion\":1,\"requestId\":\"6f777d54-6545-474a-8c24-b1a2f7375a48\",\"operationId\":\"project.open\",\"traceId\":\"trace-d24b87c6-3e3f-4dd6-adfb-8e9c0bacd12c\",\"status\":\"failed\",\"idempotencyKey\":\"1794198830502:1f01a1c1-2714-48c7-828d-7f5a784cfc9b\",\"error\":{\"code\":\"RESOURCE_BUSY\",\"phase\":\"task-occupancy\",\"ret"
+    },
+    {
+      "code": "C_A_TASK_LOST_AFTER_BLOCKED_SWITCH",
+      "ok": true,
+      "detail": "{\"taskId\":\"run-mw8rnpu4-81e0a1e9\",\"projectId\":\"yNbY3AL60ig0\",\"source\":\"node-run\",\"state\":\"running\",\"mode\":\"subgraph\",\"nodeIds\":[\"shape:0Xk8nwBW2gV6KgLAmSI5M\"],\"cancelRequested\":false,\"error\":null,\"createdAt\":1794198830476,\"updatedAt\":1794198830478,\"hostResident\":true}"
+    },
+    {
+      "code": "C_CANCEL_REJECTED",
+      "ok": true
+    }
+  ],
+  "failures": [],
+  "notes": [],
+  "status": "failed",
+  "error": "RUN_WAIT_REJECTED:{\"code\":\"OUTCOME_UNKNOWN\",\"phase\":\"connect\",\"retryable\":false}"
+}

@@ -1,0 +1,191 @@
+{
+  "families": {
+    "family-2-media": [
+      {
+        "name": "media.import 导入真实文件",
+        "ok": true,
+        "detail": {
+          "mediaId": "uDq65BAJpF"
+        }
+      },
+      {
+        "name": "media.list 含新导入媒体",
+        "ok": true,
+        "detail": {
+          "total": 1
+        }
+      },
+      {
+        "name": "media.getRecipe 导入件无生成来源（found=false）",
+        "ok": true,
+        "detail": {
+          "found": false
+        }
+      },
+      {
+        "name": "media.batchExport 落到受控目录且逐项回执",
+        "ok": true,
+        "detail": {
+          "exported": 1,
+          "failed": 0
+        }
+      },
+      {
+        "name": "media.delete 删除后列表里消失",
+        "ok": true,
+        "detail": {}
+      },
+      {
+        "name": "project.export 项目包导出（文件名/字节数/哈希自洽）",
+        "ok": true,
+        "detail": {
+          "fileName": "accept.canvasbundle",
+          "byteSize": 1280
+        }
+      }
+    ],
+    "family-3-transfer": [
+      {
+        "name": "project.exportStructure（无快照时给明确码）",
+        "ok": true,
+        "detail": {
+          "nodeCount": 0
+        }
+      },
+      {
+        "name": "project.import 导入刚导出的项目包（媒体重映射）",
+        "ok": true,
+        "detail": {
+          "importedProjectId": "ZKmDDwvdM0Js",
+          "mediaCount": 0
+        }
+      },
+      {
+        "name": "project.import 拒绝目录外路径",
+        "ok": true,
+        "detail": {
+          "code": "PATH_NOT_ALLOWED"
+        }
+      },
+      {
+        "name": "project.importStructure 拒绝目录外路径",
+        "ok": true,
+        "detail": {
+          "code": "PATH_NOT_ALLOWED"
+        }
+      }
+    ],
+    "family-7-history": [
+      {
+        "name": "history.snapshot.create",
+        "ok": true,
+        "detail": {
+          "snapshotId": "pOgjlC-RV8Zy"
+        }
+      },
+      {
+        "name": "history.list 含新快照",
+        "ok": true,
+        "detail": {
+          "total": 1
+        }
+      },
+      {
+        "name": "history.restore.precheck",
+        "ok": true,
+        "detail": {
+          "ok": true
+        }
+      },
+      {
+        "name": "history.recovery.precheck",
+        "ok": true,
+        "detail": {
+          "ok": true
+        }
+      },
+      {
+        "name": "history.snapshot.delete 删除后消失",
+        "ok": true,
+        "detail": {}
+      }
+    ],
+    "family-8-diagnostics-workspace": [
+      {
+        "name": "app.status",
+        "ok": true,
+        "detail": {}
+      },
+      {
+        "name": "capability.list 操作数与门禁一致（133）",
+        "ok": false,
+        "detail": "操作数=143"
+      },
+      {
+        "name": "node.type.list 返回 32 类节点",
+        "ok": true,
+        "detail": {
+          "nodes": 32
+        }
+      },
+      {
+        "name": "node.type.get 读契约",
+        "ok": true,
+        "detail": {
+          "nodeType": "text"
+        }
+      },
+      {
+        "name": "workspace.palettePreferences 读→写→读回",
+        "ok": true,
+        "detail": {
+          "changed": true
+        }
+      },
+      {
+        "name": "diagnostics.query",
+        "ok": true,
+        "detail": {
+          "events": 20,
+          "source": "diagnostics-store"
+        }
+      },
+      {
+        "name": "diagnostics.summary",
+        "ok": true,
+        "detail": {
+          "ok": true
+        }
+      },
+      {
+        "name": "diagnostics.exportBundle 受控目录 + 指纹自洽",
+        "ok": true,
+        "detail": {
+          "byteSize": 10687,
+          "totalEvents": 107
+        }
+      },
+      {
+        "name": "diagnostics.exportBundle 拒绝空范围",
+        "ok": true,
+        "detail": {
+          "code": "INVALID_INPUT"
+        }
+      }
+    ]
+  },
+  "startedAt": "2026-11-09T03:02:34.581Z",
+  "failures": [
+    {
+      "family": "family-8-diagnostics-workspace",
+      "name": "capability.list 操作数与门禁一致（133）",
+      "detail": "操作数=143"
+    }
+  ],
+  "notes": [],
+  "found": [],
+  "finishedAt": "2026-11-09T03:02:45.082Z",
+  "total": 24,
+  "passed": 23,
+  "failed": 1
+}

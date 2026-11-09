@@ -1,0 +1,38 @@
+{
+  "checks": [
+    {
+      "name": "SSE 服务启动并打印发现信息",
+      "ok": true,
+      "detail": {
+        "url": "http://127.0.0.1:47672/sse",
+        "tokenLength": 36
+      }
+    },
+    {
+      "name": "不带令牌的请求必须 401",
+      "ok": true,
+      "detail": {
+        "status": 401
+      }
+    },
+    {
+      "name": "错误令牌必须 401",
+      "ok": true,
+      "detail": {
+        "status": 401
+      }
+    },
+    {
+      "name": "真实 SSE 客户端可连上并列出 143 项工具",
+      "ok": true,
+      "detail": {
+        "tools": 143,
+        "operations": 143
+      }
+    }
+  ],
+  "failures": [],
+  "total": 4,
+  "passed": 4,
+  "failed": 0
+}

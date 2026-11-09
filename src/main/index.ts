@@ -631,7 +631,8 @@ app.whenReady().then(async () => {
         appVersion: app.getVersion(),
         activeProjectId: () => projectWatcher.activeProjectId,
         diagnostics,
-        desktop: createAccessDesktop(() => mainWindow)
+        desktop: createAccessDesktop(() => mainWindow),
+        settleOrphanedRuns: true
       })
       emitDomainEvent('agent.access.server_ready', '本地外部接入已就绪')
     } catch {

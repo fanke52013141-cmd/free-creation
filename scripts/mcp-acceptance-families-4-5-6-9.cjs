@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
 /**
  * MCP 验收 · 第 4/5/6/9 族：资源库、Agent Flow、模型与环境、执行与对话。
  *

@@ -2,14 +2,29 @@
 const { _electron } = require('playwright')
 const { spawn } = require('node:child_process')
 const { mkdtemp, mkdir, readFile, writeFile, rm, cp, readdir } = require('node:fs/promises')
+const { existsSync } = require('node:fs')
 const { resolve, join, basename } = require('node:path')
-const { tmpdir } = require('node:os')
+const { tmpdir, homedir } = require('node:os')
 const { createHash, randomUUID } = require('node:crypto')
 const { Client } = require('@modelcontextprotocol/sdk/client/index.js')
 const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio.js')
 const AdmZip = require('adm-zip')
 const { qaOutputPath } = require('./qa-output.cjs')
 const key = () => `${Date.now()}:${randomUUID()}`
+// 授权是设备绑定的：把本机已激活的 security 目录复制进隔离数据目录，应用才能越过
+// 授权门禁启动接入服务（不伪造任何签名）。发行版构建无授权门禁，不需要复制。
+function licensedSecurityDir() {
+  const roaming = process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming')
+  const candidates = [
+    join(roaming, 'canvas-studio', 'data', 'security'),
+    join(roaming, 'Electron', 'data', 'security'),
+    join(roaming, 'canvas-studio', 'security')
+  ]
+  for (const candidate of candidates) {
+    if (existsSync(join(candidate, 'license-current.json'))) return candidate
+  }
+  throw new Error('MACHINE_NOT_LICENSED')
+}
 const installedRoot = process.env.CANVAS_LOCAL_AGENT_INSTALL_ROOT
 const electron = installedRoot ? join(installedRoot,'canvas-studio.exe') : require('electron')
 const appRoot = installedRoot ? join(installedRoot,'resources','app') : resolve('.')
@@ -40,6 +55,7 @@ async function captureDesktop(app,file){
 }
 ;(async()=>{
   const directory=await mkdtemp(join(tmpdir(),'canvas-local-agent-desktop-'))
+  if(!installedRoot) await cp(licensedSecurityDir(),join(directory,'security'),{recursive:true})
   const evidence=qaOutputPath(installedRoot?'qa/local-agent-access/installed-vertical-slice':'qa/local-agent-access/vertical-slice')
   await mkdir(evidence,{recursive:true})
   let app; let client; let transport

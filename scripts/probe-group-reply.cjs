@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
 // 探针：group.create 的回执到底返回了什么（确认 groups 是否真被回传）
 const { _electron } = require('playwright')
 const { cp, mkdtemp, readFile, rm, writeFile } = require('node:fs/promises')

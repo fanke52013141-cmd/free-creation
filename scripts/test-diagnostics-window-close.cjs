@@ -2,10 +2,27 @@
 // Source-app acceptance only: inject transport faults before loading the unchanged main bundle.
 const assert = require('node:assert/strict')
 const fs = require('node:fs/promises')
+const { existsSync } = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
 const { spawn } = require('node:child_process')
 const { _electron: electron } = require('playwright')
 const { qaOutputPath } = require('./qa-output.cjs')
+
+// 授权是设备绑定的：把本机已激活的 security 目录复制进隔离数据目录，应用才能
+// 越过授权门禁进入业务窗（不伪造任何签名）。
+function licensedSecurityDir() {
+  const roaming = process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming')
+  const candidates = [
+    path.join(roaming, 'canvas-studio', 'data', 'security'),
+    path.join(roaming, 'Electron', 'data', 'security'),
+    path.join(roaming, 'canvas-studio', 'security')
+  ]
+  for (const candidate of candidates) {
+    if (existsSync(path.join(candidate, 'license-current.json'))) return candidate
+  }
+  throw new Error('MACHINE_NOT_LICENSED')
+}
 
 async function filesUnder(directory) {
   const output = []
@@ -38,6 +55,7 @@ async function filesUnder(directory) {
       const directory = path.join(evidence, mode)
       const data = path.join(directory, 'data')
       await fs.mkdir(data, { recursive: true })
+      await fs.cp(licensedSecurityDir(), path.join(data, 'security'), { recursive: true })
       await fs.mkdir(path.join(directory, 'profile'), { recursive: true })
       if (mode === 'prior-unclean') {
         const sessions = path.join(data, 'diagnostics', 'sessions')

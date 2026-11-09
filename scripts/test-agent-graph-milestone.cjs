@@ -379,10 +379,13 @@ async function launchLicensedApp(dataDirectory) {
       check(stale.response.status === 'failed' && stale.response.error?.code === 'REVISION_CONFLICT', `UNSAVED_EDIT_NOT_PROTECTED:${JSON.stringify(stale.response.error)}`)
       const fresh = await runCli(directory, ['project', 'get'], { input: { projectId: created.A } })
       const version = fresh.response.data.meta.graphVersion
-      const retried = await runCli(directory, ['graph', 'patch'], {
-        input: { projectId: created.A, expectedGraphVersion: version, ops: [{ action: 'node.create', nodeType: 'text', x: 60, y: 1180, title: 'A 冲突测试' }] },
-        idempotencyKey: key()
-      })
+      // 单次读数会被保存屏障防抖再次推进（与 family1 同一已知竞态）：用稳定读数+冲突重试 helper。
+      const retried = await patchWithFreshVersion(
+        directory,
+        created.A,
+        () => [{ action: 'node.create', nodeType: 'text', x: 60, y: 1180, title: 'A 冲突测试' }],
+        'CONFLICT_RETRY_FAILED'
+      )
       check(retried.response.data.graphVersion > version, 'RETRY_VERSION_UNEXPECTED')
       // 用户正文被保存而不是被覆盖（数据级验证：权威宿主 latest 视图中存在该正文）。
       let userTextAlive = false

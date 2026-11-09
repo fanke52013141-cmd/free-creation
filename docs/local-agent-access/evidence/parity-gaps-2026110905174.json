@@ -1,0 +1,307 @@
+{
+  "startedAt": "2026-11-09T05:16:05.225Z",
+  "sections": {
+    "A": {
+      "name": "A 反向腿",
+      "checks": [
+        "外部建 2 节点在权威宿主生效（latest 视图=2）",
+        "GUI 撤销 → 外部 latest 视图节点数 2→0（整批补丁为一个撤销步）",
+        "GUI 重做 → 外部 latest 视图节点数 0→2",
+        "外部补丁 → GUI 撤销/重做 → 外部读数一致（交替编辑闭环）",
+        "外部读取 GUI 正文（latest/节点视图一致）"
+      ]
+    },
+    "C": {
+      "name": "C 画布切换与隔离",
+      "checks": [
+        "A 运行中切画布被 RESOURCE_BUSY 拒绝，A 任务仍在账本（不被带走）",
+        "取消 A → 终态=completed；占用释放后可切换",
+        "B 运行中切 C 被拒；B 完成终态=completed",
+        "取消 A 后 B/C 依次在各自画布完成（未并行、未丢失）",
+        "B/C 产物各自落盘且互不串台",
+        "A 的媒体索引不含 B/C 产物"
+      ]
+    },
+    "B": {
+      "name": "B 崩溃重启",
+      "checks": [
+        "执行已受理（running）后即硬杀主进程，无正常退出钩子",
+        "重启后遗留任务显式结算为 failed/HOST_RESTARTED（未伪造完成、未静默成功）",
+        "重启后画布可再打开并可写（占用解除，不再永久锁死）",
+        "重启后零重放：无新产物、媒体数不变",
+        "对已结算任务 run.cancel 幂等：仍为 failed，不复活、不改写",
+        "重启后可重新执行同一节点并完成（账本未中毒）"
+      ],
+      "trace": {
+        "mediaBeforeKill": 1,
+        "inFlight": "running",
+        "afterRestart": {
+          "state": "failed",
+          "error": "HOST_RESTARTED"
+        }
+      }
+    }
+  },
+  "checks": [
+    {
+      "code": "MACHINE_NOT_LICENSED",
+      "ok": true,
+      "detail": "C:\\Users\\Administrator\\AppData\\Roaming\\canvas-studio\\data\\security"
+    },
+    {
+      "code": "PROJECT_CREATE_FAILED",
+      "ok": true
+    },
+    {
+      "code": "PROJECT_OPEN_FAILED",
+      "ok": true
+    },
+    {
+      "code": "A_NODES_NOT_VISIBLE_IN_HOST",
+      "ok": true
+    },
+    {
+      "code": "A_GUI_UNDO_NOT_VISIBLE_EXTERNALLY",
+      "ok": true
+    },
+    {
+      "code": "A_GUI_REDO_NOT_VISIBLE_EXTERNALLY",
+      "ok": true
+    },
+    {
+      "code": "A_NODES_3_NOT_VISIBLE",
+      "ok": true
+    },
+    {
+      "code": "A_GUI_UNDO_SECOND_PATCH_FAILED",
+      "ok": true
+    },
+    {
+      "code": "A_GUI_REDO_SECOND_PATCH_FAILED",
+      "ok": true
+    },
+    {
+      "code": "A_TEXT_NODE_MISSING",
+      "ok": true
+    },
+    {
+      "code": "A_EXTERNAL_CANNOT_SEE_GUI_TEXT",
+      "ok": true
+    },
+    {
+      "code": "MACHINE_NOT_LICENSED",
+      "ok": true,
+      "detail": "C:\\Users\\Administrator\\AppData\\Roaming\\canvas-studio\\data\\security"
+    },
+    {
+      "code": "PROJECT_CREATE_FAILED",
+      "ok": true
+    },
+    {
+      "code": "PROJECT_CREATE_FAILED",
+      "ok": true
+    },
+    {
+      "code": "PROJECT_CREATE_FAILED",
+      "ok": true
+    },
+    {
+      "code": "PROJECT_OPEN_FAILED",
+      "ok": true
+    },
+    {
+      "code": "MEDIA_IMPORT_FAILED",
+      "ok": true
+    },
+    {
+      "code": "CLIP_NODE_MISSING",
+      "ok": true,
+      "detail": "[{\"ref\":\"src\",\"nodeId\":\"shape:VgzP7KyMxaA25dApnMwD_\"},{\"ref\":\"clip\",\"nodeId\":\"shape:gd7aLS6LTQlevGRnOZgHc\"}]"
+    },
+    {
+      "code": "EXECUTE_REJECTED",
+      "ok": true
+    },
+    {
+      "code": "EXECUTE_NOT_ACCEPTED",
+      "ok": true,
+      "detail": "{\"projectId\":\"uyhxLiGMV-oy\",\"taskId\":\"run-mw8t6pmh-cb09c9d9\",\"accepted\":true,\"mode\":\"single\",\"nodeIds\":[\"shape:gd7aLS6LTQlevGRnOZgHc\"],\"state\":\"running\"}"
+    },
+    {
+      "code": "C_INFLIGHT_SWITCH_NOT_BLOCKED",
+      "ok": true,
+      "detail": "{\"apiVersion\":1,\"requestId\":\"619befe0-275f-416f-882d-d1f263fda5c0\",\"operationId\":\"project.open\",\"traceId\":\"trace-e058f37b-bbf8-41bd-be64-3917cf2b4af0\",\"status\":\"failed\",\"idempotencyKey\":\"1794201396307:beaecba9-4cb9-4b3c-819f-8cb6a06b1d1f\",\"error\":{\"code\":\"RESOURCE_BUSY\",\"phase\":\"task-occupancy\",\"ret"
+    },
+    {
+      "code": "C_A_TASK_LOST_AFTER_BLOCKED_SWITCH",
+      "ok": true,
+      "detail": "{\"taskId\":\"run-mw8t6pmh-cb09c9d9\",\"projectId\":\"uyhxLiGMV-oy\",\"source\":\"node-run\",\"state\":\"running\",\"mode\":\"single\",\"nodeIds\":[\"shape:gd7aLS6LTQlevGRnOZgHc\"],\"cancelRequested\":false,\"error\":null,\"createdAt\":1794201396281,\"updatedAt\":1794201396282,\"hostResident\":true}"
+    },
+    {
+      "code": "C_CANCEL_REJECTED",
+      "ok": true
+    },
+    {
+      "code": "C_A_NOT_TERMINAL",
+      "ok": true,
+      "detail": "{\"taskId\":\"run-mw8t6pmh-cb09c9d9\",\"projectId\":\"uyhxLiGMV-oy\",\"source\":\"node-run\",\"state\":\"completed\",\"mode\":\"single\",\"nodeIds\":[\"shape:gd7aLS6LTQlevGRnOZgHc\"],\"cancelRequested\":false,\"error\":null,\"createdAt\":1794201396281,\"updatedAt\":1794201399705,\"hostResident\":true}"
+    },
+    {
+      "code": "PROJECT_OPEN_FAILED",
+      "ok": true
+    },
+    {
+      "code": "MEDIA_IMPORT_FAILED",
+      "ok": true
+    },
+    {
+      "code": "CLIP_NODE_MISSING",
+      "ok": true,
+      "detail": "[{\"ref\":\"src\",\"nodeId\":\"shape:4G564NtnjhQXUjQnJMAvO\"},{\"ref\":\"clip\",\"nodeId\":\"shape:FxnaDoaRudjcNUrfVQPGR\"}]"
+    },
+    {
+      "code": "EXECUTE_REJECTED",
+      "ok": true
+    },
+    {
+      "code": "EXECUTE_NOT_ACCEPTED",
+      "ok": true,
+      "detail": "{\"projectId\":\"3ixtKMce4WgP\",\"taskId\":\"run-mw8t6zer-a72e8eb3\",\"accepted\":true,\"mode\":\"single\",\"nodeIds\":[\"shape:FxnaDoaRudjcNUrfVQPGR\"],\"state\":\"running\"}"
+    },
+    {
+      "code": "C_B_INFLIGHT_SWITCH_NOT_BLOCKED",
+      "ok": true,
+      "detail": "{\"apiVersion\":1,\"requestId\":\"10b1ebe1-43ab-4e26-ad00-e36b62f19b1a\",\"operationId\":\"project.open\",\"traceId\":\"trace-fb810a3b-e2cf-4666-81a4-2afc4da99304\",\"status\":\"failed\",\"idempotencyKey\":\"1794201409008:fb813c69-62d8-456a-806a-fd6460afae22\",\"error\":{\"code\":\"RESOURCE_BUSY\",\"phase\":\"task-occupancy\",\"ret"
+    },
+    {
+      "code": "C_B_NOT_COMPLETED",
+      "ok": true,
+      "detail": "{\"taskId\":\"run-mw8t6zer-a72e8eb3\",\"projectId\":\"3ixtKMce4WgP\",\"source\":\"node-run\",\"state\":\"completed\",\"mode\":\"single\",\"nodeIds\":[\"shape:FxnaDoaRudjcNUrfVQPGR\"],\"cancelRequested\":false,\"error\":null,\"createdAt\":1794201408963,\"updatedAt\":1794201412188,\"hostResident\":true}"
+    },
+    {
+      "code": "PROJECT_OPEN_FAILED",
+      "ok": true
+    },
+    {
+      "code": "MEDIA_IMPORT_FAILED",
+      "ok": true
+    },
+    {
+      "code": "CLIP_NODE_MISSING",
+      "ok": true,
+      "detail": "[{\"ref\":\"src\",\"nodeId\":\"shape:ZS6CYk9c582_rQGVNooyI\"},{\"ref\":\"clip\",\"nodeId\":\"shape:BJSqm56jJ-zlHEDE0kOSB\"}]"
+    },
+    {
+      "code": "EXECUTE_REJECTED",
+      "ok": true
+    },
+    {
+      "code": "EXECUTE_NOT_ACCEPTED",
+      "ok": true,
+      "detail": "{\"projectId\":\"our73bkC8ka3\",\"taskId\":\"run-mw8t78we-5d20c0a0\",\"accepted\":true,\"mode\":\"single\",\"nodeIds\":[\"shape:BJSqm56jJ-zlHEDE0kOSB\"],\"state\":\"running\"}"
+    },
+    {
+      "code": "C_C_NOT_COMPLETED",
+      "ok": true,
+      "detail": "{\"taskId\":\"run-mw8t78we-5d20c0a0\",\"projectId\":\"our73bkC8ka3\",\"source\":\"node-run\",\"state\":\"completed\",\"mode\":\"single\",\"nodeIds\":[\"shape:BJSqm56jJ-zlHEDE0kOSB\"],\"cancelRequested\":false,\"error\":null,\"createdAt\":1794201421262,\"updatedAt\":1794201424449,\"hostResident\":true}"
+    },
+    {
+      "code": "C_OUTPUT_MISSING",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "code": "C_OUTPUT_CROSSED",
+      "ok": true
+    },
+    {
+      "code": "C_ARTIFACT_LEAKED_INTO_A",
+      "ok": true
+    },
+    {
+      "code": "MACHINE_NOT_LICENSED",
+      "ok": true,
+      "detail": "C:\\Users\\Administrator\\AppData\\Roaming\\canvas-studio\\data\\security"
+    },
+    {
+      "code": "PROJECT_CREATE_FAILED",
+      "ok": true
+    },
+    {
+      "code": "PROJECT_OPEN_FAILED",
+      "ok": true
+    },
+    {
+      "code": "MEDIA_IMPORT_FAILED",
+      "ok": true
+    },
+    {
+      "code": "CLIP_NODE_MISSING",
+      "ok": true,
+      "detail": "[{\"ref\":\"src\",\"nodeId\":\"shape:MNKGHJ_8tl7zD3eEej2HD\"},{\"ref\":\"clip\",\"nodeId\":\"shape:MSQ3Qs5KwTsvqVvBrQ4la\"}]"
+    },
+    {
+      "code": "EXECUTE_REJECTED",
+      "ok": true
+    },
+    {
+      "code": "EXECUTE_NOT_ACCEPTED",
+      "ok": true,
+      "detail": "{\"projectId\":\"0QKmtj9ujeKp\",\"taskId\":\"run-mw8t7m60-73fbeee1\",\"accepted\":true,\"mode\":\"single\",\"nodeIds\":[\"shape:MSQ3Qs5KwTsvqVvBrQ4la\"],\"state\":\"running\"}"
+    },
+    {
+      "code": "B_TASK_NOT_IN_FLIGHT",
+      "ok": true,
+      "detail": "{\"taskId\":\"run-mw8t7m60-73fbeee1\",\"projectId\":\"0QKmtj9ujeKp\",\"source\":\"node-run\",\"state\":\"running\",\"mode\":\"single\",\"nodeIds\":[\"shape:MSQ3Qs5KwTsvqVvBrQ4la\"],\"cancelRequested\":false,\"error\":null,\"createdAt\":1794201438456,\"updatedAt\":1794201438458,\"hostResident\":true}"
+    },
+    {
+      "code": "B_FAKE_COMPLETION",
+      "ok": true,
+      "detail": "{\"taskId\":\"run-mw8t7m60-73fbeee1\",\"projectId\":\"0QKmtj9ujeKp\",\"source\":\"node-run\",\"state\":\"failed\",\"mode\":\"single\",\"nodeIds\":[\"shape:MSQ3Qs5KwTsvqVvBrQ4la\"],\"cancelRequested\":false,\"error\":\"HOST_RESTARTED\",\"createdAt\":1794201438456,\"updatedAt\":1794201443542,\"hostResident\":true}"
+    },
+    {
+      "code": "B_STALE_RUN_NOT_SETTLED",
+      "ok": true,
+      "detail": "state=failed error=HOST_RESTARTED"
+    },
+    {
+      "code": "B_WRITE_STILL_BLOCKED",
+      "ok": true
+    },
+    {
+      "code": "B_REPLAY_PRODUCED_OUTPUT",
+      "ok": true,
+      "detail": "{\"projectId\":\"0QKmtj9ujeKp\",\"graphVersion\":8,\"nodeId\":\"shape:MSQ3Qs5KwTsvqVvBrQ4la\",\"nodeType\":\"video-clip\",\"outputSource\":\"run\",\"outputs\":[],\"projection\":\"deterministic@1\"}"
+    },
+    {
+      "code": "B_REPLAY_CREATED_MEDIA",
+      "ok": true,
+      "detail": "before=1 after=1"
+    },
+    {
+      "code": "B_SETTLED_RUN_MUTATED",
+      "ok": true,
+      "detail": "{\"apiVersion\":1,\"requestId\":\"1f479eaf-1a87-4b37-9c49-e7e0b6009ae6\",\"operationId\":\"run.cancel\",\"traceId\":\"trace-38999ccf-7279-4259-8cc2-71cdd9dba7b8\",\"status\":\"completed\",\"idempotencyKey\":\"1794201453556:2b802040-80b2-4b1c-b098-c6c79f5b7d9f\",\"data\":{\"projectId\":\"0QKmtj9ujeKp\",\"taskId\":\"run-mw8t7m60-73"
+    },
+    {
+      "code": "EXECUTE_REJECTED",
+      "ok": true
+    },
+    {
+      "code": "EXECUTE_NOT_ACCEPTED",
+      "ok": true,
+      "detail": "{\"projectId\":\"0QKmtj9ujeKp\",\"taskId\":\"run-mw8t80ro-5e702933\",\"accepted\":true,\"mode\":\"single\",\"nodeIds\":[\"shape:MSQ3Qs5KwTsvqVvBrQ4la\"],\"state\":\"running\"}"
+    },
+    {
+      "code": "B_RECOVERED_EXECUTE_FAILED",
+      "ok": true,
+      "detail": "{\"taskId\":\"run-mw8t80ro-5e702933\",\"projectId\":\"0QKmtj9ujeKp\",\"source\":\"node-run\",\"state\":\"completed\",\"mode\":\"single\",\"nodeIds\":[\"shape:MSQ3Qs5KwTsvqVvBrQ4la\"],\"cancelRequested\":false,\"error\":null,\"createdAt\":1794201457380,\"updatedAt\":1794201461060,\"hostResident\":true}"
+    }
+  ],
+  "failures": [],
+  "notes": [
+    "A：外部在未保存窗口内采到 unsaved=true（另证 latest 视图不假装已保存）",
+    "C：桌面为单活动画布；在途任务占用期间禁止切换（RESOURCE_BUSY），不存在跨画布并行执行；本段不宣称并行/排队语义"
+  ],
+  "status": "passed"
+}

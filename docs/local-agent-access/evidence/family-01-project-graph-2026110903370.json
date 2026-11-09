@@ -1,0 +1,216 @@
+{
+  "family": "project-graph",
+  "startedAt": "2026-11-09T03:35:09.048Z",
+  "steps": [
+    {
+      "name": "project.create",
+      "ok": true,
+      "detail": {
+        "projectId": "-d_6n_sl32Ol",
+        "graphVersion": 0
+      }
+    },
+    {
+      "name": "project.list 包含新项目",
+      "ok": true,
+      "detail": {
+        "total": 1
+      }
+    },
+    {
+      "name": "project.get",
+      "ok": true,
+      "detail": {
+        "graphVersion": 0
+      }
+    },
+    {
+      "name": "project.open 在真实桌面打开画布",
+      "ok": true,
+      "detail": {
+        "graphVersion": 0
+      }
+    },
+    {
+      "name": "graph.patch 建 2 个文本节点并连线",
+      "ok": true,
+      "detail": {
+        "nodeIds": [
+          "shape:LNG0gJiIt62TG12t-yTOM",
+          "shape:kqro-ZLy9lP1rJSdzB16R"
+        ],
+        "graphVersion": 3
+      }
+    },
+    {
+      "name": "graph.get 读图（节点数=2）",
+      "ok": true,
+      "detail": {
+        "nodes": 2,
+        "edges": 0
+      }
+    },
+    {
+      "name": "node.get 读节点内容",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "name": "graph.patch 改节点标题",
+      "ok": true,
+      "detail": {
+        "title": "节点甲-已改"
+      }
+    },
+    {
+      "name": "graph.patch 复制节点（编辑器节点数 2→3）",
+      "ok": true,
+      "detail": {
+        "copyNodeId": "shape:pUofN1fEW-8kHUgHDpn0f"
+      }
+    },
+    {
+      "name": "graph.patch 左对齐（坐标真的变了）",
+      "ok": true,
+      "detail": {
+        "xsBefore": [
+          400,
+          0,
+          40
+        ],
+        "xsAfter": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "name": "graph.patch 组合节点",
+      "ok": true,
+      "detail": {
+        "graphVersion": 15
+      }
+    },
+    {
+      "name": "canvas.history 撤销一步",
+      "ok": true,
+      "detail": {
+        "graphVersion": 18
+      }
+    },
+    {
+      "name": "canvas.history 重做一步",
+      "ok": true,
+      "detail": {
+        "graphVersion": 22
+      }
+    },
+    {
+      "name": "project.save（保存屏障）",
+      "ok": true,
+      "detail": {
+        "graphVersion": 24
+      }
+    },
+    {
+      "name": "project.rename",
+      "ok": true,
+      "detail": {
+        "name": "族1 验收项目-改名"
+      }
+    },
+    {
+      "name": "project.update（活动画布改名）",
+      "ok": true,
+      "detail": {
+        "graphVersion": 29
+      }
+    },
+    {
+      "name": "project.nodeVisibility.get",
+      "ok": true,
+      "detail": {
+        "hidden": 0
+      }
+    },
+    {
+      "name": "project.nodeVisibility.set（收窄可见节点类型再读回）",
+      "ok": true,
+      "detail": {
+        "visible": [
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "project.export 导出项目包到受控目录",
+      "ok": true,
+      "detail": {
+        "fileName": "family1.canvasbundle",
+        "byteSize": 1861
+      }
+    },
+    {
+      "name": "project.exportStructure",
+      "ok": true,
+      "detail": {
+        "nodeCount": 3
+      }
+    },
+    {
+      "name": "project.clone",
+      "ok": true,
+      "detail": {
+        "cloneId": "c7dvzoUY6oP0"
+      }
+    },
+    {
+      "name": "project.delete.precheck",
+      "ok": true,
+      "detail": {
+        "impactToken": "1794195963553.2fcc8b6d0d7da05e790f4edc1678d6907e0633196270ff0401ef118b59b7d851"
+      }
+    },
+    {
+      "name": "project.delete 删除克隆项目（带预检 token）",
+      "ok": true,
+      "detail": {
+        "remaining": 1
+      }
+    },
+    {
+      "name": "node.library.save 拒绝非 chat/agent 节点",
+      "ok": true,
+      "detail": {
+        "rejectedWith": "CHAT_NODE_REQUIRED"
+      }
+    },
+    {
+      "name": "project.close 关闭画布回到列表",
+      "ok": true,
+      "detail": {}
+    }
+  ],
+  "failures": [],
+  "notes": [
+    "group.delete 未验收：组合后的 group 形状 ID 不经回执暴露，外部无法在后续调用里解组",
+    "node.library.save 正确拒绝普通文本节点（CHAT_NODE_REQUIRED）：该功能只对 chat/agent 模板开放，属业务规则"
+  ],
+  "defects": [
+    {
+      "severity": "P1",
+      "status": "已修复（本轮验收中修复并复验）",
+      "title": "失败的 canvas.history 请求会推进图版本，导致重试永远追不上",
+      "repro": "scripts/probe-history-conflict.cjs：同一 expectedGraphVersion 连续 undo，版本 2→3→4→5→6→7",
+      "impact": "Agent 无法可靠执行撤销/重做；任何\"读版本→写\"的重试都会持续错位",
+      "rootCause": "每次桌面握手前都会走保存屏障，save 推进 graphVersion；而 history 原先要求版本**严格相等**，于是\"读到的版本\"必然比\"实际到达时的版本\"旧 1，且每次失败重试又推进 1，永远追不上",
+      "fix": "撤销/重做操作的是编辑器自己的历史栈，不会覆盖他人内容，因此把 expectedGraphVersion 降级为**建议值**：只拒绝\"超前版本\"（真正的状态错乱），允许落后版本（src/renderer/src/canvas/CanvasEditor.tsx）",
+      "verified": "修复后同一族验收 25/25 全通过，撤销/重做均返回新图版本"
+    }
+  ],
+  "finishedAt": "2026-11-09T03:36:04.512Z",
+  "total": 25,
+  "passed": 25,
+  "failed": 0
+}

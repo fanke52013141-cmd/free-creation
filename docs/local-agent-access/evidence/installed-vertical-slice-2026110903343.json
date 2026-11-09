@@ -1,0 +1,15 @@
+{
+  "status": "passed",
+  "mode": "installed",
+  "checks": [
+    "CLI create",
+    "second desktop on same data store rejected before creating a window",
+    "CLI node type list: 31 planned nodes",
+    "MCP SDK initialize/list/call; cross-transport idempotency",
+    "MCP rename → CLI save/export; bundle same revision/name",
+    "closed UI rename shares snapshot transaction; stale external revision rejected",
+    "desktop open/readback + UI-owned export rejected",
+    "offline error + durable receipt after app restart",
+    "actual JSONL lifecycle + content redaction"
+  ]
+}

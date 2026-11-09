@@ -101,3 +101,33 @@ export function projectHasActiveExternalRun(projectId: string): boolean {
     )
     .get(projectId)
 }
+
+/**
+ * 宿主启动结算：终态只能由宿主回执推进，新宿主启动时仍非终态的行必然已失去执行宿主
+ * （崩溃/退出）。统一结算为 failed/HOST_RESTARTED，保留行、不删除、不重放、不补产物。
+ * 调用方必须先持有接入服务进程锁，确认没有其他存活宿主。
+ */
+export function settleOrphanedExternalRuns(): {
+  id: string
+  projectId: string
+  from: string
+}[] {
+  const db = getDb()
+  const rows = db
+    .prepare(
+      "SELECT id,project_id,status FROM external_runs WHERE status IN ('accepted','running','cancel-requested') ORDER BY created_at"
+    )
+    .all() as { id: string; project_id: string; status: string }[]
+  if (rows.length === 0) return []
+  const update = db.prepare(
+    "UPDATE external_runs SET status='failed', error='HOST_RESTARTED', updated_at=? WHERE id=? AND status IN ('accepted','running','cancel-requested')"
+  )
+  const settled: { id: string; projectId: string; from: string }[] = []
+  db.transaction(() => {
+    const now = Date.now()
+    for (const row of rows)
+      if (update.run(now, row.id).changes === 1)
+        settled.push({ id: row.id, projectId: row.project_id, from: row.status })
+  })()
+  return settled
+}

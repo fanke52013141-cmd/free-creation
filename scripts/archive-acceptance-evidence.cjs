@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * 把验收报告归档进 docs（qa/ 被 gitignore，换机器就丢，证据必须可追溯）。
  *

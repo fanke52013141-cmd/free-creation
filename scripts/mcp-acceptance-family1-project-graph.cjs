@@ -187,14 +187,14 @@ async function main() {
     // ── 3. 建两个节点（同一批次）+ 连线 ──
     const patched = await step('graph.patch 建 2 个文本节点并连线', async () => {
       const data = ok(
-        await call('graph.patch', {
+        await callWithVersionRetry('graph.patch', (version) => ({
           projectId,
-          expectedGraphVersion: graphVersion,
+          expectedGraphVersion: version,
           ops: [
             { action: 'node.create', ref: 'a', nodeType: 'text', x: 0, y: 0, title: '节点甲' },
             { action: 'node.create', ref: 'b', nodeType: 'text', x: 400, y: 120, title: '节点乙' }
           ]
-        }),
+        })),
         'graph.patch node.create'
       )
       graphVersion = await currentVersion()
@@ -219,11 +219,11 @@ async function main() {
 
     await step('graph.patch 改节点标题', async () => {
       const data = ok(
-        await call('graph.patch', {
+        await callWithVersionRetry('graph.patch', (version) => ({
           projectId,
-          expectedGraphVersion: graphVersion,
+          expectedGraphVersion: version,
           ops: [{ action: 'node.update', nodeId: nodeA, title: '节点甲-已改' }]
-        }),
+        })),
         'graph.patch node.update'
       )
       graphVersion = await currentVersion()
@@ -235,11 +235,11 @@ async function main() {
 
     await step('graph.patch 复制节点（编辑器节点数 2→3）', async () => {
       const data = ok(
-        await call('graph.patch', {
+        await callWithVersionRetry('graph.patch', (version) => ({
           projectId,
-          expectedGraphVersion: graphVersion,
+          expectedGraphVersion: version,
           ops: [{ action: 'node.duplicate', nodeId: nodeA, ref: 'copy' }]
-        }),
+        })),
         'graph.patch node.duplicate'
       )
       graphVersion = await currentVersion()
@@ -254,9 +254,9 @@ async function main() {
       const before = ok(await call('graph.get', { projectId }), 'graph.get before align')
       const xsBefore = before.nodes.map((node) => node.x)
       const data = ok(
-        await call('graph.patch', {
+        await callWithVersionRetry('graph.patch', (version) => ({
           projectId,
-          expectedGraphVersion: graphVersion,
+          expectedGraphVersion: version,
           ops: [
             {
               action: 'layout.align',
@@ -264,7 +264,7 @@ async function main() {
               nodeIds: before.nodes.map((node) => node.nodeId)
             }
           ]
-        }),
+        })),
         'graph.patch layout.align'
       )
       graphVersion = await currentVersion()
@@ -277,11 +277,11 @@ async function main() {
     await step('graph.patch 组合节点', async () => {
       const graph = ok(await call('graph.get', { projectId }), 'graph.get before group')
       const data = ok(
-        await call('graph.patch', {
+        await callWithVersionRetry('graph.patch', (version) => ({
           projectId,
-          expectedGraphVersion: graphVersion,
+          expectedGraphVersion: version,
           ops: [{ action: 'group.create', nodeIds: graph.nodes.slice(0, 2).map((n) => n.nodeId) }]
-        }),
+        })),
         'graph.patch group.create'
       )
       graphVersion = await currentVersion()

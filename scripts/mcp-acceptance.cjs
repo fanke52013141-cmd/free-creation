@@ -1,7 +1,6 @@
 ﻿/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty, no-irregular-whitespace */
-/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
 ﻿/**
- * 真实 MCP 客户端验收：把 133 项外部操作逐个过一遍真实 MCP 协议栈
+ * 真实 MCP 客户端验收：把全部外部操作逐个过一遍真实 MCP 协议栈
  * （@modelcontextprotocol/sdk Client + StdioClientTransport，不是直接调服务）。
  *
  * 目的：证明"Agent 真能通过 MCP 用这些能力"，而不只是单元测试里逻辑正确。
@@ -19,7 +18,7 @@
  */
 const { _electron } = require('playwright')
 const { cp, mkdir, mkdtemp, readFile, writeFile, rm } = require('node:fs/promises')
-const { existsSync } = require('node:fs')
+const { existsSync, readFileSync } = require('node:fs')
 const { resolve, join } = require('node:path')
 const { tmpdir, homedir } = require('node:os')
 const { randomUUID } = require('node:crypto')
@@ -29,6 +28,8 @@ const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio
 const electron = require('electron')
 const appRoot = resolve('.')
 const cliPath = join(appRoot, 'out/main/local-agent.js')
+// 期望工具数以门禁契约快照为唯一事实源，不再硬编码（注册表扩容后硬编码必然过期）。
+const expectedToolCount = JSON.parse(readFileSync(join(appRoot, 'docs/local-agent-access/generated/contracts.json'), 'utf8')).operations.length
 const key = () => `${Date.now()}:${randomUUID()}`
 
 /** 本机已激活授权的 security 目录（设备绑定，同一机器有效）。 */
@@ -154,7 +155,7 @@ async function main() {
 
     const listed = await client.listTools()
     report.toolCount = listed.tools.length
-    record('tools/list 返回工具数 = 133', listed.tools.length === 133, String(listed.tools.length))
+    record(`tools/list 返回工具数 = ${expectedToolCount}`, listed.tools.length === expectedToolCount, String(listed.tools.length))
     const missingSchema = listed.tools.filter(
       (tool) => !tool.inputSchema || tool.inputSchema.type !== 'object'
     )

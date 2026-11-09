@@ -124,6 +124,26 @@ describe('C2.2 command intent foundation (not dispatch authorization)', () => {
     snapshot.store['camera:page'] = { x: 12, y: 20, z: 0.5 }
     expect(projectSemanticRevision(file)).toBe(revision)
   })
+  it('ignores resumable supplier task ids on video configs but keeps video intent', () => {
+    const video = project()
+    video.nodes[0].type = 'video'
+    video.nodes[0].contractVersion = 7
+    shape(video).props.nodeType = 'video'
+    const config = (mode: 'text' | 'reference', taskId: string): string =>
+      JSON.stringify({ mode, modelKey: 'video-test::doubao', params: {}, taskId })
+    const setConfig = (value: string): void => {
+      // props.config 与项目节点 params.config 同步保存，两处都必须归一化。
+      shape(video).props.config = value
+      video.nodes[0].params = { config: value }
+    }
+    setConfig(config('text', 'fv-old'))
+    const revision = projectSemanticRevision(video)
+    // 执行器把供应商任务号写回 config 只是续跑标记，不应让已下发命令变成"画布已变更"。
+    setConfig(config('text', 'fv-new'))
+    expect(projectSemanticRevision(video)).toBe(revision)
+    setConfig(config('reference', 'fv-new'))
+    expect(projectSemanticRevision(video)).not.toBe(revision)
+  })
   it('changes for body, configuration, contract, fixed output, relation or input edge edits', () => {
     const original = projectSemanticRevision(project())
     const mutations: Array<(file: ProjectFile) => void> = [

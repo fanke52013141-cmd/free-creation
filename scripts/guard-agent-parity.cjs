@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * 铁律守卫：一次跑完 Agent 对接的三道门。
  *

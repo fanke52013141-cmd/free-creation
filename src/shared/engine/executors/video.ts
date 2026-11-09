@@ -142,12 +142,11 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
       void ctx.gateway.videoCancel(submitted.data.taskId, ctx.diagnostics?.traceId)
       return { status: 'skipped', reason: '已取消' }
     }
-    // 任务号持久化到节点 config：退出项目/返回首页后主进程仍会继续轮询，
+    // 任务号持久化到节点 meta：退出项目/返回首页后主进程仍会继续轮询，
     // 重新进入时 recoverRunningNodes 用这个 taskId 接回原任务，不再误判为中断。
-    const rawConfig = parseJsonObj(readNodeConfig(ctx.shape)) ?? {}
-    ctx.updateProps({
-      config: JSON.stringify({ ...rawConfig, taskId: submitted.data.taskId })
-    })
+    // 不能写进 config——config 参与命令意图修订与输入指纹，运行期写入会让
+    // 已下发命令在提交时被误判为"画布/输入已变更"。
+    ctx.updateMeta?.({ videoTaskId: submitted.data.taskId })
     const result = await waitForVideo(
       ctx.gateway,
       submitted.data.taskId,

@@ -1,0 +1,308 @@
+{
+  "status": "passed",
+  "checks": [
+    "created three independent project canvases via CLI",
+    "serially opened A/B/C and applied atomic batch graph patches with id mapping",
+    "idempotency: same key replays the original receipt without duplicating nodes",
+    "illegal operations leave no half-applied graph (reference + compatibility)",
+    "unsaved user edit flushed and preserved; stale agent version rejected then retried on fresh revision",
+    "deterministic text flow executed via node.execute and formal output read via output.get",
+    "project isolation: nodes/media/tasks do not cross A/B/C",
+    "F4 image family: media.import → graph.patch media reference → local crop execute → formal artifact on disk and indexed",
+    "F4 quad crop: four-point perspective crop executes and materializes a formal artifact",
+    "F4 clamp: out-of-bounds crop rect clamped at execution by the same normalization as GUI",
+    "F4 split: 2x2 grid split materializes exactly four indexed assets with selected-cell projection",
+    "F4 split failure rollback: corrupt source fails the run and leaves no orphan cell assets",
+    "F4 cancel contract: terminal-task cancel is an honest no-op; unknown task rejected",
+    "F5 video-frame: 2000ms frame extraction from imported video materializes an indexed PNG",
+    "F5 video-clip: 3s-6s clip materializes both video and audio artifacts of matching range and duration",
+    "F5 sound-adjust: 2x rate adjustment halves duration via the same ffmpeg pipeline as GUI",
+    "F5 timeline: track/clip structure edits via graph.patch persist across reads, then compose materializes an independent 4s video artifact",
+    "F6 chat: external graph.patch creates a real canvas chat node; chat.patch appends a user message that the GUI dialog really renders",
+    "F6 chat: chat.messages read-back preserves user message order/content; the same idempotency key replays the original receipt without duplicating messages",
+    "F6 chat attachment: mediaId-only input is resolved by the host into project-relative path and MIME in persisted data and GUI image; cross-project mediaId is rejected with MEDIA_NOT_FOUND and leaves no half message",
+    "F6 chat execute: with no verified text model the run fails honestly with the same reason as GUI; no fabricated assistant reply",
+    "F6 chat guard: a chat.patch mixed with geometry ops is rejected before admission (MIXED_PATCH_UNSUPPORTED); neither a node nor a message is half-applied",
+    "F6 publish: manual-publish is not smuggled through node.execute; the external prepare only registers a pending request and a human authorizes it in the GUI confirm dialog",
+    "F6 publish: after human authorization the host renders with the same GUI publish service, writes the formal publish record, the artifact exists on disk and output.get projects it as manual-publish",
+    "F6 publish: when the human denies, the request is revoked and continue fails with PUBLISH_DENIED without producing a second artifact",
+    "F7 audio: external graph.patch creates speech/tts/voice-design nodes; node.get reads back their types, titles and JSON configs and all three render as GUI node cards without opening an editor",
+    "F7 audio: tts without reference audio is honestly gated with 缺少参考语音 and no success state, so no voice-clone request is sent",
+    "F7 audio: speech and voice-design without a verified model are gated with the executor reasons 功能 speech.synthesize 尚未绑定已验证语音模型 / 功能 voice.design 尚未绑定已验证音色设计模型",
+    "F7 audio: zero paid side effects — media.list count is unchanged, output.get exposes no fabricated image/audio/video output and node exec is not success",
+    "F7 library: CLI library.resource.create imports a local PNG into the resource library (blob stored, byte size equals the source file)",
+    "F7 library: library.resource.materialize creates a canvas image node via the authoritative host; graph.get and node.get see it after a formal save",
+    "F7 library: the materialized node references a project-controlled media copy (projects/<id>/media, readable on disk with identical bytes), not the resource-library blob",
+    "F7 library: the materialized node and its media file survive an app restart unchanged",
+    "F7 node library: node.library.compose saves three selected nodes and their two connecting edges plus the media reference as one reusable entry",
+    "F7 node library: node.library.insert instantiates the entry on another opened canvas (3 nodes / 2 edges) with every node and edge id remapped",
+    "F7 node library: the inserted image node references a fresh project-controlled media copy under the target project; the source project media is untouched and never reused across canvases",
+    "F7 node library: replaying the same idempotency key returns the original receipt without creating a second copy of nodes or media",
+    "F7 history: after project.open and an explicit stable save, history.snapshot.create captures the persisted graph as a restorable snapshot with the expected node count",
+    "F7 history: history.restore.precheck issues a bound token and history.restore returns the persisted graph to the snapshot state — node ids/types/titles, node text/config and edge count all match, not just the version",
+    "F7 history: the pre-restore checkpoint is listed as restorable and restoring it returns the canvas to the modified state including the newly added node",
+    "F7 history: history.restore without the precheck token is rejected with IMPACT_CONFIRM_REQUIRED before touching the project",
+    "F7 history: restoring a project that is open in the desktop is refused with RESOURCE_BUSY (desktop-ownership) and does not change its graph version",
+    "F8 flowAgent.build: inspect reads a real canvas builder node preview (null before propose); propose without a verified tool-calling model is refused at the model gate with AGENT_MODEL_UNAVAILABLE and persists no preview; external-sent request identity is rejected by the strict input schema",
+    "F8 flowAgent.build.commit: without a persisted preview it is refused with FLOW_BUILD_MISSING before any desktop write; build operations on a non-active canvas are refused with ACTIVE_PROJECT_REQUIRED",
+    "F8 flowAgent.review: a real ai-review node is refused at the model gate with AGENT_MODEL_UNAVAILABLE before any model request; a non-review node is refused with FLOW_REVIEW_CONFIG_INVALID; external input cannot carry a verdict (strict schema rejects the extra field)",
+    "F8 honest boundary: flowAgent.cooperate / flowAgent.publication are not registered and the CLI refuses them locally (CLI_INVALID_RESULT:2; no external substitute for human decisions or internal publication)",
+    "graph structure and task ledger survive app restart",
+    "human reopened project in GUI, continued editing without conversion",
+    "diagnostics JSONL exists without prompt/body/user-content leakage"
+  ],
+  "projects": {
+    "A": {
+      "id": "21kAYJ-1NThL",
+      "name": "角色素材",
+      "graphVersion": 109
+    },
+    "B": {
+      "id": "rGpY363ftz75",
+      "name": "视频剪辑",
+      "graphVersion": 14
+    },
+    "C": {
+      "id": "63KZ51-DGbhs",
+      "name": "配音",
+      "graphVersion": 7
+    }
+  },
+  "execute": {
+    "taskId": "run-mw8p6l20-8b89c6f6",
+    "finalState": "completed",
+    "outputText": "用户未保存的手工正文\n$$$\nA 前缀："
+  },
+  "crop": {
+    "mediaId": "4efrs5FjIh",
+    "artifactMediaId": "t8GY-t-TH5",
+    "outputPath": "projects/21kAYJ-1NThL/media/t8GY-t-TH5.png"
+  },
+  "split": {
+    "cells": 4,
+    "selected": "8W8i42mY6k"
+  },
+  "frame": {
+    "mediaId": "nLAJGHH_BL"
+  },
+  "clip": {
+    "videoMediaId": "VzQyuG_4Mo",
+    "audioMediaId": "Y-Na9RE6i4",
+    "durationSec": 3
+  },
+  "adjust": {
+    "mediaId": "C1CnVgmzxc",
+    "durationSec": 5.006009
+  },
+  "timeline": {
+    "composedMediaId": "lV1nOaFabo",
+    "durationSec": 4.021029,
+    "tracks": 2
+  },
+  "chat": {
+    "nodeId": "shape:X77lI547_uc-8WzoR2aJ5",
+    "sessionId": "chat-1794194748583",
+    "messages": [
+      {
+        "role": "user",
+        "content": "F6 外部追加：对话面板应可见的第一条用户消息"
+      },
+      {
+        "role": "user",
+        "content": "F6 外部追加：对话顺序验证的第二条用户消息"
+      },
+      {
+        "role": "user",
+        "content": "F6 外部追加：宿主注入附件的第三条用户消息"
+      }
+    ],
+    "attachment": {
+      "mediaId": "F0oR02Ingr",
+      "mediaPath": "projects/21kAYJ-1NThL/media/F0oR02Ingr.png",
+      "mime": "image/png"
+    },
+    "idempotentReplay": {
+      "graphVersion": 73,
+      "totalAfterReplay": 1
+    },
+    "gui": {
+      "messageBubbles": 3,
+      "imageLoaded": true,
+      "screenshot": "milestone-f6-chat-dialog.png"
+    },
+    "execute": {
+      "taskId": "run-mw8p8l0v-a1d9c4b9",
+      "state": "failed",
+      "error": "功能 chat.generate 尚未绑定已验证文本模型",
+      "modelPath": "none: isolated data dir has no verified text model connection (same failure as GUI)"
+    },
+    "crossProjectMedia": {
+      "attemptedMediaId": "7ywUFs7sTa",
+      "code": "MEDIA_NOT_FOUND",
+      "totalAfter": 3
+    },
+    "mixedBatch": {
+      "code": "MIXED_PATCH_UNSUPPORTED",
+      "totalAfterMixed": 3,
+      "nodeCreated": false
+    }
+  },
+  "publish": {
+    "nodeId": "shape:4xIdsblKQnhrtk2R_2fW7",
+    "publishRequestId": "pub_jigPG6cyH7b5ahx4du38",
+    "artifact": {
+      "mediaId": "tUduWgi-XG",
+      "mediaPath": "projects/21kAYJ-1NThL/media/tUduWgi-XG.png",
+      "mime": "image/png"
+    },
+    "outputSource": "manual-publish",
+    "deniedCode": "PUBLISH_DENIED"
+  },
+  "audioFamily": {
+    "nodes": {
+      "f7-speech": {
+        "nodeId": "shape:MKW6V_Lc0UZXmJOC9pEpX",
+        "nodeType": "speech",
+        "taskId": "run-mw8p9l3d-9ee7a7b0",
+        "state": "failed",
+        "reason": "功能 speech.synthesize 尚未绑定已验证语音模型",
+        "exec": "idle",
+        "output": "empty"
+      },
+      "f7-tts": {
+        "nodeId": "shape:HlCxSLDycEzuWe3yd5AjW",
+        "nodeType": "tts",
+        "taskId": "run-mw8p9ovf-11a8595c",
+        "state": "failed",
+        "reason": "缺少参考语音",
+        "exec": "idle",
+        "output": "empty"
+      },
+      "f7-voice-design": {
+        "nodeId": "shape:6Q-RrLhywR3Ybh6ln0SCl",
+        "nodeType": "voice-design",
+        "taskId": "run-mw8p9sn1-60068a6c",
+        "state": "failed",
+        "reason": "功能 voice.design 尚未绑定已验证音色设计模型",
+        "exec": "idle",
+        "output": "unsupported:UNSUPPORTED_CONTRACT"
+      }
+    },
+    "media": {
+      "before": 21,
+      "after": 21
+    },
+    "paidRequests": "none: executors gate on missing reference audio / unbound verified voice models before any gateway call"
+  },
+  "library": {
+    "resourceId": "n5eRr0hi2syr",
+    "revisionId": "WFNex8tOVwSt",
+    "componentId": "1RIpoHvcMXVd",
+    "blob": {
+      "hasBlob": true,
+      "sizeBytes": 2007
+    },
+    "materialize": {
+      "usageId": "72cj05fE8kmZ",
+      "graphVersion": 92,
+      "nodeId": "shape:oe91DYAJERwRYNoxg0ixS",
+      "mediaId": "9VgsbvjzLW",
+      "mediaPath": "projects/21kAYJ-1NThL/media/9VgsbvjzLW.png",
+      "bytes": 2007
+    },
+    "restart": {
+      "nodeId": "shape:oe91DYAJERwRYNoxg0ixS",
+      "mediaId": "9VgsbvjzLW"
+    }
+  },
+  "nodeLibrary": {
+    "entryId": "hAqW2F4s6EfF",
+    "entry": {
+      "nodeCount": 3,
+      "edgeCount": 2
+    },
+    "source": {
+      "projectId": "21kAYJ-1NThL",
+      "nodeIds": [
+        "shape:CGZeeeHGMLv7V8n2G_CTs",
+        "shape:1IAg1w1KiqQHiDpHoBeNQ",
+        "shape:ZNYOBm64sh4tjvsjM-x_I"
+      ],
+      "mediaId": "XpyYmkJk6_"
+    },
+    "insert": {
+      "projectId": "rGpY363ftz75",
+      "graphVersion": 8,
+      "applied": {
+        "nodeCreated": 3,
+        "nodeUpdated": 0,
+        "nodeDeleted": 0,
+        "edgeCreated": 2,
+        "edgeDeleted": 0
+      },
+      "media": [
+        {
+          "entryMediaId": "XpyYmkJk6_",
+          "mediaId": "hPIr2msddJ"
+        }
+      ],
+      "skippedEdges": 0,
+      "before": {
+        "total": 4,
+        "edges": 2,
+        "media": 1
+      }
+    },
+    "replay": {
+      "graphVersion": 8,
+      "total": 7,
+      "media": 2
+    }
+  },
+  "history": {
+    "projectId": "CyzmuzItd8mN",
+    "snapshotId": "_qbhV8bPdNVq",
+    "checkpointSnapshotId": "3apxTOohQEsl",
+    "base": {
+      "nodeCount": 3,
+      "edgeCount": 2,
+      "graphVersion": 5
+    },
+    "modified": {
+      "nodeCount": 4,
+      "edgeCount": 2,
+      "graphVersion": 9,
+      "addedNodeId": "shape:1DnKJctvzX7KZIFPQTZnq"
+    },
+    "restore": {
+      "graphVersion": 12,
+      "previousGraphVersion": 11,
+      "nodeCount": 3,
+      "edgeCount": 2
+    },
+    "checkpointRestore": {
+      "nodeCount": 4,
+      "edgeCount": 2
+    },
+    "tokenRequired": "IMPACT_CONFIRM_REQUIRED",
+    "activeRestore": {
+      "code": "RESOURCE_BUSY",
+      "detail": "desktop-ownership",
+      "blockers": [
+        "ACTIVE_PROJECT"
+      ]
+    }
+  },
+  "flowAgent": {
+    "builderNodeId": "shape:N1XO0qrf-8VmPsY0urevN",
+    "reviewNodeId": "shape:pxiTjidj9q6O9hLw3itAO",
+    "buildInspect": "null-preview",
+    "buildPropose": "AGENT_MODEL_UNAVAILABLE",
+    "buildCommitMissing": "FLOW_BUILD_MISSING",
+    "buildInactive": "ACTIVE_PROJECT_REQUIRED",
+    "forgedIdentity": "CLI_LOCAL_REJECTED",
+    "review": "AGENT_MODEL_UNAVAILABLE",
+    "reviewWrongNode": "FLOW_REVIEW_CONFIG_INVALID",
+    "forgedVerdict": "CLI_LOCAL_REJECTED"
+  }
+}

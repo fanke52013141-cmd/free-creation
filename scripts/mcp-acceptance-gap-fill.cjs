@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, no-empty */
 /**
  * MCP 验收 · 补齐最后 10 项（前几族未触及的操作）。
  *
