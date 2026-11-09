@@ -122,9 +122,14 @@ function repair() {
     console.error('先跑 license:restore，或从生成根的机器拷贝 store。')
     return 1
   }
-  const activate = join(root, 'qa', 'activate-dev-license.cjs')
-  if (!existsSync(activate)) {
-    console.error('缺少激活脚本 qa/activate-dev-license.cjs')
+  // 优先用入库版本（qa/ 被 gitignore，换机后可能不存在，而修复必须能跑）。
+  const activateCandidates = [
+    join(root, 'scripts', 'activate-dev-license.cjs'),
+    join(root, 'qa', 'activate-dev-license.cjs')
+  ]
+  const activate = activateCandidates.find((candidate) => existsSync(candidate))
+  if (!activate) {
+    console.error('缺少激活脚本 scripts/activate-dev-license.cjs')
     return 1
   }
   // 关键：让**未打包构建**信任本机 store 的根，否则签出来的授权不会被接受。
