@@ -66,7 +66,9 @@ export function buildViduVideoArgs(input: ViduVideoArgs): string[] {
     // 首帧/首尾帧按图片推导画幅；文生和参考模式显式传画幅。
     ...(type === 'img2video' || type === 'headtailimg2video' ? [] : ['--aspect-ratio', input.ratio || '16:9']),
     // 3.1/3.2 的图片类任务要求 transition，纯文生（3.2）也支持。
-    ...(type === 'text2video' ? [] : ['--transition', 'pro']),
+    // Q4（3.4）**明确不接受** transition：CLI 会返回
+    // "Q4 should not include transition"（client_error，本地即失败，不会产生任务）。
+    ...(type === 'text2video' || input.modelId === VIDU_Q4_MODEL ? [] : ['--transition', 'pro']),
     '--schedule-mode', 'normal', '--sample-count', '1', '--codec', 'h264',
     ...input.imagePaths.flatMap((path) => [`--image=${path}`])
   ]

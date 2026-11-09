@@ -8,6 +8,9 @@ describe('Vidu CLI task contract', () => {
     expect(args[args.indexOf('--type') + 1]).toBe('character2video')
     expect(args).toContain('--image=start.png')
     expect(args).toContain('--duration')
+    // 2026-11-09 用户报障：Q4 传 transition 会被 CLI 拒绝
+    // （"Q4 should not include transition"，client_error，任务不会创建）。
+    expect(args).not.toContain('--transition')
   })
 
   it('Q3 first frame uses img2video, one ordered image and required transition', () => {

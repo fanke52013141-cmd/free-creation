@@ -1329,8 +1329,20 @@ async function pollLoop(
   } catch (e) {
     if (['success', 'failed', 'cancelled'].includes(getVideoTask(taskId)?.status ?? '')) return
     const msg = e instanceof Error ? e.message : String(e)
-    const definitive = e instanceof GatewayError &&
-      (e.code === 'GEN_FAILED' || e.code === 'DREAMINA_REFERENCE_AUDIO_INVALID')
+    // 确定性失败：参数/配置/依赖问题，重试不会变好，也不存在"远端可能已提交"。
+    // 2026-11-09：Vidu Q4 曾把 client_error（"Q4 should not include transition"）
+    // 标成 unknown，用户只看到"远端结果尚未确认"而不知道参数被拒——这里补上。
+    const DEFINITIVE_CODES = [
+      'GEN_FAILED',
+      'DREAMINA_REFERENCE_AUDIO_INVALID',
+      'INVALID_INPUT',
+      'VIDU_MODEL_UNSUPPORTED',
+      'PROVIDER_NO_KEY',
+      'PROVIDER_MISSING',
+      'VIDU_CLI_MISSING',
+      'VIDU_CLI_VERSION'
+    ]
+    const definitive = e instanceof GatewayError && DEFINITIVE_CODES.includes(e.code)
     if (definitive) updateTask(taskId, { status: 'failed', error: msg })
     else if (!(e instanceof GraphWriteInProgressError)) markUnknown(taskId)
     clearCancelled(taskId)

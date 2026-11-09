@@ -103,6 +103,19 @@ export async function runViduJson(
         if (data.ok === false || data.error) {
           const error = data.error && typeof data.error === 'object' ? data.error as Record<string, unknown> : {}
           const httpStatus = Number(error.http_status)
+          // CLI 的 client_error 是**本地参数/约束校验**失败：请求根本没有发出去，
+          // 属确定性错误，必须把原因如实带回（此前被吞成 VIDU_CLI_FAILED →
+          // 上层标 unknown，用户只看到"远端结果尚未确认"，实际是参数不被接受）。
+          if (error.type === 'client_error') {
+            const detail =
+              typeof error.message === 'string'
+                ? error.message.replace(/[\r\n]+/g, ' ').slice(0, 200)
+                : ''
+            throw new ViduCliError(
+              'INVALID_INPUT',
+              'Vidu 拒绝了本次参数' + (detail ? '：' + detail : '，请检查模型与参数')
+            )
+          }
           if (httpStatus === 429) throw new ViduCliError('UPSTREAM_RATE_LIMIT', 'Vidu 查询触发限流，请稍后继续核对原任务')
           if (httpStatus >= 500 && args[0] === 'task' && args[1] === 'get')
             throw new ViduCliError('TIMEOUT', 'Vidu 暂时无法查询任务，请稍后继续核对原任务')
