@@ -14,7 +14,7 @@
 | 附带修复的验证脚本问题 | 3 个脚本（`test:local-agent-access` 与 `test:diagnostics-window-close` 缺授权目录复制；`optimizations` A3 版本竞态未重试） |
 | 未修复观察项 | 2 个（取消语义、计划中的"跨画布并行"假设不成立） |
 | 验收脚本 | `scripts/test-agent-parity-gaps.cjs`，已纳入 `npm run verify:acceptance`（`parity-gaps` 批次） |
-| R3 全链 | 前段全绿（单测 3111/跳过 7、全部桌面专项至 agent-flow-recovery）；**视频 Agent Flow 11 个脚本为既有回归红点**（HEAD 复现，非本轮引入，见 §五附） |
+| R3 全链 | 前段全绿（单测 3111/跳过 7、全部桌面专项至 agent-flow-recovery）；视频 Agent Flow 11 个脚本为既有回归红点（HEAD 复现，非本轮引入，见 §五附）；**已于同日修复并全链转绿（run-jeMqF7，[69](69-video-flow-revision-fix.md)）** |
 
 ## 一、范围与计划修正
 

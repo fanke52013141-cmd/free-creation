@@ -97,5 +97,6 @@ R3 中 11 个视频 Agent Flow 脚本稳定失败（unknown 保持 / 返工 / �
 
 修复：任务号改存 `meta.videoTaskId`（`recoverVideoRuns` 兼容旧 `config.taskId`）；
 `semanticProjectPayload` 对视频 `config`/`params.config` 忽略遗留 taskId。新增两个定向单测。
-修复后 11 个脚本全部通过，`verify:acceptance` 9/9。详见
-[69 视频 Flow 回归修复](69-video-flow-revision-fix.md)。
+修复后 11 个脚本全部通过，`verify:acceptance` 9/9；`npm run verify` 全链
+**exit 0**（run-jeMqF7，单测 3113 通过/7 跳过，agent-flow 全家族与 r09 全绿）。
+详见 [69 视频 Flow 回归修复](69-video-flow-revision-fix.md)。

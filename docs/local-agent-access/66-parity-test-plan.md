@@ -321,7 +321,7 @@ L4 规范化对照方法：同一起始项目与同一操作意图分别走 GUI�
 | --- | --- | --- | --- |
 | R1 基线重跑（约半天） | L0+L1+L3 全量，产出当日真相快照 | `guard:agent-parity` → `typecheck` → `test` → `build` → `verify:acceptance`（全量 8 批）→ milestone | 全绿；当日分母/操作数/检查数写入报告；任何红先修再进 R2 |
 | R2 缺口补齐（1–2 天） | §6 三个缺口：GUI 反向腿对照、真实崩溃/回执丢失专项、画布切换与隔离（原"双画布并发"假设已作废见 §6） | 新增 `scripts/test-agent-parity-gaps.cjs`，纳入 `verify:acceptance` | **已完成 2026-11-09**：A 6/6、C 6/6、B 6/6；修复 2 个真实缺陷 + 1 个验证链回归；证据见 [68 报告](68-r2-gap-report.md) |
-| R3 全量回归（约半天） | 完整验证链 | `npm run verify:checks` + `verify:acceptance` | **2026-11-09 已跑**：前段全绿、验收 9/9；视频 Agent Flow 11 个脚本为既有回归红点（HEAD 复现，非本轮引入），待单独定位后再判全链绿 |
+| R3 全量回归（约半天） | 完整验证链 | `npm run verify:checks` + `verify:acceptance` | **2026-11-09 全链绿**：`npm run verify` exit 0（run-jeMqF7，单测 3113 通过/7 跳过；验收 9/9）；视频 Agent Flow 回归已修复（[69](69-video-flow-revision-fix.md)） |
 | R4 人工/付费（用户排期） | §8 四条路径 | runbook + 一次性手测脚本 | 验收记录四列填完；例外清单相应关闭 |
 | R5 发布验收（用户授权打包后） | T10 全部 | 打包 + `CANVAS_LOCAL_AGENT_INSTALL_ROOT` 指向安装目录重跑验收 | §0.3 发布判据满足；剩余限制清单发布 |
 

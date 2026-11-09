@@ -76,7 +76,12 @@ unknown 分支按设计进入 `waiting/reconcile`。
 
 ## 五、R3 全链结果
 
-（`npm run verify` 结果在本轮完成后回填。）
+2026-11-09 15:04–15:31（本地）`npm run verify` 全链**通过（exit 0）**，证据
+`qa/verification/run-jeMqF7/status.json`。关键数字：单测 **3113 通过 / 7 跳过**
+（268 个文件通过 / 2 跳过），模型测试 2 通过；lint、类型检查 ×4、日志门禁、接入门禁、
+浏览器 UI 门禁、构建、`test:local-agent-access`、诊断关窗、agent-flow 全家族
+（含 11 个原红脚本）与 r09 可靠性全部通过。**这是本会话首次全链绿**；原先的视频
+Agent Flow 红区已由本修复消除。
 
 ## 附：变更文件
 
