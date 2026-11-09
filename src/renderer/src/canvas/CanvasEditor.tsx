@@ -1,4 +1,4 @@
-﻿import { reportCanvasFailure } from './canvas-diagnostics'
+import { reportCanvasFailure } from './canvas-diagnostics'
 import { ensureCanvasSaved } from './flow-asset-actions'
 import { readNodeRunHistory, readNodeRunRecord } from '../engine/runRecord'
 import { commitFlowBuild } from './flow-build-actions'
@@ -13,7 +13,6 @@ import type { ProjectMeta, MediaAsset, NodeTypeId } from '@shared/types'
 import type { WorkspaceProfile } from '@shared/workspace-profile'
 import { Tooltip } from '../components/Tooltip'
 import { NodeCardUtil, type NodeCardProps, type NodeCardShape } from './NodeCardShape'
-import { BackdropShapeUtil } from './BackdropShape'
 import { CarrierArrowUtil } from './CarrierArrowUtil'
 import { repairTldrawSnapshot } from './tldrawSnapshotRepair'
 import { NodeCreateMenu } from './NodeCreateMenu'
@@ -477,6 +476,45 @@ export function CanvasEditor({
     }
   }, [project.id, providers])
 
+  // Ctrl / Cmd + 框选 = **加选**（2026-11-09 用户需求）。
+  // tldraw 原生只认 Shift 加选；这里在按下瞬间记住既有选择，松手后（等 tldraw 处理完
+  // pointerup 再合并，否则会被它随后写入的选择覆盖）把新框到的并入。
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el || !editorInstance) return
+    let base: TLShapeId[] = []
+    let active = false
+    const onPointerDown = (event: PointerEvent): void => {
+      if (event.button !== 0) return
+      const additive = event.ctrlKey || event.metaKey
+      base = additive ? [...editorInstance.getSelectedShapeIds()] : []
+      active = additive && base.length > 0
+    }
+    const onPointerUp = (): void => {
+      if (!active) return
+      const editor = editorRef.current
+      active = false
+      if (!editor) return
+      // 延迟到 tldraw 的 pointerup/选择更新之后执行；再多合并一次以覆盖拖拽结束时的二次选择。
+      const merge = (): void => {
+        const current = editor.getSelectedShapeIds()
+        const union = [...new Set([...base, ...current])]
+        if (union.length !== current.length) editor.select(...union)
+      }
+      window.setTimeout(merge, 0)
+      window.setTimeout(merge, 60)
+      base = []
+    }
+    el.addEventListener('pointerdown', onPointerDown, { capture: true })
+    window.addEventListener('pointerup', onPointerUp, { capture: true })
+    window.addEventListener('pointercancel', onPointerUp, { capture: true })
+    return () => {
+      el.removeEventListener('pointerdown', onPointerDown, { capture: true })
+      window.removeEventListener('pointerup', onPointerUp, { capture: true })
+      window.removeEventListener('pointercancel', onPointerUp, { capture: true })
+    }
+  }, [editorInstance])
+
   // One capture listener routes the wheel to the selected node or pans the canvas.
   // Keep this ahead of tldraw's focus-dependent wheel handler.
   useEffect(() => {
@@ -500,62 +538,6 @@ export function CanvasEditor({
       window.clearTimeout(settleTimer)
       el.classList.remove('is-camera-interacting')
       el.removeEventListener('wheel', onWheel, { capture: true })
-    }
-  }, [editorInstance])
-
-  // 开发态调试钩子：验收脚本据此确定性地选择节点（生产构建不存在）。
-  useEffect(() => {
-    if (!editorInstance) return
-    ;(window as unknown as { __canvasEditor?: Editor }).__canvasEditor = editorInstance
-    return () => {
-      delete (window as unknown as { __canvasEditor?: Editor }).__canvasEditor
-    }
-  }, [editorInstance])
-
-  // Ctrl / Cmd + 框选 = **加选**（2026-11-09 用户需求）。
-  // tldraw 原生只支持 Shift 加选；用户习惯用 Ctrl，这里在捕获阶段记录按下瞬间的
-  // 既有选择，并在拖动过程中把新框到的形状并入，松手后清除。
-  useEffect(() => {
-    const el = wrapRef.current
-    if (!el || !editorInstance) return
-    let base: TLShapeId[] = []
-    let active = false
-    let applying = false
-    const merge = (): void => {
-      if (!active || applying) return
-      const editor = editorRef.current
-      if (!editor) return
-      const current = editor.getSelectedShapeIds()
-      const union = [...new Set([...base, ...current])]
-      if (union.length === current.length) return
-      applying = true
-      try {
-        editor.select(...union)
-      } finally {
-        applying = false
-      }
-    }
-    const onPointerDown = (event: PointerEvent): void => {
-      if (event.button !== 0) return
-      const additive = event.ctrlKey || event.metaKey
-      base = additive ? [...editorInstance.getSelectedShapeIds()] : []
-      active = additive && base.length > 0
-    }
-    const onPointerUp = (): void => {
-      if (!active) return
-      merge()
-      active = false
-      base = []
-    }
-    const unsub = editorInstance.store.listen(merge, { scope: 'session' })
-    el.addEventListener('pointerdown', onPointerDown, { capture: true })
-    window.addEventListener('pointerup', onPointerUp, { capture: true })
-    window.addEventListener('pointercancel', onPointerUp, { capture: true })
-    return () => {
-      unsub()
-      el.removeEventListener('pointerdown', onPointerDown, { capture: true } as never)
-      window.removeEventListener('pointerup', onPointerUp, { capture: true } as never)
-      window.removeEventListener('pointercancel', onPointerUp, { capture: true } as never)
     }
   }, [editorInstance])
 
@@ -2902,7 +2884,7 @@ export function CanvasEditor({
       <Tldraw
         onMount={handleMount}
         getShapeVisibility={artifactShapeVisibility}
-        shapeUtils={[NodeCardUtil, CarrierArrowUtil, BackdropShapeUtil]}
+        shapeUtils={[NodeCardUtil, CarrierArrowUtil]}
         cameraOptions={{
           // 统一滚轮路由使用这些 Ctrl / Cmd 缩放档位。
           zoomSteps: [0.1, 0.25, 0.5, 1, 2, 4]

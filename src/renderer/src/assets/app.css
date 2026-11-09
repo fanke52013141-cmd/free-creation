@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   color-scheme: dark;
   --bg: #141414;
   --card: #1f1f1f;
@@ -1013,8 +1013,8 @@ select:focus-visible {
 
 .canvas-group-outline {
   position: absolute;
-  /* 2026-11-09 用户反馈：分组框原来的深色渐变底像给节点"盖了一层蒙版"，节点变糊。
-     改为**只有细虚线边框**，不填充、不遮罩，节点保持完全清晰；分组靠边框+标签表达。 */
+  /* 2026-11-09 用户反馈：原来的深色渐变底像给节点盖了一层蒙版，节点变糊。
+     改为只有细虚线边框、不填充不遮罩，节点保持完全清晰。 */
   border: 1px dashed rgba(231, 238, 247, 0.26);
   border-radius: calc(18px * var(--group-zoom, 1));
   background: transparent;
@@ -13036,38 +13036,4 @@ canvas.tl-canvas-indicators {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* 背景板（backdrop）标签与工具栏色板。2026-11-09 用户需求：
-   淡色可伸缩矩形用于归类，节点保持清晰，不被蒙版覆盖。 */
-.backdrop-label {
-  position: absolute;
-  left: 14px;
-  top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  pointer-events: none;
-  user-select: none;
-}
-.backdrop-label-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  flex: 0 0 auto;
-}
-.ms-swatch {
-  width: 18px;
-  height: 18px;
-  margin: 0 1px;
-  padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 999px;
-  cursor: pointer;
-}
-.ms-swatch:hover {
-  border-color: rgba(255, 255, 255, 0.5);
 }
