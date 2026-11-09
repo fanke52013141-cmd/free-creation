@@ -9495,15 +9495,15 @@ select:focus-visible {
 }
 
 /* 2026-11-09 用户反馈：窄栏里"导出接收凭证"折成两行很难看。
-   改为等宽自适应网格：每个按钮内部永不折行，空间不够时整颗按钮换到下一行。 */
+   按钮按内容宽度排列、内部永不折行；按钮数量变化时也不会被拉成一整行。 */
 .gw-provider-transfer-actions {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
-  align-items: stretch;
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
 }
 
 .gw-provider-transfer-actions button {
-  flex: 1;
+  flex: 0 0 auto;
   min-width: 0;
   white-space: nowrap;
 }
@@ -9641,19 +9641,6 @@ select:focus-visible {
 }
 .gw-keys-dialog .gw-transfer-actions .btn-ghost:hover {
   background: rgba(148, 163, 184, 0.26);
-}
-.gw-provider-transfer-actions {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-.gw-provider-transfer-actions .btn-ghost {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 6px 8px;
-  font-size: 12px;
-  white-space: nowrap;
 }
 
 .gw-item {
