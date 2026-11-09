@@ -103,7 +103,11 @@
     "test:local-agent-access": "node scripts/test-local-agent-access.cjs",
     "verify:acceptance": "node scripts/verify-acceptance.cjs",
     "verify:acceptance:fast": "node scripts/verify-acceptance.cjs --fast",
-    "guard:agent-parity": "node scripts/guard-agent-parity.cjs"
+    "guard:agent-parity": "node scripts/guard-agent-parity.cjs",
+    "license:check": "node scripts/license-tool.cjs check",
+    "license:backup": "node scripts/license-tool.cjs backup",
+    "license:restore": "node scripts/license-tool.cjs restore",
+    "license:repair": "node scripts/license-tool.cjs repair"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.34",

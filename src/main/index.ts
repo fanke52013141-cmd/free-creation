@@ -1,7 +1,7 @@
-import { app, clipboard, shell, BrowserWindow, protocol, Menu, net, powerMonitor } from 'electron'
+﻿import { app, clipboard, shell, BrowserWindow, protocol, Menu, net, powerMonitor } from 'electron'
 import { setImageNetworkFetch } from './gateway/image'
-import { join, extname } from 'path'
-import { createReadStream } from 'fs'
+import { join, extname, isAbsolute } from 'path'
+import { createReadStream, existsSync, readFileSync } from 'fs'
 import { stat } from 'fs/promises'
 import { Readable } from 'stream'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -372,11 +372,77 @@ interface LicenseGateOutcome {
   adapter: DeviceKeyAdapter
 }
 
+/**
+ * 开发构建的授权便利开关（**仅未打包构建生效**，发布包一律忽略）：
+ *
+ * 背景：授权是"设备 + 信任根"双绑定的。开发根一旦被重新 init-root，旧根签发的授权
+ * 立刻作废，本机就会反复被要求授权；而新根的私钥往往只在生成它的那台机器上。
+ *
+ * 两个环境变量只服务于本机开发/自测：
+ * - `CANVAS_LICENSE_TRUSTED_ROOT_STORE=<dir>`：用该目录的 `root.public.json` 作为信任根。
+ *   本机只有旧根私钥时，用它就能继续用旧根签发/校验，不被仓库里的新根阻断。
+ * - `CANVAS_LICENSE_DEV_BYPASS=1`：完全跳过授权门禁（调试用，日志会留痕）。
+ *
+ * 发布包（`app.isPackaged`）不读这两个变量，因此不影响发行版安全。
+ */
+function resolveDevelopmentTrustedRoot(): typeof TRUSTED_ROOT {
+  if (app.isPackaged) return TRUSTED_ROOT
+  // 优先读"本机开发配置"（gitignored，一次写好就不用再管）：
+  //   <repo>/.canvas-license-dev.json  →  { "trustedRootStore": "qa/security-dev-root" }
+  let storeDir = process.env.CANVAS_LICENSE_TRUSTED_ROOT_STORE
+  if (!storeDir) {
+    try {
+      const configPath = join(app.getAppPath(), '.canvas-license-dev.json')
+      if (existsSync(configPath)) {
+        const config = JSON.parse(readFileSync(configPath, 'utf8')) as {
+          trustedRootStore?: unknown
+        }
+        if (typeof config.trustedRootStore === 'string' && config.trustedRootStore.trim())
+          storeDir = config.trustedRootStore.trim()
+      }
+    } catch {
+      // 配置损坏不阻断启动：回退到构建内固定根。
+    }
+  }
+  if (!storeDir) return TRUSTED_ROOT
+  const resolvedStore = isAbsolute(storeDir) ? storeDir : join(app.getAppPath(), storeDir)
+  try {
+    const file = join(resolvedStore, 'root.public.json')
+    const raw = JSON.parse(readFileSync(file, 'utf8')) as {
+      kid?: unknown
+      publicKey?: unknown
+      environment?: unknown
+    }
+    if (typeof raw.kid !== 'string' || typeof raw.publicKey !== 'string')
+      throw new Error('root.public.json 缺少 kid/publicKey')
+    log.warn(
+      `license: 开发构建使用了信任根覆盖 store=${resolvedStore} kid=${raw.kid}（发布包不会这样）`
+    )
+    return {
+      ...TRUSTED_ROOT,
+      kid: raw.kid,
+      publicKey: raw.publicKey
+    } as typeof TRUSTED_ROOT
+  } catch (error) {
+    log.error(
+      'license: 忽略无效的开发信任根配置（' +
+        (error instanceof Error ? error.message : String(error)) +
+        '），回退到构建内固定根'
+    )
+    return TRUSTED_ROOT
+  }
+}
+
 async function bootLicenseGate(): Promise<LicenseGateOutcome | null> {
+  // 仅开发构建（未打包）允许跳过门禁；发布包不读该开关。
+  if (!app.isPackaged && process.env.CANVAS_LICENSE_DEV_BYPASS === '1') {
+    log.warn('license: 已通过 CANVAS_LICENSE_DEV_BYPASS 跳过授权门禁（仅开发构建；发布包不生效）')
+    return null
+  }
   const { adapter, detail } = await selectDeviceAdapter({ dataDir: getDataDir() })
   log.info(`license: 设备适配器=${adapter.keySource}（${detail}）`)
   const service = new LicenseService({
-    root: TRUSTED_ROOT,
+    root: resolveDevelopmentTrustedRoot(),
     adapter,
     storageDir: join(getDataDir(), 'security')
   })
