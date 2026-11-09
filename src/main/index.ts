@@ -1,4 +1,5 @@
-﻿import { app, clipboard, shell, BrowserWindow, protocol, Menu, net, powerMonitor } from 'electron'
+import { app, clipboard, shell, BrowserWindow, protocol, Menu, net, powerMonitor } from 'electron'
+import { execFileSync } from 'node:child_process'
 import { setImageNetworkFetch } from './gateway/image'
 import { join, extname, isAbsolute } from 'path'
 import { createReadStream, existsSync, readFileSync } from 'fs'
@@ -59,6 +60,15 @@ import { KeyPackageService, type KeyPackageDatabase } from './security/keystore/
 import { TRUSTED_ROOT } from './security/license/trusted-root.generated'
 
 log.initialize()
+// Windows 控制台默认代码页（GBK/936）会把 UTF-8 日志显示成乱码。
+// 若进程附着在控制台上（用户从命令行/快捷方式启动看到日志窗口），先切到 UTF-8。
+if (process.platform === 'win32' && process.stdout.isTTY) {
+  try {
+    execFileSync('cmd.exe', ['/d', '/c', 'chcp', '65001'], { stdio: 'ignore', windowsHide: true })
+  } catch {
+    // 切码页失败不影响业务：日志文件本身始终是 UTF-8。
+  }
+}
 log.info('main process starting', {
   appVersion: app.getVersion(),
   packaged: app.isPackaged,
