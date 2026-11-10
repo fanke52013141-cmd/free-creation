@@ -157,7 +157,12 @@ export const IPC = {
     publish: 'composite:publish',
     versionGet: 'composite:version:get',
     archive: 'composite:archive',
-    verify: 'composite:verify'
+    verify: 'composite:verify',
+    runStart: 'composite:run:start',
+    runStep: 'composite:run:step',
+    runFinish: 'composite:run:finish',
+    runGet: 'composite:run:get',
+    runList: 'composite:run:list'
   },
   workspace: {
     listTemplates: 'workspace:templates:list',

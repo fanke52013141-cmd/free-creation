@@ -12,6 +12,7 @@ import type {
   CompositeRunRequest
 } from '@shared/engine/composite-run-contract'
 import { parseMediaResultCollection } from '@shared/engine/values'
+import { compositeContentHash } from '@shared/composite/manifest'
 import type { ProviderSummary } from '@shared/types'
 import { NodeCardUtil, type NodeCardShape } from '../canvas/NodeCardShape'
 import { CarrierArrowUtil } from '../canvas/CarrierArrowUtil'
@@ -40,9 +41,29 @@ async function execute(
 ): Promise<CompositeRunOutcome> {
   const { manifest } = request
   if (request.signal?.cancelled) return { status: 'failed', reason: '组合运行已取消' }
+  const runId = request.runId ?? crypto.randomUUID()
   const runEditor = createRunEditor()
+  let ledgerStarted = false
+  const report = async (fn: () => Promise<unknown>): Promise<void> => {
+    try {
+      await fn()
+    } catch {
+      // 账本失败不能改变组合业务结果（日志/存储降级）。
+    }
+  }
   const shapeByNode = new Map<string, TLShapeId>()
   try {
+    const contentHash = await compositeContentHash(manifest)
+    await report(() =>
+      window.api.composite.runStart({
+        id: runId,
+        projectId,
+        capabilityId: manifest.capabilityId,
+        capabilityVersion: manifest.version,
+        contentHash
+      })
+    )
+    ledgerStarted = true
     for (const node of manifest.graph.nodes) {
       const id = createShapeId()
       shapeByNode.set(node.id, id)
@@ -124,7 +145,13 @@ async function execute(
       if (request.signal?.cancelled) return { status: 'failed', reason: '组合运行已取消', stepCount: successfulSteps }
       const shapeId = shapeByNode.get(nodeId)
       if (!shapeId) continue
+      await report(() =>
+        window.api.composite.runStep({ runId, stepKey: nodeId, nodeType: manifest.graph.nodes.find((node) => node.id === nodeId)?.nodeType ?? '', status: 'running' })
+      )
       const result = await runNodeManually(runEditor, projectId, providers, shapeId)
+      await report(() =>
+        window.api.composite.runStep({ runId, stepKey: nodeId, nodeType: manifest.graph.nodes.find((node) => node.id === nodeId)?.nodeType ?? '', status: result.status === 'failed' ? 'failed' : 'completed', ...(result.reason ? { reason: result.reason } : {}) })
+      )
       if (result.status === 'failed') {
         return { status: 'failed', reason: result.reason ?? `内部节点失败：${nodeId}`, stepCount: successfulSteps }
       }
@@ -139,6 +166,7 @@ async function execute(
         collection?.results.find((entry) => entry.mediaId === collection.selectedMediaId) ??
         collection?.results.at(-1)
       if (item) {
+        await report(() => window.api.composite.runFinish({ runId, status: 'completed' }))
         return {
           status: 'done',
           media: { mediaId: item.mediaId, mediaPath: item.mediaPath, mime: item.mime },
@@ -146,6 +174,7 @@ async function execute(
         }
       }
       if (shape?.props.mediaId && shape.props.mediaPath) {
+        await report(() => window.api.composite.runFinish({ runId, status: 'completed' }))
         return {
           status: 'done',
           media: {
@@ -157,8 +186,10 @@ async function execute(
         }
       }
     }
+    await report(() => window.api.composite.runFinish({ runId, status: 'failed', errorCode: 'NO_OUTPUT', errorMessage: '组合没有产生可投影的公开输出' }))
     return { status: 'failed', reason: '组合没有产生可投影的公开输出', stepCount: successfulSteps }
   } catch (error) {
+    if (ledgerStarted) await report(() => window.api.composite.runFinish({ runId, status: 'failed', errorCode: 'COMPOSITE_EXCEPTION', errorMessage: error instanceof Error ? error.message : String(error) }))
     return {
       status: 'failed',
       reason: `组合隔离执行异常：${error instanceof Error ? error.message : String(error)}`

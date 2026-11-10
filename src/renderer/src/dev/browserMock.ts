@@ -520,7 +520,12 @@ export function installBrowserMock(): void {
         }),
       versionGet: () => Promise.resolve({ ok: true, data: null }),
       archive: () => Promise.resolve({ ok: true, data: true }),
-      verify: () => Promise.resolve({ ok: true, data: { ok: true } })
+      verify: () => Promise.resolve({ ok: true, data: { ok: true } }),
+      runStart: (input: { id: string }) => Promise.resolve({ ok: true, data: { id: input.id } }),
+      runStep: () => Promise.resolve({ ok: true, data: true }),
+      runFinish: () => Promise.resolve({ ok: true, data: true }),
+      runGet: () => Promise.resolve({ ok: true, data: null }),
+      runList: () => Promise.resolve({ ok: true, data: [] })
     } as unknown as WindowApi['composite'],
     workspace: {
       listTemplates: () =>

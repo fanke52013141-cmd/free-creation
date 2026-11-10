@@ -540,7 +540,32 @@ const api = {
       capabilityId: string
       version: string
     }): Promise<IpcEnvelope<{ ok: boolean; reason?: string }>> =>
-      ipcRenderer.invoke(IPC.composite.verify, input)
+      ipcRenderer.invoke(IPC.composite.verify, input),
+    runStart: (input: {
+      id: string
+      projectId: string
+      capabilityId: string
+      capabilityVersion: string
+      contentHash: string
+      instanceNodeId?: string
+    }): Promise<IpcEnvelope<unknown>> => ipcRenderer.invoke(IPC.composite.runStart, input),
+    runStep: (input: {
+      runId: string
+      stepKey: string
+      nodeType: string
+      status: 'running' | 'completed' | 'failed' | 'cancelled' | 'skipped'
+      reason?: string
+    }): Promise<IpcEnvelope<boolean>> => ipcRenderer.invoke(IPC.composite.runStep, input),
+    runFinish: (input: {
+      runId: string
+      status: 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'unknown'
+      errorCode?: string
+      errorMessage?: string
+    }): Promise<IpcEnvelope<boolean>> => ipcRenderer.invoke(IPC.composite.runFinish, input),
+    runGet: (runId: string): Promise<IpcEnvelope<unknown>> =>
+      ipcRenderer.invoke(IPC.composite.runGet, runId),
+    runList: (input: { projectId: string; limit?: number }): Promise<IpcEnvelope<unknown>> =>
+      ipcRenderer.invoke(IPC.composite.runList, input)
   },
   workspace: {
     listTemplates: (): Promise<IpcEnvelope<WorkflowTemplateRecord[]>> =>

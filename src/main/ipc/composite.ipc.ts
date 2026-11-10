@@ -20,6 +20,13 @@ import {
   saveCompositeDraft,
   verifyCompositeVersion
 } from '../store/composite.repo'
+import {
+  createCompositeRun,
+  finishCompositeRun,
+  getCompositeRun,
+  listCompositeRuns,
+  recordCompositeRunStep
+} from '../store/composite-run.repo'
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -36,6 +43,59 @@ function failure(error: unknown): IpcEnvelope<never> {
 }
 
 export function registerCompositeIpc(): void {
+  ipcMain.handle(
+    IPC.composite.runStart,
+    (_event, input: Parameters<typeof createCompositeRun>[0]): IpcEnvelope<unknown> => {
+      try {
+        return ok(createCompositeRun(input))
+      } catch (error) {
+        return failure(error)
+      }
+    }
+  )
+  ipcMain.handle(
+    IPC.composite.runStep,
+    (_event, input: Parameters<typeof recordCompositeRunStep>[0]): IpcEnvelope<boolean> => {
+      try {
+        recordCompositeRunStep(input)
+        return ok(true)
+      } catch (error) {
+        return failure(error)
+      }
+    }
+  )
+  ipcMain.handle(
+    IPC.composite.runFinish,
+    (_event, input: Parameters<typeof finishCompositeRun>[0]): IpcEnvelope<boolean> => {
+      try {
+        finishCompositeRun(input)
+        return ok(true)
+      } catch (error) {
+        return failure(error)
+      }
+    }
+  )
+  ipcMain.handle(
+    IPC.composite.runGet,
+    (_event, runId: string): IpcEnvelope<unknown> => {
+      try {
+        return ok(getCompositeRun(runId ?? ''))
+      } catch (error) {
+        return failure(error)
+      }
+    }
+  )
+  ipcMain.handle(
+    IPC.composite.runList,
+    (_event, input: { projectId: string; limit?: number }): IpcEnvelope<unknown> => {
+      try {
+        return ok(listCompositeRuns(input?.projectId ?? '', input?.limit))
+      } catch (error) {
+        return failure(error)
+      }
+    }
+  )
+
   ipcMain.handle(
     IPC.composite.search,
     (_event, input: CompositeSearchInput = {}): IpcEnvelope<CompositeCapabilitySummary[]> => {
