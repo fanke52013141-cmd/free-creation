@@ -20,6 +20,7 @@ import { useGatewayStore } from '../stores/gateway'
 import { useWorkflowStore, type WorkflowTemplate } from '../stores/workflow'
 import { addNodeLibraryEntry } from './node-library'
 import { CompositeVersionDialog } from '../composite/CompositeVersionDialog'
+import { CompositeCanvasEditor } from '../composite/CompositeCanvasEditor'
 import { markUndoPoint } from './history'
 import { toast } from '../stores/toast'
 import { useConfirmStore } from '../stores/confirm'
@@ -77,6 +78,10 @@ function formatTime(ts: number): string {
 }
 
 // ── 节点库面板 ──
+function versionLabel(version: string): string {
+  return version.replace(/\.0\.0$/, '.0')
+}
+
 function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId: string }): React.JSX.Element {
   const templates = useWorkflowStore((s) => s.templates)
   const wfLoad = useWorkflowStore((s) => s.load)
@@ -84,6 +89,7 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
   const [query, setQuery] = useState('')
   const [composites, setComposites] = useState<CompositeCapabilitySummary[]>([])
   const [versionDialog, setVersionDialog] = useState<{ capability: CompositeCapabilitySummary; mode: 'edit' | 'next' } | null>(null)
+  const [canvasEdit, setCanvasEdit] = useState<{ capability: CompositeCapabilitySummary; manifest: import('@shared/composite/manifest').CompositeManifest } | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const needle = query.trim().toLocaleLowerCase()
   const visibleTemplates = templates.filter((template) =>
@@ -142,6 +148,19 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
     })
     editor.select(id)
     toast(`已添加组合「${capability.name} v${version}」`)
+  }
+
+  const openCanvasEdit = async (capability: CompositeCapabilitySummary, mode: 'edit' | 'next'): Promise<void> => {
+    const latest = capability.latestVersion
+    if (!latest) return toast('该组合还没有已发布版本')
+    const result = await window.api.composite.versionGet({ capabilityId: capability.id, version: latest })
+    if (!result.ok || !result.data) return toast('读取组合版本失败')
+    const manifest = structuredClone(result.data.manifest)
+    if (mode === 'next') {
+      const major = Number.parseInt(versionLabel(manifest.version), 10)
+      manifest.version = `${Number.isFinite(major) ? major + 1 : 1}.0`
+    }
+    setCanvasEdit({ capability, manifest })
   }
 
   const handleRun = async (template: WorkflowTemplate): Promise<void> => {
@@ -211,7 +230,7 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
                     className="btn-ghost small"
                     onClick={(event) => {
                       event.stopPropagation()
-                      setVersionDialog({ capability, mode: 'edit' })
+                      void openCanvasEdit(capability, 'edit')
                     }}
                   >
                     编辑
@@ -221,10 +240,20 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
                     className="btn-ghost small"
                     onClick={(event) => {
                       event.stopPropagation()
-                      setVersionDialog({ capability, mode: 'next' })
+                      void openCanvasEdit(capability, 'next')
                     }}
                   >
                     新版本
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost small"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setVersionDialog({ capability, mode: 'edit' })
+                    }}
+                  >
+                    版本
                   </button>
                 </span>
               </div>
@@ -242,6 +271,19 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
         </div>
       )}
     </div>
+    {canvasEdit && (
+      <CompositeCanvasEditor
+        capability={canvasEdit.capability}
+        manifest={canvasEdit.manifest}
+        projectId={projectId}
+        onClose={() => setCanvasEdit(null)}
+        onSaved={() => {
+          void window.api.composite.search().then((result) => {
+            if (result.ok) setComposites(result.data)
+          })
+        }}
+      />
+    )}
     {versionDialog && (
       <CompositeVersionDialog
         capability={versionDialog.capability}

@@ -76,3 +76,41 @@
 }
 .composite-sheet-footer .hint { flex: 1; color: #78869c; font-size: 10px; line-height: 1.4; }
 .composite-sheet-error { color: #ffb4ab; font-size: 11px; white-space: pre-wrap; }
+
+
+/* 全屏组合内部图编辑模式 */
+.composite-canvas-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  display: flex;
+  flex-direction: column;
+  background: #101010;
+}
+.composite-canvas-topbar {
+  height: 46px;
+  flex: 0 0 46px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-bottom: 1px solid #232936;
+  background: #131313;
+  color: #f1f5f9;
+  font-size: 12px;
+}
+.composite-canvas-stage { flex: 1; position: relative; min-height: 0; }
+.composite-canvas-stage .tl-container { position: absolute; inset: 0; }
+.composite-canvas-overlay .node-contract-panel { z-index: 2600; }
+.composite-canvas-warning {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 2600;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #7a5c1e;
+  background: rgba(40, 30, 10, 0.92);
+  color: #f5d48a;
+  font-size: 11px;
+}
