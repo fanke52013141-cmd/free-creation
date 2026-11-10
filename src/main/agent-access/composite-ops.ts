@@ -10,6 +10,7 @@ import {
   publishCompositeVersion,
   saveCompositeDraft
 } from '../store/composite.repo'
+import { getCompositeRun, listCompositeRuns } from '../store/composite-run.repo'
 
 interface CompositeOperationContext {
   diagnostics?: { traceId: string; spanId: string }
@@ -86,6 +87,17 @@ export async function runCompositeOperation(
         contentHash: result.record.contentHash,
         created: result.created
       }
+    }
+    case 'composite.run.get': {
+      const record = getCompositeRun(String(input.runId ?? ''))
+      if (!record) throw new DesktopAccessError('NOT_FOUND', false, 'composite-run')
+      return record
+    }
+    case 'composite.run.list': {
+      return listCompositeRuns(
+        String(input.projectId ?? ''),
+        typeof input.limit === 'number' ? input.limit : undefined
+      )
     }
     case 'composite.archive': {
       const capabilityId = String(input.capabilityId ?? '')

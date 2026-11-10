@@ -57,6 +57,8 @@ export const OPERATION_REQUIREMENTS: Record<string, readonly string[]> = {
   'composite.validate': [],
   'composite.publish': [],
   'composite.archive': [],
+  'composite.run.get': [],
+  'composite.run.list': [],
   'node.library.compose': ['nodeLibraryEntry'],
   'chat.skill.list': ['openProject', 'chatNode'],
   'chat.skill.bind': ['openProject', 'chatNode'],

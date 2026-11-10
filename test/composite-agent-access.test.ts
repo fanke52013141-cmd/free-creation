@@ -72,8 +72,8 @@ function manifest(): CompositeManifest {
 }
 
 describe('组合能力 Agent 契约（P1 对等）', () => {
-  it('composite.* 七项操作全部进入统一 Registry，输入输出成对', () => {
-    expect(Object.keys(COMPOSITE_OPERATIONS)).toHaveLength(7)
+  it('composite.* 九项操作全部进入统一 Registry，输入输出成对', () => {
+    expect(Object.keys(COMPOSITE_OPERATIONS)).toHaveLength(9)
     for (const id of Object.keys(COMPOSITE_OPERATIONS)) {
       expect(ACCESS_OPERATIONS).toHaveProperty(id)
       expect(COMPOSITE_OUTPUTS).toHaveProperty(id)

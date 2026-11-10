@@ -2143,6 +2143,48 @@
         "composite.get"
       ],
       "note": "按内容摘要核对版本完整性"
+    },
+    "ipc.composite.runStart": {
+      "label": "组合运行开始",
+      "channel": "composite:run:start",
+      "gui": "组合运行账本",
+      "phase": "excluded",
+      "external": [],
+      "note": "GUI/运行器内部账本写入，不是外部业务动作；由运行入口统一产生，外部只查询 composite.run.get/list"
+    },
+    "ipc.composite.runStep": {
+      "label": "组合内部步骤",
+      "channel": "composite:run:step",
+      "gui": "组合运行账本",
+      "phase": "excluded",
+      "external": [],
+      "note": "GUI/运行器内部账本写入，不是外部业务动作；由运行入口统一产生，外部只查询 composite.run.get/list"
+    },
+    "ipc.composite.runFinish": {
+      "label": "组合运行终态",
+      "channel": "composite:run:finish",
+      "gui": "组合运行账本",
+      "phase": "excluded",
+      "external": [],
+      "note": "GUI/运行器内部账本写入，不是外部业务动作；由运行入口统一产生，外部只查询 composite.run.get/list"
+    },
+    "ipc.composite.runGet": {
+      "label": "组合运行查询",
+      "channel": "composite:run:get",
+      "gui": "组合运行账本",
+      "phase": "external",
+      "external": [
+        "composite.run.get"
+      ]
+    },
+    "ipc.composite.runList": {
+      "label": "组合运行列表",
+      "channel": "composite:run:list",
+      "gui": "组合运行账本",
+      "phase": "external",
+      "external": [
+        "composite.run.list"
+      ]
     }
   }
 }
