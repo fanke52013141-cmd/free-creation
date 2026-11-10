@@ -2349,6 +2349,131 @@
                   "properties": {
                     "action": {
                       "type": "string",
+                      "const": "backdrop.create"
+                    },
+                    "backdropId": {
+                      "type": "string",
+                      "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+                    },
+                    "nodeIds": {
+                      "minItems": 2,
+                      "maxItems": 200,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+                      }
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "backdropId",
+                    "nodeIds"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "backdrop.delete"
+                    },
+                    "backdropId": {
+                      "type": "string",
+                      "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "backdropId"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "backdrop.update"
+                    },
+                    "backdropId": {
+                      "type": "string",
+                      "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+                    },
+                    "title": {
+                      "type": "string",
+                      "maxLength": 100
+                    },
+                    "color": {
+                      "type": "string",
+                      "pattern": "^#[0-9a-f]{6}$"
+                    },
+                    "fillOpacity": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "backdropId"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "backdrop.arrange"
+                    },
+                    "backdropId": {
+                      "type": "string",
+                      "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "backdropId"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "backdrop.move"
+                    },
+                    "backdropId": {
+                      "type": "string",
+                      "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+                    },
+                    "dx": {
+                      "type": "number",
+                      "minimum": -100000,
+                      "maximum": 100000
+                    },
+                    "dy": {
+                      "type": "number",
+                      "minimum": -100000,
+                      "maximum": 100000
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "backdropId",
+                    "dx",
+                    "dy"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
                       "const": "node.select-result"
                     },
                     "nodeId": {

@@ -1733,6 +1733,27 @@
         "graph.patch"
       ]
     },
+    "canvas.backdrop.create-delete": {
+      "label": "创建和删除背景板",
+      "gui": "多选工具栏",
+      "phase": "external",
+      "external": ["graph.patch"],
+      "note": "backdrop.create/delete 复用画布宿主规划器，调用方提供背景板 ID，删除背景板保留成员节点。"
+    },
+    "canvas.backdrop.configure-arrange": {
+      "label": "背景板命名、配色和整理",
+      "gui": "背景板顶部",
+      "phase": "external",
+      "external": ["graph.patch"],
+      "note": "backdrop.update 与 backdrop.arrange 复用画布规划器，标题、颜色和透明度随快照保存，整理复用同一布局。"
+    },
+    "canvas.backdrop.move": {
+      "label": "移动背景板及成员",
+      "gui": "画布拖动背景板",
+      "phase": "external",
+      "external": ["graph.patch"],
+      "note": "backdrop.move 以画布单位接收 dx 和 dy，与桌面拖动共用成员位移逻辑。"
+    },
     "canvas.align": {
       "label": "对齐/均分",
       "gui": "多选工具栏",

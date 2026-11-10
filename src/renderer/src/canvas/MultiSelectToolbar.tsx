@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import type { Editor, TLShapeId } from 'tldraw'
+import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import { Icon } from '../components/Icon'
+import { applyBackdropAction } from './backdrop-actions'
 
 interface MultiSelectToolbarProps {
   editor: Editor
@@ -25,11 +26,15 @@ export function MultiSelectToolbar({
 }: MultiSelectToolbarProps): React.JSX.Element | null {
   const [selectedIds, setSelectedIds] = useState<TLShapeId[]>([])
   const [selectedGroupIds, setSelectedGroupIds] = useState<TLShapeId[]>([])
+  const [selectedBackdropId, setSelectedBackdropId] = useState<TLShapeId | null>(null)
 
   useEffect((): (() => void) => {
     const update = (): void => {
       const selected = editor.getSelectedShapes()
       setSelectedIds(selected.filter((s) => s.type === 'node-card').map((s) => s.id))
+      setSelectedBackdropId(
+        selected.length === 1 && selected[0].type === 'backdrop' ? selected[0].id : null
+      )
       // 选中的 tldraw group：包含节点子项时提供「拆分」入口。
       setSelectedGroupIds(
         selected
@@ -49,7 +54,8 @@ export function MultiSelectToolbar({
   }, [editor])
 
   // 单选时工具栏没有任何可用操作，不能留下空的灰色圆角岛。
-  if (selectedIds.length < 2 && selectedGroupIds.length === 0) return null
+  if (selectedIds.length < 2 && selectedGroupIds.length === 0 && !selectedBackdropId) return null
+
 
   const getBounds = (): ShapeBounds[] =>
     selectedIds.map((id) => {
@@ -131,6 +137,16 @@ export function MultiSelectToolbar({
     <div className="multiselect-toolbar">
       <div className="multiselect-toolbar__entrance">
         <div className="multiselect-toolbar__island">
+          {selectedBackdropId && (
+            <button
+              className="ms-btn"
+              aria-label="删除背景板"
+              title="删除背景板，保留节点"
+              onClick={() => applyBackdropAction(editor, { action: 'backdrop.delete', backdropId: selectedBackdropId })}
+            >
+              <Icon name="trash" size={16} />
+            </button>
+          )}
           {selectedIds.length > 1 && (
             <>
               <button
@@ -191,6 +207,18 @@ export function MultiSelectToolbar({
                 onClick={handleGroup}
               >
                 <Icon name="group" size={16} />
+              </button>
+              <button
+                className="ms-btn"
+                aria-label="创建背景板"
+                title="为所选节点创建背景板"
+                onClick={() => applyBackdropAction(editor, {
+                  action: 'backdrop.create',
+                  backdropId: createShapeId(),
+                  nodeIds: selectedIds
+                })}
+              >
+                <Icon name="rectangle" size={16} />
               </button>
               <span className="ms-divider" />
               <button

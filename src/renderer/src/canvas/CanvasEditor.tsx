@@ -1,4 +1,4 @@
-﻿import { reportCanvasFailure } from './canvas-diagnostics'
+import { reportCanvasFailure } from './canvas-diagnostics'
 import { ensureCanvasSaved } from './flow-asset-actions'
 import { readNodeRunHistory, readNodeRunRecord } from '../engine/runRecord'
 import { commitFlowBuild } from './flow-build-actions'
@@ -14,6 +14,8 @@ import type { WorkspaceProfile } from '@shared/workspace-profile'
 import { Tooltip } from '../components/Tooltip'
 import { NodeCardUtil, type NodeCardProps, type NodeCardShape } from './NodeCardShape'
 import { CarrierArrowUtil } from './CarrierArrowUtil'
+import { BackdropShapeUtil } from './BackdropShape'
+import { syncBackdropLayouts } from './backdrop-layout'
 import { repairTldrawSnapshot } from './tldrawSnapshotRepair'
 import { NodeCreateMenu } from './NodeCreateMenu'
 import { NodeContextMenu } from './NodeContextMenu'
@@ -253,10 +255,10 @@ type MenuState = CreateMenuState | NodeMenuState
 
 /**
  * 画布只承载工作流实体，不是通用白板。tldraw 内置的 draw / text / geo 等形状既无法
- * 参与端口契约，又会干扰节点布局；原生 group 仍保留为“分组状态”。
+ * 参与端口契约，又会干扰节点布局；分组和背景板是专用布局对象。
  */
 function isWorkflowCanvasShape(shape: { type: string; meta?: Record<string, unknown> }): boolean {
-  if (shape.type === 'node-card' || shape.type === 'group') return true
+  if (shape.type === 'node-card' || shape.type === 'group' || shape.type === 'backdrop') return true
   return (
     shape.type === 'arrow' &&
     typeof shape.meta?.fromPort === 'string' &&
@@ -2609,6 +2611,22 @@ export function CanvasEditor({
     }
     const removedUnsupported = removeUnsupportedCanvasShapes(editor)
     if (removedUnsupported > 0) toast(`已移除 ${removedUnsupported} 个不属于工作流的白板元素`)
+    let backdropLayoutDirty = false
+    const markBackdropLayoutDirty = (shape: { type: string }): void => {
+      if (shape.type === 'node-card' || shape.type === 'group' || shape.type === 'backdrop')
+        backdropLayoutDirty = true
+    }
+    disposers.push(
+      editor.sideEffects.registerAfterCreateHandler('shape', markBackdropLayoutDirty),
+      editor.sideEffects.registerAfterChangeHandler('shape', (_, shape) => markBackdropLayoutDirty(shape)),
+      editor.sideEffects.registerAfterDeleteHandler('shape', markBackdropLayoutDirty),
+      editor.sideEffects.registerOperationCompleteHandler(() => {
+        if (!backdropLayoutDirty) return
+        backdropLayoutDirty = false
+        syncBackdropLayouts(editor)
+      })
+    )
+    syncBackdropLayouts(editor)
     disposers.push(
       editor.store.listen(
         () => {
@@ -2971,7 +2989,7 @@ export function CanvasEditor({
       <Tldraw
         onMount={handleMount}
         getShapeVisibility={artifactShapeVisibility}
-        shapeUtils={[NodeCardUtil, CarrierArrowUtil]}
+        shapeUtils={[NodeCardUtil, CarrierArrowUtil, BackdropShapeUtil]}
         cameraOptions={{
           // 统一滚轮路由使用这些 Ctrl / Cmd 缩放档位。
           zoomSteps: [0.1, 0.25, 0.5, 1, 2, 4]

@@ -135,6 +135,37 @@ const groupDelete = z
   .object({ action: z.literal('group.delete'), groupId: z.string().min(1).max(180) })
   .strict()
 
+const backdropCreate = z.object({
+  action: z.literal('backdrop.create'),
+  backdropId: accessNodeId,
+  nodeIds: z.array(accessNodeId).min(2).max(GRAPH_PATCH_MAX_OPS)
+}).strict()
+
+const backdropDelete = z.object({
+  action: z.literal('backdrop.delete'),
+  backdropId: accessNodeId
+}).strict()
+
+const backdropUpdate = z.object({
+  action: z.literal('backdrop.update'),
+  backdropId: accessNodeId,
+  title: z.string().trim().max(100).optional(),
+  color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
+  fillOpacity: z.number().min(0).max(1).optional()
+}).strict()
+
+const backdropArrange = z.object({
+  action: z.literal('backdrop.arrange'),
+  backdropId: accessNodeId
+}).strict()
+
+const backdropMove = z.object({
+  action: z.literal('backdrop.move'),
+  backdropId: accessNodeId,
+  dx: coord,
+  dy: coord
+}).strict()
+
 /**
  * 切换结果版本：把节点当前引用切换到它自己结果集合里的另一条产物
  * （与 GUI 资产节点"选择结果版本"同一 selectMediaResult）。
@@ -159,6 +190,11 @@ export const GraphPatchOpSchema = z.discriminatedUnion('action', [
   layoutAlign,
   groupCreate,
   groupDelete,
+  backdropCreate,
+  backdropDelete,
+  backdropUpdate,
+  backdropArrange,
+  backdropMove,
   nodeSelectResult
 ])
 export type GraphPatchOp = z.infer<typeof GraphPatchOpSchema>
@@ -344,6 +380,10 @@ export function resolvePatchReferences(
     }
     if (op.action === 'node.delete' || op.action === 'node.update') {
       if (!resolveTarget(op.nodeId)) errors.push({ index, code: 'NODE_NOT_FOUND' })
+      continue
+    }
+    if (op.action === 'backdrop.create') {
+      if (op.nodeIds.some((id) => !resolveTarget(id))) errors.push({ index, code: 'NODE_NOT_FOUND' })
       continue
     }
     if (op.action === 'edge.delete') {

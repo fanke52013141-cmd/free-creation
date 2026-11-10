@@ -20,6 +20,7 @@ import { createEdge, portPairCompatible } from './graph'
 import type { NodeCardShape } from './NodeCardShape'
 import { parseMediaResultCollection } from '@shared/engine/values'
 import { selectMediaResult } from '../nodes/specs/bodies/shared'
+import { arrangeBackdrop, createBackdrop, moveBackdrop } from './backdrop-layout'
 
 export interface GraphPatchApplyCounts {
   nodeCreated: number
@@ -167,6 +168,7 @@ export function planGraphPatch(
   const createdGroups: Array<{ ref?: string; groupId: TLShapeId }> = []
   const counts: GraphPatchApplyCounts = { nodeCreated: 0, nodeUpdated: 0, nodeDeleted: 0, edgeCreated: 0, edgeDeleted: 0 }
   const applySteps: Array<(editor: Editor) => void> = []
+  const plannedBackdrops = new Map<TLShapeId, boolean>()
   const fail = (index: number, code: string, detail?: string): GraphPatchPlanResult => ({ ok: false, issue: { index, code, ...(detail ? { detail } : {}) } })
 
   const livePorts = (nodeType: string, config: string, h: number): { in: PortDecl[]; out: PortDecl[] } => {
@@ -392,6 +394,47 @@ export function planGraphPatch(
           ed.updateShape({ id: b.id, type: 'node-card', ...patch } as never)
         }
       })
+      continue
+    }
+    if (
+      op.action === 'backdrop.create' || op.action === 'backdrop.delete' ||
+      op.action === 'backdrop.update' || op.action === 'backdrop.arrange' ||
+      op.action === 'backdrop.move'
+    ) {
+      const id = idOf(op.backdropId)
+      const existing = editor.getShape(id)
+      const exists = plannedBackdrops.get(id) ?? existing?.type === 'backdrop'
+      if (op.action !== 'backdrop.create') {
+        if (!exists) return fail(index, 'BACKDROP_NOT_FOUND', op.backdropId)
+        if (op.action === 'backdrop.delete') {
+          plannedBackdrops.set(id, false)
+          applySteps.push((ed) => ed.deleteShapes([id]))
+        } else if (op.action === 'backdrop.update') {
+          const { title, color, fillOpacity } = op
+          const props = {
+            ...(title !== undefined ? { title } : {}),
+            ...(color !== undefined ? { color: color.toUpperCase() } : {}),
+            ...(fillOpacity !== undefined ? { fillOpacity } : {})
+          }
+          applySteps.push((ed) => ed.updateShape({ id, type: 'backdrop', props }))
+        } else {
+          applySteps.push((ed) => {
+            const board = ed.getShape(id)
+            if (board?.type !== 'backdrop') return
+            if (op.action === 'backdrop.move') moveBackdrop(ed, board, op.dx, op.dy)
+            else arrangeBackdrop(ed, board)
+          })
+        }
+        continue
+      }
+      if (exists || (existing && existing.type !== 'backdrop') || nodes.has(id) || edges.has(id))
+        return fail(index, 'BACKDROP_ID_CONFLICT', op.backdropId)
+      const members = op.nodeIds.map(idOf)
+      if (new Set(members).size !== members.length) return fail(index, 'DUPLICATE_NODE', 'nodeIds')
+      if (members.some((member) => !nodes.get(member)?.exists))
+        return fail(index, 'NODE_NOT_FOUND', 'nodeIds')
+      plannedBackdrops.set(id, true)
+      applySteps.push((ed) => createBackdrop(ed, id, members))
       continue
     }
     if (op.action === 'group.create') {

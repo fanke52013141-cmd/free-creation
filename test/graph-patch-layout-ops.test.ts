@@ -66,9 +66,11 @@ function mockEditor(shapes: MockShape[]) {
   const updated: any[] = []
   const grouped: string[][] = []
   const ungrouped: string[][] = []
+  const deleted: string[][] = []
   let groupSeq = 0
   const editor = {
     getCurrentPageShapes: () => shapes,
+    getCurrentPageId: () => 'page:canvas',
     getBindingsFromShape: () => [],
     getShape: (shapeId: TLShapeId) => shapes.find((s) => s.id === String(shapeId)),
     createShape: (input: any) => {
@@ -81,7 +83,7 @@ function mockEditor(shapes: MockShape[]) {
       if (target && typeof input.x === 'number') target.x = input.x
       if (target && typeof input.y === 'number') target.y = input.y
     },
-    deleteShapes: () => undefined,
+    deleteShapes: (ids: TLShapeId[]) => deleted.push(ids.map(String)),
     bringToFront: () => undefined,
     sendToBack: () => undefined,
     markHistoryStoppingPoint: () => undefined,
@@ -97,7 +99,7 @@ function mockEditor(shapes: MockShape[]) {
     },
     run: (fn: () => void) => fn()
   }
-  return { editor: editor as unknown as Editor, created, updated, grouped, ungrouped }
+  return { editor: editor as unknown as Editor, created, updated, grouped, ungrouped, deleted }
 }
 
 const bounds = (updated: any[], id: string) => updated.filter((entry) => String(entry.id) === `shape:${id}`)
@@ -382,5 +384,57 @@ describe('group.create / group.delete', () => {
     )
     expect(ghost.ok).toBe(false)
     if (!ghost.ok) expect(ghost.issue.code).toBe('NODE_NOT_FOUND')
+  })
+})
+
+describe('backdrop.create / backdrop.delete', () => {
+  const create = {
+    action: 'backdrop.create',
+    backdropId: 'shape:board',
+    nodeIds: ['shape:a', 'shape:b']
+  }
+  const remove = { action: 'backdrop.delete', backdropId: 'shape:board' }
+
+  it('supports creating and removing a board in one patch without deleting nodes', () => {
+    const { editor, created, deleted } = mockEditor([card('a'), card('b')])
+    const planned = planGraphPatch(editor, [create, remove], [])
+    expect(planned.ok).toBe(true)
+    if (!planned.ok) return
+    planned.plan.apply(editor)
+    expect(created).toEqual([{
+      id: 'shape:board',
+      type: 'backdrop',
+      parentId: 'page:canvas',
+      props: { memberIds: create.nodeIds }
+    }])
+    expect(deleted).toEqual([['shape:board']])
+  })
+
+  it.each([
+    [{ ...create, nodeIds: ['shape:a', 'shape:a'] }, 'DUPLICATE_NODE'],
+    [{ ...create, nodeIds: ['shape:a', 'shape:missing'] }, 'NODE_NOT_FOUND'],
+    [{ ...create, backdropId: 'shape:a' }, 'BACKDROP_ID_CONFLICT'],
+    [remove, 'BACKDROP_NOT_FOUND']
+  ])('rejects invalid backdrop operations before applying (%#)', (op, code) => {
+    const { editor, created, deleted } = mockEditor([card('a'), card('b')])
+    expect(planGraphPatch(editor, [op], [])).toMatchObject({ ok: false, issue: { code } })
+    expect(created).toHaveLength(0)
+    expect(deleted).toHaveLength(0)
+  })
+
+  it('normalizes title and color for external backdrop updates', () => {
+    const { editor, updated } = mockEditor([
+      { ...groupShape('board', []), type: 'backdrop' } as MockShape
+    ])
+    const result = planGraphPatch(editor, [{
+      action: 'backdrop.update',
+      backdropId: 'shape:board',
+      title: '  参考图  ',
+      color: '#aabbcc',
+      fillOpacity: 0
+    }], [])
+    if (!result.ok) throw new Error(result.issue.code)
+    result.plan.apply(editor)
+    expect(updated[0].props).toEqual({ title: '参考图', color: '#AABBCC', fillOpacity: 0 })
   })
 })
