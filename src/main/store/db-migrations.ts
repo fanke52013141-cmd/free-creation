@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 25
+export const DB_SCHEMA_VERSION = 26
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -532,6 +532,39 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
         revision INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL
       );
+    `)
+  },
+  // M26: 组合运行账本（P3 基础）。一次调用一行；步骤按固定内部 ID 记录，供重启核对。
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS composite_runs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        capability_id TEXT NOT NULL,
+        capability_version TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        instance_node_id TEXT,
+        status TEXT NOT NULL,
+        started_at INTEGER NOT NULL,
+        finished_at INTEGER,
+        error_code TEXT,
+        error_message TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_composite_runs_project_status
+        ON composite_runs(project_id, status);
+      CREATE TABLE IF NOT EXISTS composite_run_steps (
+        run_id TEXT NOT NULL,
+        step_key TEXT NOT NULL,
+        node_type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        started_at INTEGER,
+        finished_at INTEGER,
+        reason TEXT,
+        PRIMARY KEY (run_id, step_key)
+      );
+      CREATE INDEX IF NOT EXISTS idx_composite_run_steps_run
+        ON composite_run_steps(run_id);
     `)
   }
 ]

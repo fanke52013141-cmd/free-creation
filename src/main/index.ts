@@ -22,6 +22,7 @@ import { registerMediaIpc } from './ipc/media.ipc'
 import { registerGatewayIpc } from './ipc/gateway.ipc'
 import { registerWorkspaceStateIpc } from './ipc/workspace-state.ipc'
 import { registerCompositeIpc } from './ipc/composite.ipc'
+import { settleInterruptedCompositeRuns } from './store/composite-run.repo'
 import { registerModelIpc } from './ipc/models.ipc'
 import { registerDiagnosticsIpc, setDiagnosticsService } from './ipc/diagnostics.ipc'
 import {
@@ -542,6 +543,7 @@ app.whenReady().then(async () => {
   await initDiagnostics()
 
   const database = getDb()
+  settleInterruptedCompositeRuns()
   // 发行版/自用版：预置即梦供应商与模型清单——打开模型设置即可见「即梦（本机 CLI）」，
   // 只需点「登录即梦」完成本机 OAuth 即可使用（CLI 已随包内置，无需下载）。
   if (LICENSE_GATE_DISABLED) {
