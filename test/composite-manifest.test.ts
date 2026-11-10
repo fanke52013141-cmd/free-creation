@@ -6,6 +6,7 @@ import {
   validateCompositeManifestStructure,
   type CompositeManifest
 } from '../src/shared/composite/manifest'
+import { validateCompositeManifest } from '../src/shared/composite/validate'
 
 function characterDesign(patch: Partial<CompositeManifest> = {}): CompositeManifest {
   return {
@@ -134,5 +135,30 @@ describe('组合能力 manifest（P1 契约）', () => {
     expect(canonicalCompositeJson(left)).toBe(canonicalCompositeJson(right))
     await expect(compositeContentHash(left)).resolves.toMatch(/^[a-f0-9]{64}$/)
     await expect(compositeContentHash(left)).resolves.toBe(await compositeContentHash(right))
+  })
+
+  it('缺少节点依赖或嵌套依赖成环时发布校验拒绝', () => {
+    const missing = characterDesign()
+    missing.dependencies = []
+    expect(validateCompositeManifest(missing).issues.map((issue) => issue.code)).toContain(
+      'DEPENDENCY_MISSING'
+    )
+
+    const a = characterDesign()
+    a.capabilityId = 'a'
+    a.dependencies = [
+      ...(a.dependencies ?? []),
+      { kind: 'capability', id: 'b', version: '1.0.0' }
+    ]
+    const b = characterDesign()
+    b.capabilityId = 'b'
+    b.dependencies = [
+      ...(b.dependencies ?? []),
+      { kind: 'capability', id: 'a', version: '1.0.0' }
+    ]
+    const result = validateCompositeManifest(a, {
+      getCapability: (id) => (id === 'a' ? a : id === 'b' ? b : null)
+    })
+    expect(result.issues.map((issue) => issue.code)).toContain('DEPENDENCY_CYCLE')
   })
 })

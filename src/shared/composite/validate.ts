@@ -20,6 +20,7 @@ export type CompositeValidationCode =
   | 'DEPENDENCY_MISSING'
   | 'BUDGET_EXCEEDED'
   | 'SELF_RECURSION'
+  | 'DEPENDENCY_CYCLE'
 
 export interface CompositeValidationIssue extends CompositeManifestIssue {
   code: CompositeValidationCode
@@ -33,6 +34,8 @@ export interface CompositeValidationResult {
 export interface CompositeValidationDeps {
   /** 已发布能力的依赖是否存在（递归检查）；不注入时按 manifest 内声明判定。 */
   hasCapability?: (capabilityId: string, version: string) => boolean
+  /** 解析固定版本 manifest，用于嵌套深度/依赖环校验。 */
+  getCapability?: (capabilityId: string, version: string) => CompositeManifest | null
 }
 
 const ANY_PORT = 'any'
@@ -203,6 +206,59 @@ export function validateCompositeManifest(
         issues.push(issue('DEPENDENCY_MISSING', path, `依赖组合 ${dependency.id}@${dependency.version} 不存在`))
     }
   }
+  // 依赖锁定：内部图每个节点类型/契约版本都必须在 dependencies 中登记，防止
+  // 注册表升级后同一版本组合静默换用新节点实现。
+  for (const node of manifest.graph.nodes) {
+    const listed = (manifest.dependencies ?? []).some(
+      (dependency) =>
+        dependency.kind === 'node' &&
+        dependency.id === node.nodeType &&
+        (dependency.contractVersion === undefined || dependency.contractVersion === node.contractVersion)
+    )
+    if (!listed)
+      issues.push(
+        issue('DEPENDENCY_MISSING', `graph.nodes.${node.id}`, `节点 ${node.nodeType}@${node.contractVersion} 未登记依赖`)
+      )
+  }
+
+  // 嵌套依赖：环、深度、展开节点预算（注入 resolver 时才可判定）。
+  const getCapability = deps.getCapability
+  if (getCapability) {
+    const policy = manifest.executionPolicy
+    const maxDepth = policy?.maxDepth ?? 5
+    const maxNodes = policy?.maxExpandedNodes ?? MAX_BUDGET_NODES
+    const walk = (
+      current: CompositeManifest,
+      depth: number,
+      path: string[],
+      counter: { nodes: number }
+    ): void => {
+      counter.nodes += current.graph.nodes.length
+      if (counter.nodes > maxNodes) {
+        issues.push(issue('BUDGET_EXCEEDED', 'executionPolicy.maxExpandedNodes', `嵌套展开节点数超过预算 ${maxNodes}`))
+        return
+      }
+      if (depth > maxDepth) {
+        issues.push(issue('BUDGET_EXCEEDED', 'executionPolicy.maxDepth', `嵌套深度超过预算 ${maxDepth}`))
+        return
+      }
+      for (const dependency of current.dependencies ?? []) {
+        if (dependency.kind !== 'capability' || !dependency.version) continue
+        if (path.includes(dependency.id)) {
+          issues.push(issue('DEPENDENCY_CYCLE', 'dependencies', `组合依赖存在环：${[...path, dependency.id].join(' -> ')}`))
+          continue
+        }
+        const nested = getCapability(dependency.id, dependency.version)
+        if (!nested) {
+          issues.push(issue('DEPENDENCY_MISSING', 'dependencies', `依赖组合 ${dependency.id}@${dependency.version} 不存在`))
+          continue
+        }
+        walk(nested, depth + 1, [...path, dependency.id], counter)
+      }
+    }
+    walk(manifest, 1, [manifest.capabilityId], { nodes: 0 })
+  }
+
   const policy = manifest.executionPolicy
   const budgetNodes = policy?.maxExpandedNodes ?? MAX_BUDGET_NODES
   const budgetEdges = policy?.maxExpandedEdges ?? MAX_BUDGET_EDGES

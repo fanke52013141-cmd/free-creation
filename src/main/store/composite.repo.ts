@@ -74,7 +74,19 @@ function rowToDraft(row: DraftRow): CompositeDraftRecord {
 }
 
 function assertPublishManifest(value: unknown): CompositeManifest {
-  const result = validateCompositeManifest(value)
+  // 已发布版本可同步读取，用于嵌套依赖环/深度/展开预算校验。
+  const getCapability = (capabilityId: string, version: string): CompositeManifest | null => {
+    const row = getDb()
+      .prepare('SELECT manifest FROM composite_versions WHERE capability_id = ? AND version = ?')
+      .get(capabilityId, version) as { manifest: string } | undefined
+    if (!row) return null
+    try {
+      return JSON.parse(row.manifest) as CompositeManifest
+    } catch {
+      return null
+    }
+  }
+  const result = validateCompositeManifest(value, { getCapability })
   if (!result.ok) {
     throw new Error(
       `组合契约无效：${result.issues.map((issue) => `[${issue.code}] ${issue.path}: ${issue.message}`).join('；')}`

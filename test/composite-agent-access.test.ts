@@ -67,7 +67,11 @@ function manifest(): CompositeManifest {
           to: { nodeId: 'n3', portId: 'in-prompt' }
         }
       ]
-    }
+    },
+    dependencies: [
+      { kind: 'node', id: 'text', contractVersion: 1 },
+      { kind: 'node', id: 'image-gen', contractVersion: 1 }
+    ]
   }
 }
 

@@ -82,6 +82,10 @@ function manifest(patch: Partial<CompositeManifest> = {}): CompositeManifest {
         }
       ]
     },
+    dependencies: [
+      { kind: 'node', id: 'text', contractVersion: 1 },
+      { kind: 'node', id: 'image-gen', contractVersion: 1 }
+    ],
     ...patch
   }
 }
