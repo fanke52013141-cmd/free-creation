@@ -13,6 +13,7 @@ import { validateCompositeManifest } from '../../shared/composite/validate'
 import type { CompositeValidationResult } from '../../shared/composite/validate'
 import {
   archiveCompositeCapability,
+  listCompositeVersions,
   getCompositeDraft,
   getCompositeVersion,
   listCompositeCapabilities,
@@ -157,6 +158,16 @@ export function registerCompositeIpc(): void {
     ): IpcEnvelope<CompositeVersionRecord | null> => {
       try {
         return ok(getCompositeVersion(input?.capabilityId ?? '', input?.version ?? ''))
+      } catch (error) {
+        return failure(error)
+      }
+    }
+  )
+  ipcMain.handle(
+    IPC.composite.versionList,
+    (_event, capabilityId: string): IpcEnvelope<unknown> => {
+      try {
+        return ok(listCompositeVersions(capabilityId ?? ''))
       } catch (error) {
         return failure(error)
       }

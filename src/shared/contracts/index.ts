@@ -156,6 +156,7 @@ export const IPC = {
     validate: 'composite:validate',
     publish: 'composite:publish',
     versionGet: 'composite:version:get',
+    versionList: 'composite:version:list',
     archive: 'composite:archive',
     verify: 'composite:verify',
     runStart: 'composite:run:start',

@@ -191,55 +191,78 @@ export function buildCompositeManifestFromGraph(
     }
   }
 
-  // 必填但未接线的输入端口也要成为公开输入候选，避免保存后才发现缺项。
+  // 边界源节点：没有内部上游。文本节点默认把正文变成公开输入；
+  // 其余源节点的必填输入端口也公开。外部连线已映射的目标不重复添加。
   const internalIncoming = new Set(internalEdges.map((edge) => `${edge.to.nodeId}:${edge.to.portId}`))
-  const internalOutgoing = new Set(internalEdges.map((edge) => `${edge.from.nodeId}:${edge.from.portId}`))
   for (const node of nodes) {
     const internalId = internalIds.get(node.id)!
-    for (const port of node.ports) {
-      const key = `${node.id}:${port.id}`
-      if (port.dir === 'in' && port.required && !incomingExternal.has(key)) {
-        const internalKey = `${internalId}:${port.id}`
-        if (internalIncoming.has(internalKey)) continue
-        const publicKey = `internal-${internalKey}`
-        if (inputs.has(publicKey)) continue
-        const id = uniquePublicId(`${internalId}-${port.id}`, usedInputIds)
-        inputs.set(publicKey, {
-          id,
-          label: port.name,
-          type: port.type as CompositePort['type'],
-          required: port.required,
-          cardinality: port.cardinality,
-          ...(port.description ? { description: port.description } : {}),
-          ...(port.schema ? { schemaRef: { id: port.schema.id, version: port.schema.version } } : {}),
-          targets: [{ nodeId: internalId, portId: port.id }]
-        })
+    const hasInternalIncoming = internalEdges.some((edge) => edge.to.nodeId === internalId)
+    if (hasInternalIncoming) continue
+    if (node.type === 'text') {
+      const port = node.ports.find((item) => item.dir === 'in' && item.type === 'text')
+      if (port) {
+        const key = `${node.id}:${port.id}`
+        if (!incomingExternal.has(key)) {
+          const defaultValue = node.content.kind === 'text' ? node.content.text.trim() : ''
+          const id = uniquePublicId(`${internalId}-${port.id}`, usedInputIds)
+          inputs.set(`source-${key}`, {
+            id,
+            label: port.name || '文本输入',
+            type: 'text',
+            required: true,
+            cardinality: 'one',
+            description: '组合的文本输入；未提交时使用默认文本',
+            targets: [{ nodeId: internalId, portId: port.id }],
+            ...(defaultValue ? { defaultValue } : {})
+          })
+          incomingExternal.add(key)
+        }
       }
     }
-  }
-
-  // 终态输出（没有下游的内部输出）作为公开输出候选；至少保证一个业务输出。
-  for (const node of nodes) {
-    const internalId = internalIds.get(node.id)!
     for (const port of node.ports) {
-      if (port.dir !== 'out') continue
-      if (!(COMPOSITE_PORT_TYPES as readonly string[]).includes(port.type)) continue
-      const internalKey = `${internalId}:${port.id}`
-      if (internalOutgoing.has(internalKey)) continue
-      const publicKey = `${node.id}:${port.id}`
-      if (outputs.has(publicKey)) continue
-      const id = uniquePublicId(`${internalId}-${port.id}`, usedOutputIds)
-      outputs.set(publicKey, {
+      if (port.dir !== 'in' || !port.required) continue
+      const key = `${node.id}:${port.id}`
+      if (incomingExternal.has(key) || internalIncoming.has(`${internalId}:${port.id}`)) continue
+      const id = uniquePublicId(`${internalId}-${port.id}`, usedInputIds)
+      inputs.set(`required-${key}`, {
         id,
         label: port.name,
         type: port.type as CompositePort['type'],
-        required: port.required,
+        required: true,
         cardinality: port.cardinality,
         ...(port.description ? { description: port.description } : {}),
         ...(port.schema ? { schemaRef: { id: port.schema.id, version: port.schema.version } } : {}),
-        source: { nodeId: internalId, portId: port.id }
+        targets: [{ nodeId: internalId, portId: port.id }]
       })
+      incomingExternal.add(key)
     }
+  }
+
+  // 只公开汇节点（没有内部下游）的单个主输出：媒体优先，其次文本/JSON。
+  // 中间节点的多路输出不再自动公开，用户可在边界编辑器显式添加。
+  const primaryTypes = ['image', 'video', 'audio', 'file', 'text', 'markdown', 'json'] as const
+  for (const node of nodes) {
+    const internalId = internalIds.get(node.id)!
+    if (internalEdges.some((edge) => edge.from.nodeId === internalId)) continue
+    const candidates = node.ports.filter((port) => port.dir === 'out')
+    const primary =
+      [...candidates].sort(
+        (a, b) => primaryTypes.indexOf(a.type as never) - primaryTypes.indexOf(b.type as never)
+      )[0] ?? candidates[0]
+    if (!primary) continue
+    const publicKey = `${node.id}:${primary.id}`
+    if (outputs.has(publicKey)) continue
+    const id = uniquePublicId(`${internalId}-${primary.id}`, usedOutputIds)
+    outputs.set(publicKey, {
+      id,
+      label: primary.name,
+      type: primary.type as CompositePort['type'],
+      required: primary.required,
+      cardinality: primary.cardinality,
+      ...(primary.description ? { description: primary.description } : {}),
+      ...(primary.schema ? { schemaRef: { id: primary.schema.id, version: primary.schema.version } } : {}),
+      source: { nodeId: internalId, portId: primary.id }
+    })
   }
 
   if (outputs.size === 0) {

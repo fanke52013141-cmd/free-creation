@@ -519,6 +519,7 @@ export function installBrowserMock(): void {
           }
         }),
       versionGet: () => Promise.resolve({ ok: true, data: null }),
+      versionList: () => Promise.resolve({ ok: true, data: [] }),
       archive: () => Promise.resolve({ ok: true, data: true }),
       verify: () => Promise.resolve({ ok: true, data: { ok: true } }),
       runStart: (input: { id: string }) => Promise.resolve({ ok: true, data: { id: input.id } }),

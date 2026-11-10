@@ -36,7 +36,7 @@ describe('组合运行账本（P3 基础）', () => {
       id: 'run-1',
       projectId: 'project',
       capabilityId: 'character-design',
-      capabilityVersion: '1.0.0',
+      capabilityVersion: '1.0',
       contentHash: 'a'.repeat(64)
     })
     recordCompositeRunStep({ runId: 'run-1', stepKey: 'n1', nodeType: 'text', status: 'running' })
@@ -54,7 +54,7 @@ describe('组合运行账本（P3 基础）', () => {
       id: 'run-2',
       projectId: 'project',
       capabilityId: 'character-design',
-      capabilityVersion: '1.0.0',
+      capabilityVersion: '1.0',
       contentHash: 'b'.repeat(64)
     })
     expect(settleInterruptedCompositeRuns()).toBe(1)
@@ -68,7 +68,7 @@ describe('组合运行账本（P3 基础）', () => {
       id: 'run-3',
       projectId: 'project',
       capabilityId: 'character-design',
-      capabilityVersion: '1.0.0',
+      capabilityVersion: '1.0',
       contentHash: 'c'.repeat(64)
     })
     finishCompositeRun({ runId: 'run-3', status: 'failed', errorCode: 'GEN_FAILED', errorMessage: 'x'.repeat(800) })

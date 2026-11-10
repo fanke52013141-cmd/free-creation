@@ -2185,6 +2185,15 @@
       "external": [
         "composite.run.list"
       ]
+    },
+    "ipc.composite.versionList": {
+      "label": "组合版本列表",
+      "channel": "composite:version:list",
+      "gui": "组合版本历史",
+      "phase": "external",
+      "external": [
+        "composite.version.list"
+      ]
     }
   }
 }

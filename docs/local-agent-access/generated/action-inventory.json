@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "generatedFrom": {
-    "ipcChannels": 185,
+    "ipcChannels": 186,
     "canvasActions": 45,
-    "externalOperations": 154
+    "externalOperations": 155
   },
   "totals": {
-    "actions": 230,
+    "actions": 231,
     "byPhase": {
-      "external": 189,
+      "external": 190,
       "excluded": 33,
       "F9": 8
     }
@@ -2196,6 +2196,15 @@
       "phase": "external",
       "external": [
         "composite.run.list"
+      ]
+    },
+    "ipc.composite.versionList": {
+      "label": "组合版本列表",
+      "channel": "composite:version:list",
+      "gui": "组合版本历史",
+      "phase": "external",
+      "external": [
+        "composite.version.list"
       ]
     }
   }

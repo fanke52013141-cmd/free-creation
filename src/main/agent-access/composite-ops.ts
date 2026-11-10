@@ -7,6 +7,7 @@ import {
   getCompositeDraft,
   getCompositeVersion,
   listCompositeCapabilities,
+  listCompositeVersions,
   publishCompositeVersion,
   saveCompositeDraft
 } from '../store/composite.repo'
@@ -88,6 +89,8 @@ export async function runCompositeOperation(
         created: result.created
       }
     }
+    case 'composite.version.list':
+      return listCompositeVersions(String(input.capabilityId ?? ''))
     case 'composite.run.get': {
       const record = getCompositeRun(String(input.runId ?? ''))
       if (!record) throw new DesktopAccessError('NOT_FOUND', false, 'composite-run')

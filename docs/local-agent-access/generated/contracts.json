@@ -13235,7 +13235,7 @@
                       "anyOf": [
                         {
                           "type": "string",
-                          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                          "pattern": "^\\d+\\.0(\\.0)?$"
                         },
                         {
                           "type": "null"
@@ -13333,7 +13333,7 @@
           },
           "version": {
             "type": "string",
-            "pattern": "^\\d+\\.\\d+\\.\\d+$"
+            "pattern": "^\\d+\\.0(\\.0)?$"
           }
         },
         "required": [
@@ -13380,7 +13380,7 @@
               },
               "version": {
                 "type": "string",
-                "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                "pattern": "^\\d+\\.0(\\.0)?$"
               },
               "manifest": {
                 "type": "object",
@@ -13397,7 +13397,7 @@
                   },
                   "version": {
                     "type": "string",
-                    "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                    "pattern": "^\\d+\\.0(\\.0)?$"
                   },
                   "name": {
                     "type": "string",
@@ -14087,7 +14087,7 @@
                       },
                       "version": {
                         "type": "string",
-                        "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                        "pattern": "^\\d+\\.0(\\.0)?$"
                       },
                       "name": {
                         "type": "string",
@@ -14732,7 +14732,7 @@
               },
               "version": {
                 "type": "string",
-                "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                "pattern": "^\\d+\\.0(\\.0)?$"
               },
               "name": {
                 "type": "string",
@@ -15419,7 +15419,7 @@
               },
               "version": {
                 "type": "string",
-                "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                "pattern": "^\\d+\\.0(\\.0)?$"
               },
               "name": {
                 "type": "string",
@@ -16117,7 +16117,7 @@
               },
               "version": {
                 "type": "string",
-                "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                "pattern": "^\\d+\\.0(\\.0)?$"
               },
               "name": {
                 "type": "string",
@@ -16716,7 +16716,7 @@
               },
               "version": {
                 "type": "string",
-                "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                "pattern": "^\\d+\\.0(\\.0)?$"
               },
               "contentHash": {
                 "type": "string",
@@ -16733,6 +16733,104 @@
               "created"
             ],
             "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "composite.version.list",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "列出某个组合能力的全部已发布版本（名称/摘要/发布时间），供切换与历史查看",
+      "requires": [],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "capabilityId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "capabilityId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "composite.version.list"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "array",
+            "items": {}
           },
           "error": {
             "type": "object",

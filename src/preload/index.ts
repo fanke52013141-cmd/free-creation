@@ -532,6 +532,8 @@ const api = {
       version: string
     }): Promise<IpcEnvelope<CompositeVersionRecord | null>> =>
       ipcRenderer.invoke(IPC.composite.versionGet, input),
+    versionList: (capabilityId: string): Promise<IpcEnvelope<CompositeVersionRecord[]>> =>
+      ipcRenderer.invoke(IPC.composite.versionList, capabilityId),
     archive: (input: {
       capabilityId: string
       archived?: boolean

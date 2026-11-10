@@ -63,6 +63,11 @@ export const COMPOSITE_OPERATIONS = {
     description: '发布不可变组合版本；同版本同摘要幂等，同版本异摘要拒绝覆盖',
     input: z.object({ manifest }).strict()
   },
+  'composite.version.list': {
+    effect: 'read',
+    description: '列出某个组合能力的全部已发布版本（名称/摘要/发布时间），供切换与历史查看',
+    input: z.object({ capabilityId: z.string().min(1).max(120) }).strict()
+  },
   'composite.run.get': {
     effect: 'read',
     description: '读取一次组合运行的状态与内部步骤（固定版本、产物归属、失败原因）',
@@ -114,6 +119,7 @@ export const COMPOSITE_OUTPUTS = {
       created: z.boolean()
     })
     .strict(),
+  'composite.version.list': z.array(z.unknown()),
   'composite.run.get': z.object({ run: z.unknown(), steps: z.array(z.unknown()) }).strict().nullable(),
   'composite.run.list': z.array(z.unknown()),
   'composite.archive': z.object({ capabilityId, archived: z.boolean() }).strict()

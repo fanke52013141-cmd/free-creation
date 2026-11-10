@@ -274,6 +274,13 @@ export function getCompositeCapability(capabilityId: string): CompositeCapabilit
   return row ? rowToSummary(row) : null
 }
 
+export function listCompositeVersions(capabilityId: string): CompositeVersionRecord[] {
+  const rows = getDb()
+    .prepare('SELECT * FROM composite_versions WHERE capability_id = ? ORDER BY published_at DESC')
+    .all(capabilityId) as VersionRow[]
+  return rows.map(rowToVersion)
+}
+
 export function listCompositeCapabilities(options: {
   query?: string
   includeArchived?: boolean

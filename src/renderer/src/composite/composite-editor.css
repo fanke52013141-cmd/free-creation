@@ -1,0 +1,78 @@
+/* 组合能力编辑器：按 Stitch 设计稿（自由画布 - 复合能力编辑 v2.0）落地 */
+.composite-sheet-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(8, 10, 14, 0.62);
+  backdrop-filter: blur(2px);
+}
+.composite-sheet {
+  width: min(560px, 94vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #131313;
+  border-left: 1px solid #232936;
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.55);
+}
+.composite-sheet-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #232936;
+}
+.composite-sheet-heading { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.composite-sheet-heading h2 { margin: 0; font-size: 15px; color: #f1f5f9; font-weight: 600; }
+.composite-version-pill {
+  font: 500 11px/1 'JetBrains Mono', monospace;
+  color: #00e5ff;
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.28);
+  border-radius: 999px;
+  padding: 4px 8px;
+}
+.composite-status-pill { font-size: 10px; color: #7ee787; border: 1px solid #2f5b3a; border-radius: 999px; padding: 3px 7px; }
+.composite-sheet-tabs { display: flex; gap: 4px; padding: 0 12px; border-bottom: 1px solid #232936; }
+.composite-sheet-tab {
+  appearance: none; background: none; border: 0; color: #8b9bb4; font-size: 12px;
+  padding: 10px 10px 9px; border-bottom: 2px solid transparent; cursor: pointer;
+}
+.composite-sheet-tab.is-active { color: #f1f5f9; border-bottom-color: #00e5ff; }
+.composite-sheet-body { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.composite-section { border: 1px solid #232936; border-radius: 12px; background: #151922; padding: 12px; }
+.composite-section-title { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #f1f5f9; margin-bottom: 10px; font-weight: 600; }
+.composite-graph-strip { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.composite-graph-node {
+  min-width: 128px; padding: 8px 9px; border-radius: 9px; border: 1px solid #2a2f3d;
+  background: #101319; color: #c6d0e0; font-size: 11px; cursor: pointer;
+}
+.composite-graph-node.is-selected { border-color: #00e5ff; box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.4); }
+.composite-graph-node span { display: block; color: #78869c; font-size: 10px; margin-top: 3px; }
+.composite-graph-link { color: #00e5ff; opacity: 0.7; font-size: 12px; }
+.composite-node-editor { margin-top: 10px; }
+.composite-node-editor textarea {
+  width: 100%; min-height: 92px; resize: vertical; font: 11px/1.5 'JetBrains Mono', monospace;
+  color: #c6d0e0; background: #101010; border: 1px solid #232936; border-radius: 8px; padding: 8px;
+}
+.composite-io-row {
+  display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 8px;
+  background: #101319; border: 1px solid #232936; font-size: 11px; color: #c6d0e0;
+}
+.composite-io-row + .composite-io-row { margin-top: 6px; }
+.composite-io-badge { color: #00e5ff; font: 500 10px 'JetBrains Mono', monospace; }
+.composite-version-row {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid #232936; background: #101319; font-size: 11px; color: #c6d0e0;
+}
+.composite-version-row + .composite-version-row { margin-top: 6px; }
+.composite-version-row.is-current { border-color: rgba(0, 229, 255, 0.45); }
+.composite-version-row button { margin-left: auto; }
+.composite-sheet-footer {
+  display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid #232936;
+  background: #101319;
+}
+.composite-sheet-footer .hint { flex: 1; color: #78869c; font-size: 10px; line-height: 1.4; }
+.composite-sheet-error { color: #ffb4ab; font-size: 11px; white-space: pre-wrap; }
