@@ -1,5 +1,6 @@
 import { DiagnosticsProducer, newProducerId, newTraceId, newSpanId } from '../shared/observability'
 import type { LibraryCategory, SaveLibraryCategoryInput } from '../shared/library/blueprint'
+import type { CompositeValidationResult } from '../shared/composite/validate'
 import type {
   CompositeCapabilitySummary,
   CompositeDraftRecord,
@@ -520,8 +521,8 @@ const api = {
       ipcRenderer.invoke(IPC.composite.draftGet, capabilityId),
     draftSave: (input: CompositeDraftSaveInput): Promise<IpcEnvelope<CompositeDraftRecord>> =>
       ipcRenderer.invoke(IPC.composite.draftSave, input),
-    draftDelete: (capabilityId: string): Promise<IpcEnvelope<boolean>> =>
-      ipcRenderer.invoke(IPC.composite.draftDelete, capabilityId),
+    validate: (input: { manifest: unknown }): Promise<IpcEnvelope<CompositeValidationResult>> =>
+      ipcRenderer.invoke(IPC.composite.validate, input),
     publish: (
       input: CompositePublishInput
     ): Promise<IpcEnvelope<{ record: CompositeVersionRecord; created: boolean }>> =>

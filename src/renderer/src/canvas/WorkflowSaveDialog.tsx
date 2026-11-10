@@ -5,6 +5,8 @@ import { toast } from '../stores/toast'
 import { extractTemplateFromSelection, useWorkflowStore } from '../stores/workflow'
 import { deriveGraph } from './graph'
 import { buildCompositeManifestFromGraph } from '../composite/build-manifest'
+import { CompositeBoundaryEditor } from '../composite/CompositeBoundaryEditor'
+import type { CompositeManifest } from '@shared/composite/manifest'
 import type { NodeCardShape } from './NodeCardShape'
 import '../library/library.css'
 import { useAppStore } from '../stores/app'
@@ -28,6 +30,7 @@ export function WorkflowSaveDialog({
   const [saveKind, setSaveKind] = useState<'template' | 'resource' | 'composite'>('template')
   const [capabilityId, setCapabilityId] = useState('')
   const [version, setVersion] = useState('1.0.0')
+  const [compositeDraft, setCompositeDraft] = useState<CompositeManifest | null>(null)
   const saveWorkflow = useWorkflowStore((state) => state.save)
   const nodes = useMemo(
     () =>
@@ -36,6 +39,26 @@ export function WorkflowSaveDialog({
         .filter((shape): shape is NodeCardShape => shape?.type === 'node-card'),
     [editor, nodeIds]
   )
+
+  // 进入组合模式时构建一次可编辑边界；用户之后增删/改映射直接改这份草稿。
+  const buildBoundary = (): void => {
+    const graph = deriveGraph(editor)
+    const built = buildCompositeManifestFromGraph({
+      capabilityId: capabilityId.trim() || slugify(name) || `composite-${Date.now()}`,
+      name: name.trim() || '未命名组合',
+      version: version.trim() || '1.0.0',
+      nodes: graph.nodes,
+      edges: graph.edges,
+      selectedNodeIds: nodes.map((node) => node.id)
+    })
+    if (built.ok) {
+      setCompositeDraft(built.manifest)
+      setError('')
+    } else {
+      setCompositeDraft(null)
+      setError(built.issues.map((issue) => `${issue.path}: ${issue.message}`).join('；'))
+    }
+  }
 
   const save = async (): Promise<void> => {
     const title = name.trim()
@@ -78,28 +101,24 @@ export function WorkflowSaveDialog({
         })
         if (!result.ok) throw new Error(result.error.message)
       } else if (saveKind === 'composite') {
-        const graph = deriveGraph(editor)
-        const id =
-          capabilityId.trim() ||
-          title
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-|-$/g, '') ||
-          `composite-${Date.now()}`
-        const built = buildCompositeManifestFromGraph({
+        if (!compositeDraft) throw new Error('组合边界尚未构建，请先检查选区与映射')
+        const id = capabilityId.trim() || slugify(title) || `composite-${Date.now()}`
+        const edited: CompositeManifest = {
+          ...compositeDraft,
           capabilityId: id,
           name: title,
-          version: version.trim() || '1.0.0',
-          nodes: graph.nodes,
-          edges: graph.edges,
-          selectedNodeIds: nodes.map((node) => node.id)
-        })
-        if (!built.ok) {
-          throw new Error(built.issues.map((issue) => `${issue.path}: ${issue.message}`).join('；'))
+          version: version.trim() || '1.0.0'
         }
-        const draft = await window.api.composite.draftSave({ manifest: built.manifest })
+        const validated = await window.api.composite.validate({ manifest: edited })
+        if (!validated.ok) throw new Error(validated.error.message)
+        if (!validated.data.ok) {
+          throw new Error(
+            validated.data.issues.map((issue) => `[${issue.code}] ${issue.path}: ${issue.message}`).join('；')
+          )
+        }
+        const draft = await window.api.composite.draftSave({ manifest: edited })
         if (!draft.ok) throw new Error(draft.error.message)
-        const published = await window.api.composite.publish({ manifest: built.manifest })
+        const published = await window.api.composite.publish({ manifest: edited })
         if (!published.ok) throw new Error(published.error.message)
       } else await saveWorkflow(title, extractTemplateFromSelection(nodes, edges))
       const kindLabel =
@@ -191,7 +210,10 @@ export function WorkflowSaveDialog({
                 name="reuse-kind"
                 checked={saveKind === 'composite'}
                 disabled={nodes.length < 1}
-                onChange={() => setSaveKind('composite')}
+                onChange={() => {
+                  setSaveKind('composite')
+                  buildBoundary()
+                }}
               />
               组合节点
             </label>
@@ -220,8 +242,15 @@ export function WorkflowSaveDialog({
                 />
               </label>
               <p className="workflow-save-composite-note">
-                发布后版本不可变；输入输出从当前选区的外部连线与终态端口自动提取。
+                发布后版本不可变；可在此增删公开输入输出、修改映射与必填性。
               </p>
+              {compositeDraft ? (
+                <CompositeBoundaryEditor
+                  manifest={compositeDraft}
+                  disabled={busy}
+                  onChange={setCompositeDraft}
+                />
+              ) : null}
             </div>
           )}
           {error && (
@@ -258,4 +287,12 @@ export function WorkflowSaveDialog({
       </section>
     </div>
   )
+}
+
+function slugify(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
 }

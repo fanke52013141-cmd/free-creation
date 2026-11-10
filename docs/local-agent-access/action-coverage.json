@@ -1248,7 +1248,9 @@
       "channel": "gateway:dreamina:logout",
       "gui": "模型设置",
       "phase": "external",
-      "external": ["dreamina.logout"],
+      "external": [
+        "dreamina.logout"
+      ],
       "note": "GUI、CLI、MCP 共用本机 CLI 退出操作；外部调用需显式 confirmLogout。"
     },
     "ipc.keys.dreaminaLoginStart": {
@@ -1745,21 +1747,27 @@
       "label": "创建和删除背景板",
       "gui": "多选工具栏",
       "phase": "external",
-      "external": ["graph.patch"],
+      "external": [
+        "graph.patch"
+      ],
       "note": "backdrop.create/delete 复用画布宿主规划器，调用方提供背景板 ID，删除背景板保留成员节点。"
     },
     "canvas.backdrop.configure-arrange": {
       "label": "背景板命名、配色和整理",
       "gui": "背景板顶部",
       "phase": "external",
-      "external": ["graph.patch"],
+      "external": [
+        "graph.patch"
+      ],
       "note": "backdrop.update 与 backdrop.arrange 复用画布规划器，标题、颜色和透明度随快照保存，整理复用同一布局。"
     },
     "canvas.backdrop.move": {
       "label": "移动背景板及成员",
       "gui": "画布拖动背景板",
       "phase": "external",
-      "external": ["graph.patch"],
+      "external": [
+        "graph.patch"
+      ],
       "note": "backdrop.move 以画布单位接收 dx 和 dy，与桌面拖动共用成员位移逻辑。"
     },
     "canvas.align": {
@@ -2055,6 +2063,86 @@
         "model.credential.status"
       ],
       "note": "F9（四）：只读查询某连接是否已保存 API Key，仅返回存在性与不可逆指纹（sha256 前 12 位），不返回明文/端点/请求头"
+    },
+    "ipc.composite.search": {
+      "label": "组合能力搜索",
+      "channel": "composite:search",
+      "gui": "保存节点 → 组合节点",
+      "phase": "external",
+      "external": [
+        "composite.search"
+      ],
+      "note": "按名称/标签发现组合，返回稳定 ID/版本摘要，不含内部图"
+    },
+    "ipc.composite.versionGet": {
+      "label": "组合版本读取",
+      "channel": "composite:version:get",
+      "gui": "保存节点 → 组合节点",
+      "phase": "external",
+      "external": [
+        "composite.get"
+      ],
+      "note": "读取固定版本 manifest；GUI 与 Agent 共用同一契约"
+    },
+    "ipc.composite.draftGet": {
+      "label": "组合草稿读取",
+      "channel": "composite:draft:get",
+      "gui": "保存节点 → 组合节点",
+      "phase": "external",
+      "external": [
+        "composite.draft.get"
+      ],
+      "note": "编辑草稿与 revision 并发保护"
+    },
+    "ipc.composite.draftSave": {
+      "label": "组合草稿保存",
+      "channel": "composite:draft:save",
+      "gui": "保存节点 → 组合节点",
+      "phase": "external",
+      "external": [
+        "composite.draft.save"
+      ],
+      "note": "GUI 与 Agent 同一保存策略；不发布"
+    },
+    "ipc.composite.validate": {
+      "label": "组合发布校验",
+      "channel": "composite:validate",
+      "gui": "保存节点 → 组合节点",
+      "phase": "external",
+      "external": [
+        "composite.validate"
+      ],
+      "note": "端口/映射/类型/基数/DAG/依赖/预算同规则"
+    },
+    "ipc.composite.publish": {
+      "label": "组合版本发布",
+      "channel": "composite:publish",
+      "gui": "保存节点 → 组合节点",
+      "phase": "external",
+      "external": [
+        "composite.publish"
+      ],
+      "note": "不可变版本；同版本异摘要拒绝覆盖"
+    },
+    "ipc.composite.archive": {
+      "label": "组合能力归档",
+      "channel": "composite:archive",
+      "gui": "保存节点 → 组合节点",
+      "phase": "external",
+      "external": [
+        "composite.archive"
+      ],
+      "note": "归档后默认发现不可见，已引用版本仍可读"
+    },
+    "ipc.composite.verify": {
+      "label": "组合版本完整性校验",
+      "channel": "composite:verify",
+      "gui": "保存节点 → 组合节点",
+      "phase": "external",
+      "external": [
+        "composite.get"
+      ],
+      "note": "按内容摘要核对版本完整性"
     }
   }
 }

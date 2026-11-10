@@ -28,6 +28,7 @@ import { FLOW_COMMANDS_OPERATIONS, FLOW_COMMANDS_OUTPUTS } from './ops/flow-comm
 import { HISTORY_OPERATIONS, HISTORY_OUTPUTS } from './ops/history'
 import { LIBRARY_OPERATIONS, LIBRARY_OUTPUTS } from './ops/library'
 import { NODE_LIBRARY_OPERATIONS, NODE_LIBRARY_OUTPUTS } from './ops/node-library'
+import { COMPOSITE_OPERATIONS, COMPOSITE_OUTPUTS } from './ops/composite'
 import { PUBLISH_OPERATIONS, PUBLISH_OUTPUTS } from './ops/publish'
 import { SETTINGS_OPERATIONS, SETTINGS_OUTPUTS } from './ops/settings'
 import { DIAGNOSTICS_OPERATIONS, DIAGNOSTICS_OUTPUTS } from './ops/diagnostics'
@@ -338,6 +339,7 @@ export const ACCESS_OPERATIONS = {
   // 对外的 operationDirectory/契约快照必须与拆分前等价。
   ...LIBRARY_OPERATIONS,
   ...NODE_LIBRARY_OPERATIONS,
+  ...COMPOSITE_OPERATIONS,
   ...HISTORY_OPERATIONS,
   ...TRANSFER_OPERATIONS,
   ...FLOW_AGENTS_OPERATIONS,
@@ -856,6 +858,7 @@ export const ACCESS_OUTPUTS = {
     .strict(),
   ...LIBRARY_OUTPUTS,
   ...NODE_LIBRARY_OUTPUTS,
+  ...COMPOSITE_OUTPUTS,
   ...HISTORY_OUTPUTS,
   ...TRANSFER_OUTPUTS,
   ...FLOW_AGENTS_OUTPUTS,

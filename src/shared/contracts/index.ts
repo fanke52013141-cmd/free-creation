@@ -153,7 +153,7 @@ export const IPC = {
     search: 'composite:search',
     draftGet: 'composite:draft:get',
     draftSave: 'composite:draft:save',
-    draftDelete: 'composite:draft:delete',
+    validate: 'composite:validate',
     publish: 'composite:publish',
     versionGet: 'composite:version:get',
     archive: 'composite:archive',

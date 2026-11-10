@@ -49,6 +49,8 @@ import { ACCESS_ERROR_CATALOG } from '../../shared/agent-access/metadata'
 import { assertLicenseActive } from '../security/license/gate'
 import { DesktopAccessError, type AccessDesktop } from './desktop'
 import { runNodeLibraryOperation } from './node-library-ops'
+import { runCompositeOperation } from './composite-ops'
+import { COMPOSITE_OPERATION_IDS } from '../../shared/agent-access/ops/composite'
 import { runHistoryOperation } from './history-ops'
 import { FLOW_AGENT_OPERATION_IDS, runFlowAgentOperation } from './flow-agents-ops'
 import { FLOW_AGENT_RUN_OPERATION_IDS, runFlowAgentRunOperation } from './flow-agent-run-ops'
@@ -194,7 +196,8 @@ const F7_DISPATCH_OPERATIONS: ReadonlySet<AccessOperationId> = new Set([
   'history.restore.precheck',
   'history.restore',
   'history.recovery.precheck',
-  'history.recovery.resolve'
+  'history.recovery.resolve',
+  ...COMPOSITE_OPERATION_IDS
 ] as AccessOperationId[])
 
 /** Only this main-process service touches repositories; CLI/MCP are transport clients. */
@@ -946,7 +949,9 @@ export class LocalAccessService {
           activeProjectId: this.options.activeProjectId,
           diagnostics: { traceId: base.traceId, spanId }
         }
-        result = operationId.startsWith('history.')
+        result = operationId.startsWith('composite.')
+          ? await runCompositeOperation(operationId, input, { diagnostics: f7Context.diagnostics })
+          : operationId.startsWith('history.')
           ? runHistoryOperation(operationId, input, {
               ...f7Context,
               isTaskOccupied: (projectId) => this.taskOccupied(projectId),
@@ -2114,6 +2119,6 @@ export class LocalAccessService {
         }
       }
     }
-    return unhandledOperation(operation)
+    return unhandledOperation(operation as never)
   }
 }

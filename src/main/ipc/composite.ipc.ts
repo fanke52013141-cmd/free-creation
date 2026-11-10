@@ -9,9 +9,10 @@ import type {
   CompositeSearchInput,
   CompositeVersionRecord
 } from '../../shared/composite/types'
+import { validateCompositeManifest } from '../../shared/composite/validate'
+import type { CompositeValidationResult } from '../../shared/composite/validate'
 import {
   archiveCompositeCapability,
-  deleteCompositeDraft,
   getCompositeDraft,
   getCompositeVersion,
   listCompositeCapabilities,
@@ -65,13 +66,16 @@ export function registerCompositeIpc(): void {
       }
     }
   )
-  ipcMain.handle(IPC.composite.draftDelete, (_event, capabilityId: string): IpcEnvelope<boolean> => {
-    try {
-      return ok(deleteCompositeDraft(capabilityId ?? ''))
-    } catch (error) {
-      return failure(error)
+  ipcMain.handle(
+    IPC.composite.validate,
+    (_event, input: { manifest: unknown }): IpcEnvelope<CompositeValidationResult> => {
+      try {
+        return ok(validateCompositeManifest(input?.manifest))
+      } catch (error) {
+        return failure(error)
+      }
     }
-  })
+  )
   ipcMain.handle(
     IPC.composite.publish,
     async (

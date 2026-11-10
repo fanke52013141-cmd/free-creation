@@ -1686,6 +1686,62 @@
   font-size: 12px;
   line-height: 1.6;
 }
+.composite-boundary {
+  display: grid;
+  gap: 14px;
+  margin-top: 4px;
+}
+.composite-boundary-section {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--sunk);
+}
+.composite-boundary-section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--txt);
+  font-size: 12px;
+}
+.composite-boundary-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) auto auto minmax(0, 1.4fr) minmax(0, 0.9fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+.composite-boundary-row input,
+.composite-boundary-row select {
+  min-width: 0;
+  height: 30px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--txt);
+  font-size: 12px;
+}
+.composite-boundary-type {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.composite-boundary-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.composite-boundary-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
 
 /* 卡片展示形态（分类 presentation） */
 .library-resource-card.presentation-profile .library-resource-cover { aspect-ratio: 3 / 4; height: auto; }

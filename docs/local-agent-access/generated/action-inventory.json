@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "generatedFrom": {
-    "ipcChannels": 172,
+    "ipcChannels": 180,
     "canvasActions": 45,
-    "externalOperations": 145
+    "externalOperations": 152
   },
   "totals": {
-    "actions": 217,
+    "actions": 225,
     "byPhase": {
-      "external": 179,
+      "external": 187,
       "excluded": 30,
       "F9": 8
     }
@@ -2075,6 +2075,86 @@
         "model.credential.status"
       ],
       "note": "F9（四）：只读查询某连接是否已保存 API Key，仅返回存在性与不可逆指纹（sha256 前 12 位），不返回明文/端点/请求头"
+    },
+    "ipc.composite.search": {
+      "label": "组合能力搜索",
+      "channel": "composite:search",
+      "gui": "保存节点 → 组合节点",
+      "phase": "external",
+      "external": [
+        "composite.search"
+      ],
+      "note": "按名称/标签发现组合，返回稳定 ID/版本摘要，不含内部图"
+    },
+    "ipc.composite.versionGet": {
+      "label": "组合版本读取",
+      "channel": "composite:version:get",
+      "gui": "保存节点 → 组合节点",
+      "phase": "external",
+      "external": [
+        "composite.get"
+      ],
+      "note": "读取固定版本 manifest；GUI 与 Agent 共用同一契约"
+    },
+    "ipc.composite.draftGet": {
+      "label": "组合草稿读取",
+      "channel": "composite:draft:get",
+      "gui": "保存节点 → 组合节点",
+      "phase": "external",
+      "external": [
+        "composite.draft.get"
+      ],
+      "note": "编辑草稿与 revision 并发保护"
+    },
+    "ipc.composite.draftSave": {
+      "label": "组合草稿保存",
+      "channel": "composite:draft:save",
+      "gui": "保存节点 → 组合节点",
+      "phase": "external",
+      "external": [
+        "composite.draft.save"
+      ],
+      "note": "GUI 与 Agent 同一保存策略；不发布"
+    },
+    "ipc.composite.validate": {
+      "label": "组合发布校验",
+      "channel": "composite:validate",
+      "gui": "保存节点 → 组合节点",
+      "phase": "external",
+      "external": [
+        "composite.validate"
+      ],
+      "note": "端口/映射/类型/基数/DAG/依赖/预算同规则"
+    },
+    "ipc.composite.publish": {
+      "label": "组合版本发布",
+      "channel": "composite:publish",
+      "gui": "保存节点 → 组合节点",
+      "phase": "external",
+      "external": [
+        "composite.publish"
+      ],
+      "note": "不可变版本；同版本异摘要拒绝覆盖"
+    },
+    "ipc.composite.archive": {
+      "label": "组合能力归档",
+      "channel": "composite:archive",
+      "gui": "保存节点 → 组合节点",
+      "phase": "external",
+      "external": [
+        "composite.archive"
+      ],
+      "note": "归档后默认发现不可见，已引用版本仍可读"
+    },
+    "ipc.composite.verify": {
+      "label": "组合版本完整性校验",
+      "channel": "composite:verify",
+      "gui": "保存节点 → 组合节点",
+      "phase": "external",
+      "external": [
+        "composite.get"
+      ],
+      "note": "按内容摘要核对版本完整性"
     }
   }
 }

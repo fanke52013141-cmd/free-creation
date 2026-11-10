@@ -5,6 +5,7 @@ import type {
   CompositeVersionRecord
 } from '../../shared/composite/types'
 import { compositeContentHash, parseCompositeManifest } from '../../shared/composite/manifest'
+import { validateCompositeManifest } from '../../shared/composite/validate'
 import { getDb } from './db'
 
 interface CapabilityRow {
@@ -70,6 +71,16 @@ function rowToDraft(row: DraftRow): CompositeDraftRecord {
     revision: row.revision,
     updatedAt: row.updated_at
   }
+}
+
+function assertPublishManifest(value: unknown): CompositeManifest {
+  const result = validateCompositeManifest(value)
+  if (!result.ok) {
+    throw new Error(
+      `组合契约无效：${result.issues.map((issue) => `[${issue.code}] ${issue.path}: ${issue.message}`).join('；')}`
+    )
+  }
+  return result.ok ? (value as CompositeManifest) : (value as CompositeManifest)
 }
 
 function assertManifest(value: unknown): CompositeManifest {
@@ -172,7 +183,7 @@ export async function publishCompositeVersion(
   manifestInput: unknown,
   publishedBy = 'local'
 ): Promise<{ record: CompositeVersionRecord; created: boolean }> {
-  const manifest = assertManifest(manifestInput)
+  const manifest = assertPublishManifest(manifestInput)
   const contentHash = await compositeContentHash(manifest)
   const db = getDb()
   const now = Date.now()

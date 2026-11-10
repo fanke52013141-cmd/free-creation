@@ -503,7 +503,7 @@ export function installBrowserMock(): void {
             updatedAt: Date.now()
           }
         }),
-      draftDelete: () => Promise.resolve({ ok: true, data: true }),
+      validate: () => Promise.resolve({ ok: true, data: { ok: true, issues: [] } }),
       publish: (input: { manifest: { capabilityId: string; version: string } }) =>
         Promise.resolve({
           ok: true,

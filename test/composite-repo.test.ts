@@ -46,7 +46,20 @@ function manifest(patch: Partial<CompositeManifest> = {}): CompositeManifest {
     ],
     graph: {
       nodes: [
-        { id: 'requirements', nodeType: 'text', contractVersion: 1, title: '人物要求', dx: 0, dy: 0, w: 340, h: 260 },
+        {
+          id: 'requirements',
+          nodeType: 'text',
+          contractVersion: 1,
+          title: '人物要求',
+          dx: 0,
+          dy: 0,
+          w: 340,
+          h: 260,
+          ports: [
+            { id: 'in-text', name: '人物要求', dir: 'in', type: 'text', required: true, cardinality: 'one' },
+            { id: 'out-text', name: '文本', dir: 'out', type: 'text', required: true, cardinality: 'one' }
+          ]
+        },
         {
           id: 'generate-image',
           nodeType: 'image-gen',
@@ -55,7 +68,11 @@ function manifest(patch: Partial<CompositeManifest> = {}): CompositeManifest {
           dx: 380,
           dy: 0,
           w: 340,
-          h: 260
+          h: 260,
+          ports: [
+            { id: 'in-prompt', name: '提示词', dir: 'in', type: 'text', required: true, cardinality: 'one' },
+            { id: 'out-image', name: '人物设计图', dir: 'out', type: 'image', required: true, cardinality: 'one' }
+          ]
         }
       ],
       edges: [
