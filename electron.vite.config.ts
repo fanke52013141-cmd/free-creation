@@ -10,8 +10,10 @@ import type { Plugin } from 'vite'
  * 对这些文件改为整页刷新，保证形状相关改动总能生效。
  */
 /** 发行版构建开关：CANVAS_DISTRIBUTION=1 时注入 __CANVAS_DISTRIBUTION__=true（见 src/shared/edition.ts）。 */
+/** 自用版开关：CANVAS_OWNER=1 时注入 __CANVAS_OWNER__=true（跳过授权、保留全部节点）。 */
 const editionDefine = {
-  __CANVAS_DISTRIBUTION__: JSON.stringify(process.env.CANVAS_DISTRIBUTION === '1')
+  __CANVAS_DISTRIBUTION__: JSON.stringify(process.env.CANVAS_DISTRIBUTION === '1'),
+  __CANVAS_OWNER__: JSON.stringify(process.env.CANVAS_OWNER === '1')
 }
 
 const forceReloadCanvasShapes = (): Plugin => ({

@@ -7,9 +7,22 @@
  * 常规开发/测试构建该值为 false，行为与主线完全一致。
  */
 declare const __CANVAS_DISTRIBUTION__: boolean
+declare const __CANVAS_OWNER__: boolean
 
 export const DISTRIBUTION_EDITION: boolean =
   typeof __CANVAS_DISTRIBUTION__ === 'boolean' ? __CANVAS_DISTRIBUTION__ : false
+
+/**
+ * 自用版（`CANVAS_OWNER=1 npm run build:personal`）：
+ * - 跳过授权门禁与设备绑定密钥库（同发行版），密钥走系统安全存储（DPAPI），导入即用；
+ * - **不裁剪节点**：保留全部节点/分类（发行版会精简调色板和节点集）；
+ * - 仅用于本机自用打包，不得对外分发。
+ */
+export const OWNER_EDITION: boolean =
+  typeof __CANVAS_OWNER__ === 'boolean' ? __CANVAS_OWNER__ : false
+
+/** 不需要授权门禁的构建：客户发行版 + 本机自用版。 */
+export const LICENSE_GATE_DISABLED: boolean = DISTRIBUTION_EDITION || OWNER_EDITION
 
 /**
  * 发行版裁剪的节点类型。

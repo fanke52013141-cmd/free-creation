@@ -44,7 +44,7 @@ import { acquireProcessLock, type ProcessLock } from './store/process-lock'
 import { checkWorkspaceHealth, sweepStaleVideoTempFiles } from './store/workspace-health'
 import { bootstrapLegacyProvidersToCatalog, saveProvider } from './gateway/providers.repo'
 import { DREAMINA_IMAGE_MODELS, DREAMINA_VIDEO_MODELS } from '../shared/dreamina-models'
-import { DISTRIBUTION_EDITION } from '../shared/edition'
+import { LICENSE_GATE_DISABLED } from '../shared/edition'
 import { SecretVault, setActiveVault } from './security/keystore/vault'
 import { migrateSecretsToVault } from './security/keystore/migrate'
 import type { DeviceKeyAdapter } from './security/license/device/adapter'
@@ -515,11 +515,11 @@ app.whenReady().then(async () => {
   // ── 授权门禁（方案 §3.3）───────────────────────────────────────────────
   // 必须先于一切数据库访问（含进程锁的 SQLite 表）、诊断、密钥迁移、
   // 业务 IPC、媒体协议与外部接入：未激活时只提供授权窗。
-  // 发行版（CANVAS_DISTRIBUTION=1）：不做授权、不注入设备密钥库——
-  // API Key 走系统安全存储（DPAPI），导入即用。
+  // 发行版/自用版（CANVAS_DISTRIBUTION=1 / CANVAS_OWNER=1）：不做授权、不注入设备密钥库——
+  // API Key 走系统安全存储（DPAPI），导入即用。自用版保留全部节点，发行版另有裁剪。
   let gate: LicenseGateOutcome | null = null
   let vault: SecretVault | null = null
-  if (!DISTRIBUTION_EDITION) {
+  if (!LICENSE_GATE_DISABLED) {
     gate = await bootLicenseGate()
     if (!gate) {
       return // 授权窗路径：waitForLicenseActivation 未通过，应用已退出
@@ -541,9 +541,9 @@ app.whenReady().then(async () => {
   await initDiagnostics()
 
   const database = getDb()
-  // 发行版：预置即梦供应商与模型清单——客户打开模型设置即可见「即梦（本机 CLI）」，
+  // 发行版/自用版：预置即梦供应商与模型清单——打开模型设置即可见「即梦（本机 CLI）」，
   // 只需点「登录即梦」完成本机 OAuth 即可使用（CLI 已随包内置，无需下载）。
-  if (DISTRIBUTION_EDITION) {
+  if (LICENSE_GATE_DISABLED) {
     const dreaminaRow = database.prepare('SELECT id FROM providers WHERE id = ?').get('dreamina')
     if (!dreaminaRow) {
       try {
