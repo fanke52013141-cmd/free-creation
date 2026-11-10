@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { compositeManifestSchema } from '../../composite/manifest'
 
 const capabilityId = z.string().min(1).max(80)
-const semver = z.string().regex(/^\d+\.\d+\.\d+$/)
+const semver = z.string().regex(/^\d+\.0(\.0)?$/)
 const manifest = compositeManifestSchema
 
 const summary = z

@@ -20,7 +20,7 @@ function manifest(patch: Partial<CompositeManifest> = {}): CompositeManifest {
   return {
     schemaVersion: 1,
     capabilityId: 'character-design',
-    version: '1.0.0',
+    version: '1.0',
     name: '人物设计',
     description: '输入人物要求，输出人物设计图',
     tags: ['人物'],
@@ -126,21 +126,22 @@ describe('组合能力存储（P1）', () => {
     expect(getCompositeDraft('character-design')).toBeNull()
   })
 
-  it('发布版本不可变、同内容幂等，latestVersion 取最高版本', async () => {
+  it('发布可覆盖旧版本、同内容幂等，latestVersion 取最高主版本', async () => {
     const published = await publishCompositeVersion(manifest())
     expect(published.created).toBe(true)
     expect(published.record.contentHash).toMatch(/^[a-f0-9]{64}$/)
     const repeat = await publishCompositeVersion(manifest())
     expect(repeat.created).toBe(false)
 
-    await expect(
-      publishCompositeVersion(manifest({ name: '被篡改的人物设计' }))
-    ).rejects.toThrow('禁止覆盖')
+    // 用户裁决：允许直接修改旧版本，不强制按副版本递增。
+    const replaced = await publishCompositeVersion(manifest({ name: '修改后的人物设计' }))
+    expect(replaced.created).toBe(false)
+    expect(getCompositeVersion('character-design', '1.0')?.manifest.name).toBe('修改后的人物设计')
 
-    await publishCompositeVersion(manifest({ version: '1.1.0' }))
-    expect(listCompositeCapabilities()[0].latestVersion).toBe('1.1.0')
-    expect(getCompositeVersion('character-design', '1.0.0')?.manifest.name).toBe('人物设计')
-    await expect(verifyCompositeVersion('character-design', '1.0.0')).resolves.toEqual({ ok: true })
+    await publishCompositeVersion(manifest({ version: '2.0' }))
+    expect(listCompositeCapabilities()[0].latestVersion).toBe('2.0')
+    expect(getCompositeVersion('character-design', '2.0')?.manifest.version).toBe('2.0')
+    await expect(verifyCompositeVersion('character-design', '1.0')).resolves.toEqual({ ok: true })
   })
 
   it('按名称/标签搜索，归档后默认不可见但版本仍可读', async () => {
@@ -150,7 +151,7 @@ describe('组合能力存储（P1）', () => {
     expect(archiveCompositeCapability('character-design')).toBe(true)
     expect(listCompositeCapabilities()).toHaveLength(0)
     expect(listCompositeCapabilities({ includeArchived: true })).toHaveLength(1)
-    expect(getCompositeVersion('character-design', '1.0.0')).not.toBeNull()
+    expect(getCompositeVersion('character-design', '1.0')).not.toBeNull()
   })
 
   it('损坏 manifest 不能保存或发布', async () => {

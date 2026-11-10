@@ -29,7 +29,7 @@ export function WorkflowSaveDialog({
   const [error, setError] = useState('')
   const [saveKind, setSaveKind] = useState<'template' | 'resource' | 'composite'>('template')
   const [capabilityId, setCapabilityId] = useState('')
-  const [version, setVersion] = useState('1.0.0')
+  const [version, setVersion] = useState('1.0')
   const [compositeDraft, setCompositeDraft] = useState<CompositeManifest | null>(null)
   const saveWorkflow = useWorkflowStore((state) => state.save)
   const nodes = useMemo(
@@ -46,7 +46,7 @@ export function WorkflowSaveDialog({
     const built = buildCompositeManifestFromGraph({
       capabilityId: capabilityId.trim() || slugify(name) || `composite-${Date.now()}`,
       name: name.trim() || '未命名组合',
-      version: version.trim() || '1.0.0',
+      version: version.trim() || '1.0',
       nodes: graph.nodes,
       edges: graph.edges,
       selectedNodeIds: nodes.map((node) => node.id)
@@ -107,7 +107,7 @@ export function WorkflowSaveDialog({
           ...compositeDraft,
           capabilityId: id,
           name: title,
-          version: version.trim() || '1.0.0'
+          version: version.trim() || '1.0'
         }
         const validated = await window.api.composite.validate({ manifest: edited })
         if (!validated.ok) throw new Error(validated.error.message)
@@ -256,7 +256,7 @@ export function WorkflowSaveDialog({
                   maxLength={20}
                   value={version}
                   onChange={(event) => setVersion(event.target.value)}
-                  placeholder="1.0.0"
+                  placeholder="1.0"
                 />
               </label>
               <p className="workflow-save-composite-note">

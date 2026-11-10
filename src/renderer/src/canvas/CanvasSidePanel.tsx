@@ -19,6 +19,7 @@ import { runNodeManually, runWorkflowForNodes } from '../engine/executor'
 import { useGatewayStore } from '../stores/gateway'
 import { useWorkflowStore, type WorkflowTemplate } from '../stores/workflow'
 import { addNodeLibraryEntry } from './node-library'
+import { CompositeVersionDialog } from '../composite/CompositeVersionDialog'
 import { markUndoPoint } from './history'
 import { toast } from '../stores/toast'
 import { useConfirmStore } from '../stores/confirm'
@@ -82,6 +83,7 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
   const wfRemove = useWorkflowStore((s) => s.remove)
   const [query, setQuery] = useState('')
   const [composites, setComposites] = useState<CompositeCapabilitySummary[]>([])
+  const [versionDialog, setVersionDialog] = useState<{ capability: CompositeCapabilitySummary; mode: 'edit' | 'next' } | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const needle = query.trim().toLocaleLowerCase()
   const visibleTemplates = templates.filter((template) =>
@@ -168,6 +170,7 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
   }
 
   return (
+    <>
     <div className="side-panel-body workflow-panel" ref={scrollRef}>
       <label className="assets-search-row">
         <Icon name="search" size={14} />
@@ -200,7 +203,29 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
                   {capability.name}
                 </span>
                 <span className="asset-meta">
-                  v{capability.latestVersion ?? '—'} · 组合节点
+                  v{(capability.latestVersion ?? '—').replace(/\.0\.0$/, '.0')} · 组合节点
+                </span>
+                <span className="composite-card-actions">
+                  <button
+                    type="button"
+                    className="btn-ghost small"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setVersionDialog({ capability, mode: 'edit' })
+                    }}
+                  >
+                    编辑
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost small"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setVersionDialog({ capability, mode: 'next' })
+                    }}
+                  >
+                    新版本
+                  </button>
                 </span>
               </div>
             </article>
@@ -217,6 +242,19 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
         </div>
       )}
     </div>
+    {versionDialog && (
+      <CompositeVersionDialog
+        capability={versionDialog.capability}
+        mode={versionDialog.mode}
+        onClose={() => setVersionDialog(null)}
+        onPublished={() => {
+          void window.api.composite.search().then((result) => {
+            if (result.ok) setComposites(result.data)
+          })
+        }}
+      />
+    )}
+    </>
   )
 }
 

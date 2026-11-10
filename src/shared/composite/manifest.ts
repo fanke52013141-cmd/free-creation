@@ -166,7 +166,7 @@ export const compositeManifestSchema = z
       .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/, 'capabilityId 只能包含字母/数字/._-'),
     version: z
       .string()
-      .regex(/^\d+\.\d+\.\d+$/, '版本必须为 SemVer（例如 1.0.0）'),
+      .regex(/^\d+\.0(\.0)?$/, '版本必须为主版本整数（例如 1.0、2.0、3.0）'),
     name: z.string().trim().min(1).max(120),
     description: z.string().trim().max(600).optional(),
     tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),

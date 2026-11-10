@@ -8,7 +8,7 @@ function manifest(): CompositeManifest {
   return {
     schemaVersion: 1,
     capabilityId: 'character-design',
-    version: '1.0.0',
+    version: '1.0',
     name: '人物设计',
     inputs: [
       {

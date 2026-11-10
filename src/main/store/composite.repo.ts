@@ -206,9 +206,24 @@ export async function publishCompositeVersion(
     if (existing.content_hash === contentHash) {
       return { record: rowToVersion(existing), created: false }
     }
-    throw new Error(
-      `组合版本 ${manifest.capabilityId}@${manifest.version} 已发布且内容不同，禁止覆盖；请提升版本号`
+    // 用户 2026-11-10 裁决：版本按主版本整数管理，允许直接修改旧版本；
+    // 更新同一版本的内容摘要而不另造副版本。
+    db.prepare(
+      `UPDATE composite_versions SET manifest = ?, content_hash = ?, published_at = ?, published_by = ?
+       WHERE capability_id = ? AND version = ?`
+    ).run(
+      JSON.stringify(manifest),
+      contentHash,
+      now,
+      publishedBy,
+      manifest.capabilityId,
+      manifest.version
     )
+    upsertCapabilityRow(manifest, now)
+    const replaced = db
+      .prepare('SELECT * FROM composite_versions WHERE capability_id = ? AND version = ?')
+      .get(manifest.capabilityId, manifest.version) as VersionRow
+    return { record: rowToVersion(replaced), created: false }
   }
   const capability = db
     .prepare('SELECT * FROM composite_capabilities WHERE id = ?')

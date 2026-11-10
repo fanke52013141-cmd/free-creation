@@ -90,7 +90,7 @@ describe('组合草稿边界提取（P1）', () => {
     const result = buildCompositeManifestFromGraph({
       capabilityId: 'character-design',
       name: '人物设计',
-      version: '1.0.0',
+      version: '1.0',
       nodes,
       edges,
       selectedNodeIds: ['shape:text', 'shape:ai', 'shape:image']
@@ -120,7 +120,7 @@ describe('组合草稿边界提取（P1）', () => {
     const result = buildCompositeManifestFromGraph({
       capabilityId: 'character-design',
       name: '人物设计',
-      version: '1.0.0',
+      version: '1.0',
       nodes,
       edges,
       selectedNodeIds: ['shape:ai', 'shape:image']
@@ -136,7 +136,7 @@ describe('组合草稿边界提取（P1）', () => {
     const result = buildCompositeManifestFromGraph({
       capabilityId: 'character-design',
       name: '人物设计',
-      version: '1.0.0',
+      version: '1.0',
       nodes: [nodes[0]],
       edges: edges.filter((edge) => edge.from.nodeId !== 'shape:text'),
       selectedNodeIds: ['shape:text']

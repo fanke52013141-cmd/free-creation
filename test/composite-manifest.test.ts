@@ -12,7 +12,7 @@ function characterDesign(patch: Partial<CompositeManifest> = {}): CompositeManif
   return {
     schemaVersion: 1,
     capabilityId: 'character-design',
-    version: '1.0.0',
+    version: '1.0',
     name: '人物设计',
     description: '输入人物要求，输出人物设计图',
     tags: ['人物', '设计'],
@@ -148,13 +148,13 @@ describe('组合能力 manifest（P1 契约）', () => {
     a.capabilityId = 'a'
     a.dependencies = [
       ...(a.dependencies ?? []),
-      { kind: 'capability', id: 'b', version: '1.0.0' }
+      { kind: 'capability', id: 'b', version: '1.0' }
     ]
     const b = characterDesign()
     b.capabilityId = 'b'
     b.dependencies = [
       ...(b.dependencies ?? []),
-      { kind: 'capability', id: 'a', version: '1.0.0' }
+      { kind: 'capability', id: 'a', version: '1.0' }
     ]
     const result = validateCompositeManifest(a, {
       getCapability: (id) => (id === 'a' ? a : id === 'b' ? b : null)

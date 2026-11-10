@@ -1953,3 +1953,5 @@
   line-height: 1.6;
 }
 .composite-body-meta { color: var(--txt-secondary, var(--muted)); }
+
+.composite-card-actions { display: flex; gap: 4px; margin-top: 4px; }
