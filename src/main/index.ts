@@ -521,11 +521,17 @@ app.whenReady().then(async () => {
   // API Key 走系统安全存储（DPAPI），导入即用。自用版保留全部节点，发行版另有裁剪。
   let gate: LicenseGateOutcome | null = null
   let vault: SecretVault | null = null
-  if (!LICENSE_GATE_DISABLED) {
+  // 开发 bypass 时必须真正跳过门禁；不能把 bootLicenseGate 的 null（授权窗路径）误当成
+  // “等待激活”而直接 return，否则未打包开发实例会静默退出、无窗口也无外部接入。
+  const devLicenseBypass = !app.isPackaged && process.env.CANVAS_LICENSE_DEV_BYPASS === '1'
+  if (!LICENSE_GATE_DISABLED && !devLicenseBypass) {
     gate = await bootLicenseGate()
     if (!gate) {
       return // 授权窗路径：waitForLicenseActivation 未通过，应用已退出
     }
+  }
+  if (devLicenseBypass && !LICENSE_GATE_DISABLED) {
+    log.warn('license: 已通过 CANVAS_LICENSE_DEV_BYPASS 跳过授权门禁（仅开发构建；发布包不生效）')
   }
   const licenseService = gate?.service
 
