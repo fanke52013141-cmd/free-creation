@@ -985,3 +985,8 @@ AI 对话工作区视觉重排：移除可见角色标签，保留无障碍消�
 保存节点运行复用模板插入及统一工作流执行器。确定缺项在运行启动前收集，实际注入、素材导入和执行终态沿用原有诊断，临时值不写日志。
 
 node.runPlan 为只读预检，复用 Agent 请求诊断，返回端口元数据，未收集输入正文或媒体内容。
+
+## 2026-11-10 组合能力 P1（定义/版本/草稿存储与 IPC）
+
+新增 composite_capabilities/composite_versions/composite_drafts（M25）与 composite.search/draft/publish/validate/archive IPC。路径均为本地 SQLite 同步读写，不访问网络、不调用模型、不写媒体；发布校验失败以 IPC 错误 envelope 返回，不伪造成功。证据：composite-manifest/repo/build/agent-access/db-migrations 共 20 项测试通过，guard:agent-parity 与 verify:agent-access 通过。日志影响：P1 不新增执行事件；composite.run.* 等待/恢复事件在 P2/P3 实施时登记，当前不得声称已覆盖。未覆盖：真实 CLI/MCP 进程调用、桌面 UI 点击、重启恢复。
+
