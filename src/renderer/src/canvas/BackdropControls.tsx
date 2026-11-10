@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import { Icon } from '../components/Icon'
 import { applyBackdropAction } from './backdrop-actions'
+import { arrangeBackdrop } from './backdrop-layout'
 import type { BackdropShape } from './BackdropShape'
 import './backdrop-controls.css'
 
@@ -38,6 +39,14 @@ export function BackdropControls({ shape }: { shape: BackdropShape }): React.JSX
       fillOpacity: opacity
     })
     popover.current?.hidePopover()
+  }
+
+  /** 横排/纵排属于视图整理操作：走本地历史点，失败时不会留下半成品。 */
+  const arrange = (layout: 'horizontal' | 'vertical'): void => {
+    if (memberIds.length < 2) return
+    editor.markHistoryStoppingPoint(`backdrop-arrange-${layout}`)
+    editor.run(() => arrangeBackdrop(editor, shape, layout))
+    editor.markHistoryStoppingPoint('backdrop-arrange-complete')
   }
 
   return (
@@ -79,6 +88,28 @@ export function BackdropControls({ shape }: { shape: BackdropShape }): React.JSX
         }
       >
         <Icon name="grid" size={26} />
+      </button>
+      <button
+        type="button"
+        className="backdrop-arrange"
+        aria-label="横向排列背景板节点"
+        title="横向排列：所有节点排成一行"
+        disabled={memberIds.length < 2}
+        onPointerDown={stopEventPropagation}
+        onClick={() => arrange('horizontal')}
+      >
+        <Icon name="distribute-horizontal" size={26} />
+      </button>
+      <button
+        type="button"
+        className="backdrop-arrange"
+        aria-label="纵向排列背景板节点"
+        title="纵向排列：所有节点排成一列"
+        disabled={memberIds.length < 2}
+        onPointerDown={stopEventPropagation}
+        onClick={() => arrange('vertical')}
+      >
+        <Icon name="distribute-vertical" size={26} />
       </button>
       <button
         ref={colorButton}

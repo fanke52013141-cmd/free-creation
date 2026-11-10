@@ -36,13 +36,43 @@ export function moveBackdrop(
   editor.updateShapes([...updates, { id: board.id, type: 'backdrop', x: point.x, y: point.y }])
 }
 
-export function arrangeBackdrop(editor: Editor, board: BackdropShape): void {
+export function arrangeBackdrop(
+  editor: Editor,
+  board: BackdropShape,
+  layout: 'grid' | 'horizontal' | 'vertical' = 'grid'
+): void {
   const members = board.props.memberIds.flatMap((id) => {
     const shape = editor.getShape(id)
     const bounds = editor.getShapePageBounds(id)
     return shape?.type === 'node-card' && bounds ? [{ shape, bounds }] : []
   })
   if (members.length < 2) return
+
+  // 横排/纵排：忽略原有行列，按阅读方向把所有成员排成一行或一列。
+  if (layout === 'horizontal' || layout === 'vertical') {
+    const horizontal = layout === 'horizontal'
+    members.sort((a, b) =>
+      horizontal
+        ? a.bounds.x - b.bounds.x || a.bounds.y - b.bounds.y
+        : a.bounds.y - b.bounds.y || a.bounds.x - b.bounds.x
+    )
+    const left = Math.min(...members.map(({ bounds }) => bounds.x))
+    const top = Math.min(...members.map(({ bounds }) => bounds.y))
+    let cursor = horizontal ? left : top
+    const updates = members.map(({ shape, bounds }) => {
+      const origin = editor.getShapePageTransform(shape)?.point()
+      const pageX = horizontal ? cursor : left
+      const pageY = horizontal ? top : cursor
+      cursor += (horizontal ? bounds.w : bounds.h) + ARRANGE_GAP
+      const point = editor.getPointInParentSpace(shape, {
+        x: pageX + (origin?.x ?? bounds.x) - bounds.x,
+        y: pageY + (origin?.y ?? bounds.y) - bounds.y
+      })
+      return { id: shape.id, type: 'node-card' as const, x: point.x, y: point.y }
+    })
+    editor.updateShapes(updates)
+    return
+  }
 
   members.sort((a, b) => a.bounds.y - b.bounds.y || a.bounds.x - b.bounds.x)
   const rows: Array<typeof members> = []
