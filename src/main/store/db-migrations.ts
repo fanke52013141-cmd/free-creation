@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 26
+export const DB_SCHEMA_VERSION = 27
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -565,6 +565,28 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
       );
       CREATE INDEX IF NOT EXISTS idx_composite_run_steps_run
         ON composite_run_steps(run_id);
+    `)
+  },
+  // M27: 组合运行等待输入（P3）。一个运行同一 revision 只允许一个等待；补交值单独列存放。
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS composite_run_waits (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        step_key TEXT,
+        revision INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        state TEXT NOT NULL DEFAULT 'open',
+        fields_json TEXT NOT NULL,
+        value_json TEXT,
+        submitted_by TEXT,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER,
+        satisfied_at INTEGER,
+        UNIQUE (run_id, revision)
+      );
+      CREATE INDEX IF NOT EXISTS idx_composite_run_waits_open
+        ON composite_run_waits(run_id, state);
     `)
   }
 ]
