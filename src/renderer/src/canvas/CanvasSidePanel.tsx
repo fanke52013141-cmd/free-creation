@@ -194,9 +194,13 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
               title={`点击添加组合节点：${capability.id}@${capability.latestVersion ?? ''}`}
               onClick={() => void insertComposite(capability)}
             >
+              <LibraryCardCover icon="layers" compact />
               <div className="asset-info">
                 <span className="asset-name" title={capability.name}>
                   {capability.name}
+                </span>
+                <span className="asset-meta">
+                  v{capability.latestVersion ?? '—'} · 组合节点
                 </span>
               </div>
             </article>

@@ -864,7 +864,10 @@ export function registerBaseNodeTypes(): void {
             type: input.type,
             required: input.required,
             cardinality: input.cardinality,
-            description: input.description || input.label
+            description: input.description || input.label,
+            ...(input.type === 'json'
+              ? { schema: input.schemaRef ?? { id: 'json.any', version: 1 } }
+              : {})
           })),
           out: manifest.outputs.map((output) => ({
             id: `out-${output.id}`,
@@ -873,7 +876,10 @@ export function registerBaseNodeTypes(): void {
             type: output.type,
             required: output.required,
             cardinality: output.cardinality,
-            description: output.description || output.label
+            description: output.description || output.label,
+            ...(output.type === 'json'
+              ? { schema: output.schemaRef ?? { id: 'json.any', version: 1 } }
+              : {})
           }))
         }
       } catch {
