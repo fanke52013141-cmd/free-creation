@@ -6,6 +6,7 @@
 // - 外部不提供密钥/地址，只给已保存 id；
 // - 回执去敏（不含地址、密钥、请求/响应正文）。
 import type { AccessOperationId } from '../../shared/agent-access/registry'
+import { getProvider } from '../gateway/providers.repo'
 import { testProvider } from '../gateway/factory'
 import { createDesktopModelRuntime } from '../model-host/runtime'
 import { discoverConnectionModels } from '../model-host/discovery'
@@ -52,7 +53,16 @@ export async function runProviderNetworkOperation(
     const providerId = input.providerId as string
     try {
       // 只传 id：密钥由 main 从设备密钥库读取，外部无法借此探测或注入密钥。
-      const result = await testProvider({ id: providerId } as never)
+      const provider = await getProvider(providerId)
+      if (!provider) throw new Error('PROVIDER_NOT_FOUND')
+      const result = await testProvider({
+        id: provider.id,
+        name: provider.name,
+        specId: provider.specId,
+        baseURL: provider.baseURL,
+        apiKey: provider.apiKey,
+        models: provider.models
+      })
       return {
         providerId,
         reachable: true,
