@@ -1675,6 +1675,17 @@
 .workflow-save-options label:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }
 .workflow-save-options input { accent-color: var(--brand); }
 .workflow-save-dialog .library-form-footer button { min-height: 36px; font-size: 13px; }
+.workflow-save-composite {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+.workflow-save-composite-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
 
 /* 卡片展示形态（分类 presentation） */
 .library-resource-card.presentation-profile .library-resource-cover { aspect-ratio: 3 / 4; height: auto; }

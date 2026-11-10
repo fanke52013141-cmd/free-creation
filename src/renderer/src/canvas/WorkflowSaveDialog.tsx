@@ -3,6 +3,8 @@ import type { Editor, TLShapeId } from 'tldraw'
 import { Icon } from '../components/Icon'
 import { toast } from '../stores/toast'
 import { extractTemplateFromSelection, useWorkflowStore } from '../stores/workflow'
+import { deriveGraph } from './graph'
+import { buildCompositeManifestFromGraph } from '../composite/build-manifest'
 import type { NodeCardShape } from './NodeCardShape'
 import '../library/library.css'
 import { useAppStore } from '../stores/app'
@@ -11,7 +13,7 @@ interface Props {
   editor: Editor
   nodeIds: TLShapeId[]
   onClose: () => void
-  onSaved: (kind: 'template' | 'resource', name?: string) => void
+  onSaved: (kind: 'template' | 'resource' | 'composite', name?: string) => void
 }
 
 export function WorkflowSaveDialog({
@@ -23,7 +25,9 @@ export function WorkflowSaveDialog({
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [saveKind, setSaveKind] = useState<'template' | 'resource'>('template')
+  const [saveKind, setSaveKind] = useState<'template' | 'resource' | 'composite'>('template')
+  const [capabilityId, setCapabilityId] = useState('')
+  const [version, setVersion] = useState('1.0.0')
   const saveWorkflow = useWorkflowStore((state) => state.save)
   const nodes = useMemo(
     () =>
@@ -73,8 +77,34 @@ export function WorkflowSaveDialog({
           }))
         })
         if (!result.ok) throw new Error(result.error.message)
+      } else if (saveKind === 'composite') {
+        const graph = deriveGraph(editor)
+        const id =
+          capabilityId.trim() ||
+          title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '') ||
+          `composite-${Date.now()}`
+        const built = buildCompositeManifestFromGraph({
+          capabilityId: id,
+          name: title,
+          version: version.trim() || '1.0.0',
+          nodes: graph.nodes,
+          edges: graph.edges,
+          selectedNodeIds: nodes.map((node) => node.id)
+        })
+        if (!built.ok) {
+          throw new Error(built.issues.map((issue) => `${issue.path}: ${issue.message}`).join('；'))
+        }
+        const draft = await window.api.composite.draftSave({ manifest: built.manifest })
+        if (!draft.ok) throw new Error(draft.error.message)
+        const published = await window.api.composite.publish({ manifest: built.manifest })
+        if (!published.ok) throw new Error(published.error.message)
       } else await saveWorkflow(title, extractTemplateFromSelection(nodes, edges))
-      toast(`已保存${saveKind === 'resource' ? '素材资源' : '流程模板'}「${title}」`)
+      const kindLabel =
+        saveKind === 'resource' ? '素材资源' : saveKind === 'composite' ? '组合节点' : '流程模板'
+      toast(`已保存${kindLabel}「${title}」`)
       onSaved(saveKind, title)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
@@ -155,7 +185,45 @@ export function WorkflowSaveDialog({
               />
               素材资源
             </label>
+            <label>
+              <input
+                type="radio"
+                name="reuse-kind"
+                checked={saveKind === 'composite'}
+                disabled={nodes.length < 1}
+                onChange={() => setSaveKind('composite')}
+              />
+              组合节点
+            </label>
           </fieldset>
+          {saveKind === 'composite' && (
+            <div className="workflow-save-composite">
+              <label className="library-form-field">
+                <span>组合 ID（留空由名称生成）</span>
+                <input
+                  maxLength={80}
+                  value={capabilityId}
+                  onChange={(event) => {
+                    setCapabilityId(event.target.value)
+                    setError('')
+                  }}
+                  placeholder="character-design"
+                />
+              </label>
+              <label className="library-form-field">
+                <span>版本</span>
+                <input
+                  maxLength={20}
+                  value={version}
+                  onChange={(event) => setVersion(event.target.value)}
+                  placeholder="1.0.0"
+                />
+              </label>
+              <p className="workflow-save-composite-note">
+                发布后版本不可变；输入输出从当前选区的外部连线与终态端口自动提取。
+              </p>
+            </div>
+          )}
           {error && (
             <div className="library-form-error" role="alert">
               {error}
@@ -178,7 +246,13 @@ export function WorkflowSaveDialog({
             disabled={busy}
             onClick={() => void save()}
           >
-            {busy ? '保存中…' : saveKind === 'resource' ? '保存素材资源' : '保存流程模板'}
+            {busy
+              ? '保存中…'
+              : saveKind === 'resource'
+                ? '保存素材资源'
+                : saveKind === 'composite'
+                  ? '保存并发布组合'
+                  : '保存流程模板'}
           </button>
         </footer>
       </section>
