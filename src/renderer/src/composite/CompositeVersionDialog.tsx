@@ -5,6 +5,7 @@ import type { CompositeManifest } from '@shared/composite/manifest'
 import { Icon } from '../components/Icon'
 import { toast } from '../stores/toast'
 import { CompositeBoundaryEditor } from '../composite/CompositeBoundaryEditor'
+import { deriveCompositeBoundary } from '@shared/composite/boundary'
 import './composite-editor.css'
 import '../library/library.css'
 
@@ -224,7 +225,22 @@ export function CompositeVersionDialog({
           {tab === 'io' && manifest && (
             <>
               <div className="composite-section">
-                <div className="composite-section-title"><span>公开端口</span><span style={{ color: '#78869c', fontWeight: 400 }}>{inputCount} 输入 · {outputCount} 输出</span></div>
+                <div className="composite-section-title">
+                  <span>公开端口 · {inputCount} 输入 · {outputCount} 输出</span>
+                  <button
+                    type="button"
+                    className="btn-ghost small"
+                    disabled={busy}
+                    onClick={() => {
+                      if (!manifest) return
+                      const boundary = deriveCompositeBoundary(manifest)
+                      setManifest({ ...manifest, inputs: boundary.inputs, outputs: boundary.outputs })
+                      toast(`已按内部图重新推导：${boundary.inputs.length} 输入 / ${boundary.outputs.length} 输出`)
+                    }}
+                  >
+                    按内部图重新推导
+                  </button>
+                </div>
                 {manifest.inputs.map((input) => (
                   <div className="composite-io-row" key={`in-${input.id}`}>
                     <span className="composite-io-badge">IN</span>
