@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 24
+export const DB_SCHEMA_VERSION = 25
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -501,6 +501,38 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
       `ALTER TABLE flow_commands ADD COLUMN principal TEXT NOT NULL DEFAULT 'internal'
         CHECK (principal IN ('internal','external'));`
     )
+  },
+  // M25: 组合能力（P1）。定义/草稿/不可变发布版本分开存放；发布版本只增不改。
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS composite_capabilities (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        tags TEXT NOT NULL DEFAULT '[]',
+        latest_version TEXT,
+        archived INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS composite_versions (
+        capability_id TEXT NOT NULL,
+        version TEXT NOT NULL,
+        manifest TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        published_at INTEGER NOT NULL,
+        published_by TEXT NOT NULL DEFAULT 'local',
+        PRIMARY KEY (capability_id, version)
+      );
+      CREATE INDEX IF NOT EXISTS idx_composite_versions_capability
+        ON composite_versions(capability_id, published_at DESC);
+      CREATE TABLE IF NOT EXISTS composite_drafts (
+        capability_id TEXT PRIMARY KEY,
+        manifest TEXT NOT NULL,
+        revision INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
+    `)
   }
 ]
 

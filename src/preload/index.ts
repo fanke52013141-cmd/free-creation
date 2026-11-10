@@ -1,5 +1,13 @@
 import { DiagnosticsProducer, newProducerId, newTraceId, newSpanId } from '../shared/observability'
 import type { LibraryCategory, SaveLibraryCategoryInput } from '../shared/library/blueprint'
+import type {
+  CompositeCapabilitySummary,
+  CompositeDraftRecord,
+  CompositeDraftSaveInput,
+  CompositePublishInput,
+  CompositeSearchInput,
+  CompositeVersionRecord
+} from '../shared/composite/types'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import { IPC } from '../shared/contracts'
@@ -503,6 +511,36 @@ const api = {
     mediaIds?: string[]
   ): Promise<IpcEnvelope<{ exported: number; failed: number; targetDir: string }>> =>
     ipcRenderer.invoke(IPC.media.batchExport, { projectId, mediaIds }),
+  composite: {
+    search: (
+      input: CompositeSearchInput = {}
+    ): Promise<IpcEnvelope<CompositeCapabilitySummary[]>> =>
+      ipcRenderer.invoke(IPC.composite.search, input),
+    draftGet: (capabilityId: string): Promise<IpcEnvelope<CompositeDraftRecord | null>> =>
+      ipcRenderer.invoke(IPC.composite.draftGet, capabilityId),
+    draftSave: (input: CompositeDraftSaveInput): Promise<IpcEnvelope<CompositeDraftRecord>> =>
+      ipcRenderer.invoke(IPC.composite.draftSave, input),
+    draftDelete: (capabilityId: string): Promise<IpcEnvelope<boolean>> =>
+      ipcRenderer.invoke(IPC.composite.draftDelete, capabilityId),
+    publish: (
+      input: CompositePublishInput
+    ): Promise<IpcEnvelope<{ record: CompositeVersionRecord; created: boolean }>> =>
+      ipcRenderer.invoke(IPC.composite.publish, input),
+    versionGet: (input: {
+      capabilityId: string
+      version: string
+    }): Promise<IpcEnvelope<CompositeVersionRecord | null>> =>
+      ipcRenderer.invoke(IPC.composite.versionGet, input),
+    archive: (input: {
+      capabilityId: string
+      archived?: boolean
+    }): Promise<IpcEnvelope<boolean>> => ipcRenderer.invoke(IPC.composite.archive, input),
+    verify: (input: {
+      capabilityId: string
+      version: string
+    }): Promise<IpcEnvelope<{ ok: boolean; reason?: string }>> =>
+      ipcRenderer.invoke(IPC.composite.verify, input)
+  },
   workspace: {
     listTemplates: (): Promise<IpcEnvelope<WorkflowTemplateRecord[]>> =>
       ipcRenderer.invoke(IPC.workspace.listTemplates),

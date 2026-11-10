@@ -37,10 +37,11 @@ function characterDesign(patch: Partial<CompositeManifest> = {}): CompositeManif
     ],
     graph: {
       nodes: [
-        { id: 'requirements', nodeType: 'text', title: '人物要求', dx: 0, dy: 0, w: 340, h: 260 },
+        { id: 'requirements', nodeType: 'text', contractVersion: 1, title: '人物要求', dx: 0, dy: 0, w: 340, h: 260 },
         {
           id: 'polish',
           nodeType: 'ai-process',
+          contractVersion: 1,
           title: '整理描述',
           dx: 380,
           dy: 0,
@@ -51,6 +52,7 @@ function characterDesign(patch: Partial<CompositeManifest> = {}): CompositeManif
         {
           id: 'generate-image',
           nodeType: 'image-gen',
+          contractVersion: 1,
           title: '生成人物图',
           dx: 760,
           dy: 0,

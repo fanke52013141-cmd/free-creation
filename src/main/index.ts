@@ -21,6 +21,7 @@ import { ProjectFileWatcher } from './ipc/project-watcher'
 import { registerMediaIpc } from './ipc/media.ipc'
 import { registerGatewayIpc } from './ipc/gateway.ipc'
 import { registerWorkspaceStateIpc } from './ipc/workspace-state.ipc'
+import { registerCompositeIpc } from './ipc/composite.ipc'
 import { registerModelIpc } from './ipc/models.ipc'
 import { registerDiagnosticsIpc, setDiagnosticsService } from './ipc/diagnostics.ipc'
 import {
@@ -633,6 +634,7 @@ app.whenReady().then(async () => {
   registerLibraryIpc()
   registerMediaIpc()
   registerWorkspaceStateIpc()
+  registerCompositeIpc()
   registerDiagnosticsIpc()
   const modelHost = new SqliteModelHost(database)
   const importedLegacyModels = await bootstrapLegacyProvidersToCatalog(modelHost)

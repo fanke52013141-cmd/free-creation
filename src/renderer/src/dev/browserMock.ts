@@ -490,6 +490,38 @@ export function installBrowserMock(): void {
     openMedia: () => Promise.resolve({ ok: true, data: true }),
     batchExportMedia: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持媒体导出' } }),
+    composite: {
+      search: () => Promise.resolve({ ok: true, data: [] }),
+      draftGet: () => Promise.resolve({ ok: true, data: null }),
+      draftSave: (input: { manifest: { capabilityId: string }; expectedRevision?: number }) =>
+        Promise.resolve({
+          ok: true,
+          data: {
+            capabilityId: input.manifest.capabilityId,
+            manifest: input.manifest,
+            revision: (input.expectedRevision ?? 0) + 1,
+            updatedAt: Date.now()
+          }
+        }),
+      draftDelete: () => Promise.resolve({ ok: true, data: true }),
+      publish: (input: { manifest: { capabilityId: string; version: string } }) =>
+        Promise.resolve({
+          ok: true,
+          data: {
+            record: {
+              capabilityId: input.manifest.capabilityId,
+              version: input.manifest.version,
+              manifest: input.manifest,
+              contentHash: '0'.repeat(64),
+              publishedAt: Date.now()
+            },
+            created: true
+          }
+        }),
+      versionGet: () => Promise.resolve({ ok: true, data: null }),
+      archive: () => Promise.resolve({ ok: true, data: true }),
+      verify: () => Promise.resolve({ ok: true, data: { ok: true } })
+    } as unknown as WindowApi['composite'],
     workspace: {
       listTemplates: () =>
         // F16-legacy：演示模板存的是宽松 Record，形状分歧局部 cast

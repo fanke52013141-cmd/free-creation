@@ -32,14 +32,21 @@
 - 节点执行器本身（文本、AI 处理、生图）只通过 `ctx.gateway`、`ctx.inputs`、`ctx.update*`、`ctx.emitArtifact` 工作，不直接依赖 React。
 - 媒体落盘、模型调用、诊断都走既有公共入口，composite 宿主只需提供执行上下文与产物捕获。
 
-**结论**：隔离执行可行，但不能直接复用当前 `runWorkflow(editor, ...)`。需要一个 `CompositeRunHost`：
+**结论**：隔离执行可行，但不能直接复用当前 `runWorkflow(editor, ...)`，也**不需要**新建独立 tldraw editor/store。正确做法是：
 
-1. 内部图用固定版本 manifest 建立独立 tldraw store/editor（或等价的 graph host），不复用用户当前画布；
-2. 复用 `deriveGraph`/`topoSort`/`executeNodeOnce` 的纯图逻辑；
-3. 把 `updateProps/updateResult/updateMeta/emitArtifact` 改写到运行快照与产物表，而不是用户画布；
-4. 公开输出从 manifest 的 output source 映射读取本次运行的端口产物。
+1. 内部图用固定版本 manifest 构造纯 JSON 的 `CanvasNode[] + CanvasEdge[]` 快照；
+2. 抽出 `NodeRunHost` 接口（getShape/updateShape/updateShapes/emitArtifact/emitDocumentArtifact/reportTrace），
+   把现有 executor 的 24 个 editor 触点改为走 host；
+3. 画布宿主 = 现有 editor 的薄包装；组合宿主 = 内存快照 + 产物收集；
+4. `text → ai-process → image-gen` 在内存宿主中执行，输入只注入 text、输出只取 image，用户当前页面 shape 数量与 meta 不变。
 
-P0 的原型验证目标（下一实现包）是：`text → ai-process → image-gen` 三节点在独立 host 中跑通，输入只注入 text，输出只取 image，不修改用户当前页面。
+同时必须处理三组进程级单例：`hasNodeTask`（resource-queue.ts:60-62，key=projectId/nodeId）、
+provider:2/media:2 限额、stop/pause/resume 单槽（store.ts:30-39）。组合运行必须加 `runId` 作用域，
+否则两个实例并发会互相阻塞/覆盖。
+
+另有两份输出投影：`src/renderer/src/nodes/specs/outputProjections.ts`（GUI）与
+`src/shared/engine/deterministic-projections.ts`（main/output.get）。组合必须指定唯一权威（建议 renderer 侧），
+否则 GUI 与 CLI 结果可能不一致。
 
 ## 3. 首批可嵌入节点与风险
 
@@ -57,7 +64,8 @@ P0 的原型验证目标（下一实现包）是：`text → ai-process → imag
 
 ## 4. 状态与兼容策略
 
-- 现有运行事实已有 `runs` / `run_artifacts` / `meta.nodeRun` 等结构，可承载内部节点执行记录与产物。
+- 现有运行事实：`runs` / `run_artifacts` 两张表**全仓库零读写**，不是可复用基础；真实事实在
+  `shape.meta.nodeRun`、`external_runs`、`artifact_recipes`。组合运行需要新增持久化，不能假装旧表可用。
 - 现有外部 run 状态没有 `waiting-input`；先按计划使用**版本化可选等待详情**，不直接改变旧枚举语义，避免严格旧客户端解析失败。
 - 组合运行新增：
   - `rootRunId` / `parentRunId` / `compositeVersion` / `internalNodeRunId` 关联；

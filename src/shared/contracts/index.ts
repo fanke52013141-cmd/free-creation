@@ -149,6 +149,16 @@ export const IPC = {
     /** 本地 IndexTTS 2.5：参考音频克隆合成。 */
     indexttsSynthesize: 'media:indextts-synthesize'
   },
+  composite: {
+    search: 'composite:search',
+    draftGet: 'composite:draft:get',
+    draftSave: 'composite:draft:save',
+    draftDelete: 'composite:draft:delete',
+    publish: 'composite:publish',
+    versionGet: 'composite:version:get',
+    archive: 'composite:archive',
+    verify: 'composite:verify'
+  },
   workspace: {
     listTemplates: 'workspace:templates:list',
     saveTemplate: 'workspace:templates:save',

@@ -59,6 +59,8 @@ export const compositePortSchema = z
     description: z.string().trim().max(300).optional(),
     /** JSON Schema 片段；复杂类型用它约束 GUI 控件与 CLI/MCP 值。 */
     schema: z.record(z.string(), z.unknown()).optional(),
+    /** 项目 PortDecl 的 JSON 结构引用（JSON 端口必须命中 node-schemas 白名单）。 */
+    schemaRef: z.object({ id: z.string().min(1).max(80), version: z.number().int().positive() }).strict().optional(),
     defaultValue: z.unknown().optional()
   })
   .strict()
@@ -81,6 +83,8 @@ export const compositeGraphNodeSchema = z
   .object({
     id: internalNodeIdSchema,
     nodeType: z.string().min(1).max(60),
+    /** 固定内部节点契约版本；端口快照必须能按该版本复现。 */
+    contractVersion: z.number().int().positive(),
     title: z.string().trim().max(200),
     dx: z.number(),
     dy: z.number(),
@@ -88,8 +92,37 @@ export const compositeGraphNodeSchema = z
     h: z.number().positive(),
     text: z.string().optional(),
     config: z.string().optional(),
+    /** 端口快照：发布后不依赖当前节点注册表也能校验映射。 */
+    ports: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1).max(80),
+            name: z.string().min(1).max(80),
+            dir: z.enum(['in', 'out']),
+            type: compositePortTypeSchema,
+            required: z.boolean(),
+            cardinality: compositeCardinalitySchema,
+            schemaRef: z
+              .object({ id: z.string().min(1).max(80), version: z.number().int().positive() })
+              .strict()
+              .optional()
+          })
+          .strict()
+      )
+      .optional(),
     /** 固定媒体依赖：只保存引用，不复制二进制。 */
-    mediaRefs: z.array(z.string().max(120)).optional()
+    mediaRefs: z
+      .array(
+        z
+          .object({
+            mediaId: z.string().min(1).max(120),
+            mediaPath: z.string().min(1).max(500),
+            mime: z.string().min(1).max(120)
+          })
+          .strict()
+      )
+      .optional()
   })
   .strict()
 
@@ -102,7 +135,7 @@ export const compositeGraphEdgeSchema = z
 
 export const compositeDependencySchema = z
   .object({
-    kind: z.enum(['node', 'capability', 'media']),
+    kind: z.enum(['node', 'capability', 'media', 'model']),
     id: z.string().min(1).max(120),
     /** 节点契约版本或组合固定版本；media 依赖可省略。 */
     version: z.string().min(1).max(40).optional(),
@@ -115,6 +148,7 @@ export const compositeExecutionPolicySchema = z
     timeoutMs: z.number().int().positive().max(24 * 60 * 60 * 1000).optional(),
     maxDepth: z.number().int().positive().max(16).optional(),
     maxExpandedNodes: z.number().int().positive().max(500).optional(),
+    maxExpandedEdges: z.number().int().positive().max(1500).optional(),
     /** 是否允许运行中暂停等待补输入。 */
     waitForInput: z.boolean().optional(),
     /** 内部节点如含人工发布/审核，必须在能力描述中标记。 */
