@@ -1,0 +1,113 @@
+{
+  "steps": [
+    {
+      "name": "library.create_resource（旧别名）",
+      "ok": true,
+      "detail": {
+        "code": "INVALID_INPUT",
+        "status": "failed"
+      }
+    },
+    {
+      "name": "library.resource.preview_files",
+      "ok": true,
+      "detail": {
+        "code": "INVALID_INPUT",
+        "status": "failed"
+      }
+    },
+    {
+      "name": "library.category.save",
+      "ok": true,
+      "detail": {
+        "code": "INVALID_INPUT",
+        "status": "failed"
+      }
+    },
+    {
+      "name": "library.folder.create（为删除做准备）",
+      "ok": true,
+      "detail": {
+        "folderId": "Ogwc7JGedwqE"
+      }
+    },
+    {
+      "name": "library.folder.delete",
+      "ok": true,
+      "detail": {
+        "completed": true,
+        "data": {
+          "folderId": "Ogwc7JGedwqE",
+          "deleted": true
+        }
+      }
+    },
+    {
+      "name": "library.resource.delete（单删）",
+      "ok": true,
+      "detail": {
+        "code": "INVALID_INPUT",
+        "status": "failed"
+      }
+    },
+    {
+      "name": "history.snapshot.create（为恢复做准备）",
+      "ok": true,
+      "detail": {
+        "snapshotId": "V7LuwSNZtSB6"
+      }
+    },
+    {
+      "name": "history.restore（真实恢复）",
+      "ok": true,
+      "detail": {
+        "code": "INVALID_INPUT",
+        "status": "failed"
+      }
+    },
+    {
+      "name": "history.recovery.resolve",
+      "ok": true,
+      "detail": {
+        "code": "INVALID_INPUT",
+        "status": "failed"
+      }
+    },
+    {
+      "name": "model.definition.delete（单删）",
+      "ok": true,
+      "detail": {
+        "completed": true,
+        "data": {
+          "id": "gap-model",
+          "deleted": true
+        }
+      }
+    },
+    {
+      "name": "flowAgent.build.commit（无预览应稳定拒绝）",
+      "ok": true,
+      "detail": {
+        "code": "FLOW_BUILD_CONFIG_INVALID",
+        "status": "failed"
+      }
+    },
+    {
+      "name": "skill.install（无包源应稳定拒绝）",
+      "ok": true,
+      "detail": {
+        "code": "INVALID_INPUT",
+        "status": "failed"
+      }
+    }
+  ],
+  "failures": [],
+  "notes": [],
+  "codes": {
+    "INVALID_INPUT": 7,
+    "FLOW_BUILD_CONFIG_INVALID": 1
+  },
+  "total": 12,
+  "passed": 12,
+  "failed": 0
+}

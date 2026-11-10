@@ -1,0 +1,337 @@
+{
+  "startedAt": "2026-11-10T23:48:52.672Z",
+  "dataDirectory": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\canvas-mcp-acceptance-DsxX65",
+  "toolCount": 155,
+  "checks": [
+    {
+      "name": "MCP 初始化握手",
+      "ok": true
+    },
+    {
+      "name": "tools/list 返回工具数 = 155",
+      "ok": true,
+      "detail": "155"
+    },
+    {
+      "name": "所有工具都有 object 型 inputSchema",
+      "ok": true
+    },
+    {
+      "name": "project.create 经 MCP 成功并返回项目 ID",
+      "ok": true,
+      "detail": "{\"apiVersion\":1,\"requestId\":\"bf285b73-8fb5-4456-9aef-1c7bb60f7342\",\"operationId\":\"project.create\",\"traceId\":\"trace-d7fa8099-447e-43f5-a99b-bedd6c0ee1dd\",\"status\":\"completed\",\"idempotencyKey\":\"1794354535139:39cb4cc0-bda5-432d-9f0e-22298ce74894\",\"data\":{\"meta\":{\"id\":\"9s9ZsaqJGqN1\",\"name\":\"MCP 验收项目\",\"c"
+    },
+    {
+      "name": "project.open 经 MCP 在真实桌面中打开画布",
+      "ok": true,
+      "detail": "\"\""
+    },
+    {
+      "name": "读操作 app.status",
+      "ok": true
+    },
+    {
+      "name": "读操作 capability.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 node.type.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 node.type.get",
+      "ok": true
+    },
+    {
+      "name": "读操作 project.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 model.connection.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 model.definition.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 model.binding.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 environment.local",
+      "ok": true
+    },
+    {
+      "name": "读操作 environment.videoEngine.status",
+      "ok": true
+    },
+    {
+      "name": "读操作 provider.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 provider.listExecutable",
+      "ok": true
+    },
+    {
+      "name": "读操作 provider.exportableConnections",
+      "ok": true
+    },
+    {
+      "name": "读操作 workspace.palettePreferences.get",
+      "ok": true
+    },
+    {
+      "name": "读操作 diagnostics.query",
+      "ok": true
+    },
+    {
+      "name": "读操作 library.resource.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 library.folder.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 library.collection.list",
+      "ok": true
+    },
+    {
+      "name": "读操作 flowAgent.catalog",
+      "ok": true
+    },
+    {
+      "name": "读操作 history.list",
+      "ok": true
+    },
+    {
+      "name": "拦住 environment.videoEngine.install（期望 INSTALL_CONFIRM_REQUIRED）",
+      "ok": true,
+      "detail": "实际 code=INSTALL_CONFIRM_REQUIRED"
+    },
+    {
+      "name": "拦住 provider.testConnection（期望 NETWORK_CONFIRM_REQUIRED）",
+      "ok": true,
+      "detail": "实际 code=NETWORK_CONFIRM_REQUIRED"
+    },
+    {
+      "name": "拦住 model.validate（期望 NETWORK_CONFIRM_REQUIRED）",
+      "ok": true,
+      "detail": "实际 code=NETWORK_CONFIRM_REQUIRED"
+    },
+    {
+      "name": "拦住 provider.package.preview（不得成功）",
+      "ok": true,
+      "detail": "status=failed code=KEYS_SERVICE_UNAVAILABLE"
+    },
+    {
+      "name": "拦住 graph.patch（不得成功）",
+      "ok": true,
+      "detail": "status=failed code=INVALID_INPUT"
+    },
+    {
+      "name": "拦住 project.import（期望 PATH_NOT_ALLOWED）",
+      "ok": true,
+      "detail": "实际 code=PATH_NOT_ALLOWED"
+    },
+    {
+      "name": "拦住 run.cancel（不得成功）",
+      "ok": true,
+      "detail": "status=failed code=NOT_FOUND"
+    },
+    {
+      "name": "拦住 flowAgent.cooperate（不得成功）",
+      "ok": true,
+      "detail": "status=failed code=INVALID_INPUT"
+    },
+    {
+      "name": "拦住 license.getStatus（不得成功）",
+      "ok": true,
+      "detail": "status=failed code=UNSUPPORTED_OPERATION"
+    }
+  ],
+  "failures": [],
+  "guarded": [
+    {
+      "operationId": "environment.videoEngine.install",
+      "status": "failed",
+      "code": "INSTALL_CONFIRM_REQUIRED"
+    },
+    {
+      "operationId": "provider.testConnection",
+      "status": "failed",
+      "code": "NETWORK_CONFIRM_REQUIRED"
+    },
+    {
+      "operationId": "model.validate",
+      "status": "failed",
+      "code": "NETWORK_CONFIRM_REQUIRED"
+    },
+    {
+      "operationId": "provider.package.preview",
+      "status": "failed",
+      "code": "KEYS_SERVICE_UNAVAILABLE"
+    },
+    {
+      "operationId": "graph.patch",
+      "status": "failed",
+      "code": "INVALID_INPUT"
+    },
+    {
+      "operationId": "project.import",
+      "status": "failed",
+      "code": "PATH_NOT_ALLOWED"
+    },
+    {
+      "operationId": "run.cancel",
+      "status": "failed",
+      "code": "NOT_FOUND"
+    },
+    {
+      "operationId": "flowAgent.cooperate",
+      "status": "failed",
+      "code": "INVALID_INPUT"
+    },
+    {
+      "operationId": "license.getStatus",
+      "status": "failed",
+      "code": "UNSUPPORTED_OPERATION"
+    }
+  ],
+  "uncovered": [
+    "skill_list",
+    "skill_install",
+    "chat_skill_list",
+    "chat_skill_bind",
+    "node_library_save",
+    "node_library_list",
+    "graph_get",
+    "node_get",
+    "node_runPlan",
+    "node_execute",
+    "run_wait",
+    "output_get",
+    "media_import",
+    "media_list",
+    "media_delete",
+    "chat_read",
+    "chat_messages",
+    "model_list",
+    "library_search",
+    "library_create_resource",
+    "run_get",
+    "diagnostics_summary",
+    "project_get",
+    "project_create",
+    "project_open",
+    "project_update",
+    "project_rename",
+    "project_save",
+    "project_clone",
+    "project_delete_precheck",
+    "project_delete",
+    "project_export",
+    "library_resource_get",
+    "library_resource_preview_files",
+    "library_resource_create",
+    "library_resource_publish",
+    "library_resource_delete",
+    "library_resource_delete_many",
+    "library_resource_archive",
+    "library_resource_set_folder",
+    "library_resource_set_collections",
+    "library_folder_create",
+    "library_folder_rename",
+    "library_folder_delete",
+    "library_collection_create",
+    "library_category_list",
+    "library_category_save",
+    "library_resource_materialize",
+    "library_materialization_discard",
+    "node_library_compose",
+    "node_library_update",
+    "node_library_delete",
+    "node_library_get",
+    "node_library_search",
+    "node_library_insert",
+    "composite_search",
+    "composite_get",
+    "composite_draft_get",
+    "composite_draft_save",
+    "composite_validate",
+    "composite_publish",
+    "composite_version_list",
+    "composite_run_get",
+    "composite_run_list",
+    "composite_archive",
+    "history_snapshot_create",
+    "history_snapshot_delete",
+    "history_restore_precheck",
+    "history_restore",
+    "history_recovery_precheck",
+    "history_recovery_resolve",
+    "project_importStructure",
+    "library_import",
+    "library_export",
+    "project_exportStructure",
+    "flowAgent_inspect",
+    "flowAgent_collaboration",
+    "flowAgent_run",
+    "flowAgent_pause",
+    "flowAgent_stop",
+    "flowAgent_build_inspect",
+    "flowAgent_build_propose",
+    "flowAgent_build_commit",
+    "flowAgent_review",
+    "flow_command_lookup",
+    "flow_command_availability",
+    "flow_command_reconcile",
+    "flow_command_check",
+    "flow_command_dispatch",
+    "flow_command_abort",
+    "flowAsset_submit",
+    "flowAsset_list",
+    "flowAsset_read",
+    "model_binding_resolve",
+    "workspace_palettePreferences_save",
+    "diagnostics_exportBundle",
+    "diagnostics_exportNodeRun",
+    "project_nodeVisibility_get",
+    "project_nodeVisibility_set",
+    "model_connection_save",
+    "model_credential_status",
+    "model_connection_delete",
+    "model_definition_save",
+    "model_definition_delete",
+    "model_definition_deleteMany",
+    "model_binding_save",
+    "media_getRecipe",
+    "media_batchExport",
+    "library_captureProjectMedia",
+    "library_captureProjectNodes",
+    "canvas_history",
+    "project_close",
+    "model_discover",
+    "model_validateAgentToolCalling",
+    "provider_save",
+    "provider_delete",
+    "provider_probe",
+    "provider_package_import",
+    "provider_package_importProviders",
+    "dreamina_logout",
+    "dreamina_login_start",
+    "dreamina_login_check",
+    "provider_package_export",
+    "provider_package_seal",
+    "director_publish_prepare",
+    "director_publish_status",
+    "director_publish_continue"
+  ],
+  "licensed": true,
+  "readSweep": [],
+  "finishedAt": "2026-11-10T23:48:57.824Z",
+  "passed": 34,
+  "failed": 0
+}

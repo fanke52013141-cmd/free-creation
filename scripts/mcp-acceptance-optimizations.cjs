@@ -126,7 +126,7 @@ async function main() {
         require('node:child_process').execFileSync(
           electron,
           [cliPath, 'contracts', '--data-dir', directory],
-          { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8' }
+          { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }
         )
       )
       const graphGet = contracts.operations.find((entry) => entry.operationId === 'graph.get')
