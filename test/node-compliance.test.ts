@@ -82,8 +82,8 @@ describe('节点合规门禁', () => {
       } else {
         expect(spec.creatable, `${spec.type} 不在可创建集合却未显式 creatable=false`).toBe(false)
         expect(
-          legacy as readonly string[],
-          `${spec.type} 不可创建却未登记进 LEGACY_NODE_TYPE_IDS`
+          [...legacy, ...INTERNAL_NODE_TYPE_IDS] as readonly string[],
+          `${spec.type} 不可创建却未登记进 LEGACY/INTERNAL 类型清单`
         ).toContain(spec.type)
       }
     }

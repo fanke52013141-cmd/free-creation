@@ -170,6 +170,8 @@ export interface NodeExecutionContext {
   emitArtifact?: (artifact: ProducedArtifact) => void
   outgoing?: Array<{ nodeId: string; fromPortId: string; toPortId: string }>
   runSubflow?: (request: SubflowRequest) => Promise<SubflowOutput>
+  /** 组合节点执行入口：由 renderer 注入隔离执行服务（不把内部节点写进用户当前画布）。 */
+  runComposite?: (request: import('./composite-run-contract').CompositeRunRequest) => Promise<import('./composite-run-contract').CompositeRunOutcome>
   restoreSubflowInputs?: (request: Pick<SubflowRequest, 'nodeIds' | 'iterationNodeId'>) => void
   /**
    * 宿主是否支持并行执行循环项（W2）。renderer 的循环体卡片是逐项复用的共享

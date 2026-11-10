@@ -26,6 +26,7 @@ export const CONFIG_NODE_TYPES = new Set([
   'structured',
   'code',
   'ai-process',
+  'composite',
   'iterate',
   'director'
 ])

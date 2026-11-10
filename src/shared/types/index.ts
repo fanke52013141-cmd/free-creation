@@ -51,7 +51,7 @@ export type ActiveNodeTypeId = (typeof ACTIVE_NODE_TYPE_IDS)[number]
  * `video-asset` 曾在此列（只能由视频节点产物生成）。用户 2026-09-18 拍板：
  * 视频必须像图片一样可以直接上传素材，因此它升级为可创建节点，本清单目前为空。
  */
-export const INTERNAL_NODE_TYPE_IDS = [] as const
+export const INTERNAL_NODE_TYPE_IDS = ['composite'] as const
 export type InternalNodeTypeId = (typeof INTERNAL_NODE_TYPE_IDS)[number]
 
 /**

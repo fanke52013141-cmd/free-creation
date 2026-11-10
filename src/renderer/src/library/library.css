@@ -1917,3 +1917,39 @@
   border-color: var(--brand);
   color: #10202a;
 }
+
+.composite-body {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 4px 2px;
+  min-height: 0;
+}
+.composite-body-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.composite-body-name {
+  overflow: hidden;
+  color: var(--txt);
+  font-size: 14px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composite-body-version {
+  flex: none;
+  color: var(--brand);
+  font-size: 11px;
+}
+.composite-body-desc,
+.composite-body-meta,
+.composite-body-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.composite-body-meta { color: var(--txt-secondary, var(--muted)); }

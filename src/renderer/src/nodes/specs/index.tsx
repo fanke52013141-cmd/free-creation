@@ -3,6 +3,10 @@ import { PROCESSOR_PORTS, PROCESSOR_CONTRACT_VERSION } from '@shared/agent-flow/
 // 端口声明对齐路线图的节点类型表；any 万能口，其余类型需一致才可连
 import type { PortCardinality, PortDecl, PortSchemaRef } from '@shared/types'
 import { registerAgentFlowNodeTypes } from './agentFlow'
+import { CompositeBody } from '../../composite/CompositeBody'
+import { compositeExecutor } from '@shared/engine/executors/composite'
+import { parseMediaResultCollection } from '@shared/engine/values'
+import type { CompositeManifest } from '@shared/composite/manifest'
 import { DEFAULT_VIDEO_CLAY_CONFIG, serializeVideoClayConfig } from '@shared/video-conversion'
 import { NODE_ACCENTS, registerNodeType, unregisterNodeType } from '../registry'
 import { readNodeConfig } from '../../canvas/node-persistence'
@@ -832,6 +836,81 @@ export function registerBaseNodeTypes(): void {
     executor: chatExecutor,
     SettingsPanel: ChatSettings,
     Body: ChatBody
+  })
+
+  // 组合能力节点：非面板新建类型，由“发布组合/节点库插入”创建。
+  registerNodeType({
+    type: 'composite',
+    contractVersion: 1,
+    label: '组合能力',
+    icon: 'layers',
+    color: NODE_ACCENTS.composite,
+    defaultSize: { w: 340, h: 260 },
+    sizePolicy: 'standard',
+    creatable: false,
+    description: '调试好的节点组合发布成的固定版本能力：公开输入输出、内部图可展开检查，可继续连线。',
+    category: 'ai',
+    ports: { in: [], out: [] },
+    resolvePorts: (shape) => {
+      try {
+        const parsed = JSON.parse(shape.props.config || '{}') as { manifest?: CompositeManifest }
+        const manifest = parsed.manifest
+        if (!manifest) return { in: [], out: [] }
+        return {
+          in: manifest.inputs.map((input) => ({
+            id: `in-${input.id}`,
+            name: input.label,
+            dir: 'in' as const,
+            type: input.type,
+            required: input.required,
+            cardinality: input.cardinality,
+            description: input.description || input.label
+          })),
+          out: manifest.outputs.map((output) => ({
+            id: `out-${output.id}`,
+            name: output.label,
+            dir: 'out' as const,
+            type: output.type,
+            required: output.required,
+            cardinality: output.cardinality,
+            description: output.description || output.label
+          }))
+        }
+      } catch {
+        return { in: [], out: [] }
+      }
+    },
+    projectOutputs: (shape) => {
+      try {
+        const parsed = JSON.parse(shape.props.config || '{}') as { manifest?: CompositeManifest }
+        const manifest = parsed.manifest
+        if (!manifest) return {}
+        const collection = parseMediaResultCollection(String(shape.meta?.nodeResult ?? ''))
+        const item =
+          collection?.results.find((entry) => entry.mediaId === collection.selectedMediaId) ??
+          collection?.results.at(-1)
+        if (!item) return {}
+        const outputs: Record<string, { type: string; value: unknown }> = {}
+        for (const output of manifest.outputs) {
+          if (output.type === 'image' || output.type === 'video' || output.type === 'audio' || output.type === 'file') {
+            outputs[`out-${output.id}`] = {
+              type: output.type,
+              value: {
+                kind: output.type,
+                mediaId: item.mediaId,
+                mediaPath: item.mediaPath,
+                mime: item.mime
+              }
+            }
+          }
+        }
+        return outputs as never
+      } catch {
+        return {}
+      }
+    },
+    executor: compositeExecutor,
+    Body: CompositeBody
   })
 }
 

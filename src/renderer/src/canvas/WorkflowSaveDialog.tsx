@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { Editor, TLShapeId } from 'tldraw'
+import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import { Icon } from '../components/Icon'
 import { toast } from '../stores/toast'
 import { extractTemplateFromSelection, useWorkflowStore } from '../stores/workflow'
@@ -120,6 +120,24 @@ export function WorkflowSaveDialog({
         if (!draft.ok) throw new Error(draft.error.message)
         const published = await window.api.composite.publish({ manifest: edited })
         if (!published.ok) throw new Error(published.error.message)
+        // P2 最小闭环：发布后在视口中心插入一个组合节点实例，绑定固定版本快照。
+        editor.markHistoryStoppingPoint('insert-composite')
+        const center = editor.getViewportPageBounds().center
+        const shapeId = createShapeId()
+        editor.createShape({
+          id: shapeId,
+          type: 'node-card',
+          x: center.x - 170,
+          y: center.y - 130,
+          props: {
+            nodeType: 'composite',
+            title,
+            config: JSON.stringify({ manifest: edited }),
+            w: 340,
+            h: 260
+          }
+        })
+        editor.select(shapeId)
       } else await saveWorkflow(title, extractTemplateFromSelection(nodes, edges))
       const kindLabel =
         saveKind === 'resource' ? '素材资源' : saveKind === 'composite' ? '组合节点' : '流程模板'

@@ -72,7 +72,8 @@ export const NODE_ACCENTS = {
   compose: '#CD8E5E',
   agent: '#59D4CD',
   'state-machine': '#49D2EA',
-  'ai-review': '#00AEBD'
+  'ai-review': '#00AEBD',
+  composite: '#7C9CFF'
 } satisfies Record<NodeTypeId, string>
 
 /** 图标前景按主题统一加深；卡片强调色、端口和数据类型色仍使用原身份色。 */
