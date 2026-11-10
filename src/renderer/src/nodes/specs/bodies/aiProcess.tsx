@@ -136,15 +136,6 @@ export function AiProcessSettings({ shape, editor }: NodeSettingsProps): React.J
     })
   }
 
-  if (options.length === 0) {
-    return (
-      <section className="node-settings ai-process-settings">
-        <SkillAgentSettings value={config.agent} onChange={(agent) => save({ agent })} />
-        <NoModelHint />
-      </section>
-    )
-  }
-
   return (
     <section className="node-settings ai-process-settings">
       <SkillAgentSettings value={config.agent} onChange={(agent) => save({ agent })} />
@@ -156,6 +147,7 @@ export function AiProcessSettings({ shape, editor }: NodeSettingsProps): React.J
           onChange={(modelKey) => save({ modelKey })}
         />
       </div>
+      {options.length === 0 && <NoModelHint />}
       <div className="settings-row">
         <label className="opt-label" htmlFor={`ai-process-output-${shape.id}`}>
           输出类型
