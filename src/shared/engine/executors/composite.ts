@@ -1,4 +1,5 @@
 import type { NodeExecutor, NodeExecutionContext } from '../executor-types'
+import { appendMediaResult, serializeMediaResultCollection } from '../values'
 
 /**
  * composite 节点的公共执行器：不直接读画布，只把固定版本 manifest 与本次输入交给宿主注入的
@@ -20,9 +21,30 @@ export const compositeExecutor: NodeExecutor = async (
   } catch {
     return { status: 'failed', reason: '组合节点 manifest 已损坏' }
   }
-  const outcome = await ctx.runComposite({ manifest, inputs: ctx.inputs, runId: ctx.runId })
+  const outcome = await ctx.runComposite({ manifest, inputs: ctx.inputs, runId: ctx.runId, signal: ctx.signal })
   if (outcome.status === 'failed') {
     return { status: 'failed', reason: outcome.reason ?? '组合运行失败' }
+  }
+  if (outcome.media) {
+    // 组合的公开产物必须写回自身 meta.nodeResult，projectOutputs 才能投影给下游；
+    // 内部节点的结果节点只存在于临时运行页，不能当作组合输出。
+    ctx.updateResult(
+      serializeMediaResultCollection(
+        appendMediaResult(
+          '',
+          {
+            mediaId: outcome.media.mediaId,
+            mediaPath: outcome.media.mediaPath,
+            mime: outcome.media.mime
+          },
+          {
+            nodeId: ctx.node.id,
+            modelKey: 'composite',
+            ...(ctx.runId ? { runId: ctx.runId } : {})
+          }
+        )
+      )
+    )
   }
   return { status: 'done' }
 }

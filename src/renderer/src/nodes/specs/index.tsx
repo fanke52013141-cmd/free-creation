@@ -890,17 +890,14 @@ export function registerBaseNodeTypes(): void {
           collection?.results.find((entry) => entry.mediaId === collection.selectedMediaId) ??
           collection?.results.at(-1)
         if (!item) return {}
-        const outputs: Record<string, { type: string; value: unknown }> = {}
+        const outputs: Record<string, unknown> = {}
         for (const output of manifest.outputs) {
           if (output.type === 'image' || output.type === 'video' || output.type === 'audio' || output.type === 'file') {
             outputs[`out-${output.id}`] = {
-              type: output.type,
-              value: {
-                kind: output.type,
-                mediaId: item.mediaId,
-                mediaPath: item.mediaPath,
-                mime: item.mime
-              }
+              kind: output.type,
+              mediaId: item.mediaId,
+              mediaPath: item.mediaPath,
+              mime: item.mime
             }
           }
         }

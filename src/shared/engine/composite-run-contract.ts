@@ -1,11 +1,13 @@
 import type { CompositeManifest } from '../composite/manifest'
 import type { ContractInputMap } from '../engine/inputs'
+import type { CancelSignal } from './executor-types'
 
 export interface CompositeRunRequest {
   manifest: CompositeManifest
   inputs: ContractInputMap
   /** 便于运行记录/日志关联；由宿主生成。 */
   runId?: string
+  signal?: CancelSignal
 }
 
 export interface CompositeRunOutcome {

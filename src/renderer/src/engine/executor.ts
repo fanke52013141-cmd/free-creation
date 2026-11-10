@@ -10,7 +10,7 @@
 // 节点卡片内的手动生成与全局运行共用同一输出投影（nodes/nodeValues.ts），
 // 因此执行器只需把运行结果写回 shape props / meta，投影交给运行器统一处理。
 import type { Editor, TLShapeId } from 'tldraw'
-import { runCompositeOnTempPage } from '../composite/run-composite'
+import { runCompositeIsolated } from '../composite/run-composite'
 import type { CanvasEdge, CanvasNode, ExecStatus, PortDecl, ProviderSummary } from '@shared/types'
 import type { FlowAssetVersion } from '@shared/agent-flow/assets'
 import { deriveGraph } from '../canvas/graph'
@@ -938,7 +938,7 @@ async function invokeExecutor(
       ctx.editor.run(() => materializeArtifact(ctx.editor, current, artifact, ctx.runId))
     },
     runSubflow,
-    runComposite: (request) => runCompositeOnTempPage(ctx.editor, ctx.projectId, ctx.providers, request),
+    runComposite: (request) => runCompositeIsolated(ctx.editor, ctx.projectId, ctx.providers, { ...request, signal: ctx.token }),
     restoreSubflowInputs: (request) => restoreSubflowStaticInputs(ctx, request)
   }
   // 只为循环节点附加循环体指纹：shared 执行器据此在 resume 前拒绝「改了循环体的
