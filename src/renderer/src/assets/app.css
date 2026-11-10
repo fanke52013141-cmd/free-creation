@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   color-scheme: dark;
   --bg: #141414;
   --card: #1f1f1f;
@@ -9787,6 +9787,24 @@ select:focus-visible {
   flex: none;
   font-size: 12px;
   color: var(--muted);
+}
+
+/* 已保存 API Key 的脱敏预览：只显示首尾各 5 位，中间隐藏。 */
+.gw-key-preview {
+  margin: -2px 0 0 82px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.gw-key-preview b {
+  color: var(--txt);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.gw-key-preview span {
+  margin-left: 6px;
 }
 
 .gw-input {

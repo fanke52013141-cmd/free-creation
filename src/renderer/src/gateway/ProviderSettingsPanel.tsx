@@ -29,6 +29,8 @@ interface Draft extends Omit<SaveProviderInput, 'apiKey'> {
   apiKey: string
   createdAt?: number
   hasApiKey?: boolean
+  /** 脱敏预览（首尾各 5 位）；由主进程返回，只用于展示，不回填输入框。 */
+  apiKeyPreview?: string
 }
 
 // Keep the paid protocol probe hidden until the complete provider support matrix is verified.
@@ -100,7 +102,8 @@ function draftFromConfig(p: ProviderSummary): Draft {
       : p.models
     ).map((m) => ({ ...m })),
     createdAt: p.createdAt,
-    hasApiKey: p.hasApiKey
+    hasApiKey: p.hasApiKey,
+    apiKeyPreview: p.apiKeyPreview
   }
 }
 
@@ -846,10 +849,16 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                           type="password"
                           value={draft.apiKey}
                           spellCheck={false}
-                          placeholder={draft.hasApiKey ? '已保存；留空则保持不变' : 'sk-…'}
+                          placeholder={draft.hasApiKey ? '留空则保持不变' : 'sk-…'}
                           onChange={(e) => patch({ apiKey: e.target.value })}
                         />
                       </label>
+                      {draft.hasApiKey && (
+                        <p className="gw-key-preview">
+                          已保存：<b>{draft.apiKeyPreview ?? '•••••…•••••'}</b>
+                          <span>（首尾各 5 位，中间已隐藏；留空保持不变）</span>
+                        </p>
+                      )}
                     </>
                   )}
                 </div>

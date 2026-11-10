@@ -8,6 +8,7 @@ import { getDb } from '../store/db'
 import { decryptSecret, encryptionAvailable, encryptSecret, isEncryptedSecret, parseVaultRef, vaultRef } from './keycrypto'
 import { getActiveVault } from '../security/keystore/vault'
 import { driverForSpec } from '../../shared/provider-driver'
+import { apiKeyPreview } from '../../shared/security/api-key-preview'
 import type { Capability, Connection, ModelOperation } from '@free-creation/model-contracts'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
 
@@ -268,6 +269,13 @@ function toSummary(row: ProviderRow): ProviderSummary {
   } catch {
     // 损坏数据按空处理
   }
+  // 密文存在不等于当前桌面环境能解密。若 DPAPI/安全存储上下文已变化，仍把它
+  // 显示为"已保存"会让用户选中模型后只得到一条无 Key 的失败请求。
+  //
+  // P2 起密钥写在**设备绑定 vault** 里，`api_key_ref` 是 `vault:provider:<id>` 指针，
+  // 不是可解密文——只用 decryptSecret 判断会把"有密钥"误报成 false。
+  // 因此：vault 指针只要格式合法就视为已保存（是否真能读取由 getProvider/请求时校验）。
+  const decrypted = decryptSecret(row.api_key_ref)
   return {
     id: row.id,
     name: row.name,
@@ -277,14 +285,25 @@ function toSummary(row: ProviderRow): ProviderSummary {
       ? models.map(normalizeModel).filter((model): model is GatewayModelInfo => model !== null)
       : [],
     createdAt: row.created_at,
-    // 密文存在不等于当前桌面环境能解密。若 DPAPI/安全存储上下文已变化，仍把它
-    // 显示为"已保存"会让用户选中模型后只得到一条无 Key 的失败请求。
-    //
-    // P2 起密钥写在**设备绑定 vault** 里，`api_key_ref` 是 `vault:provider:<id>` 指针，
-    // 不是可解密文——只用 decryptSecret 判断会把"有密钥"误报成 false。
-    // 因此：vault 指针只要格式合法就视为已保存（是否真能读取由 getProvider/请求时校验）。
-    hasApiKey:
-      parseVaultRef(row.api_key_ref) !== null || Boolean(decryptSecret(row.api_key_ref))
+    hasApiKey: parseVaultRef(row.api_key_ref) !== null || Boolean(decrypted),
+    // vault 指针在同步路径里解不开，预览交给 listProviders/catalog 异步路径补；
+    // 旧明文行仍能给出可辨认的首尾片段。
+    ...(apiKeyPreview(decrypted) ? { apiKeyPreview: apiKeyPreview(decrypted) } : {})
+  }
+}
+
+/** 目录连接（已验证）→ 渲染层摘要；vault 里的密钥只能在这里异步解出预览。 */
+function catalogToSummary(p: ProviderConfig): ProviderSummary {
+  const preview = apiKeyPreview(p.apiKey)
+  return {
+    id: p.id,
+    name: p.name,
+    specId: p.specId,
+    baseURL: p.baseURL,
+    models: p.models,
+    createdAt: p.createdAt,
+    hasApiKey: Boolean(p.apiKey),
+    ...(preview ? { apiKeyPreview: preview } : {})
   }
 }
 
@@ -294,7 +313,7 @@ export async function listProviders(): Promise<ProviderSummary[]> {
     .prepare('SELECT * FROM providers ORDER BY created_at ASC')
     .all() as ProviderRow[]
   const legacy = rows.map(toSummary)
-  const catalog = (await catalogConfigs()).map((p) => ({ id: p.id, name: p.name, specId: p.specId, baseURL: p.baseURL, models: p.models, createdAt: p.createdAt, hasApiKey: Boolean(p.apiKey) }))
+  const catalog = (await catalogConfigs()).map(catalogToSummary)
   // 接管是逐能力完成的：图片已经验收进新目录时，不能把尚未接管的文本/语音档案
   // 一并藏掉。相同“模型 ID + 模态”则由已验证目录档案取代旧行；其余旧档案保留到
   // 自己通过真实验收。这样既不出现同一模型的双份选择，也不会在半程接管时断业务。
@@ -312,7 +331,7 @@ export async function listProviders(): Promise<ProviderSummary[]> {
 
 /** The sole source used by canvas node selectors and executors. */
 export async function listVerifiedProviders(): Promise<ProviderSummary[]> {
-  return (await catalogConfigs()).map((p) => ({ id: p.id, name: p.name, specId: p.specId, baseURL: p.baseURL, models: p.models, createdAt: p.createdAt, hasApiKey: Boolean(p.apiKey) }))
+  return (await catalogConfigs()).map(catalogToSummary)
 }
 
 export async function getProvider(id: string): Promise<ProviderConfig | null> {
@@ -385,7 +404,11 @@ export async function saveProvider(input: SaveProviderInput): Promise<ProviderSu
     )
     .run(row)
   const saved = getDb().prepare('SELECT * FROM providers WHERE id = ?').get(id) as ProviderRow
-  const summary = toSummary(saved)
+  const preview = apiKeyPreview(apiKey || existing?.apiKey)
+  const summary: ProviderSummary = {
+    ...toSummary(saved),
+    ...(preview ? { apiKeyPreview: preview } : {})
+  }
   await bootstrapLegacyProvidersToCatalog(new SqliteModelHost(getDb()))
   return summary
 }

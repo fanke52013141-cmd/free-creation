@@ -12,6 +12,7 @@ import type {
   SaveProviderInput
 } from '@shared/contracts'
 import { createBrowserMedia } from './browserMedia'
+import { apiKeyPreview } from '@shared/security/api-key-preview'
 import { defaultPalettePreferences, type PalettePreferences } from '@shared/palette-preferences'
 import { defaultWorkspaceProfile, type WorkspaceProfile } from '@shared/workspace-profile'
 
@@ -59,6 +60,7 @@ export function installBrowserMock(): void {
       specId: 'toapis',
       baseURL: 'https://toapis.com/v1',
       hasApiKey: true,
+      apiKeyPreview: 'sk-de…m0ckY',
       createdAt: now - 1000,
       models: [{ id: 'gpt-image-2', modality: 'image' }]
     },
@@ -68,6 +70,7 @@ export function installBrowserMock(): void {
       specId: 'relay',
       baseURL: 'https://example.com/v1',
       hasApiKey: true,
+      apiKeyPreview: 'sk-de…m0ckY',
       createdAt: now,
       models: [
         { id: 'gpt-image-2', modality: 'image' },
@@ -80,6 +83,7 @@ export function installBrowserMock(): void {
       specId: 'minimax',
       baseURL: 'https://api.minimax.example/v2',
       hasApiKey: true,
+      apiKeyPreview: 'sk-de…m0ckY',
       createdAt: now,
       models: [
         { id: 'MiniMax-H3', modality: 'video' },
@@ -92,6 +96,7 @@ export function installBrowserMock(): void {
       specId: 'seedance',
       baseURL: 'https://ark.example/api/v3',
       hasApiKey: true,
+      apiKeyPreview: 'sk-de…m0ckY',
       createdAt: now,
       models: [
         { id: 'Seedance-2.0', modality: 'video' },
@@ -798,6 +803,8 @@ export function installBrowserMock(): void {
           hasApiKey: Boolean(
             input.apiKey?.trim() || existing?.hasApiKey || inMemoryApiKeys.has(id)
           ),
+          apiKeyPreview:
+            apiKeyPreview(inMemoryApiKeys.get(id)) ?? existing?.apiKeyPreview,
           models: input.models.map((model) => ({ ...model })),
           createdAt: existing?.createdAt ?? Date.now()
         }

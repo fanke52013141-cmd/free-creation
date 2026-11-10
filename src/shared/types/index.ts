@@ -311,7 +311,7 @@ export interface ProviderConfig {
 
 /**
  * 可安全发送给渲染进程的供应商信息。API Key 只能停留在主进程的 ProviderConfig 中；
- * UI 仅需知道密钥是否已配置，而不应读取、缓存或回填真实值。
+ * UI 仅需知道密钥是否已配置，以及一段用于辨认的脱敏预览（首尾各 5 位）。
  */
 export interface ProviderSummary {
   id: string
@@ -321,6 +321,8 @@ export interface ProviderSummary {
   models: GatewayModelInfo[]
   createdAt: number
   hasApiKey: boolean
+  /** 脱敏预览，如 `sk-ab…wxyz1`；仅用于设置面板展示，禁止用于请求/日志/导出。 */
+  apiKeyPreview?: string
 }
 
 /** 供应商模板：新增供应商时的预设（渲染端设置面板与主进程驱动映射共用） */
