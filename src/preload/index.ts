@@ -570,6 +570,8 @@ const api = {
       ipcRenderer.invoke(IPC.gateway.testProvider, input),
     probeProvider: (input: ProbeProviderInput): Promise<IpcEnvelope<ProbeProviderResult>> =>
       ipcRenderer.invoke(IPC.gateway.probeProvider, input),
+    dreaminaLogout: (): Promise<IpcEnvelope<{ loggedOut: true }>> =>
+      ipcRenderer.invoke(IPC.gateway.dreaminaLogout),
     dreaminaLoginStart: (): Promise<IpcEnvelope<DreaminaLoginMaterial>> =>
       ipcRenderer.invoke(IPC.gateway.dreaminaLoginStart),
     dreaminaLoginCheck: (deviceCode: string): Promise<IpcEnvelope<DreaminaLoginCheckResult>> =>

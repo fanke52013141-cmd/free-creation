@@ -605,6 +605,39 @@ describe('local Agent vertical slice', () => {
     })
   }
 
+  it('reads a workflow input plan through the active desktop', async () => {
+    const project = createProject('workflow-plan')
+    const input = { projectId: project.id, nodeIds: ['shape:source'] }
+    expect((await call('node.runPlan', input)).error?.code).toBe('ACTIVE_PROJECT_REQUIRED')
+    active = project.id
+    const missing = [{ nodeId: 'shape:source', title: '文本', portId: 'in-text', label: '文本', type: 'text' }]
+    withDesktop({ run: async (request) => {
+      expect(request).toMatchObject({ action: 'workflow-run-plan', nodeIds: input.nodeIds })
+      return { graphVersion: 0, result: { nodeCount: 1, missing } }
+    } })
+    expect((await call('node.runPlan', input)).data).toEqual({ graphVersion: 0, nodeCount: 1, missing })
+  })
+
+  it('routes temporary subgraph inputs to the desktop and requires explicit Dreamina logout consent', async () => {
+    const project = createProject('workflow')
+    active = project.id
+    const nodeId = 'shape:temporary-text'
+    const saved = saveProject({
+      id: project.id,
+      expectedGraphVersion: 0,
+      graph: { nodes: [{ id: nodeId, type: 'text', params: { text: '' } }], edges: [], groups: [] }
+    })!
+    const run = vi.fn<AccessDesktop['run']>(async () => ({ graphVersion: saved.graphVersion }))
+    withDesktop({ run })
+    const inputs = [{ nodeId, portId: 'in-text', value: { kind: 'text', text: 'private temporary value' } }]
+    const input = { projectId: project.id, expectedGraphVersion: saved.graphVersion, nodeIds: [nodeId], inputs }
+    expect((await call('node.execute', { ...input, mode: 'single' }, key())).error?.code).toBe('INVALID_INPUT')
+    expect((await call('node.execute', input, key())).status).toBe('completed')
+    expect(run.mock.calls.map(([request]) => request)).toContainEqual(expect.objectContaining({ action: 'execute-nodes', inputs }))
+    expect((await call('dreamina.logout', {}, key())).error?.code).toBe('LOGOUT_CONFIRM_REQUIRED')
+    expect(JSON.stringify(events)).not.toContain('private temporary value')
+  })
+
   it('flushes active edits before save/export and commits metadata with acknowledged renderer version', async () => {
     const p = createProject('before')
     active = p.id

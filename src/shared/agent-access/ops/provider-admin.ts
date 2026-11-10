@@ -57,6 +57,11 @@ export const PROVIDER_ADMIN_OPERATIONS = {
       '导入受控目录内的旧版供应商包（.cskeys 旧格式）：必须显式 confirmImport=true，并会在 GUI 弹人工确认框；只有人点允许才写入，回执给新增数量，不含密钥',
     input: z.object({ fileName, password, confirmImport: z.boolean().optional() }).strict()
   },
+  'dreamina.logout': {
+    effect: 'write',
+    description: '清除本机即梦 CLI 登录态，切换账号前使用；需 confirmLogout=true',
+    input: z.object({ confirmLogout: z.boolean().optional() }).strict()
+  },
   'dreamina.login.start': {
     effect: 'write',
     description:
@@ -121,6 +126,7 @@ export const PROVIDER_ADMIN_OUTPUTS = {
       humanConfirmed: z.literal(true)
     })
     .strict(),
+  'dreamina.logout': z.object({ loggedOut: z.literal(true) }).strict(),
   'dreamina.login.start': z
     .object({
       status: z.enum(['already', 'pending', 'failed']),

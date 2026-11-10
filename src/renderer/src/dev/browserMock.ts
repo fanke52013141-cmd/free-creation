@@ -840,6 +840,10 @@ export function installBrowserMock(): void {
           }
         }),
       // 设备流登录需要本机 CLI 与系统浏览器，浏览器演示里没有这些能力。
+      dreaminaLogout: () => Promise.resolve({
+        ok: false as const,
+        error: { code: 'NOT_SUPPORTED', message: '请在桌面端退出即梦登录' }
+      }),
       dreaminaLoginStart: () =>
         Promise.resolve({
           ok: false,

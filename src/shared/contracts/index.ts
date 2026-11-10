@@ -205,6 +205,7 @@ export const IPC = {
     importProviders: 'gateway:providers:import',
     testProvider: 'gateway:providers:test',
     probeProvider: 'gateway:providers:probe',
+    dreaminaLogout: 'gateway:dreamina:logout',
     dreaminaLoginStart: 'gateway:dreamina:login:start',
     dreaminaLoginCheck: 'gateway:dreamina:login:check',
     chatStart: 'gateway:chat:start',

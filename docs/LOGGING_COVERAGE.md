@@ -979,3 +979,9 @@ AI 对话工作区视觉重排：移除可见角色标签，保留无障碍消�
   skipped/unknown），详见 [29-flow-commands-delivery.md](local-agent-access/29-flow-commands-delivery.md) 第 10.5 节。
 
 
+
+2026-11-10 即梦退出与选区补输入：GUI 退出记录 dreamina.logout.started/completed/failed，CLI/MCP 复用 agent.access 操作事件；只记录阶段和关联 ID。运行期补输入复用节点输入阶段与工作流终态，媒体复用导入诊断。临时正文、文件内容和授权材料不入日志。验证及范围见 [交付说明](local-agent-access/66-workflow-inputs-dreamina-logout.md)。
+
+保存节点运行复用模板插入及统一工作流执行器。确定缺项在运行启动前收集，实际注入、素材导入和执行终态沿用原有诊断，临时值不写日志。
+
+node.runPlan 为只读预检，复用 Agent 请求诊断，返回端口元数据，未收集输入正文或媒体内容。

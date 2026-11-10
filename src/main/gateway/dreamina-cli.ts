@@ -452,12 +452,33 @@ export function currentDreaminaVersion(): string | undefined {
  * 发起设备流登录：`login --headless` 只打印授权材料就退出，不在主进程里阻塞等待。
  * 浏览器由 IPC 层调用 shell.openExternal 打开；面板随后用 checklogin 轮询结果。
  */
-export async function startDreaminaLogin(): Promise<DreaminaLoginMaterialResult> {
+export function logoutDreamina(): Promise<{ loggedOut: true }> {
+  return withDreaminaSlot(async () => {
+    const binary = await resolveBinary()
+    const result = await spawnDreamina(binary, ['logout'], undefined, 60_000)
+    if (result.code !== 0) throw new GatewayError('DREAMINA_LOGOUT_FAILED', '即梦退出登录失败')
+    allowPreviousLoginCodes = false
+    currentLoginCode = undefined
+    return { loggedOut: true }
+  })
+}
+
+let allowPreviousLoginCodes = true
+let currentLoginCode: string | undefined
+
+export function startDreaminaLogin(): Promise<DreaminaLoginMaterialResult> {
+  return withDreaminaSlot(startDreaminaLoginInSlot)
+}
+
+async function startDreaminaLoginInSlot(): Promise<DreaminaLoginMaterialResult> {
   const binary = await resolveBinary()
   const result = await spawnDreamina(binary, ['login', '--headless'], undefined, 60_000)
   const text = `${result.stdout}\n${result.stderr}`
   const parsed = parseLoginMaterial(text)
-  if (parsed.status === 'pending') return parsed
+  if (parsed.status === 'pending') {
+    currentLoginCode = parsed.deviceCode
+    return parsed
+  }
   if (result.code === 0) return parsed
   return {
     status: 'failed',
@@ -468,9 +489,15 @@ export async function startDreaminaLogin(): Promise<DreaminaLoginMaterialResult>
 /**
  * 查询一次授权结果（poll=0，由面板按自己的节奏轮询，便于 UI 显示与取消）。
  */
-export async function checkDreaminaLogin(deviceCode: string): Promise<DreaminaLoginCheckResult> {
+export function checkDreaminaLogin(deviceCode: string): Promise<DreaminaLoginCheckResult> {
+  return withDreaminaSlot(() => checkDreaminaLoginInSlot(deviceCode))
+}
+
+async function checkDreaminaLoginInSlot(deviceCode: string): Promise<DreaminaLoginCheckResult> {
   const code = deviceCode.trim()
   if (!code) return { status: 'failed', message: '缺少 device_code，请重新发起登录' }
+  if (!allowPreviousLoginCodes && code !== currentLoginCode)
+    return { status: 'expired', message: '该登录请求已失效，请重新发起登录' }
   const binary = await resolveBinary()
   const result = await spawnDreamina(
     binary,

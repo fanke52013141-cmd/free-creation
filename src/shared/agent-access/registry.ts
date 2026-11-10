@@ -1,4 +1,4 @@
-﻿import { z } from 'zod'
+import { z } from 'zod'
 import { OPERATION_REQUIREMENTS } from './metadata'
 import { ACTIVE_NODE_TYPE_IDS } from '../types'
 import {
@@ -54,6 +54,7 @@ import {
 } from './graph-ops'
 import {
   NODE_EXECUTE_MAX_NODES,
+  WorkflowInputsSchema,
   RUN_WAIT_MAX_TIMEOUT_MS,
   nodeRunTaskDto,
   outputValueDto
@@ -130,15 +131,21 @@ export const ACCESS_OPERATIONS = {
       '向当前打开项目提交一批类型化画布编辑（建/改/删节点与连线）；整体校验后原子应用并保存；返回ID映射与保存版本',
     input: revision.extend({ ops: GraphPatchOpsSchema }).strict()
   },
+  'node.runPlan': {
+    effect: 'read',
+    description: '预检当前打开画布的目标节点及上游闭包，列出可确定的缺失输入及端口类型。只读，不调用模型。',
+    input: project.extend({ nodeIds: z.array(nodeId).min(1).max(NODE_EXECUTE_MAX_NODES) }).strict()
+  },
   'node.execute': {
     effect: 'execute',
     description:
-      '向当前打开项目提交节点执行（single=仅该节点读取已持久化上游；subgraph=所选节点及其上游闭包）；返回持久任务ID，最终状态以 run.get 为准',
+      '向当前打开项目提交节点执行（single=仅该节点读取已持久化上游；subgraph=所选节点及其上游闭包）；subgraph 可传 inputs 补齐缺失端口（媒体使用项目 mediaId）；返回持久任务ID，最终状态以 run.get 为准',
     input: revision
       .extend({
         nodeIds: z.array(nodeId).min(1).max(NODE_EXECUTE_MAX_NODES),
         mode: z.enum(['single', 'subgraph']).default('subgraph'),
-        confirmPaidRerun: z.boolean().default(false)
+        confirmPaidRerun: z.boolean().default(false),
+        inputs: WorkflowInputsSchema.optional()
       })
       .strict()
   },
@@ -613,6 +620,11 @@ export const ACCESS_OUTPUTS = {
         .strict()
     })
     .strict(),
+  'node.runPlan': z.object({
+    graphVersion: z.number().int().nonnegative(),
+    nodeCount: z.number().int().nonnegative(),
+    missing: z.array(z.object({ nodeId, title: z.string(), portId: z.string(), label: z.string(), type: z.string() }).strict())
+  }).strict(),
   'node.execute': z
     .object({
       projectId: identifier,

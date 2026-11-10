@@ -50,6 +50,9 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
         }
       )
     ),
+    ...['started', 'completed', 'failed'].map((stage) =>
+      def(`dreamina.logout.${stage}`, stage === 'failed' ? 'error' : 'info', 'main/ipc/gateway.ipc')
+    ),
     def('project.watch.failed', 'warn', 'main/ipc/project-watcher', {
       phase: 'short',
       code: 'short'

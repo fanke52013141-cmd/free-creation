@@ -13055,3 +13055,24 @@ canvas.tl-canvas-indicators {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.workflow-input-dialog {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--txt);
+}
+.workflow-input-dialog::backdrop { background: rgb(0 0 0 / 60%); }
+.workflow-input-dialog .confirm-dialog { width: min(440px, 88vw); }
+.workflow-input-field { display: grid; gap: 8px; }
+.workflow-input-field textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 10px;
+  color: var(--txt);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.asset-template-run { position: absolute; left: 6px; top: 6px; z-index: 2; }

@@ -226,3 +226,5 @@ A1.4首包接续：[查询交付台账](08-a1-4-read-only-queries.md)。`library
 - 诊断与脱敏：[LOGGING_SPEC.md](../../LOGGING_SPEC.md)、[日志覆盖清单](../LOGGING_COVERAGE.md)
 
 2026-11-07 节点标题操作调整：移除节点内复制文件路径按钮及悬浮光效，外部操作、节点契约、媒体定位和诊断接口无变化。桌面视觉门禁验证节点标题与定位交互；当前外部能力状态沿用原表。
+
+2026-11-10：模型设置的即梦退出接入 dreamina.logout，选区执行的临时输入接入 node.execute subgraph 可选 inputs，CLI/MCP 共用桌面执行。详见 [66 交付说明](66-workflow-inputs-dreamina-logout.md)。

@@ -233,5 +233,9 @@ export const aiProcessExecutor = async (
   // 写回运行结果到 meta（配置/结果分离）；props.config 不再混入 result。
   // 输出投影（nodeValues.ts）据此产出对应端口输出。
   ctx.updateResult(JSON.stringify(result))
-  return { status: 'done', artifactOutputPorts: [`out-${config.mode}`] }
+  const outputPort = `out-${config.mode}`
+  return {
+    status: 'done',
+    artifactOutputPorts: ctx.outgoing?.some((edge) => edge.fromPortId === outputPort) ? [] : [outputPort]
+  }
 }

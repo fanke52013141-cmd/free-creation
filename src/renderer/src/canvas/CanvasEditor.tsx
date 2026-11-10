@@ -1,3 +1,5 @@
+import { WorkflowInputDialog } from './WorkflowInputDialog'
+import { requestWorkflowInput } from '../stores/workflowInput'
 import { reportCanvasFailure } from './canvas-diagnostics'
 import { ensureCanvasSaved } from './flow-asset-actions'
 import { readNodeRunHistory, readNodeRunRecord } from '../engine/runRecord'
@@ -84,7 +86,7 @@ import { useGatewayStore } from '../stores/gateway'
 import { flowInitialConfig } from '@shared/agent-flow/model-defaults'
 import type { BuildPreview } from '@shared/agent-flow/builder'
 import { useEngineStore } from '../engine/store'
-import { runWorkflow, runWorkflowForNodes, runNodeManually, cancelFlowCommandExecution, iterationBodyNodeIds, isDocumentOutputNode } from '../engine/executor'
+import { runWorkflow, runWorkflowForNodes, previewWorkflowInputs, runNodeManually, cancelFlowCommandExecution, iterationBodyNodeIds, isDocumentOutputNode } from '../engine/executor'
 import { recoverRunningNodes } from '../engine/recoverVideoRuns'
 import {
   runPreparedFlowNodeCommand,
@@ -469,7 +471,7 @@ export function CanvasEditor({
     const run = (): void => {
       const editor = editorRef.current
       if (!editor) return
-      void runWorkflow(editor, project.id, providers)
+      void runWorkflow(editor, project.id, providers, { requestInput: requestWorkflowInput })
     }
     useEngineStore.getState().register(run)
     return () => {
@@ -995,6 +997,16 @@ export function CanvasEditor({
             // 注意：读取型请求（read-graph/execute-nodes/cancel-run）不得取消
             // 自动保存防抖计时器——否则未保存编辑会失去唯一的落盘调度。
             // ── F2 read-graph：只读权威宿主 latest 视图；不保存、不修改 ──
+            if (request.action === 'workflow-run-plan') {
+              window.api.replyLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                ok: true,
+                graphVersion: graphVersionRef.current,
+                result: previewWorkflowInputs(editor, request.nodeIds ?? [])
+              })
+              return
+            }
             if (request.action === 'read-graph') {
               const save = useSaveCoordinator.getState()
               const view = toGraphView(deriveGraph(editor), request.offset ?? 0, request.limit ?? 100)
@@ -1513,15 +1525,16 @@ export function CanvasEditor({
                       failureReason = result.reason ?? '节点未执行'
                     }
                   } else {
-                    await runWorkflowForNodes(
+                    const result = await runWorkflowForNodes(
                       editor,
                       project.id,
                       providers,
-                      executeNodeIds as TLShapeId[]
+                      executeNodeIds as TLShapeId[],
+                      { inputs: request.inputs, confirmPaidRerun: request.confirmPaidRerun }
                     )
                     const after = useEngineStore.getState()
-                    if (sawStopping) outcome = 'cancelled'
-                    else if (after.errors.length > 0) {
+                    if (sawStopping || result === 'cancelled') outcome = 'cancelled'
+                    else if (result !== 'completed' || after.errors.length > 0) {
                       outcome = 'failed'
                       failureReason = after.errors[0]?.reason ?? '子图执行失败'
                     } else outcome = 'completed'
@@ -2970,6 +2983,7 @@ export function CanvasEditor({
       onDropCapture={(e) => void handleDrop(e)}
       onPasteCapture={(e) => void handlePaste(e)}
     >
+      <WorkflowInputDialog />
       {savePaused && (
         <div className="save-paused-banner" role="alert">
           <span>
@@ -3000,7 +3014,7 @@ export function CanvasEditor({
         <GroupOutlineLayer
           editor={editorInstance}
           hostRef={wrapRef}
-          onRunFlow={(ids) => void runWorkflowForNodes(editorInstance, project.id, providers, ids)}
+          onRunFlow={(ids) => void runWorkflowForNodes(editorInstance, project.id, providers, ids, { requestInput: requestWorkflowInput })}
         />
       )}
       {editorInstance && <DataEdgeLayer editor={editorInstance} />}
@@ -3159,7 +3173,7 @@ export function CanvasEditor({
       {editorInstance && (
         <MultiSelectToolbar
           editor={editorInstance}
-          onRunFlow={(ids) => void runWorkflowForNodes(editorInstance, project.id, providers, ids)}
+          onRunFlow={(ids) => void runWorkflowForNodes(editorInstance, project.id, providers, ids, { requestInput: requestWorkflowInput })}
           onSaveWorkflow={(ids) => setWorkflowSaveSelection(ids)}
         />
       )}

@@ -133,3 +133,25 @@ export function buildProjectionShape(file: ProjectFile, nodeId: string): Project
     meta
   }
 }
+
+/** Values supplied for this run only. Media references always belong to the active project. */
+export const WorkflowInputSchema = z.object({
+  nodeId: z.string().min(1).max(180),
+  portId: z.string().min(1).max(100),
+  value: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('text'), text: z.string().trim().min(1).max(100000) }).strict(),
+    z.object({ kind: z.literal('markdown'), text: z.string().trim().min(1).max(100000) }).strict(),
+    z.object({ kind: z.literal('json'), data: z.unknown().refine((value) => value !== undefined) }).strict(),
+    z.object({ kind: z.literal('media'), mediaId: z.string().min(1).max(180) }).strict()
+  ])
+}).strict()
+
+export const WorkflowInputsSchema = z.array(WorkflowInputSchema).max(64).superRefine((inputs, ctx) => {
+  const keys = new Set<string>()
+  for (const [index, input] of inputs.entries()) {
+    const key = JSON.stringify([input.nodeId, input.portId])
+    if (keys.has(key)) ctx.addIssue({ code: 'custom', path: [index], message: '输入端口重复' })
+    keys.add(key)
+  }
+})
+export type WorkflowInput = z.infer<typeof WorkflowInputSchema>

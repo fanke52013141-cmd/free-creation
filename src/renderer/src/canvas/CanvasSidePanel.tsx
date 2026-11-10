@@ -12,7 +12,9 @@ import {
   type IndexedNodeRun,
   type RunStatusFilter
 } from '../engine/run-index'
-import { runNodeManually } from '../engine/executor'
+import { requestWorkflowInput } from '../stores/workflowInput'
+import { useEngineStore } from '../engine/store'
+import { runNodeManually, runWorkflowForNodes } from '../engine/executor'
 import { useGatewayStore } from '../stores/gateway'
 import { useWorkflowStore, type WorkflowTemplate } from '../stores/workflow'
 import { addNodeLibraryEntry } from './node-library'
@@ -73,7 +75,7 @@ function formatTime(ts: number): string {
 }
 
 // ── 节点库面板 ──
-function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element {
+function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId: string }): React.JSX.Element {
   const templates = useWorkflowStore((s) => s.templates)
   const wfLoad = useWorkflowStore((s) => s.load)
   const wfRemove = useWorkflowStore((s) => s.remove)
@@ -99,6 +101,18 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
         ? `已从节点库添加「${tmpl.name}」，${skippedEdges} 条旧连线因端口不明确未恢复`
         : `已从节点库添加「${tmpl.name}」（${tmpl.nodes.length} 个节点）`
     )
+  }
+
+  const handleRun = async (template: WorkflowTemplate): Promise<void> => {
+    if (!editor || useEngineStore.getState().phase !== 'idle') return
+    const { nodeIds, skippedEdges } = addNodeLibraryEntry(editor, template)
+    if (skippedEdges > 0) {
+      toast('部分旧连线无法恢复，请检查画布中的连线后再运行')
+      return
+    }
+    await runWorkflowForNodes(editor, projectId, useGatewayStore.getState().providers, nodeIds, {
+      requestInput: requestWorkflowInput
+    })
   }
 
   const handleRemoveTemplate = async (tmpl: WorkflowTemplate): Promise<void> => {
@@ -139,6 +153,7 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
               key={tmpl.id}
               template={tmpl}
               onApply={(dropScreen) => handleApply(tmpl, dropScreen)}
+              onRun={() => void handleRun(tmpl)}
               onRemove={() => void handleRemoveTemplate(tmpl)}
             />
           ))}
@@ -152,10 +167,12 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
 function WorkflowCard({
   template,
   onApply,
+  onRun,
   onRemove
 }: {
   template: WorkflowTemplate
   onApply: (dropScreen?: { x: number; y: number }) => void
+  onRun: () => void
   onRemove: () => void
 }): React.JSX.Element {
   const { startDrag, handleClick } = useDragToCanvas()
@@ -177,6 +194,12 @@ function WorkflowCard({
       onClick={() => handleClick(() => onApply())}
     >
       <LibraryCardCover icon={coverIcon} compact />
+      <button type="button" className="asset-template-run btn-ghost small"
+        aria-label={`运行 ${template.name}`}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => { event.stopPropagation(); onRun() }}>
+        <Icon name="play" size={13} /> 运行
+      </button>
       <div className="asset-info">
         <span className="asset-name" title={template.name}>
           {template.name}
@@ -667,7 +690,7 @@ export function CanvasSidePanel({
           onDropMedia={onDropMedia}
         />
       )}
-      {tab === 'workflow' && <WorkflowPanel editor={editor} />}
+      {tab === 'workflow' && <WorkflowPanel editor={editor} projectId={projectId} />}
       {tab === 'history' && <HistoryPanel projectId={projectId} editor={editor} />}
       {tab === 'runs' && (
         <RunsPanel

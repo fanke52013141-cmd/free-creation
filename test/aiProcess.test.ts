@@ -211,6 +211,17 @@ describe('aiProcess 执行器 · 输出模式分支', () => {
     expect(Object.keys(props)).toHaveLength(0)
   })
 
+  it('connected text output flows downstream without creating a document card', async () => {
+    installFakeGateway('下游提示词')
+    const { ctx, result } = makeCtx(JSON.stringify({ modelKey: 'p1::m1' }), textInput('输入'))
+    const executed = await aiProcessExecutor({
+      ...ctx,
+      outgoing: [{ nodeId: 'shape:image', fromPortId: 'out-text', toPortId: 'in-text' }]
+    })
+    expect(executed).toEqual({ status: 'done', artifactOutputPorts: [] })
+    expect(JSON.parse(result.value as string)).toEqual({ kind: 'text', text: '下游提示词' })
+  })
+
   it('markdown 模式：输出 markdown 结果', async () => {
     installFakeGateway('# 标题')
     const config = JSON.stringify({ modelKey: 'p1::m1', mode: 'markdown' })

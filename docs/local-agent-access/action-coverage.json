@@ -1243,6 +1243,14 @@
       ],
       "note": "F9：对**已保存**供应商做连通性探测（复用同一 probeProvider），只做免费/只读探测、allowCost 恒 false；必须显式 confirmNetwork=true；外部只给 providerId，密钥由 main 读取"
     },
+    "ipc.keys.dreaminaLogout": {
+      "label": "退出即梦登录",
+      "channel": "gateway:dreamina:logout",
+      "gui": "模型设置",
+      "phase": "external",
+      "external": ["dreamina.logout"],
+      "note": "GUI、CLI、MCP 共用本机 CLI 退出操作；外部调用需显式 confirmLogout。"
+    },
     "ipc.keys.dreaminaLoginStart": {
       "label": "Dreamina 登录开始",
       "channel": "gateway:dreamina:login:start",
@@ -1786,9 +1794,10 @@
       "gui": "多选运行",
       "phase": "external",
       "external": [
-        "node.execute"
+        "node.execute",
+        "node.runPlan"
       ],
-      "note": "F3 新增：node.execute subgraph 模式（多目标闭包，与 GUI runWorkflowForNodes 同一实现）"
+      "note": "node.execute subgraph 与 GUI 共用运行器。节点库运行可组合 node.library.search、node.library.insert、node.get 与 node.execute；临时素材按项目 mediaId 解析。"
     },
     "canvas.workflow.cancel": {
       "label": "取消运行",

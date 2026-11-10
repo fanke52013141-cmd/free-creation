@@ -262,7 +262,10 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     const deviceCode = dreaminaLogin?.deviceCode
     if (!deviceCode) return
     let stopped = false
+    let checking = false
     const timer = window.setInterval(() => {
+      if (checking) return
+      checking = true
       void (async () => {
         const res = await window.api.gateway.dreaminaLoginCheck(deviceCode)
         if (stopped) return
@@ -284,7 +287,9 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
           return
         }
         setDreaminaLoginMsg(res.data.message)
-      })()
+      })().catch(() => {
+        if (!stopped) setDreaminaLoginMsg('暂时无法检查登录状态')
+      }).finally(() => { checking = false })
     }, 2500)
     return () => {
       stopped = true
@@ -415,6 +420,20 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
       deviceCode: res.data.deviceCode
     })
     setDreaminaLoginMsg('已打开浏览器，请在页面中完成授权（本面板会自动检测结果）')
+  }
+
+  const exitDreaminaLogin = async (): Promise<void> => {
+    setDreaminaLoginBusy(true)
+    setDreaminaLogin(null)
+    try {
+      const result = await window.api.gateway.dreaminaLogout()
+      if (result.ok) setTestMsg('')
+      setDreaminaLoginMsg(result.ok ? '已退出即梦，可以重新登录其他账号' : result.error.message)
+    } catch {
+      setDreaminaLoginMsg('退出即梦失败，请重试')
+    } finally {
+      setDreaminaLoginBusy(false)
+    }
   }
 
   const copyDreaminaLink = (value: string): void => {
@@ -802,7 +821,14 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                           disabled={dreaminaLoginBusy}
                           onClick={() => void startDreaminaLogin()}
                         >
-                          {dreaminaLoginBusy ? '发起中…' : '登录即梦'}
+                          登录即梦
+                        </button>
+                        <button
+                          className="btn-ghost small"
+                          disabled={dreaminaLoginBusy}
+                          onClick={() => void exitDreaminaLogin()}
+                        >
+                          退出登录
                         </button>
                       </div>
                       {dreaminaLogin && (

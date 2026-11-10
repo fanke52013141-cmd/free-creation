@@ -14,7 +14,7 @@ import {
 } from '../gateway/providers.repo'
 import { probeProvider } from '../gateway/provider-check'
 import { importProviders } from '../gateway/provider-transfer'
-import { checkDreaminaLogin, startDreaminaLogin } from '../gateway/dreamina-cli'
+import { checkDreaminaLogin, logoutDreamina, startDreaminaLogin } from '../gateway/dreamina-cli'
 import { keysPackageAccessPort } from './keys-bridge'
 import { DesktopAccessError, type AccessDesktop } from './desktop'
 
@@ -24,7 +24,7 @@ export const PROVIDER_ADMIN_OPERATION_IDS: ReadonlySet<AccessOperationId> = new 
   'provider.probe',
   'provider.package.import',
   'provider.package.importProviders',
-  'dreamina.login.start',
+  'dreamina.logout', 'dreamina.login.start',
   'dreamina.login.check'
 ] as AccessOperationId[])
 
@@ -204,6 +204,12 @@ export async function runProviderAdminOperation(
     )
     const imported = await importProviders(target, input.password as string)
     return { imported: Number(imported ?? 0), humanConfirmed: true as const }
+  }
+
+  if (operationId === 'dreamina.logout') {
+    if (input.confirmLogout !== true)
+      refuse('LOGOUT_CONFIRM_REQUIRED', 'pass confirmLogout: true to clear the local Dreamina session')
+    return logoutDreamina()
   }
 
   if (operationId === 'dreamina.login.start') {

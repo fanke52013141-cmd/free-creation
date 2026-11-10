@@ -1,8 +1,8 @@
-﻿import { z } from 'zod'
+import { z } from 'zod'
 import { SkillAgentConfigSchema } from '../skill-agent'
 import { GraphPatchOpsSchema, GRAPH_VIEW_MAX_NODES, mediaResolutionSchema } from './graph-ops'
 import { PublishModeSchema, publishRequestIdSchema } from './publish'
-import { NODE_EXECUTE_MAX_NODES } from './run-ops'
+import { NODE_EXECUTE_MAX_NODES, WorkflowInputsSchema } from './run-ops'
 
 export const ACCESS_DESKTOP_REQUEST = 'local-agent:desktop-request'
 export const ACCESS_DESKTOP_REPLY = 'local-agent:desktop-reply'
@@ -20,6 +20,7 @@ export const DesktopRequestSchema = z
       'bind-skills',
       'graph-patch',
       'read-graph',
+      'workflow-run-plan',
       'execute-nodes',
       'cancel-run',
       // F6 收尾：manual-publish 的等待/继续。
@@ -55,6 +56,7 @@ export const DesktopRequestSchema = z
     mode: z.enum(['single', 'subgraph']).optional(),
     nodeIds: z.array(z.string().max(180)).min(1).max(NODE_EXECUTE_MAX_NODES).optional(),
     confirmPaidRerun: z.boolean().optional(),
+    inputs: WorkflowInputsSchema.optional(),
     /** graph-patch：main 预检解析的素材事实（按 mediaId 注入，外部输入不可携带路径）。 */
     mediaResolutions: z.record(z.string(), mediaResolutionSchema).optional(),
     /** 发布授权协议：待授权请求、发布模式与镜头；方向由 main 决定，外部不可自造授权。 */

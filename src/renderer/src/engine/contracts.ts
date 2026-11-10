@@ -43,7 +43,7 @@ function describePort(port: PortDecl): string {
  * 从 CanvasNode 解析实际端口。优先使用 deriveGraph 已填充的 node.ports
  * （包含动态解析的端口），为空时回退到 spec 静态端口（兼容测试与旧数据）。
  */
-function portsOf(node: CanvasNode): { in: PortDecl[]; out: PortDecl[] } {
+export function portsOf(node: CanvasNode): { in: PortDecl[]; out: PortDecl[] } {
   if (node.ports.length > 0) {
     return {
       in: node.ports.filter((p) => p.dir === 'in'),

@@ -17,7 +17,7 @@ import { driverForSpec } from '../../shared/provider-driver'
 import { startChat, cancelChat } from '../gateway/chat'
 import { GatewayError, testProvider } from '../gateway/factory'
 import { draftToConfig, freeConnectionMessage, probeProvider } from '../gateway/provider-check'
-import { checkDreaminaLogin, startDreaminaLogin } from '../gateway/dreamina-cli'
+import { checkDreaminaLogin, logoutDreamina, startDreaminaLogin } from '../gateway/dreamina-cli'
 import { generateImageToAsset } from '../gateway/image'
 import { transformImageEdit } from '../media/image-edit'
 import {
@@ -370,6 +370,19 @@ export function registerGatewayIpc(win: BrowserWindow, keysService?: GatewayKeys
 
   // 即梦本机 CLI 的 OAuth 设备流：发起后直接把浏览器打开，用户在网页上授权，
   // 面板再按自己的节奏轮询 checklogin——主进程不阻塞等待，也不接触任何 token。
+  ipcMain.handle(IPC.gateway.dreaminaLogout, () => wrapAsync(async () => {
+    const diagnostics = { traceId: newTraceId(), spanId: newSpanId() }
+    emitGatewayEvent('dreamina.logout.started', '开始退出即梦', diagnostics)
+    try {
+      const result = await logoutDreamina()
+      emitGatewayEvent('dreamina.logout.completed', '即梦已退出', diagnostics, { status: 'success' })
+      return result
+    } catch (error) {
+      emitGatewayEvent('dreamina.logout.failed', '即梦退出失败', diagnostics, { status: 'failed', phase: 'local-cli' })
+      throw error
+    }
+  }))
+
   ipcMain.handle(IPC.gateway.dreaminaLoginStart, () =>
     wrapAsync<DreaminaLoginMaterial>(async () => {
       const material = await startDreaminaLogin()

@@ -399,6 +399,8 @@ export class LocalAccessService {
           )
         const executeFile = projects.openProject(id)
         if (!executeFile) throw new AccessFailure('NOT_FOUND', 'read')
+        if (input.mode === 'single' && Array.isArray(input.inputs) && input.inputs.length)
+          throw new AccessFailure('INVALID_INPUT', 'precheck', 'temporary inputs require subgraph mode')
         const executeNodeIds = input.nodeIds as string[]
         for (const nodeId of executeNodeIds)
           if (!executeFile.nodes.some((candidate) => candidate.id === nodeId))
@@ -415,7 +417,8 @@ export class LocalAccessService {
             taskId: run.id,
             mode: run.mode === 'single' ? 'single' : 'subgraph',
             nodeIds: executeNodeIds,
-            confirmPaidRerun: input.confirmPaidRerun === true
+            confirmPaidRerun: input.confirmPaidRerun === true,
+            inputs: input.inputs as import('@shared/agent-access/run-ops').WorkflowInput[] | undefined
           })
         } catch (error) {
           if (error instanceof DesktopAccessError && !error.unknownOutcome) {
@@ -1396,6 +1399,14 @@ export class LocalAccessService {
           referencedBySavedNodes: referenced
         }
       }
+      case 'node.runPlan': {
+        if (id !== this.options.activeProjectId() || !this.options.desktop)
+          throw new AccessFailure('ACTIVE_PROJECT_REQUIRED', 'workflow-preflight')
+        const plan = await this.options.desktop.run({
+          action: 'workflow-run-plan', projectId: id, nodeIds: input.nodeIds as string[]
+        })
+        return { ...(plan.result as object), graphVersion: plan.graphVersion }
+      }
       case 'graph.get': {
         const view = (input.view as 'persisted' | 'latest') ?? 'persisted'
         const offset = input.offset as number
@@ -2017,6 +2028,7 @@ export class LocalAccessService {
       case 'provider.probe':
       case 'provider.package.import':
       case 'provider.package.importProviders':
+      case 'dreamina.logout':
       case 'dreamina.login.start':
       case 'dreamina.login.check':
         // F9：凭据包导出/预览在 dispatch 分组分支执行（需要受控导出目录与共享服务实例）。

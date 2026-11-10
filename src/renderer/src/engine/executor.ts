@@ -10,7 +10,7 @@
 // 节点卡片内的手动生成与全局运行共用同一输出投影（nodes/nodeValues.ts），
 // 因此执行器只需把运行结果写回 shape props / meta，投影交给运行器统一处理。
 import type { Editor, TLShapeId } from 'tldraw'
-import type { CanvasEdge, CanvasNode, ExecStatus, ProviderSummary } from '@shared/types'
+import type { CanvasEdge, CanvasNode, ExecStatus, PortDecl, ProviderSummary } from '@shared/types'
 import type { FlowAssetVersion } from '@shared/agent-flow/assets'
 import { deriveGraph } from '../canvas/graph'
 import { markUndoPoint } from '../canvas/history'
@@ -21,11 +21,13 @@ import {
   buildOutputPackets,
   collectContractInputs,
   type ContractInputInjection,
-  type ContractOutputs
+  type ContractOutputs,
+  portsOf
 } from './contracts'
 import type { NodeExecutionContext, NodeExecutionResult, SubflowRequest } from './executor-types'
 import type { NodeMetaPatch } from '@shared/engine/executor-types'
-import { iterationItemValue } from '@shared/engine/inputs'
+import { inputText, iterationItemValue } from '@shared/engine/inputs'
+import { mergedPrompt } from '@shared/engine/helpers'
 import { rendererGateway } from './rendererGateway'
 import {
   preflightAgentDecisionModels,
@@ -71,6 +73,7 @@ import {
 } from '@shared/agent-flow/node-contracts'
 import { AgentOutputSetSchema, agentOutputSetMatchesAssets } from '@shared/agent-flow/agent-outputs'
 import { canonicalFlowJson } from '@shared/agent-flow/semantic-revision'
+import { missingWorkflowPorts, workflowInputValue, type WorkflowInputOptions } from './workflow-inputs'
 import { readPinnedOutputs } from '@shared/engine/deterministic-projections'
 
 export interface NodeCommandRunOptions {
@@ -89,6 +92,8 @@ interface RunControl {
 }
 
 interface WorkflowContext {
+  workflowInputs?: WorkflowInputOptions
+  usedWorkflowInputs?: Set<string>
   controlledRequestId?: string
   command?: NodeCommandRunOptions
   taskId?: string
@@ -817,7 +822,8 @@ async function invokeExecutor(
   shape: NodeCardShape,
   inputs: NodeExecutionContext['inputs'],
   runSubflow: (request: SubflowRequest) => Promise<Record<string, ContractOutputs>>,
-  record: NodeRunRecord
+  record: NodeRunRecord,
+  temporaryText?: string
 ): Promise<NodeExecutionResult> {
   const spec = getNodeType(node.type)
   if (!spec?.executor) return { status: 'failed', reason: `未实现节点类型：${node.type}` }
@@ -866,6 +872,7 @@ async function invokeExecutor(
     waitForResume: () => waitForResume(ctx.token),
     outgoing,
     updateProps: (patch) => {
+      if (temporaryText !== undefined && Object.keys(patch).every((key) => key === 'text')) return
       const violation = operationPatchViolation(node.type, patch)
       if (violation) throw new Error(violation)
       ctx.editor.updateShape({ id, type: 'node-card', props: patch })
@@ -1179,7 +1186,69 @@ async function executeNodeUnscheduled(
     return { status: 'skipped', reason: '已取消' }
   }
   try {
-    const collected = collectNodeInputs(ctx, node, injection)
+    let collected = collectNodeInputs(ctx, node, injection)
+    let temporaryText: string | undefined
+    let temporaryMedia: Partial<NodeCardProps> | undefined
+    const workflowInputs = ctx.workflowInputs
+    if (workflowInputs && !ctx.command && !injection) {
+      const supplied = workflowInputs.inputs ?? []
+      const missing = missingWorkflowPorts(node, shape.props.text, ctx.graph.edges, collected.value, supplied)
+      const injections: ContractInputInjection[] = []
+      const resolveInput = async (port: PortDecl): Promise<NodeValue | null> => {
+        const entry = supplied.find((input) => input.nodeId === node.id && input.portId === port.id)
+        let input = entry?.value
+        if (!input && workflowInputs.requestInput) {
+          recordRunTrace(ctx, node, record, 'input', 'info', '等待补充本次运行的输入')
+          input = (await workflowInputs.requestInput({
+            projectId: ctx.projectId,
+            title: node.title || node.type,
+            port,
+            onCancel: ctx.token.onCancel
+          })) ?? undefined
+          if (!input) {
+            ctx.token.cancelled = true
+            return null
+          }
+        }
+        if (ctx.token.cancelled) return null
+        if (!input) throw new Error(`输入契约：缺少 ${port.name}（${node.id}/${port.id}，${port.type}）`)
+        const assets = input.kind === 'media' ? await window.api.listMedia(ctx.projectId) : undefined
+        if (assets && !assets.ok) throw new Error('输入契约：无法读取项目素材')
+        const value = workflowInputValue(port, input, assets?.ok ? assets.data : [])
+        if (entry) ctx.usedWorkflowInputs?.add(JSON.stringify([entry.nodeId, entry.portId]))
+        return value
+      }
+      for (const port of missing) {
+        const value = await resolveInput(port)
+        if (!value) return finishCancelled()
+        injections.push({
+          portId: port.id,
+          packet: {
+            type: value.kind,
+            value,
+            source: { nodeId: node.id, portId: port.id, runId: ctx.runId },
+            createdAt: Date.now()
+          }
+        })
+      }
+      if (injections.length > 0) {
+        collected = collectContractInputs(node, ctx.graph.edges, ctx.outputs, { injections })
+        recordRunTrace(ctx, node, record, 'input', 'info', `已补充 ${injections.length} 个临时输入端口`)
+        if (node.type === 'text' && injections.some((input) => input.portId === 'in-text')) {
+          temporaryText = mergedPrompt(shape.props.text, inputText(collected.value, 'in-text'))
+        }
+      }
+      if (node.type === 'image' && (!shape.props.mediaId || !shape.props.mediaPath)) {
+        const port = portsOf(node).out.find((item) => item.id === 'out-image')
+        if (port) {
+          const value = await resolveInput(port)
+          if (!value) return finishCancelled()
+          if (value.kind !== 'image') throw new Error('输入契约：请选择图片')
+          temporaryMedia = { mediaId: value.mediaId, mediaPath: value.mediaPath, mediaMime: value.mime }
+          recordRunTrace(ctx, node, record, 'input', 'info', '已补充本次运行的图片素材')
+        }
+      }
+    }
     record.inputs = inputSources(collected.value)
     record.inputFingerprint = fingerprintNodeInputs(shape, collected.value)
     recordRunTrace(
@@ -1214,7 +1283,8 @@ async function executeNodeUnscheduled(
     if (ctx.command) await ctx.command.beforeExecutor()
     if (ctx.token.cancelled) return finishCancelled()
     recordRunTrace(ctx, node, record, 'execution', 'info', '开始调用节点执行器')
-    const result = await invokeExecutor(ctx, node, shape, collected.value, runSubflow, record)
+    const runtimeShape = temporaryMedia ? { ...shape, props: { ...shape.props, ...temporaryMedia } } : shape
+    const result = await invokeExecutor(ctx, node, runtimeShape, collected.value, runSubflow, record, temporaryText)
     const latest = editor.getShape<NodeCardShape>(shapeId)
     if (ctx.token.cancelled) {
       return finishCancelled()
@@ -1227,6 +1297,11 @@ async function executeNodeUnscheduled(
       // 只会在输出验证成功后写入，失败路径不会泄露任何输出。
       const outputShape = {
         ...latest,
+        props: {
+          ...latest.props,
+          ...temporaryMedia,
+          ...(temporaryText === undefined ? {} : { text: temporaryText })
+        },
         meta: { ...(latest.meta ?? {}), nodeRun: { ...record, status: 'success' as const } }
       } as unknown as NodeCardShape
       const projected = buildOutputPackets(node, projectNodeOutputs(outputShape), ctx.runId)
@@ -1750,10 +1825,86 @@ export async function runNodeManually(
   return result
 }
 
+function workflowScope(fullGraph: ReturnType<typeof deriveGraph>, targets: readonly string[]): { graph: WorkflowContext['graph']; required: Set<string> } {
+  const required = new Set<string>(targets)
+  const pending: string[] = [...targets]
+  while (pending.length > 0) {
+    const nodeId = pending.pop()!
+    for (const edge of fullGraph.edges) {
+      if (edge.to.nodeId === nodeId && !required.has(edge.from.nodeId)) {
+        required.add(edge.from.nodeId)
+        pending.push(edge.from.nodeId)
+      }
+    }
+  }
+  const graph = {
+    nodes: fullGraph.nodes.filter((node) => required.has(node.id)),
+    edges: fullGraph.edges.filter(
+      (edge) => required.has(edge.from.nodeId) && required.has(edge.to.nodeId)
+    )
+  }
+  return { graph, required }
+}
+
+function workflowPortGaps(
+  editor: Editor,
+  graph: WorkflowContext['graph'],
+  order: readonly CanvasNode[],
+  supplied: NonNullable<WorkflowInputOptions['inputs']>
+): Array<{ nodeId: string; title: string; port: PortDecl }> {
+  return order.flatMap((node) => {
+    const shape = editor.getShape<NodeCardShape>(node.id as TLShapeId)
+    if (!shape) return []
+    const ports = missingWorkflowPorts(node, shape.props.text, graph.edges, new Map(), supplied)
+    if (node.type === 'image' && (!shape.props.mediaId || !shape.props.mediaPath)) {
+      const source = portsOf(node).out.find((port) => port.id === 'out-image')
+      if (source) ports.push(source)
+    }
+    return ports
+      .filter((port) => !supplied.some((item) => item.nodeId === node.id && item.portId === port.id))
+      .map((port) => ({ nodeId: node.id, title: node.title || node.type, port }))
+  })
+}
+
+export function previewWorkflowInputs(editor: Editor, nodeIds: readonly string[]): {
+  nodeCount: number
+  missing: Array<{ nodeId: string; title: string; portId: string; label: string; type: string }>
+} {
+  const fullGraph = deriveGraph(editor)
+  if (nodeIds.some((id) => !fullGraph.nodes.some((node) => node.id === id))) throw new Error('NODE_NOT_FOUND')
+  const { graph } = workflowScope(fullGraph, nodeIds)
+  const order = topoSort(graph)
+  if (!order) throw new Error('WORKFLOW_CYCLE')
+  const bodies = iterationBodyNodeIds(graph)
+  const executable = order.filter((node) => !bodies.has(node.id))
+  return {
+    nodeCount: executable.length,
+    missing: workflowPortGaps(editor, graph, executable, []).map(({ nodeId, title, port }) => ({
+      nodeId, title, portId: port.id, label: port.name, type: port.type
+    }))
+  }
+}
+
+async function prepareWorkflowInputs(ctx: WorkflowContext, order: readonly CanvasNode[]): Promise<boolean> {
+  const options = ctx.workflowInputs
+  if (!options?.requestInput) return true
+  const supplied = [...(options.inputs ?? [])]
+  for (const { nodeId, title, port } of workflowPortGaps(ctx.editor, ctx.graph, order, supplied)) {
+    const value = await options.requestInput({
+      projectId: ctx.projectId, title, port, onCancel: ctx.token.onCancel
+    })
+    if (!value || ctx.token.cancelled) return false
+    supplied.push({ nodeId, portId: port.id, value })
+  }
+  ctx.workflowInputs = { ...options, inputs: supplied }
+  return true
+}
+
 export async function runWorkflow(
   editor: Editor,
   projectId: string,
-  providers: ProviderSummary[]
+  providers: ProviderSummary[],
+  inputOptions?: WorkflowInputOptions
 ): Promise<void> {
   const store = useEngineStore.getState()
   if (store.phase !== 'idle') return
@@ -1799,9 +1950,9 @@ export async function runWorkflow(
     registerRunControls(token)
     const iterationBodies = iterationBodyNodeIds(graph)
     const executableOrder = order.filter((node) => !iterationBodies.has(node.id))
-    store.beginRun(executableOrder.length)
     const ctx: WorkflowContext = {
       editor,
+      workflowInputs: inputOptions,
       projectId,
       providers,
       token,
@@ -1812,6 +1963,8 @@ export async function runWorkflow(
       traceId: newTraceId(),
       workflowSpanId: newSpanId()
     }
+    if (!(await prepareWorkflowInputs(ctx, executableOrder))) return
+    store.beginRun(executableOrder.length)
     emitWorkflowEvent('workflow.started', '工作流开始执行', ctx, {
       attributes: { itemCount: executableOrder.length }
     })
@@ -1858,8 +2011,9 @@ export async function runWorkflowForNodes(
   editor: Editor,
   projectId: string,
   providers: ProviderSummary[],
-  targetNodeIds: TLShapeId[]
-): Promise<void> {
+  targetNodeIds: TLShapeId[],
+  inputOptions?: WorkflowInputOptions
+): Promise<'completed' | 'failed' | 'cancelled' | void> {
   const store = useEngineStore.getState()
   if (store.phase !== 'idle') return
   let phaseStarted = false
@@ -1870,22 +2024,16 @@ export async function runWorkflowForNodes(
     )
     if (targets.length === 0) return toast('所选节点不存在或尚未保存到画布')
 
-    const required = new Set<string>(targets)
-    const pending: string[] = [...targets]
-    while (pending.length > 0) {
-      const nodeId = pending.pop()!
-      for (const edge of fullGraph.edges) {
-        if (edge.to.nodeId === nodeId && !required.has(edge.from.nodeId)) {
-          required.add(edge.from.nodeId)
-          pending.push(edge.from.nodeId)
-        }
+    const { graph, required } = workflowScope(fullGraph, targets)
+    for (const input of inputOptions?.inputs ?? []) {
+      const target = graph.nodes.find((candidate) => candidate.id === input.nodeId)
+      const acceptsImageSource = target?.type === 'image' && input.portId === 'out-image'
+      if (!target || (!acceptsImageSource && !portsOf(target).in.some((port) => port.id === input.portId))) {
+        throw new Error('临时输入必须指向本次流程内的有效端口')
       }
-    }
-    const graph = {
-      nodes: fullGraph.nodes.filter((node) => required.has(node.id)),
-      edges: fullGraph.edges.filter(
-        (edge) => required.has(edge.from.nodeId) && required.has(edge.to.nodeId)
-      )
+      if (graph.edges.some((edge) => edge.to.nodeId === input.nodeId && edge.to.portId === input.portId)) {
+        throw new Error('已连线的输入由上游提供，不能用临时值覆盖')
+      }
     }
     const order = topoSort(graph)
     if (!order) return toast('所选子图存在循环连线，无法执行')
@@ -1923,7 +2071,7 @@ export async function runWorkflowForNodes(
       const node = nodeById.get(nodeId)
       return node !== undefined && !isDocumentOutputNode(node.type)
     })
-    if (rerunPaidUpstream.length > 0) {
+    if (rerunPaidUpstream.length > 0 && !inputOptions?.confirmPaidRerun) {
       // T07（F07）：确认清单带节点名（最多列 6 个，余量计数），不再只给笼统计数。
       const names = rerunPaidUpstream
         .map((nodeId) => nodeById.get(nodeId)?.title || nodeId.slice(-4))
@@ -1942,9 +2090,10 @@ export async function runWorkflowForNodes(
     const token = createRunControl()
     registerRunControls(token)
     const executableOrder = order.filter((node) => !iterationBodies.has(node.id))
-    store.beginRun(executableOrder.length)
     const ctx: WorkflowContext = {
       editor,
+      workflowInputs: inputOptions,
+      usedWorkflowInputs: new Set(),
       projectId,
       providers,
       token,
@@ -1955,6 +2104,11 @@ export async function runWorkflowForNodes(
       traceId: newTraceId(),
       workflowSpanId: newSpanId()
     }
+    if (!(await prepareWorkflowInputs(ctx, executableOrder))) {
+      toast('子图运行已停止')
+      return 'cancelled'
+    }
+    store.beginRun(executableOrder.length)
     emitWorkflowEvent('workflow.started', '子图开始执行', ctx, {
       attributes: { itemCount: executableOrder.length }
     })
@@ -1965,10 +2119,20 @@ export async function runWorkflowForNodes(
       await waitForResume(token)
       if (token.cancelled) break
       store.setCurrent(node.title || node.type, node.id)
-      await executeNodeOnce(ctx, node, runSubflow)
+      const result = await executeNodeOnce(ctx, node, runSubflow)
+      if (inputOptions && result.status === 'skipped' && !token.cancelled &&
+          (!isDocumentOutputNode(node.type) || targetIds.has(node.id))) {
+        reportRunError(ctx, node.title || node.type, result.reason ?? '节点未执行', {
+          nodeId: node.id,
+          phase: result.diagnosticPhase === 'input' ? 'input' : 'execution'
+        })
+      }
       store.nodeDone()
     }
 
+    if (!token.cancelled && (ctx.workflowInputs?.inputs?.length ?? 0) > (ctx.usedWorkflowInputs?.size ?? 0)) {
+      reportRunError(ctx, '临时输入', '存在未使用的临时输入', { phase: 'input' })
+    }
     const after = useEngineStore.getState()
     after.endRun()
     clearRunControls()
@@ -1989,6 +2153,7 @@ export async function runWorkflowForNodes(
       })
     }
     markUndoPoint(editor, 'workflow-run-subgraph')
+    return token.cancelled ? 'cancelled' : after.errors.length > 0 ? 'failed' : 'completed'
   } finally {
     if (phaseStarted) {
       useEngineStore.getState().endRun()
