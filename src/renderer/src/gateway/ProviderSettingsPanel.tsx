@@ -16,7 +16,6 @@ import type {
   SaveProviderInput
 } from '@shared/contracts'
 import { driverForSpec, guessModelModality } from '@shared/provider-driver'
-import { DISTRIBUTION_EDITION } from '@shared/edition'
 import { isDreaminaModelSupported } from '@shared/dreamina-models'
 import { useGatewayStore } from '../stores/gateway'
 import { useConfirmStore } from '../stores/confirm'
@@ -129,7 +128,6 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
   const [expanded, setExpanded] = useState<string | null>(null)
   // 密钥包三步流（.cskeys v2，仅授权版发码模式使用；发行版隐藏）。
   const [keysDialog, setKeysDialog] = useState<KeyPackageDialogMode>(null)
-  const [canIssueKeys, setCanIssueKeys] = useState(false)
   // 供应商配置传输（密码加密文件）：发行版 + 发放员可用——把带 Key 的配置发给客户导入。
   const [transferMode, setTransferMode] = useState<'import' | 'export' | null>(null)
   const [transferPassword, setTransferPassword] = useState('')
@@ -137,7 +135,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
   const [transferProviderIds, setTransferProviderIds] = useState<Set<string>>(new Set())
   const [transferError, setTransferError] = useState('')
   const [transferBusy, setTransferBusy] = useState(false)
-  /** 即梦本机 CLI 的设备流登录：pending 时持有授权材料并轮询 checklogin。 */
+  /** 即梦 的设备流登录：pending 时持有授权材料并轮询 checklogin。 */
   const [dreaminaLogin, setDreaminaLogin] = useState<{
     verificationUri?: string
     userCode?: string
@@ -224,11 +222,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
       if (active && result.ok) setProviders(result.data)
     })
     // P2：发放入口只对具备 credentials.export 能力的授权（模型密钥发放员）可见。
-    void window.api.bootstrap().then((result) => {
-      if (active && result.ok) {
-        setCanIssueKeys(result.data.license.capabilities.includes('credentials.export'))
-      }
-    })
+    // 配置导入导出不再依赖授权能力：自用/发行版都可直接导出模型配置。
     return () => {
       active = false
     }
@@ -240,10 +234,6 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
       if (e.key !== 'Escape') return
       if (transferMode) {
         finishProviderTransfer()
-        return
-      }
-      if (keysDialog) {
-        setKeysDialog(null)
         return
       }
       // 弹层打开时 Esc 只关弹层，不关整个面板
@@ -696,63 +686,22 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                 )}
               </div>
             )}
-            {/* 两条通道语义不同，用户 2026-11-09 反馈"分不清"：
-                · 配置文件（.canvasproviders）：发放员给你「文件 + 密码」，任何已激活设备都能导入；
-                · 设备专属密钥包（.cskeys）：先导出本机凭证 → 发放员为**这台设备**签发，
-                  文件即使泄露，别的设备也导不进去。 */}
             {!picking && !selecting && (
-              <div className="gw-provider-transfer-group">
-                <span className="gw-provider-transfer-label">配置文件（文件 + 密码）</span>
-                <div className="gw-provider-transfer-actions">
-                  <button
-                    className="btn-ghost small"
-                    title="选择供应商配置文件并输入密码；任何已激活设备都能导入"
-                    onClick={() => beginProviderTransfer('import')}
-                  >
-                    导入配置
-                  </button>
-                  {(DISTRIBUTION_EDITION || canIssueKeys) && (
-                    <button
-                      className="btn-ghost small"
-                      title="把所选供应商（含密钥）加密成配置文件，别人用密码导入"
-                      onClick={() => beginProviderTransfer('export')}
-                    >
-                      导出配置
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-            {!picking && !selecting && !DISTRIBUTION_EDITION && (
-              <div className="gw-provider-transfer-group">
-                <span className="gw-provider-transfer-label">
-                  设备专属（更安全，需发放员配合）
-                </span>
-                <div className="gw-provider-transfer-actions">
-                  <button
-                    className="btn-ghost small"
-                    title="导出本机设备凭证，交给发放员"
-                    onClick={() => setKeysDialog('credential')}
-                  >
-                    导出凭证
-                  </button>
-                  <button
-                    className="btn-ghost small"
-                    title="导入只对本机有效的密钥包（需先用凭证让发放员签发）"
-                    onClick={() => setKeysDialog('import')}
-                  >
-                    导入密钥包
-                  </button>
-                  {canIssueKeys && (
-                    <button
-                      className="btn-ghost small"
-                      title="用接收设备的凭证，为它签发专属密钥包"
-                      onClick={() => setKeysDialog('export')}
-                    >
-                      发放密钥包
-                    </button>
-                  )}
-                </div>
+              <div className="gw-provider-transfer-actions">
+                <button
+                  className="btn-ghost small"
+                  title="选择模型配置，设置密码后导出"
+                  onClick={() => beginProviderTransfer('export')}
+                >
+                  导出配置
+                </button>
+                <button
+                  className="btn-ghost small"
+                  title="选择配置文件并输入密码导入"
+                  onClick={() => beginProviderTransfer('import')}
+                >
+                  导入配置
+                </button>
               </div>
             )}
             {selecting && (
@@ -1197,33 +1146,6 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                 </p>
               )}
               <form onSubmit={(event) => void submitProviderTransfer(event)}>
-                <label className="gw-transfer-field">
-                  <span>{transferMode === 'export' ? '设置加密密码' : '文件密码'}</span>
-                  <input
-                    className="gw-input"
-                    type="password"
-                    autoFocus
-                    autoComplete="new-password"
-                    minLength={8}
-                    value={transferPassword}
-                    onChange={(event) => setTransferPassword(event.target.value)}
-                    placeholder="至少 8 个字符"
-                  />
-                </label>
-                {transferMode === 'export' && (
-                  <label className="gw-transfer-field">
-                    <span>再次输入密码</span>
-                    <input
-                      className="gw-input"
-                      type="password"
-                      autoComplete="new-password"
-                      minLength={8}
-                      value={transferPasswordConfirm}
-                      onChange={(event) => setTransferPasswordConfirm(event.target.value)}
-                      placeholder="确认加密密码"
-                    />
-                  </label>
-                )}
                 {transferMode === 'export' && (
                   <fieldset className="gw-transfer-selection">
                     <legend>选择导出的供应商（含 API 密钥）</legend>
@@ -1251,6 +1173,33 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                       <span>暂无可导出的供应商</span>
                     )}
                   </fieldset>
+                )}
+                <label className="gw-transfer-field">
+                  <span>{transferMode === 'export' ? '设置加密密码' : '文件密码'}</span>
+                  <input
+                    className="gw-input"
+                    type="password"
+                    autoFocus
+                    autoComplete="new-password"
+                    minLength={8}
+                    value={transferPassword}
+                    onChange={(event) => setTransferPassword(event.target.value)}
+                    placeholder="至少 8 个字符"
+                  />
+                </label>
+                {transferMode === 'export' && (
+                  <label className="gw-transfer-field">
+                    <span>再次输入密码</span>
+                    <input
+                      className="gw-input"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={8}
+                      value={transferPasswordConfirm}
+                      onChange={(event) => setTransferPasswordConfirm(event.target.value)}
+                      placeholder="确认加密密码"
+                    />
+                  </label>
                 )}
                 {transferError && (
                   <div className="gw-transfer-error" role="alert">
