@@ -3,8 +3,9 @@ import { RunTimeline } from './RunTimeline'
 // 资产中心：项目级媒体库——导入/搜索/筛选/缩略图预览/点击拖到画布/删除
 // 节点库：列出用户保存的单节点或多节点组合，并允许搜索、添加和删除。
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useValue, type Editor, type TLShapeId } from 'tldraw'
+import { createShapeId, useValue, type Editor, type TLShapeId } from 'tldraw'
 import type { MediaAsset } from '@shared/types'
+import type { CompositeCapabilitySummary } from '@shared/composite/types'
 import type { NodeCardShape } from './NodeCardShape'
 import {
   buildRunIndex,
@@ -80,6 +81,7 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
   const wfLoad = useWorkflowStore((s) => s.load)
   const wfRemove = useWorkflowStore((s) => s.remove)
   const [query, setQuery] = useState('')
+  const [composites, setComposites] = useState<CompositeCapabilitySummary[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const needle = query.trim().toLocaleLowerCase()
   const visibleTemplates = templates.filter((template) =>
@@ -87,10 +89,21 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
       (value) => value.toLocaleLowerCase().includes(needle)
     )
   )
+  const visibleComposites = composites.filter((capability) =>
+    [capability.name, capability.id, ...(capability.tags ?? [])].some((value) =>
+      value.toLocaleLowerCase().includes(needle)
+    )
+  )
 
   useEffect(() => {
     void wfLoad().catch((error) => toast(`加载节点库失败：${String(error)}`))
   }, [wfLoad])
+
+  useEffect(() => {
+    void window.api.composite.search().then((result) => {
+      if (result.ok) setComposites(result.data)
+    })
+  }, [])
 
   // 将节点库条目添加到画布：点击放在视口中心，拖拽则落在光标位置。
   const handleApply = (tmpl: WorkflowTemplate, dropScreen?: { x: number; y: number }): void => {
@@ -101,6 +114,32 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
         ? `已从节点库添加「${tmpl.name}」，${skippedEdges} 条旧连线因端口不明确未恢复`
         : `已从节点库添加「${tmpl.name}」（${tmpl.nodes.length} 个节点）`
     )
+  }
+
+  const insertComposite = async (capability: CompositeCapabilitySummary): Promise<void> => {
+    if (!editor) return
+    const version = capability.latestVersion
+    if (!version) return toast('该组合还没有已发布版本')
+    const result = await window.api.composite.versionGet({ capabilityId: capability.id, version })
+    if (!result.ok || !result.data) return toast('读取组合版本失败')
+    const center = editor.getViewportPageBounds().center
+    const id = createShapeId()
+    markUndoPoint(editor, 'insert-composite-node')
+    editor.createShape({
+      id,
+      type: 'node-card',
+      x: center.x - 170,
+      y: center.y - 130,
+      props: {
+        nodeType: 'composite',
+        title: capability.name,
+        w: 340,
+        h: 260,
+        config: JSON.stringify({ manifest: result.data.manifest })
+      }
+    })
+    editor.select(id)
+    toast(`已添加组合「${capability.name} v${version}」`)
   }
 
   const handleRun = async (template: WorkflowTemplate): Promise<void> => {
@@ -140,14 +179,28 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
           aria-label="搜索节点库"
         />
       </label>
-      {templates.length === 0 ? (
+      {templates.length === 0 && composites.length === 0 ? (
         <div className="side-panel-empty">
           节点库还是空的。右键点击画布节点，选择「保存节点」中的流程模板；也可以多选节点后使用浮动工具栏保存。
         </div>
-      ) : visibleTemplates.length === 0 ? (
+      ) : visibleTemplates.length === 0 && visibleComposites.length === 0 ? (
         <div className="side-panel-empty">没有找到匹配的节点库条目。</div>
       ) : (
         <div className="assets-grid">
+          {visibleComposites.map((capability) => (
+            <article
+              key={`composite-${capability.id}`}
+              className="asset-card"
+              title={`点击添加组合节点：${capability.id}@${capability.latestVersion ?? ''}`}
+              onClick={() => void insertComposite(capability)}
+            >
+              <div className="asset-info">
+                <span className="asset-name" title={capability.name}>
+                  {capability.name}
+                </span>
+              </div>
+            </article>
+          ))}
           {visibleTemplates.map((tmpl) => (
             <WorkflowCard
               key={tmpl.id}
