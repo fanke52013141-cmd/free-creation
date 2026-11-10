@@ -1138,7 +1138,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
               aria-labelledby="gw-transfer-title"
             >
               <h2 id="gw-transfer-title">
-                {transferMode === 'export' ? '导出供应商配置' : '导入供应商配置'}
+                {transferMode === 'export' ? '导出模型配置' : '导入模型配置'}
               </h2>
               {transferMode === 'import' && (
                 <p>
@@ -1148,7 +1148,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
               <form onSubmit={(event) => void submitProviderTransfer(event)}>
                 {transferMode === 'export' && (
                   <fieldset className="gw-transfer-selection">
-                    <legend>选择导出的供应商（含 API 密钥）</legend>
+                    <legend>选择要导出的模型配置（含 API 密钥）</legend>
                     {providers
                       .filter((provider) => provider.hasApiKey)
                       .map((provider) => (
