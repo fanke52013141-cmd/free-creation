@@ -104,6 +104,8 @@
     "test:local-agent-access": "node scripts/test-local-agent-access.cjs",
     "verify:acceptance": "node scripts/verify-acceptance.cjs",
     "verify:acceptance:fast": "node scripts/verify-acceptance.cjs --fast",
+    "acceptance:composite-desktop": "node scripts/acceptance/composite-desktop-acceptance.cjs",
+    "acceptance:composite-gui": "node scripts/acceptance/composite-gui-acceptance.cjs",
     "guard:agent-parity": "node scripts/guard-agent-parity.cjs",
     "license:check": "node scripts/license-tool.cjs check",
     "license:backup": "node scripts/license-tool.cjs backup",

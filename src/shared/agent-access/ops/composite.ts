@@ -82,6 +82,19 @@ export const COMPOSITE_OPERATIONS = {
       })
       .strict()
   },
+  'composite.upgrade.apply': {
+    effect: 'write',
+    description:
+      '把画布上的节点流实例升级到指定已发布版本：先运行同一升级预检，阻断则拒绝且原实例不变；通过后以固定版本引用原子更新实例并保留兼容连线',
+    input: z
+      .object({
+        projectId: z.string().min(1).max(120),
+        nodeId: z.string().min(1).max(180),
+        nextManifest: manifest,
+        expectedGraphVersion: z.number().int().nonnegative()
+      })
+      .strict()
+  },
   'composite.version.list': {
     effect: 'read',
     description: '列出某个组合能力的全部已发布版本（名称/摘要/发布时间），供切换与历史查看',
@@ -101,6 +114,18 @@ export const COMPOSITE_OPERATIONS = {
     effect: 'write',
     description: '归档/恢复组合能力；归档后默认搜索不可见，已引用版本仍可读取',
     input: z.object({ capabilityId, archived: z.boolean().optional() }).strict()
+  },
+  'composite.references': {
+    effect: 'read',
+    description:
+      '删除前引用检查：列出各项目画布上绑定该能力的实例（含固定版本）与其他节点流发布版本的嵌套依赖；归档不阻断引用',
+    input: z.object({ capabilityId }).strict()
+  },
+  'composite.delete': {
+    effect: 'write',
+    description:
+      '物理删除节点流（发布版本+草稿+能力行）。先做同一引用检查，存在画布实例或嵌套引用时返回 CAPABILITY_IN_USE 且不改动数据',
+    input: z.object({ capabilityId }).strict()
   }
 } as const
 
@@ -193,10 +218,48 @@ export const COMPOSITE_OUTPUTS = {
       created: z.boolean()
     })
     .strict(),
+  'composite.upgrade.apply': z
+    .object({
+      projectId: z.string().min(1).max(120),
+      nodeId: z.string().min(1).max(180),
+      previousVersion: semver,
+      version: semver,
+      graphVersion: z.number().int().nonnegative()
+    })
+    .strict(),
   'composite.version.list': z.array(z.unknown()),
   'composite.run.get': z.object({ run: z.unknown(), steps: z.array(z.unknown()) }).strict().nullable(),
   'composite.run.list': z.array(z.unknown()),
-  'composite.archive': z.object({ capabilityId, archived: z.boolean() }).strict()
+  'composite.archive': z.object({ capabilityId, archived: z.boolean() }).strict(),
+  'composite.references': z
+    .object({
+      capabilityId,
+      projectInstances: z
+        .array(
+          z
+            .object({
+              projectId: z.string().max(120),
+              projectName: z.string().max(200),
+              nodeId: z.string().max(180),
+              version: z.string().max(40)
+            })
+            .strict()
+        )
+        .max(2000),
+      nestedVersions: z
+        .array(
+          z
+            .object({
+              capabilityId,
+              version: semver,
+              refVersion: z.string().max(40)
+            })
+            .strict()
+        )
+        .max(2000)
+    })
+    .strict(),
+  'composite.delete': z.object({ capabilityId, deleted: z.boolean() }).strict()
 } as const
 
 export const COMPOSITE_OPERATION_IDS = Object.keys(COMPOSITE_OPERATIONS) as Array<

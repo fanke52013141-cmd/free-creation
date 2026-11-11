@@ -228,3 +228,17 @@ A1.4首包接续：[查询交付台账](08-a1-4-read-only-queries.md)。`library
 2026-11-07 节点标题操作调整：移除节点内复制文件路径按钮及悬浮光效，外部操作、节点契约、媒体定位和诊断接口无变化。桌面视觉门禁验证节点标题与定位交互；当前外部能力状态沿用原表。
 
 2026-11-10：模型设置的即梦退出接入 dreamina.logout，选区执行的临时输入接入 node.execute subgraph 可选 inputs，CLI/MCP 共用桌面执行。详见 [66 交付说明](66-workflow-inputs-dreamina-logout.md)。
+
+2026-11-11 节点流（composite）W1/W2 补登记：组合能力操作已在 Registry 与 action-coverage 映射，本矩阵此前漏记，现补状态如下（均 phase=external，GUI/CLI/MCP 同源）：
+
+| operation | 状态 | 说明 |
+| --- | --- | --- |
+| `composite.search` / `composite.get` / `composite.version.list` | verified（W1 桌面 CLI/MCP） | 只读摘要与固定版本 manifest，不含正文诊断 |
+| `composite.draft.get` / `composite.draft.save` | verified（W1/W2 桌面） | revision 乐观并发，冲突 `DRAFT_REVISION_CONFLICT` 保留草稿 |
+| `composite.validate` | verified | 与 GUI 发布同一校验 |
+| `composite.publish` | verified | 不可变：`VERSION_IMMUTABLE` / `VERSION_NOT_NEWER`，可带 `expectedRevision` |
+| `composite.upgrade.preview` | verified（公共预检；GUI 升级入口 W3） | 按项目实例实际连线输出阻断项；GUI 入口落地后须移除审计例外 |
+| `composite.run.get` / `composite.run.list` | verified | 运行账本只读，含父子运行/失败阶段/输出摘要 |
+| `composite.archive` | implemented（repo/IPC/外部已通，GUI 入口与引用保护 W3） | 软归档；删除前引用检查未实现 |
+
+执行路径复用 `graph.patch`（`nodeType:'composite'` 仅限带 manifest 对象插入）+ `node.execute` + `run.wait` / `output.get`。W2 的发布预览/关闭确认为 GUI 呈现与人工步骤，未新增业务动作；差异预检复用 `planCompositeUpgrade`。详见 [W2 交付](../composite/W2_DELIVERY_2026_11_11.md)。

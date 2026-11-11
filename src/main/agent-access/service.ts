@@ -49,7 +49,10 @@ import { ACCESS_ERROR_CATALOG } from '../../shared/agent-access/metadata'
 import { assertLicenseActive } from '../security/license/gate'
 import { DesktopAccessError, type AccessDesktop } from './desktop'
 import { runNodeLibraryOperation } from './node-library-ops'
-import { runCompositeOperation } from './composite-ops'
+import { runCompositeOperation, previewCompositeUpgrade } from './composite-ops'
+import { getCompositeVersion } from '../store/composite.repo'
+import { compositeContentHash } from '../../shared/composite/manifest'
+import type { CompositeResolutionMap } from '../../shared/agent-access/graph-ops'
 import { COMPOSITE_OPERATION_IDS } from '../../shared/agent-access/ops/composite'
 import { runHistoryOperation } from './history-ops'
 import { FLOW_AGENT_OPERATION_IDS, runFlowAgentOperation } from './flow-agents-ops'
@@ -464,133 +467,10 @@ export class LocalAccessService {
           }
         }
       } else if (operationId === 'graph.patch') {
-        // F2 画布编辑走权威宿主：未打开的项目返回明确等待动作，不另建 headless 编辑路径。
-        if (id !== active || !this.options.desktop)
-          throw new AccessFailure(
-            'ACTIVE_PROJECT_REQUIRED',
-            'desktop-ownership',
-            'project.open the target canvas first, then retry graph.patch'
-          )
-        const current = projects.openProject(id)
-        if (!current) throw new AccessFailure('NOT_FOUND', 'read')
-        const resolved = resolvePatchReferences(input.ops as GraphPatchOp[], {
-          nodes: current.nodes,
-          edges: current.edges
+        result = await this.executeGraphPatch(id!, active, input, () => {
+          metadataCommitted = true
         })
-        if (!resolved.ok)
-          throw new AccessFailure(
-            'PATCH_REFERENCE_INVALID',
-            'precheck',
-            resolved.errors
-              .slice(0, 5)
-              .map((e) => `op[${e.index}]:${e.code}`)
-              .join(',')
-          )
-        // F4：素材引用必须已登记到同一项目；解析事实（相对路径/MIME）按 mediaId 注入宿主载荷。
-        const mediaResolutions: Record<
-          string,
-          { mediaId: string; mediaPath: string; mediaMime: string; name?: string }
-        > = {}
-        const chatMediaResolutions: typeof mediaResolutions = {}
-        for (const op of input.ops as GraphPatchOp[]) {
-          const mediaRef = op.action === 'node.create' || op.action === 'node.update' ? op.media : undefined
-          if (!mediaRef || mediaResolutions[mediaRef.mediaId]) continue
-          const asset = listMedia(id).find((candidate) => candidate.id === mediaRef.mediaId)
-          if (!asset) throw new AccessFailure('MEDIA_NOT_FOUND', 'precheck', mediaRef.mediaId)
-          mediaResolutions[mediaRef.mediaId] = {
-            mediaId: asset.id,
-            mediaPath: asset.path,
-            mediaMime: asset.mime,
-            ...(asset.name ? { name: asset.name.slice(0, 200) } : {})
-          }
-        }
-        // F6：chat.patch 预检——目标必须是对话节点；附件 mediaId 解析同媒体规则。
-        // chat.patch 由权威宿主的独立分支整体应用；与几何 op 混批时宿主只应用会话
-        // 分支会静默丢弃其余 op，因此这里在准入前明确拒绝（failed，不留半张图）。
-        const patchOps = input.ops as GraphPatchOp[]
-        const chatOpCount = patchOps.filter((op) => op.action === 'chat.patch').length
-        if (chatOpCount > 0 && chatOpCount !== patchOps.length)
-          throw new AccessFailure(
-            'MIXED_PATCH_UNSUPPORTED',
-            'precheck',
-            'chat.patch must be submitted in its own graph.patch batch'
-          )
-        for (const op of patchOps) {
-          if (op.action !== 'chat.patch') continue
-          const chatNode = current.nodes.find((candidate) => candidate.id === op.nodeId)
-          if (!chatNode || chatNode.type !== 'chat')
-            throw new AccessFailure('CHAT_NODE_REQUIRED', 'precheck', op.nodeId.slice(0, 60))
-          for (const chatOp of op.ops) {
-            if (chatOp.action !== 'chat.message.append' || !chatOp.message.images) continue
-            for (const image of chatOp.message.images) {
-              const asset = listMedia(id).find((candidate) => candidate.id === image.mediaId)
-              if (!asset)
-                throw new AccessFailure('MEDIA_NOT_FOUND', 'precheck', image.mediaId)
-              chatMediaResolutions[image.mediaId] = {
-                mediaId: asset.id,
-                mediaPath: asset.path,
-                mediaMime: asset.mime,
-                ...(asset.name ? { name: asset.name.slice(0, 200) } : {})
-              }
-            }
-          }
-        }
-        const patchResult = await this.options.desktop.run(
-          {
-            action: 'graph-patch',
-            projectId: id,
-            ops: input.ops as GraphPatchOp[],
-            expectedGraphVersion: input.expectedGraphVersion as number,
-            ...(Object.keys(mediaResolutions).length ? { mediaResolutions } : {}),
-            ...(Object.keys(chatMediaResolutions).length ? { mediaResolutions: chatMediaResolutions } : {})
-          },
-          (version) => {
-            if (this.options.activeProjectId() !== id)
-              throw new AccessFailure('RESOURCE_BUSY', 'desktop-ownership')
-            this.assertNoActiveTasks(id)
-            const admitted = projects.openProject(id)
-            if (!admitted || admitted.meta.graphVersion !== version)
-              throw new AccessFailure('REVISION_CONFLICT', 'patch-admission')
-            // From this admission onward the renderer may have persisted a mutation.
-            metadataCommitted = true
-            return admitted.meta
-          }
-        )
-        // main 读取并核对：回执中的每个创建节点必须真实落盘，数量必须与保存结果一致。
-        const savedFile = projects.openProject(id)
-        if (!savedFile || savedFile.meta.graphVersion !== patchResult.graphVersion)
-          throw new AccessFailure('REVISION_CONFLICT', 'patch-verify')
-        const payload = (patchResult.result ?? {}) as {
-          created?: Array<{ ref?: string; nodeId?: string }>
-          groups?: Array<{ ref?: string; groupId?: string }>
-          counts?: Partial<Record<'nodeCreated' | 'nodeUpdated' | 'nodeDeleted' | 'edgeCreated' | 'edgeDeleted', number>>
-        }
-        const createdNodes = (payload.created ?? []).filter((c): c is { ref?: string; nodeId: string } =>
-          typeof c.nodeId === 'string'
-        )
-        for (const created of createdNodes) {
-          // 每个回执 ID（节点或连线）都必须能在正式持久化数据中核对到。
-          const persisted =
-            savedFile.nodes.some((n) => n.id === created.nodeId) ||
-            savedFile.edges.some((e) => e.id === created.nodeId)
-          if (!persisted)
-            throw new AccessFailure('STORAGE_INCONSISTENT', 'patch-verify', created.nodeId.slice(0, 60))
-        }
-        const zero = { nodeCreated: 0, nodeUpdated: 0, nodeDeleted: 0, edgeCreated: 0, edgeDeleted: 0 }
-        const counts = { ...zero, ...(payload.counts ?? {}) }
-        result = {
-          projectId: id,
-          graphVersion: patchResult.graphVersion,
-          saved: true,
-          created: createdNodes.map((c) => ({ ...(c.ref ? { ref: c.ref } : {}), nodeId: c.nodeId })),
-          // group 形状只存在于画布快照里、不在节点表中，main 侧无法核对也不需要核对；
-          // 但必须回传给外部，否则组合之后拿不到 groupId 就无法解组（group.delete 不可达）。
-          groups: (payload.groups ?? []).filter(
-            (group): group is { ref?: string; groupId: string } =>
-              typeof (group as { groupId?: unknown }).groupId === 'string'
-          ),
-          applied: counts
-        }
+
       } else if (
         operationId === 'director.publish.prepare' ||
         operationId === 'director.publish.status' ||
@@ -950,7 +830,11 @@ export class LocalAccessService {
           diagnostics: { traceId: base.traceId, spanId }
         }
         result = operationId.startsWith('composite.')
-          ? await runCompositeOperation(operationId, input, { diagnostics: f7Context.diagnostics })
+          ? operationId === 'composite.upgrade.apply'
+            ? await this.applyCompositeUpgrade(input, () => {
+                metadataCommitted = true
+              })
+            : await runCompositeOperation(operationId, input, { diagnostics: f7Context.diagnostics })
           : operationId.startsWith('history.')
           ? runHistoryOperation(operationId, input, {
               ...f7Context,
@@ -1329,6 +1213,222 @@ export class LocalAccessService {
     if (!projects.deleteProject(id)) throw new AccessFailure('NOT_FOUND', 'read')
     return { deleted: true, projectId: id, graphVersion: snapshot.graphVersion }
   }
+
+  /**
+   * W3 实例升级：与 GUI 同一份 previewCompositeUpgrade 预检；阻断则拒绝且原实例不变。
+   * 目标必须是已发布快照（摘要核对），通过后复用 graph.patch 的同一权威应用路径，
+   * 不另建画布编辑路径。
+   */
+  private async applyCompositeUpgrade(
+    input: Record<string, unknown>,
+    markCommitted: () => void
+  ): Promise<unknown> {
+    const projectId = String(input.projectId ?? '')
+    const nodeId = String(input.nodeId ?? '')
+    const preview = previewCompositeUpgrade(projectId, nodeId, input.nextManifest)
+    if (!preview.ok) {
+      const detail =
+        (preview.impact?.breaking ?? []).map((item) => item.portId).slice(0, 8).join(',') ||
+        'invalid-next-manifest'
+      throw new AccessFailure('UPGRADE_BLOCKED', 'precheck', detail)
+    }
+    const next = preview.nextManifest
+    const record = getCompositeVersion(next.capabilityId, next.version)
+    if (!record) throw new AccessFailure('NOT_FOUND', 'precheck', 'published-version')
+    const hash = await compositeContentHash(next)
+    if (hash !== record.contentHash)
+      throw new AccessFailure('INVALID_INPUT', 'precheck', 'next-manifest-not-published-snapshot')
+    const patch = (await this.executeGraphPatch(
+      projectId,
+      this.options.activeProjectId(),
+      {
+        projectId,
+        expectedGraphVersion: input.expectedGraphVersion,
+        ops: [
+          {
+            action: 'node.update',
+            nodeId,
+            config: {
+              capabilityId: next.capabilityId,
+              version: next.version,
+              contentHash: record.contentHash
+            }
+          }
+        ]
+      },
+      markCommitted
+    )) as { graphVersion: number }
+    return {
+      projectId,
+      nodeId,
+      previousVersion: preview.previousVersion,
+      version: next.version,
+      graphVersion: patch.graphVersion
+    }
+  }
+
+  /** F2 画布编辑的权威应用：dispatch 与 composite.upgrade.apply 共用同一条准入/应用/核对路径。 */
+  private async executeGraphPatch(
+    id: string,
+    activeId: string | null | undefined,
+    input: Record<string, unknown>,
+    markCommitted: () => void
+  ): Promise<unknown> {
+      // F2 画布编辑走权威宿主：未打开的项目返回明确等待动作，不另建 headless 编辑路径。
+      if (id !== activeId || !this.options.desktop)
+        throw new AccessFailure(
+          'ACTIVE_PROJECT_REQUIRED',
+          'desktop-ownership',
+          'project.open the target canvas first, then retry graph.patch'
+        )
+      const current = projects.openProject(id)
+      if (!current) throw new AccessFailure('NOT_FOUND', 'read')
+      const resolved = resolvePatchReferences(input.ops as GraphPatchOp[], {
+        nodes: current.nodes,
+        edges: current.edges
+      })
+      if (!resolved.ok)
+        throw new AccessFailure(
+          'PATCH_REFERENCE_INVALID',
+          'precheck',
+          resolved.errors
+            .slice(0, 5)
+            .map((e) => `op[${e.index}]:${e.code}`)
+            .join(',')
+        )
+      // F4：素材引用必须已登记到同一项目；解析事实（相对路径/MIME）按 mediaId 注入宿主载荷。
+      const mediaResolutions: Record<
+        string,
+        { mediaId: string; mediaPath: string; mediaMime: string; name?: string }
+      > = {}
+      const chatMediaResolutions: typeof mediaResolutions = {}
+      for (const op of input.ops as GraphPatchOp[]) {
+        const mediaRef = op.action === 'node.create' || op.action === 'node.update' ? op.media : undefined
+        if (!mediaRef || mediaResolutions[mediaRef.mediaId]) continue
+        const asset = listMedia(id).find((candidate) => candidate.id === mediaRef.mediaId)
+        if (!asset) throw new AccessFailure('MEDIA_NOT_FOUND', 'precheck', mediaRef.mediaId)
+        mediaResolutions[mediaRef.mediaId] = {
+          mediaId: asset.id,
+          mediaPath: asset.path,
+          mediaMime: asset.mime,
+          ...(asset.name ? { name: asset.name.slice(0, 200) } : {})
+        }
+      }
+      // F6：chat.patch 预检——目标必须是对话节点；附件 mediaId 解析同媒体规则。
+      // chat.patch 由权威宿主的独立分支整体应用；与几何 op 混批时宿主只应用会话
+      // 分支会静默丢弃其余 op，因此这里在准入前明确拒绝（failed，不留半张图）。
+      const patchOps = input.ops as GraphPatchOp[]
+      const chatOpCount = patchOps.filter((op) => op.action === 'chat.patch').length
+      if (chatOpCount > 0 && chatOpCount !== patchOps.length)
+        throw new AccessFailure(
+          'MIXED_PATCH_UNSUPPORTED',
+          'precheck',
+          'chat.patch must be submitted in its own graph.patch batch'
+        )
+      for (const op of patchOps) {
+        if (op.action !== 'chat.patch') continue
+        const chatNode = current.nodes.find((candidate) => candidate.id === op.nodeId)
+        if (!chatNode || chatNode.type !== 'chat')
+          throw new AccessFailure('CHAT_NODE_REQUIRED', 'precheck', op.nodeId.slice(0, 60))
+        for (const chatOp of op.ops) {
+          if (chatOp.action !== 'chat.message.append' || !chatOp.message.images) continue
+          for (const image of chatOp.message.images) {
+            const asset = listMedia(id).find((candidate) => candidate.id === image.mediaId)
+            if (!asset)
+              throw new AccessFailure('MEDIA_NOT_FOUND', 'precheck', image.mediaId)
+            chatMediaResolutions[image.mediaId] = {
+              mediaId: asset.id,
+              mediaPath: asset.path,
+              mediaMime: asset.mime,
+              ...(asset.name ? { name: asset.name.slice(0, 200) } : {})
+            }
+          }
+        }
+      }
+    // W3：composite 固定版本引用由存储拥有者预解析（外部 op 不带大快照）。
+    const compositeResolutions: CompositeResolutionMap = {}
+    for (const [opIndex, op] of patchOps.entries()) {
+      if (op.action !== 'node.create' && op.action !== 'node.update') continue
+      const cfg = op.config as Record<string, unknown> | undefined
+      if (!cfg || cfg.manifest || typeof cfg.capabilityId !== 'string' || typeof cfg.version !== 'string')
+        continue
+      const isComposite =
+        op.action === 'node.create'
+          ? op.nodeType === 'composite'
+          : current.nodes.find((node) => node.id === op.nodeId)?.type === 'composite'
+      if (!isComposite)
+        throw new AccessFailure('INVALID_INPUT', 'precheck', 'composite-ref-on-non-composite')
+      const record = getCompositeVersion(cfg.capabilityId, cfg.version)
+      if (!record) throw new AccessFailure('NOT_FOUND', 'precheck', 'published-version')
+      if (typeof cfg.contentHash === 'string' && cfg.contentHash !== record.contentHash)
+        throw new AccessFailure('INVALID_INPUT', 'precheck', 'composite-content-hash-mismatch')
+      const key =
+        op.action === 'node.create'
+          ? op.ref
+            ? `ref:${op.ref}`
+            : `index:${opIndex}`
+          : `node:${op.nodeId}`
+      compositeResolutions[key] = { manifest: record.manifest, contentHash: record.contentHash }
+    }
+    const patchResult = await this.options.desktop.run(
+      {
+        action: 'graph-patch',
+        projectId: id,
+        ops: input.ops as GraphPatchOp[],
+        expectedGraphVersion: input.expectedGraphVersion as number,
+        ...(Object.keys(mediaResolutions).length ? { mediaResolutions } : {}),
+        ...(Object.keys(chatMediaResolutions).length ? { mediaResolutions: chatMediaResolutions } : {}),
+        ...(Object.keys(compositeResolutions).length ? { compositeResolutions } : {})
+      },
+        (version) => {
+          if (this.options.activeProjectId() !== id)
+            throw new AccessFailure('RESOURCE_BUSY', 'desktop-ownership')
+          this.assertNoActiveTasks(id)
+          const admitted = projects.openProject(id)
+          if (!admitted || admitted.meta.graphVersion !== version)
+            throw new AccessFailure('REVISION_CONFLICT', 'patch-admission')
+          // From this admission onward the renderer may have persisted a mutation.
+          markCommitted()
+          return admitted.meta
+        }
+      )
+      // main 读取并核对：回执中的每个创建节点必须真实落盘，数量必须与保存结果一致。
+      const savedFile = projects.openProject(id)
+      if (!savedFile || savedFile.meta.graphVersion !== patchResult.graphVersion)
+        throw new AccessFailure('REVISION_CONFLICT', 'patch-verify')
+      const payload = (patchResult.result ?? {}) as {
+        created?: Array<{ ref?: string; nodeId?: string }>
+        groups?: Array<{ ref?: string; groupId?: string }>
+        counts?: Partial<Record<'nodeCreated' | 'nodeUpdated' | 'nodeDeleted' | 'edgeCreated' | 'edgeDeleted', number>>
+      }
+      const createdNodes = (payload.created ?? []).filter((c): c is { ref?: string; nodeId: string } =>
+        typeof c.nodeId === 'string'
+      )
+      for (const created of createdNodes) {
+        // 每个回执 ID（节点或连线）都必须能在正式持久化数据中核对到。
+        const persisted =
+          savedFile.nodes.some((n) => n.id === created.nodeId) ||
+          savedFile.edges.some((e) => e.id === created.nodeId)
+        if (!persisted)
+          throw new AccessFailure('STORAGE_INCONSISTENT', 'patch-verify', created.nodeId.slice(0, 60))
+      }
+      const zero = { nodeCreated: 0, nodeUpdated: 0, nodeDeleted: 0, edgeCreated: 0, edgeDeleted: 0 }
+      const counts = { ...zero, ...(payload.counts ?? {}) }
+      return {
+        projectId: id,
+        graphVersion: patchResult.graphVersion,
+        saved: true,
+        created: createdNodes.map((c) => ({ ...(c.ref ? { ref: c.ref } : {}), nodeId: c.nodeId })),
+        // group 形状只存在于画布快照里、不在节点表中，main 侧无法核对也不需要核对；
+        // 但必须回传给外部，否则组合之后拿不到 groupId 就无法解组（group.delete 不可达）。
+        groups: (payload.groups ?? []).filter(
+          (group): group is { ref?: string; groupId: string } =>
+            typeof (group as { groupId?: unknown }).groupId === 'string'
+        ),
+        applied: counts
+      }
+  }
+
 
   private async execute(operation: AccessOperationId, input: Record<string, unknown>): Promise<unknown> {
     const id = input.projectId as string

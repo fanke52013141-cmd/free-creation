@@ -41,10 +41,15 @@ function portSnapshot(ports: CanvasNode['ports']): NonNullable<CompositeGraphNod
 function nestedCapability(node: CompositeGraphNode): { id: string; version: string } | null {
   if (node.nodeType !== 'composite' || !node.config) return null
   try {
-    const parsed = JSON.parse(node.config) as { manifest?: { capabilityId?: unknown; version?: unknown } }
-    return typeof parsed.manifest?.capabilityId === 'string' &&
-      typeof parsed.manifest.version === 'string'
-      ? { id: parsed.manifest.capabilityId, version: parsed.manifest.version }
+    const parsed = JSON.parse(node.config) as {
+      manifest?: { capabilityId?: unknown; version?: unknown }
+      capabilityId?: unknown
+      version?: unknown
+    }
+    // 内嵌快照形态与 W3 固定版本引用形态都登记固定 capabilityId@version。
+    const source = parsed.manifest ?? parsed
+    return typeof source.capabilityId === 'string' && typeof source.version === 'string'
+      ? { id: source.capabilityId, version: source.version }
       : null
   } catch {
     return null

@@ -47,3 +47,21 @@ export interface CompositeSearchInput {
   includeArchived?: boolean
   limit?: number
 }
+
+/** 删除前引用检查（W3）：画布实例 + 其他节点流发布版本的嵌套引用。 */
+export interface CompositeReferenceReport {
+  capabilityId: string
+  /** 各项目画布上绑定该能力的实例（含固定版本）。 */
+  projectInstances: Array<{
+    projectId: string
+    projectName: string
+    nodeId: string
+    version: string
+  }>
+  /** 其他能力的已发布版本通过 dependencies 固定引用该能力。 */
+  nestedVersions: Array<{
+    capabilityId: string
+    version: string
+    refVersion: string
+  }>
+}

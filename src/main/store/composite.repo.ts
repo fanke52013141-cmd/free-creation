@@ -454,11 +454,91 @@ export function listCompositeCapabilities(options: {
 }
 
 export function archiveCompositeCapability(capabilityId: string, archived = true): boolean {
-  return (
+  const changed =
     getDb()
       .prepare('UPDATE composite_capabilities SET archived = ?, updated_at = ? WHERE id = ?')
       .run(archived ? 1 : 0, Date.now(), capabilityId).changes > 0
-  )
+  if (changed) {
+    emitGatewayEvent(
+      'composite.archive.changed',
+      archived ? '节点流已归档，默认发现入口隐藏' : '节点流已恢复归档',
+      { traceId: newTraceId(), spanId: newSpanId() },
+      {
+        phase: 'repository',
+        attributes: { capabilityId, archived }
+      }
+    )
+  }
+  return changed
+}
+
+/**
+ * 嵌套引用扫描（W3）：其他能力的已发布版本是否通过 dependencies
+ * 固定引用该能力。只读发布快照，不读草稿（草稿不构成运行绑定）。
+ */
+export function listNestedCompositeReferences(
+  capabilityId: string
+): Array<{ capabilityId: string; version: string; refVersion: string }> {
+  const rows = getDb()
+    .prepare('SELECT capability_id, version, manifest FROM composite_versions WHERE capability_id != ?')
+    .all(capabilityId) as Array<{ capability_id: string; version: string; manifest: string }>
+  const references: Array<{ capabilityId: string; version: string; refVersion: string }> = []
+  for (const row of rows) {
+    let manifest: CompositeManifest
+    try {
+      manifest = JSON.parse(row.manifest) as CompositeManifest
+    } catch {
+      continue
+    }
+    for (const dependency of manifest.dependencies ?? []) {
+      if (dependency.kind === 'capability' && dependency.id === capabilityId) {
+        references.push({
+          capabilityId: row.capability_id,
+          version: row.version,
+          refVersion: dependency.version ?? ''
+        })
+      }
+    }
+  }
+  return references
+}
+
+/**
+ * 物理删除节点流（W3）：调用方必须先完成引用检查（画布实例 + 嵌套引用）。
+ * 同一事务删除发布版本、草稿与能力行；失败保留全部数据。
+ */
+export function deleteCompositeCapability(capabilityId: string): boolean {
+  const db = getDb()
+  const traceId = newTraceId()
+  const spanId = newSpanId()
+  try {
+    const transaction = db.transaction(() => {
+      db.prepare('DELETE FROM composite_versions WHERE capability_id = ?').run(capabilityId)
+      db.prepare('DELETE FROM composite_drafts WHERE capability_id = ?').run(capabilityId)
+      return db.prepare('DELETE FROM composite_capabilities WHERE id = ?').run(capabilityId).changes > 0
+    })
+    const deleted = transaction()
+    if (deleted) {
+      emitGatewayEvent(
+        'composite.delete.completed',
+        '节点流已删除（引用检查通过后）',
+        { traceId, spanId },
+        { phase: 'repository', attributes: { capabilityId } }
+      )
+    }
+    return deleted
+  } catch (error) {
+    emitGatewayEvent(
+      'composite.delete.failed',
+      '节点流删除失败，数据保留',
+      { traceId, spanId },
+      {
+        phase: 'repository',
+        attributes: { code: compositeErrorCode(error, 'DELETE_FAILED'), capabilityId }
+      }
+    )
+    throw error
+  }
 }
 
 /** 校验已发布版本的摘要是否仍与 manifest 一致（导入/运行前完整性检查）。 */

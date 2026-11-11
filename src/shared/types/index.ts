@@ -167,6 +167,8 @@ export interface CanvasNode {
     createdAt: number
     taskId?: string
     derivedFrom?: string
+    /** W3：composite 引用形态实例由宿主解析发布仓库后缓存的固定版本快照。 */
+    compositeManifest?: unknown
   }
 }
 

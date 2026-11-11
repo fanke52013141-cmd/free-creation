@@ -968,7 +968,13 @@ export function deriveGraph(editor: Editor): {
             ? { kind: 'text', text: s.props.text }
             : { kind: 'empty' },
         exec: { status: (s.props.exec as ExecStatus) ?? 'idle' },
-        meta: { source: 'input', createdAt: Date.now() }
+        meta: {
+          source: 'input',
+          createdAt: Date.now(),
+          ...((s.meta as Record<string, unknown> | undefined)?.compositeManifest
+            ? { compositeManifest: (s.meta as Record<string, unknown>).compositeManifest }
+            : {})
+        }
       })
     } else if (shape.type === 'arrow') {
       const { start, end } = getArrowBindings(editor, shape.id)

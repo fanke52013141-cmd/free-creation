@@ -138,6 +138,101 @@ describe('collectContractInputs · 缺失与无效输入', () => {
     const result = collectContractInputs(target, [], new Map())
     expect(result.errors).toHaveLength(0)
   })
+
+  it('节点流必填公开输入带 defaultValue → 未连线不报错；无 defaultValue 仍报错', () => {
+    const manifestBase = {
+      schemaVersion: 1,
+      runtimeVersion: 2,
+      capabilityId: 'copy-polish',
+      version: '1.0',
+      name: '文案整理',
+      outputs: [
+        {
+          id: 'polished',
+          label: '整理结果',
+          type: 'text',
+          required: true,
+          cardinality: 'one',
+          source: { nodeId: 'n1', portId: 'out-text' }
+        }
+      ],
+      graph: {
+        nodes: [
+          {
+            id: 'n1',
+            nodeType: 'text',
+            contractVersion: 3,
+            title: '文案',
+            dx: 0,
+            dy: 0,
+            w: 340,
+            h: 300,
+            text: '内部说明',
+            ports: [
+              { id: 'in-text', name: '文本', dir: 'in', type: 'text', required: true, cardinality: 'many' },
+              { id: 'out-text', name: '文本', dir: 'out', type: 'text', required: true, cardinality: 'one' }
+            ]
+          }
+        ],
+        edges: []
+      },
+      dependencies: [{ kind: 'node', id: 'text', contractVersion: 3 }]
+    }
+    const requiredPort = {
+      id: 'in-copy',
+      name: '文案',
+      dir: 'in' as const,
+      type: 'text' as const,
+      required: true,
+      cardinality: 'one' as const,
+      description: '组合文本输入'
+    }
+    const withDefault = makeNode('c', 'composite', {
+      ports: [requiredPort],
+      params: {
+        config: JSON.stringify({
+          manifest: {
+            ...manifestBase,
+            inputs: [
+              {
+                id: 'copy',
+                label: '文案',
+                type: 'text',
+                required: true,
+                cardinality: 'one',
+                defaultValue: '内部说明',
+                targets: [{ nodeId: 'n1', portId: 'in-text' }]
+              }
+            ]
+          }
+        })
+      }
+    })
+    expect(collectContractInputs(withDefault, [], new Map()).errors).toHaveLength(0)
+    const withoutDefault = makeNode('c2', 'composite', {
+      ports: [requiredPort],
+      params: {
+        config: JSON.stringify({
+          manifest: {
+            ...manifestBase,
+            inputs: [
+              {
+                id: 'copy',
+                label: '文案',
+                type: 'text',
+                required: true,
+                cardinality: 'one',
+                targets: [{ nodeId: 'n1', portId: 'in-text' }]
+              }
+            ]
+          }
+        })
+      }
+    })
+    expect(
+      collectContractInputs(withoutDefault, [], new Map()).errors.some((e) => e.includes('必需'))
+    ).toBe(true)
+  })
 })
 
 describe('collectContractInputs · 类型不匹配', () => {

@@ -42,6 +42,47 @@ export function readCompositeManifest(config: string | undefined): CompositeMani
   return result.ok ? result.manifest : null
 }
 
+/**
+ * 实例 manifest 读取（W3 引用形态）：优先 config 内嵌快照（历史实例），
+ * 其次 meta.compositeManifest（引用形态实例由宿主解析发布仓库后缓存）。
+ * config 只存 {capabilityId, version, contentHash} 引用时不再受 64KiB 配置上限约束。
+ */
+export function readCompositeInstanceManifest(shape: {
+  props: { config?: string }
+  meta?: unknown
+}): CompositeManifest | null {
+  const embedded = readCompositeManifest(shape.props.config)
+  if (embedded) return embedded
+  const cached = (shape.meta as Record<string, unknown> | undefined)?.compositeManifest
+  if (!cached) return null
+  const result = parseCompositeManifest(cached)
+  return result.ok ? result.manifest : null
+}
+
+/** 实例 config 中的固定版本引用（W3）；内嵌 manifest 形态返回 null。 */
+export function readCompositeInstanceRef(
+  config: string | undefined
+): { capabilityId: string; version: string; contentHash?: string } | null {
+  if (!config) return null
+  try {
+    const parsed = JSON.parse(config) as {
+      manifest?: unknown
+      capabilityId?: unknown
+      version?: unknown
+      contentHash?: unknown
+    }
+    if (parsed.manifest) return null
+    if (typeof parsed.capabilityId !== 'string' || typeof parsed.version !== 'string') return null
+    return {
+      capabilityId: parsed.capabilityId,
+      version: parsed.version,
+      ...(typeof parsed.contentHash === 'string' ? { contentHash: parsed.contentHash } : {})
+    }
+  } catch {
+    return null
+  }
+}
+
 function readExtraValues(meta: CompositeProjectionShape['meta']): Record<string, unknown> {
   const stored = meta?.nodeExtra
   const text = typeof stored === 'string' ? stored : ''
@@ -108,7 +149,7 @@ function legacyMediaValue(shape: CompositeProjectionShape): RawNodeOutputs[strin
  * 保证旧发布版本和已绑定实例的运行结果不变。
  */
 export function projectCompositeOutputs(shape: NodeShape | CompositeProjectionShape): RawNodeOutputs {
-  const runtime = readCompositeManifest(String(shape.props.config ?? ''))
+  const runtime = readCompositeInstanceManifest(shape)
   if (!runtime) return {}
   const status = readStoredNodeRunStatus(shape.meta?.nodeRun)
   if (status !== 'success') return {}

@@ -853,8 +853,13 @@ export function registerBaseNodeTypes(): void {
     ports: { in: [], out: [] },
     resolvePorts: (shape) => {
       try {
+        // W3 引用形态：config 只存固定版本引用，快照缓存在 meta.compositeManifest。
         const parsed = JSON.parse(shape.props.config || '{}') as { manifest?: CompositeManifest }
-        const manifest = parsed.manifest
+        const manifest =
+          parsed.manifest ??
+          ((shape.meta as Record<string, unknown> | undefined)?.compositeManifest as
+            | CompositeManifest
+            | undefined)
         if (!manifest) return { in: [], out: [] }
         return {
           in: manifest.inputs.map((input) => ({

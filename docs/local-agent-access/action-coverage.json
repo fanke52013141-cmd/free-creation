@@ -2194,6 +2194,66 @@
       "external": [
         "composite.version.list"
       ]
+    },
+    "ipc.composite.upgradePreview": {
+      "label": "组合实例升级预检",
+      "channel": "composite:upgrade:preview",
+      "gui": "右键菜单 → 升级节点流",
+      "phase": "external",
+      "external": [
+        "composite.upgrade.preview"
+      ],
+      "note": "W3：GUI 与 CLI/MCP 共用 previewCompositeUpgrade；按项目实例实际连线输出阻断项"
+    },
+    "canvas.composite.upgrade": {
+      "label": "节点流实例升级",
+      "gui": "右键菜单 → 升级节点流",
+      "phase": "external",
+      "external": [
+        "composite.upgrade.apply",
+        "composite.upgrade.preview"
+      ],
+      "note": "W3：预检通过后以固定版本引用更新实例并保留兼容连线；取消/失败保留原实例；外部经 graph.patch 原子写"
+    },
+    "ipc.composite.references": {
+      "label": "节点流引用检查",
+      "channel": "composite:references",
+      "gui": "节点库卡片 → 删除前引用检查",
+      "phase": "external",
+      "external": [
+        "composite.references"
+      ],
+      "note": "W3：GUI 与 CLI/MCP 共用 findCompositeReferences；扫描画布实例（内嵌/引用两形态）与发布版本嵌套依赖"
+    },
+    "ipc.composite.delete": {
+      "label": "节点流物理删除",
+      "channel": "composite:delete",
+      "gui": "节点库卡片 → 删除",
+      "phase": "external",
+      "external": [
+        "composite.delete"
+      ],
+      "note": "W3：同一引用保护，存在引用返回 CAPABILITY_IN_USE 且不改动数据；无引用需 GUI 二次确认"
+    },
+    "canvas.composite.archive": {
+      "label": "节点流归档/恢复",
+      "gui": "节点库卡片 → 归档/恢复（含已归档开关）",
+      "phase": "external",
+      "external": [
+        "composite.archive",
+        "composite.search"
+      ],
+      "note": "W3：归档隐藏默认发现入口，已绑定实例按固定版本继续运行；includeArchived 可恢复查看"
+    },
+    "canvas.composite.delete": {
+      "label": "节点流删除（引用保护）",
+      "gui": "节点库卡片 → 删除",
+      "phase": "external",
+      "external": [
+        "composite.references",
+        "composite.delete"
+      ],
+      "note": "W3：先引用检查后二次确认；阻断时提示引用来源，不改动画布与发布数据"
     }
   }
 }

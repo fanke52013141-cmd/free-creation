@@ -120,6 +120,8 @@ interface WorkflowContext {
   batch?: { batchId: string; itemId?: string }
   /** 独立节点任务不写入前台工作流的进度和错误汇总。 */
   isolated?: boolean
+  /** W3：所属节点流运行的祖先上下文（递归/深度/预算守卫），顶层画布执行缺省。 */
+  compositeRunContext?: import('@shared/engine/composite-run-contract').CompositeRunContext
 }
 
 const nodeTests = new Set<TLShapeId>()
@@ -939,6 +941,16 @@ async function invokeExecutor(
     },
     runSubflow,
     runComposite: (request) => runCompositeIsolated(ctx.editor, ctx.projectId, ctx.providers, { ...request, signal: ctx.token }),
+    compositeRunContext: ctx.compositeRunContext,
+    resolveCompositeManifest: async (ref) => {
+      const result = await window.api.composite.versionGet({
+        capabilityId: ref.capabilityId,
+        version: ref.version
+      })
+      if (!result.ok || !result.data) return null
+      if (ref.contentHash && result.data.contentHash !== ref.contentHash) return null
+      return result.data.manifest
+    },
     restoreSubflowInputs: (request) => restoreSubflowStaticInputs(ctx, request)
   }
   // 只为循环节点附加循环体指纹：shared 执行器据此在 resume 前拒绝「改了循环体的
@@ -1723,7 +1735,8 @@ export async function runNodeManually(
   providers: ProviderSummary[],
   nodeId: TLShapeId,
   command?: NodeCommandRunOptions,
-  publication?: import('@shared/agent-flow/coordination').AgentPublication
+  publication?: import('@shared/agent-flow/coordination').AgentPublication,
+  compositeRunContext?: import('@shared/engine/composite-run-contract').CompositeRunContext
 ): Promise<NodeExecutionResult> {
   if (hasNodeTask(projectId, nodeId) || nodeTests.has(nodeId))
     return { status: 'skipped', reason: '当前节点已在运行或排队' }
@@ -1783,7 +1796,8 @@ export async function runNodeManually(
     command,
     controlledRequestId: publication?.kind === 'review' ? publication.taskId : undefined,
     taskId: command?.grant.command.taskId,
-    isolated: true
+    isolated: true,
+    compositeRunContext
   }
   emitWorkflowEvent('workflow.started', '手动运行单个节点', ctx)
   seedPersistedOutputs(ctx)

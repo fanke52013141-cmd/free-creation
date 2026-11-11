@@ -1,4 +1,5 @@
 import { exclusiveInputErrors } from '@shared/engine/input-constraints'
+import { readCompositeInstanceManifest } from '@shared/composite/outputs'
 import type { CanvasEdge, CanvasNode, PortDecl, PortType } from '@shared/types'
 import { nodeSchemasCompatible, validateNodeSchema } from '@shared/node-schemas'
 import { getNodeType, portCompatible } from '../nodes/registry'
@@ -199,9 +200,23 @@ export function collectContractInputs(
     appendPacket(target, injection.packet)
   }
 
+  // 节点流公开输入带 defaultValue（内部正文/固定配置）时，运行时允许不接外部值
+  // （planCompositeInputBindings 同口径）；输入契约不得把这类端口判为必填缺口。
+  const fixedSatisfied = new Set<string>()
+  if (node.type === 'composite') {
+    const config = node.params.config
+    const manifest = readCompositeInstanceManifest({
+      props: { config: typeof config === 'string' ? config : undefined },
+      meta: node.meta
+    })
+    for (const input of manifest?.inputs ?? []) {
+      if (input.defaultValue !== undefined) fixedSatisfied.add(`in-${input.id}`)
+    }
+  }
   for (const port of resolved.in) {
     const count = mutable.get(port.id)?.length ?? 0
-    if (port.required && count === 0) errors.push(`缺少必需输入：${describePort(port)}`)
+    if (port.required && count === 0 && !fixedSatisfied.has(port.id))
+      errors.push(`缺少必需输入：${describePort(port)}`)
     if (port.cardinality === 'one' && count > 1) {
       errors.push(`${describePort(port)} 是单值输入，但收到 ${count} 条连线`)
     }

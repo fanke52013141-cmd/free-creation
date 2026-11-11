@@ -125,7 +125,8 @@ export function WorkflowSaveDialog({
           expectedRevision: draft.data.revision
         })
         if (!published.ok) throw new Error(published.error.message)
-        // P2 最小闭环：发布后在视口中心插入一个组合节点实例，绑定固定版本快照。
+        // P2 最小闭环：发布后在视口中心插入一个组合节点实例。
+        // W3：config 只存固定版本引用，快照缓存 meta，避免大图受 config 64KiB 上限。
         editor.markHistoryStoppingPoint('insert-composite')
         const center = editor.getViewportPageBounds().center
         const shapeId = createShapeId()
@@ -137,11 +138,16 @@ export function WorkflowSaveDialog({
           props: {
             nodeType: 'composite',
             title,
-            config: JSON.stringify({ manifest: edited }),
+            config: JSON.stringify({
+              capabilityId: id,
+              version: edited.version,
+              contentHash: published.data.record.contentHash
+            }),
             w: 340,
             h: 260
-          }
-        })
+          },
+          meta: { compositeManifest: edited }
+        } as never)
         editor.select(shapeId)
       } else await saveWorkflow(title, extractTemplateFromSelection(nodes, edges))
       const kindLabel =

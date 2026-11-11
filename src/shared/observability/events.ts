@@ -210,6 +210,21 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
         }
       )
     ),
+    // 节点流（W3）：归档开关与引用保护后的物理删除；只记 ID/开关/稳定 code。
+    def('composite.archive.changed', 'info', 'main/store/composite.repo', {
+      phase: 'short',
+      capabilityId: 'id',
+      archived: 'flag'
+    }),
+    def('composite.delete.completed', 'info', 'main/store/composite.repo', {
+      phase: 'short',
+      capabilityId: 'id'
+    }),
+    def('composite.delete.failed', 'warn', 'main/store/composite.repo', {
+      phase: 'short',
+      code: 'short',
+      capabilityId: 'id'
+    }),
     def('canvas.flow_config.applied', 'info', 'renderer/nodes/specs/agentFlow', { phase: 'short' }),
     def('canvas.flow_config.failed', 'error', 'renderer/nodes/specs/agentFlow', {
       phase: 'short',

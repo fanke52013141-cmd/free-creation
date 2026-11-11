@@ -172,6 +172,20 @@ export interface NodeExecutionContext {
   runSubflow?: (request: SubflowRequest) => Promise<SubflowOutput>
   /** 组合节点执行入口：由 renderer 注入隔离执行服务（不把内部节点写进用户当前画布）。 */
   runComposite?: (request: import('./composite-run-contract').CompositeRunRequest) => Promise<import('./composite-run-contract').CompositeRunOutcome>
+  /**
+   * 当前执行所属节点流运行的祖先上下文（W3）：含当前节点流自身与累计展开节点数。
+   * 顶层画布执行缺省；嵌套 composite 执行器据此向子运行传递递归/深度/预算守卫。
+   */
+  compositeRunContext?: import('./composite-run-contract').CompositeRunContext
+  /**
+   * 固定版本引用解析（W3）：实例 config 只存 {capabilityId, version, contentHash} 时，
+   * 由宿主从发布仓库解析 manifest 并核对摘要；找不到或摘要不符必须明确失败。
+   */
+  resolveCompositeManifest?: (ref: {
+    capabilityId: string
+    version: string
+    contentHash?: string
+  }) => Promise<import('../composite/manifest').CompositeManifest | null>
   restoreSubflowInputs?: (request: Pick<SubflowRequest, 'nodeIds' | 'iterationNodeId'>) => void
   /**
    * 宿主是否支持并行执行循环项（W2）。renderer 的循环体卡片是逐项复用的共享

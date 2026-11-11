@@ -57,6 +57,10 @@ export const OPERATION_REQUIREMENTS: Record<string, readonly string[]> = {
   'composite.validate': [],
   'composite.publish': [],
   'composite.archive': [],
+  'composite.references': [],
+  'composite.delete': [],
+  'composite.upgrade.preview': ['openProject'],
+  'composite.upgrade.apply': ['openProject'],
   'composite.run.get': [],
   'composite.version.list': [],
   'composite.run.list': [],
@@ -134,6 +138,8 @@ export const ACCESS_ERROR_CATALOG: readonly { code: string; meaning: string; hin
   { code: 'VERSION_NOT_NEWER', meaning: '新版本号不高于当前最新发布', hint: '使用更大的主版本号' },
   { code: 'DRAFT_REVISION_CONFLICT', meaning: '草稿修订与预期不一致（期间有保存/他人编辑）', hint: '重新读取草稿 revision 后重试；本次不会覆盖草稿' },
   { code: 'PUBLISH_INVALID', meaning: '发布契约校验未通过', hint: '按 issues 修正端口、映射、依赖或预算后重试' },
+  { code: 'CAPABILITY_IN_USE', meaning: '节点流仍被画布实例或其他发布版本嵌套引用，不能物理删除', hint: '先用 composite.references 查看引用；移除实例/引用后再删，或改用 composite.archive 归档' },
+  { code: 'UPGRADE_BLOCKED', meaning: '实例升级预检未通过（接口不兼容或目标 manifest 无效）', hint: '按 impact.breaking/issues 调整连线或目标版本；原实例保持不变' },
   { code: 'UNKNOWN_NODE_TYPE', meaning: '节点类型不存在或不可创建', hint: '以 node.type.list 为准' },
   { code: 'EMPTY_NODE_VISIBILITY', meaning: '可见集不能为空', hint: '至少保留一个类型' }
 ]

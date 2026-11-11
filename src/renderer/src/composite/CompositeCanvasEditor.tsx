@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { createShapeId, Tldraw, type Editor, type TLShapeId } from 'tldraw'
 import type { CompositeCapabilitySummary } from '@shared/composite/types'
 import type { CompositeManifest } from '@shared/composite/manifest'
@@ -12,6 +13,8 @@ import { Icon } from '../components/Icon'
 import { useGatewayStore } from '../stores/gateway'
 import { toast } from '../stores/toast'
 import { buildCompositeManifestFromEditor } from './editor-manifest'
+import { CompositePublishPreview, type CompositePublishValidationIssue } from './CompositePublishPreview'
+import { CompositeCloseConfirm } from './CompositeCloseConfirm'
 import './composite-editor.css'
 
 const EMPTY_COMPONENTS = {
@@ -71,6 +74,13 @@ export function CompositeCanvasEditor({
   const [issues, setIssues] = useState<string[]>([])
   const [version, setVersion] = useState(manifest.version)
   const [revision, setRevision] = useState<number | null>(draftRevision)
+  const [dirty, setDirty] = useState(false)
+  const [closeConfirm, setCloseConfirm] = useState(false)
+  const [preview, setPreview] = useState<{
+    base: CompositeManifest | null
+    next: CompositeManifest
+    issues: CompositePublishValidationIssue[]
+  } | null>(null)
   const internalIdByShape = useRef(new Map<string, string>())
   const initialized = useRef(false)
   const providers = useGatewayStore((state) => state.providers)
@@ -124,7 +134,15 @@ export function CompositeCanvasEditor({
       },
       { scope: 'session' }
     )
-    return unsubscribe
+    // 初始化完成后才监听用户改动，避免把恢复快照本身记为未保存修改。
+    const unsubscribeDirty = editor.store.listen(() => setDirty(true), {
+      scope: 'document',
+      source: 'user'
+    })
+    return () => {
+      unsubscribe()
+      unsubscribeDirty()
+    }
   }, [editor, manifest])
 
   const addNode = (nodeType: string): void => {
@@ -197,6 +215,7 @@ export function CompositeCanvasEditor({
       })
       if (!saved.ok) throw new Error(saved.error.message)
       setRevision(saved.data.revision)
+      setDirty(false)
       setStatus(`草稿已保存 · 修订 ${saved.data.revision}`)
       toast(`草稿已保存（修订 ${saved.data.revision}）`)
       return built.manifest
@@ -226,15 +245,34 @@ export function CompositeCanvasEditor({
       if (latest && Number.parseInt(next.version, 10) <= Number.parseInt(latest, 10))
         throw new Error(`新版本必须高于当前最新发布 v${versionLabel(latest)}`)
       const validated = await window.api.composite.validate({ manifest: next })
-      if (!validated.ok) throw new Error(validated.error.message)
-      if (!validated.data.ok) {
-        setIssues(
-          validated.data.issues.map(
-            (issue) => `[${issue.code}] ${issue.path}: ${issue.message}`
-          )
-        )
-        throw new Error('发布校验未通过，请修复下列问题')
+      const validationIssues: CompositePublishValidationIssue[] = validated.ok
+        ? validated.data.issues
+        : [{ code: 'VALIDATE_FAILED', path: 'composite.validate', message: validated.error.message }]
+      // 发布预览（W2-B）：基准取最新发布快照，差异复用实例升级同一预检函数。
+      let base: CompositeManifest | null = null
+      if (latest) {
+        const result = await window.api.composite.versionGet({
+          capabilityId: capability.id,
+          version: latest
+        })
+        if (result.ok && result.data) base = result.data.manifest
       }
+      setPreview({ base, next, issues: validationIssues })
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause)
+      setStatus('')
+      setIssues((current) => (current.length > 0 ? current : [message]))
+      toast(message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const confirmPublish = async (): Promise<void> => {
+    if (!preview) return
+    setBusy(true)
+    try {
+      const next = preview.next
       const saved = await window.api.composite.draftSave({
         manifest: next,
         expectedRevision: revision ?? 0
@@ -246,11 +284,15 @@ export function CompositeCanvasEditor({
         expectedRevision: saved.data.revision
       })
       if (!published.ok) throw new Error(published.error.message)
+      setDirty(false)
+      setPreview(null)
       toast(`已发布「${next.name}」v${versionLabel(next.version)}`)
       onSaved(next)
       onClose()
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause)
+      // 发布失败保留草稿并回到编辑器展示问题。
+      setPreview(null)
       setStatus('')
       setIssues((current) => (current.length > 0 ? current : [message]))
       toast(message)
@@ -259,7 +301,22 @@ export function CompositeCanvasEditor({
     }
   }
 
-  return (
+  const requestClose = (): void => {
+    if (dirty) setCloseConfirm(true)
+    else onClose()
+  }
+
+  const saveAndClose = async (): Promise<void> => {
+    const saved = await saveDraft()
+    if (saved) {
+      setCloseConfirm(false)
+      onClose()
+    }
+  }
+
+  // 侧栏祖先会形成层叠上下文，fixed overlay 若留在原处会被主顶栏盖住头部按钮；
+  // 挂到 body 保证全屏编辑始终位于最上层。
+  return createPortal(
     <div
       className="composite-canvas-overlay"
       role="dialog"
@@ -282,7 +339,10 @@ export function CompositeCanvasEditor({
               aria-label="发布版本"
               value={version}
               disabled={busy}
-              onChange={(event) => setVersion(event.target.value)}
+              onChange={(event) => {
+                setVersion(event.target.value)
+                setDirty(true)
+              }}
             />
           </label>
           <span className="composite-canvas-revision">
@@ -309,7 +369,7 @@ export function CompositeCanvasEditor({
           <button
             type="button"
             className="composite-canvas-close"
-            onClick={onClose}
+            onClick={requestClose}
             disabled={busy}
             aria-label="关闭节点流编辑"
             title="关闭节点流编辑"
@@ -368,6 +428,30 @@ export function CompositeCanvasEditor({
           ))}
         </div>
       )}
-    </div>
+      {preview && (
+        <CompositePublishPreview
+          capabilityName={manifest.name}
+          baseManifest={preview.base}
+          nextManifest={preview.next}
+          validationIssues={preview.issues}
+          busy={busy}
+          onCancel={() => setPreview(null)}
+          onConfirm={() => void confirmPublish()}
+        />
+      )}
+      {closeConfirm && (
+        <CompositeCloseConfirm
+          capabilityName={manifest.name}
+          busy={busy}
+          onSaveAndClose={() => void saveAndClose()}
+          onDiscard={() => {
+            setCloseConfirm(false)
+            onClose()
+          }}
+          onContinue={() => setCloseConfirm(false)}
+        />
+      )}
+    </div>,
+    document.body
   )
 }

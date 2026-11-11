@@ -1,6 +1,7 @@
 import type { CompositeInput, CompositeManifest, CompositeOutput } from './manifest'
 import type { ContractInputMap } from '../engine/inputs'
 import type { NodeValue } from '../engine/values'
+import type { CompositeRunContext } from '../engine/composite-run-contract'
 
 /**
  * 节点流运行时的纯规划/收集逻辑（W1）。
@@ -265,4 +266,61 @@ export function findCompositeInput(
 ): CompositeInput | undefined {
   const bare = portId.startsWith('in-') ? portId.slice(3) : portId
   return manifest.inputs.find((input) => input.id === bare)
+}
+
+export type CompositeRunBudgetCode =
+  | 'RECURSIVE_COMPOSITE'
+  | 'DEPTH_EXCEEDED'
+  | 'EXPANSION_BUDGET_EXCEEDED'
+
+export interface CompositeRunBudgetCheck {
+  /** 含当前节点流自身的完整调用链。 */
+  chain: CompositeRunContext['chain']
+  /** 祖先链 + 当前内部图的累计展开节点数。 */
+  expandedNodes: number
+  issue: { code: CompositeRunBudgetCode; message: string } | null
+}
+
+/**
+ * 运行期递归/深度/展开预算守卫（W3），与发布校验同口径：
+ * 同一 capabilityId 再次进入即递归；深度与展开节点数取当前 manifest 的
+ * executionPolicy（缺省 8 层 / 200 节点）。纯函数，GUI 隔离执行与测试共用。
+ */
+export function checkCompositeRunBudget(
+  manifest: CompositeManifest,
+  parentContext?: CompositeRunContext
+): CompositeRunBudgetCheck {
+  const parentChain = parentContext?.chain ?? []
+  const chain = [
+    ...parentChain,
+    { capabilityId: manifest.capabilityId, version: manifest.version }
+  ]
+  const expandedNodes = (parentContext?.expandedNodes ?? 0) + manifest.graph.nodes.length
+  const maxDepth = manifest.executionPolicy?.maxDepth ?? 8
+  const maxExpandedNodes = manifest.executionPolicy?.maxExpandedNodes ?? 200
+  if (parentChain.some((entry) => entry.capabilityId === manifest.capabilityId)) {
+    return {
+      chain,
+      expandedNodes,
+      issue: { code: 'RECURSIVE_COMPOSITE', message: `节点流递归调用：${manifest.capabilityId}` }
+    }
+  }
+  if (chain.length > maxDepth) {
+    return {
+      chain,
+      expandedNodes,
+      issue: { code: 'DEPTH_EXCEEDED', message: `节点流嵌套深度超过上限 ${maxDepth}` }
+    }
+  }
+  if (expandedNodes > maxExpandedNodes) {
+    return {
+      chain,
+      expandedNodes,
+      issue: {
+        code: 'EXPANSION_BUDGET_EXCEEDED',
+        message: `节点流展开节点数超过上限 ${maxExpandedNodes}`
+      }
+    }
+  }
+  return { chain, expandedNodes, issue: null }
 }

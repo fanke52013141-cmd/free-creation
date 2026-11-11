@@ -51,6 +51,16 @@ export interface CompositeUpgradePlan {
   impact: CompositeUpgradeImpact
 }
 
+/** GUI/CLI/MCP 共用的升级预检结果（不含内部 manifest 正文）。 */
+export interface CompositeUpgradePreviewResult {
+  previousVersion: string
+  nextVersion: string
+  ok: boolean
+  runtimeVersion?: number
+  issues?: Array<{ code: string; path: string; message: string }>
+  impact: CompositeUpgradeImpact | null
+}
+
 interface PortShape {
   type: string
   cardinality: 'one' | 'many'

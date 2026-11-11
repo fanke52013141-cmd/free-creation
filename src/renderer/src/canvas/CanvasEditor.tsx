@@ -8,6 +8,7 @@ import { useAppStore } from '../stores/app'
 import { nodeTextField } from './node-pointer-policy'
 import { ResourceInsertRequest } from '../library/ResourceInsertRequest'
 import { WorkflowSaveDialog } from './WorkflowSaveDialog'
+import { CompositeUpgradeDialog } from '../composite/CompositeUpgradeDialog'
 import { Tldraw, createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import 'tldraw/tldraw.css'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -339,6 +340,7 @@ export function CanvasEditor({
   const [clipboardCount, setClipboardCount] = useState(0)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [workflowSaveSelection, setWorkflowSaveSelection] = useState<TLShapeId[] | null>(null)
+  const [upgradeTarget, setUpgradeTarget] = useState<TLShapeId | null>(null)
   // 拉线到空白后的菜单锚点由实际 DOM 尺寸测得；不能再把鼠标松手点误当菜单左上角。
   const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number } | null>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -1277,7 +1279,7 @@ export function CanvasEditor({
                 })
               }
               const bindings = useGatewayStore.getState().modelBindings
-              const planned = planGraphPatch(editor, request.ops, bindings, request.mediaResolutions)
+              const planned = planGraphPatch(editor, request.ops, bindings, request.mediaResolutions, request.compositeResolutions)
               if (!planned.ok) {
                 // 校验失败发生在任何变更之前：整批不留半图。
                 replyFail(true, planned.issue.code, planned.issue.detail)
@@ -1316,7 +1318,7 @@ export function CanvasEditor({
               )
                 throw new Error('PATCH_NOT_ADMITTED')
               // 准入与校验之间用户可能继续编辑：整批重新校验；此时失败按 unknown 核对。
-              const replanned = planGraphPatch(editor, request.ops, bindings, request.mediaResolutions)
+              const replanned = planGraphPatch(editor, request.ops, bindings, request.mediaResolutions, request.compositeResolutions)
               if (!replanned.ok) {
                 replyFail(false, replanned.issue.code, replanned.issue.detail)
                 return
@@ -3319,7 +3321,16 @@ export function CanvasEditor({
           y={menu.y}
           onCopy={() => copySelectionToClipboard(editorInstance)}
           onSaveWorkflow={(ids) => setWorkflowSaveSelection(ids)}
+          onUpgrade={(id) => setUpgradeTarget(id)}
           onClose={closeMenu}
+        />
+      )}
+      {upgradeTarget && editorInstance && (
+        <CompositeUpgradeDialog
+          editor={editorInstance}
+          projectId={project.id}
+          shapeId={upgradeTarget}
+          onClose={() => setUpgradeTarget(null)}
         />
       )}
     </div>

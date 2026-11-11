@@ -521,7 +521,19 @@ export function installBrowserMock(): void {
       versionGet: () => Promise.resolve({ ok: true, data: null }),
       versionList: () => Promise.resolve({ ok: true, data: [] }),
       archive: () => Promise.resolve({ ok: true, data: true }),
+      references: (input: { capabilityId: string }) =>
+        Promise.resolve({
+          ok: true,
+          data: { capabilityId: input.capabilityId, projectInstances: [], nestedVersions: [] }
+        }),
+      delete: (input: { capabilityId: string }) =>
+        Promise.resolve({ ok: true, data: { capabilityId: input.capabilityId, deleted: true } }),
       verify: () => Promise.resolve({ ok: true, data: { ok: true } }),
+      upgradePreview: () =>
+        Promise.resolve({
+          ok: true,
+          data: { previousVersion: '1.0', nextVersion: '2.0', ok: true, impact: null }
+        }),
       runStart: (input: { id: string }) => Promise.resolve({ ok: true, data: { id: input.id } }),
       runStep: () => Promise.resolve({ ok: true, data: true }),
       runFinish: () => Promise.resolve({ ok: true, data: true }),

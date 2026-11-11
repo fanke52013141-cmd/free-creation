@@ -11,6 +11,7 @@ import type {
   CompositeOutput
 } from '@shared/composite/manifest'
 import { parseCompositeManifest } from '@shared/composite/manifest'
+import { readCompositeInstanceManifest } from '@shared/composite/outputs'
 
 export interface CompositeBuildOptions {
   capabilityId: string
@@ -66,17 +67,13 @@ function findPort(node: CanvasNode, portId: string): PortDecl | undefined {
   return node.ports.find((port) => port.id === portId)
 }
 
-/** 从内部组合节点的固定 config 快照读取嵌套版本；不解析当前最新版本。 */
+/** 从内部组合节点的固定版本快照读取嵌套版本；不解析当前最新版本。
+ * W3 引用形态实例的快照缓存在 meta.compositeManifest。 */
 function parseNestedCompositeManifest(node: CanvasNode): CompositeManifest | null {
-  if (typeof node.params.config !== 'string') return null
-  try {
-    const parsed = JSON.parse(node.params.config) as { manifest?: unknown }
-    if (!parsed.manifest) return null
-    const result = parseCompositeManifest(parsed.manifest)
-    return result.ok ? result.manifest : null
-  } catch {
-    return null
-  }
+  return readCompositeInstanceManifest({
+    props: { config: typeof node.params.config === 'string' ? node.params.config : undefined },
+    meta: node.meta
+  })
 }
 
 /**

@@ -13,8 +13,10 @@ import { flowInitialConfig } from '@shared/agent-flow/model-defaults'
 import type { FeatureBinding } from '@free-creation/model-contracts'
 import {
   type MediaResolution,
-  type MediaResolutionMap
+  type MediaResolutionMap,
+  type CompositeResolutionMap
 } from '@shared/agent-access/graph-ops'
+import type { CompositeManifest } from '@shared/composite/manifest'
 import { getNodeType, getNodePorts, type NodeTypeSpec } from '../nodes/registry'
 import { createEdge, portPairCompatible } from './graph'
 import type { NodeCardShape } from './NodeCardShape'
@@ -53,6 +55,8 @@ interface SimNode {
   config: string
   text: string
   exists: boolean
+  /** W3 引用形态：宿主解析发布仓库后缓存的固定版本快照（存 meta，不占 config 配额）。 */
+  compositeManifest?: CompositeManifest
 }
 
 interface SimEdge {
@@ -93,7 +97,7 @@ function initialConfigString(spec: NodeTypeSpec, patch: Record<string, unknown> 
   return mergeConfig(base, patch)
 }
 
-function resolvedPorts(spec: NodeTypeSpec, nodeType: string, config: string, h: number): {
+function resolvedPorts(spec: NodeTypeSpec, nodeType: string, config: string, h: number, compositeManifest?: CompositeManifest): {
   in: PortDecl[]
   out: PortDecl[]
 } {
@@ -106,13 +110,26 @@ function resolvedPorts(spec: NodeTypeSpec, nodeType: string, config: string, h: 
     rotation: 0,
     isLocked: false,
     opacity: 1,
-    meta: {},
+    meta: compositeManifest ? { compositeManifest } : {},
     props: { w: 340, h, nodeType, title: '', config, text: '', mediaId: '', mediaPath: '', mediaMime: '', exec: 'idle' }
   }
   try {
     return getNodePorts(spec, shape as unknown as NodeCardShape)
   } catch {
     return { in: [], out: [] }
+  }
+}
+
+/** W3：composite 实例的固定版本引用形态 config（无内嵌 manifest）。 */
+function compositeRefConfig(
+  config: Record<string, unknown> | undefined
+): { capabilityId: string; version: string; contentHash?: string } | null {
+  if (!config || config.manifest) return null
+  if (typeof config.capabilityId !== 'string' || typeof config.version !== 'string') return null
+  return {
+    capabilityId: config.capabilityId,
+    version: config.version,
+    ...(typeof config.contentHash === 'string' ? { contentHash: config.contentHash } : {})
   }
 }
 
@@ -127,7 +144,8 @@ export function planGraphPatch(
   editor: Editor,
   rawOps: unknown,
   modelBindings: FeatureBinding[],
-  mediaResolutions?: MediaResolutionMap
+  mediaResolutions?: MediaResolutionMap,
+  compositeResolutions?: CompositeResolutionMap
 ): GraphPatchPlanResult {
   const parsed = parseGraphPatchOps(rawOps)
   if (!parsed.ok) return { ok: false, issue: { index: 0, code: 'INVALID_INPUT', detail: parsed.detail } }
@@ -146,7 +164,10 @@ export function planGraphPatch(
       nodeType: card.props.nodeType,
       config: card.props.config ?? '',
       text: card.props.text ?? '',
-      exists: true
+      exists: true,
+      compositeManifest: (card.meta as Record<string, unknown> | undefined)?.compositeManifest as
+        | CompositeManifest
+        | undefined
     })
   }
   const edges = new Map<TLShapeId, SimEdge>()
@@ -171,17 +192,17 @@ export function planGraphPatch(
   const plannedBackdrops = new Map<TLShapeId, boolean>()
   const fail = (index: number, code: string, detail?: string): GraphPatchPlanResult => ({ ok: false, issue: { index, code, ...(detail ? { detail } : {}) } })
 
-  const livePorts = (nodeType: string, config: string, h: number): { in: PortDecl[]; out: PortDecl[] } => {
+  const livePorts = (nodeType: string, config: string, h: number, compositeManifest?: CompositeManifest): { in: PortDecl[]; out: PortDecl[] } => {
     const spec = getNodeType(nodeType)
     if (!spec) return { in: [], out: [] }
-    return resolvedPorts(spec, nodeType, config, h)
+    return resolvedPorts(spec, nodeType, config, h, compositeManifest)
   }
   const validateEdgesOn = (index: number, nodeId: TLShapeId): GraphPatchPlanResult | null => {
     const node = nodes.get(nodeId)
     if (!node || !node.exists) return null
     const spec = getNodeType(node.nodeType)
     if (!spec) return null
-    const ports = livePorts(node.nodeType, node.config, 260)
+    const ports = livePorts(node.nodeType, node.config, 260, node.compositeManifest)
     for (const edge of edges.values()) {
       if (!edge.exists) continue
       for (const side of [edge.from, edge.to] as const) {
@@ -198,20 +219,37 @@ export function planGraphPatch(
     const op = ops[index]
     if (op.action === 'node.create') {
       const spec = getNodeType(op.nodeType)
-      // `composite` 是内部节点类型：不进入创建面板，但允许以固定 manifest 快照插入实例。
+      // `composite` 是内部节点类型：不进入创建面板，但允许以固定 manifest 快照
+      // 或固定版本引用（W3，main 预解析发布仓库）插入实例。
+      const createRef = op.nodeType === 'composite' ? compositeRefConfig(op.config) : null
+      const createResolution = createRef
+        ? compositeResolutions?.[op.ref ? `ref:${op.ref}` : `index:${index}`]
+        : undefined
+      if (createRef && !createResolution)
+        return fail(index, 'COMPOSITE_REF_NOT_RESOLVED', `${createRef.capabilityId}@${createRef.version}`)
       const internalComposite =
         op.nodeType === 'composite' &&
-        typeof op.config?.manifest === 'object' &&
-        op.config.manifest !== null
+        ((typeof op.config?.manifest === 'object' && op.config.manifest !== null) ||
+          Boolean(createResolution))
       if (!spec || (spec.creatable === false && !internalComposite))
         return fail(index, 'NODE_TYPE_INVALID', op.nodeType)
-      const config = initialConfigString(spec, op.config, modelBindings)
+      // 引用形态 config 只存 capabilityId/version/contentHash；快照放 meta，
+      // 不再受 64KiB config 上限约束。
+      const config = createResolution
+        ? JSON.stringify({ ...createRef!, contentHash: createResolution.contentHash })
+        : initialConfigString(spec, op.config, modelBindings)
       if (configByteLength(config) > GRAPH_NODE_CONFIG_MAX_BYTES)
         return fail(index, 'CONFIG_TOO_LARGE')
       const media = op.media ? resolutionOf(op.media.mediaId) : undefined
       if (op.media && !media) return fail(index, 'MEDIA_NOT_RESOLVED', op.media.mediaId)
       const id = createShapeId()
-      nodes.set(id, { nodeType: op.nodeType, config, text: op.text ?? '', exists: true })
+      nodes.set(id, {
+        nodeType: op.nodeType,
+        config,
+        text: op.text ?? '',
+        exists: true,
+        compositeManifest: createResolution?.manifest
+      })
       if (op.ref) refToId.set(op.ref, id)
       created.push({ ...(op.ref ? { ref: op.ref } : {}), nodeId: id })
       counts.nodeCreated += 1
@@ -232,8 +270,9 @@ export function planGraphPatch(
             mediaPath: media?.mediaPath ?? '',
             mediaMime: media?.mediaMime ?? '',
             exec: 'idle'
-          }
-        })
+          },
+          ...(createResolution ? { meta: { compositeManifest: createResolution.manifest } } : {})
+        } as never)
       })
       continue
     }
@@ -243,15 +282,26 @@ export function planGraphPatch(
       if (!node || !node.exists) return fail(index, 'NODE_NOT_FOUND', op.nodeId)
       const spec = getNodeType(node.nodeType)
       if (!spec) return fail(index, 'NODE_TYPE_INVALID', node.nodeType)
-      const beforePorts = livePorts(node.nodeType, node.config, 260)
+      const beforePorts = livePorts(node.nodeType, node.config, 260, node.compositeManifest)
+      // W3：composite 实例升级为固定版本引用（整体替换实例绑定，快照放 meta）。
+      const updateRef = node.nodeType === 'composite' ? compositeRefConfig(op.config) : null
+      const updateResolution = updateRef
+        ? compositeResolutions?.[`node:${op.nodeId}`]
+        : undefined
+      if (updateRef && !updateResolution)
+        return fail(index, 'COMPOSITE_REF_NOT_RESOLVED', `${updateRef.capabilityId}@${updateRef.version}`)
       let nextConfig = node.config
-      if (op.config) {
+      if (updateResolution) {
+        nextConfig = JSON.stringify({ ...updateRef!, contentHash: updateResolution.contentHash })
+      } else if (op.config) {
         nextConfig = mergeConfig(node.config, op.config)
+      }
+      if (op.config || updateResolution) {
         if (configByteLength(nextConfig) > GRAPH_NODE_CONFIG_MAX_BYTES)
           return fail(index, 'CONFIG_TOO_LARGE')
       }
       const afterH = op.h ?? 260
-      const afterPorts = livePorts(node.nodeType, nextConfig, afterH)
+      const afterPorts = livePorts(node.nodeType, nextConfig, afterH, updateResolution?.manifest ?? node.compositeManifest)
       // 静态端口 ID 之外的动态端口变化：已有连线引用的端口必须仍然存在。
       const staticIds = new Set([...spec.ports.in, ...spec.ports.out].map((p) => p.id))
       for (const side of ['in', 'out'] as const) {
@@ -269,6 +319,7 @@ export function planGraphPatch(
           }
       }
       node.config = nextConfig
+      if (updateResolution) node.compositeManifest = updateResolution.manifest
       if (op.text !== undefined) node.text = op.text
       const updateMedia = op.media ? resolutionOf(op.media.mediaId) : undefined
       if (op.media && !updateMedia) return fail(index, 'MEDIA_NOT_RESOLVED', op.media.mediaId)
@@ -286,6 +337,14 @@ export function planGraphPatch(
           props.mediaMime = updateMedia.mediaMime
         }
         if (Object.keys(props).length) ed.updateShape({ id, type: 'node-card', props } as never)
+        if (updateResolution) {
+          const current = ed.getShape(id)
+          ed.updateShape({
+            id,
+            type: 'node-card',
+            meta: { ...((current?.meta as Record<string, unknown>) ?? {}), compositeManifest: updateResolution.manifest }
+          } as never)
+        }
         if (op.x !== undefined || op.y !== undefined) {
           const shape = ed.getShape(id)
           if (shape) ed.updateShape({ id, type: 'node-card', x: op.x ?? shape.x, y: op.y ?? shape.y } as never)

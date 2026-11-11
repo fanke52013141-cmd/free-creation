@@ -23,6 +23,7 @@ import { nodeExecLabel } from './node-status'
 import { currentNodeFingerprint, successfulInputFingerprint } from '../engine/resultFreshness'
 import { projectNodeOutputs } from '../nodes/nodeValues'
 import { deriveNodeReadiness } from './node-readiness'
+import { readCompositeInstanceManifest } from '@shared/composite/outputs'
 import { runNodeManually } from '../engine/executor'
 import { useAppStore } from '../stores/app'
 import { useGatewayStore } from '../stores/gateway'
@@ -663,6 +664,15 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           )
         }
       }
+      // 节点流公开输入带 defaultValue（内部正文/固定配置）时，运行时允许不接外部值；
+      // 就绪判定与 planCompositeInputBindings 的必填口径保持一致，不再误置灰运行按钮。
+      const fixedSatisfiedInputPorts = new Set<string>()
+      if (shape.props.nodeType === 'composite') {
+        const manifest = readCompositeInstanceManifest(shape)
+        for (const input of manifest?.inputs ?? []) {
+          if (input.defaultValue !== undefined) fixedSatisfiedInputPorts.add(`in-${input.id}`)
+        }
+      }
       return {
         readiness: deriveNodeReadiness({
           executionMode: spec?.executionMode ?? 'auto',
@@ -673,6 +683,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           incomingCounts,
           availableInputCounts,
           modelAvailable,
+          fixedSatisfiedInputPorts,
           configIssue:
             spec?.executionDisabledReason ??
             (shape.props.nodeType === 'processor'

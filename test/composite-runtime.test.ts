@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CompositeManifest } from '../src/shared/composite/manifest'
 import {
+  checkCompositeRunBudget,
   collectCompositeOutputs,
   compositeValueMatchesPort,
   planCompositeInputBindings
@@ -266,5 +267,50 @@ describe('节点流 W1 运行时（文本闭环）', () => {
     expect(compositeValueMatchesPort({ kind: 'text', text: 'x' }, 'markdown')).toBe(true)
     expect(compositeValueMatchesPort({ kind: 'json', data: 1 }, 'any')).toBe(true)
     expect(compositeValueMatchesPort({ kind: 'text', text: 'x' }, 'image')).toBe(false)
+  })
+})
+
+describe('checkCompositeRunBudget · W3 运行期递归/深度/展开预算', () => {
+  it('顶层运行通过并登记自身链与展开节点数', () => {
+    const check = checkCompositeRunBudget(copyManifest())
+    expect(check.issue).toBeNull()
+    expect(check.chain).toEqual([{ capabilityId: 'copy-polish', version: '1.0' }])
+    expect(check.expandedNodes).toBe(1)
+  })
+
+  it('同一 capabilityId 再次进入即递归拒绝（版本不同也拒绝）', () => {
+    const parent = { chain: [{ capabilityId: 'copy-polish', version: '2.0' }], expandedNodes: 1 }
+    const check = checkCompositeRunBudget(copyManifest(), parent)
+    expect(check.issue?.code).toBe('RECURSIVE_COMPOSITE')
+  })
+
+  it('嵌套深度超过 executionPolicy.maxDepth（缺省 8）拒绝', () => {
+    const chain = Array.from({ length: 8 }, (_, i) => ({
+      capabilityId: `cap-${i}`,
+      version: '1.0'
+    }))
+    expect(checkCompositeRunBudget(copyManifest(), { chain, expandedNodes: 8 }).issue?.code).toBe(
+      'DEPTH_EXCEEDED'
+    )
+    expect(
+      checkCompositeRunBudget(copyManifest(), { chain: chain.slice(0, 7), expandedNodes: 7 }).issue
+    ).toBeNull()
+    const strict = copyManifest({ executionPolicy: { maxDepth: 2 } })
+    expect(
+      checkCompositeRunBudget(strict, { chain: chain.slice(0, 2), expandedNodes: 2 }).issue?.code
+    ).toBe('DEPTH_EXCEEDED')
+  })
+
+  it('累计展开节点数超过 maxExpandedNodes（缺省 200）拒绝', () => {
+    expect(
+      checkCompositeRunBudget(copyManifest(), { chain: [], expandedNodes: 200 }).issue?.code
+    ).toBe('EXPANSION_BUDGET_EXCEEDED')
+    expect(
+      checkCompositeRunBudget(copyManifest(), { chain: [], expandedNodes: 199 }).issue
+    ).toBeNull()
+    const strict = copyManifest({ executionPolicy: { maxExpandedNodes: 3 } })
+    expect(
+      checkCompositeRunBudget(strict, { chain: [], expandedNodes: 3 }).issue?.code
+    ).toBe('EXPANSION_BUDGET_EXCEEDED')
   })
 })

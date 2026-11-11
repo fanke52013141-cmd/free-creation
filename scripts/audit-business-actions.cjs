@@ -149,7 +149,10 @@ const CANVAS_ACTIONS = [
   ['canvas.model.catalog', '模型设置页读取本地模型与能力验证状态'],
   ['canvas.project.read-summary', '项目页/打开项目时读取项目摘要'],
   ['canvas.node.contract-panel', '选中节点右侧 I/O 面板的类型/字段/端口/依赖查询（N1）'],
-  ['canvas.model.credential-status', '模型设置里每个连接显示"已保存密钥/未保存"状态']
+  ['canvas.model.credential-status', '模型设置里每个连接显示"已保存密钥/未保存"状态'],
+  ['canvas.composite.upgrade', '右键菜单节点流实例升级：版本选择、同一预检、兼容连线迁移（W3）'],
+  ['canvas.composite.archive', '节点库卡片归档/恢复节点流：隐藏默认发现入口，已绑定实例不受影响（W3）'],
+  ['canvas.composite.delete', '节点库卡片删除节点流：同一引用检查（画布实例+嵌套引用）+ 二次确认（W3）']
 ]
 
 const PHASES = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'external', 'excluded']
@@ -171,10 +174,6 @@ const EXTERNAL_ONLY_OPERATIONS = new Map([
   [
     'node.library.update',
     'GUI 节点库面板当前没有重命名入口；外部重命名复用同一 store 写口，待 GUI 补同入口或下线该操作'
-  ],
-  [
-    'composite.upgrade.preview',
-    'W1 只交付公共升级预检（CLI/MCP），实例升级的完整 GUI 在 W3；预检复用 GUI 同一 upgrade 纯函数，不写业务状态'
   ]
 ])
 

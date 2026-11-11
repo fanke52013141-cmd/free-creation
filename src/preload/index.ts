@@ -538,11 +538,25 @@ const api = {
       capabilityId: string
       archived?: boolean
     }): Promise<IpcEnvelope<boolean>> => ipcRenderer.invoke(IPC.composite.archive, input),
+    references: (input: {
+      capabilityId: string
+    }): Promise<IpcEnvelope<import('@shared/composite/types').CompositeReferenceReport>> =>
+      ipcRenderer.invoke(IPC.composite.references, input),
+    delete: (input: {
+      capabilityId: string
+    }): Promise<IpcEnvelope<{ capabilityId: string; deleted: boolean }>> =>
+      ipcRenderer.invoke(IPC.composite.delete, input),
     verify: (input: {
       capabilityId: string
       version: string
     }): Promise<IpcEnvelope<{ ok: boolean; reason?: string }>> =>
       ipcRenderer.invoke(IPC.composite.verify, input),
+    upgradePreview: (input: {
+      projectId: string
+      nodeId: string
+      nextManifest: unknown
+    }): Promise<IpcEnvelope<import('@shared/composite/upgrade').CompositeUpgradePreviewResult>> =>
+      ipcRenderer.invoke(IPC.composite.upgradePreview, input),
     runStart: (input: {
       id: string
       projectId: string

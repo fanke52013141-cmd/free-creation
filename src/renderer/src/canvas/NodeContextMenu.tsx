@@ -10,6 +10,8 @@ interface NodeContextMenuProps {
   y: number
   onClose: () => void
   onSaveWorkflow?: (ids: TLShapeId[]) => void
+  /** W3：单选节点流实例时提供升级入口（预检通过才迁移）。 */
+  onUpgrade?: (id: TLShapeId) => void
   /** 复制按钮写入节点剪贴板（由 CanvasEditor 提供），之后可在空白处 Ctrl+V 或右键粘贴；不可用时回退为原地复制。 */
   onCopy?: () => number
 }
@@ -21,6 +23,7 @@ export function NodeContextMenu({
   y,
   onCopy,
   onSaveWorkflow,
+  onUpgrade,
   onClose
 }: NodeContextMenuProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
@@ -84,6 +87,14 @@ export function NodeContextMenu({
         <Icon name="workflow" size={16} />
         保存节点
       </button>
+      {ids.length === 1 &&
+        (editor.getShape(ids[0]) as { props?: { nodeType?: string } } | undefined)?.props
+          ?.nodeType === 'composite' && (
+          <button className="node-menu-item" onClick={() => run(() => onUpgrade?.(ids[0]))}>
+            <Icon name="refresh" size={16} />
+            升级节点流
+          </button>
+        )}
       <button
         className="node-menu-item"
         onClick={() =>

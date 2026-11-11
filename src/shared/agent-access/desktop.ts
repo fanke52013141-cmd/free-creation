@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { SkillAgentConfigSchema } from '../skill-agent'
 import { GraphPatchOpsSchema, GRAPH_VIEW_MAX_NODES, mediaResolutionSchema } from './graph-ops'
+import { compositeManifestSchema } from '../composite/manifest'
 import { PublishModeSchema, publishRequestIdSchema } from './publish'
 import { NODE_EXECUTE_MAX_NODES, WorkflowInputsSchema } from './run-ops'
 
@@ -59,6 +60,16 @@ export const DesktopRequestSchema = z
     inputs: WorkflowInputsSchema.optional(),
     /** graph-patch：main 预检解析的素材事实（按 mediaId 注入，外部输入不可携带路径）。 */
     mediaResolutions: z.record(z.string(), mediaResolutionSchema).optional(),
+    /** graph-patch：main 预解析的组合固定版本快照（W3 引用形态；外部输入只携带引用）。 */
+    compositeResolutions: z
+      .record(
+        z.string(),
+        z.object({
+          manifest: compositeManifestSchema,
+          contentHash: z.string().regex(/^[a-f0-9]{64}$/)
+        })
+      )
+      .optional(),
     /** 发布授权协议：待授权请求、发布模式与镜头；方向由 main 决定，外部不可自造授权。 */
     publishRequestId: publishRequestIdSchema.optional(),
     publishMode: PublishModeSchema.optional(),

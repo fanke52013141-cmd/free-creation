@@ -1,17 +1,8 @@
 import type { NodeBodyProps } from '../nodes/registry'
-import type { CompositeManifest } from '@shared/composite/manifest'
-
-function readManifest(config: string): CompositeManifest | null {
-  try {
-    const parsed = JSON.parse(config || '{}') as { manifest?: CompositeManifest }
-    return parsed.manifest ?? null
-  } catch {
-    return null
-  }
-}
+import { readCompositeInstanceManifest } from '@shared/composite/outputs'
 
 export function CompositeBody({ shape }: NodeBodyProps): React.JSX.Element {
-  const manifest = readManifest(shape.props.config)
+  const manifest = readCompositeInstanceManifest(shape)
   if (!manifest) {
     return (
       <div className="composite-body">

@@ -459,11 +459,13 @@ export function getNodePorts(
   shape: NodeCardShape
 ): { in: PortDecl[]; out: PortDecl[] } {
   const ports = spec.resolvePorts ? spec.resolvePorts(shape) : spec.ports
-  // 代码节点允许用户声明具名函数输入/输出字段。相同类型只在这一处重复，
-  // 每个字段仍有独立、稳定的端口 ID；其他节点继续遵守同类型单端口规则。
+  // 代码节点允许用户声明具名函数输入/输出字段；组合能力（W3）的公开端口同样
+  // 来自用户确认的稳定映射，允许多输出/多输入同类型（每个端口仍有独立稳定 ID）。
+  // 相同类型只在这两处重复；其他节点继续遵守同类型单端口规则。
+  const repeatedNamed = Boolean(spec.resolvePorts && (spec.type === 'code' || spec.type === 'composite'))
   const errors = portValidationErrors(ports, {
-    allowRepeatedNamedInputs: Boolean(spec.resolvePorts && spec.type === 'code'),
-    allowRepeatedNamedOutputs: Boolean(spec.resolvePorts && spec.type === 'code')
+    allowRepeatedNamedInputs: repeatedNamed,
+    allowRepeatedNamedOutputs: repeatedNamed
   })
   if (errors.length > 0) {
     throw new Error(`节点动态端口不合法：${spec.type}\n- ${errors.join('\n- ')}`)

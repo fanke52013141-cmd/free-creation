@@ -32,6 +32,7 @@ import {
   compositeErrorCode
 } from '../../shared/composite/errors'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
+import { previewCompositeUpgrade, findCompositeReferences, deleteCompositeCapabilityChecked } from '../agent-access/composite-ops'
 import { newSpanId } from '../../shared/observability'
 import type { GatewayDiagnosticsContext } from '../../shared/contracts'
 
@@ -265,6 +266,28 @@ export function registerCompositeIpc(): void {
       }
     }
   )
+  // W3：GUI 删除前引用检查与 CLI/MCP composite.references 共用同一实现。
+  ipcMain.handle(
+    IPC.composite.references,
+    (_event, input: { capabilityId: string }): IpcEnvelope<unknown> => {
+      try {
+        return ok(findCompositeReferences(input?.capabilityId ?? ''))
+      } catch (error) {
+        return failure(error)
+      }
+    }
+  )
+  // W3：GUI 物理删除与 CLI/MCP composite.delete 共用同一引用保护。
+  ipcMain.handle(
+    IPC.composite.delete,
+    (_event, input: { capabilityId: string }): IpcEnvelope<unknown> => {
+      try {
+        return ok(deleteCompositeCapabilityChecked(input?.capabilityId ?? ''))
+      } catch (error) {
+        return failure(error)
+      }
+    }
+  )
   ipcMain.handle(
     IPC.composite.verify,
     async (
@@ -273,6 +296,32 @@ export function registerCompositeIpc(): void {
     ): Promise<IpcEnvelope<{ ok: boolean; reason?: string }>> => {
       try {
         return ok(await verifyCompositeVersion(input?.capabilityId ?? '', input?.version ?? ''))
+      } catch (error) {
+        return failure(error)
+      }
+    }
+  )
+  // W3：GUI 升级预检与 CLI/MCP composite.upgrade.preview 共用同一实现。
+  ipcMain.handle(
+    IPC.composite.upgradePreview,
+    (
+      _event,
+      input: { projectId: string; nodeId: string; nextManifest: unknown }
+    ): IpcEnvelope<unknown> => {
+      try {
+        const preview = previewCompositeUpgrade(
+          input?.projectId ?? '',
+          input?.nodeId ?? '',
+          input?.nextManifest
+        )
+        return ok({
+          previousVersion: preview.previousVersion,
+          nextVersion: preview.nextVersion,
+          ok: preview.ok,
+          ...(preview.runtimeVersion !== undefined ? { runtimeVersion: preview.runtimeVersion } : {}),
+          ...(preview.issues ? { issues: preview.issues } : {}),
+          impact: preview.impact
+        })
       } catch (error) {
         return failure(error)
       }

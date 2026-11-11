@@ -3,6 +3,20 @@ import type { ContractInputMap } from '../engine/inputs'
 import type { NodeValue } from '../engine/values'
 import type { CancelSignal } from './executor-types'
 
+export interface CompositeRunChainEntry {
+  capabilityId: string
+  version: string
+}
+
+/**
+ * 嵌套运行的祖先上下文（W3）：chain 含调用方节点流自身，expandedNodes 为
+ * 祖先链累计展开的内部节点数。顶层调用缺省；递归/深度/预算在运行期与发布期同口径拒绝。
+ */
+export interface CompositeRunContext {
+  chain: CompositeRunChainEntry[]
+  expandedNodes: number
+}
+
 export interface CompositeRunRequest {
   manifest: CompositeManifest
   inputs: ContractInputMap
@@ -11,6 +25,8 @@ export interface CompositeRunRequest {
   /** 画布上的节点流实例 ID；用于运行记录关联到具体实例。 */
   instanceNodeId?: string
   signal?: CancelSignal
+  /** 调用方节点流的祖先上下文；顶层调用缺省。 */
+  parentContext?: CompositeRunContext
 }
 
 export interface CompositeRunFailure {

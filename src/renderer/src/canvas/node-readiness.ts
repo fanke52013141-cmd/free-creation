@@ -67,6 +67,11 @@ export function deriveNodeReadiness(input: {
   availableInputCounts?: ReadonlyMap<string, number>
   modelAvailable?: boolean
   configIssue?: string | null
+  /**
+   * 契约认可的固定输入端口（如节点流公开输入的 defaultValue、文本节点正文）。
+   * 这些端口未连线也视为可满足，与运行时的必填判定保持同一口径。
+   */
+  fixedSatisfiedInputPorts?: ReadonlySet<string>
 }): NodeReadiness {
   if (input.exec === 'running' || input.exec === 'queued' || input.exec === 'pending') {
     return {
@@ -110,7 +115,10 @@ export function deriveNodeReadiness(input: {
       detail: '先运行已连接的媒体来源。'
     }
   const missing = input.inputs.filter(
-    (port) => port.required && (input.incomingCounts.get(port.id) ?? 0) === 0
+    (port) =>
+      port.required &&
+      (input.incomingCounts.get(port.id) ?? 0) === 0 &&
+      !input.fixedSatisfiedInputPorts?.has(port.id)
   )
   if (missing.length > 0) {
     return {

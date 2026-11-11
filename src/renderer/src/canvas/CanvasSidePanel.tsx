@@ -92,6 +92,7 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
   const wfLoad = useWorkflowStore((s) => s.load)
   const wfRemove = useWorkflowStore((s) => s.remove)
   const [query, setQuery] = useState('')
+  const [includeArchived, setIncludeArchived] = useState(false)
   const [composites, setComposites] = useState<CompositeCapabilitySummary[]>([])
   const [versionDialog, setVersionDialog] = useState<{ capability: CompositeCapabilitySummary; mode: 'edit' | 'next' } | null>(null)
   const [canvasEdit, setCanvasEdit] = useState<{
@@ -117,10 +118,58 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
   }, [wfLoad])
 
   useEffect(() => {
-    void window.api.composite.search().then((result) => {
+    void window.api.composite.search({ includeArchived }).then((result) => {
       if (result.ok) setComposites(result.data)
     })
-  }, [])
+  }, [includeArchived])
+
+  const refreshComposites = (): void => {
+    void window.api.composite.search({ includeArchived }).then((result) => {
+      if (result.ok) setComposites(result.data)
+    })
+  }
+
+  // W3 归档：隐藏默认发现入口；已绑定实例按固定版本继续运行，可随时恢复。
+  const handleArchiveComposite = async (capability: CompositeCapabilitySummary): Promise<void> => {
+    const result = await window.api.composite.archive({
+      capabilityId: capability.id,
+      archived: !capability.archived
+    })
+    if (!result.ok) return toast(`归档操作失败：${result.error.message}`)
+    toast(capability.archived ? `已恢复「${capability.name}」` : `已归档「${capability.name}」，画布实例不受影响`)
+    refreshComposites()
+  }
+
+  // W3 删除：先做与 CLI/MCP 同一份引用检查；有引用则阻断，无引用需二次确认。
+  const handleDeleteComposite = async (capability: CompositeCapabilitySummary): Promise<void> => {
+    const references = await window.api.composite.references({ capabilityId: capability.id })
+    if (!references.ok) return toast(`引用检查失败：${references.error.message}`)
+    const { projectInstances, nestedVersions } = references.data
+    if (projectInstances.length > 0 || nestedVersions.length > 0) {
+      const parts: string[] = []
+      if (projectInstances.length > 0) {
+        const projects = [...new Set(projectInstances.map((instance) => instance.projectName))]
+        parts.push(`${projectInstances.length} 个画布实例（${projects.slice(0, 3).join('、')}${projects.length > 3 ? ' 等' : ''}）`)
+      }
+      if (nestedVersions.length > 0) {
+        parts.push(`${nestedVersions.length} 个其他节点流发布版本的嵌套引用`)
+      }
+      return toast(`无法删除「${capability.name}」：仍被 ${parts.join('、')} 使用。可先移除引用，或改用归档。`)
+    }
+    if (
+      !(await useConfirmStore.getState().confirm({
+        title: `删除节点流「${capability.name}」`,
+        message: '将物理删除全部发布版本与草稿，不可恢复。当前没有画布实例或嵌套引用。',
+        confirmText: '删除',
+        danger: true
+      }))
+    )
+      return
+    const result = await window.api.composite.delete({ capabilityId: capability.id })
+    if (!result.ok) return toast(`删除失败：${result.error.message}`)
+    toast(`已删除节点流「${capability.name}」`)
+    refreshComposites()
+  }
 
   // 将节点库条目添加到画布：点击放在视口中心，拖拽则落在光标位置。
   const handleApply = (tmpl: WorkflowTemplate, dropScreen?: { x: number; y: number }): void => {
@@ -152,9 +201,15 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
         title: capability.name,
         w: 340,
         h: 260,
-        config: JSON.stringify({ manifest: result.data.manifest })
-      }
-    })
+        // W3 引用形态：config 存固定版本引用，快照缓存 meta。
+        config: JSON.stringify({
+          capabilityId: capability.id,
+          version,
+          contentHash: result.data.contentHash
+        })
+      },
+      meta: { compositeManifest: result.data.manifest }
+    } as never)
     editor.select(id)
     toast(`已添加组合「${capability.name} v${versionLabel(version)}」`)
   }
@@ -221,6 +276,14 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
           aria-label="搜索节点库"
         />
       </label>
+      <label className="composite-archived-toggle">
+        <input
+          type="checkbox"
+          checked={includeArchived}
+          onChange={(event) => setIncludeArchived(event.target.checked)}
+        />
+        <span>含已归档节点流</span>
+      </label>
       {templates.length === 0 && composites.length === 0 ? (
         <div className="side-panel-empty">
           节点库还是空的。右键点击画布节点，选择「保存节点」中的流程模板；也可以多选节点后使用浮动工具栏保存。
@@ -243,6 +306,7 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
                 </span>
                 <span className="asset-meta">
                   v{(capability.latestVersion ?? '—').replace(/\.0\.0$/, '.0')} · 组合节点
+                  {capability.archived ? ' · 已归档' : ''}
                 </span>
                 <span className="composite-card-actions">
                   <button
@@ -275,6 +339,26 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
                   >
                     版本
                   </button>
+                  <button
+                    type="button"
+                    className="btn-ghost small"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void handleArchiveComposite(capability)
+                    }}
+                  >
+                    {capability.archived ? '恢复' : '归档'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost small"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void handleDeleteComposite(capability)
+                    }}
+                  >
+                    删除
+                  </button>
                 </span>
               </div>
             </article>
@@ -298,11 +382,7 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
         projectId={projectId}
         draftRevision={canvasEdit.draftRevision}
         onClose={() => setCanvasEdit(null)}
-        onSaved={() => {
-          void window.api.composite.search().then((result) => {
-            if (result.ok) setComposites(result.data)
-          })
-        }}
+        onSaved={refreshComposites}
       />
     )}
     {versionDialog && (
@@ -310,11 +390,7 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
         capability={versionDialog.capability}
         mode={versionDialog.mode}
         onClose={() => setVersionDialog(null)}
-        onPublished={() => {
-          void window.api.composite.search().then((result) => {
-            if (result.ok) setComposites(result.data)
-          })
-        }}
+        onPublished={refreshComposites}
       />
     )}
     </>

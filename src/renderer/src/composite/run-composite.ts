@@ -16,6 +16,7 @@ import type {
 import { parseMediaResultCollection } from '@shared/engine/values'
 import { compositeContentHash } from '@shared/composite/manifest'
 import {
+  checkCompositeRunBudget,
   collectCompositeOutputs,
   compositeOutputSummary,
   planCompositeInputBindings
@@ -63,6 +64,10 @@ async function execute(
 ): Promise<CompositeRunOutcome> {
   const { manifest } = request
   if (request.signal?.cancelled) return { status: 'failed', reason: '节点流运行已取消' }
+  // W3 运行期守卫：递归、嵌套深度与展开预算与发布校验同口径拒绝。
+  // 拒绝同样写入运行台账（failurePhase=runtime），保证可定位、可审计。
+  const budget = checkCompositeRunBudget(manifest, request.parentContext)
+  const runContext = { chain: budget.chain, expandedNodes: budget.expandedNodes }
   // 每次调用独立运行 ID；request.runId 是外层（父）运行，用于父子关联。
   const runId = crypto.randomUUID()
   const parentRunId = request.runId
@@ -108,6 +113,61 @@ async function execute(
       })
     )
     ledgerStarted = true
+    if (budget.issue) {
+      failure = { code: budget.issue.code, phase: 'runtime' }
+      await finish('failed', {
+        errorCode: failure.code,
+        errorMessage: budget.issue.message,
+        failurePhase: failure.phase
+      })
+      return {
+        status: 'failed',
+        reason: budget.issue.message,
+        failure,
+        stepCount: 0
+      }
+    }
+    // W3：引用形态的内部组合节点必须先解析固定版本快照并缓存到 meta，
+    // 否则 resolvePorts 推导不出公开端口，内部连线与输入绑定会失败。
+    // 与主画布 graph.patch 的 meta.compositeManifest 缓存同口径。
+    const nestedManifests = new Map<string, CompositeManifest>()
+    for (const node of manifest.graph.nodes) {
+      if (node.nodeType !== 'composite') continue
+      let parsed: {
+        manifest?: CompositeManifest
+        ref?: { capabilityId?: string; version?: string; contentHash?: string }
+        capabilityId?: string
+        version?: string
+        contentHash?: string
+      }
+      try {
+        parsed = JSON.parse(node.config || '{}')
+      } catch {
+        parsed = {}
+      }
+      if (parsed.manifest) continue
+      const ref =
+        parsed.ref ??
+        (parsed.capabilityId
+          ? { capabilityId: parsed.capabilityId, version: parsed.version, contentHash: parsed.contentHash }
+          : undefined)
+      if (!ref?.capabilityId || !ref.version) continue
+      const result = await window.api.composite.versionGet({
+        capabilityId: ref.capabilityId,
+        version: ref.version
+      })
+      if (!result.ok || !result.data || (ref.contentHash && result.data.contentHash !== ref.contentHash)) {
+        failure = { code: 'COMPOSITE_REF_NOT_RESOLVED', phase: 'input', nodeId: node.id }
+        const reason = `内部组合节点固定版本引用无法解析：${ref.capabilityId}@${ref.version}`
+        await finish('failed', {
+          errorCode: failure.code,
+          errorMessage: reason,
+          failurePhase: failure.phase
+        })
+        return { status: 'failed', reason, failure, stepCount: 0 }
+      }
+      nestedManifests.set(node.id, result.data.manifest)
+    }
     for (const node of manifest.graph.nodes) {
       const id = createShapeId()
       shapeByNode.set(node.id, id)
@@ -127,8 +187,11 @@ async function execute(
           mediaId: media?.mediaId ?? '',
           mediaPath: media?.mediaPath ?? '',
           mediaMime: media?.mime ?? ''
-        }
-      })
+        },
+        ...(nestedManifests.has(node.id)
+          ? { meta: { compositeManifest: nestedManifests.get(node.id) } }
+          : {})
+      } as never)
     }
 
     if (runtimeVersion === 1) {
@@ -232,7 +295,7 @@ async function execute(
       await report(() =>
         window.api.composite.runStep({ runId, stepKey: nodeId, nodeType, status: 'running' })
       )
-      const result = await runNodeManually(runEditor, projectId, providers, shapeId)
+      const result = await runNodeManually(runEditor, projectId, providers, shapeId, undefined, undefined, runContext)
       await report(() =>
         window.api.composite.runStep({
           runId,

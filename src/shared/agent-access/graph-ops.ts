@@ -362,6 +362,17 @@ export const mediaResolutionSchema = z
 export type MediaResolution = z.infer<typeof mediaResolutionSchema>
 export type MediaResolutionMap = Record<string, MediaResolution>
 
+/**
+ * W3 组合固定版本引用解析：外部 op 只携带 {capabilityId, version, contentHash?}，
+ * main 从发布仓库解析快照并按 key 注入宿主载荷（create: ref:<ref>/index:<i>；
+ * update: node:<nodeId>）。快照存实例 meta，不占 config 64KiB 配额。
+ */
+export interface CompositeResolution {
+  manifest: import('../composite/manifest').CompositeManifest
+  contentHash: string
+}
+export type CompositeResolutionMap = Record<string, CompositeResolution>
+
 /** main 侧结构预检：引用可解析、ref 唯一、目标存在。类型/端口/兼容校验由权威宿主做。 */
 export function resolvePatchReferences(
   ops: readonly GraphPatchOp[],

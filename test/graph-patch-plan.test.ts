@@ -342,4 +342,104 @@ describe('graph.patch 规划器校验矩阵', () => {
     withManifest.plan.apply(compositeEditor)
     expect((compositeEditor as any).__created[0].props.nodeType).toBe('composite')
   })
+
+  it('W3：composite 固定版本引用插入——config 只存引用，快照进 meta，未解析拒绝', () => {
+    const manifest = {
+      schemaVersion: 1,
+      runtimeVersion: 2,
+      capabilityId: 'copy-polish',
+      version: '1.0',
+      name: '文案整理',
+      inputs: [
+        { id: 'copy', label: '文案', type: 'text', required: true, cardinality: 'one', targets: [{ nodeId: 'n1', portId: 'in-text' }] }
+      ],
+      outputs: [
+        { id: 'polished', label: '结果', type: 'text', required: true, cardinality: 'one', source: { nodeId: 'n1', portId: 'out-text' } }
+      ],
+      graph: { nodes: [], edges: [] },
+      dependencies: []
+    }
+    const contentHash = 'a'.repeat(64)
+    const op = {
+      action: 'node.create',
+      nodeType: 'composite',
+      x: 0,
+      y: 0,
+      config: { capabilityId: 'copy-polish', version: '1.0' }
+    }
+    const unresolved = planGraphPatch(mockEditor([]), [op], [])
+    expect(unresolved).toMatchObject({ ok: false, issue: { code: 'COMPOSITE_REF_NOT_RESOLVED' } })
+
+    const editor = mockEditor([])
+    const planned = planGraphPatch(editor, [op], [], undefined, {
+      'index:0': { manifest: manifest as never, contentHash }
+    })
+    expect(planned.ok).toBe(true)
+    if (!planned.ok) return
+    planned.plan.apply(editor)
+    const created = (editor as any).__created[0]
+    expect(JSON.parse(created.props.config)).toEqual({
+      capabilityId: 'copy-polish',
+      version: '1.0',
+      contentHash
+    })
+    expect(created.meta.compositeManifest).toEqual(manifest)
+    // 引用形态 config 很小，不受 64KiB 上限约束（快照在 meta）。
+    expect(created.props.config.length).toBeLessThan(512)
+  })
+
+  it('W3：引用升级 node.update 替换实例绑定，并按新端口校验现有连线', () => {
+    const oldManifest = {
+      schemaVersion: 1,
+      runtimeVersion: 2,
+      capabilityId: 'copy-polish',
+      version: '1.0',
+      name: '文案整理',
+      inputs: [{ id: 'copy', label: '文案', type: 'text', required: true, cardinality: 'one', targets: [{ nodeId: 'n1', portId: 'in-text' }] }],
+      outputs: [{ id: 'polished', label: '结果', type: 'text', required: true, cardinality: 'one', source: { nodeId: 'n1', portId: 'out-text' } }],
+      graph: { nodes: [], edges: [] },
+      dependencies: []
+    }
+    const nextManifest = { ...oldManifest, version: '2.0' }
+    const contentHash = 'b'.repeat(64)
+    const instance = card('inst', 'composite', JSON.stringify({ manifest: oldManifest }))
+    const source = card('src', 'text', '', '上游正文')
+    const edge = arrow('e1', 'src', 'inst', 'out-text', 'in-copy')
+    const bindings: Array<[string, { from: string; to: string }]> = [['e1', { from: 'src', to: 'inst' }]]
+
+    // 兼容升级：端口保留 → 通过，config 变引用、meta 换新快照。
+    const okEditor = editorWith([instance, source, edge], bindings)
+    const okPlan = planGraphPatch(
+      okEditor,
+      [{ action: 'node.update', nodeId: 'shape:inst', config: { capabilityId: 'copy-polish', version: '2.0' } }],
+      [],
+      undefined,
+      { 'node:shape:inst': { manifest: nextManifest as never, contentHash } }
+    )
+    expect(okPlan.ok).toBe(true)
+    if (okPlan.ok) {
+      okPlan.plan.apply(okEditor)
+      const updates = (okEditor as any).__updated as Array<Record<string, any>>
+      const configUpdate = updates.find((u) => u.props?.config)
+      expect(JSON.parse(configUpdate.props.config)).toEqual({
+        capabilityId: 'copy-polish',
+        version: '2.0',
+        contentHash
+      })
+      const metaUpdate = updates.find((u) => u.meta?.compositeManifest)
+      expect(metaUpdate.meta.compositeManifest.version).toBe('2.0')
+    }
+
+    // 不兼容升级：删除已连接输入端口 → EDGE_PORT_INVALID，整批拒绝。
+    const breakingManifest = { ...nextManifest, inputs: [] }
+    const badEditor = editorWith([instance, source, edge], bindings)
+    const badPlan = planGraphPatch(
+      badEditor,
+      [{ action: 'node.update', nodeId: 'shape:inst', config: { capabilityId: 'copy-polish', version: '2.0' } }],
+      [],
+      undefined,
+      { 'node:shape:inst': { manifest: breakingManifest as never, contentHash } }
+    )
+    expect(badPlan).toMatchObject({ ok: false, issue: { code: 'EDGE_PORT_INVALID' } })
+  })
 })

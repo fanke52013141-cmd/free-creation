@@ -36,6 +36,29 @@ describe('节点就绪状态', () => {
     ).toMatchObject({ kind: 'blocked', label: '缺少输入：正文' })
   })
 
+  it('契约固定输入（节点流 defaultValue）未连线也可运行，与运行时必填口径一致', () => {
+    const base = {
+      executionMode: 'auto' as const,
+      exec: 'idle',
+      nodeType: 'composite',
+      inputs: [requiredText],
+      incomingCounts: new Map(),
+      outputs: {}
+    }
+    expect(deriveNodeReadiness(base)).toMatchObject({ kind: 'blocked', reason: 'not-connected' })
+    expect(
+      deriveNodeReadiness({ ...base, fixedSatisfiedInputPorts: new Set(['in-text']) })
+    ).toMatchObject({ kind: 'ready' })
+    // 固定输入只豁免未连线的必填端口；其它必填缺口仍阻断。
+    expect(
+      deriveNodeReadiness({
+        ...base,
+        inputs: [requiredText, { ...requiredText, id: 'in-extra', name: '额外' }],
+        fixedSatisfiedInputPorts: new Set(['in-text'])
+      })
+    ).toMatchObject({ kind: 'blocked', label: '缺少输入：额外' })
+  })
+
   it('手动发布节点仅工程摘要时仍提示等待发布', () => {
     expect(
       deriveNodeReadiness({
