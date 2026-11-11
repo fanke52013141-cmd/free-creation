@@ -28,6 +28,12 @@ import {
   listCompositeRuns,
   recordCompositeRunStep
 } from '../store/composite-run.repo'
+import {
+  compositeErrorCode
+} from '../../shared/composite/errors'
+import { emitGatewayEvent } from '../diagnostics/gateway-events'
+import { newSpanId } from '../../shared/observability'
+import type { GatewayDiagnosticsContext } from '../../shared/contracts'
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -37,9 +43,23 @@ function failure(error: unknown): IpcEnvelope<never> {
   return {
     ok: false,
     error: {
-      code: 'COMPOSITE_ERROR',
+      code: compositeErrorCode(error, 'COMPOSITE_ERROR'),
       message: error instanceof Error ? error.message : String(error)
     }
+  }
+}
+
+/**
+ * 运行事件上下文：以节点流 runId 作 traceId，实例节点与项目用于定位；
+ * 不携带错误正文、输入正文或媒体路径。
+ */
+function runDiagnostics(runId: string): GatewayDiagnosticsContext {
+  const record = getCompositeRun(runId)?.run
+  return {
+    traceId: runId,
+    spanId: newSpanId(),
+    ...(record?.projectId ? { projectId: record.projectId } : {}),
+    ...(record?.instanceNodeId ? { nodeId: record.instanceNodeId } : {})
   }
 }
 
@@ -48,7 +68,27 @@ export function registerCompositeIpc(): void {
     IPC.composite.runStart,
     (_event, input: Parameters<typeof createCompositeRun>[0]): IpcEnvelope<unknown> => {
       try {
-        return ok(createCompositeRun(input))
+        const record = createCompositeRun(input)
+        emitGatewayEvent(
+          'composite.run.started',
+          '节点流运行开始',
+          {
+            traceId: record.id,
+            spanId: newSpanId(),
+            projectId: record.projectId,
+            ...(record.instanceNodeId ? { nodeId: record.instanceNodeId } : {})
+          },
+          {
+            phase: 'run',
+            attributes: {
+              capabilityId: record.capabilityId,
+              capabilityVersion: record.capabilityVersion,
+              ...(record.parentRunId ? { parentRunId: record.parentRunId } : {}),
+              ...(record.instanceNodeId ? { instanceNodeId: record.instanceNodeId } : {})
+            }
+          }
+        )
+        return ok(record)
       } catch (error) {
         return failure(error)
       }
@@ -59,6 +99,22 @@ export function registerCompositeIpc(): void {
     (_event, input: Parameters<typeof recordCompositeRunStep>[0]): IpcEnvelope<boolean> => {
       try {
         recordCompositeRunStep(input)
+        if (input.status === 'failed') {
+          const context = runDiagnostics(input.runId)
+          emitGatewayEvent(
+            'composite.run.step_failed',
+            '节点流内部步骤失败',
+            context,
+            {
+              phase: 'step',
+              attributes: {
+                code: 'STEP_FAILED',
+                stepKey: input.stepKey,
+                nodeType: input.nodeType
+              }
+            }
+          )
+        }
         return ok(true)
       } catch (error) {
         return failure(error)
@@ -69,8 +125,29 @@ export function registerCompositeIpc(): void {
     IPC.composite.runFinish,
     (_event, input: Parameters<typeof finishCompositeRun>[0]): IpcEnvelope<boolean> => {
       try {
-        finishCompositeRun(input)
-        return ok(true)
+        const changed = finishCompositeRun(input)
+        if (changed) {
+          const context = runDiagnostics(input.runId)
+          const record = getCompositeRun(input.runId)?.run
+          const event =
+            input.status === 'completed'
+              ? 'composite.run.completed'
+              : input.status === 'cancelled'
+                ? 'composite.run.cancelled'
+                : 'composite.run.failed'
+          emitGatewayEvent(event, input.status === 'completed' ? '节点流运行完成' : '节点流运行结束', context, {
+            phase: input.failurePhase ?? 'run',
+            attributes: {
+              ...(input.errorCode ? { code: input.errorCode } : {}),
+              ...(record?.capabilityId ? { capabilityId: record.capabilityId } : {}),
+              ...(record?.capabilityVersion
+                ? { capabilityVersion: record.capabilityVersion }
+                : {}),
+              outputPortCount: input.outputPorts?.length ?? 0
+            }
+          })
+        }
+        return ok(changed)
       } catch (error) {
         return failure(error)
       }
@@ -144,7 +221,12 @@ export function registerCompositeIpc(): void {
       input: CompositePublishInput
     ): Promise<IpcEnvelope<{ record: CompositeVersionRecord; created: boolean }>> => {
       try {
-        return ok(await publishCompositeVersion(input?.manifest, input?.publishedBy))
+        return ok(
+          await publishCompositeVersion(input?.manifest, {
+            publishedBy: input?.publishedBy,
+            expectedRevision: input?.expectedRevision
+          })
+        )
       } catch (error) {
         return failure(error)
       }

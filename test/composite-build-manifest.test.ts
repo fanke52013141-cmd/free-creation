@@ -144,4 +144,97 @@ describe('组合草稿边界提取（P1）', () => {
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.manifest.outputs.length).toBeGreaterThan(0)
   })
+
+  it('W1：嵌套节点流登记固定 capabilityId@version，运行语义写 2', () => {
+    const nestedManifest = {
+      schemaVersion: 1,
+      runtimeVersion: 2,
+      capabilityId: 'copy-polish',
+      version: '1.0',
+      name: '文案整理',
+      inputs: [
+        {
+          id: 'copy',
+          label: '文案',
+          type: 'text',
+          required: true,
+          cardinality: 'one',
+          targets: [{ nodeId: 'n1', portId: 'in-text' }]
+        }
+      ],
+      outputs: [
+        {
+          id: 'polished',
+          label: '整理结果',
+          type: 'text',
+          required: true,
+          cardinality: 'one',
+          source: { nodeId: 'n1', portId: 'out-text' }
+        }
+      ],
+      graph: {
+        nodes: [
+          {
+            id: 'n1',
+            nodeType: 'text',
+            contractVersion: 3,
+            title: '文案',
+            dx: 0,
+            dy: 0,
+            w: 340,
+            h: 300,
+            ports: [
+              { id: 'in-text', name: 'in-text', dir: 'in', type: 'text', required: true, cardinality: 'one' },
+              { id: 'out-text', name: 'out-text', dir: 'out', type: 'text', required: true, cardinality: 'one' }
+            ]
+          }
+        ],
+        edges: []
+      },
+      dependencies: [{ kind: 'node', id: 'text', contractVersion: 3 }]
+    }
+    const text = node({
+      id: 'shape:text',
+      type: 'text',
+      title: '标题',
+      content: { kind: 'text', text: '' },
+      ports: [
+        port({ id: 'in-text', dir: 'in', type: 'text' }),
+        port({ id: 'out-text', dir: 'out', type: 'text' })
+      ]
+    })
+    const nested = node({
+      id: 'shape:nested',
+      type: 'composite',
+      title: '文案整理',
+      x: 380,
+      params: { config: JSON.stringify({ manifest: nestedManifest }) },
+      ports: [
+        port({ id: 'in-copy', dir: 'in', type: 'text', name: '文案' }),
+        port({ id: 'out-polished', dir: 'out', type: 'text', name: '整理结果' })
+      ]
+    })
+    const result = buildCompositeManifestFromGraph({
+      capabilityId: 'title-polish',
+      name: '标题整理',
+      version: '1.0',
+      nodes: [text, nested],
+      edges: [
+        {
+          id: 'e1',
+          from: { nodeId: 'shape:text', portId: 'out-text' },
+          to: { nodeId: 'shape:nested', portId: 'in-copy' }
+        }
+      ],
+      selectedNodeIds: ['shape:text', 'shape:nested']
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.manifest.runtimeVersion).toBe(2)
+    expect(result.manifest.dependencies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'capability', id: 'copy-polish', version: '1.0' })
+      ])
+    )
+  })
 })

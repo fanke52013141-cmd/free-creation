@@ -126,22 +126,40 @@ describe('组合能力存储（P1）', () => {
     expect(getCompositeDraft('character-design')).toBeNull()
   })
 
-  it('发布可覆盖旧版本、同内容幂等，latestVersion 取最高主版本', async () => {
+  it('W1：发布不可变、同内容幂等、版本必须递增，失败保留草稿', async () => {
     const published = await publishCompositeVersion(manifest())
     expect(published.created).toBe(true)
     expect(published.record.contentHash).toMatch(/^[a-f0-9]{64}$/)
     const repeat = await publishCompositeVersion(manifest())
     expect(repeat.created).toBe(false)
 
-    // 用户裁决：允许直接修改旧版本，不强制按副版本递增。
-    const replaced = await publishCompositeVersion(manifest({ name: '修改后的人物设计' }))
-    expect(replaced.created).toBe(false)
-    expect(getCompositeVersion('character-design', '1.0')?.manifest.name).toBe('修改后的人物设计')
+    // 同版本不同内容拒绝覆盖，旧版本内容与摘要保持原样。
+    await expect(
+      publishCompositeVersion(manifest({ name: '修改后的人物设计' }))
+    ).rejects.toMatchObject({ code: 'VERSION_IMMUTABLE' })
+    expect(getCompositeVersion('character-design', '1.0')?.manifest.name).toBe('人物设计')
 
-    await publishCompositeVersion(manifest({ version: '2.0' }))
-    expect(listCompositeCapabilities()[0].latestVersion).toBe('2.0')
+    // 新版本必须大于当前最新。
+    await expect(publishCompositeVersion(manifest({ version: '2.0' }))).resolves.toMatchObject({
+      created: true
+    })
+    await expect(
+      publishCompositeVersion(manifest({ version: '2.0', name: '覆盖 2.0' }))
+    ).rejects.toMatchObject({ code: 'VERSION_IMMUTABLE' })
+    expect(getCompositeVersion('character-design', '1.0')?.manifest.name).toBe('人物设计')
     expect(getCompositeVersion('character-design', '2.0')?.manifest.version).toBe('2.0')
+    expect(listCompositeCapabilities()[0].latestVersion).toBe('2.0')
     await expect(verifyCompositeVersion('character-design', '1.0')).resolves.toEqual({ ok: true })
+
+    // expectedRevision 过期时拒绝发布，草稿仍保留。
+    const draft = await saveCompositeDraft(manifest({ version: '3.0' }))
+    await expect(
+      publishCompositeVersion(manifest({ version: '3.0' }), {
+        expectedRevision: draft.revision - 1
+      })
+    ).rejects.toMatchObject({ code: 'DRAFT_REVISION_CONFLICT' })
+    expect(getCompositeDraft('character-design')?.revision).toBe(draft.revision)
+    expect(getCompositeVersion('character-design', '3.0')).toBeNull()
   })
 
   it('按名称/标签搜索，归档后默认不可见但版本仍可读', async () => {

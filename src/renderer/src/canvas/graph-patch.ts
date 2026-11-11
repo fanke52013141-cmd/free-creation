@@ -198,7 +198,13 @@ export function planGraphPatch(
     const op = ops[index]
     if (op.action === 'node.create') {
       const spec = getNodeType(op.nodeType)
-      if (!spec || spec.creatable === false) return fail(index, 'NODE_TYPE_INVALID', op.nodeType)
+      // `composite` 是内部节点类型：不进入创建面板，但允许以固定 manifest 快照插入实例。
+      const internalComposite =
+        op.nodeType === 'composite' &&
+        typeof op.config?.manifest === 'object' &&
+        op.config.manifest !== null
+      if (!spec || (spec.creatable === false && !internalComposite))
+        return fail(index, 'NODE_TYPE_INVALID', op.nodeType)
       const config = initialConfigString(spec, op.config, modelBindings)
       if (configByteLength(config) > GRAPH_NODE_CONFIG_MAX_BYTES)
         return fail(index, 'CONFIG_TOO_LARGE')

@@ -60,4 +60,49 @@ describe('组合实例版本升级（P4）', () => {
     ])
     expect(connected.ok).toBe(false)
   })
+
+  it('W1：新增必填输入阻断，新增可选输入放行', () => {
+    const required = manifest({
+      version: '2.0',
+      inputs: [
+        ...manifest().inputs,
+        { id: 'style', label: '风格', type: 'text', required: true, cardinality: 'one', targets: [{ nodeId: 'n1', portId: 'in-text' }] }
+      ]
+    })
+    const plan = planCompositeUpgrade(manifest(), required, [])
+    expect(plan.ok).toBe(false)
+    expect(plan.impact.addedRequiredInputs).toEqual(['in-style'])
+    expect(plan.impact.breaking[0].portId).toBe('in-style')
+  })
+
+  it('W1：已连接端口的 Schema/基数/必填变化可定位到原连线', () => {
+    const next = manifest({ version: '2.0' })
+    next.inputs[0] = {
+      ...next.inputs[0],
+      type: 'json',
+      required: false,
+      cardinality: 'many',
+      schemaRef: { id: 'json.any', version: 1 }
+    }
+    const plan = planCompositeUpgrade(manifest(), next, [
+      { dir: 'in', portId: 'in-requirements', type: 'text', cardinality: 'one', nodeId: 'shape:outer', edgeId: 'edge:1' }
+    ])
+    expect(plan.ok).toBe(false)
+    expect(plan.impact.typeChanged).toContainEqual({
+      portId: 'in-requirements',
+      from: 'text',
+      to: 'json'
+    })
+    expect(plan.impact.cardinalityChanged).toContainEqual({
+      portId: 'in-requirements',
+      from: 'one',
+      to: 'many'
+    })
+    expect(plan.impact.requiredChanged).toContainEqual({
+      portId: 'in-requirements',
+      from: true,
+      to: false
+    })
+    expect(plan.impact.breaking[0]).toMatchObject({ nodeId: 'shape:outer', edgeId: 'edge:1' })
+  })
 })

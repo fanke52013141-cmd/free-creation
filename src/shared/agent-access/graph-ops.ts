@@ -29,7 +29,11 @@ const nodeCreate = z
     action: z.literal('node.create'),
     /** 客户端临时引用：同批 edge.create 端口与回执 created 映射用它寻址。 */
     ref: accessClientRef.optional(),
-    nodeType: z.enum(ACTIVE_NODE_TYPE_IDS),
+    /**
+     * 可创建节点 + 内部节点流实例。`composite` 不从节点面板新建，
+     * 但外部插入固定版本实例必须与 GUI「节点库 → 插入」走同一条图编辑路径。
+     */
+    nodeType: z.union([z.enum(ACTIVE_NODE_TYPE_IDS), z.literal('composite')]),
     title: z.string().max(GRAPH_NODE_TITLE_MAX_CHARS).optional(),
     x: coord,
     y: coord,

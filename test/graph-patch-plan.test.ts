@@ -314,4 +314,32 @@ describe('graph.patch 规划器校验矩阵', () => {
     const malformed = planGraphPatch(editorWith([], []), [{ action: 'node.frobnicate' } as never], [])
     expect(malformed).toMatchObject({ ok: false, issue: { code: 'INVALID_INPUT' } })
   })
+
+  it('W1：composite 只允许带固定 manifest 快照插入，不能无配置创建', () => {
+    const withoutManifest = planGraphPatch(
+      editorWith([], []),
+      [{ action: 'node.create', nodeType: 'composite', x: 0, y: 0 }],
+      []
+    )
+    expect(withoutManifest).toMatchObject({ ok: false, issue: { code: 'NODE_TYPE_INVALID' } })
+
+    const compositeEditor = mockEditor([])
+    const withManifest = planGraphPatch(
+      compositeEditor,
+      [
+        {
+          action: 'node.create',
+          nodeType: 'composite',
+          x: 0,
+          y: 0,
+          config: { manifest: { capabilityId: 'copy-polish', version: '1.0' } }
+        }
+      ],
+      []
+    )
+    expect(withManifest.ok).toBe(true)
+    if (!withManifest.ok) return
+    withManifest.plan.apply(compositeEditor)
+    expect((compositeEditor as any).__created[0].props.nodeType).toBe('composite')
+  })
 })

@@ -1743,40 +1743,48 @@
                       "pattern": "^[a-zA-Z0-9_-]{1,64}$"
                     },
                     "nodeType": {
-                      "type": "string",
-                      "enum": [
-                        "text",
-                        "image",
-                        "image-crop",
-                        "image-split",
-                        "image-gen",
-                        "image-edit",
-                        "website",
-                        "video",
-                        "video-asset",
-                        "video-frame",
-                        "video-clip",
-                        "video-depth",
-                        "video-clay",
-                        "timeline",
-                        "audio",
-                        "sound-adjust",
-                        "file",
-                        "speech",
-                        "tts",
-                        "voice-design",
-                        "chat",
-                        "processor",
-                        "code",
-                        "json",
-                        "structured",
-                        "storyboard",
-                        "ai-process",
-                        "iterate",
-                        "director",
-                        "agent",
-                        "state-machine",
-                        "ai-review"
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "text",
+                            "image",
+                            "image-crop",
+                            "image-split",
+                            "image-gen",
+                            "image-edit",
+                            "website",
+                            "video",
+                            "video-asset",
+                            "video-frame",
+                            "video-clip",
+                            "video-depth",
+                            "video-clay",
+                            "timeline",
+                            "audio",
+                            "sound-adjust",
+                            "file",
+                            "speech",
+                            "tts",
+                            "voice-design",
+                            "chat",
+                            "processor",
+                            "code",
+                            "json",
+                            "structured",
+                            "storyboard",
+                            "ai-process",
+                            "iterate",
+                            "director",
+                            "agent",
+                            "state-machine",
+                            "ai-review"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "const": "composite"
+                        }
                       ]
                     },
                     "title": {
@@ -13389,6 +13397,11 @@
                     "type": "number",
                     "const": 1
                   },
+                  "runtimeVersion": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2
+                  },
                   "capabilityId": {
                     "type": "string",
                     "minLength": 1,
@@ -14079,6 +14092,11 @@
                         "type": "number",
                         "const": 1
                       },
+                      "runtimeVersion": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 2
+                      },
                       "capabilityId": {
                         "type": "string",
                         "minLength": 1,
@@ -14711,7 +14729,7 @@
       "operationId": "composite.draft.save",
       "operationVersion": 1,
       "effect": "write",
-      "description": "创建/更新组合草稿；expectedRevision 用于乐观并发，冲突返回草稿修订错误",
+      "description": "创建/更新组合草稿；允许未接完的图并返回问题；expectedRevision 用于乐观并发，冲突返回 DRAFT_REVISION_CONFLICT 且保留草稿",
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -14723,6 +14741,11 @@
               "schemaVersion": {
                 "type": "number",
                 "const": 1
+              },
+              "runtimeVersion": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2
               },
               "capabilityId": {
                 "type": "string",
@@ -15411,6 +15434,11 @@
                 "type": "number",
                 "const": 1
               },
+              "runtimeVersion": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2
+              },
               "capabilityId": {
                 "type": "string",
                 "minLength": 1,
@@ -16096,7 +16124,7 @@
       "operationId": "composite.publish",
       "operationVersion": 1,
       "effect": "write",
-      "description": "发布不可变组合版本；同版本同摘要幂等，同版本异摘要拒绝覆盖",
+      "description": "发布不可变组合版本：同版本同摘要幂等；同版本异摘要返回 VERSION_IMMUTABLE；新版本必须递增，可带 expectedRevision 校验草稿未被他人改动",
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -16108,6 +16136,717 @@
               "schemaVersion": {
                 "type": "number",
                 "const": 1
+              },
+              "runtimeVersion": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2
+              },
+              "capabilityId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^\\d+\\.0(\\.0)?$"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 600
+              },
+              "tags": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 40
+                }
+              },
+              "inputs": {
+                "maxItems": 32,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "pattern": "^[a-z][a-z0-9-]*$"
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "text",
+                        "markdown",
+                        "json",
+                        "image",
+                        "video",
+                        "audio",
+                        "file",
+                        "any"
+                      ]
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "cardinality": {
+                      "type": "string",
+                      "enum": [
+                        "one",
+                        "many"
+                      ]
+                    },
+                    "description": {
+                      "type": "string",
+                      "maxLength": 300
+                    },
+                    "schema": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "schemaRef": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "version": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "defaultValue": {},
+                    "targets": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "nodeId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80,
+                            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+                          },
+                          "portId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          }
+                        },
+                        "required": [
+                          "nodeId",
+                          "portId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "type",
+                    "required",
+                    "cardinality",
+                    "targets"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "outputs": {
+                "minItems": 1,
+                "maxItems": 32,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "pattern": "^[a-z][a-z0-9-]*$"
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "text",
+                        "markdown",
+                        "json",
+                        "image",
+                        "video",
+                        "audio",
+                        "file",
+                        "any"
+                      ]
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "cardinality": {
+                      "type": "string",
+                      "enum": [
+                        "one",
+                        "many"
+                      ]
+                    },
+                    "description": {
+                      "type": "string",
+                      "maxLength": 300
+                    },
+                    "schema": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "schemaRef": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "version": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "defaultValue": {},
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "nodeId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+                        },
+                        "portId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        }
+                      },
+                      "required": [
+                        "nodeId",
+                        "portId"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "type",
+                    "required",
+                    "cardinality",
+                    "source"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "graph": {
+                "type": "object",
+                "properties": {
+                  "nodes": {
+                    "minItems": 1,
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+                        },
+                        "nodeType": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 60
+                        },
+                        "contractVersion": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "title": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "dx": {
+                          "type": "number"
+                        },
+                        "dy": {
+                          "type": "number"
+                        },
+                        "w": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        "h": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        "text": {
+                          "type": "string"
+                        },
+                        "config": {
+                          "type": "string"
+                        },
+                        "ports": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80
+                              },
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80
+                              },
+                              "dir": {
+                                "type": "string",
+                                "enum": [
+                                  "in",
+                                  "out"
+                                ]
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "text",
+                                  "markdown",
+                                  "json",
+                                  "image",
+                                  "video",
+                                  "audio",
+                                  "file",
+                                  "any"
+                                ]
+                              },
+                              "required": {
+                                "type": "boolean"
+                              },
+                              "cardinality": {
+                                "type": "string",
+                                "enum": [
+                                  "one",
+                                  "many"
+                                ]
+                              },
+                              "schemaRef": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 80
+                                  },
+                                  "version": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "version"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "dir",
+                              "type",
+                              "required",
+                              "cardinality"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "mediaRefs": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "mediaId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 120
+                              },
+                              "mediaPath": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 500
+                              },
+                              "mime": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 120
+                              }
+                            },
+                            "required": [
+                              "mediaId",
+                              "mediaPath",
+                              "mime"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "nodeType",
+                        "contractVersion",
+                        "title",
+                        "dx",
+                        "dy",
+                        "w",
+                        "h"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "edges": {
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "from": {
+                          "type": "object",
+                          "properties": {
+                            "nodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80,
+                              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+                            },
+                            "portId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80
+                            }
+                          },
+                          "required": [
+                            "nodeId",
+                            "portId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "to": {
+                          "type": "object",
+                          "properties": {
+                            "nodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80,
+                              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+                            },
+                            "portId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80
+                            }
+                          },
+                          "required": [
+                            "nodeId",
+                            "portId"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "from",
+                        "to"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "nodes",
+                  "edges"
+                ],
+                "additionalProperties": false
+              },
+              "dependencies": {
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "node",
+                        "capability",
+                        "media",
+                        "model"
+                      ]
+                    },
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
+                    "version": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
+                    },
+                    "contractVersion": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "executionPolicy": {
+                "type": "object",
+                "properties": {
+                  "timeoutMs": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 86400000
+                  },
+                  "maxDepth": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 16
+                  },
+                  "maxExpandedNodes": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 500
+                  },
+                  "maxExpandedEdges": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1500
+                  },
+                  "waitForInput": {
+                    "type": "boolean"
+                  },
+                  "requiresManualGate": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "contentHash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "capabilityId",
+              "version",
+              "name",
+              "inputs",
+              "outputs",
+              "graph"
+            ],
+            "additionalProperties": false
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "manifest"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "composite.publish"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "capabilityId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^\\d+\\.0(\\.0)?$"
+              },
+              "contentHash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "created": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "capabilityId",
+              "version",
+              "contentHash",
+              "created"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "composite.upgrade.preview",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "按项目内已绑定实例的实际连线预检升级：比较端口 ID/类型/Schema/必填/基数，返回阻断项及受影响节点与边",
+      "requires": [],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "nodeId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 180
+          },
+          "nextManifest": {
+            "type": "object",
+            "properties": {
+              "schemaVersion": {
+                "type": "number",
+                "const": 1
+              },
+              "runtimeVersion": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2
               },
               "capabilityId": {
                 "type": "string",
@@ -16673,7 +17412,9 @@
           }
         },
         "required": [
-          "manifest"
+          "projectId",
+          "nodeId",
+          "nextManifest"
         ],
         "additionalProperties": false
       },
@@ -16690,7 +17431,7 @@
           },
           "operationId": {
             "type": "string",
-            "const": "composite.publish"
+            "const": "composite.upgrade.preview"
           },
           "traceId": {
             "type": "string"
@@ -16709,28 +17450,286 @@
           "data": {
             "type": "object",
             "properties": {
-              "capabilityId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 80
-              },
-              "version": {
+              "previousVersion": {
                 "type": "string",
                 "pattern": "^\\d+\\.0(\\.0)?$"
               },
-              "contentHash": {
+              "nextVersion": {
                 "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
+                "pattern": "^\\d+\\.0(\\.0)?$"
               },
-              "created": {
+              "ok": {
                 "type": "boolean"
+              },
+              "runtimeVersion": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "issues": {
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "maxLength": 60
+                    },
+                    "path": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "message": {
+                      "type": "string",
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "path",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "impact": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "fromVersion": {
+                        "type": "string",
+                        "maxLength": 40
+                      },
+                      "toVersion": {
+                        "type": "string",
+                        "maxLength": 40
+                      },
+                      "addedInputs": {
+                        "maxItems": 64,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 100
+                        }
+                      },
+                      "removedInputs": {
+                        "maxItems": 64,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 100
+                        }
+                      },
+                      "addedOutputs": {
+                        "maxItems": 64,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 100
+                        }
+                      },
+                      "removedOutputs": {
+                        "maxItems": 64,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 100
+                        }
+                      },
+                      "typeChanged": {
+                        "maxItems": 64,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "portId": {
+                              "type": "string",
+                              "maxLength": 100
+                            },
+                            "from": {
+                              "type": "string",
+                              "maxLength": 40
+                            },
+                            "to": {
+                              "type": "string",
+                              "maxLength": 40
+                            }
+                          },
+                          "required": [
+                            "portId",
+                            "from",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "requiredChanged": {
+                        "maxItems": 64,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "portId": {
+                              "type": "string",
+                              "maxLength": 100
+                            },
+                            "from": {
+                              "type": "boolean"
+                            },
+                            "to": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "portId",
+                            "from",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "schemaChanged": {
+                        "maxItems": 64,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "portId": {
+                              "type": "string",
+                              "maxLength": 100
+                            },
+                            "from": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 120
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "to": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 120
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "portId",
+                            "from",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "cardinalityChanged": {
+                        "maxItems": 64,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "portId": {
+                              "type": "string",
+                              "maxLength": 100
+                            },
+                            "from": {
+                              "type": "string",
+                              "enum": [
+                                "one",
+                                "many"
+                              ]
+                            },
+                            "to": {
+                              "type": "string",
+                              "enum": [
+                                "one",
+                                "many"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "portId",
+                            "from",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "addedRequiredInputs": {
+                        "maxItems": 64,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 100
+                        }
+                      },
+                      "breaking": {
+                        "maxItems": 64,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "portId": {
+                              "type": "string",
+                              "maxLength": 100
+                            },
+                            "reason": {
+                              "type": "string",
+                              "maxLength": 300
+                            },
+                            "nodeId": {
+                              "type": "string",
+                              "maxLength": 180
+                            },
+                            "edgeId": {
+                              "type": "string",
+                              "maxLength": 180
+                            }
+                          },
+                          "required": [
+                            "portId",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "fromVersion",
+                      "toVersion",
+                      "addedInputs",
+                      "removedInputs",
+                      "addedOutputs",
+                      "removedOutputs",
+                      "typeChanged",
+                      "requiredChanged",
+                      "schemaChanged",
+                      "cardinalityChanged",
+                      "addedRequiredInputs",
+                      "breaking"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
-              "capabilityId",
-              "version",
-              "contentHash",
-              "created"
+              "previousVersion",
+              "nextVersion",
+              "ok",
+              "impact"
             ],
             "additionalProperties": false
           },

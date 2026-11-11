@@ -6,6 +6,9 @@ import type {
 } from '../../shared/composite/types'
 import { compositeContentHash, parseCompositeManifest } from '../../shared/composite/manifest'
 import { validateCompositeManifest } from '../../shared/composite/validate'
+import { CompositePublishError, compositeErrorCode } from '../../shared/composite/errors'
+import { newSpanId, newTraceId } from '../../shared/observability'
+import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import { getDb } from './db'
 
 interface CapabilityRow {
@@ -86,13 +89,24 @@ function assertPublishManifest(value: unknown): CompositeManifest {
       return null
     }
   }
-  const result = validateCompositeManifest(value, { getCapability })
+  const result = validateCompositeManifest(value, {
+    getCapability,
+    hasCapability: (capabilityId, version) => getCapability(capabilityId, version) !== null
+  })
   if (!result.ok) {
-    throw new Error(
-      `组合契约无效：${result.issues.map((issue) => `[${issue.code}] ${issue.path}: ${issue.message}`).join('；')}`
+    throw new CompositePublishError(
+      'PUBLISH_INVALID',
+      `组合契约无效：${result.issues.map((issue) => `[${issue.code}] ${issue.path}: ${issue.message}`).join('；')}`,
+      {
+        issues: result.issues.map((issue) => ({
+          code: issue.code,
+          path: issue.path,
+          message: issue.message
+        }))
+      }
     )
   }
-  return result.ok ? (value as CompositeManifest) : (value as CompositeManifest)
+  return value as CompositeManifest
 }
 
 function assertManifest(value: unknown): CompositeManifest {
@@ -156,7 +170,28 @@ export async function saveCompositeDraft(
     .get(manifest.capabilityId) as DraftRow | undefined
   const currentRevision = existing?.revision ?? 0
   if (expectedRevision !== undefined && expectedRevision !== currentRevision) {
-    throw new Error(`草稿修订冲突：期望 ${expectedRevision}，当前 ${currentRevision}`)
+    emitGatewayEvent(
+      'composite.draft.save_failed',
+      '节点流草稿修订冲突，保留原草稿',
+      { traceId: newTraceId(), spanId: newSpanId() },
+      {
+        phase: 'repository',
+        attributes: {
+          code: 'DRAFT_REVISION_CONFLICT',
+          capabilityId: manifest.capabilityId,
+          ...(expectedRevision === undefined ? {} : { expectedRevision })
+        }
+      }
+    )
+    throw new CompositePublishError(
+      'DRAFT_REVISION_CONFLICT',
+      `草稿修订冲突：期望 ${expectedRevision}，当前 ${currentRevision}`,
+      {
+        capabilityId: manifest.capabilityId,
+        expectedRevision,
+        currentRevision
+      }
+    )
   }
   const revision = currentRevision + 1
   upsertCapabilityRow(manifest, now)
@@ -166,6 +201,19 @@ export async function saveCompositeDraft(
      ON CONFLICT(capability_id) DO UPDATE SET
        manifest = excluded.manifest, revision = excluded.revision, updated_at = excluded.updated_at`
   ).run(manifest.capabilityId, JSON.stringify(manifest), revision, now)
+  emitGatewayEvent(
+    'composite.draft.saved',
+    '节点流草稿已保存',
+    { traceId: newTraceId(), spanId: newSpanId() },
+    {
+      phase: 'repository',
+      attributes: {
+        capabilityId: manifest.capabilityId,
+        revision,
+        ...(expectedRevision === undefined ? {} : { expectedRevision })
+      }
+    }
+  )
   return {
     capabilityId: manifest.capabilityId,
     manifest,
@@ -187,74 +235,174 @@ export function deleteCompositeDraft(capabilityId: string): boolean {
   )
 }
 
+export interface CompositePublishOptions {
+  publishedBy?: string
+  /**
+   * 发布所基于的草稿修订。传入时必须与当前草稿一致，否则拒绝并保留草稿；
+   * CLI/MCP 与 GUI 使用同一校验，避免旧页面把别人的改动静默覆盖。
+   */
+  expectedRevision?: number
+}
+
 /**
- * 发布不可变版本：同 capabilityId+version 已存在且摘要相同 → 幂等返回；
- * 摘要不同 → 拒绝覆盖（发布版本永远不可变）。
+ * 发布不可变版本（W1）。
+ *
+ * - 同 capabilityId+version 同摘要 → 幂等返回；
+ * - 同 capabilityId+version 不同摘要 → 拒绝覆盖（VERSION_IMMUTABLE）；
+ * - 新版本号必须大于最新发布（VERSION_NOT_NEWER）；
+ * - expectedRevision 与当前草稿不一致 → 拒绝（DRAFT_REVISION_CONFLICT），草稿保留。
  */
 export async function publishCompositeVersion(
   manifestInput: unknown,
-  publishedBy = 'local'
+  publishedByOrOptions: string | CompositePublishOptions = {}
 ): Promise<{ record: CompositeVersionRecord; created: boolean }> {
+  const options: CompositePublishOptions =
+    typeof publishedByOrOptions === 'string'
+      ? { publishedBy: publishedByOrOptions }
+      : publishedByOrOptions
   const manifest = assertPublishManifest(manifestInput)
   const contentHash = await compositeContentHash(manifest)
   const db = getDb()
-  const now = Date.now()
-  const existing = db
-    .prepare('SELECT * FROM composite_versions WHERE capability_id = ? AND version = ?')
-    .get(manifest.capabilityId, manifest.version) as VersionRow | undefined
-  if (existing) {
-    if (existing.content_hash === contentHash) {
-      return { record: rowToVersion(existing), created: false }
+  const traceId = newTraceId()
+  const spanId = newSpanId()
+  emitGatewayEvent(
+    'composite.publish.started',
+    '节点流发布开始',
+    { traceId, spanId },
+    {
+      phase: 'repository',
+      attributes: {
+        capabilityId: manifest.capabilityId,
+        version: manifest.version,
+        ...(options.expectedRevision === undefined
+          ? {}
+          : { expectedRevision: options.expectedRevision })
+      }
     }
-    // 用户 2026-11-10 裁决：版本按主版本整数管理，允许直接修改旧版本；
-    // 更新同一版本的内容摘要而不另造副版本。
-    db.prepare(
-      `UPDATE composite_versions SET manifest = ?, content_hash = ?, published_at = ?, published_by = ?
-       WHERE capability_id = ? AND version = ?`
-    ).run(
-      JSON.stringify(manifest),
-      contentHash,
-      now,
-      publishedBy,
-      manifest.capabilityId,
-      manifest.version
-    )
-    upsertCapabilityRow(manifest, now)
-    const replaced = db
+  )
+  try {
+    if (options.expectedRevision !== undefined) {
+      const draft = db
+        .prepare('SELECT * FROM composite_drafts WHERE capability_id = ?')
+        .get(manifest.capabilityId) as DraftRow | undefined
+      const currentRevision = draft?.revision ?? 0
+      if (currentRevision !== options.expectedRevision) {
+        throw new CompositePublishError(
+          'DRAFT_REVISION_CONFLICT',
+          `草稿修订冲突：期望 ${options.expectedRevision}，当前 ${currentRevision}`,
+          {
+            capabilityId: manifest.capabilityId,
+            version: manifest.version,
+            expectedRevision: options.expectedRevision,
+            currentRevision
+          }
+        )
+      }
+    }
+
+    const now = Date.now()
+    const existing = db
+      .prepare('SELECT * FROM composite_versions WHERE capability_id = ? AND version = ?')
+      .get(manifest.capabilityId, manifest.version) as VersionRow | undefined
+    if (existing) {
+      if (existing.content_hash === contentHash) {
+        emitGatewayEvent(
+          'composite.publish.completed',
+          '节点流发布幂等返回，未新增版本',
+          { traceId, spanId },
+          {
+            phase: 'repository',
+            attributes: {
+              capabilityId: manifest.capabilityId,
+              version: manifest.version,
+              created: false
+            }
+          }
+        )
+        return { record: rowToVersion(existing), created: false }
+      }
+      throw new CompositePublishError(
+        'VERSION_IMMUTABLE',
+        `版本 ${manifest.capabilityId}@${manifest.version} 已发布且不可覆盖；请发布新的主版本`,
+        {
+          capabilityId: manifest.capabilityId,
+          version: manifest.version,
+          existingHash: existing.content_hash,
+          incomingHash: contentHash
+        }
+      )
+    }
+
+    const capability = db
+      .prepare('SELECT * FROM composite_capabilities WHERE id = ?')
+      .get(manifest.capabilityId) as CapabilityRow | undefined
+    if (
+      capability?.latest_version &&
+      compareSemver(manifest.version, capability.latest_version) <= 0
+    ) {
+      throw new CompositePublishError(
+        'VERSION_NOT_NEWER',
+        `版本 ${manifest.version} 不高于当前最新发布 ${capability.latest_version}；新版本必须递增`,
+        {
+          capabilityId: manifest.capabilityId,
+          version: manifest.version,
+          latestVersion: capability.latest_version
+        }
+      )
+    }
+
+    const transaction = db.transaction(() => {
+      upsertCapabilityRow(manifest, now)
+      db.prepare(
+        `INSERT INTO composite_versions
+           (capability_id, version, manifest, content_hash, published_at, published_by)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).run(
+        manifest.capabilityId,
+        manifest.version,
+        JSON.stringify(manifest),
+        contentHash,
+        now,
+        options.publishedBy ?? 'local'
+      )
+      db.prepare(
+        `UPDATE composite_capabilities SET latest_version = ?, archived = 0, updated_at = ? WHERE id = ?`
+      ).run(manifest.version, now, manifest.capabilityId)
+    })
+    transaction()
+    const saved = db
       .prepare('SELECT * FROM composite_versions WHERE capability_id = ? AND version = ?')
       .get(manifest.capabilityId, manifest.version) as VersionRow
-    return { record: rowToVersion(replaced), created: false }
-  }
-  const capability = db
-    .prepare('SELECT * FROM composite_capabilities WHERE id = ?')
-    .get(manifest.capabilityId) as CapabilityRow | undefined
-  const nextLatest =
-    !capability?.latest_version || compareSemver(manifest.version, capability.latest_version) > 0
-      ? manifest.version
-      : capability.latest_version
-  const transaction = db.transaction(() => {
-    upsertCapabilityRow(manifest, now)
-    db.prepare(
-      `INSERT INTO composite_versions
-         (capability_id, version, manifest, content_hash, published_at, published_by)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(
-      manifest.capabilityId,
-      manifest.version,
-      JSON.stringify(manifest),
-      contentHash,
-      now,
-      publishedBy
+    emitGatewayEvent(
+      'composite.publish.completed',
+      '节点流新版本已发布',
+      { traceId, spanId },
+      {
+        phase: 'repository',
+        attributes: {
+          capabilityId: manifest.capabilityId,
+          version: manifest.version,
+          created: true
+        }
+      }
     )
-    db.prepare(
-      `UPDATE composite_capabilities SET latest_version = ?, archived = 0, updated_at = ? WHERE id = ?`
-    ).run(nextLatest, now, manifest.capabilityId)
-  })
-  transaction()
-  const saved = db
-    .prepare('SELECT * FROM composite_versions WHERE capability_id = ? AND version = ?')
-    .get(manifest.capabilityId, manifest.version) as VersionRow
-  return { record: rowToVersion(saved), created: true }
+    return { record: rowToVersion(saved), created: true }
+  } catch (error) {
+    emitGatewayEvent(
+      'composite.publish.failed',
+      '节点流发布失败，草稿与既有版本保留',
+      { traceId, spanId },
+      {
+        phase: 'repository',
+        attributes: {
+          code: compositeErrorCode(error, 'PUBLISH_FAILED'),
+          capabilityId: manifest.capabilityId,
+          version: manifest.version
+        }
+      }
+    )
+    throw error
+  }
 }
 
 export function getCompositeVersion(

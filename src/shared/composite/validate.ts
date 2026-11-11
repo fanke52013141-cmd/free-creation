@@ -156,7 +156,7 @@ export function validateCompositeManifest(
     }
   }
 
-  // 必填内部输入：要么有内部连线，要么被公开输入绑定
+  // 必填内部输入：要么有内部连线，要么被公开输入绑定，要么由节点契约认可的固定输入满足。
   const internalIncoming = new Set(
     manifest.graph.edges.map((edge) => `${edge.to.nodeId}:${edge.to.portId}`)
   )
@@ -165,7 +165,8 @@ export function validateCompositeManifest(
       if (port.dir !== 'in' || !port.required) continue
       const key = `${node.id}:${port.id}`
       if (internalIncoming.has(key) || usedTargets.has(key)) continue
-      issues.push(issue('REQUIRED_INPUT_UNBOUND', `graph.nodes.${node.id}`, `必填输入 ${port.id} 没有来源（内部连线或公开输入）`))
+      if (hasContractFixedInput(node, port)) continue
+      issues.push(issue('REQUIRED_INPUT_UNBOUND', `graph.nodes.${node.id}`, `必填输入 ${port.id} 没有来源（内部连线、公开输入或节点固定输入）`))
     }
   }
 
@@ -268,6 +269,23 @@ export function validateCompositeManifest(
     issues.push(issue('BUDGET_EXCEEDED', 'executionPolicy.maxExpandedEdges', `连线数 ${manifest.graph.edges.length} 超过预算 ${budgetEdges}`))
 
   return { ok: issues.length === 0, issues }
+}
+
+/**
+ * 节点契约认可的固定输入：文本节点的正文可替代 `in-text` 上游；
+ * 资产节点的固定媒体引用可替代对应媒体输入。未知类型一律不豁免。
+ */
+function hasContractFixedInput(
+  node: CompositeManifest['graph']['nodes'][number],
+  port: NonNullable<CompositeManifest['graph']['nodes'][number]['ports']>[number]
+): boolean {
+  if (node.nodeType === 'text' && port.id === 'in-text' && (node.text ?? '').trim()) return true
+  if (
+    (port.type === 'image' || port.type === 'video' || port.type === 'audio' || port.type === 'file') &&
+    (node.mediaRefs?.length ?? 0) > 0
+  )
+    return true
+  return false
 }
 
 function hasCycle(manifest: CompositeManifest): boolean {

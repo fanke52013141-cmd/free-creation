@@ -2,7 +2,13 @@
 
 2026-11-11。后续以[节点流执行方案](WORKFLOW_IMPLEMENTATION_PLAN.md)和[执行 Agent 指令](WORKFLOW_AGENT_INSTRUCTIONS.md)为入口。此前[组合编辑交接](COMPOSITE_HANDOFF_2026_11_11.md)及[发布备注](RELEASE_NOTES_2026_11_11.md)保留为已实现基线。
 
-## 本次提交内容
+## W1 文本调用闭环（2026-11-11）
+
+已完成：公开端口稳定映射与编辑保留、文本经 `in-text` 合并、按本次映射收集输出、草稿恢复/不可变发布/固定嵌套版本、升级公共预检、GUI/CLI/MCP 同源契约、运行与发布诊断事件、M28 运行关联字段。详情、兼容结论与未验证边界见 [W1 交付](W1_DELIVERY_2026_11_11.md)；后续执行 Agent 的接手说明见 [W1 交接](W1_HANDOFF_2026_11_11.md)。
+
+行为修订：同版本发布不再覆盖，改为 `VERSION_IMMUTABLE`；历史版本缺省按运行语义 1 保留旧文本替换与首媒体输出行为，新封装写 `runtimeVersion=2`。旧数据不迁移。
+
+## 此前提交内容
 
 - 现有 UI 调整：保存方式去除外围框及选项描边，组合 ID 与版本同行，公开端口区域去除层叠容器。组合全屏画布把新增工具置左上、关闭置右上，选中节点复用原设置，画布展示现有数据线。背景板工具按横向、纵向、自动整理、圆形颜色排列。
 - 刷新受保护源码影响声明。远端已有 `af7bbb1` 修改了 `CanvasSidePanel.tsx` 的组合编辑入口，核对其沿用 `composite.version.get`、`composite.validate`、`composite.draft.save` 和 `composite.publish`，本次生成的 Agent 契约快照内容一致。

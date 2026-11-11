@@ -12,6 +12,22 @@ import type { PortCardinality, PortType } from '../types'
  */
 export const COMPOSITE_SCHEMA_VERSION = 1
 
+/**
+ * 运行语义版本（W1）：
+ * - 1（缺省，历史版本）：外部文本直接替换文本节点正文；公开输出只收集首个媒体结果。
+ * - 2：外部文本作为虚拟上游接入契约声明的 `in-text`，沿用普通文本节点的合并/投影；
+ *   公开输出按本次运行的映射结果收集，支持文本与 JSON。
+ *
+ * 历史已发布版本不写该字段，继续按 1 运行；新封装/新发布写 2。字段是加性的，
+ * schemaVersion 保持 1，旧客户端忽略它即可。
+ */
+export const COMPOSITE_RUNTIME_VERSION_LEGACY = 1
+export const COMPOSITE_RUNTIME_VERSION = 2
+export const COMPOSITE_RUNTIME_VERSIONS = [
+  COMPOSITE_RUNTIME_VERSION_LEGACY,
+  COMPOSITE_RUNTIME_VERSION
+] as const
+
 export const COMPOSITE_PORT_TYPES = [
   'text',
   'markdown',
@@ -159,6 +175,8 @@ export const compositeExecutionPolicySchema = z
 export const compositeManifestSchema = z
   .object({
     schemaVersion: z.literal(COMPOSITE_SCHEMA_VERSION),
+    /** 缺省=1（历史运行语义）；新发布使用 2。 */
+    runtimeVersion: z.number().int().min(1).max(2).optional(),
     capabilityId: z
       .string()
       .min(1)
@@ -194,6 +212,15 @@ export type CompositeGraphEdge = z.infer<typeof compositeGraphEdgeSchema>
 export type CompositeDependency = z.infer<typeof compositeDependencySchema>
 export type CompositeExecutionPolicy = z.infer<typeof compositeExecutionPolicySchema>
 export type CompositeManifest = z.infer<typeof compositeManifestSchema>
+
+/** 解析运行语义版本；历史 manifest 缺省按 1 处理。 */
+export function compositeRuntimeVersion(
+  manifest: Pick<CompositeManifest, 'runtimeVersion'>
+): 1 | 2 {
+  return manifest.runtimeVersion === COMPOSITE_RUNTIME_VERSION
+    ? COMPOSITE_RUNTIME_VERSION
+    : COMPOSITE_RUNTIME_VERSION_LEGACY
+}
 
 export interface CompositeManifestIssue {
   path: string

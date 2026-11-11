@@ -130,6 +130,10 @@ export const ACCESS_ERROR_CATALOG: readonly { code: string; meaning: string; hin
   { code: 'IDEMPOTENCY_EXPIRED', meaning: '幂等记录已过期', hint: '用新幂等键重试' },
   { code: 'OUTCOME_UNKNOWN', meaning: '已准入但结果未知（不能假定失败）', hint: '用 run.get / list 核对真实结果' },
   { code: 'PUBLISH_DENIED', meaning: '人工拒绝了发布', hint: '不要重放；征求新授权' },
+  { code: 'VERSION_IMMUTABLE', meaning: '同版本已发布且内容不同，不能覆盖', hint: '递增主版本后重新发布' },
+  { code: 'VERSION_NOT_NEWER', meaning: '新版本号不高于当前最新发布', hint: '使用更大的主版本号' },
+  { code: 'DRAFT_REVISION_CONFLICT', meaning: '草稿修订与预期不一致（期间有保存/他人编辑）', hint: '重新读取草稿 revision 后重试；本次不会覆盖草稿' },
+  { code: 'PUBLISH_INVALID', meaning: '发布契约校验未通过', hint: '按 issues 修正端口、映射、依赖或预算后重试' },
   { code: 'UNKNOWN_NODE_TYPE', meaning: '节点类型不存在或不可创建', hint: '以 node.type.list 为准' },
   { code: 'EMPTY_NODE_VISIBILITY', meaning: '可见集不能为空', hint: '至少保留一个类型' }
 ]

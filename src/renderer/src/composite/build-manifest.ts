@@ -1,6 +1,7 @@
 import type { CanvasEdge, CanvasNode, PortDecl } from '@shared/types'
 import { COMPOSITE_PORT_TYPES } from '@shared/composite/manifest'
 import type {
+  CompositeDependency,
   CompositeGraphEdge,
   CompositeGraphNode,
   CompositeInput,
@@ -63,6 +64,19 @@ function portSnapshot(ports: readonly PortDecl[]): NonNullable<CompositeGraphNod
 
 function findPort(node: CanvasNode, portId: string): PortDecl | undefined {
   return node.ports.find((port) => port.id === portId)
+}
+
+/** 从内部组合节点的固定 config 快照读取嵌套版本；不解析当前最新版本。 */
+function parseNestedCompositeManifest(node: CanvasNode): CompositeManifest | null {
+  if (typeof node.params.config !== 'string') return null
+  try {
+    const parsed = JSON.parse(node.params.config) as { manifest?: unknown }
+    if (!parsed.manifest) return null
+    const result = parseCompositeManifest(parsed.manifest)
+    return result.ok ? result.manifest : null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -269,7 +283,7 @@ export function buildCompositeManifestFromGraph(
     issues.push({ path: 'outputs', message: '组合至少需要一个公开输出' })
   }
 
-  const dependencies = [
+  const dependencies: CompositeDependency[] = [
     ...new Map(
       nodes.map((node) => [
         `${node.type}@${node.contractVersion}`,
@@ -278,8 +292,28 @@ export function buildCompositeManifestFromGraph(
     ).values()
   ]
 
+  // 嵌套节点流：公开契约里登记固定 capabilityId@version，发布/运行都按快照解析，
+  // 不能因为内层发布了新版本就静默改用最新版。
+  for (const node of nodes) {
+    if (node.type !== 'composite') continue
+    const nested = parseNestedCompositeManifest(node)
+    if (!nested) {
+      issues.push({
+        path: `graph.nodes.${internalIds.get(node.id)}`,
+        message: '内部组合节点缺少可解析的固定版本 manifest'
+      })
+      continue
+    }
+    dependencies.push({
+      kind: 'capability',
+      id: nested.capabilityId,
+      version: nested.version
+    })
+  }
+
   const manifest: CompositeManifest = {
     schemaVersion: 1,
+    runtimeVersion: 2,
     capabilityId: options.capabilityId,
     version: options.version,
     name: options.name,

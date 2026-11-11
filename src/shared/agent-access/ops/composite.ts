@@ -50,7 +50,8 @@ export const COMPOSITE_OPERATIONS = {
   },
   'composite.draft.save': {
     effect: 'write',
-    description: '创建/更新组合草稿；expectedRevision 用于乐观并发，冲突返回草稿修订错误',
+    description:
+      '创建/更新组合草稿；允许未接完的图并返回问题；expectedRevision 用于乐观并发，冲突返回 DRAFT_REVISION_CONFLICT 且保留草稿',
     input: z.object({ manifest, expectedRevision: z.number().int().nonnegative().optional() }).strict()
   },
   'composite.validate': {
@@ -60,8 +61,26 @@ export const COMPOSITE_OPERATIONS = {
   },
   'composite.publish': {
     effect: 'write',
-    description: '发布不可变组合版本；同版本同摘要幂等，同版本异摘要拒绝覆盖',
-    input: z.object({ manifest }).strict()
+    description:
+      '发布不可变组合版本：同版本同摘要幂等；同版本异摘要返回 VERSION_IMMUTABLE；新版本必须递增，可带 expectedRevision 校验草稿未被他人改动',
+    input: z
+      .object({
+        manifest,
+        expectedRevision: z.number().int().nonnegative().optional()
+      })
+      .strict()
+  },
+  'composite.upgrade.preview': {
+    effect: 'read',
+    description:
+      '按项目内已绑定实例的实际连线预检升级：比较端口 ID/类型/Schema/必填/基数，返回阻断项及受影响节点与边',
+    input: z
+      .object({
+        projectId: z.string().min(1).max(120),
+        nodeId: z.string().min(1).max(180),
+        nextManifest: manifest
+      })
+      .strict()
   },
   'composite.version.list': {
     effect: 'read',
@@ -110,6 +129,61 @@ export const COMPOSITE_OUTPUTS = {
     .strict(),
   'composite.validate': z
     .object({ ok: z.boolean(), issues: z.array(validationIssue).max(200) })
+    .strict(),
+  'composite.upgrade.preview': z
+    .object({
+      previousVersion: semver,
+      nextVersion: semver,
+      ok: z.boolean(),
+      runtimeVersion: z.number().int().positive().optional(),
+      issues: z.array(validationIssue).max(200).optional(),
+      impact: z
+        .object({
+          fromVersion: z.string().max(40),
+          toVersion: z.string().max(40),
+          addedInputs: z.array(z.string().max(100)).max(64),
+          removedInputs: z.array(z.string().max(100)).max(64),
+          addedOutputs: z.array(z.string().max(100)).max(64),
+          removedOutputs: z.array(z.string().max(100)).max(64),
+          typeChanged: z
+            .array(z.object({ portId: z.string().max(100), from: z.string().max(40), to: z.string().max(40) }).strict())
+            .max(64),
+          requiredChanged: z
+            .array(z.object({ portId: z.string().max(100), from: z.boolean(), to: z.boolean() }).strict())
+            .max(64),
+          schemaChanged: z
+            .array(
+              z.object({
+                portId: z.string().max(100),
+                from: z.string().max(120).nullable(),
+                to: z.string().max(120).nullable()
+              }).strict()
+            )
+            .max(64),
+          cardinalityChanged: z
+            .array(
+              z.object({
+                portId: z.string().max(100),
+                from: z.enum(['one', 'many']),
+                to: z.enum(['one', 'many'])
+              }).strict()
+            )
+            .max(64),
+          addedRequiredInputs: z.array(z.string().max(100)).max(64),
+          breaking: z
+            .array(
+              z.object({
+                portId: z.string().max(100),
+                reason: z.string().max(300),
+                nodeId: z.string().max(180).optional(),
+                edgeId: z.string().max(180).optional()
+              }).strict()
+            )
+            .max(64)
+        })
+        .strict()
+        .nullable()
+    })
     .strict(),
   'composite.publish': z
     .object({

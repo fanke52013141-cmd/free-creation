@@ -5,7 +5,7 @@ import type { PortCardinality, PortDecl, PortSchemaRef } from '@shared/types'
 import { registerAgentFlowNodeTypes } from './agentFlow'
 import { CompositeBody } from '../../composite/CompositeBody'
 import { compositeExecutor } from '@shared/engine/executors/composite'
-import { parseMediaResultCollection } from '@shared/engine/values'
+import { projectCompositeOutputs } from '@shared/composite/outputs'
 import type { CompositeManifest } from '@shared/composite/manifest'
 import { DEFAULT_VIDEO_CLAY_CONFIG, serializeVideoClayConfig } from '@shared/video-conversion'
 import { NODE_ACCENTS, registerNodeType, unregisterNodeType } from '../registry'
@@ -886,32 +886,7 @@ export function registerBaseNodeTypes(): void {
         return { in: [], out: [] }
       }
     },
-    projectOutputs: (shape) => {
-      try {
-        const parsed = JSON.parse(shape.props.config || '{}') as { manifest?: CompositeManifest }
-        const manifest = parsed.manifest
-        if (!manifest) return {}
-        const collection = parseMediaResultCollection(String(shape.meta?.nodeResult ?? ''))
-        const item =
-          collection?.results.find((entry) => entry.mediaId === collection.selectedMediaId) ??
-          collection?.results.at(-1)
-        if (!item) return {}
-        const outputs: Record<string, unknown> = {}
-        for (const output of manifest.outputs) {
-          if (output.type === 'image' || output.type === 'video' || output.type === 'audio' || output.type === 'file') {
-            outputs[`out-${output.id}`] = {
-              kind: output.type,
-              mediaId: item.mediaId,
-              mediaPath: item.mediaPath,
-              mime: item.mime
-            }
-          }
-        }
-        return outputs as never
-      } catch {
-        return {}
-      }
-    },
+    projectOutputs: projectCompositeOutputs,
     executor: compositeExecutor,
     Body: CompositeBody
   })

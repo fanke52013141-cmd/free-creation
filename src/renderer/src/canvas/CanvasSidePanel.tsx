@@ -82,6 +82,11 @@ function versionLabel(version: string): string {
   return version.replace(/\.0\.0$/, '.0')
 }
 
+function nextVersionLabel(version: string | null): string {
+  const major = Number.parseInt(version ?? '0', 10)
+  return `${Number.isFinite(major) ? major + 1 : 1}.0`
+}
+
 function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId: string }): React.JSX.Element {
   const templates = useWorkflowStore((s) => s.templates)
   const wfLoad = useWorkflowStore((s) => s.load)
@@ -89,7 +94,11 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
   const [query, setQuery] = useState('')
   const [composites, setComposites] = useState<CompositeCapabilitySummary[]>([])
   const [versionDialog, setVersionDialog] = useState<{ capability: CompositeCapabilitySummary; mode: 'edit' | 'next' } | null>(null)
-  const [canvasEdit, setCanvasEdit] = useState<{ capability: CompositeCapabilitySummary; manifest: import('@shared/composite/manifest').CompositeManifest } | null>(null)
+  const [canvasEdit, setCanvasEdit] = useState<{
+    capability: CompositeCapabilitySummary
+    manifest: import('@shared/composite/manifest').CompositeManifest
+    draftRevision: number | null
+  } | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const needle = query.trim().toLocaleLowerCase()
   const visibleTemplates = templates.filter((template) =>
@@ -147,20 +156,31 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
       }
     })
     editor.select(id)
-    toast(`已添加组合「${capability.name} v${version}」`)
+    toast(`已添加组合「${capability.name} v${versionLabel(version)}」`)
   }
 
-  const openCanvasEdit = async (capability: CompositeCapabilitySummary, mode: 'edit' | 'next'): Promise<void> => {
+  const openCanvasEdit = async (
+    capability: CompositeCapabilitySummary,
+    mode: 'edit' | 'next'
+  ): Promise<void> => {
     const latest = capability.latestVersion
-    if (!latest) return toast('该组合还没有已发布版本')
-    const result = await window.api.composite.versionGet({ capabilityId: capability.id, version: latest })
-    if (!result.ok || !result.data) return toast('读取组合版本失败')
-    const manifest = structuredClone(result.data.manifest)
-    if (mode === 'next') {
-      const major = Number.parseInt(versionLabel(manifest.version), 10)
-      manifest.version = `${Number.isFinite(major) ? major + 1 : 1}.0`
+    if (!latest) return toast('该节点流还没有已发布版本')
+    // 编辑优先恢复未发布草稿；新版本从最新发布快照创建，不把草稿静默带进历史基线。
+    const draft = mode === 'edit' ? await window.api.composite.draftGet(capability.id) : null
+    if (draft && !draft.ok) return toast('读取节点流草稿失败')
+    if (draft?.ok && draft.data) {
+      const manifest = structuredClone(draft.data.manifest)
+      manifest.version = nextVersionLabel(latest)
+      setCanvasEdit({ capability, manifest, draftRevision: draft.data.revision })
+      toast(`已恢复草稿（修订 ${draft.data.revision}）`)
+      return
     }
-    setCanvasEdit({ capability, manifest })
+    const result = await window.api.composite.versionGet({ capabilityId: capability.id, version: latest })
+    if (!result.ok || !result.data) return toast('读取节点流版本失败')
+    const manifest = structuredClone(result.data.manifest)
+    // 已发布版本不可变：全屏编辑默认准备下一个主版本，保存/publish 分离。
+    manifest.version = nextVersionLabel(latest)
+    setCanvasEdit({ capability, manifest, draftRevision: null })
   }
 
   const handleRun = async (template: WorkflowTemplate): Promise<void> => {
@@ -276,6 +296,7 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
         capability={canvasEdit.capability}
         manifest={canvasEdit.manifest}
         projectId={projectId}
+        draftRevision={canvasEdit.draftRevision}
         onClose={() => setCanvasEdit(null)}
         onSaved={() => {
           void window.api.composite.search().then((result) => {

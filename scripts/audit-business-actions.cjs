@@ -171,6 +171,10 @@ const EXTERNAL_ONLY_OPERATIONS = new Map([
   [
     'node.library.update',
     'GUI 节点库面板当前没有重命名入口；外部重命名复用同一 store 写口，待 GUI 补同入口或下线该操作'
+  ],
+  [
+    'composite.upgrade.preview',
+    'W1 只交付公共升级预检（CLI/MCP），实例升级的完整 GUI 在 W3；预检复用 GUI 同一 upgrade 纯函数，不写业务状态'
   ]
 ])
 

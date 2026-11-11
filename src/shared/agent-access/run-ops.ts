@@ -88,7 +88,9 @@ export const DETERMINISTIC_OUTPUT_SOURCES: Record<string, 'document' | 'run' | '
   'video-asset': 'run',
   timeline: 'run',
   agent: 'run',
-  'ai-review': 'run'
+  'ai-review': 'run',
+  // W1：节点流实例的正式输出只来自本次固定版本运行写入的映射结果。
+  composite: 'run'
 }
 
 export function readSnapshotShapeMeta(

@@ -550,6 +550,8 @@ const api = {
       capabilityVersion: string
       contentHash: string
       instanceNodeId?: string
+      /** 外层运行 ID；节点流自身每次调用使用独立 id。 */
+      parentRunId?: string
     }): Promise<IpcEnvelope<unknown>> => ipcRenderer.invoke(IPC.composite.runStart, input),
     runStep: (input: {
       runId: string
@@ -563,6 +565,9 @@ const api = {
       status: 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'unknown'
       errorCode?: string
       errorMessage?: string
+      failurePhase?: string
+      /** 已产生的公开输出端口（只记 portId/kind，不记正文）。 */
+      outputPorts?: Array<{ portId: string; kind: string }>
     }): Promise<IpcEnvelope<boolean>> => ipcRenderer.invoke(IPC.composite.runFinish, input),
     runGet: (runId: string): Promise<IpcEnvelope<unknown>> =>
       ipcRenderer.invoke(IPC.composite.runGet, runId),

@@ -372,6 +372,12 @@ describe('C4 independent process recovery contention', () => {
         DROP TABLE agent_tool_calling_validations;
         DROP TABLE external_runs;
         DROP TABLE director_publish_requests;
+        DROP TABLE composite_run_waits;
+        DROP TABLE composite_run_steps;
+        DROP TABLE composite_runs;
+        DROP TABLE composite_drafts;
+        DROP TABLE composite_versions;
+        DROP TABLE composite_capabilities;
         ALTER TABLE history_snapshots DROP COLUMN graph_json;
         ALTER TABLE flow_commands DROP COLUMN principal;
         ALTER TABLE model_connections DROP COLUMN agent_tool_calling_revision;

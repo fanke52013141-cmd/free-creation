@@ -120,7 +120,10 @@ export function WorkflowSaveDialog({
         }
         const draft = await window.api.composite.draftSave({ manifest: edited })
         if (!draft.ok) throw new Error(draft.error.message)
-        const published = await window.api.composite.publish({ manifest: edited })
+        const published = await window.api.composite.publish({
+          manifest: edited,
+          expectedRevision: draft.data.revision
+        })
         if (!published.ok) throw new Error(published.error.message)
         // P2 最小闭环：发布后在视口中心插入一个组合节点实例，绑定固定版本快照。
         editor.markHistoryStoppingPoint('insert-composite')

@@ -17,11 +17,17 @@ export interface CompositeRunRecord {
   capabilityVersion: string
   contentHash: string
   instanceNodeId: string | null
+  /** 外层运行 ID；节点流嵌套调用时用于父子关联。 */
+  parentRunId: string | null
   status: CompositeRunStatus
   startedAt: number
   finishedAt: number | null
   errorCode: string | null
   errorMessage: string | null
+  /** input / step / output / runtime；成功时为 null。 */
+  failurePhase: string | null
+  /** 已产生的公开输出摘要：[{portId, kind}]，不含正文。 */
+  outputSummary: Array<{ portId: string; kind: string }>
   createdAt: number
 }
 
@@ -42,11 +48,14 @@ interface RunRow {
   capability_version: string
   content_hash: string
   instance_node_id: string | null
+  parent_run_id: string | null
   status: string
   started_at: number
   finished_at: number | null
   error_code: string | null
   error_message: string | null
+  failure_phase: string | null
+  output_summary: string | null
   created_at: number
 }
 
@@ -60,6 +69,25 @@ interface StepRow {
   reason: string | null
 }
 
+function parseOutputSummary(value: string | null): Array<{ portId: string; kind: string }> {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value) as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter(
+        (item): item is { portId: string; kind: string } =>
+          Boolean(item) &&
+          typeof item === 'object' &&
+          typeof (item as { portId?: unknown }).portId === 'string' &&
+          typeof (item as { kind?: unknown }).kind === 'string'
+      )
+      .slice(0, 32)
+  } catch {
+    return []
+  }
+}
+
 function rowToRun(row: RunRow): CompositeRunRecord {
   return {
     id: row.id,
@@ -68,11 +96,14 @@ function rowToRun(row: RunRow): CompositeRunRecord {
     capabilityVersion: row.capability_version,
     contentHash: row.content_hash,
     instanceNodeId: row.instance_node_id,
+    parentRunId: row.parent_run_id ?? null,
     status: row.status as CompositeRunStatus,
     startedAt: row.started_at,
     finishedAt: row.finished_at,
     errorCode: row.error_code,
     errorMessage: row.error_message,
+    failurePhase: row.failure_phase ?? null,
+    outputSummary: parseOutputSummary(row.output_summary),
     createdAt: row.created_at
   }
 }
@@ -96,14 +127,15 @@ export function createCompositeRun(input: {
   capabilityVersion: string
   contentHash: string
   instanceNodeId?: string
+  parentRunId?: string
 }): CompositeRunRecord {
   const now = Date.now()
   getDb()
     .prepare(
       `INSERT INTO composite_runs
        (id, project_id, capability_id, capability_version, content_hash,
-        instance_node_id, status, started_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?)`
+        instance_node_id, parent_run_id, status, started_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)`
     )
     .run(
       input.id,
@@ -112,6 +144,7 @@ export function createCompositeRun(input: {
       input.capabilityVersion,
       input.contentHash,
       input.instanceNodeId ?? null,
+      input.parentRunId ?? null,
       now,
       now
     )
@@ -165,19 +198,26 @@ export function finishCompositeRun(input: {
   status: Extract<CompositeRunStatus, 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'unknown'>
   errorCode?: string
   errorMessage?: string
-}): void {
-  getDb()
-    .prepare(
-      `UPDATE composite_runs SET status = ?, finished_at = ?, error_code = ?, error_message = ?
-       WHERE id = ? AND status IN ('accepted','running','waiting-input')`
-    )
-    .run(
-      input.status,
-      Date.now(),
-      input.errorCode ?? null,
-      input.errorMessage?.slice(0, 500) ?? null,
-      input.runId
-    )
+  failurePhase?: string
+  outputPorts?: Array<{ portId: string; kind: string }>
+}): boolean {
+  return (
+    getDb()
+      .prepare(
+        `UPDATE composite_runs SET status = ?, finished_at = ?, error_code = ?, error_message = ?,
+           failure_phase = ?, output_summary = ?
+         WHERE id = ? AND status IN ('accepted','running','waiting-input')`
+      )
+      .run(
+        input.status,
+        Date.now(),
+        input.errorCode ?? null,
+        input.errorMessage?.slice(0, 500) ?? null,
+        input.failurePhase?.slice(0, 40) ?? null,
+        input.outputPorts?.length ? JSON.stringify(input.outputPorts.slice(0, 32)) : null,
+        input.runId
+      ).changes > 0
+  )
 }
 
 export function getCompositeRun(runId: string): {

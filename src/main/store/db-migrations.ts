@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 27
+export const DB_SCHEMA_VERSION = 28
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -587,6 +587,15 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
       );
       CREATE INDEX IF NOT EXISTS idx_composite_run_waits_open
         ON composite_run_waits(run_id, state);
+    `)
+  },
+  // M28: 节点流 W1 运行关联（父子调用、失败阶段、公开输出摘要）。
+  // 只存 ID/阶段/端口种类，不存正文、提示词或媒体路径。
+  (database) => {
+    database.exec(`
+      ALTER TABLE composite_runs ADD COLUMN parent_run_id TEXT;
+      ALTER TABLE composite_runs ADD COLUMN failure_phase TEXT;
+      ALTER TABLE composite_runs ADD COLUMN output_summary TEXT;
     `)
   }
 ]

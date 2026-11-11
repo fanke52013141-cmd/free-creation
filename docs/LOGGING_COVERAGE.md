@@ -990,3 +990,7 @@ node.runPlan 为只读预检，复用 Agent 请求诊断，返回端口元数据
 
 新增 composite_capabilities/composite_versions/composite_drafts（M25）与 composite.search/draft/publish/validate/archive IPC。路径均为本地 SQLite 同步读写，不访问网络、不调用模型、不写媒体；发布校验失败以 IPC 错误 envelope 返回，不伪造成功。证据：composite-manifest/repo/build/agent-access/db-migrations 共 20 项测试通过，guard:agent-parity 与 verify:agent-access 通过。日志影响：P1 不新增执行事件；composite.run.* 等待/恢复事件在 P2/P3 实施时登记，当前不得声称已覆盖。未覆盖：真实 CLI/MCP 进程调用、桌面 UI 点击、重启恢复。
 
+## 2026-11-11 节点流 W1（文本调用闭环、草稿/发布、固定嵌套）
+
+新增 `composite.run.started/completed/failed/cancelled`、`composite.run.step_failed`、`composite.draft.saved/save_failed`、`composite.publish.started/completed/failed`。运行事件由 `main/ipc/composite.ipc` 在运行账本入口发射：每次调用一次 started，`runFinish` 只在状态真正转换时记一次终态；`traceId` 使用节点流自身 runId，`parentRunId` 关联外层调用，`instanceNodeId` / `projectId` 定位实例，`outputPortCount` / `stepCount` 为计数。步骤失败记 `composite.run.step_failed`，只带 stepKey、nodeType 与稳定 code。草稿/发布事件由 `main/store/composite.repo` 发射：记录 capabilityId、version、revision、expectedRevision、created 与稳定错误码；幂等发布记 completed(created=false)，覆盖/版本倒序/修订冲突记 failed，不复制异常正文。禁止项：不记录节点正文、提示词、模型回复、媒体路径、原始请求/响应、密钥；失败事件不写 message 原文。日志 sink 缺失或写入失败时业务返回不变。证据：`test/composite-*`（运行时、仓储、运行账本、Agent 入口、编辑 manifest）通过，`test/observability/*` 全绿，`npm run verify:logging` 通过。未覆盖：真实 Electron 诊断包导出后的字段抽查、真实 CLI/MCP 进程执行段；桌面 GUI/CLI/MCP 端到端仍待 W2 验收，不能以服务级测试宣称全链路完成。详见 [W1 交付](composite/W1_DELIVERY_2026_11_11.md)。
+

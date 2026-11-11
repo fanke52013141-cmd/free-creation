@@ -4,6 +4,7 @@ import { projectAgentOutputs } from '../agent-flow/agent-outputs'
 import { projectReviewOutputs } from '../agent-flow/review'
 import { readStoredNodeRunStatus } from './run-status'
 import { validateNodeSchema } from '../node-schemas'
+import { projectCompositeOutputs } from '../composite/outputs'
 
 
 
@@ -68,6 +69,8 @@ export const DETERMINISTIC_PROJECTIONS = {
   'ai-process': projectAiProcessOutputsShared,
   'ai-review': projectReviewOutputs,
   agent: projectAgentOutputs,
+  // W1：节点流实例只暴露本次运行的显式映射结果；旧版本继续按媒体结果兼容。
+  composite: projectCompositeOutputs,
   text: projectTextOutputs,
   json: projectJsonOutputs,
   processor: projectProcessorOutputs

@@ -157,6 +157,59 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
       )
     ),
     def('canvas.flow_config.started', 'info', 'renderer/nodes/specs/agentFlow', { phase: 'short' }),
+    // 节点流（W1）：运行开始/唯一终态、步骤失败、草稿与不可变发布。
+    // 只允许 ID/版本/阶段/计数；正文、提示词、媒体路径和原始异常不得进入事件。
+    ...['started', 'completed', 'failed', 'cancelled'].map((stage) =>
+      def(
+        `composite.run.${stage}`,
+        stage === 'failed' ? 'error' : 'info',
+        'main/ipc/composite.ipc',
+        {
+          phase: 'short',
+          code: 'short',
+          capabilityId: 'id',
+          capabilityVersion: 'short',
+          parentRunId: 'id',
+          instanceNodeId: 'id',
+          stepCount: 'int',
+          outputPortCount: 'int'
+        }
+      )
+    ),
+    def('composite.run.step_failed', 'warn', 'main/ipc/composite.ipc', {
+      phase: 'short',
+      code: 'short',
+      stepKey: 'id',
+      nodeType: 'short'
+    }),
+    def('composite.draft.saved', 'info', 'main/store/composite.repo', {
+      phase: 'short',
+      capabilityId: 'id',
+      revision: 'int',
+      expectedRevision: 'int'
+    }),
+    def('composite.draft.save_failed', 'warn', 'main/store/composite.repo', {
+      phase: 'short',
+      code: 'short',
+      capabilityId: 'id',
+      expectedRevision: 'int'
+    }),
+    ...['started', 'completed', 'failed'].map((stage) =>
+      def(
+        `composite.publish.${stage}`,
+        stage === 'failed' ? 'error' : 'info',
+        'main/store/composite.repo',
+        {
+          phase: 'short',
+          code: 'short',
+          capabilityId: 'id',
+          version: 'short',
+          created: 'flag',
+          expectedRevision: 'int',
+          revision: 'int'
+        }
+      )
+    ),
     def('canvas.flow_config.applied', 'info', 'renderer/nodes/specs/agentFlow', { phase: 'short' }),
     def('canvas.flow_config.failed', 'error', 'renderer/nodes/specs/agentFlow', {
       phase: 'short',

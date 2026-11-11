@@ -37,6 +37,8 @@ export interface CompositeDraftSaveInput {
 
 export interface CompositePublishInput {
   manifest: CompositeManifest
+  /** 发布所基于的草稿修订；与当前草稿不一致时拒绝并保留草稿。 */
+  expectedRevision?: number
   publishedBy?: string
 }
 

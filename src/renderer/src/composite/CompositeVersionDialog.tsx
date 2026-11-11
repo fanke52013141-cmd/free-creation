@@ -64,7 +64,7 @@ export function CompositeVersionDialog({
       setManifest(current.data.manifest)
       setName(current.data.manifest.name)
       setDescription(current.data.manifest.description ?? '')
-      setVersion(mode === 'edit' ? versionLabel(latest) : nextVersion(latest))
+      setVersion(nextVersion(latest))
       setSelectedNodeId(current.data.manifest.graph.nodes[0]?.id ?? null)
       if (history.ok) setVersions(history.data)
     })
@@ -79,10 +79,10 @@ export function CompositeVersionDialog({
     setManifest(result.data.manifest)
     setName(result.data.manifest.name)
     setDescription(result.data.manifest.description ?? '')
-    setVersion(versionLabel(record.version))
+    setVersion(nextVersion(record.version))
     setSelectedNodeId(result.data.manifest.graph.nodes[0]?.id ?? null)
     setError('')
-    toast(`已载入 v${versionLabel(record.version)}，保存会更新该版本`)
+    toast(`已载入 v${versionLabel(record.version)}，发布将创建新版本`)
   }
 
   const updateNodeConfig = (nodeId: string, config: string): void => {
@@ -274,7 +274,7 @@ export function CompositeVersionDialog({
                 </div>
               ))}
               <p style={{ color: '#78869c', fontSize: 10, margin: '8px 0 0' }}>
-                载入旧版本后发布，会以当前版本号保存；要保留旧版请先把版本号改成新的主版本。
+                已发布版本不可修改；载入旧版本后会以新的主版本号发布，旧版本与已绑定实例保持原样。
               </p>
             </div>
           )}
@@ -283,7 +283,7 @@ export function CompositeVersionDialog({
         </div>
 
         <footer className="composite-sheet-footer">
-          <span className="hint">修改保存为草稿；发布后按主版本号生成/更新版本</span>
+          <span className="hint">发布不可变新版本；同版本覆盖会被拒绝，旧版本与已绑定实例保持原样</span>
           <button type="button" className="btn-ghost" disabled={busy} onClick={onClose}>取消</button>
           <button type="button" className="library-form-primary" disabled={busy || !manifest} onClick={() => void publish()}>
             {busy ? '发布中…' : '发布新版本'}
