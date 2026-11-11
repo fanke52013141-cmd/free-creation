@@ -24,7 +24,6 @@ import {
   CompositePublishPreview,
   type CompositePublishValidationIssue
 } from './CompositePublishPreview'
-import { CompositeCloseConfirm } from './CompositeCloseConfirm'
 import { CompositeVersionSheet } from './CompositeVersionSheet'
 import './composite-editor.css'
 
@@ -59,10 +58,12 @@ function versionLabel(version: string): string {
 /**
  * 节点流「编辑节点」：与主画布同规格的全屏画布。
  * - 左侧节点面板、底部缩放/小地图坞、双击空白建节点菜单与主画布一致；
- * - 右下角浮动动作簇：历史版本 / 保存 / 另存为新版本 / 取消；
+ * - 顶栏只显示节点流名称；右下角浮动动作簇：历史版本 / 保存 / 另存为新版本 / 取消；
+ * - 取消即退出，不做二次确认（用户裁决 2026-11-11）；
  * - 历史版本从底部弹层查看，可载入旧版本或切换为旧版本；
  * - 编辑期间隐藏窗口标题栏控制钮，退出恢复；
- * - 保存 = 写入草稿（下次编辑自动恢复）；另存为新版本 = 发布不可变版本。
+ * - 保存 = 写入草稿（下次编辑自动恢复）；另存为新版本 = 发布不可变版本；
+ * - 公开输入/输出随内部图按节点规范自动推导，不提供手动挑选。
  */
 export function CompositeCanvasEditor({
   capability,
@@ -75,11 +76,9 @@ export function CompositeCanvasEditor({
   const [editor, setEditor] = useState<Editor | null>(null)
   const [selectedShapeId, setSelectedShapeId] = useState<TLShapeId | null>(null)
   const [busy, setBusy] = useState(false)
-  const [staleMappings, setStaleMappings] = useState<string[]>([])
   const [issues, setIssues] = useState<string[]>([])
   const [revision, setRevision] = useState<number | null>(draftRevision)
   const [dirty, setDirty] = useState(false)
-  const [closeConfirm, setCloseConfirm] = useState(false)
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const [showVersions, setShowVersions] = useState(false)
   const [activeCategory, setActiveCategory] = useState<{
@@ -220,13 +219,11 @@ export function CompositeCanvasEditor({
   const buildManifest = (): {
     manifest: CompositeManifest
     issues: string[]
-    staleMappings: string[]
   } => {
     if (!editor)
       return {
         manifest: { ...base, version },
-        issues: [],
-        staleMappings: []
+        issues: []
       }
     const graph = deriveGraph(editor)
     const result = buildCompositeManifestFromEditor({
@@ -242,12 +239,10 @@ export function CompositeCanvasEditor({
       if (assigned) internalIdByShape.current.set(node.id, assigned)
     })
     const nextIssues = result.issues.map((item) => `${item.path}: ${item.message}`)
-    setStaleMappings(result.staleMappings)
     setIssues(nextIssues)
     return {
       manifest: { ...result.manifest, version },
-      issues: nextIssues,
-      staleMappings: result.staleMappings
+      issues: nextIssues
     }
   }
 
@@ -286,7 +281,6 @@ export function CompositeCanvasEditor({
       const built = buildManifest()
       const next = built.manifest
       if (built.issues.length > 0) throw new Error('内部图存在结构问题，请先修复')
-      if (built.staleMappings.length > 0) throw new Error('公开端口映射已失效，请先重新绑定或移除')
       const latest = capability.latestVersion
       if (latest && Number.parseInt(next.version, 10) <= Number.parseInt(latest, 10))
         throw new Error(`新版本必须高于当前最新发布 v${versionLabel(latest)}`)
@@ -351,18 +345,9 @@ export function CompositeCanvasEditor({
     }
   }
 
-  // 取消 = 退出编辑；有未保存修改时先确认（保存并关闭 / 放弃 / 继续）。
+  // 取消 = 立即退出编辑，不做二次确认（用户裁决 2026-11-11）。
   const requestClose = (): void => {
-    if (dirty) setCloseConfirm(true)
-    else onClose()
-  }
-
-  const saveAndClose = async (): Promise<void> => {
-    const saved = await saveDraft()
-    if (saved) {
-      setCloseConfirm(false)
-      onClose()
-    }
+    onClose()
   }
 
   // 双击空白画布打开与主画布相同的节点创建菜单；点在节点上时交给节点自身处理。
@@ -410,16 +395,9 @@ export function CompositeCanvasEditor({
       <span hidden>{capability.id}</span>
       <header className="composite-canvas-topbar">
         <div className="composite-canvas-heading">
-          <span className="composite-canvas-mark">
-            <Icon name="layers" size={15} />
-          </span>
-          <span>节点流</span>
-          <h2 id="composite-canvas-title" title={manifest.name}>
+          <h2 id="composite-canvas-title" title={base.name}>
             {base.name}
           </h2>
-          <span className="composite-canvas-version">
-            当前 v{versionLabel(capability.latestVersion ?? manifest.version)}
-          </span>
         </div>
       </header>
       <div className="composite-canvas-workspace">
@@ -584,13 +562,8 @@ export function CompositeCanvasEditor({
           />
         )}
       </div>
-      {(staleMappings.length > 0 || issues.length > 0) && (
+      {issues.length > 0 && (
         <div className="composite-canvas-diagnostics" role="status">
-          {staleMappings.map((item) => (
-            <span key={item} className="composite-canvas-warning">
-              {item}
-            </span>
-          ))}
           {issues.map((item) => (
             <span key={item} className="composite-canvas-warning">
               {item}
@@ -607,18 +580,6 @@ export function CompositeCanvasEditor({
           busy={busy}
           onCancel={() => setPreview(null)}
           onConfirm={() => void confirmPublish()}
-        />
-      )}
-      {closeConfirm && (
-        <CompositeCloseConfirm
-          capabilityName={manifest.name}
-          busy={busy}
-          onSaveAndClose={() => void saveAndClose()}
-          onDiscard={() => {
-            setCloseConfirm(false)
-            onClose()
-          }}
-          onContinue={() => setCloseConfirm(false)}
         />
       )}
     </div>,

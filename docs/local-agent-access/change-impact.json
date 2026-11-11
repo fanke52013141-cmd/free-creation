@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "性能优化专项（无业务语义变化）：主进程 getDataDir/getProjectsDir 目录确保改为一次性缓存；project.json 保存与恢复副本改紧凑 JSON（仍为同一 JSON 结构，tmp+fsync+bak+rename 崩溃安全顺序不变）；启动工作区健康扫描与过期成片临时文件清扫延后到业务窗创建后 2s；media 表新增 path 索引（M29），listMedia/cloneProject 改语义等价的前缀范围查询；媒体文件预检改异步并发 lstat（原 media.files_preflight 事件与口径保留）。渲染端：Flow 节点 inspect 轮询无任务时退避 750ms→5s、有任务/事件恢复快轮询、窗口隐藏暂停；gateway.load 首屏在途去重；节点输入指纹与执行时长估计改编辑器级共享 computed 索引（判定口径不变，node-page-index 签名补充箭头顺序与端点方向，binding.props 以可选链兼容）；连线层几何按文档修订 memo、命中测试加端口区域与 bbox 粗筛；节点卡聚光灯 CSS 写入按 rAF 合并；历史坞仅在 canUndo/canRedo 变化时重渲染。无 IPC 通道、契约 Schema、外部操作语义变化；CLI/MCP 与 GUI 复用同一业务函数，三入口行为一致。验证：typecheck/lint(仅既有 scripts 报错)/guard 三关/electron-vite build/freshness+node-page-index+input-fingerprint+canvas-interaction+node-ui-decisions 共 146 测试通过。",
+  "reason": "节点流第三轮用户裁决（纯渲染层+共享推导）：卡片参考资产样式仅名称、悬浮显示删除/编辑节点/编辑；公开输入输出改为始终按内部图节点规范自动推导（deriveCompositeBoundary），移除手动边界编辑器与 staleMappings 保留逻辑（editor-manifest 单一来源，GUI/CLI/MCP 共用同一推导，无契约 Schema 变化）；编辑基础信息弹窗仅取消/保存（draftSave 同步名称不产生版本）；编辑器顶栏仅名称、取消即退出无二次确认；历史版本弹层与发布预览按应用主题变量与 Stitch 设计稿重样式，确认发布改主题色主按钮。业务动作分母与日志门禁已通过。",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -128,7 +128,7 @@
     "src/preload/index.ts": "e85de48e5c5d5f59b87d89c691a548803c5afcf584b0bda7868565cbd771e939",
     "src/renderer/src/App.tsx": "2c668996c4a04a85c27e9bedc3845c2265c6e0a90e64ad5efbd267b127e9e3d5",
     "src/renderer/src/canvas/CanvasEditor.tsx": "96ae543acf14c0f311f932be73c3d945774679ef43ab33f8cf0710f2dce8cdea",
-    "src/renderer/src/canvas/CanvasSidePanel.tsx": "0a36e19f8bbd0eaa4e0de4d78c84210fd2ddf9f08bed17bf44301700a5dc12a4",
+    "src/renderer/src/canvas/CanvasSidePanel.tsx": "f9499faff7b35efe2d92d7ecb3b502f2c8776cab0268598b14cb940d0870e76c",
     "src/renderer/src/canvas/ChatSidePanel.tsx": "ddbebc7275822df64fa95b25b56c63d946fb5c512f9d2c2b3017046ae21e54b5",
     "src/renderer/src/canvas/RunTimeline.tsx": "c29fef7a5460a75a6f1d0dfb0f02afbd87d419014b6d0d7122949d5cfd4924a6",
     "src/renderer/src/canvas/flow-asset-actions.ts": "0dd4e5a53510d9566771618052954004bfdc17b31f8f94afe08c0d624554a94f",

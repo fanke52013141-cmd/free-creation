@@ -7,6 +7,7 @@ import type {
   CompositePort
 } from '@shared/composite/manifest'
 import { parseCompositeManifest } from '@shared/composite/manifest'
+import { deriveCompositeBoundary } from '@shared/composite/boundary'
 
 export interface CompositeEditorBuildInput {
   manifest: CompositeManifest
@@ -22,8 +23,6 @@ export interface CompositeEditorBuildResult {
   manifest: CompositeManifest
   /** 结构性错误（不能保存为草稿）。 */
   issues: CompositeManifestIssue[]
-  /** 可定位的映射失效提示（发布前必须处理，但草稿允许保留）。 */
-  staleMappings: string[]
 }
 
 function portSnapshot(ports: CanvasNode['ports']): NonNullable<CompositeGraphNode['ports']> {
@@ -91,12 +90,13 @@ function rebuildDependencies(
 }
 
 /**
- * 从全屏编辑画布重建内部图（W1）。
+ * 从全屏编辑画布重建内部图。
  *
- * 关键规则：
+ * 关键规则（2026-11-11 用户裁决）：
  * - 内部节点 ID 来自创建时的稳定映射，不按数组下标重新编号；
- * - 已确认的公开输入/输出原样保留，不因增删节点自动重写；
- * - 映射失效只记录可定位问题（节点 ID + 端口 ID），由发布校验阻断，不静默丢弃。
+ * - 公开输入/输出始终按内部图自动推导（源节点输入规范 → 公开输入，
+ *   汇节点主输出规范 → 公开输出），不再保留旧边界、也不提供手动挑选；
+ * - 类型/连线合法性仍由发布前的 validateCompositeManifest 负责。
  */
 export function buildCompositeManifestFromEditor(
   input: CompositeEditorBuildInput
@@ -149,56 +149,17 @@ export function buildCompositeManifestFromEditor(
       to: { nodeId: internalIdByShape.get(edge.to.nodeId)!, portId: edge.to.portId }
     }))
 
-  const nodeById = new Map(graphNodes.map((node) => [node.id, node]))
-  const portOf = (
-    nodeId: string,
-    portId: string
-  ): NonNullable<CompositeGraphNode['ports']>[number] | undefined =>
-    nodeById.get(nodeId)?.ports?.find((port) => port.id === portId)
-  const staleMappings: string[] = []
-
-  const inputs = input.manifest.inputs.map((port) => {
-    const target = port.targets[0]
-    if (!target) {
-      staleMappings.push(`输入「${port.label}」（${port.id}）没有映射目标`)
-      return port
-    }
-    if (!nodeById.has(target.nodeId)) {
-      staleMappings.push(
-        `输入「${port.label}」（${port.id}）映射的节点 ${target.nodeId} 已不存在（目标端口 ${target.nodeId}.${target.portId}）`
-      )
-      return port
-    }
-    if (!portOf(target.nodeId, target.portId)) {
-      staleMappings.push(
-        `输入「${port.label}」（${port.id}）映射的端口 ${target.nodeId}.${target.portId} 已不存在`
-      )
-    }
-    return port
-  })
-  const outputs = input.manifest.outputs.map((port) => {
-    if (!nodeById.has(port.source.nodeId)) {
-      staleMappings.push(
-        `输出「${port.label}」（${port.id}）来源节点 ${port.source.nodeId} 已不存在`
-      )
-      return port
-    }
-    if (!portOf(port.source.nodeId, port.source.portId)) {
-      staleMappings.push(
-        `输出「${port.label}」（${port.id}）来源端口 ${port.source.nodeId}.${port.source.portId} 已不存在`
-      )
-    }
-    return port
-  })
-
+  const graph = { nodes: graphNodes, edges: graphEdges }
+  // 公开边界随内部图实时推导：文本开头 → 文本输入，图片结尾 → 图片输出。
+  const boundary = deriveCompositeBoundary({ ...input.manifest, graph })
   const manifest: CompositeManifest = {
     ...input.manifest,
-    graph: { nodes: graphNodes, edges: graphEdges },
-    inputs,
-    outputs,
+    graph,
+    inputs: boundary.inputs,
+    outputs: boundary.outputs,
     dependencies: rebuildDependencies(input.manifest, graphNodes)
   }
   const parsed = parseCompositeManifest(manifest)
-  if (!parsed.ok) return { manifest, issues: parsed.issues, staleMappings }
-  return { manifest: parsed.manifest, issues: [], staleMappings }
+  if (!parsed.ok) return { manifest, issues: parsed.issues }
+  return { manifest: parsed.manifest, issues: [] }
 }

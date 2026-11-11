@@ -1,30 +1,21 @@
-/* eslint-disable react-hooks/set-state-in-effect -- 弹窗异步加载版本与草稿后填充表单 */
-// 节点流「编辑」基础信息弹窗：与创建时（WorkflowSaveDialog 组合模式）同一套
-// library-form 弹窗样式——名称/说明 + 公开端口映射。
-// 内部节点不在此编辑——「编辑节点」走全屏画布（CompositeCanvasEditor）。
-// 保存 = 写入草稿（下次编辑自动恢复）；另存为新版本 = 发布不可变版本（版本号自动递增）。
+/* eslint-disable react-hooks/set-state-in-effect -- 弹窗异步加载草稿后填充表单 */
+// 节点流「编辑」基础信息弹窗：与创建时同一套 library-form 样式。
+// 只编辑名称/说明；保存 = 写入草稿并同步名称展示（不产生新版本）。
+// 版本只在「编辑节点」里通过「另存为新版本」产生（用户裁决 2026-11-11）。
+// 公开输入/输出按内部节点规范自动推导，不在此手动挑选。
 import { useEffect, useState } from 'react'
 import type { CompositeCapabilitySummary } from '@shared/composite/types'
 import type { CompositeManifest } from '@shared/composite/manifest'
 import { Icon } from '../components/Icon'
 import { toast } from '../stores/toast'
-import { CompositeBoundaryEditor } from '../composite/CompositeBoundaryEditor'
 import './composite-editor.css'
 import '../library/library.css'
 
 interface Props {
   capability: CompositeCapabilitySummary
   onClose: () => void
+  /** 保存成功后刷新列表（名称展示同步）。 */
   onPublished: () => void
-}
-
-function nextVersion(version: string | null): string {
-  const major = Number.parseInt(version ?? '0', 10)
-  return `${Number.isFinite(major) ? major + 1 : 1}.0`
-}
-
-function versionLabel(version: string | null): string {
-  return (version ?? '—').replace(/\.0\.0$/, '.0')
 }
 
 export function CompositeVersionDialog({
@@ -38,8 +29,6 @@ export function CompositeVersionDialog({
   const [revision, setRevision] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  // 发布目标版本始终高于当前最新发布，不提供手填，避免同版本覆盖被拒的困惑。
-  const targetVersion = nextVersion(capability.latestVersion)
 
   useEffect(() => {
     const latest = capability.latestVersion
@@ -64,65 +53,25 @@ export function CompositeVersionDialog({
     })
   }, [capability])
 
-  const editedManifest = (): CompositeManifest | null =>
-    manifest
-      ? {
-          ...manifest,
-          version: targetVersion,
-          name: name.trim() || manifest.name,
-          description: description.trim() || undefined
-        }
-      : null
-
-  // 保存：写入草稿，不产生新版本；下次「编辑 / 编辑节点」自动恢复。
-  const saveDraft = async (): Promise<void> => {
-    const edited = editedManifest()
-    if (!edited) return setError('版本尚未加载')
-    setBusy(true)
-    setError('')
-    try {
-      const saved = await window.api.composite.draftSave({
-        manifest: edited,
-        expectedRevision: revision ?? 0
-      })
-      if (!saved.ok) throw new Error(saved.error.message)
-      setRevision(saved.data.revision)
-      setManifest(edited)
-      toast('已保存，下次编辑会自动恢复')
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
-    } finally {
-      setBusy(false)
+  // 保存：写入草稿（同步名称/说明展示），不产生新版本。
+  const save = async (): Promise<void> => {
+    if (!manifest) return setError('版本尚未加载')
+    const title = name.trim()
+    if (!title) return setError('请填写名称')
+    const edited: CompositeManifest = {
+      ...manifest,
+      name: title,
+      description: description.trim() || undefined
     }
-  }
-
-  // 另存为新版本：校验后发布不可变新版本；旧版本与已绑定实例保持原样。
-  const publish = async (): Promise<void> => {
-    const edited = editedManifest()
-    if (!edited) return setError('版本尚未加载')
     setBusy(true)
     setError('')
     try {
-      const validated = await window.api.composite.validate({ manifest: edited })
-      if (!validated.ok) throw new Error(validated.error.message)
-      if (!validated.data.ok) {
-        throw new Error(
-          validated.data.issues
-            .map((issue) => `[${issue.code}] ${issue.path}: ${issue.message}`)
-            .join('；')
-        )
-      }
       const saved = await window.api.composite.draftSave({
         manifest: edited,
         expectedRevision: revision ?? 0
       })
       if (!saved.ok) throw new Error(saved.error.message)
-      const published = await window.api.composite.publish({
-        manifest: edited,
-        expectedRevision: saved.data.revision
-      })
-      if (!published.ok) throw new Error(published.error.message)
-      toast(`已另存为「${edited.name}」v${versionLabel(targetVersion)}`)
+      toast('已保存')
       onPublished()
       onClose()
     } catch (cause) {
@@ -138,13 +87,23 @@ export function CompositeVersionDialog({
       onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}
     >
       <section
-        className="library-form-dialog workflow-save-dialog is-composite"
+        className="library-form-dialog workflow-save-dialog"
         role="dialog"
         aria-modal="true"
         aria-label="编辑节点流"
         onKeyDown={(event) => {
           event.stopPropagation()
           if (event.key === 'Escape' && !busy) onClose()
+          if (
+            event.key === 'Enter' &&
+            !busy &&
+            event.target instanceof HTMLInputElement &&
+            event.target.type === 'text' &&
+            !event.nativeEvent.isComposing
+          ) {
+            event.preventDefault()
+            void save()
+          }
         }}
       >
         <header className="library-form-header">
@@ -166,7 +125,7 @@ export function CompositeVersionDialog({
           {manifest && (
             <>
               <label className="library-form-field">
-                <span>内容名称</span>
+                <span>名称</span>
                 <input
                   autoFocus
                   maxLength={100}
@@ -179,7 +138,7 @@ export function CompositeVersionDialog({
                 />
               </label>
               <label className="library-form-field">
-                <span>说明</span>
+                <span>说明（可选）</span>
                 <input
                   maxLength={600}
                   value={description}
@@ -187,16 +146,9 @@ export function CompositeVersionDialog({
                     setDescription(event.target.value)
                     setError('')
                   }}
-                  placeholder="这个节点流做什么（可选）"
+                  placeholder="这个节点流做什么"
                 />
               </label>
-              <div className="workflow-save-composite">
-                <CompositeBoundaryEditor
-                  manifest={manifest}
-                  disabled={busy}
-                  onChange={setManifest}
-                />
-              </div>
             </>
           )}
           {error && (
@@ -206,7 +158,7 @@ export function CompositeVersionDialog({
           )}
         </div>
         <footer className="library-form-footer">
-          <span>当前 v{versionLabel(capability.latestVersion)}</span>
+          <span />
           <button
             type="button"
             className="library-form-secondary"
@@ -217,20 +169,11 @@ export function CompositeVersionDialog({
           </button>
           <button
             type="button"
-            className="library-form-secondary"
-            disabled={busy || !manifest}
-            title="暂存修改，下次编辑自动恢复；不产生新版本"
-            onClick={() => void saveDraft()}
-          >
-            保存
-          </button>
-          <button
-            type="button"
             className="library-form-primary"
             disabled={busy || !manifest}
-            onClick={() => void publish()}
+            onClick={() => void save()}
           >
-            {busy ? '处理中…' : `另存为新版本 v${versionLabel(targetVersion)}`}
+            {busy ? '保存中…' : '保存'}
           </button>
         </footer>
       </section>

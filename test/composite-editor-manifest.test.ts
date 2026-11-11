@@ -73,11 +73,15 @@ function manifest(): CompositeManifest {
   }
 }
 
-describe('节点流编辑画布 → manifest（W1）', () => {
-  it('保留已确认公开端口与稳定内部 ID，不按数组下标重排', () => {
+describe('节点流编辑画布 → manifest（边界随内部图自动推导）', () => {
+  it('稳定内部 ID 不按数组下标重排；公开边界按源/汇节点规范推导', () => {
     const nodes = [node('shape:a', '文案'), node('shape:b', '新增')]
     const edges: CanvasEdge[] = [
-      { id: 'e1', from: { nodeId: 'shape:a', portId: 'out-text' }, to: { nodeId: 'shape:b', portId: 'in-text' } }
+      {
+        id: 'e1',
+        from: { nodeId: 'shape:a', portId: 'out-text' },
+        to: { nodeId: 'shape:b', portId: 'in-text' }
+      }
     ]
     let index = 0
     const result = buildCompositeManifestFromEditor({
@@ -89,14 +93,19 @@ describe('节点流编辑画布 → manifest（W1）', () => {
     })
     expect(result.issues).toEqual([])
     expect(result.manifest.graph.nodes.map((item) => item.id)).toEqual(['n1', 'n-new-0'])
-    expect(result.manifest.inputs).toEqual(manifest().inputs)
-    expect(result.manifest.outputs).toEqual(manifest().outputs)
+    // 输入来自源文本节点（带默认正文），输出来自汇节点的主输出。
+    expect(result.manifest.inputs).toHaveLength(1)
+    expect(result.manifest.inputs[0].type).toBe('text')
+    expect(result.manifest.inputs[0].targets).toEqual([{ nodeId: 'n1', portId: 'in-text' }])
+    expect(result.manifest.inputs[0].defaultValue).toBe('文案')
+    expect(result.manifest.outputs).toHaveLength(1)
+    expect(result.manifest.outputs[0].source).toEqual({ nodeId: 'n-new-0', portId: 'out-text' })
     expect(result.manifest.graph.edges).toEqual([
       { from: { nodeId: 'n1', portId: 'out-text' }, to: { nodeId: 'n-new-0', portId: 'in-text' } }
     ])
   })
 
-  it('删除映射节点时保留公开端口并给出原节点/端口定位', () => {
+  it('删除节点后边界跟随新图推导，不保留失效的旧映射', () => {
     const nodes = [node('shape:b', '其他')]
     const result = buildCompositeManifestFromEditor({
       manifest: manifest(),
@@ -105,9 +114,7 @@ describe('节点流编辑画布 → manifest（W1）', () => {
       internalIdByShapeId: new Map(),
       nextInternalId: () => 'n-new'
     })
-    expect(result.manifest.inputs[0].targets).toEqual([{ nodeId: 'n1', portId: 'in-text' }])
-    expect(result.manifest.outputs[0].source).toEqual({ nodeId: 'n1', portId: 'out-text' })
-    expect(result.staleMappings.join('\n')).toContain('n1')
-    expect(result.staleMappings.join('\n')).toContain('in-text')
+    expect(result.manifest.inputs[0].targets).toEqual([{ nodeId: 'n-new', portId: 'in-text' }])
+    expect(result.manifest.outputs[0].source).toEqual({ nodeId: 'n-new', portId: 'out-text' })
   })
 })

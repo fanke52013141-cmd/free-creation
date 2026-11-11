@@ -302,46 +302,44 @@ function WorkflowPanel({
                   <span className="asset-name" title={capability.name}>
                     {capability.name}
                   </span>
-                  <span className="asset-meta">
-                    v{(capability.latestVersion ?? '—').replace(/\.0\.0$/, '.0')} · 节点流
-                  </span>
-                  <span className="composite-card-actions">
-                    <button
-                      type="button"
-                      className="btn-ghost small"
-                      title="编辑名称、说明与公开端口（与创建时同一弹窗）"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        setSettingsDialog(capability)
-                      }}
-                    >
-                      编辑
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-ghost small"
-                      title="铺开画布编辑内部节点：可添加任意节点、调整内容与连线"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        void openCanvasEdit(capability)
-                      }}
-                    >
-                      编辑节点
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-ghost small composite-card-delete"
-                      title="删除节点流（先检查引用，再二次确认）"
-                      aria-label={`删除 ${capability.name}`}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        void handleDeleteComposite(capability)
-                      }}
-                    >
-                      删除
-                    </button>
-                  </span>
                 </div>
+                {/* 与资产卡片一致：悬浮才显示动作（删除 / 编辑节点 / 编辑）。 */}
+                <span className="composite-card-actions">
+                  <button
+                    type="button"
+                    className="btn-ghost small composite-card-delete"
+                    title="删除节点流（先检查引用，再二次确认）"
+                    aria-label={`删除 ${capability.name}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void handleDeleteComposite(capability)
+                    }}
+                  >
+                    删除
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost small"
+                    title="铺开画布编辑内部节点：可添加任意节点、调整内容与连线"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void openCanvasEdit(capability)
+                    }}
+                  >
+                    编辑节点
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost small"
+                    title="编辑名称与说明（与创建时同一弹窗，不产生新版本）"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setSettingsDialog(capability)
+                    }}
+                  >
+                    编辑
+                  </button>
+                </span>
               </article>
             ))}
             {visibleTemplates.map((tmpl) => (

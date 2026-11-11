@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import type { CompositeManifest } from '@shared/composite/manifest'
 import { planCompositeUpgrade } from '@shared/composite/upgrade'
 import { Icon } from '../components/Icon'
+import '../library/library.css'
 
 export interface CompositePublishValidationIssue {
   code: string
@@ -227,7 +228,7 @@ export function CompositePublishPreview({
           </button>
           <button
             type="button"
-            className="run-btn"
+            className="library-form-primary nf-publish-confirm"
             disabled={busy || blocked}
             title={blocked ? '发布校验未通过，请先修复阻断问题' : '确认发布新版本'}
             onClick={onConfirm}

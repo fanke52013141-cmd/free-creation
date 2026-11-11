@@ -5,7 +5,6 @@ import { toast } from '../stores/toast'
 import { extractTemplateFromSelection, useWorkflowStore } from '../stores/workflow'
 import { deriveGraph } from './graph'
 import { buildCompositeManifestFromGraph } from '../composite/build-manifest'
-import { CompositeBoundaryEditor } from '../composite/CompositeBoundaryEditor'
 import type { CompositeManifest } from '@shared/composite/manifest'
 import type { NodeCardShape } from './NodeCardShape'
 import '../library/library.css'
@@ -282,11 +281,10 @@ export function WorkflowSaveDialog({
                 </label>
               </div>
               {compositeDraft ? (
-                <CompositeBoundaryEditor
-                  manifest={compositeDraft}
-                  disabled={busy}
-                  onChange={setCompositeDraft}
-                />
+                <p className="workflow-save-boundary-hint">
+                  公开输入/输出按内部节点规范自动推导：
+                  {compositeDraft.inputs.length} 个输入 · {compositeDraft.outputs.length} 个输出
+                </p>
               ) : null}
             </div>
           )}
