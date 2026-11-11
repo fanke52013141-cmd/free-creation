@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 28
+export const DB_SCHEMA_VERSION = 29
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -596,6 +596,13 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
       ALTER TABLE composite_runs ADD COLUMN parent_run_id TEXT;
       ALTER TABLE composite_runs ADD COLUMN failure_phase TEXT;
       ALTER TABLE composite_runs ADD COLUMN output_summary TEXT;
+    `)
+  },
+  // M29: 媒体路径索引。listMedia/cloneProject 按项目前缀查媒体，
+  // 原 substr() 条件无法走索引，媒体行随所有项目累积后每次打开画布都全表扫描。
+  (database) => {
+    database.exec(`
+      CREATE INDEX IF NOT EXISTS idx_media_path ON media(path);
     `)
   }
 ]

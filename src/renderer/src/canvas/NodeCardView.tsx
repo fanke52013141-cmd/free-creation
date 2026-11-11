@@ -2,6 +2,7 @@ import { toast } from '../stores/toast'
 import { checkModelAvailability, providerAvailabilityKey } from './model-availability'
 import type { ModelOperation } from '@free-creation/model-contracts'
 import { nodePageIndex } from './node-page-index'
+import { nodeRunDurationIndex } from './node-run-duration-index'
 // NodeCard 卡片视图：头部（序号/图标/标题/状态灯）+ 类型化内容体 + 端口圆点 + 媒体预览浮层
 import { HTMLContainer, stopEventPropagation, useEditor, useValue, getPointerInfo } from 'tldraw'
 import { nodeOwnsPointer, nodeSelectableText, nodeTextField } from './node-pointer-policy'
@@ -46,7 +47,7 @@ import {
   estimateImageGenerationDuration,
   imageGenerationProgressPercent
 } from './image-generation-progress'
-import { readNodeRunHistory, readNodeRunRecord } from '../engine/runRecord'
+import { readNodeRunRecord } from '../engine/runRecord'
 import type { GenerationTimingSample } from '@shared/contracts'
 import { estimateGenerationDuration } from './generation-time-estimate'
 import './image-gen-adaptive.css'
@@ -170,6 +171,16 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const portFollowRef = useRef<PortFollowPosition | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLDivElement>(null)
+  // 聚光灯 CSS 变量写入按 rAF 合并：每个指针事件都 getBoundingClientRect + 写样式
+  // 会在鼠标移动时造成多处强制布局，与连线层命中测试叠加放大卡顿。
+  const spotlightFrameRef = useRef(0)
+  const spotlightPointRef = useRef<{ x: number; y: number; el: HTMLDivElement } | null>(null)
+  useEffect(
+    () => () => {
+      if (spotlightFrameRef.current) cancelAnimationFrame(spotlightFrameRef.current)
+    },
+    []
+  )
   const titleEditable = true
 
   /** Follow within the detached hit area, in canvas-local pixels. */
@@ -510,23 +521,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const nodeRunDurationEstimateMs = useValue(
     'node execution average duration',
     () => {
-      const runs = editor.getCurrentPageShapes().flatMap((candidate) => {
-        if (candidate.type !== 'node-card' || candidate.props.nodeType !== shape.props.nodeType) {
-          return []
-        }
-        const history = readNodeRunHistory(candidate.meta?.nodeRunHistory)
-        const latest = readNodeRunRecord(candidate.meta?.nodeRun)
-        const uniqueRuns = new Map(history.map((run) => [run.runId, run]))
-        if (latest && latest.status !== 'running') uniqueRuns.set(latest.runId, latest)
-        return [...uniqueRuns.values()]
-          .filter((run) => run.status === 'success' && typeof run.durationMs === 'number')
-          .map((run) => ({
-            durationMs: run.durationMs!,
-            providerId: run.target?.providerId,
-            modelId: run.target?.modelId,
-            recordedAt: run.finishedAt ?? run.startedAt
-          }))
-      })
+      // 共享索引：全页运行历史每修订只扫描解析一次，不再每张卡各扫一遍。
+      const runs = nodeRunDurationIndex(editor).samples.get(shape.props.nodeType) ?? []
       const exactModelRuns = configuredModelKey
         ? runs.filter((run) =>
             run.modelId === configuredModelKey &&
@@ -1096,10 +1092,16 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         }}
         onPointerMoveCapture={(event) => {
           if (event.pointerType !== 'mouse' || !event.currentTarget.contains(event.target as Node)) return
-          const card = event.currentTarget
-          const bounds = card.getBoundingClientRect()
-          card.style.setProperty('--node-mouse-x', `${(event.clientX - bounds.left) / bounds.width * 100}%`)
-          card.style.setProperty('--node-mouse-y', `${(event.clientY - bounds.top) / bounds.height * 100}%`)
+          spotlightPointRef.current = { x: event.clientX, y: event.clientY, el: event.currentTarget }
+          if (spotlightFrameRef.current) return
+          spotlightFrameRef.current = requestAnimationFrame(() => {
+            spotlightFrameRef.current = 0
+            const point = spotlightPointRef.current
+            if (!point) return
+            const bounds = point.el.getBoundingClientRect()
+            point.el.style.setProperty('--node-mouse-x', `${(point.x - bounds.left) / bounds.width * 100}%`)
+            point.el.style.setProperty('--node-mouse-y', `${(point.y - bounds.top) / bounds.height * 100}%`)
+          })
         }}
         onPointerDown={handleCardPointerDown}
         onPointerDownCapture={(event) => {

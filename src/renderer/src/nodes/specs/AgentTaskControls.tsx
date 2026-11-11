@@ -24,20 +24,31 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
     let disposed = false,
       timer: ReturnType<typeof setTimeout>
     const inspect = async (): Promise<void> => {
-      try {
-        const reply = await window.api.inspectFlowAgent({ projectId, nodeId: shape.id })
-        if (!disposed && reply.ok) setTask(reply.data)
-      } catch {
-        /* The next explicit action reports transport errors. */
+      // 无任务时退避到 5s；有任务时保持 750ms。任务更新另有事件推送兜底。
+      let delay = 5000
+      if (!document.hidden) {
+        try {
+          const reply = await window.api.inspectFlowAgent({ projectId, nodeId: shape.id })
+          if (!disposed && reply.ok) {
+            setTask(reply.data)
+            if (reply.data) delay = 750
+          }
+        } catch {
+          /* The next explicit action reports transport errors. */
+        }
       }
-      if (!disposed) timer = setTimeout(() => void inspect(), 750)
+      if (!disposed) timer = setTimeout(() => void inspect(), delay)
     }
     const onTaskUpdate = (event: Event): void => {
       const detail = (
         event as CustomEvent<{ projectId: string; nodeId: string; task: FlowAgentView }>
       ).detail
-      if (!disposed && detail?.projectId === projectId && detail.nodeId === shape.id)
+      if (!disposed && detail?.projectId === projectId && detail.nodeId === shape.id) {
         setTask(detail.task)
+        // 事件把节点带回活跃态：立即恢复快轮询，不等 5s 退避到期。
+        clearTimeout(timer)
+        void inspect()
+      }
     }
     window.addEventListener('canvas-agent-task-updated', onTaskUpdate)
     void inspect()

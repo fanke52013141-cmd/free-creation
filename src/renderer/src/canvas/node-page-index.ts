@@ -19,6 +19,9 @@ export function nodePageIndex(editor: Editor): NodePageIndex {
         const sequence = new Map<string, number>()
         const arrows = new Map<string, TLShape[]>()
         const artifacts = new Map<string, TLShape[]>()
+        // 指纹等派生计算依赖箭头顺序与端点方向：签名必须覆盖 index 与 terminal，
+        // 否则重排/翻转箭头时共享索引不会失效，下游会拿到过期关系。
+        const arrowSignatures: Array<[string, string, string]> = []
         const shapes = editor.getCurrentPageShapes()
         const append = (map: Map<string, TLShape[]>, id: string, shape: TLShape): void => {
           const list = map.get(id) ?? []
@@ -31,9 +34,16 @@ export function nodePageIndex(editor: Editor): NodePageIndex {
           .forEach((shape, index) => sequence.set(shape.id, index + 1))
         for (const shape of shapes) {
           if (shape.type === 'arrow') {
-            const endpoints = new Set(
-              editor.getBindingsFromShape(shape.id, 'arrow').map((binding) => binding.toId)
-            )
+            const bindings = editor.getBindingsFromShape(shape.id, 'arrow')
+            const endpoints = new Set(bindings.map((binding) => binding.toId))
+            arrowSignatures.push([
+              shape.id,
+              shape.index,
+              bindings
+                .map((binding) => `${binding.toId}:${binding.props?.terminal ?? ''}`)
+                .sort()
+                .join(',')
+            ])
             for (const id of endpoints) append(arrows, id, shape)
           } else if (
             shape.type === 'node-card' &&
@@ -48,6 +58,7 @@ export function nodePageIndex(editor: Editor): NodePageIndex {
             id,
             items.map((item) => [item.id, item.meta.fromPort, item.meta.toPort])
           ]),
+          arrowSignatures,
           [...artifacts].map(([id, items]) => [
             id,
             items.map((item) => [item.id, item.meta.artifactProducerPortId])

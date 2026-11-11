@@ -3132,16 +3132,16 @@ export function CanvasEditor({
               <span className="palette-label">资产</span>
             </button>
           </Tooltip>
-          <Tooltip label="打开节点库">
+          <Tooltip label="打开节点流">
             <button
               className="palette-item"
-              aria-label="打开节点库"
+              aria-label="打开节点流"
               onClick={() => setPanelTab('workflow')}
             >
               <span className="palette-icon">
                 <Icon name="node-library" size={20} />
               </span>
-              <span className="palette-label">节点库</span>
+              <span className="palette-label">节点流</span>
             </button>
           </Tooltip>
           <Tooltip label="打开历史记录">

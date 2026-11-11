@@ -26,23 +26,31 @@ export function FlowBuilderControls({ shape }: Pick<NodeBodyProps, 'shape'>): Re
     [error, setError] = useState('')
   useEffect(() => {
     let disposed = false
+    let timer: ReturnType<typeof setTimeout>
+    // 自适应轮询：无提案/已提交/已丢弃时退避到 5s，预览待决时保持 1s。
     const inspect = (): void => {
-      if (projectId)
-        void window.api
-          .buildFlowAgent({ projectId, nodeId: shape.id, action: 'inspect' })
-          .then((reply) => {
-            if (!disposed && reply.ok) {
-              setPreview(reply.data)
-              setFlowBuildPreview(projectId, shape.id, reply.data)
-            }
-          })
-          .catch(() => {})
+      if (!projectId || document.hidden) {
+        if (!disposed) timer = setTimeout(inspect, 5000)
+        return
+      }
+      void window.api
+        .buildFlowAgent({ projectId, nodeId: shape.id, action: 'inspect' })
+        .then((reply) => {
+          if (!disposed && reply.ok) {
+            setPreview(reply.data)
+            setFlowBuildPreview(projectId, shape.id, reply.data)
+          }
+          if (!disposed)
+            timer = setTimeout(inspect, reply.ok && reply.data?.state === 'preview' ? 1000 : 5000)
+        })
+        .catch(() => {
+          if (!disposed) timer = setTimeout(inspect, 5000)
+        })
     }
-    const timer = setInterval(inspect, 750)
     inspect()
     return () => {
       disposed = true
-      clearInterval(timer)
+      clearTimeout(timer)
     }
   }, [projectId, shape.id])
   const act = async (action: 'propose' | 'commit' | 'discard'): Promise<void> => {

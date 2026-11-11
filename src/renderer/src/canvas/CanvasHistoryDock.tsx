@@ -6,23 +6,26 @@ import { Icon } from '../components/Icon'
 
 export function CanvasTopHistory(): React.JSX.Element {
   const editor = useEditorStore((state) => state.editor)
-  const [, force] = useState(0)
+  const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false })
 
   useEffect(() => {
     if (!editor) return
-    const unsub = editor.store.listen(
-      () => {
-        force((n) => n + 1)
-      },
-      { scope: 'session' }
-    )
+    // session 每次相机帧都会触发监听；只在 canUndo/canRedo 真正变化时才重渲染。
+    const sync = (): void => {
+      const next = { canUndo: editor.canUndo(), canRedo: editor.canRedo() }
+      setHistoryState((current) =>
+        current.canUndo === next.canUndo && current.canRedo === next.canRedo ? current : next
+      )
+    }
+    sync()
+    // 监听全部变更但按结果判等：相机帧不再触发重渲染，历史栈变化仍即时刷新。
+    const unsub = editor.store.listen(sync, { scope: 'all' })
     return () => {
       unsub?.()
     }
   }, [editor])
 
-  const canUndo = editor?.canUndo() ?? false
-  const canRedo = editor?.canRedo() ?? false
+  const { canUndo, canRedo } = historyState
 
   return (
     <div className="undo-redo-group" aria-label="历史操作">

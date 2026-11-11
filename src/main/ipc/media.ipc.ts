@@ -3,8 +3,8 @@ import { emitDomainEvent } from '../diagnostics/ipc-domain-events'
 // 媒体 IPC：拖拽导入 + 系统对话框选择导入（见《技术框架与规范》§10）
 import { ipcMain, dialog, clipboard, shell } from 'electron'
 import log from 'electron-log/main'
-import { constants as fsConstants, existsSync, lstatSync } from 'fs'
-import { copyFile, mkdtemp, rm } from 'fs/promises'
+import { constants as fsConstants } from 'fs'
+import { copyFile, lstat, mkdtemp, rm } from 'fs/promises'
 import { tmpdir } from 'os'
 import { basename, extname, join } from 'path'
 import { IPC } from '../../shared/contracts'
@@ -772,15 +772,21 @@ export function registerMediaIpc(): void {
 
   ipcMain.handle(
     IPC.media.checkProjectFiles,
-    (_e, projectId: string): IpcEnvelope<{ missingMediaIds: string[] }> => {
+    async (_e, projectId: string): Promise<IpcEnvelope<{ missingMediaIds: string[] }>> => {
       if (typeof projectId !== 'string' || !projectId) return err('INVALID_INPUT', '项目身份无效')
       try {
-        const missingMediaIds = listMedia(projectId)
-          .filter((asset) => {
+        // 异步并发 stat：打开大项目时不再用同步 fs 逐个阻塞主进程事件循环。
+        const assets = listMedia(projectId)
+        const checks = await Promise.all(
+          assets.map(async (asset) => {
             const absolute = join(getDataDir(), asset.path)
-            return !existsSync(absolute) || !lstatSync(absolute).isFile()
+            const isFile = await lstat(absolute)
+              .then((stat) => stat.isFile())
+              .catch(() => false)
+            return isFile ? null : asset.id
           })
-          .map((asset) => asset.id)
+        )
+        const missingMediaIds = checks.filter((id): id is string => id !== null)
         emitDomainEvent('media.files_preflight', '项目媒体文件预检完成', {
           status: 'success',
           attributes: { projectId, missingCount: missingMediaIds.length }

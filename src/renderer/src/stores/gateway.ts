@@ -25,23 +25,35 @@ interface GatewayState {
   closeCatalog: () => void
 }
 
-export const useGatewayStore = create<GatewayState>((set) => ({
+// 首屏 N 个模型节点同时看到 loaded=false 会各自调用 load()，
+// 造成 N 对 listProviders+listBindings IPC 并发。共享同一个在途 Promise 去重。
+let loadInFlight: Promise<void> | null = null
+
+export const useGatewayStore = create<GatewayState>((set, get) => ({
   providers: [],
   modelBindings: [],
   loaded: false,
   settingsOpen: false,
   catalogOpen: false,
-  load: async () => {
-    // The provider manager saves legacy-compatible providers. Nodes must immediately see
-    // those saved models so users can select one; a selected model is still checked by the
-    // real provider request rather than being silently treated as absent.
-    const res = await window.api.gateway.listProviders()
-    let modelBindings: FeatureBinding[] = []
-    if (window.api.models?.listBindings) {
-      const bindings = await window.api.models.listBindings()
-      if (bindings.ok) modelBindings = bindings.data
+  load: () => {
+    // 已加载后的显式刷新（如保存供应商后）仍发起新请求；只合并首次加载风暴。
+    if (loadInFlight && !get().loaded) return loadInFlight
+    const run = async (): Promise<void> => {
+      // The provider manager saves legacy-compatible providers. Nodes must immediately see
+      // those saved models so users can select one; a selected model is still checked by the
+      // real provider request rather than being silently treated as absent.
+      const res = await window.api.gateway.listProviders()
+      let modelBindings: FeatureBinding[] = []
+      if (window.api.models?.listBindings) {
+        const bindings = await window.api.models.listBindings()
+        if (bindings.ok) modelBindings = bindings.data
+      }
+      if (res.ok) set({ providers: res.data, modelBindings, loaded: true })
     }
-    if (res.ok) set({ providers: res.data, modelBindings, loaded: true })
+    loadInFlight = run().finally(() => {
+      loadInFlight = null
+    })
+    return loadInFlight
   },
   // The compatibility panel keeps the original provider setup flow available.
   openSettings: () => set({ settingsOpen: true, catalogOpen: false }),

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeAll, describe, expect, it } from 'vitest'
-import type { Editor } from 'tldraw'
+import { atom, type Editor } from 'tldraw'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 import {
@@ -83,10 +83,11 @@ describe('T09 结果新鲜度与固定输出', () => {
     const source = shape('text')
     source.id = 'shape:source' as NodeCardShape['id']
     source.props.text = 'upstream'
-    let connected = true
+    // 共享索引按响应式信号失效：mock 与真实 editor 一样用 atom 驱动页面形状。
+    const connected = atom('freshness connected', true)
     const editor = {
       getCurrentPageShapes: () =>
-        connected
+        connected.get()
           ? [
               {
                 id: 'shape:arrow',
@@ -117,7 +118,7 @@ describe('T09 结果新鲜度与固定输出', () => {
       ])
     )
     expect(currentNodeFingerprint(editor, node)).toBe(expected)
-    connected = false
+    connected.set(false)
     expect(currentNodeFingerprint(editor, node)).not.toBe(expected)
   })
   it('失败重试后仍能以最近成功记录判定旧结果的新鲜度', () => {

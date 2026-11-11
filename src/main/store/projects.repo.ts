@@ -201,7 +201,9 @@ function writeProjectSnapshot(
     bak = path + '.bak'
   let phase: ProjectSavePhase = 'write-tmp'
   try {
-    writeFileSync(tmp, JSON.stringify(file, null, 2), 'utf-8')
+    // project.json 是机器读写文件：不带缩进可显著减小体积，
+    // 等比降低每次自动保存的 stringify/写盘/回读 parse 成本。
+    writeFileSync(tmp, JSON.stringify(file), 'utf-8')
     // Ask the OS to flush the complete pending file before touching either
     // verified snapshot. This is a file barrier, not a power-loss guarantee
     // for the later directory renames or the separate SQLite commit.
@@ -416,12 +418,16 @@ export function cloneProject(sourceId: string, requestedName: string): ProjectMe
   const stagingDir = join(getProjectsDir(), `${id}.cloning`)
   if (existsSync(finalDir) || existsSync(stagingDir)) throw new Error('项目 ID 冲突，请重试')
   const stagingMediaDir = join(stagingDir, 'media')
+  // 前缀范围查询走 idx_media_path（与 listMedia 同口径）。
+  const clonePrefix = `projects/${sourceId}/media/`
+  const cloneUpper =
+    clonePrefix.slice(0, -1) + String.fromCharCode(clonePrefix.charCodeAt(clonePrefix.length - 1) + 1)
   const rows = getDb()
     .prepare(
       `SELECT id, kind, mime, path, size_bytes, width, height, duration_sec, name
-       FROM media WHERE substr(path, 1, length(?)) = ? ORDER BY created_at ASC`
+       FROM media WHERE path >= ? AND path < ? ORDER BY created_at ASC`
     )
-    .all(`projects/${sourceId}/media/`, `projects/${sourceId}/media/`) as CloneMediaRow[]
+    .all(clonePrefix, cloneUpper) as CloneMediaRow[]
   const ids = new Map<string, string>()
   const paths = new Map<string, string>()
   const clonedRows: Array<CloneMediaRow & { newId: string; newPath: string }> = []
@@ -797,7 +803,7 @@ export function saveRecoveryCopySync(input: {
   }
   const tmp = p + '.tmp'
   try {
-    writeFileSync(tmp, JSON.stringify(file, null, 2), 'utf-8')
+    writeFileSync(tmp, JSON.stringify(file), 'utf-8')
     renameSync(tmp, p)
     return true
   } catch {

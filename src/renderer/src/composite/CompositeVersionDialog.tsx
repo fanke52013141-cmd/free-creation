@@ -1,19 +1,19 @@
-/* eslint-disable react-hooks/set-state-in-effect -- 弹窗异步加载版本与历史后填充表单 */
+/* eslint-disable react-hooks/set-state-in-effect -- 弹窗异步加载版本与草稿后填充表单 */
+// 节点流「编辑」基础信息弹窗：与创建时（WorkflowSaveDialog 组合模式）同一套
+// library-form 弹窗样式——名称/说明 + 公开端口映射。
+// 内部节点不在此编辑——「编辑节点」走全屏画布（CompositeCanvasEditor）。
+// 保存 = 写入草稿（下次编辑自动恢复）；另存为新版本 = 发布不可变版本（版本号自动递增）。
 import { useEffect, useState } from 'react'
-import type { CompositeCapabilitySummary, CompositeVersionRecord } from '@shared/composite/types'
+import type { CompositeCapabilitySummary } from '@shared/composite/types'
 import type { CompositeManifest } from '@shared/composite/manifest'
 import { Icon } from '../components/Icon'
 import { toast } from '../stores/toast'
 import { CompositeBoundaryEditor } from '../composite/CompositeBoundaryEditor'
-import { deriveCompositeBoundary } from '@shared/composite/boundary'
 import './composite-editor.css'
 import '../library/library.css'
 
-type Tab = 'graph' | 'io' | 'versions'
-
 interface Props {
   capability: CompositeCapabilitySummary
-  mode: 'edit' | 'next'
   onClose: () => void
   onPublished: () => void
 }
@@ -27,88 +27,79 @@ function versionLabel(version: string | null): string {
   return (version ?? '—').replace(/\.0\.0$/, '.0')
 }
 
-function nodeTitle(node: CompositeManifest['graph']['nodes'][number]): string {
-  return node.title || node.nodeType
-}
-
 export function CompositeVersionDialog({
   capability,
-  mode,
   onClose,
   onPublished
 }: Props): React.JSX.Element {
   const [manifest, setManifest] = useState<CompositeManifest | null>(null)
-  const [versions, setVersions] = useState<CompositeVersionRecord[]>([])
   const [name, setName] = useState(capability.name)
   const [description, setDescription] = useState(capability.description)
-  const [version, setVersion] = useState(nextVersion(capability.latestVersion))
-  const [tab, setTab] = useState<Tab>('graph')
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [revision, setRevision] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // 发布目标版本始终高于当前最新发布，不提供手填，避免同版本覆盖被拒的困惑。
+  const targetVersion = nextVersion(capability.latestVersion)
 
   useEffect(() => {
     const latest = capability.latestVersion
     if (!latest) {
-      setError('该组合还没有已发布版本')
+      setError('该节点流还没有已发布版本')
       return
     }
     void Promise.all([
       window.api.composite.versionGet({ capabilityId: capability.id, version: latest }),
-      window.api.composite.versionList(capability.id)
-    ]).then(([current, history]) => {
+      window.api.composite.draftGet(capability.id)
+    ]).then(([current, draft]) => {
       if (!current.ok || !current.data) {
-        setError('读取组合版本失败')
+        setError('读取节点流版本失败')
         return
       }
-      setManifest(current.data.manifest)
-      setName(current.data.manifest.name)
-      setDescription(current.data.manifest.description ?? '')
-      setVersion(nextVersion(latest))
-      setSelectedNodeId(current.data.manifest.graph.nodes[0]?.id ?? null)
-      if (history.ok) setVersions(history.data)
+      // 有未发布草稿时优先恢复草稿，与「编辑节点」的恢复规则一致。
+      const base = draft.ok && draft.data ? draft.data.manifest : current.data.manifest
+      setManifest(base)
+      setName(base.name)
+      setDescription(base.description ?? '')
+      setRevision(draft.ok && draft.data ? draft.data.revision : null)
     })
-  }, [capability, mode])
+  }, [capability])
 
-  const loadVersion = async (record: CompositeVersionRecord): Promise<void> => {
-    const result = await window.api.composite.versionGet({
-      capabilityId: capability.id,
-      version: record.version
-    })
-    if (!result.ok || !result.data) return setError('读取版本失败')
-    setManifest(result.data.manifest)
-    setName(result.data.manifest.name)
-    setDescription(result.data.manifest.description ?? '')
-    setVersion(nextVersion(record.version))
-    setSelectedNodeId(result.data.manifest.graph.nodes[0]?.id ?? null)
+  const editedManifest = (): CompositeManifest | null =>
+    manifest
+      ? {
+          ...manifest,
+          version: targetVersion,
+          name: name.trim() || manifest.name,
+          description: description.trim() || undefined
+        }
+      : null
+
+  // 保存：写入草稿，不产生新版本；下次「编辑 / 编辑节点」自动恢复。
+  const saveDraft = async (): Promise<void> => {
+    const edited = editedManifest()
+    if (!edited) return setError('版本尚未加载')
+    setBusy(true)
     setError('')
-    toast(`已载入 v${versionLabel(record.version)}，发布将创建新版本`)
-  }
-
-  const updateNodeConfig = (nodeId: string, config: string): void => {
-    setManifest((current) =>
-      current
-        ? {
-            ...current,
-            graph: {
-              ...current.graph,
-              nodes: current.graph.nodes.map((node) =>
-                node.id === nodeId ? { ...node, config } : node
-              )
-            }
-          }
-        : current
-    )
-  }
-
-  const publish = async (): Promise<void> => {
-    if (!manifest) return setError('版本尚未加载')
-    const edited: CompositeManifest = {
-      ...manifest,
-      version,
-      name: name.trim() || manifest.name,
-      description: description.trim() || undefined
+    try {
+      const saved = await window.api.composite.draftSave({
+        manifest: edited,
+        expectedRevision: revision ?? 0
+      })
+      if (!saved.ok) throw new Error(saved.error.message)
+      setRevision(saved.data.revision)
+      setManifest(edited)
+      toast('已保存，下次编辑会自动恢复')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(false)
     }
+  }
+
+  // 另存为新版本：校验后发布不可变新版本；旧版本与已绑定实例保持原样。
+  const publish = async (): Promise<void> => {
+    const edited = editedManifest()
+    if (!edited) return setError('版本尚未加载')
     setBusy(true)
     setError('')
     try {
@@ -116,12 +107,22 @@ export function CompositeVersionDialog({
       if (!validated.ok) throw new Error(validated.error.message)
       if (!validated.data.ok) {
         throw new Error(
-          validated.data.issues.map((issue) => `[${issue.code}] ${issue.path}: ${issue.message}`).join('；')
+          validated.data.issues
+            .map((issue) => `[${issue.code}] ${issue.path}: ${issue.message}`)
+            .join('；')
         )
       }
-      const published = await window.api.composite.publish({ manifest: edited })
+      const saved = await window.api.composite.draftSave({
+        manifest: edited,
+        expectedRevision: revision ?? 0
+      })
+      if (!saved.ok) throw new Error(saved.error.message)
+      const published = await window.api.composite.publish({
+        manifest: edited,
+        expectedRevision: saved.data.revision
+      })
       if (!published.ok) throw new Error(published.error.message)
-      toast(`已发布「${edited.name}」v${versionLabel(version)}`)
+      toast(`已另存为「${edited.name}」v${versionLabel(targetVersion)}`)
       onPublished()
       onClose()
     } catch (cause) {
@@ -131,162 +132,105 @@ export function CompositeVersionDialog({
     }
   }
 
-  const selectedNode = manifest?.graph.nodes.find((node) => node.id === selectedNodeId) ?? null
-  const inputCount = manifest?.inputs.length ?? 0
-  const outputCount = manifest?.outputs.length ?? 0
-
   return (
     <div
-      className="composite-sheet-mask"
+      className="library-form-mask"
       onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}
     >
-      <section className="composite-sheet" role="dialog" aria-modal="true" aria-label="组合能力编辑">
-        <header className="composite-sheet-header">
-          <button type="button" className="btn-ghost small" aria-label="关闭" onClick={onClose} disabled={busy}>
-            <Icon name="close" size={16} />
-          </button>
-          <div className="composite-sheet-heading">
-            <h2>{name || capability.name}</h2>
-            <span className="composite-version-pill">v{versionLabel(version)}</span>
-            <span className="composite-status-pill">{mode === 'edit' ? '已发布' : '草稿'}</span>
+      <section
+        className="library-form-dialog workflow-save-dialog is-composite"
+        role="dialog"
+        aria-modal="true"
+        aria-label="编辑节点流"
+        onKeyDown={(event) => {
+          event.stopPropagation()
+          if (event.key === 'Escape' && !busy) onClose()
+        }}
+      >
+        <header className="library-form-header">
+          <div>
+            <h2>编辑节点流</h2>
           </div>
+          <button
+            type="button"
+            className="library-form-close"
+            aria-label="关闭"
+            disabled={busy}
+            onClick={onClose}
+          >
+            <Icon name="close" size={17} />
+          </button>
         </header>
-
-        <div className="composite-sheet-tabs" role="tablist">
-          <button type="button" role="tab" aria-selected={tab === 'graph'} className={`composite-sheet-tab ${tab === 'graph' ? 'is-active' : ''}`} onClick={() => setTab('graph')}>
-            节点图
-          </button>
-          <button type="button" role="tab" aria-selected={tab === 'io'} className={`composite-sheet-tab ${tab === 'io' ? 'is-active' : ''}`} onClick={() => setTab('io')}>
-            输入输出
-          </button>
-          <button type="button" role="tab" aria-selected={tab === 'versions'} className={`composite-sheet-tab ${tab === 'versions' ? 'is-active' : ''}`} onClick={() => setTab('versions')}>
-            版本历史
-          </button>
-        </div>
-
-        <div className="composite-sheet-body">
-          {tab === 'graph' && manifest && (
+        <div className="library-form-scroll">
+          {!manifest && !error && <p className="composite-settings-hint">正在读取节点流内容…</p>}
+          {manifest && (
             <>
-              <div className="composite-section">
-                <div className="composite-section-title">
-                  <span>内部节点 · {manifest.graph.nodes.length} 个</span>
-                  <span style={{ color: '#78869c', fontWeight: 400 }}>点击节点编辑配置</span>
-                </div>
-                <div className="composite-graph-strip">
-                  {manifest.graph.nodes.map((node, index) => (
-                    <span key={node.id} style={{ display: 'contents' }}>
-                      {index > 0 && <span className="composite-graph-link">→</span>}
-                      <button
-                        type="button"
-                        className={`composite-graph-node ${node.id === selectedNodeId ? 'is-selected' : ''}`}
-                        onClick={() => setSelectedNodeId(node.id)}
-                      >
-                        {nodeTitle(node)}
-                        <span>{node.nodeType} · {node.id}</span>
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                {selectedNode && (
-                  <div className="composite-node-editor">
-                    <label className="composite-section-title" style={{ marginBottom: 6 }}>
-                      <span>{nodeTitle(selectedNode)} · 节点配置（JSON）</span>
-                    </label>
-                    <textarea
-                      aria-label={`${nodeTitle(selectedNode)} 节点配置`}
-                      value={selectedNode.config ?? ''}
-                      placeholder="{}"
-                      onChange={(event) => updateNodeConfig(selectedNode.id, event.target.value)}
-                    />
-                    <p style={{ color: '#78869c', fontSize: 10, margin: '6px 0 0' }}>
-                      这里修改的是该内部节点的固定配置（模型、系统提示词等）；文本正文在文本节点中单独维护。
-                    </p>
-                  </div>
-                )}
-              </div>
-              <div className="composite-section">
-                <div className="composite-section-title"><span>组合信息</span></div>
-                <label className="library-form-field">
-                  <span>名称</span>
-                  <input value={name} onChange={(event) => setName(event.target.value)} />
-                </label>
-                <label className="library-form-field">
-                  <span>说明</span>
-                  <input value={description} onChange={(event) => setDescription(event.target.value)} />
-                </label>
-                <label className="library-form-field">
-                  <span>版本（主版本整数）</span>
-                  <input value={version} onChange={(event) => setVersion(event.target.value)} placeholder="1.0" />
-                </label>
+              <label className="library-form-field">
+                <span>内容名称</span>
+                <input
+                  autoFocus
+                  maxLength={100}
+                  value={name}
+                  onChange={(event) => {
+                    setName(event.target.value)
+                    setError('')
+                  }}
+                  placeholder="例如：角色设定到分镜"
+                />
+              </label>
+              <label className="library-form-field">
+                <span>说明</span>
+                <input
+                  maxLength={600}
+                  value={description}
+                  onChange={(event) => {
+                    setDescription(event.target.value)
+                    setError('')
+                  }}
+                  placeholder="这个节点流做什么（可选）"
+                />
+              </label>
+              <div className="workflow-save-composite">
+                <CompositeBoundaryEditor
+                  manifest={manifest}
+                  disabled={busy}
+                  onChange={setManifest}
+                />
               </div>
             </>
           )}
-
-          {tab === 'io' && manifest && (
-            <>
-              <div className="composite-section">
-                <div className="composite-section-title">
-                  <span>公开端口 · {inputCount} 输入 · {outputCount} 输出</span>
-                  <button
-                    type="button"
-                    className="btn-ghost small"
-                    disabled={busy}
-                    onClick={() => {
-                      if (!manifest) return
-                      const boundary = deriveCompositeBoundary(manifest)
-                      setManifest({ ...manifest, inputs: boundary.inputs, outputs: boundary.outputs })
-                      toast(`已按内部图重新推导：${boundary.inputs.length} 输入 / ${boundary.outputs.length} 输出`)
-                    }}
-                  >
-                    按内部图重新推导
-                  </button>
-                </div>
-                {manifest.inputs.map((input) => (
-                  <div className="composite-io-row" key={`in-${input.id}`}>
-                    <span className="composite-io-badge">IN</span>
-                    <span>{input.label}</span>
-                    <span style={{ color: '#78869c' }}>{input.type}</span>
-                  </div>
-                ))}
-                {manifest.outputs.map((output) => (
-                  <div className="composite-io-row" key={`out-${output.id}`}>
-                    <span className="composite-io-badge">OUT</span>
-                    <span>{output.label}</span>
-                    <span style={{ color: '#78869c' }}>{output.type}</span>
-                  </div>
-                ))}
-              </div>
-              <CompositeBoundaryEditor manifest={manifest} disabled={busy} onChange={setManifest} />
-            </>
-          )}
-
-          {tab === 'versions' && (
-            <div className="composite-section">
-              <div className="composite-section-title"><span>版本历史</span><span style={{ color: '#78869c', fontWeight: 400 }}>{versions.length} 个版本</span></div>
-              {versions.length === 0 && <p style={{ color: '#78869c', fontSize: 11 }}>暂无历史版本</p>}
-              {versions.map((record) => (
-                <div className={`composite-version-row ${versionLabel(record.version) === versionLabel(version) ? 'is-current' : ''}`} key={record.version}>
-                  <span>v{versionLabel(record.version)}</span>
-                  <span style={{ color: '#78869c' }}>{new Date(record.publishedAt).toLocaleString()}</span>
-                  <button type="button" className="btn-ghost small" disabled={busy} onClick={() => void loadVersion(record)}>
-                    查看/载入
-                  </button>
-                </div>
-              ))}
-              <p style={{ color: '#78869c', fontSize: 10, margin: '8px 0 0' }}>
-                已发布版本不可修改；载入旧版本后会以新的主版本号发布，旧版本与已绑定实例保持原样。
-              </p>
+          {error && (
+            <div className="library-form-error" role="alert">
+              {error}
             </div>
           )}
-
-          {error && <div className="composite-sheet-error" role="alert">{error}</div>}
         </div>
-
-        <footer className="composite-sheet-footer">
-          <span className="hint">发布不可变新版本；同版本覆盖会被拒绝，旧版本与已绑定实例保持原样</span>
-          <button type="button" className="btn-ghost" disabled={busy} onClick={onClose}>取消</button>
-          <button type="button" className="library-form-primary" disabled={busy || !manifest} onClick={() => void publish()}>
-            {busy ? '发布中…' : '发布新版本'}
+        <footer className="library-form-footer">
+          <span>当前 v{versionLabel(capability.latestVersion)}</span>
+          <button
+            type="button"
+            className="library-form-secondary"
+            disabled={busy}
+            onClick={onClose}
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            className="library-form-secondary"
+            disabled={busy || !manifest}
+            title="暂存修改，下次编辑自动恢复；不产生新版本"
+            onClick={() => void saveDraft()}
+          >
+            保存
+          </button>
+          <button
+            type="button"
+            className="library-form-primary"
+            disabled={busy || !manifest}
+            onClick={() => void publish()}
+          >
+            {busy ? '处理中…' : `另存为新版本 v${versionLabel(targetVersion)}`}
           </button>
         </footer>
       </section>

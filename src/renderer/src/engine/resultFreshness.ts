@@ -1,6 +1,7 @@
 import type { Editor } from 'tldraw'
 import { computeInputFingerprint } from '@shared/engine/input-fingerprint'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
+import { nodePageIndex } from '../canvas/node-page-index'
 import { getNodeType } from '../nodes/registry'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 import type { ContractInputMap } from './contracts'
@@ -39,9 +40,12 @@ export function currentNodeFingerprint(editor: Editor, shape: NodeCardShape): st
     Array<{ source: { nodeId: string; portId: string }; value: NodeValue | undefined }>
   >()
   const seen = new Set<string>()
-  for (const arrow of editor
-    .getCurrentPageShapes()
-    .sort((a, b) => String(a.index ?? '').localeCompare(String(b.index ?? '')))) {
+  // 复用编辑器级共享索引：只遍历与本节点相连的箭头（按保存顺序排序，口径与
+  // 全页排序后过滤完全一致），避免每张卡各自全页扫描造成 O(N²)/帧。
+  const relatedArrows = [...(nodePageIndex(editor).arrows.get(shape.id) ?? [])].sort((a, b) =>
+    String(a.index ?? '').localeCompare(String(b.index ?? ''))
+  )
+  for (const arrow of relatedArrows) {
     if (arrow.type !== 'arrow') continue
     const bindings = editor.getBindingsFromShape(arrow.id, 'arrow')
     const start = bindings.find((binding) => binding.props.terminal === 'start')

@@ -1,7 +1,7 @@
 import { RunTimeline } from './RunTimeline'
-// 画布右侧抽屉面板：资产中心 / 节点库 / 历史记录（LibTV 侧栏入口落地）
+// 画布右侧抽屉面板：资产中心 / 节点流 / 历史记录（LibTV 侧栏入口落地）
 // 资产中心：项目级媒体库——导入/搜索/筛选/缩略图预览/点击拖到画布/删除
-// 节点库：列出用户保存的单节点或多节点组合，并允许搜索、添加和删除。
+// 节点流：列出用户保存的单节点或多节点组合，并允许搜索、添加和删除。
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createShapeId, useValue, type Editor, type TLShapeId } from 'tldraw'
 import type { MediaAsset } from '@shared/types'
@@ -53,7 +53,7 @@ interface CanvasSidePanelProps {
 
 const TAB_META: Record<SidePanelTab, { title: string; icon: IconName }> = {
   assets: { title: '资产中心', icon: 'assets' },
-  workflow: { title: '节点库', icon: 'node-library' },
+  workflow: { title: '节点流', icon: 'node-library' },
   history: { title: '历史记录', icon: 'history' },
   runs: { title: '运行中心', icon: 'play' }
 }
@@ -77,7 +77,7 @@ function formatTime(ts: number): string {
   return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
 }
 
-// ── 节点库面板 ──
+// ── 节点流面板 ──
 function versionLabel(version: string): string {
   return version.replace(/\.0\.0$/, '.0')
 }
@@ -87,14 +87,19 @@ function nextVersionLabel(version: string | null): string {
   return `${Number.isFinite(major) ? major + 1 : 1}.0`
 }
 
-function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId: string }): React.JSX.Element {
+function WorkflowPanel({
+  editor,
+  projectId
+}: {
+  editor: Editor | null
+  projectId: string
+}): React.JSX.Element {
   const templates = useWorkflowStore((s) => s.templates)
   const wfLoad = useWorkflowStore((s) => s.load)
   const wfRemove = useWorkflowStore((s) => s.remove)
   const [query, setQuery] = useState('')
-  const [includeArchived, setIncludeArchived] = useState(false)
   const [composites, setComposites] = useState<CompositeCapabilitySummary[]>([])
-  const [versionDialog, setVersionDialog] = useState<{ capability: CompositeCapabilitySummary; mode: 'edit' | 'next' } | null>(null)
+  const [settingsDialog, setSettingsDialog] = useState<CompositeCapabilitySummary | null>(null)
   const [canvasEdit, setCanvasEdit] = useState<{
     capability: CompositeCapabilitySummary
     manifest: import('@shared/composite/manifest').CompositeManifest
@@ -114,47 +119,44 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
   )
 
   useEffect(() => {
-    void wfLoad().catch((error) => toast(`加载节点库失败：${String(error)}`))
+    void wfLoad().catch((error) => toast(`加载节点流失败：${String(error)}`))
   }, [wfLoad])
 
   useEffect(() => {
-    void window.api.composite.search({ includeArchived }).then((result) => {
+    void window.api.composite.search({}).then((result) => {
       if (result.ok) setComposites(result.data)
     })
-  }, [includeArchived])
+  }, [])
 
   const refreshComposites = (): void => {
-    void window.api.composite.search({ includeArchived }).then((result) => {
+    void window.api.composite.search({}).then((result) => {
       if (result.ok) setComposites(result.data)
     })
-  }
-
-  // W3 归档：隐藏默认发现入口；已绑定实例按固定版本继续运行，可随时恢复。
-  const handleArchiveComposite = async (capability: CompositeCapabilitySummary): Promise<void> => {
-    const result = await window.api.composite.archive({
-      capabilityId: capability.id,
-      archived: !capability.archived
-    })
-    if (!result.ok) return toast(`归档操作失败：${result.error.message}`)
-    toast(capability.archived ? `已恢复「${capability.name}」` : `已归档「${capability.name}」，画布实例不受影响`)
-    refreshComposites()
   }
 
   // W3 删除：先做与 CLI/MCP 同一份引用检查；有引用则阻断，无引用需二次确认。
-  const handleDeleteComposite = async (capability: CompositeCapabilitySummary): Promise<void> => {
+  const handleDeleteComposite = async (
+    capability: CompositeCapabilitySummary
+  ): Promise<boolean> => {
     const references = await window.api.composite.references({ capabilityId: capability.id })
-    if (!references.ok) return toast(`引用检查失败：${references.error.message}`)
+    if (!references.ok) {
+      toast(`引用检查失败：${references.error.message}`)
+      return false
+    }
     const { projectInstances, nestedVersions } = references.data
     if (projectInstances.length > 0 || nestedVersions.length > 0) {
       const parts: string[] = []
       if (projectInstances.length > 0) {
         const projects = [...new Set(projectInstances.map((instance) => instance.projectName))]
-        parts.push(`${projectInstances.length} 个画布实例（${projects.slice(0, 3).join('、')}${projects.length > 3 ? ' 等' : ''}）`)
+        parts.push(
+          `${projectInstances.length} 个画布实例（${projects.slice(0, 3).join('、')}${projects.length > 3 ? ' 等' : ''}）`
+        )
       }
       if (nestedVersions.length > 0) {
         parts.push(`${nestedVersions.length} 个其他节点流发布版本的嵌套引用`)
       }
-      return toast(`无法删除「${capability.name}」：仍被 ${parts.join('、')} 使用。可先移除引用，或改用归档。`)
+      toast(`无法删除「${capability.name}」：仍被 ${parts.join('、')} 使用。请先移除引用。`)
+      return false
     }
     if (
       !(await useConfirmStore.getState().confirm({
@@ -164,21 +166,25 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
         danger: true
       }))
     )
-      return
+      return false
     const result = await window.api.composite.delete({ capabilityId: capability.id })
-    if (!result.ok) return toast(`删除失败：${result.error.message}`)
+    if (!result.ok) {
+      toast(`删除失败：${result.error.message}`)
+      return false
+    }
     toast(`已删除节点流「${capability.name}」`)
     refreshComposites()
+    return true
   }
 
-  // 将节点库条目添加到画布：点击放在视口中心，拖拽则落在光标位置。
+  // 将节点流条目添加到画布：点击放在视口中心，拖拽则落在光标位置。
   const handleApply = (tmpl: WorkflowTemplate, dropScreen?: { x: number; y: number }): void => {
     if (!editor) return
     const { skippedEdges } = addNodeLibraryEntry(editor, tmpl, true, dropScreen)
     toast(
       skippedEdges > 0
-        ? `已从节点库添加「${tmpl.name}」，${skippedEdges} 条旧连线因端口不明确未恢复`
-        : `已从节点库添加「${tmpl.name}」（${tmpl.nodes.length} 个节点）`
+        ? `已从节点流添加「${tmpl.name}」，${skippedEdges} 条旧连线因端口不明确未恢复`
+        : `已从节点流添加「${tmpl.name}」（${tmpl.nodes.length} 个节点）`
     )
   }
 
@@ -211,29 +217,29 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
       meta: { compositeManifest: result.data.manifest }
     } as never)
     editor.select(id)
-    toast(`已添加组合「${capability.name} v${versionLabel(version)}」`)
+    toast(`已添加节点流「${capability.name} v${versionLabel(version)}」`)
   }
 
-  const openCanvasEdit = async (
-    capability: CompositeCapabilitySummary,
-    mode: 'edit' | 'next'
-  ): Promise<void> => {
+  // 编辑节点：优先恢复未发布草稿；没有草稿时以最新发布版本为基准铺开画布。
+  const openCanvasEdit = async (capability: CompositeCapabilitySummary): Promise<void> => {
     const latest = capability.latestVersion
     if (!latest) return toast('该节点流还没有已发布版本')
-    // 编辑优先恢复未发布草稿；新版本从最新发布快照创建，不把草稿静默带进历史基线。
-    const draft = mode === 'edit' ? await window.api.composite.draftGet(capability.id) : null
-    if (draft && !draft.ok) return toast('读取节点流草稿失败')
-    if (draft?.ok && draft.data) {
+    const draft = await window.api.composite.draftGet(capability.id)
+    if (!draft.ok) return toast('读取节点流草稿失败')
+    if (draft.data) {
       const manifest = structuredClone(draft.data.manifest)
       manifest.version = nextVersionLabel(latest)
       setCanvasEdit({ capability, manifest, draftRevision: draft.data.revision })
-      toast(`已恢复草稿（修订 ${draft.data.revision}）`)
+      toast('已恢复上次保存的内容')
       return
     }
-    const result = await window.api.composite.versionGet({ capabilityId: capability.id, version: latest })
+    const result = await window.api.composite.versionGet({
+      capabilityId: capability.id,
+      version: latest
+    })
     if (!result.ok || !result.data) return toast('读取节点流版本失败')
     const manifest = structuredClone(result.data.manifest)
-    // 已发布版本不可变：全屏编辑默认准备下一个主版本，保存/publish 分离。
+    // 已发布版本不可变：全屏编辑默认准备下一个主版本，保存/另存为新版本分离。
     manifest.version = nextVersionLabel(latest)
     setCanvasEdit({ capability, manifest, draftRevision: null })
   }
@@ -253,151 +259,125 @@ function WorkflowPanel({ editor, projectId }: { editor: Editor | null; projectId
   const handleRemoveTemplate = async (tmpl: WorkflowTemplate): Promise<void> => {
     if (
       !(await useConfirmStore.getState().confirm({
-        title: `删除节点库条目「${tmpl.name}」`,
-        message: '删除后该节点库条目不可恢复，画布上已创建的节点不受影响。',
+        title: `删除节点流条目「${tmpl.name}」`,
+        message: '删除后该节点流条目不可恢复，画布上已创建的节点不受影响。',
         confirmText: '删除',
         danger: true
       }))
     )
       return
-    await wfRemove(tmpl.id).catch((error) => toast(`删除节点库条目失败：${String(error)}`))
+    await wfRemove(tmpl.id).catch((error) => toast(`删除节点流条目失败：${String(error)}`))
   }
 
   return (
     <>
-    <div className="side-panel-body workflow-panel" ref={scrollRef}>
-      <label className="assets-search-row">
-        <Icon name="search" size={14} />
-        <input
-          className="assets-search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜索节点库"
-          aria-label="搜索节点库"
+      <div className="side-panel-body workflow-panel" ref={scrollRef}>
+        <label className="assets-search-row">
+          <Icon name="search" size={14} />
+          <input
+            className="assets-search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="搜索节点流"
+            aria-label="搜索节点流"
+          />
+        </label>
+        {templates.length === 0 && composites.length === 0 ? (
+          <div className="side-panel-empty">
+            节点流还是空的。右键点击画布节点，选择「保存节点」中的流程模板；也可以多选节点后使用浮动工具栏保存。
+          </div>
+        ) : visibleTemplates.length === 0 && visibleComposites.length === 0 ? (
+          <div className="side-panel-empty">没有找到匹配的节点流条目。</div>
+        ) : (
+          <div className="assets-grid">
+            {visibleComposites.map((capability) => (
+              <article
+                key={`composite-${capability.id}`}
+                className="asset-card"
+                title={`点击添加组合节点：${capability.id}@${capability.latestVersion ?? ''}`}
+                onClick={() => void insertComposite(capability)}
+              >
+                <LibraryCardCover icon="layers" compact />
+                <div className="asset-info">
+                  <span className="asset-name" title={capability.name}>
+                    {capability.name}
+                  </span>
+                  <span className="asset-meta">
+                    v{(capability.latestVersion ?? '—').replace(/\.0\.0$/, '.0')} · 节点流
+                  </span>
+                  <span className="composite-card-actions">
+                    <button
+                      type="button"
+                      className="btn-ghost small"
+                      title="编辑名称、说明与公开端口（与创建时同一弹窗）"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setSettingsDialog(capability)
+                      }}
+                    >
+                      编辑
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost small"
+                      title="铺开画布编辑内部节点：可添加任意节点、调整内容与连线"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        void openCanvasEdit(capability)
+                      }}
+                    >
+                      编辑节点
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost small composite-card-delete"
+                      title="删除节点流（先检查引用，再二次确认）"
+                      aria-label={`删除 ${capability.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        void handleDeleteComposite(capability)
+                      }}
+                    >
+                      删除
+                    </button>
+                  </span>
+                </div>
+              </article>
+            ))}
+            {visibleTemplates.map((tmpl) => (
+              <WorkflowCard
+                key={tmpl.id}
+                template={tmpl}
+                onApply={(dropScreen) => handleApply(tmpl, dropScreen)}
+                onRun={() => void handleRun(tmpl)}
+                onRemove={() => void handleRemoveTemplate(tmpl)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      {canvasEdit && (
+        <CompositeCanvasEditor
+          capability={canvasEdit.capability}
+          manifest={canvasEdit.manifest}
+          projectId={projectId}
+          draftRevision={canvasEdit.draftRevision}
+          onClose={() => setCanvasEdit(null)}
+          onSaved={refreshComposites}
         />
-      </label>
-      <label className="composite-archived-toggle">
-        <input
-          type="checkbox"
-          checked={includeArchived}
-          onChange={(event) => setIncludeArchived(event.target.checked)}
-        />
-        <span>含已归档节点流</span>
-      </label>
-      {templates.length === 0 && composites.length === 0 ? (
-        <div className="side-panel-empty">
-          节点库还是空的。右键点击画布节点，选择「保存节点」中的流程模板；也可以多选节点后使用浮动工具栏保存。
-        </div>
-      ) : visibleTemplates.length === 0 && visibleComposites.length === 0 ? (
-        <div className="side-panel-empty">没有找到匹配的节点库条目。</div>
-      ) : (
-        <div className="assets-grid">
-          {visibleComposites.map((capability) => (
-            <article
-              key={`composite-${capability.id}`}
-              className="asset-card"
-              title={`点击添加组合节点：${capability.id}@${capability.latestVersion ?? ''}`}
-              onClick={() => void insertComposite(capability)}
-            >
-              <LibraryCardCover icon="layers" compact />
-              <div className="asset-info">
-                <span className="asset-name" title={capability.name}>
-                  {capability.name}
-                </span>
-                <span className="asset-meta">
-                  v{(capability.latestVersion ?? '—').replace(/\.0\.0$/, '.0')} · 组合节点
-                  {capability.archived ? ' · 已归档' : ''}
-                </span>
-                <span className="composite-card-actions">
-                  <button
-                    type="button"
-                    className="btn-ghost small"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      void openCanvasEdit(capability, 'edit')
-                    }}
-                  >
-                    编辑
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost small"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      void openCanvasEdit(capability, 'next')
-                    }}
-                  >
-                    新版本
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost small"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      setVersionDialog({ capability, mode: 'edit' })
-                    }}
-                  >
-                    版本
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost small"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      void handleArchiveComposite(capability)
-                    }}
-                  >
-                    {capability.archived ? '恢复' : '归档'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost small"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      void handleDeleteComposite(capability)
-                    }}
-                  >
-                    删除
-                  </button>
-                </span>
-              </div>
-            </article>
-          ))}
-          {visibleTemplates.map((tmpl) => (
-            <WorkflowCard
-              key={tmpl.id}
-              template={tmpl}
-              onApply={(dropScreen) => handleApply(tmpl, dropScreen)}
-              onRun={() => void handleRun(tmpl)}
-              onRemove={() => void handleRemoveTemplate(tmpl)}
-            />
-          ))}
-        </div>
       )}
-    </div>
-    {canvasEdit && (
-      <CompositeCanvasEditor
-        capability={canvasEdit.capability}
-        manifest={canvasEdit.manifest}
-        projectId={projectId}
-        draftRevision={canvasEdit.draftRevision}
-        onClose={() => setCanvasEdit(null)}
-        onSaved={refreshComposites}
-      />
-    )}
-    {versionDialog && (
-      <CompositeVersionDialog
-        capability={versionDialog.capability}
-        mode={versionDialog.mode}
-        onClose={() => setVersionDialog(null)}
-        onPublished={refreshComposites}
-      />
-    )}
+      {settingsDialog && (
+        <CompositeVersionDialog
+          capability={settingsDialog}
+          onClose={() => setSettingsDialog(null)}
+          onPublished={refreshComposites}
+        />
+      )}
     </>
   )
 }
 
-/** 节点库卡片：与项目素材共用 .asset-card 材质；只显示名称，点击/拖拽到画布即用。 */
+/** 节点流卡片：与项目素材共用 .asset-card 材质；只显示名称，点击/拖拽到画布即用。 */
 function WorkflowCard({
   template,
   onApply,
@@ -428,10 +408,16 @@ function WorkflowCard({
       onClick={() => handleClick(() => onApply())}
     >
       <LibraryCardCover icon={coverIcon} compact />
-      <button type="button" className="asset-template-run btn-ghost small"
+      <button
+        type="button"
+        className="asset-template-run btn-ghost small"
         aria-label={`运行 ${template.name}`}
         onPointerDown={(event) => event.stopPropagation()}
-        onClick={(event) => { event.stopPropagation(); onRun() }}>
+        onClick={(event) => {
+          event.stopPropagation()
+          onRun()
+        }}
+      >
         <Icon name="play" size={13} /> 运行
       </button>
       <div className="asset-info">
@@ -442,7 +428,7 @@ function WorkflowCard({
       <button
         type="button"
         className="asset-delete"
-        aria-label={`删除节点库条目 ${template.name}`}
+        aria-label={`删除节点流条目 ${template.name}`}
         onClick={(e) => {
           e.stopPropagation()
           onRemove()

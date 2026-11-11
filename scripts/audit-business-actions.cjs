@@ -151,8 +151,9 @@ const CANVAS_ACTIONS = [
   ['canvas.node.contract-panel', '选中节点右侧 I/O 面板的类型/字段/端口/依赖查询（N1）'],
   ['canvas.model.credential-status', '模型设置里每个连接显示"已保存密钥/未保存"状态'],
   ['canvas.composite.upgrade', '右键菜单节点流实例升级：版本选择、同一预检、兼容连线迁移（W3）'],
-  ['canvas.composite.archive', '节点库卡片归档/恢复节点流：隐藏默认发现入口，已绑定实例不受影响（W3）'],
-  ['canvas.composite.delete', '节点库卡片删除节点流：同一引用检查（画布实例+嵌套引用）+ 二次确认（W3）']
+  // 2026-11-11 用户裁决：GUI 不再提供归档入口（卡片动作收敛为 编辑/编辑节点/删除）。
+  // composite.archive 外部操作保留，由 ipc.composite.archive 登记解释（仅 CLI/MCP 可用）。
+  ['canvas.composite.delete', '节点流卡片删除节点流：同一引用检查（画布实例+嵌套引用）+ 二次确认（W3）']
 ]
 
 const PHASES = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'external', 'excluded']

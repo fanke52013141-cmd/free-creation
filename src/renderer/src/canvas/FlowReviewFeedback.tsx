@@ -21,19 +21,28 @@ export function FlowReviewFeedback({ shape }: { shape: NodeCardShape }): React.J
     )
       return
     let disposed = false
+    let timer: ReturnType<typeof setTimeout>
+    // 自适应轮询：节点没有关联 Flow 任务时退避到 5s（绝大多数 text/json 节点属于此类），
+    // 有任务时保持 750ms 的反馈刷新；窗口隐藏时暂停 IPC。避免每张卡各自 750ms 轮询风暴。
     const inspect = async (): Promise<void> => {
-      try {
-        const reply = await window.api.inspectFlowAgent({ projectId, nodeId: shape.id })
-        if (!disposed && reply.ok) setFeedback(reply.data?.reviewFeedback)
-      } catch {
-        /* Explicit submission owns user-visible errors. */
+      let delay = 5000
+      if (!document.hidden) {
+        try {
+          const reply = await window.api.inspectFlowAgent({ projectId, nodeId: shape.id })
+          if (!disposed && reply.ok) {
+            setFeedback(reply.data?.reviewFeedback)
+            if (reply.data) delay = 750
+          }
+        } catch {
+          /* Explicit submission owns user-visible errors. */
+        }
       }
+      if (!disposed) timer = setTimeout(() => void inspect(), delay)
     }
     void inspect()
-    const timer = setInterval(() => void inspect(), 750)
     return () => {
       disposed = true
-      clearInterval(timer)
+      clearTimeout(timer)
     }
   }, [projectId, shape.id, shape.props.nodeType])
   if (!feedback || feedback.state === 'passed') return null

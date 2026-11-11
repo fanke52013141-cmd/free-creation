@@ -304,6 +304,8 @@ const api = {
   ): Promise<IpcEnvelope<{ path: string }>> =>
     ipcRenderer.invoke(IPC.diagnostics.exportNodeRun, input),
   bootstrap: (): Promise<IpcEnvelope<BootstrapInfo>> => ipcRenderer.invoke(IPC.app.bootstrap),
+  setTitleBarOverlay: (visible: boolean): Promise<IpcEnvelope<{ visible: boolean }>> =>
+    ipcRenderer.invoke(IPC.app.setTitleBarOverlay, visible),
   listProjects: (): Promise<IpcEnvelope<ProjectMeta[]>> => ipcRenderer.invoke(IPC.project.list),
   createProject: (input: CreateProjectInput): Promise<IpcEnvelope<ProjectMeta>> =>
     ipcRenderer.invoke(IPC.project.create, input),
@@ -534,10 +536,8 @@ const api = {
       ipcRenderer.invoke(IPC.composite.versionGet, input),
     versionList: (capabilityId: string): Promise<IpcEnvelope<CompositeVersionRecord[]>> =>
       ipcRenderer.invoke(IPC.composite.versionList, capabilityId),
-    archive: (input: {
-      capabilityId: string
-      archived?: boolean
-    }): Promise<IpcEnvelope<boolean>> => ipcRenderer.invoke(IPC.composite.archive, input),
+    archive: (input: { capabilityId: string; archived?: boolean }): Promise<IpcEnvelope<boolean>> =>
+      ipcRenderer.invoke(IPC.composite.archive, input),
     references: (input: {
       capabilityId: string
     }): Promise<IpcEnvelope<import('@shared/composite/types').CompositeReferenceReport>> =>
@@ -626,16 +626,52 @@ const api = {
     listProviders: (): Promise<IpcEnvelope<ProviderSummary[]>> =>
       ipcRenderer.invoke(IPC.gateway.providers),
     // ── P2 密钥包（.cskeys v2）──────────────────────────────────────
-    exportReceiveCredential: (): Promise<IpcEnvelope<{ path: string; deviceSummary: string; expiresAt: number | null }>> =>
-      ipcRenderer.invoke(IPC.gateway.keys.exportCredential),
-    listKeyConnections: (): Promise<IpcEnvelope<Array<{ id: string; name: string; protocol: string; baseUrl: string; modelCount: number; hasKey: boolean }>>> =>
-      ipcRenderer.invoke(IPC.gateway.keys.listConnections),
-    sealKeyPackage: (input: { password: string; connectionIds: string[] }): Promise<IpcEnvelope<{ path: string; packageId: string; connectionCount: number; expiresAt: number }>> =>
-      ipcRenderer.invoke(IPC.gateway.keys.sealPackage, input),
-    previewKeyPackage: (input: { password: string }): Promise<IpcEnvelope<{ packageId: string; expiresAt: number; issuerDeviceSummary: string; connections: Array<{ id: string; name: string; protocol: string; baseUrl: string; modelCount: number; hasKey: boolean }>; alreadyImported: boolean; existingConnections: string[] }>> =>
-      ipcRenderer.invoke(IPC.gateway.keys.previewPackage, input),
-    importKeyPackage: (input: { password: string; overwriteConfirmed: boolean }): Promise<IpcEnvelope<{ packageId: string; added: number; updated: number; modelCount: number }>> =>
-      ipcRenderer.invoke(IPC.gateway.keys.importPackage, input),
+    exportReceiveCredential: (): Promise<
+      IpcEnvelope<{ path: string; deviceSummary: string; expiresAt: number | null }>
+    > => ipcRenderer.invoke(IPC.gateway.keys.exportCredential),
+    listKeyConnections: (): Promise<
+      IpcEnvelope<
+        Array<{
+          id: string
+          name: string
+          protocol: string
+          baseUrl: string
+          modelCount: number
+          hasKey: boolean
+        }>
+      >
+    > => ipcRenderer.invoke(IPC.gateway.keys.listConnections),
+    sealKeyPackage: (input: {
+      password: string
+      connectionIds: string[]
+    }): Promise<
+      IpcEnvelope<{ path: string; packageId: string; connectionCount: number; expiresAt: number }>
+    > => ipcRenderer.invoke(IPC.gateway.keys.sealPackage, input),
+    previewKeyPackage: (input: {
+      password: string
+    }): Promise<
+      IpcEnvelope<{
+        packageId: string
+        expiresAt: number
+        issuerDeviceSummary: string
+        connections: Array<{
+          id: string
+          name: string
+          protocol: string
+          baseUrl: string
+          modelCount: number
+          hasKey: boolean
+        }>
+        alreadyImported: boolean
+        existingConnections: string[]
+      }>
+    > => ipcRenderer.invoke(IPC.gateway.keys.previewPackage, input),
+    importKeyPackage: (input: {
+      password: string
+      overwriteConfirmed: boolean
+    }): Promise<
+      IpcEnvelope<{ packageId: string; added: number; updated: number; modelCount: number }>
+    > => ipcRenderer.invoke(IPC.gateway.keys.importPackage, input),
     listExecutableProviders: (): Promise<IpcEnvelope<ProviderSummary[]>> =>
       ipcRenderer.invoke(IPC.gateway.executableProviders),
     saveProvider: (input: SaveProviderInput): Promise<IpcEnvelope<ProviderSummary>> =>

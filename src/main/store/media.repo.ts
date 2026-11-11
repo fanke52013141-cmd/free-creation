@@ -201,12 +201,16 @@ export async function readMediaBuffer(
 
 // 列出指定项目的所有媒体资产（按创建时间倒序）
 export function listMedia(projectId: string): MediaAsset[] {
+  // 前缀范围查询可走 idx_media_path；原 substr() 条件无法使用索引，
+  // 媒体行随所有项目累积后每次打开画布都全表扫描。范围语义与 substr 前缀完全一致。
+  const prefix = `projects/${projectId}/media/`
+  const upper = prefix.slice(0, -1) + String.fromCharCode(prefix.charCodeAt(prefix.length - 1) + 1)
   const rows = getDb()
     .prepare(
       `SELECT id, kind, mime, path, size_bytes, created_at, name FROM media
-       WHERE substr(path, 1, length(?)) = ? ORDER BY created_at DESC`
+       WHERE path >= ? AND path < ? ORDER BY created_at DESC`
     )
-    .all(`projects/${projectId}/media/`, `projects/${projectId}/media/`) as {
+    .all(prefix, upper) as {
     id: string
     kind: MediaKind
     mime: string

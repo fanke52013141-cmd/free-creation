@@ -587,21 +587,8 @@ app.whenReady().then(async () => {
       )
     }
   }
-  checkWorkspaceHealth({
-    projectsDir: getProjectsDir(),
-    projectIds: (
-      database.prepare('SELECT id FROM projects WHERE deleted = 0').all() as Array<{ id: string }>
-    ).map((row) => row.id),
-    knownProjectIds: (
-      database.prepare('SELECT id FROM projects').all() as Array<{ id: string }>
-    ).map((row) => row.id)
-  })
-  // 数据根目录残留超过 24 小时的成片临时文件（tmp-video-*）在启动时兜底清扫；
-  // 时限内不动，避免误删并行实例正在写的文件。
-  const sweptVideoTemps = sweepStaleVideoTempFiles(getDataDir())
-  if (sweptVideoTemps.length) {
-    log.info(`workspace health: 已清扫 ${sweptVideoTemps.length} 个过期的成片临时文件`)
-  }
+  // 工作区健康扫描与过期临时文件清扫是纯家务（只产出报告/清扫，不影响首屏数据），
+  // 延后到业务窗创建之后执行，避免同步目录全扫描挡住窗口创建（繁忙机器上尤其明显）。
   registerMediaProtocol()
 
   // 无界面真实验收：复用桌面端主进程的安全存储与网关，避免把真实 Token 测试建立在
@@ -653,6 +640,26 @@ app.whenReady().then(async () => {
   mainWindow = createWindow()
   // 业务窗就绪后再关授权窗，避免零窗口触发 window-all-closed 退出。
   closeLicenseWindow()
+
+  // 启动家务（健康扫描 + 过期成片临时文件清扫）延后到首屏之后：
+  // 两者都只产出报告/清扫，不影响首屏数据；给首屏让出主进程事件循环。
+  setTimeout(() => {
+    checkWorkspaceHealth({
+      projectsDir: getProjectsDir(),
+      projectIds: (
+        database.prepare('SELECT id FROM projects WHERE deleted = 0').all() as Array<{ id: string }>
+      ).map((row) => row.id),
+      knownProjectIds: (
+        database.prepare('SELECT id FROM projects').all() as Array<{ id: string }>
+      ).map((row) => row.id)
+    })
+    // 数据根目录残留超过 24 小时的成片临时文件（tmp-video-*）兜底清扫；
+    // 时限内不动，避免误删并行实例正在写的文件。
+    const sweptVideoTemps = sweepStaleVideoTempFiles(getDataDir())
+    if (sweptVideoTemps.length) {
+      log.info(`workspace health: 已清扫 ${sweptVideoTemps.length} 个过期的成片临时文件`)
+    }
+  }, 2000)
 
   // 系统恢复后在下一次敏感操作前复验（方案 §3.3）：resume 时完整复验，
   // 失效则停收新任务（业务守卫即刻拒绝）、关闭外部接入，回到授权窗等待重新激活。

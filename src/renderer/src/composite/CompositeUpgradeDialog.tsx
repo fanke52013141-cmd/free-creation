@@ -25,7 +25,12 @@ function versionLabel(version: string): string {
  * （composite:upgrade:preview）→ 通过后以固定版本引用更新实例并保留兼容连线；
  * 取消或预检失败不改变原实例。
  */
-export function CompositeUpgradeDialog({ editor, projectId, shapeId, onClose }: Props): React.JSX.Element {
+export function CompositeUpgradeDialog({
+  editor,
+  projectId,
+  shapeId,
+  onClose
+}: Props): React.JSX.Element {
   const shape = editor.getShape<NodeCardShape>(shapeId)
   const current = shape ? readCompositeInstanceManifest(shape) : null
   const [versions, setVersions] = useState<CompositeVersionRecord[]>([])
@@ -112,7 +117,9 @@ export function CompositeUpgradeDialog({ editor, projectId, shapeId, onClose }: 
     for (const change of impact.schemaChanged)
       lines.push(`Schema 变更：${change.portId}（${change.from ?? '无'} → ${change.to ?? '无'}）`)
     for (const change of impact.requiredChanged)
-      lines.push(`必填性：${change.portId}（${change.from ? '必填' : '可选'} → ${change.to ? '必填' : '可选'}）`)
+      lines.push(
+        `必填性：${change.portId}（${change.from ? '必填' : '可选'} → ${change.to ? '必填' : '可选'}）`
+      )
     for (const change of impact.cardinalityChanged)
       lines.push(`基数：${change.portId}（${change.from} → ${change.to}）`)
     return lines
@@ -120,16 +127,28 @@ export function CompositeUpgradeDialog({ editor, projectId, shapeId, onClose }: 
 
   if (!shape || !current) {
     return (
-      <div className="composite-modal-mask" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-        <section className="composite-modal composite-close-confirm" role="dialog" aria-modal="true" aria-label="升级节点流实例">
+      <div
+        className="composite-modal-mask"
+        onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      >
+        <section
+          className="composite-modal composite-close-confirm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="升级节点流实例"
+        >
           <header className="composite-modal-header">
             <h3>升级节点流实例</h3>
           </header>
           <div className="composite-modal-scroll">
-            <p className="composite-close-confirm-text">实例的固定版本快照无法读取，请从节点库重新插入。</p>
+            <p className="composite-close-confirm-text">
+              实例的固定版本快照无法读取，请从节点流面板重新插入。
+            </p>
           </div>
           <footer className="composite-modal-footer">
-            <button type="button" className="btn-ghost small" onClick={onClose}>关闭</button>
+            <button type="button" className="btn-ghost small" onClick={onClose}>
+              关闭
+            </button>
           </footer>
         </section>
       </div>
@@ -174,14 +193,24 @@ export function CompositeUpgradeDialog({ editor, projectId, shapeId, onClose }: 
       >
         <header className="composite-modal-header">
           <h3>升级节点流实例</h3>
-          <button type="button" className="composite-modal-close" aria-label="关闭升级对话框" disabled={busy} onClick={onClose}>
+          <button
+            type="button"
+            className="composite-modal-close"
+            aria-label="关闭升级对话框"
+            disabled={busy}
+            onClick={onClose}
+          >
             <Icon name="close" size={16} />
           </button>
         </header>
         <div className="composite-modal-scroll">
           <div className="composite-publish-versions">
-            <span className="composite-publish-version-badge">当前 v{versionLabel(current.version)}</span>
-            <span className="composite-publish-version-arrow" aria-hidden="true">→</span>
+            <span className="composite-publish-version-badge">
+              当前 v{versionLabel(current.version)}
+            </span>
+            <span className="composite-publish-version-arrow" aria-hidden="true">
+              →
+            </span>
             <label className="composite-upgrade-target">
               <span>目标版本</span>
               <select
@@ -199,9 +228,15 @@ export function CompositeUpgradeDialog({ editor, projectId, shapeId, onClose }: 
                 ))}
               </select>
             </label>
-            <span className="composite-publish-name" title={current.name}>{current.name}</span>
+            <span className="composite-publish-name" title={current.name}>
+              {current.name}
+            </span>
           </div>
-          {error && <p className="composite-modal-error" role="alert">{error}</p>}
+          {error && (
+            <p className="composite-modal-error" role="alert">
+              {error}
+            </p>
+          )}
           {preview && (
             <>
               <section className="composite-modal-section">
@@ -225,7 +260,9 @@ export function CompositeUpgradeDialog({ editor, projectId, shapeId, onClose }: 
                     {(preview.impact?.breaking ?? []).map((item, index) => (
                       <li key={`${item.portId}-${index}`}>
                         <code>{item.portId}</code> {item.reason}
-                        {item.nodeId ? `（节点 ${item.nodeId}${item.edgeId ? ` / 边 ${item.edgeId}` : ''}）` : ''}
+                        {item.nodeId
+                          ? `（节点 ${item.nodeId}${item.edgeId ? ` / 边 ${item.edgeId}` : ''}）`
+                          : ''}
                       </li>
                     ))}
                     {(preview.issues ?? []).map((issue, index) => (

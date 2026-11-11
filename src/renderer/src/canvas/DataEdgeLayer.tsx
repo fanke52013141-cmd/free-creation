@@ -11,7 +11,7 @@
 // 现在几何只依赖页面坐标，缩放/平移交给与 tldraw 完全一致的 CSS transform 镜像：
 // 路径、滤镜、mask 只在文档变化时重算，相机变化只写一个 transform 字符串（在绘制前由
 // MutationObserver 同步），连线因此与节点卡片在同一合成层节奏上移动，不再闪烁。
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Editor, TLShapeId } from 'tldraw'
 import { getNodePorts, getNodeType, PORT_COLORS } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
@@ -306,7 +306,7 @@ export function DataEdgeLayer({
   editor: Editor
   interactive?: boolean
 }): React.JSX.Element {
-  const [, setRevision] = useState(0)
+  const [revision, setRevision] = useState(0)
   const selectedEdgeId = useEdgeSelectionStore((state) => state.selectedEdgeId)
   // `from` is stable while the pointer moves, so edge anchors reflow once when a
   // connection gesture starts or ends instead of recalculating on every mouse frame.
@@ -347,14 +347,29 @@ export function DataEdgeLayer({
     }
   }, [editor])
 
-  const edges = collectEdges(editor, draftFrom).filter(
-    (edge) => !editor.isShapeHidden(edge.sourceId) && !editor.isShapeHidden(edge.targetId)
-  )
-  const nodeRects = collectNodeRects(editor)
+  // 几何只在文档修订/连接手势变化时重算；hover 状态变化不再触发全量 collectEdges。
+  const edges = useMemo(() => {
+    void revision
+    return collectEdges(editor, draftFrom).filter(
+      (edge) => !editor.isShapeHidden(edge.sourceId) && !editor.isShapeHidden(edge.targetId)
+    )
+  }, [editor, draftFrom, revision])
+  const nodeRects = useMemo(() => {
+    void revision
+    return collectNodeRects(editor)
+  }, [editor, revision])
   const nodeRectsRef = useRef<PageRect[]>([])
-  useEffect(() => {
+  const edgesRef = useRef<PageEdge[]>([])
+  useLayoutEffect(() => {
     nodeRectsRef.current = nodeRects
+    edgesRef.current = edges
   })
+  // 命中路径包围盒缓存：按 edges 身份失效。isPointInStroke 逐条全量判定很贵，
+  // 先用 bbox 粗筛把每帧候选降到指针附近的少数几条。
+  const hitBoxCacheRef = useRef<{
+    key: PageEdge[] | null
+    items: Array<{ path: SVGPathElement; box: DOMRect }>
+  }>({ key: null, items: [] })
   const mask = edgeMaskExtents(nodeRects)
   const hoveredEdgeId = hoveredEdge?.id ?? null
   const hoveredEdgeIsArtifact = hoveredEdge !== null && hoveredEdge.id.startsWith('artifact:')
@@ -380,19 +395,49 @@ export function DataEdgeLayer({
       return null
     }
     // 端口可在无可见半圆提示的范围内跟随鼠标。该范围优先属于端口，不属于连线删除。
-    const insidePortZone = Array.from(document.querySelectorAll<HTMLElement>('.port-dot')).some(
-      (port) => {
-        const portRect = port.getBoundingClientRect()
-        return (
-          Math.hypot(
-            clientX - (portRect.left + portRect.width / 2),
-            clientY - (portRect.top + portRect.height / 2)
-          ) <= 27
-        )
-      }
+    // 端口都贴在卡片边缘：指针远离所有节点矩形时直接跳过昂贵的
+    // querySelectorAll + getBoundingClientRect（鼠标在空白画布移动是常态）。
+    const scale = Math.abs(matrix.a) || 1
+    const portReach = 27 / scale + 24
+    const nearNode = nodeRectsRef.current.some(
+      (node) =>
+        point.x >= node.x - portReach &&
+        point.x <= node.x + node.width + portReach &&
+        point.y >= node.y - portReach &&
+        point.y <= node.y + node.height + portReach
     )
-    if (insidePortZone) return null
-    for (const path of svg.querySelectorAll<SVGPathElement>('.data-edge-hit')) {
+    if (nearNode) {
+      const insidePortZone = Array.from(document.querySelectorAll<HTMLElement>('.port-dot')).some(
+        (port) => {
+          const portRect = port.getBoundingClientRect()
+          return (
+            Math.hypot(
+              clientX - (portRect.left + portRect.width / 2),
+              clientY - (portRect.top + portRect.height / 2)
+            ) <= 27
+          )
+        }
+      )
+      if (insidePortZone) return null
+    }
+    // bbox 粗筛后再做精确描边命中；缓存按 edges 身份失效（几何未变不重建）。
+    const cache = hitBoxCacheRef.current
+    if (cache.key !== edgesRef.current) {
+      cache.key = edgesRef.current
+      cache.items = Array.from(svg.querySelectorAll<SVGPathElement>('.data-edge-hit')).map(
+        (path) => ({ path, box: path.getBBox() })
+      )
+    }
+    // 命中描边恒为屏幕 14px（--edge-hit-width 已按 1/zoom 折算），半宽换算到页面坐标。
+    const pad = 7 / scale + 1
+    for (const { path, box } of cache.items) {
+      if (
+        point.x < box.x - pad ||
+        point.x > box.x + box.width + pad ||
+        point.y < box.y - pad ||
+        point.y > box.y + box.height + pad
+      )
+        continue
       if (path.isPointInStroke(point)) {
         const edgeId = path.dataset.edgeId
         if (!edgeId) return null

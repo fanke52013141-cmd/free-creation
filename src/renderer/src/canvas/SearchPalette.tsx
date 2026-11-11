@@ -68,7 +68,7 @@ function SearchPaletteInner({
 
   useEffect(() => {
     requestAnimationFrame(() => inputRef.current?.focus())
-    void loadLibrary().catch((error) => toast(`加载节点库失败：${String(error)}`))
+    void loadLibrary().catch((error) => toast(`加载节点流失败：${String(error)}`))
     return () => {
       openerRef.current?.focus()
     }
@@ -156,8 +156,8 @@ function SearchPaletteInner({
     }
     toast(
       skippedEdges > 0
-        ? `已从节点库添加「${hit.entry.name}」，${skippedEdges} 条旧连线未恢复`
-        : `已从节点库添加「${hit.entry.name}」（${nodeIds.length} 个节点）`
+        ? `已从节点流添加「${hit.entry.name}」，${skippedEdges} 条旧连线未恢复`
+        : `已从节点流添加「${hit.entry.name}」（${nodeIds.length} 个节点）`
     )
     close()
   }
@@ -179,9 +179,9 @@ function SearchPaletteInner({
           <input
             ref={inputRef}
             className="search-input"
-            aria-label="搜索画布节点或节点库"
+            aria-label="搜索画布节点或节点流"
             value={query}
-            placeholder="搜索画布节点或节点库…"
+            placeholder="搜索画布节点或节点流…"
             onChange={(event) => {
               setQuery(event.target.value)
               setActiveIndex(0)
@@ -226,7 +226,7 @@ function SearchPaletteInner({
             {createHits.length === 0 &&
             matches.canvas.length === 0 &&
             matches.library.length === 0 ? (
-              <div className="search-empty">未找到匹配的创建工具、画布节点或节点库条目</div>
+              <div className="search-empty">未找到匹配的创建工具、画布节点或节点流条目</div>
             ) : (
               <>
                 {createHits.length > 0 && (
@@ -294,13 +294,13 @@ function SearchPaletteInner({
                   </section>
                 )}
                 {matches.library.length > 0 && (
-                  <section className="search-result-group" aria-label="节点库">
-                    <h3>节点库</h3>
+                  <section className="search-result-group" aria-label="节点流">
+                    <h3>节点流</h3>
                     {matches.library.map((hit) => (
                       <button
                         key={hit.entry.id}
                         className="search-hit"
-                        aria-label={`从节点库添加：${hit.title}`}
+                        aria-label={`从节点流添加：${hit.title}`}
                         onClick={() => addLibraryEntry(hit)}
                         onPointerDown={(event) => stopEventPropagation(event)}
                       >

@@ -838,7 +838,7 @@ export function registerBaseNodeTypes(): void {
     Body: ChatBody
   })
 
-  // 组合能力节点：非面板新建类型，由“发布组合/节点库插入”创建。
+  // 组合能力节点：非面板新建类型，由“发布组合/节点流插入”创建。
   registerNodeType({
     type: 'composite',
     contractVersion: 1,

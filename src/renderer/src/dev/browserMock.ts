@@ -206,9 +206,15 @@ export function installBrowserMock(): void {
         ok: true,
         data: {
           lastProjectId: 'demo',
-          license: { state: 'active', capabilities: ['app.run'], term: 'permanent', expiresAt: null }
+          license: {
+            state: 'active',
+            capabilities: ['app.run'],
+            term: 'permanent',
+            expiresAt: null
+          }
         }
       }),
+    setTitleBarOverlay: (visible: boolean) => Promise.resolve({ ok: true, data: { visible } }),
     listProjects: () => Promise.resolve({ ok: true, data: projects }),
     createProject: ({
       name,
@@ -422,16 +428,27 @@ export function installBrowserMock(): void {
     separateVocals: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持人声分离' } }),
     composeTimeline: () =>
-      Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持时间线合成' } }),
+      Promise.resolve({
+        ok: false,
+        error: { code: 'MOCK', message: '浏览器演示不支持时间线合成' }
+      }),
     probeMediaMetadata: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持素材探测' } }),
     indexttsDetect: () =>
       Promise.resolve({
         ok: true,
-        data: { ready: false, pythonPath: null, modelDir: null, reason: '浏览器演示不支持本地 IndexTTS' }
+        data: {
+          ready: false,
+          pythonPath: null,
+          modelDir: null,
+          reason: '浏览器演示不支持本地 IndexTTS'
+        }
       }),
     indexttsSynthesize: () =>
-      Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持本地 IndexTTS' } }),
+      Promise.resolve({
+        ok: false,
+        error: { code: 'MOCK', message: '浏览器演示不支持本地 IndexTTS' }
+      }),
     ttsGenerate: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持本地配音' } }),
     getLocalMediaCapabilities: () =>
@@ -817,14 +834,26 @@ export function installBrowserMock(): void {
       listProviders: () => Promise.resolve({ ok: true, data: providers }),
       // P2 密钥包：浏览器演示不提供发放入口
       exportReceiveCredential: () =>
-        Promise.resolve({ ok: false as const, error: { code: 'DEMO_NOT_IMPLEMENTED', message: '浏览器演示不支持：导出接收凭证' } }),
+        Promise.resolve({
+          ok: false as const,
+          error: { code: 'DEMO_NOT_IMPLEMENTED', message: '浏览器演示不支持：导出接收凭证' }
+        }),
       listKeyConnections: () => Promise.resolve({ ok: true, data: [] }),
       sealKeyPackage: () =>
-        Promise.resolve({ ok: false as const, error: { code: 'DEMO_NOT_IMPLEMENTED', message: '浏览器演示不支持：密钥包发放' } }),
+        Promise.resolve({
+          ok: false as const,
+          error: { code: 'DEMO_NOT_IMPLEMENTED', message: '浏览器演示不支持：密钥包发放' }
+        }),
       previewKeyPackage: () =>
-        Promise.resolve({ ok: false as const, error: { code: 'DEMO_NOT_IMPLEMENTED', message: '浏览器演示不支持：密钥包导入' } }),
+        Promise.resolve({
+          ok: false as const,
+          error: { code: 'DEMO_NOT_IMPLEMENTED', message: '浏览器演示不支持：密钥包导入' }
+        }),
       importKeyPackage: () =>
-        Promise.resolve({ ok: false as const, error: { code: 'DEMO_NOT_IMPLEMENTED', message: '浏览器演示不支持：密钥包导入' } }),
+        Promise.resolve({
+          ok: false as const,
+          error: { code: 'DEMO_NOT_IMPLEMENTED', message: '浏览器演示不支持：密钥包导入' }
+        }),
       // F16 补齐：演示环境与桌面同构的三个入口
       listExecutableProviders: () => Promise.resolve({ ok: true, data: providers }),
       exportProviders: () =>
@@ -853,8 +882,7 @@ export function installBrowserMock(): void {
           hasApiKey: Boolean(
             input.apiKey?.trim() || existing?.hasApiKey || inMemoryApiKeys.has(id)
           ),
-          apiKeyPreview:
-            apiKeyPreview(inMemoryApiKeys.get(id)) ?? existing?.apiKeyPreview,
+          apiKeyPreview: apiKeyPreview(inMemoryApiKeys.get(id)) ?? existing?.apiKeyPreview,
           models: input.models.map((model) => ({ ...model })),
           createdAt: existing?.createdAt ?? Date.now()
         }
@@ -890,10 +918,11 @@ export function installBrowserMock(): void {
           }
         }),
       // 设备流登录需要本机 CLI 与系统浏览器，浏览器演示里没有这些能力。
-      dreaminaLogout: () => Promise.resolve({
-        ok: false as const,
-        error: { code: 'NOT_SUPPORTED', message: '请在桌面端退出即梦登录' }
-      }),
+      dreaminaLogout: () =>
+        Promise.resolve({
+          ok: false as const,
+          error: { code: 'NOT_SUPPORTED', message: '请在桌面端退出即梦登录' }
+        }),
       dreaminaLoginStart: () =>
         Promise.resolve({
           ok: false,

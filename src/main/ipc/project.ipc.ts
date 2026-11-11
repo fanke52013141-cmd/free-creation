@@ -1,5 +1,5 @@
 // 项目 IPC handlers（信封规范见《技术框架与规范》§10）
-import { ipcMain, dialog } from 'electron'
+import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { IPC } from '../../shared/contracts'
 import type {
   BootstrapInfo,
@@ -125,6 +125,23 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
       }
     })
   })
+
+  // 纯窗口外观控制（非业务动作）：节点流全屏编辑期间隐藏 Windows 标题栏覆盖按钮，
+  // 退出编辑恢复。height=0 即隐藏覆盖层；非 Windows 平台无覆盖层，直接回执。
+  ipcMain.handle(
+    IPC.app.setTitleBarOverlay,
+    (event, visible: boolean): IpcEnvelope<{ visible: boolean }> => {
+      if (process.platform !== 'win32') return ok({ visible })
+      const window = BrowserWindow.fromWebContents(event.sender)
+      if (!window) return err('WINDOW_NOT_FOUND', '窗口不存在')
+      window.setTitleBarOverlay({
+        color: '#0d0d0d',
+        symbolColor: '#aeb5c0',
+        height: visible ? 46 : 0
+      })
+      return ok({ visible })
+    }
+  )
 
   ipcMain.handle(IPC.project.list, (): IpcEnvelope<ProjectMeta[]> => {
     return ok(repo.listProjects())

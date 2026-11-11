@@ -7,6 +7,15 @@ import { migrateDatabase } from './db-migrations'
 
 let db: Database.Database | null = null
 
+// 目录只需确保存在一次；media:// 等热路径每次请求都调用 getDataDir()，
+// 不能每次都触发同步 mkdir 系统调用（繁忙磁盘上会阻塞主进程事件循环）。
+const ensuredDirs = new Set<string>()
+function ensureDir(dir: string): void {
+  if (ensuredDirs.has(dir)) return
+  mkdirSync(dir, { recursive: true })
+  ensuredDirs.add(dir)
+}
+
 export function getDataDir(): string {
   // CLI/MCP 进程没有 Electron app；显式环境变量优先，保证它们与桌面端可以访问
   // 同一数据根目录，同时避免在 Node 下调用 app.getPath() 崩溃。
@@ -17,13 +26,13 @@ export function getDataDir(): string {
       ? app.getPath('userData')
       : join(process.env.APPDATA || process.cwd(), 'canvas-studio')
   const dir = configured ? userData : join(userData, 'data')
-  mkdirSync(dir, { recursive: true })
+  ensureDir(dir)
   return dir
 }
 
 export function getProjectsDir(): string {
   const dir = join(getDataDir(), 'projects')
-  mkdirSync(dir, { recursive: true })
+  ensureDir(dir)
   return dir
 }
 

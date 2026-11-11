@@ -54,7 +54,9 @@ export function CompositePublishPreview({
       impact.schemaChanged.length +
       impact.cardinalityChanged.length
     : 0
-  const capabilityDeps = (nextManifest.dependencies ?? []).filter((dep) => dep.kind === 'capability')
+  const capabilityDeps = (nextManifest.dependencies ?? []).filter(
+    (dep) => dep.kind === 'capability'
+  )
   const blocked = validationIssues.length > 0
 
   return (
@@ -66,14 +68,14 @@ export function CompositePublishPreview({
         className="composite-modal composite-publish-preview"
         role="dialog"
         aria-modal="true"
-        aria-label="发布新版本预览"
+        aria-label="另存为新版本预览"
         onKeyDown={(event) => {
           event.stopPropagation()
           if (event.key === 'Escape' && !busy) onCancel()
         }}
       >
         <header className="composite-modal-header">
-          <h3>发布新版本</h3>
+          <h3>另存为新版本</h3>
           <button
             type="button"
             className="composite-modal-close"
@@ -190,7 +192,9 @@ export function CompositePublishPreview({
                 {impact.breaking.map((item, index) => (
                   <li key={`${item.portId}-${index}`}>
                     <code>{item.portId}</code> {item.reason}
-                    {item.nodeId ? `（节点 ${item.nodeId}${item.edgeId ? ` / 边 ${item.edgeId}` : ''}）` : ''}
+                    {item.nodeId
+                      ? `（节点 ${item.nodeId}${item.edgeId ? ` / 边 ${item.edgeId}` : ''}）`
+                      : ''}
                     <span className="composite-diff-detail">
                       已绑定实例仍按原版本运行；升级到本版本前需先处理。
                     </span>
@@ -218,12 +222,7 @@ export function CompositePublishPreview({
           </section>
         </div>
         <footer className="composite-modal-footer">
-          <button
-            type="button"
-            className="btn-ghost small"
-            disabled={busy}
-            onClick={onCancel}
-          >
+          <button type="button" className="btn-ghost small" disabled={busy} onClick={onCancel}>
             取消
           </button>
           <button

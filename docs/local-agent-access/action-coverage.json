@@ -1115,299 +1115,6 @@
       ],
       "note": "F7 包传输：仅受控导出目录内的 .canvaslib；清单/版本/逐文件大小与 sha256 校验通过后单事务登记，重复内容包按包哈希拒绝"
     },
-    "ipc.keys.exportCredential": {
-      "label": "密钥导出",
-      "channel": "gateway:keys:export-credential",
-      "gui": "设备授权流程",
-      "phase": "excluded",
-      "reason": "密钥/凭据导出仅限设备授权签发流程，不开放为外部业务操作（安全边界）",
-      "note": "密钥/凭据导出仅限设备授权签发流程，不开放为外部业务操作（安全边界）"
-    },
-    "ipc.keys.listConnections": {
-      "label": "密钥连接列表",
-      "channel": "gateway:keys:list-connections",
-      "gui": "模型设置",
-      "phase": "external",
-      "note": "F9：可导出为凭据包的连接清单（导出前选择用），只给 id/名称/协议/模型数，不含密钥",
-      "external": [
-        "provider.exportableConnections"
-      ]
-    },
-    "ipc.keys.sealPackage": {
-      "label": "凭据封包",
-      "channel": "gateway:keys:seal-package",
-      "gui": "凭据包",
-      "phase": "external",
-      "external": [
-        "provider.package.seal"
-      ],
-      "note": "F9：为接收设备封包（复用 GUI 同一 sealKeyPackageForRecipient，走设备绑定与授权门禁）；接收凭证从受控目录按文件名读取（不接受任意路径）；回执给包ID/连接数/到期/指纹，不回传包正文"
-    },
-    "ipc.keys.previewPackage": {
-      "label": "凭据包预览",
-      "channel": "gateway:keys:preview-package",
-      "gui": "凭据包",
-      "phase": "external",
-      "external": [
-        "provider.package.preview"
-      ],
-      "note": "F9：只读预览受控目录内的凭据包（不解密落库）；返回包ID/签发设备摘要/到期/连接清单/是否已导入，连接只暴露主机名而不暴露完整 URL"
-    },
-    "ipc.keys.importPackage": {
-      "label": "凭据包导入",
-      "channel": "gateway:keys:import-package",
-      "gui": "凭据包",
-      "phase": "external",
-      "external": [
-        "provider.package.import"
-      ],
-      "note": "F9：导入凭据包（复用同一 KeyPackageService.applyKeyPackageImport）。必须 confirmImport=true，且会弹 GUI 人工确认框，**只有人点允许才解密落库**；回执给包ID/新增/更新/模型数，不含密钥"
-    },
-    "ipc.keys.providers": {
-      "label": "供应商列表",
-      "channel": "gateway:providers:list",
-      "gui": "模型设置",
-      "phase": "external",
-      "external": [
-        "provider.list"
-      ],
-      "note": "F9：供应商目录读取（新目录优先，旧 providers 表保留为遗留档案）；字段白名单只给 id/名称/协议/模型数/是否有密钥/是否遗留，不返回地址、鉴权头或密钥材料，不联网探测"
-    },
-    "ipc.keys.executableProviders": {
-      "label": "可执行供应商",
-      "channel": "gateway:providers:executable",
-      "gui": "模型设置",
-      "phase": "external",
-      "external": [
-        "provider.listExecutable"
-      ],
-      "note": "F9：节点执行实际可用的供应商目录（与 GUI 节点模型选择器同一来源），不返回地址或密钥"
-    },
-    "ipc.keys.saveProvider": {
-      "label": "供应商保存",
-      "channel": "gateway:providers:save",
-      "gui": "模型设置",
-      "phase": "external",
-      "external": [
-        "provider.save"
-      ],
-      "note": "F9：新建/更新供应商连接（复用 GUI 同一 saveProvider）；更新时 apiKey 留空=保留已保存密钥；**回执不回显密钥**，只给 id/名称/协议/模型数/是否有密钥"
-    },
-    "ipc.keys.deleteProvider": {
-      "label": "供应商删除",
-      "channel": "gateway:providers:delete",
-      "gui": "模型设置",
-      "phase": "external",
-      "external": [
-        "provider.delete"
-      ],
-      "note": "F9：删除已保存供应商（复用同一 deleteProvider）；不存在如实 NOT_FOUND"
-    },
-    "ipc.keys.exportProviders": {
-      "label": "供应商导出",
-      "channel": "gateway:providers:export",
-      "gui": "模型设置",
-      "phase": "external",
-      "external": [
-        "provider.package.export"
-      ],
-      "note": "F9：把选定连接导出为凭据包（.cskeys）到**受控导出目录**（复用 GUI 同一 exportProviders 与同一加密格式）；需要解封密码；回执给文件名/sha256/字节数/连接数，不回传包正文；不覆盖已有文件"
-    },
-    "ipc.keys.importProviders": {
-      "label": "供应商导入",
-      "channel": "gateway:providers:import",
-      "gui": "模型设置",
-      "phase": "external",
-      "external": [
-        "provider.package.importProviders"
-      ],
-      "note": "F9：导入旧版供应商包（复用同一 importProviders）；同样需要 confirmImport=true + GUI 人工确认"
-    },
-    "ipc.keys.testProvider": {
-      "label": "供应商测试",
-      "channel": "gateway:providers:test",
-      "gui": "模型设置",
-      "phase": "external",
-      "external": [
-        "provider.testConnection"
-      ],
-      "note": "F9：测试已保存供应商连接（向 /models 发一次请求）。**必须显式 confirmNetwork=true 才执行**，外部只给 providerId（密钥与地址由 main 从设备密钥库读取）；不可用按业务结果返回 reachable=false，不把\"发了但失败\"说成\"没发出去\"；真实供应商响应未在本轮实测"
-    },
-    "ipc.keys.probeProvider": {
-      "label": "供应商探测",
-      "channel": "gateway:providers:probe",
-      "gui": "模型设置",
-      "phase": "external",
-      "external": [
-        "provider.probe"
-      ],
-      "note": "F9：对**已保存**供应商做连通性探测（复用同一 probeProvider），只做免费/只读探测、allowCost 恒 false；必须显式 confirmNetwork=true；外部只给 providerId，密钥由 main 读取"
-    },
-    "ipc.keys.dreaminaLogout": {
-      "label": "退出即梦登录",
-      "channel": "gateway:dreamina:logout",
-      "gui": "模型设置",
-      "phase": "external",
-      "external": [
-        "dreamina.logout"
-      ],
-      "note": "GUI、CLI、MCP 共用本机 CLI 退出操作；外部调用需显式 confirmLogout。"
-    },
-    "ipc.keys.dreaminaLoginStart": {
-      "label": "Dreamina 登录开始",
-      "channel": "gateway:dreamina:login:start",
-      "gui": "登录窗口",
-      "phase": "external",
-      "note": "F9：发起即梦设备流登录（复用同一 startDreaminaLogin），返回验证地址与用户码；已有有效登录返回 already；**不伪造登录状态**，必须由人在浏览器完成授权；需 confirmNetwork",
-      "external": [
-        "dreamina.login.start"
-      ]
-    },
-    "ipc.keys.dreaminaLoginCheck": {
-      "label": "Dreamina 登录检查",
-      "channel": "gateway:dreamina:login:check",
-      "gui": "登录窗口",
-      "phase": "external",
-      "external": [
-        "dreamina.login.check"
-      ],
-      "note": "F9：查询即梦登录结果（复用同一 checkDreaminaLogin），只如实反映本机 CLI 状态；需 confirmNetwork"
-    },
-    "ipc.keys.chatStart": {
-      "label": "对话请求",
-      "channel": "gateway:chat:start",
-      "gui": "chat/ai-process 节点执行",
-      "phase": "external",
-      "note": "F6：GUI 该动作是 chat / ai-process 节点执行，外部等价路径为 node.execute + 任务族。对话发送需要已验证模型连接；无凭据时与 GUI 同因如实失败，不伪造回复（真实供应商未实测）",
-      "external": [
-        "node.execute",
-        "run.get",
-        "run.wait"
-      ]
-    },
-    "ipc.keys.chatCancel": {
-      "label": "对话取消",
-      "channel": "gateway:chat:cancel",
-      "gui": "对话运行",
-      "phase": "external",
-      "external": [
-        "run.cancel"
-      ],
-      "note": "F6：对话取消对应外部 run.cancel（取消请求与确认分离，终态由 run.get 读账本事实，不把 unknown 报成成功）"
-    },
-    "ipc.keys.imageGenerate": {
-      "label": "生图请求",
-      "channel": "gateway:image:generate",
-      "gui": "image-gen 节点执行",
-      "phase": "external",
-      "nodeType": "image-gen",
-      "external": [
-        "node.execute",
-        "run.get",
-        "run.wait",
-        "output.get"
-      ],
-      "note": "F5/F4 路由：GUI 该动作就是「生图」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
-    },
-    "ipc.keys.imageEdit": {
-      "label": "P图请求",
-      "channel": "gateway:image:edit",
-      "gui": "image-edit 节点执行",
-      "phase": "external",
-      "nodeType": "image-edit",
-      "external": [
-        "node.execute",
-        "run.get",
-        "run.wait",
-        "output.get"
-      ],
-      "note": "F5/F4 路由：GUI 该动作就是「P图」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
-    },
-    "ipc.keys.videoSubmit": {
-      "label": "视频提交",
-      "channel": "gateway:video:submit",
-      "gui": "video 节点执行",
-      "phase": "external",
-      "nodeType": "video",
-      "external": [
-        "node.execute",
-        "run.get",
-        "run.wait",
-        "output.get"
-      ],
-      "note": "F5/F4 路由：GUI 该动作就是「视频生成」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
-    },
-    "ipc.keys.videoCancel": {
-      "label": "视频取消",
-      "channel": "gateway:video:cancel",
-      "gui": "视频任务",
-      "phase": "external",
-      "external": [
-        "run.cancel"
-      ],
-      "note": "F5 路由：视频取消对应外部任务族（run.get/run.wait/run.cancel）；取消请求与确认分离，终态由 run.get 读账本事实，不把 unknown 报成成功"
-    },
-    "ipc.keys.videoTask": {
-      "label": "视频任务查询",
-      "channel": "gateway:video:task",
-      "gui": "视频任务",
-      "phase": "external",
-      "external": [
-        "run.get",
-        "run.wait"
-      ],
-      "note": "F5 路由：视频任务查询对应外部任务族（run.get/run.wait/run.cancel）；取消请求与确认分离，终态由 run.get 读账本事实，不把 unknown 报成成功"
-    },
-    "ipc.keys.audioGenerate": {
-      "label": "音频生成",
-      "channel": "gateway:audio:generate",
-      "gui": "tts 节点执行",
-      "phase": "external",
-      "nodeType": "tts",
-      "external": [
-        "node.execute",
-        "run.get",
-        "run.wait",
-        "output.get"
-      ],
-      "note": "F5/F4 路由：GUI 该动作就是「声音复刻」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
-    },
-    "ipc.keys.speechGenerate": {
-      "label": "语音合成",
-      "channel": "gateway:speech:generate",
-      "gui": "speech 节点执行",
-      "phase": "external",
-      "nodeType": "speech",
-      "external": [
-        "node.execute",
-        "run.get",
-        "run.wait",
-        "output.get"
-      ],
-      "note": "F5/F4 路由：GUI 该动作就是「语音合成」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
-    },
-    "ipc.keys.voiceDesign": {
-      "label": "音色设计",
-      "channel": "gateway:voice:design",
-      "gui": "voice-design 节点执行",
-      "phase": "external",
-      "nodeType": "voice-design",
-      "external": [
-        "node.execute",
-        "run.get",
-        "run.wait",
-        "output.get"
-      ],
-      "note": "F5/F4 路由：GUI 该动作就是「音色设计」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
-    },
-    "ipc.keys.event": {
-      "label": "网关流事件",
-      "channel": "gateway:event",
-      "gui": "流式呈现",
-      "phase": "excluded",
-      "reason": "renderer 流式事件通道；外部经 run 事件/结果协议读取（F3/F6），不原样转发 IPC",
-      "note": "renderer 流式事件通道；外部经 run 事件/结果协议读取（F3/F6），不原样转发 IPC"
-    },
     "ipc.models.connections": {
       "label": "模型连接列表",
       "channel": "models:connections:list",
@@ -2127,12 +1834,12 @@
     "ipc.composite.archive": {
       "label": "组合能力归档",
       "channel": "composite:archive",
-      "gui": "保存节点 → 组合节点",
+      "gui": "无 GUI 入口（用户 2026-11-11 裁决移除归档按钮）；仅 CLI/MCP 可用",
       "phase": "external",
       "external": [
         "composite.archive"
       ],
-      "note": "归档后默认发现不可见，已引用版本仍可读"
+      "note": "归档后默认发现不可见，已引用版本仍可读；GUI 归档入口已按用户要求移除，外部操作保留"
     },
     "ipc.composite.verify": {
       "label": "组合版本完整性校验",
@@ -2235,25 +1942,315 @@
       ],
       "note": "W3：同一引用保护，存在引用返回 CAPABILITY_IN_USE 且不改动数据；无引用需 GUI 二次确认"
     },
-    "canvas.composite.archive": {
-      "label": "节点流归档/恢复",
-      "gui": "节点库卡片 → 归档/恢复（含已归档开关）",
-      "phase": "external",
-      "external": [
-        "composite.archive",
-        "composite.search"
-      ],
-      "note": "W3：归档隐藏默认发现入口，已绑定实例按固定版本继续运行；includeArchived 可恢复查看"
-    },
     "canvas.composite.delete": {
       "label": "节点流删除（引用保护）",
-      "gui": "节点库卡片 → 删除",
+      "gui": "节点流卡片 → 删除",
       "phase": "external",
       "external": [
         "composite.references",
         "composite.delete"
       ],
       "note": "W3：先引用检查后二次确认；阻断时提示引用来源，不改动画布与发布数据"
+    },
+    "ipc.app.setTitleBarOverlay": {
+      "label": "窗口标题栏覆盖按钮显隐",
+      "channel": "app:set-title-bar-overlay",
+      "gui": "节点流全屏编辑进入/退出",
+      "phase": "excluded",
+      "reason": "纯窗口外观控制（Windows 标题栏最小化/最大化/关闭覆盖层），非业务动作，不对外开放"
+    },
+    "ipc.gateway.exportCredential": {
+      "label": "密钥导出",
+      "channel": "gateway:keys:export-credential",
+      "gui": "设备授权流程",
+      "phase": "excluded",
+      "reason": "密钥/凭据导出仅限设备授权签发流程，不开放为外部业务操作（安全边界）",
+      "note": "密钥/凭据导出仅限设备授权签发流程，不开放为外部业务操作（安全边界）"
+    },
+    "ipc.gateway.listConnections": {
+      "label": "密钥连接列表",
+      "channel": "gateway:keys:list-connections",
+      "gui": "模型设置",
+      "phase": "external",
+      "note": "F9：可导出为凭据包的连接清单（导出前选择用），只给 id/名称/协议/模型数，不含密钥",
+      "external": [
+        "provider.exportableConnections"
+      ]
+    },
+    "ipc.gateway.sealPackage": {
+      "label": "凭据封包",
+      "channel": "gateway:keys:seal-package",
+      "gui": "凭据包",
+      "phase": "external",
+      "external": [
+        "provider.package.seal"
+      ],
+      "note": "F9：为接收设备封包（复用 GUI 同一 sealKeyPackageForRecipient，走设备绑定与授权门禁）；接收凭证从受控目录按文件名读取（不接受任意路径）；回执给包ID/连接数/到期/指纹，不回传包正文"
+    },
+    "ipc.gateway.previewPackage": {
+      "label": "凭据包预览",
+      "channel": "gateway:keys:preview-package",
+      "gui": "凭据包",
+      "phase": "external",
+      "external": [
+        "provider.package.preview"
+      ],
+      "note": "F9：只读预览受控目录内的凭据包（不解密落库）；返回包ID/签发设备摘要/到期/连接清单/是否已导入，连接只暴露主机名而不暴露完整 URL"
+    },
+    "ipc.gateway.importPackage": {
+      "label": "凭据包导入",
+      "channel": "gateway:keys:import-package",
+      "gui": "凭据包",
+      "phase": "external",
+      "external": [
+        "provider.package.import"
+      ],
+      "note": "F9：导入凭据包（复用同一 KeyPackageService.applyKeyPackageImport）。必须 confirmImport=true，且会弹 GUI 人工确认框，**只有人点允许才解密落库**；回执给包ID/新增/更新/模型数，不含密钥"
+    },
+    "ipc.gateway.providers": {
+      "label": "供应商列表",
+      "channel": "gateway:providers:list",
+      "gui": "模型设置",
+      "phase": "external",
+      "external": [
+        "provider.list"
+      ],
+      "note": "F9：供应商目录读取（新目录优先，旧 providers 表保留为遗留档案）；字段白名单只给 id/名称/协议/模型数/是否有密钥/是否遗留，不返回地址、鉴权头或密钥材料，不联网探测"
+    },
+    "ipc.gateway.executableProviders": {
+      "label": "可执行供应商",
+      "channel": "gateway:providers:executable",
+      "gui": "模型设置",
+      "phase": "external",
+      "external": [
+        "provider.listExecutable"
+      ],
+      "note": "F9：节点执行实际可用的供应商目录（与 GUI 节点模型选择器同一来源），不返回地址或密钥"
+    },
+    "ipc.gateway.saveProvider": {
+      "label": "供应商保存",
+      "channel": "gateway:providers:save",
+      "gui": "模型设置",
+      "phase": "external",
+      "external": [
+        "provider.save"
+      ],
+      "note": "F9：新建/更新供应商连接（复用 GUI 同一 saveProvider）；更新时 apiKey 留空=保留已保存密钥；**回执不回显密钥**，只给 id/名称/协议/模型数/是否有密钥"
+    },
+    "ipc.gateway.deleteProvider": {
+      "label": "供应商删除",
+      "channel": "gateway:providers:delete",
+      "gui": "模型设置",
+      "phase": "external",
+      "external": [
+        "provider.delete"
+      ],
+      "note": "F9：删除已保存供应商（复用同一 deleteProvider）；不存在如实 NOT_FOUND"
+    },
+    "ipc.gateway.exportProviders": {
+      "label": "供应商导出",
+      "channel": "gateway:providers:export",
+      "gui": "模型设置",
+      "phase": "external",
+      "external": [
+        "provider.package.export"
+      ],
+      "note": "F9：把选定连接导出为凭据包（.cskeys）到**受控导出目录**（复用 GUI 同一 exportProviders 与同一加密格式）；需要解封密码；回执给文件名/sha256/字节数/连接数，不回传包正文；不覆盖已有文件"
+    },
+    "ipc.gateway.importProviders": {
+      "label": "供应商导入",
+      "channel": "gateway:providers:import",
+      "gui": "模型设置",
+      "phase": "external",
+      "external": [
+        "provider.package.importProviders"
+      ],
+      "note": "F9：导入旧版供应商包（复用同一 importProviders）；同样需要 confirmImport=true + GUI 人工确认"
+    },
+    "ipc.gateway.testProvider": {
+      "label": "供应商测试",
+      "channel": "gateway:providers:test",
+      "gui": "模型设置",
+      "phase": "external",
+      "external": [
+        "provider.testConnection"
+      ],
+      "note": "F9：测试已保存供应商连接（向 /models 发一次请求）。**必须显式 confirmNetwork=true 才执行**，外部只给 providerId（密钥与地址由 main 从设备密钥库读取）；不可用按业务结果返回 reachable=false，不把\"发了但失败\"说成\"没发出去\"；真实供应商响应未在本轮实测"
+    },
+    "ipc.gateway.probeProvider": {
+      "label": "供应商探测",
+      "channel": "gateway:providers:probe",
+      "gui": "模型设置",
+      "phase": "external",
+      "external": [
+        "provider.probe"
+      ],
+      "note": "F9：对**已保存**供应商做连通性探测（复用同一 probeProvider），只做免费/只读探测、allowCost 恒 false；必须显式 confirmNetwork=true；外部只给 providerId，密钥由 main 读取"
+    },
+    "ipc.gateway.dreaminaLogout": {
+      "label": "退出即梦登录",
+      "channel": "gateway:dreamina:logout",
+      "gui": "模型设置",
+      "phase": "external",
+      "external": [
+        "dreamina.logout"
+      ],
+      "note": "GUI、CLI、MCP 共用本机 CLI 退出操作；外部调用需显式 confirmLogout。"
+    },
+    "ipc.gateway.dreaminaLoginStart": {
+      "label": "Dreamina 登录开始",
+      "channel": "gateway:dreamina:login:start",
+      "gui": "登录窗口",
+      "phase": "external",
+      "note": "F9：发起即梦设备流登录（复用同一 startDreaminaLogin），返回验证地址与用户码；已有有效登录返回 already；**不伪造登录状态**，必须由人在浏览器完成授权；需 confirmNetwork",
+      "external": [
+        "dreamina.login.start"
+      ]
+    },
+    "ipc.gateway.dreaminaLoginCheck": {
+      "label": "Dreamina 登录检查",
+      "channel": "gateway:dreamina:login:check",
+      "gui": "登录窗口",
+      "phase": "external",
+      "external": [
+        "dreamina.login.check"
+      ],
+      "note": "F9：查询即梦登录结果（复用同一 checkDreaminaLogin），只如实反映本机 CLI 状态；需 confirmNetwork"
+    },
+    "ipc.gateway.chatStart": {
+      "label": "对话请求",
+      "channel": "gateway:chat:start",
+      "gui": "chat/ai-process 节点执行",
+      "phase": "external",
+      "note": "F6：GUI 该动作是 chat / ai-process 节点执行，外部等价路径为 node.execute + 任务族。对话发送需要已验证模型连接；无凭据时与 GUI 同因如实失败，不伪造回复（真实供应商未实测）",
+      "external": [
+        "node.execute",
+        "run.get",
+        "run.wait"
+      ]
+    },
+    "ipc.gateway.chatCancel": {
+      "label": "对话取消",
+      "channel": "gateway:chat:cancel",
+      "gui": "对话运行",
+      "phase": "external",
+      "external": [
+        "run.cancel"
+      ],
+      "note": "F6：对话取消对应外部 run.cancel（取消请求与确认分离，终态由 run.get 读账本事实，不把 unknown 报成成功）"
+    },
+    "ipc.gateway.imageGenerate": {
+      "label": "生图请求",
+      "channel": "gateway:image:generate",
+      "gui": "image-gen 节点执行",
+      "phase": "external",
+      "nodeType": "image-gen",
+      "external": [
+        "node.execute",
+        "run.get",
+        "run.wait",
+        "output.get"
+      ],
+      "note": "F5/F4 路由：GUI 该动作就是「生图」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
+    },
+    "ipc.gateway.imageEdit": {
+      "label": "P图请求",
+      "channel": "gateway:image:edit",
+      "gui": "image-edit 节点执行",
+      "phase": "external",
+      "nodeType": "image-edit",
+      "external": [
+        "node.execute",
+        "run.get",
+        "run.wait",
+        "output.get"
+      ],
+      "note": "F5/F4 路由：GUI 该动作就是「P图」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
+    },
+    "ipc.gateway.videoSubmit": {
+      "label": "视频提交",
+      "channel": "gateway:video:submit",
+      "gui": "video 节点执行",
+      "phase": "external",
+      "nodeType": "video",
+      "external": [
+        "node.execute",
+        "run.get",
+        "run.wait",
+        "output.get"
+      ],
+      "note": "F5/F4 路由：GUI 该动作就是「视频生成」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
+    },
+    "ipc.gateway.videoCancel": {
+      "label": "视频取消",
+      "channel": "gateway:video:cancel",
+      "gui": "视频任务",
+      "phase": "external",
+      "external": [
+        "run.cancel"
+      ],
+      "note": "F5 路由：视频取消对应外部任务族（run.get/run.wait/run.cancel）；取消请求与确认分离，终态由 run.get 读账本事实，不把 unknown 报成成功"
+    },
+    "ipc.gateway.videoTask": {
+      "label": "视频任务查询",
+      "channel": "gateway:video:task",
+      "gui": "视频任务",
+      "phase": "external",
+      "external": [
+        "run.get",
+        "run.wait"
+      ],
+      "note": "F5 路由：视频任务查询对应外部任务族（run.get/run.wait/run.cancel）；取消请求与确认分离，终态由 run.get 读账本事实，不把 unknown 报成成功"
+    },
+    "ipc.gateway.audioGenerate": {
+      "label": "音频生成",
+      "channel": "gateway:audio:generate",
+      "gui": "tts 节点执行",
+      "phase": "external",
+      "nodeType": "tts",
+      "external": [
+        "node.execute",
+        "run.get",
+        "run.wait",
+        "output.get"
+      ],
+      "note": "F5/F4 路由：GUI 该动作就是「声音复刻」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
+    },
+    "ipc.gateway.speechGenerate": {
+      "label": "语音合成",
+      "channel": "gateway:speech:generate",
+      "gui": "speech 节点执行",
+      "phase": "external",
+      "nodeType": "speech",
+      "external": [
+        "node.execute",
+        "run.get",
+        "run.wait",
+        "output.get"
+      ],
+      "note": "F5/F4 路由：GUI 该动作就是「语音合成」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
+    },
+    "ipc.gateway.voiceDesign": {
+      "label": "音色设计",
+      "channel": "gateway:voice:design",
+      "gui": "voice-design 节点执行",
+      "phase": "external",
+      "nodeType": "voice-design",
+      "external": [
+        "node.execute",
+        "run.get",
+        "run.wait",
+        "output.get"
+      ],
+      "note": "F5/F4 路由：GUI 该动作就是「音色设计」节点执行，外部等价路径为 node.execute + 任务族（run.get/run.wait）+ output.get。**付费/供应商执行从未实测**（无预算授权，且用户要求语音克隆/音色设计/视频生成由本人自测）：当前只验证了参数接线与\"缺依赖时在调用前如实拒绝、零计费请求\"，不得宣称供应商已验收"
+    },
+    "ipc.gateway.event": {
+      "label": "网关流事件",
+      "channel": "gateway:event",
+      "gui": "流式呈现",
+      "phase": "excluded",
+      "reason": "renderer 流式事件通道；外部经 run 事件/结果协议读取（F3/F6），不原样转发 IPC",
+      "note": "renderer 流式事件通道；外部经 run 事件/结果协议读取（F3/F6），不原样转发 IPC"
     }
   }
 }

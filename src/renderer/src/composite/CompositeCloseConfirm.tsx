@@ -48,7 +48,8 @@ export function CompositeCloseConfirm({
         </header>
         <div className="composite-modal-scroll">
           <p className="composite-close-confirm-text">
-            节点流「{capabilityName}」的内部图或公开端口已修改，尚未保存草稿。关闭前要保存吗？
+            节点流「{capabilityName}
+            」的内容已修改，尚未保存。关闭前要保存吗？保存后下次编辑会自动恢复。
           </p>
         </div>
         <footer className="composite-modal-footer is-three">
@@ -60,20 +61,10 @@ export function CompositeCloseConfirm({
           >
             放弃修改
           </button>
-          <button
-            type="button"
-            className="btn-ghost small"
-            disabled={busy}
-            onClick={onContinue}
-          >
+          <button type="button" className="btn-ghost small" disabled={busy} onClick={onContinue}>
             继续编辑
           </button>
-          <button
-            type="button"
-            className="run-btn"
-            disabled={busy}
-            onClick={onSaveAndClose}
-          >
+          <button type="button" className="run-btn" disabled={busy} onClick={onSaveAndClose}>
             {busy ? '保存中…' : '保存并关闭'}
           </button>
         </footer>

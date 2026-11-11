@@ -82,7 +82,9 @@ export const IPC = {
     read: 'flow-assets:read'
   },
   app: {
-    bootstrap: 'app:bootstrap'
+    bootstrap: 'app:bootstrap',
+    // 纯窗口外观控制：节点流全屏编辑时隐藏 Windows 标题栏覆盖按钮（最小化/最大化/关闭）。
+    setTitleBarOverlay: 'app:set-title-bar-overlay'
   },
   project: {
     list: 'project:list',
@@ -209,13 +211,13 @@ export const IPC = {
   },
   gateway: {
     // P2 密钥包通道（.cskeys v2 指定设备发放）。seal 需 credentials.export 能力。
-  keys: {
-  exportCredential: 'gateway:keys:export-credential',
-  listConnections: 'gateway:keys:list-connections',
-  sealPackage: 'gateway:keys:seal-package',
-  previewPackage: 'gateway:keys:preview-package',
-  importPackage: 'gateway:keys:import-package'
-  },
+    keys: {
+      exportCredential: 'gateway:keys:export-credential',
+      listConnections: 'gateway:keys:list-connections',
+      sealPackage: 'gateway:keys:seal-package',
+      previewPackage: 'gateway:keys:preview-package',
+      importPackage: 'gateway:keys:import-package'
+    },
     providers: 'gateway:providers:list',
     executableProviders: 'gateway:providers:executable',
     saveProvider: 'gateway:providers:save',

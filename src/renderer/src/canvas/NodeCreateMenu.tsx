@@ -28,6 +28,8 @@ interface NodeCreateMenuProps {
   visibleNodeTypeIds?: readonly string[]
   /** 拖线到空白时，回传菜单左侧中点，使临时线落在菜单中部而不是左上角。 */
   onAnchorChange?: (anchor: { x: number; y: number }) => void
+  /** 精简模式：只保留节点分类列表，隐藏模板/上传/图库入口（节点流内部画布使用）。 */
+  minimal?: boolean
 }
 
 function estimatedTextWidth(label: string): number {
@@ -57,7 +59,8 @@ export function NodeCreateMenu({
   onClose,
   source = null,
   visibleNodeTypeIds,
-  onAnchorChange
+  onAnchorChange,
+  minimal = false
 }: NodeCreateMenuProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [menuHeight, setMenuHeight] = useState(0)
@@ -125,7 +128,7 @@ export function NodeCreateMenu({
     ? [
         ...(showPaste ? [`粘贴 ${pasteCount} 个节点`] : []),
         ...categoryOptions.map((category) => category.label),
-        ...(source ? [] : ['剧本 → 分镜', '上传本地文件', '从图库选择'])
+        ...(source || minimal ? [] : ['剧本 → 分镜', '上传本地文件', '从图库选择'])
       ]
     : allChoices.flatMap((choice) => {
         const spec = getNodeType(choice.type)
@@ -213,10 +216,10 @@ export function NodeCreateMenu({
           </div>
         )}
         {!showTabs && renderChoices()}
-        {!source && (
+        {!source && !minimal && (
           <>
             <div className="node-menu-divider" />
-            <div className="node-menu-title">节点库</div>
+            <div className="node-menu-title">节点流</div>
             <button className="node-menu-action" onClick={onTemplate}>
               剧本 → 分镜
             </button>
