@@ -8,8 +8,15 @@
   pointer-events: none;
 }
 
-.backdrop-controls > :is(input, button) {
+.backdrop-controls > input,
+.backdrop-tools > button {
   pointer-events: auto;
+}
+
+.backdrop-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .backdrop-title {
@@ -38,19 +45,22 @@
 .backdrop-swatches button {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
-  flex: 0 0 26px;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
   padding: 0;
   border: 1px solid #a5afbf;
   cursor: pointer;
 }
 
-.backdrop-arrange {
+.backdrop-tools > button {
   border-radius: 6px;
   border-color: transparent;
   background: transparent;
   color: #f1f3f5;
+}
+.backdrop-tools > button:hover:not(:disabled) {
+  background: #16192266;
 }
 .backdrop-arrange:disabled {
   opacity: 0.5;
@@ -58,12 +68,12 @@
 }
 
 .backdrop-arrange svg {
-  /* The glyph occupies only part of its SVG view box. */
-  transform: scale(1.4);
   pointer-events: none;
 }
-.backdrop-color,
-.backdrop-swatches button {
+.backdrop-color span {
+  width: 16px;
+  height: 16px;
+  border: 1px solid #ffffff80;
   border-radius: 50%;
 }
 

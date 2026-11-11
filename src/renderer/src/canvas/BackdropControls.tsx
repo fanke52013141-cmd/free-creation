@@ -76,52 +76,55 @@ export function BackdropControls({ shape }: { shape: BackdropShape }): React.JSX
           if (event.key === 'Enter' || event.key === 'Escape') event.currentTarget.blur()
         }}
       />
-      <button
-        type="button"
-        className="backdrop-arrange"
-        aria-label="整理背景板节点"
-        title="整理背景板节点"
-        disabled={memberIds.length < 2}
-        onPointerDown={stopEventPropagation}
-        onClick={() =>
-          applyBackdropAction(editor, { action: 'backdrop.arrange', backdropId: shape.id })
-        }
-      >
-        <Icon name="grid" size={26} />
-      </button>
-      <button
-        type="button"
-        className="backdrop-arrange"
-        aria-label="横向排列背景板节点"
-        title="横向排列：所有节点排成一行"
-        disabled={memberIds.length < 2}
-        onPointerDown={stopEventPropagation}
-        onClick={() => arrange('horizontal')}
-      >
-        <Icon name="distribute-horizontal" size={26} />
-      </button>
-      <button
-        type="button"
-        className="backdrop-arrange"
-        aria-label="纵向排列背景板节点"
-        title="纵向排列：所有节点排成一列"
-        disabled={memberIds.length < 2}
-        onPointerDown={stopEventPropagation}
-        onClick={() => arrange('vertical')}
-      >
-        <Icon name="distribute-vertical" size={26} />
-      </button>
-      <button
-        ref={colorButton}
-        type="button"
-        className="backdrop-color"
-        popoverTarget={paletteId}
-        aria-label="背景板颜色"
-        title="背景板颜色"
-        style={{ backgroundColor: color }}
-        onPointerDown={stopEventPropagation}
-        onClick={() => popover.current?.reset()}
-      />
+      <div className="backdrop-tools" role="group" aria-label="背景板工具">
+        <button
+          type="button"
+          className="backdrop-arrange"
+          aria-label="横向排列背景板节点"
+          title="横向排列：所有节点排成一行"
+          disabled={memberIds.length < 2}
+          onPointerDown={stopEventPropagation}
+          onClick={() => arrange('horizontal')}
+        >
+          <Icon name="distribute-horizontal" size={20} />
+        </button>
+        <button
+          type="button"
+          className="backdrop-arrange"
+          aria-label="纵向排列背景板节点"
+          title="纵向排列：所有节点排成一列"
+          disabled={memberIds.length < 2}
+          onPointerDown={stopEventPropagation}
+          onClick={() => arrange('vertical')}
+        >
+          <Icon name="distribute-vertical" size={20} />
+        </button>
+        <button
+          type="button"
+          className="backdrop-arrange"
+          aria-label="自动整理背景板节点"
+          title="自动整理背景板节点"
+          disabled={memberIds.length < 2}
+          onPointerDown={stopEventPropagation}
+          onClick={() =>
+            applyBackdropAction(editor, { action: 'backdrop.arrange', backdropId: shape.id })
+          }
+        >
+          <Icon name="grid" size={20} />
+        </button>
+        <button
+          ref={colorButton}
+          type="button"
+          className="backdrop-color"
+          popoverTarget={paletteId}
+          aria-label="背景板颜色"
+          title="背景板颜色"
+          onPointerDown={stopEventPropagation}
+          onClick={() => popover.current?.reset()}
+        >
+          <span aria-hidden="true" style={{ backgroundColor: color }} />
+        </button>
+      </div>
       <form
         ref={popover}
         id={paletteId}
@@ -170,7 +173,9 @@ export function BackdropControls({ shape }: { shape: BackdropShape }): React.JSX
             defaultValue={Math.round(fillOpacity * 1000) / 10}
           />
         </label>
-        <button type="submit" className="btn-primary small">应用</button>
+        <button type="submit" className="btn-primary small">
+          应用
+        </button>
       </form>
     </div>
   )

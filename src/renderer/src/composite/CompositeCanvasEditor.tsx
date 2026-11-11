@@ -8,7 +8,8 @@ import { CarrierArrowUtil } from '../canvas/CarrierArrowUtil'
 import { BackdropShapeUtil } from '../canvas/BackdropShape'
 import { createEdge, deriveGraph } from '../canvas/graph'
 import { NodeContractPanel } from '../canvas/NodeContractPanel'
-import { useNodePanelStore } from '../stores/nodePanel'
+import { DataEdgeLayer } from '../canvas/DataEdgeLayer'
+import { Icon } from '../components/Icon'
 import { useGatewayStore } from '../stores/gateway'
 import { toast } from '../stores/toast'
 import './composite-editor.css'
@@ -27,7 +28,9 @@ const EMPTY_COMPONENTS = {
   ContextMenu: null
 } as const
 
-type ManifestNodePortType = NonNullable<CompositeManifest['graph']['nodes'][number]['ports']>[number]['type']
+type ManifestNodePortType = NonNullable<
+  CompositeManifest['graph']['nodes'][number]['ports']
+>[number]['type']
 
 const NODE_DEFAULTS: Record<string, { title: string; w: number; h: number }> = {
   text: { title: '文本', w: 340, h: 300 },
@@ -90,17 +93,24 @@ export function CompositeCanvasEditor({
       const from = shapeByNode.get(edge.from.nodeId)
       const to = shapeByNode.get(edge.to.nodeId)
       if (from && to) {
-        createEdge(editor, { shapeId: from, portId: edge.from.portId }, { shapeId: to, portId: edge.to.portId }, false)
+        createEdge(
+          editor,
+          { shapeId: from, portId: edge.from.portId },
+          { shapeId: to, portId: edge.to.portId },
+          false
+        )
       }
     }
     editor.zoomToFit({ animation: { duration: 0 } })
-    const unsubscribe = editor.store.listen(() => {
-      const selected = editor.getSelectedShapeIds()[0]
-      if (!selected) return
-      if (editor.getShape(selected)?.type !== 'node-card') return
-      setSelectedShapeId(selected as TLShapeId)
-      useNodePanelStore.getState().open('contract', selected as TLShapeId)
-    })
+    const unsubscribe = editor.store.listen(
+      () => {
+        const selected = editor.getSelectedShapeIds()[0]
+        setSelectedShapeId(
+          selected && editor.getShape(selected)?.type === 'node-card' ? selected : null
+        )
+      },
+      { scope: 'session' }
+    )
     return unsubscribe
   }, [editor, manifest])
 
@@ -114,7 +124,12 @@ export function CompositeCanvasEditor({
       type: 'node-card',
       x: bounds.center.x - defaults.w / 2,
       y: bounds.center.y - defaults.h / 2,
-      props: { nodeType: nodeType as NodeCardShape['props']['nodeType'], title: defaults.title, w: defaults.w, h: defaults.h }
+      props: {
+        nodeType: nodeType as NodeCardShape['props']['nodeType'],
+        title: defaults.title,
+        w: defaults.w,
+        h: defaults.h
+      }
     })
     editor.select(id)
   }
@@ -129,13 +144,22 @@ export function CompositeCanvasEditor({
           .map((input) => ({
             ...input,
             targets: input.targets
-              .map((target) => ({ ...target, nodeId: internalId.get(target.nodeId) ?? target.nodeId }))
+              .map((target) => ({
+                ...target,
+                nodeId: internalId.get(target.nodeId) ?? target.nodeId
+              }))
               .filter((target) => internalId.has(target.nodeId))
           }))
           .filter((input) => input.targets.length > 0)
       : []
     const outputs = manifest.outputs
-      .map((output) => ({ ...output, source: { ...output.source, nodeId: internalId.get(output.source.nodeId) ?? output.source.nodeId } }))
+      .map((output) => ({
+        ...output,
+        source: {
+          ...output.source,
+          nodeId: internalId.get(output.source.nodeId) ?? output.source.nodeId
+        }
+      }))
       .filter((output) => internalId.has(output.source.nodeId))
     const rebuilt: CompositeManifest = {
       ...manifest,
@@ -151,7 +175,17 @@ export function CompositeCanvasEditor({
           h: node.h,
           ...(node.content.kind === 'text' ? { text: node.content.text } : {}),
           ...(typeof node.params?.config === 'string' ? { config: node.params.config } : {}),
-          ...(node.content.kind === 'media' ? { mediaRefs: [{ mediaId: node.content.mediaId, mediaPath: String(node.params?.mediaPath ?? ''), mime: String(node.params?.mediaMime ?? '') }] } : {}),
+          ...(node.content.kind === 'media'
+            ? {
+                mediaRefs: [
+                  {
+                    mediaId: node.content.mediaId,
+                    mediaPath: String(node.params?.mediaPath ?? ''),
+                    mime: String(node.params?.mediaMime ?? '')
+                  }
+                ]
+              }
+            : {}),
           ports: node.ports.map((port) => ({
             id: port.id,
             name: port.name,
@@ -159,7 +193,9 @@ export function CompositeCanvasEditor({
             type: port.type as ManifestNodePortType,
             required: port.required,
             cardinality: port.cardinality,
-            ...(port.schema ? { schemaRef: { id: port.schema.id, version: port.schema.version } } : {})
+            ...(port.schema
+              ? { schemaRef: { id: port.schema.id, version: port.schema.version } }
+              : {})
           }))
         })),
         edges: graph.edges
@@ -173,7 +209,8 @@ export function CompositeCanvasEditor({
       outputs
     }
     const derived = deriveCompositeBoundary(rebuilt)
-    if (rebuilt.inputs.length === 0 && derived.inputs.length > 0) setWarning('检测到旧组合没有公开输入，发布时会按内部图重新推导')
+    if (rebuilt.inputs.length === 0 && derived.inputs.length > 0)
+      setWarning('检测到旧组合没有公开输入，发布时会按内部图重新推导')
     return { ...rebuilt, inputs: derived.inputs, outputs: derived.outputs }
   }
 
@@ -185,7 +222,11 @@ export function CompositeCanvasEditor({
       const validated = await window.api.composite.validate({ manifest: next })
       if (!validated.ok) throw new Error(validated.error.message)
       if (!validated.data.ok) {
-        throw new Error(validated.data.issues.map((issue) => `[${issue.code}] ${issue.path}: ${issue.message}`).join('；'))
+        throw new Error(
+          validated.data.issues
+            .map((issue) => `[${issue.code}] ${issue.path}: ${issue.message}`)
+            .join('；')
+        )
       }
       const draft = await window.api.composite.draftSave({ manifest: next })
       if (!draft.ok) throw new Error(draft.error.message)
@@ -202,40 +243,77 @@ export function CompositeCanvasEditor({
   }
 
   return (
-    <div className="composite-canvas-overlay">
+    <div
+      className="composite-canvas-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="composite-canvas-title"
+    >
       <span hidden>{capability.id}</span>
       <header className="composite-canvas-topbar">
-        <button type="button" className="btn-ghost small" onClick={onClose} disabled={busy}>
-          返回
-        </button>
-        <strong>{manifest.name}</strong>
-        <span className="composite-version-pill">v{manifest.version.replace(/\.0\.0$/, '.0')} · 草稿</span>
-        <span style={{ flex: 1 }} />
-        <button type="button" className="btn-ghost small" disabled={busy} onClick={() => addNode('text')}>+ 文本</button>
-        <button type="button" className="btn-ghost small" disabled={busy} onClick={() => addNode('ai-process')}>+ AI 处理</button>
-        <button type="button" className="btn-ghost small" disabled={busy} onClick={() => addNode('image-gen')}>+ 生图</button>
-        <button type="button" className="library-form-primary" disabled={busy} onClick={() => void save()}>
+        <div className="composite-canvas-heading">
+          <span>节点组合</span>
+          <h2 id="composite-canvas-title" title={manifest.name}>
+            {manifest.name}
+          </h2>
+          <span className="composite-canvas-version">
+            v{manifest.version.replace(/\.0\.0$/, '.0')}
+          </span>
+        </div>
+        <button
+          type="button"
+          className="library-form-primary"
+          disabled={busy || !editor}
+          onClick={() => void save()}
+        >
           {busy ? '保存中…' : '保存并发布'}
         </button>
+        <button
+          type="button"
+          className="composite-canvas-close"
+          onClick={onClose}
+          disabled={busy}
+          aria-label="关闭组合编辑"
+          title="关闭组合编辑"
+        >
+          <Icon name="close" size={18} />
+        </button>
       </header>
-      <div className="composite-canvas-stage">
-        <Tldraw
-          shapeUtils={[NodeCardUtil, CarrierArrowUtil, BackdropShapeUtil]}
-          components={EMPTY_COMPONENTS as never}
-          onMount={(instance) => setEditor(instance)}
-        />
+      <div className="composite-canvas-workspace">
+        <div className="composite-canvas-stage">
+          <Tldraw
+            shapeUtils={[NodeCardUtil, CarrierArrowUtil, BackdropShapeUtil]}
+            components={EMPTY_COMPONENTS as never}
+            onMount={(instance) => setEditor(instance)}
+          />
+          {editor && <DataEdgeLayer editor={editor} interactive={false} />}
+          <div className="composite-canvas-tools" role="group" aria-label="添加节点">
+            {Object.entries(NODE_DEFAULTS).map(([type, { title }]) => (
+              <button
+                key={type}
+                type="button"
+                className="btn-ghost small"
+                disabled={busy || !editor}
+                onClick={() => addNode(type)}
+              >
+                + {title}
+              </button>
+            ))}
+          </div>
+        </div>
+        {editor && selectedShapeId && (
+          <NodeContractPanel
+            editor={editor}
+            projectId={projectId}
+            providers={providers}
+            localShapeId={selectedShapeId}
+            onClose={() => {
+              editor.selectNone()
+              setSelectedShapeId(null)
+            }}
+          />
+        )}
       </div>
-      {editor && selectedShapeId && (
-        <NodeContractPanel
-          editor={editor}
-          projectId={projectId}
-          providers={providers}
-          onClose={() => {
-            useNodePanelStore.getState().close()
-            setSelectedShapeId(null)
-          }}
-        />
-      )}
       {warning && <div className="composite-canvas-warning">{warning}</div>}
     </div>
   )

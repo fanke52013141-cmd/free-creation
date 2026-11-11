@@ -299,7 +299,13 @@ function mirrorCameraTransform(editor: Editor, frame: HTMLElement): () => void {
  * 改为在 window 捕获阶段用 SVGGeometryElement.isPointInStroke 手动判定：
  * 命中连线才拦截事件，其余区域完全放行给 tldraw。
  */
-export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element {
+export function DataEdgeLayer({
+  editor,
+  interactive = true
+}: {
+  editor: Editor
+  interactive?: boolean
+}): React.JSX.Element {
   const [, setRevision] = useState(0)
   const selectedEdgeId = useEdgeSelectionStore((state) => state.selectedEdgeId)
   // `from` is stable while the pointer moves, so edge anchors reflow once when a
@@ -399,7 +405,11 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
   // window 捕获阶段处理连线交互：先于 tldraw 与 React 合成事件，能精确决定
   // “这次按下属于连线选中”还是“完全放行给画布框选”。
   useEffect(() => {
+    if (!interactive) return
+    const canvasCovered = (): boolean =>
+      Boolean(document.querySelector('.composite-canvas-overlay'))
     const onPointerDown = (event: PointerEvent): void => {
+      if (canvasCovered()) return
       // 剪刀是唯一会删除连线的显式操作，不能被窗口捕获阶段的连线选中逻辑截获。
       if (event.target instanceof Element && event.target.closest('.data-edge-scissors')) return
       // 预览弹层通过 portal 挂到 body；弹层上方即使覆盖着一条画布连线，也不能
@@ -422,6 +432,7 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
       select(hit)
     }
     const onContextMenu = (event: MouseEvent): void => {
+      if (canvasCovered()) return
       if (event.target instanceof Element && event.target.closest('.agent-flow-control-label'))
         return
       if (event.target instanceof Element && event.target.closest('.media-preview-mask')) return
@@ -437,7 +448,10 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
     }
     let moveFrame = 0
     const onPointerMove = (event: PointerEvent): void => {
-      if (event.target instanceof Element && event.target.closest('.agent-flow-control-label')) {
+      if (
+        canvasCovered() ||
+        (event.target instanceof Element && event.target.closest('.agent-flow-control-label'))
+      ) {
         if (moveFrame) cancelAnimationFrame(moveFrame)
         moveFrame = 0
         setHoveredEdge(null)
@@ -466,7 +480,7 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
       window.removeEventListener('contextmenu', onContextMenu, { capture: true })
       if (moveFrame) cancelAnimationFrame(moveFrame)
     }
-  }, [editor, select])
+  }, [editor, interactive, select])
 
   const deleteHoveredEdge = (): void => {
     if (!hoveredEdge) return
@@ -597,7 +611,8 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
                 })}
               </g>
             )}
-            {edges.map((edge) => (
+            {interactive &&
+              edges.map((edge) => (
                 <path
                   className="data-edge-hit"
                   key={`hit-${edge.id}`}
@@ -608,7 +623,7 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
           </svg>
         </div>
       </div>
-      {hoveredEdge && (
+      {interactive && hoveredEdge && (
         <button
           className="data-edge-scissors"
           type="button"

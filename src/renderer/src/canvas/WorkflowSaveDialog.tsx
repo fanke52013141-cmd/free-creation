@@ -113,7 +113,9 @@ export function WorkflowSaveDialog({
         if (!validated.ok) throw new Error(validated.error.message)
         if (!validated.data.ok) {
           throw new Error(
-            validated.data.issues.map((issue) => `[${issue.code}] ${issue.path}: ${issue.message}`).join('；')
+            validated.data.issues
+              .map((issue) => `[${issue.code}] ${issue.path}: ${issue.message}`)
+              .join('；')
           )
         }
         const draft = await window.api.composite.draftSave({ manifest: edited })
@@ -156,14 +158,23 @@ export function WorkflowSaveDialog({
       onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}
     >
       <section
-        className="library-form-dialog workflow-save-dialog"
+        className={`library-form-dialog workflow-save-dialog${saveKind === 'composite' ? ' is-composite' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label="保存节点"
         onKeyDown={(event) => {
           event.stopPropagation()
           if (event.key === 'Escape' && !busy) onClose()
-          if (event.key === 'Enter' && !busy) void save()
+          if (
+            event.key === 'Enter' &&
+            !busy &&
+            event.target instanceof HTMLInputElement &&
+            event.target.type === 'text' &&
+            !event.nativeEvent.isComposing
+          ) {
+            event.preventDefault()
+            void save()
+          }
         }}
       >
         <header className="library-form-header">
@@ -238,30 +249,29 @@ export function WorkflowSaveDialog({
           </fieldset>
           {saveKind === 'composite' && (
             <div className="workflow-save-composite">
-              <label className="library-form-field">
-                <span>组合 ID（留空由名称生成）</span>
-                <input
-                  maxLength={80}
-                  value={capabilityId}
-                  onChange={(event) => {
-                    setCapabilityId(event.target.value)
-                    setError('')
-                  }}
-                  placeholder="character-design"
-                />
-              </label>
-              <label className="library-form-field">
-                <span>版本</span>
-                <input
-                  maxLength={20}
-                  value={version}
-                  onChange={(event) => setVersion(event.target.value)}
-                  placeholder="1.0"
-                />
-              </label>
-              <p className="workflow-save-composite-note">
-                发布后版本不可变；可在此增删公开输入输出、修改映射与必填性。
-              </p>
+              <div className="workflow-save-composite-fields">
+                <label className="library-form-field">
+                  <span>组合 ID（留空由名称生成）</span>
+                  <input
+                    maxLength={80}
+                    value={capabilityId}
+                    onChange={(event) => {
+                      setCapabilityId(event.target.value)
+                      setError('')
+                    }}
+                    placeholder="character-design"
+                  />
+                </label>
+                <label className="library-form-field">
+                  <span>版本</span>
+                  <input
+                    maxLength={20}
+                    value={version}
+                    onChange={(event) => setVersion(event.target.value)}
+                    placeholder="1.0"
+                  />
+                </label>
+              </div>
               {compositeDraft ? (
                 <CompositeBoundaryEditor
                   manifest={compositeDraft}

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "composite version history read-only operation",
+  "reason": "Reviewed existing CanvasSidePanel af7bbb1 entry wiring: version.get and existing validate/draft.save/publish contracts unchanged; editor layout and diagnostics routes unchanged.",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -128,7 +128,7 @@
     "src/preload/index.ts": "8202ece01d8ed22253fc6ed13d959d0636b7f01285570c7ef46eca91c9d98fde",
     "src/renderer/src/App.tsx": "2c668996c4a04a85c27e9bedc3845c2265c6e0a90e64ad5efbd267b127e9e3d5",
     "src/renderer/src/canvas/CanvasEditor.tsx": "b4bc2616b403cc67b159ec0fb50ded56e781baaa855ddb4fe0ad8733500eaec9",
-    "src/renderer/src/canvas/CanvasSidePanel.tsx": "d2e7c07795fe1b236712f6cc21a2317886948066240b6d45f44352935f9da167",
+    "src/renderer/src/canvas/CanvasSidePanel.tsx": "f6bcd83a4b90754e37fa5030af91aede3743cbd4d158a14d4f09b6a086174063",
     "src/renderer/src/canvas/ChatSidePanel.tsx": "ddbebc7275822df64fa95b25b56c63d946fb5c512f9d2c2b3017046ae21e54b5",
     "src/renderer/src/canvas/RunTimeline.tsx": "c29fef7a5460a75a6f1d0dfb0f02afbd87d419014b6d0d7122949d5cfd4924a6",
     "src/renderer/src/canvas/flow-asset-actions.ts": "0dd4e5a53510d9566771618052954004bfdc17b31f8f94afe08c0d624554a94f",

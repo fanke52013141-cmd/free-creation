@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useValue, type Editor } from 'tldraw'
+import { useValue, type Editor, type TLShapeId } from 'tldraw'
 import type { MediaAsset, PortDecl, PortType, ProviderSummary } from '@shared/types'
 import { getNodePorts, getNodeType, nodeIconColor, PORT_TYPE_LABELS } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
@@ -32,6 +32,7 @@ interface NodeContractPanelProps {
   projectId: string
   providers: ProviderSummary[]
   onClose: () => void
+  localShapeId?: TLShapeId
 }
 
 function runSummary(record: NodeRunRecord): string {
@@ -396,10 +397,11 @@ export function NodeContractPanel({
   editor,
   projectId,
   providers,
-  onClose
+  onClose,
+  localShapeId
 }: NodeContractPanelProps): React.JSX.Element | null {
-  const shapeId = useNodePanelStore((s) => s.shapeId)
-  const initialTab = useNodePanelStore((s) => s.initialTab)
+  const shapeId = useNodePanelStore((s) => localShapeId ?? s.shapeId)
+  const initialTab = useNodePanelStore((s) => (localShapeId ? 'settings' : s.initialTab))
   const [tab, setTab] = useState<InspectorTab>(initialTab)
   const [runningAction, setRunningAction] = useState<'node' | 'subgraph' | null>(null)
   const panelRef = useRef<HTMLElement>(null)

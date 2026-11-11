@@ -89,7 +89,7 @@ export function CompositeBoundaryEditor({ manifest, disabled, onChange }: Props)
         </header>
         {manifest.inputs.length === 0 && <p className="composite-boundary-empty">暂无公开输入</p>}
         {manifest.inputs.map((input, index) => (
-          <div className="composite-boundary-row" key={input.id}>
+          <div className="composite-boundary-row composite-boundary-input" key={input.id}>
             <input
               aria-label={`输入 ${index + 1} 名称`}
               value={input.label}

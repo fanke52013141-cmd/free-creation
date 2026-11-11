@@ -1632,6 +1632,7 @@
 
 /* 工作流保存小弹窗 */
 .library-form-dialog.workflow-save-dialog { width: min(480px, calc(100vw - 32px)); }
+.library-form-dialog.workflow-save-dialog.is-composite { width: min(660px, calc(100vw - 32px)); }
 .workflow-save-dialog .library-form-header { padding: 18px 22px; }
 .workflow-save-dialog .library-form-header h2 { margin: 0; font-size: 17px; }
 .workflow-save-dialog .library-form-close {
@@ -1650,41 +1651,41 @@
 .workflow-save-dialog .library-form-field { display: grid; gap: 8px; margin: 0; color: var(--muted); font-size: 13px; }
 .workflow-save-dialog .library-form-field input { height: 40px; font-size: 13px; }
 .workflow-save-options {
-  display: flex;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  min-inline-size: 0;
   margin: 20px 0 0;
   padding: 0;
+  border: 0;
 }
 .workflow-save-options legend { margin-bottom: 8px; color: var(--muted); font-size: 13px; }
 .workflow-save-options label {
   display: flex;
-  flex: 1;
   align-items: center;
-  gap: 8px;
-  padding: 13px;
-  background: var(--sunk);
-  border: 1px solid var(--line);
+  gap: 6px;
+  min-height: 38px;
+  padding: 5px 8px;
   border-radius: 8px;
   font-size: 13px;
   cursor: pointer;
 }
-.workflow-save-options label:has(input:checked) {
-  border-color: var(--brand);
-  background: rgba(66, 185, 245, 0.1);
+.workflow-save-options label:has(input:checked),
+.workflow-save-options label:hover:not(:has(input:disabled)) {
+  background: var(--card-hover);
 }
 .workflow-save-options label:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }
-.workflow-save-options input { accent-color: var(--brand); }
+.workflow-save-options input { flex: none; margin: 0; accent-color: var(--brand); }
 .workflow-save-dialog .library-form-footer button { min-height: 36px; font-size: 13px; }
 .workflow-save-composite {
   display: grid;
   gap: 12px;
   margin-top: 16px;
 }
-.workflow-save-composite-note {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.6;
+.workflow-save-composite-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(70px, 112px);
+  gap: 12px;
 }
 .composite-boundary {
   display: grid;
@@ -1694,10 +1695,8 @@
 .composite-boundary-section {
   display: grid;
   gap: 8px;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--sunk);
+  padding: 12px 0 0;
+  border-top: 1px solid var(--line);
 }
 .composite-boundary-section > header {
   display: flex;
@@ -1709,11 +1708,14 @@
 }
 .composite-boundary-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) auto auto minmax(0, 1.4fr) minmax(0, 0.9fr) auto;
+  grid-template-columns: minmax(0, 1.2fr) auto auto minmax(0, 1.4fr) auto;
   align-items: center;
   gap: 6px;
 }
-.composite-boundary-row input,
+.composite-boundary-row.composite-boundary-input {
+  grid-template-columns: minmax(0, 1.2fr) auto auto minmax(0, 1.4fr) minmax(0, 1fr) auto;
+}
+.composite-boundary-row > input,
 .composite-boundary-row select {
   min-width: 0;
   height: 30px;
@@ -1741,6 +1743,18 @@
   margin: 0;
   color: var(--muted);
   font-size: 12px;
+}
+.composite-boundary-check input { margin: 0; accent-color: var(--brand); }
+@media (max-width: 600px) {
+  .composite-boundary-row,
+  .composite-boundary-row.composite-boundary-input {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+  .composite-boundary-row select { grid-column: 1 / -1; }
+  .composite-boundary-row button { grid-column: -2 / -1; }
+}
+@media (max-width: 380px) {
+  .workflow-save-options { grid-template-columns: 1fr; }
 }
 
 /* 卡片展示形态（分类 presentation） */
