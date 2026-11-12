@@ -26,6 +26,7 @@ import { projectNodeOutputs } from '../nodes/nodeValues'
 import { deriveNodeReadiness } from './node-readiness'
 import { readCompositeInstanceManifest } from '@shared/composite/outputs'
 import { runNodeManually } from '../engine/executor'
+import { guiWorkflowInputOptions } from '../stores/workflowInput'
 import { useAppStore } from '../stores/app'
 import { useGatewayStore } from '../stores/gateway'
 import { Tooltip } from '../components/Tooltip'
@@ -184,10 +185,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const titleEditable = true
 
   /** Follow within the detached hit area, in canvas-local pixels. */
-  const updatePortFollow = (
-    event: React.PointerEvent<HTMLSpanElement>,
-    key: string
-  ): void => {
+  const updatePortFollow = (event: React.PointerEvent<HTMLSpanElement>, key: string): void => {
     const rect = event.currentTarget.getBoundingClientRect()
     if (event.pointerType !== 'mouse' || event.buttons !== 0) return
     const zoom = rect.width / NODE_PORT_SIZE || 1
@@ -416,15 +414,18 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         ? configuredModelKey.split('::')[0]
         : ''
   const imageProviderKey =
-    imageRun?.estimateProviderKey ?? (
-    typeof nodeConfig?.providerKey === 'string' && nodeConfig.providerKey
+    imageRun?.estimateProviderKey ??
+    (typeof nodeConfig?.providerKey === 'string' && nodeConfig.providerKey
       ? nodeConfig.providerKey
       : typeof nodeConfig?.modelKey === 'string'
         ? nodeConfig.modelKey.split('::')[0]
         : '')
-  const imageModelKey = imageRun?.estimateModelKey ?? (typeof nodeConfig?.modelKey === 'string' ? nodeConfig.modelKey : '')
-  const imageCount = imageRun?.estimateFeatures?.imageCount ?? (
-    typeof nodeConfig?.count === 'number' && Number.isFinite(nodeConfig.count)
+  const imageModelKey =
+    imageRun?.estimateModelKey ??
+    (typeof nodeConfig?.modelKey === 'string' ? nodeConfig.modelKey : '')
+  const imageCount =
+    imageRun?.estimateFeatures?.imageCount ??
+    (typeof nodeConfig?.count === 'number' && Number.isFinite(nodeConfig.count)
       ? Math.max(1, Math.min(9, Math.floor(nodeConfig.count)))
       : 1)
   const [imageTimingEstimateMs, setImageTimingEstimateMs] = useState(
@@ -524,9 +525,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       // 共享索引：全页运行历史每修订只扫描解析一次，不再每张卡各扫一遍。
       const runs = nodeRunDurationIndex(editor).samples.get(shape.props.nodeType) ?? []
       const exactModelRuns = configuredModelKey
-        ? runs.filter((run) =>
-            run.modelId === configuredModelKey &&
-            (!configuredProviderKey || run.providerId === configuredProviderKey)
+        ? runs.filter(
+            (run) =>
+              run.modelId === configuredModelKey &&
+              (!configuredProviderKey || run.providerId === configuredProviderKey)
           )
         : []
       const exactProviderRuns = configuredProviderKey
@@ -844,13 +846,21 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   // 运行按钮常驻在标题行右侧（用户 2026-09-18 拍板：不能用时置灰，而不是消失）。
   // 置灰原因复用契约派生的 readiness，不引入第二套“能不能跑”的判断。
   const runBusy = activeExecution
+  // 缺输入/缺正文（not-connected/config-missing）改为可点→弹窗补输入；
+  // 缺模型/等待上游结果仍置灰（弹窗补不了）。
+  const runInputGap =
+    readiness.kind === 'blocked' &&
+    (readiness.reason === 'not-connected' || readiness.reason === 'config-missing')
   const runBlockedReason = !project
     ? '项目未就绪'
     : runBusy
       ? '节点正在运行'
-      : readiness.kind === 'blocked'
+      : readiness.kind === 'blocked' && !runInputGap
         ? readinessWithFreshness.label
         : null
+  const runTooltip =
+    runBlockedReason ??
+    (runInputGap ? `${readinessWithFreshness.label}（点击补充输入并运行）` : '运行节点')
 
   // 全节点统一高度边界；旧尺寸仅迁移几何，不改业务内容。
   useEffect(() => {
@@ -868,7 +878,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         const current = latest.props.h
         // 视频生成节点引用多图时内容超过通用上限，允许跳到专用档，避免输出参数被裁掉。
         const heightCap =
-          latest.props.nodeType === 'video' ? NODE_UI.height.autoMaxVideoGen : NODE_UI.height.autoMax
+          latest.props.nodeType === 'video'
+            ? NODE_UI.height.autoMaxVideoGen
+            : NODE_UI.height.autoMax
         // free 尺寸节点（时间线）的高度完全由用户拖动决定，内容不参与量高：
         // 时间轴每帧改 style 会持续触发这里的 MutationObserver，参与测算会反复写文档。
         if (getNodeType(latest.props.nodeType)?.sizePolicy === 'free') return
@@ -922,7 +934,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           return
         }
         if (metadata.nodeHeightMode === 'manual') return
-        if (!metadata.nodeHeightMode && current !== 260 && resolveNodeHeight(current, heightCap) !== current) {
+        if (
+          !metadata.nodeHeightMode &&
+          current !== 260 &&
+          resolveNodeHeight(current, heightCap) !== current
+        ) {
           editor.run(
             () =>
               editor.updateShape({
@@ -1083,24 +1099,38 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             : ''
         }`}
         data-node-id={shape.id}
-        style={{ width: shape.props.w, height: shape.props.h,
-          ['--node-spot-radius' as string]: Math.max(260, Math.hypot(shape.props.w, shape.props.h) * 0.55) + 'px',
+        style={{
+          width: shape.props.w,
+          height: shape.props.h,
+          ['--node-spot-radius' as string]:
+            Math.max(260, Math.hypot(shape.props.w, shape.props.h) * 0.55) + 'px',
           ['--node-header-h' as string]: `${NODE_UI.header.height}px`,
           ['--node-empty-icon-size' as string]: `${NODE_UI.identity.iconSize}px`,
           ['--node-port-outset' as string]: `${NODE_PORT_OUTSET}px`,
           ['--node-port-hit' as string]: `${NODE_PORT_SIZE}px`
         }}
         onPointerMoveCapture={(event) => {
-          if (event.pointerType !== 'mouse' || !event.currentTarget.contains(event.target as Node)) return
-          spotlightPointRef.current = { x: event.clientX, y: event.clientY, el: event.currentTarget }
+          if (event.pointerType !== 'mouse' || !event.currentTarget.contains(event.target as Node))
+            return
+          spotlightPointRef.current = {
+            x: event.clientX,
+            y: event.clientY,
+            el: event.currentTarget
+          }
           if (spotlightFrameRef.current) return
           spotlightFrameRef.current = requestAnimationFrame(() => {
             spotlightFrameRef.current = 0
             const point = spotlightPointRef.current
             if (!point) return
             const bounds = point.el.getBoundingClientRect()
-            point.el.style.setProperty('--node-mouse-x', `${(point.x - bounds.left) / bounds.width * 100}%`)
-            point.el.style.setProperty('--node-mouse-y', `${(point.y - bounds.top) / bounds.height * 100}%`)
+            point.el.style.setProperty(
+              '--node-mouse-x',
+              `${((point.x - bounds.left) / bounds.width) * 100}%`
+            )
+            point.el.style.setProperty(
+              '--node-mouse-y',
+              `${((point.y - bounds.top) / bounds.height) * 100}%`
+            )
           })
         }}
         onPointerDown={handleCardPointerDown}
@@ -1199,7 +1229,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           <span className="node-seq" title={`节点序号 ${seq}`}>
             {String(seq).padStart(2, '0')}
           </span>
-          <span className="node-icon" style={{ color: nodeIconColor(spec?.color ?? nodePortColor) }}>
+          <span
+            className="node-icon"
+            style={{ color: nodeIconColor(spec?.color ?? nodePortColor) }}
+          >
             {/* JSX 尺寸与 ui-surfaces 对 .node-icon svg 的强制 17px 保持一致 */}
             {spec ? <Icon name={spec.icon} size={17} /> : <Icon name="help" size={17} />}
           </span>
@@ -1217,9 +1250,16 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             onCopy={(event) => {
               if (!editing) return
               const selection = window.getSelection()
-              const text = selection && event.currentTarget.contains(selection.anchorNode) &&
-                event.currentTarget.contains(selection.focusNode) ? selection.toString() : ''
-              event.clipboardData.setData('text/plain', text || event.currentTarget.textContent || '')
+              const text =
+                selection &&
+                event.currentTarget.contains(selection.anchorNode) &&
+                event.currentTarget.contains(selection.focusNode)
+                  ? selection.toString()
+                  : ''
+              event.clipboardData.setData(
+                'text/plain',
+                text || event.currentTarget.textContent || ''
+              )
               event.preventDefault()
               event.stopPropagation()
             }}
@@ -1291,7 +1331,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               />
               {spec?.executor && (
                 <span className="node-action-float" aria-label="节点动作">
-                  <Tooltip label={runBlockedReason ?? '运行节点'}>
+                  <Tooltip label={runTooltip}>
                     <button
                       className="node-run-btn"
                       aria-label="运行节点"
@@ -1300,7 +1340,16 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                       onClick={(event) => {
                         stopEventPropagation(event)
                         if (project && !runBlockedReason) {
-                          void runNodeManually(editor, project.id, providers, shape.id)
+                          void runNodeManually(
+                            editor,
+                            project.id,
+                            providers,
+                            shape.id,
+                            undefined,
+                            undefined,
+                            undefined,
+                            guiWorkflowInputOptions
+                          )
                         }
                       }}
                     >
@@ -1557,9 +1606,12 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                     aria-label="复制文件路径"
                     onClick={(e) => {
                       e.stopPropagation()
-                      void window.api.copyMediaPath(shape.props.mediaId)
-            .then((result) => toast(result.ok && result.data ? '复制成功' : '复制失败，请重试'))
-            .catch(() => toast('复制失败，请重试'))
+                      void window.api
+                        .copyMediaPath(shape.props.mediaId)
+                        .then((result) =>
+                          toast(result.ok && result.data ? '复制成功' : '复制失败，请重试')
+                        )
+                        .catch(() => toast('复制失败，请重试'))
                     }}
                   >
                     <Icon name="copy" size={14} />

@@ -16,6 +16,7 @@ import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../regi
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { useNodePanelStore } from '../../../stores/nodePanel'
 import { runNodeManually } from '../../../engine/executor'
+import { guiWorkflowInputOptions } from '../../../stores/workflowInput'
 import { useAppStore } from '../../../stores/app'
 import { useGatewayStore } from '../../../stores/gateway'
 import { toast } from '../../../stores/toast'
@@ -51,13 +52,7 @@ const COMMON_ASPECT_RATIOS: readonly ImageCropAspectRatio[] = [
   '3:4'
 ]
 
-const EXTRA_ASPECT_RATIOS: readonly ImageCropAspectRatio[] = [
-  '3:2',
-  '2:3',
-  '9:21',
-  '5:4',
-  '4:5'
-]
+const EXTRA_ASPECT_RATIOS: readonly ImageCropAspectRatio[] = ['3:2', '2:3', '9:21', '5:4', '4:5']
 
 function updateRect(
   config: ImageCropConfig,
@@ -228,7 +223,16 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
   const runCrop = async (): Promise<void> => {
     if (!source) return toast('请先连接一张图片')
     if (!project) return toast('项目未就绪')
-    await runNodeManually(editor, project.id, providers, shape.id)
+    await runNodeManually(
+      editor,
+      project.id,
+      providers,
+      shape.id,
+      undefined,
+      undefined,
+      undefined,
+      guiWorkflowInputOptions
+    )
   }
 
   // 完整显示原图；图片、选区与指针共享映射，留白不属于原图坐标。

@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 29
+export const DB_SCHEMA_VERSION = 30
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -603,6 +603,13 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
     database.exec(`
       CREATE INDEX IF NOT EXISTS idx_media_path ON media(path);
+    `)
+  },
+  // M30: headless 节点流执行的完整公开输出持久化。画布执行输出落在节点 meta，
+  // headless 无画布节点，需按 runId 持久化输出值供 composite.execute.wait/run.get 读取。
+  (database) => {
+    database.exec(`
+      ALTER TABLE composite_runs ADD COLUMN output_values TEXT;
     `)
   }
 ]

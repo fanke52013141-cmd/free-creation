@@ -49,6 +49,7 @@ import { toast } from '../../../stores/toast'
 import { useAppStore } from '../../../stores/app'
 import { useGatewayStore } from '../../../stores/gateway'
 import { runNodeManually } from '../../../engine/executor'
+import { guiWorkflowInputOptions } from '../../../stores/workflowInput'
 import { VideoThumb } from './media-thumbnail'
 import { TimelineEditorStage } from './timeline-editor'
 import {
@@ -304,8 +305,7 @@ function TimelineSurface({
       updateDrag(null)
       if (!current) return
       const moved =
-        current.startMs !== current.original.startMs ||
-        current.trackId !== current.original.trackId
+        current.startMs !== current.original.startMs || current.trackId !== current.original.trackId
       if (current.mode === 'move') {
         if (!moved) return
         const result = moveClip(data, current.clipId, {
@@ -328,9 +328,7 @@ function TimelineSurface({
         data,
         current.clipId,
         current.mode,
-        current.mode === 'start'
-          ? current.startMs
-          : current.startMs + current.durationMs
+        current.mode === 'start' ? current.startMs : current.startMs + current.durationMs
       )
       if (!result.ok) {
         toast(result.reason)
@@ -351,11 +349,7 @@ function TimelineSurface({
   }, [drag?.clipId, drag?.mode, data, pxPerMs, playheadMs, snapEnabled])
 
   /** 拖动轨道头排序：只换轨道顺序，片段跟着自己的轨道一起移动。 */
-  const beginTrackDrag = (
-    event: React.PointerEvent,
-    trackId: string,
-    fromIndex: number
-  ): void => {
+  const beginTrackDrag = (event: React.PointerEvent, trackId: string, fromIndex: number): void => {
     if (event.button !== 0) return
     if (event.target instanceof Element && event.target.closest('button')) return
     event.stopPropagation()
@@ -607,7 +601,10 @@ function TimelineSurface({
 
       <div className="tl-scroll" ref={scrollRef}>
         <div className="tl-inner" style={{ width: TIMELINE_UI.trackHeaderWidth + contentWidth }}>
-          <div className="tl-ruler-row" style={{ width: TIMELINE_UI.trackHeaderWidth + contentWidth }}>
+          <div
+            className="tl-ruler-row"
+            style={{ width: TIMELINE_UI.trackHeaderWidth + contentWidth }}
+          >
             <div className="tl-corner" style={{ width: TIMELINE_UI.trackHeaderWidth }}>
               <Icon name="timeline" size={13} />
             </div>
@@ -749,7 +746,6 @@ function TimelineSurface({
                       </div>
                     )
                   })}
-
                 </div>
               </div>
             )
@@ -759,8 +755,7 @@ function TimelineSurface({
             className="tl-playhead"
             style={{
               left: TIMELINE_UI.trackHeaderWidth + playheadLeft,
-              height:
-                TIMELINE_UI.rulerHeight + data.tracks.length * TIMELINE_UI.trackHeight
+              height: TIMELINE_UI.rulerHeight + data.tracks.length * TIMELINE_UI.trackHeight
             }}
           />
         </div>
@@ -844,7 +839,9 @@ function TimelineRefStrip({
   const applySelection = (event: PointerEvent, asset: TimelineEditorAsset): void => {
     if (event.ctrlKey || event.metaKey) {
       setSelectedIds((prev) =>
-        prev.includes(asset.mediaId) ? prev.filter((id) => id !== asset.mediaId) : [...prev, asset.mediaId]
+        prev.includes(asset.mediaId)
+          ? prev.filter((id) => id !== asset.mediaId)
+          : [...prev, asset.mediaId]
       )
       return
     }
@@ -882,7 +879,8 @@ function TimelineRefStrip({
     pressRef.current = state
     const beginDrag = (): void => {
       state.started = true
-      if (!selectedIds.includes(asset.mediaId)) setSelectedIds(state.drag.map((item) => item.mediaId))
+      if (!selectedIds.includes(asset.mediaId))
+        setSelectedIds(state.drag.map((item) => item.mediaId))
       setGhost({ x: state.x, y: state.y, asset, count: state.drag.length })
       setDraggingIds(state.drag.map((item) => item.mediaId))
       document.body.classList.add('tl-asset-dragging')
@@ -976,9 +974,7 @@ function TimelineRefStrip({
                 )}
               </span>
               <span className="tl-asset-ghost-name">{ghost.asset.name}</span>
-              {ghost.count > 1 ? (
-                <span className="tl-asset-ghost-count">{ghost.count}</span>
-              ) : null}
+              {ghost.count > 1 ? <span className="tl-asset-ghost-count">{ghost.count}</span> : null}
             </div>,
             document.body
           )
@@ -994,16 +990,12 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
   const data = parsed.ok ? parsed.data : createEmptyTimeline()
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null)
   const [playheadMs, setPlayheadMs] = useState(0)
-  const [pixelsPerSecond, setPixelsPerSecond] = useState<number>(
-    TIMELINE_UI.defaultPixelsPerSecond
-  )
+  const [pixelsPerSecond, setPixelsPerSecond] = useState<number>(TIMELINE_UI.defaultPixelsPerSecond)
   const [fullscreen, setFullscreen] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [snapEnabled, setSnapEnabled] = useState(true)
   // 全屏编辑时时间轴区的高度（像素）：默认三条轨道，可拖动分隔条调整（2026-11-03 用户裁决）。
-  const [timelineHeightPx, setTimelineHeightPx] = useState<number>(
-    TIMELINE_UI.fullscreenPaneHeight
-  )
+  const [timelineHeightPx, setTimelineHeightPx] = useState<number>(TIMELINE_UI.fullscreenPaneHeight)
   const providers = useGatewayStore((store) => store.providers)
   const loadProviders = useGatewayStore((store) => store.load)
 
@@ -1012,7 +1004,11 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
   }, [loadProviders])
 
   const commit = (next: TimelineData, label: string): void => {
-    editor.updateShape({ id: shape.id, type: 'node-card', props: { text: serializeTimeline(next) } })
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { text: serializeTimeline(next) }
+    })
     markUndoPoint(editor, label)
   }
 
@@ -1041,7 +1037,10 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
             ? Math.round(asset.durationSec * 1000)
             : null
         if (kind !== 'image' && bridge.probeMediaMetadata) {
-          const probe = await bridge.probeMediaMetadata({ projectId: project.id, mediaId: asset.id })
+          const probe = await bridge.probeMediaMetadata({
+            projectId: project.id,
+            mediaId: asset.id
+          })
           if (probe.ok && probe.data) durationMs = probe.data.durationMs ?? durationMs
         }
         const added = addClip(next, {
@@ -1070,7 +1069,9 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
   // 素材库/引用素材 → 轨道：按住直接拖到目标轨道才落轨（2026-11-03 用户裁决），
   // activeTrackId 仅用于「添加素材到这条轨道」按钮与工具栏既有入口。
   const activeTrackId =
-    (selectedClipId ? findClip(data, selectedClipId)?.trackId : undefined) ?? data.tracks[0]?.id ?? ''
+    (selectedClipId ? findClip(data, selectedClipId)?.trackId : undefined) ??
+    data.tracks[0]?.id ??
+    ''
   // 成片分辨率标签（全屏预览角标）：读节点 config 的 render 配置，缺省 1920×1080。
   const resolutionLabel = useMemo(() => {
     try {
@@ -1118,7 +1119,9 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
 
   /** 从画布导入：优先取选中的媒体节点；没选中时导入画布上全部媒体节点。 */
   const importCanvasSelection = (): void => {
-    const collect = (shapes: ReturnType<typeof editor.getSelectedShapes>): TimelineEditorAsset[] => {
+    const collect = (
+      shapes: ReturnType<typeof editor.getSelectedShapes>
+    ): TimelineEditorAsset[] => {
       const refs: TimelineEditorAsset[] = []
       const seen = new Set<string>()
       for (const candidate of shapes) {
@@ -1231,7 +1234,16 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
     if (data.clips.length === 0) return toast('先把素材放到轨道上')
     setExporting(true)
     try {
-      await runNodeManually(editor, project.id, providers, shape.id)
+      await runNodeManually(
+        editor,
+        project.id,
+        providers,
+        shape.id,
+        undefined,
+        undefined,
+        undefined,
+        guiWorkflowInputOptions
+      )
     } catch (error) {
       toast(`合成失败：${error instanceof Error ? error.message : String(error)}`)
     } finally {
@@ -1269,7 +1281,6 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
     commit(result.data, 'timeline-remove-clip')
     setSelectedClipId(null)
   }
-
 
   const undo = (): void => {
     editor.undo()
@@ -1377,9 +1388,7 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
         return
       }
       const ownsScope =
-        host.contains(document.activeElement) ||
-        host.matches(':hover') ||
-        nodeSelected
+        host.contains(document.activeElement) || host.matches(':hover') || nodeSelected
       if (!ownsScope) return
       const modifier = event.ctrlKey || event.metaKey
       if (modifier && event.key.toLowerCase() === 'b') {
@@ -1526,7 +1535,12 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
                   onClose={() => setFullscreen(false)}
                   exporting={exporting}
                 />
-                <div className="tl-timeline-splitter" role="separator" aria-label="调整时间轴高度" onPointerDown={beginTimelineResize} />
+                <div
+                  className="tl-timeline-splitter"
+                  role="separator"
+                  aria-label="调整时间轴高度"
+                  onPointerDown={beginTimelineResize}
+                />
                 <div className="tl-timeline-pane" style={{ height: `${timelineHeightPx}px` }}>
                   {surface}
                 </div>

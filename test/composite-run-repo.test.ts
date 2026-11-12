@@ -19,7 +19,7 @@ beforeEach(() => {
     CREATE TABLE composite_runs (
       id TEXT PRIMARY KEY, project_id TEXT NOT NULL, capability_id TEXT NOT NULL,
       capability_version TEXT NOT NULL, content_hash TEXT NOT NULL, instance_node_id TEXT,
-      parent_run_id TEXT, failure_phase TEXT, output_summary TEXT,
+      parent_run_id TEXT, failure_phase TEXT, output_summary TEXT, output_values TEXT,
       status TEXT NOT NULL, started_at INTEGER NOT NULL, finished_at INTEGER,
       error_code TEXT, error_message TEXT, created_at INTEGER NOT NULL
     );
@@ -72,7 +72,12 @@ describe('组合运行账本（P3 基础）', () => {
       capabilityVersion: '1.0',
       contentHash: 'c'.repeat(64)
     })
-    finishCompositeRun({ runId: 'run-3', status: 'failed', errorCode: 'GEN_FAILED', errorMessage: 'x'.repeat(800) })
+    finishCompositeRun({
+      runId: 'run-3',
+      status: 'failed',
+      errorCode: 'GEN_FAILED',
+      errorMessage: 'x'.repeat(800)
+    })
     const run = getCompositeRun('run-3')
     expect(run?.run.errorMessage).toHaveLength(500)
   })
@@ -87,13 +92,15 @@ describe('组合运行账本（P3 基础）', () => {
       parentRunId: 'run-parent',
       instanceNodeId: 'shape:instance'
     })
-    expect(finishCompositeRun({
-      runId: 'run-child',
-      status: 'failed',
-      errorCode: 'REQUIRED_OUTPUT_MISSING',
-      failurePhase: 'output',
-      outputPorts: [{ portId: 'out-text', kind: 'text' }]
-    })).toBe(true)
+    expect(
+      finishCompositeRun({
+        runId: 'run-child',
+        status: 'failed',
+        errorCode: 'REQUIRED_OUTPUT_MISSING',
+        failurePhase: 'output',
+        outputPorts: [{ portId: 'out-text', kind: 'text' }]
+      })
+    ).toBe(true)
     // 已有终态时不得被第二次 finish 改写（唯一终态）。
     expect(finishCompositeRun({ runId: 'run-child', status: 'completed' })).toBe(false)
     const run = getCompositeRun('run-child')?.run

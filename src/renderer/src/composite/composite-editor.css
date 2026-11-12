@@ -62,43 +62,46 @@
 }
 .composite-io-row + .composite-io-row { margin-top: 6px; }
 .composite-io-badge { color: #00e5ff; font: 500 10px 'JetBrains Mono', monospace; }
-/* 节点流卡片动作：与资产卡片一致，悬浮才显示（删除 / 编辑节点 / 编辑）。
-   动作层覆盖封面顶部，名称留在底部保持可点击（点击卡片=插入实例）。 */
-.composite-card-actions {
+/* 节点流卡片动作：与资产中心一致，悬浮才显示的纯图标圆钮（编辑节点 / 编辑信息 / 删除）。
+   删除复用 .asset-delete（右上，悬浮红）；编辑节点/编辑信息用同材质圆钮，定位封面左上。
+   名称留在底部保持可点击（点击卡片=插入实例，拖拽=落点插入）。 */
+.composite-card-edit,
+.composite-card-settings {
   position: absolute;
-  left: 6px;
-  right: 6px;
-  top: 6px;
+  top: 4px;
+  width: 22px;
+  height: 22px;
   display: flex;
-  gap: 4px;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(10, 14, 18, 0.82);
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  background: rgba(10, 14, 18, 0.72);
   backdrop-filter: blur(6px);
+  color: #dbe6f0;
+  cursor: pointer;
   opacity: 0;
-  pointer-events: none;
-  transform: translateY(4px);
   transition:
     opacity 0.15s ease,
-    transform 0.15s ease;
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
-.asset-card:hover .composite-card-actions,
-.asset-card:focus-within .composite-card-actions {
+.composite-card-edit {
+  left: 4px;
+}
+.composite-card-settings {
+  left: 30px;
+}
+.composite-card-edit:hover,
+.composite-card-settings:hover {
+  background: var(--brand);
+  border-color: transparent;
+}
+.asset-card:hover .composite-card-edit,
+.asset-card:hover .composite-card-settings,
+.composite-card-edit:focus-visible,
+.composite-card-settings:focus-visible {
   opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
-}
-.composite-card-actions > button {
-  flex: 1;
-  min-height: 26px;
-  padding-inline: 4px;
-  white-space: nowrap;
-  font-size: 11px;
-}
-.composite-card-delete:hover:not(:disabled) {
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.4);
 }
 .composite-settings-hint {
   margin: 0 0 8px;
@@ -232,18 +235,18 @@ body:has(.composite-canvas-overlay) .app-select-content { z-index: 2501; }
 .nf-btn:hover:not(:disabled) { color: var(--txt); background: rgba(255, 255, 255, 0.06); }
 .nf-btn:active:not(:disabled) { transform: scale(0.96); }
 .nf-btn:disabled { opacity: 0.45; cursor: default; }
-/* 主按钮与 library-form-primary 同源：主题色 var(--brand)。 */
+/* 主按钮与主页「新建项目」同源：统一主按钮主题令牌。 */
 .nf-btn.primary {
   padding: 7px 18px;
-  background: var(--brand);
-  color: #06283d;
+  background: var(--primary-grad);
+  color: var(--primary-ink);
   font-weight: 600;
-  box-shadow: 0 4px 12px rgba(47, 174, 234, 0.26);
+  box-shadow: var(--primary-glow);
 }
 .nf-btn.primary:hover:not(:disabled) {
-  background: #5fc8fb;
-  color: #06283d;
-  box-shadow: 0 6px 16px rgba(47, 174, 234, 0.32);
+  background: var(--primary-grad-hover);
+  color: var(--primary-ink);
+  box-shadow: var(--primary-glow-hover);
 }
 
 /* ── 历史版本底部弹层：容器走应用主题变量，行复用 history-card ── */

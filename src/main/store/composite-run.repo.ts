@@ -28,6 +28,8 @@ export interface CompositeRunRecord {
   failurePhase: string | null
   /** 已产生的公开输出摘要：[{portId, kind}]，不含正文。 */
   outputSummary: Array<{ portId: string; kind: string }>
+  /** headless 执行的完整公开输出（按公开端口 ID 的 NodeValue）；画布执行为 null。 */
+  outputValues: Record<string, unknown> | null
   createdAt: number
 }
 
@@ -56,6 +58,7 @@ interface RunRow {
   error_message: string | null
   failure_phase: string | null
   output_summary: string | null
+  output_values: string | null
   created_at: number
 }
 
@@ -88,6 +91,18 @@ function parseOutputSummary(value: string | null): Array<{ portId: string; kind:
   }
 }
 
+function parseOutputValues(value: string | null): Record<string, unknown> | null {
+  if (!value) return null
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null
+  } catch {
+    return null
+  }
+}
+
 function rowToRun(row: RunRow): CompositeRunRecord {
   return {
     id: row.id,
@@ -104,6 +119,7 @@ function rowToRun(row: RunRow): CompositeRunRecord {
     errorMessage: row.error_message,
     failurePhase: row.failure_phase ?? null,
     outputSummary: parseOutputSummary(row.output_summary),
+    outputValues: parseOutputValues(row.output_values),
     createdAt: row.created_at
   }
 }
@@ -195,17 +211,21 @@ export function recordCompositeRunStep(input: {
 
 export function finishCompositeRun(input: {
   runId: string
-  status: Extract<CompositeRunStatus, 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'unknown'>
+  status: Extract<
+    CompositeRunStatus,
+    'completed' | 'failed' | 'cancelled' | 'interrupted' | 'unknown'
+  >
   errorCode?: string
   errorMessage?: string
   failurePhase?: string
   outputPorts?: Array<{ portId: string; kind: string }>
+  outputValues?: Record<string, unknown>
 }): boolean {
   return (
     getDb()
       .prepare(
         `UPDATE composite_runs SET status = ?, finished_at = ?, error_code = ?, error_message = ?,
-           failure_phase = ?, output_summary = ?
+           failure_phase = ?, output_summary = ?, output_values = ?
          WHERE id = ? AND status IN ('accepted','running','waiting-input')`
       )
       .run(
@@ -215,6 +235,7 @@ export function finishCompositeRun(input: {
         input.errorMessage?.slice(0, 500) ?? null,
         input.failurePhase?.slice(0, 40) ?? null,
         input.outputPorts?.length ? JSON.stringify(input.outputPorts.slice(0, 32)) : null,
+        input.outputValues ? JSON.stringify(input.outputValues) : null,
         input.runId
       ).changes > 0
   )
@@ -225,8 +246,7 @@ export function getCompositeRun(runId: string): {
   steps: CompositeRunStepRecord[]
 } | null {
   const row = getDb().prepare('SELECT * FROM composite_runs WHERE id = ?').get(runId) as
-    | RunRow
-    | undefined
+    RunRow | undefined
   if (!row) return null
   const steps = getDb()
     .prepare('SELECT * FROM composite_run_steps WHERE run_id = ? ORDER BY started_at ASC')

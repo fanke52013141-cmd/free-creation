@@ -88,7 +88,10 @@ export async function importMedia(projectId: string, srcAbsPath: string): Promis
     }
     return { ok: true, asset }
   } catch (e) {
-    emitDomainEvent('media.read_failed', '媒体导入读取失败', { status: 'failed', attributes: { projectId } })
+    emitDomainEvent('media.read_failed', '媒体导入读取失败', {
+      status: 'failed',
+      attributes: { projectId }
+    })
     return { ok: false, reason: e instanceof Error ? e.message : String(e) }
   }
 }
@@ -229,6 +232,33 @@ export function listMedia(projectId: string): MediaAsset[] {
     createdAt: r.created_at,
     ...(r.name ? { name: r.name } : {})
   }))
+}
+
+/** 按 id 全局读取媒体资产（headless 节点流输入解析用，不限项目作用域）。 */
+export function getMediaAsset(mediaId: string): MediaAsset | null {
+  const r = getDb()
+    .prepare('SELECT id, kind, mime, path, size_bytes, created_at, name FROM media WHERE id = ?')
+    .get(mediaId) as
+    | {
+        id: string
+        kind: MediaKind
+        mime: string
+        path: string
+        size_bytes: number
+        created_at: number
+        name: string | null
+      }
+    | undefined
+  if (!r) return null
+  return {
+    id: r.id,
+    kind: r.kind,
+    mime: r.mime,
+    path: r.path,
+    sizeBytes: r.size_bytes,
+    createdAt: r.created_at,
+    ...(r.name ? { name: r.name } : {})
+  }
 }
 
 // 删除媒体资产（SQLite + 磁盘文件）

@@ -1,7 +1,9 @@
 /* eslint-disable */
 // W2-A 真实桌面 GUI 验收（自动化驱动，非人工点击）：
 // 隔离数据目录 + [TEST] 窗口标题，Playwright 驱动真实 Electron 渲染层完成
-// 封装 → 草稿 → 发布 2.0 → 旧实例固定 1.0 → 外层嵌套 → 不兼容升级预检阻断。
+// 封装 → 草稿 → 另存为新版本 2.0 → 旧实例固定 1.0 → 外层嵌套 → 不兼容升级预检阻断 → 实例升级。
+// 适配第三轮 UI 裁决：节点流面板（图标动作）、编辑器「保存/另存为新版本/取消」（取消即退出，无二次确认）、
+// 版本号自动递增（无手动输入）、保存反馈为 toast（以 CLI 草稿落盘复核）。
 // 截图留证 qa/w2-gui-acceptance/，退出后关闭应用并删除临时目录。
 const { _electron } = require('playwright')
 const { spawn } = require('node:child_process')
@@ -246,47 +248,45 @@ function ok(res, label) {
     await shot('run-1.0-instance')
     check('GUI 点击运行 1.0 实例（composite.run.list 记录 completed）')
 
-    // ── 4. 节点库「编辑」→ 改正文 → 保存草稿 → 关闭 ──
+    // ── 4. 节点流「编辑节点」→ 改正文 → 保存草稿 → 关闭 ──
     const libraryCard = (name) => page.locator('.workflow-panel .asset-card', { has: page.locator(`.asset-name:text-is("${name}")`) })
     const editButton = async (name) => {
-      await page.click('button[aria-label="打开节点库"]')
+      await page.click('button[aria-label="打开节点流"]')
       await sleep(500)
       const card = libraryCard(name)
       await card.waitFor({ timeout: 10000 })
-      await card.locator('button:text-is("编辑")').click()
+      await card.hover()
+      await card.locator(`button[aria-label="编辑节点 ${name}"]`).click()
       await page.waitForSelector('.composite-canvas-overlay', { timeout: 15000 })
       await sleep(800)
     }
     await editButton('文案整理')
     const innerCard = () => page.locator('.composite-canvas-stage .node-card-wrap:has([data-node-type="text"])').first()
     await typeIntoCard(innerCard(), '内部说明（草稿修改）')
-    await page.click('.composite-canvas-overlay button:has-text("保存草稿")')
-    await page.waitForSelector('.composite-canvas-status:has-text("草稿已保存")', { timeout: 15000 })
+    await page.click('.nf-action-bar button[title^="暂存当前内容"]')
     await shot('draft-saved')
-    const draftAfterSave = ok(await cli(dir, ['composite', 'draft', 'get'], { capabilityId: 'gui-copy-polish' }), 'DRAFT_GET')
+    // 保存反馈为 toast（无状态元素）：以 CLI 草稿落盘为准轮询复核。
+    let draftAfterSave = null
+    for (let i = 0; i < 20; i++) {
+      draftAfterSave = ok(await cli(dir, ['composite', 'draft', 'get'], { capabilityId: 'gui-copy-polish' }), 'DRAFT_GET')
+      if (JSON.stringify(draftAfterSave.manifest).includes('草稿修改')) break
+      await sleep(400)
+    }
     if (!JSON.stringify(draftAfterSave.manifest).includes('草稿修改')) throw new Error('DRAFT_CONTENT_MISSING')
-    await page.click('button[aria-label="关闭节点流编辑"]')
+    await page.click('.nf-action-bar button[title="退出编辑，返回画布"]')
     await page.waitForSelector('.composite-canvas-overlay', { state: 'detached', timeout: 10000 })
-    check('GUI 编辑→修改正文→保存草稿→关闭（CLI 复核草稿内容与修订）')
+    check('GUI 编辑→修改正文→保存草稿→取消关闭（CLI 复核草稿内容）')
 
-    // ── 5. 重新「编辑」→ 恢复草稿 → 未保存关闭确认 → 发布预览 → 发布 2.0 ──
+    // ── 5. 重新「编辑节点」→ 恢复草稿 → 另存为新版本（自动 2.0）→ 发布预览 → 确认 ──
     await editButton('文案整理')
-    const revisionText = await page.locator('.composite-canvas-revision').innerText()
-    if (!/草稿修订 [1-9]/.test(revisionText)) throw new Error(`DRAFT_NOT_RESTORED:${revisionText}`)
     const restoredText = await readCardText(innerCard())
     if (!restoredText.includes('草稿修改')) throw new Error(`DRAFT_TEXT_NOT_RESTORED:${restoredText}`)
+    const draftRestored = ok(await cli(dir, ['composite', 'draft', 'get'], { capabilityId: 'gui-copy-polish' }), 'DRAFT_RESTORED')
+    if (!(draftRestored.revision >= 1)) throw new Error(`DRAFT_REVISION_NOT_RESTORED:${draftRestored.revision}`)
     await shot('draft-restored')
-    // 修改后关闭 → 未保存确认 → 继续编辑
-    await typeIntoCard(innerCard(), '内部说明（草稿修改·续）')
-    await page.click('button[aria-label="关闭节点流编辑"]')
-    await page.waitForSelector('.composite-close-confirm', { timeout: 10000 })
-    await shot('close-confirm-unsaved')
-    await page.click('.composite-close-confirm button:has-text("继续编辑")')
-    await page.waitForSelector('.composite-close-confirm', { state: 'detached', timeout: 10000 })
-    if (!(await page.locator('.composite-canvas-overlay').isVisible())) throw new Error('CONTINUE_EDITING_CLOSED_EDITOR')
-    check('GUI 未保存修改关闭时出现三选确认，「继续编辑」保留现场')
-    await page.fill('input[aria-label="发布版本"]', '2.0')
-    await page.click('.composite-canvas-overlay button:has-text("发布新版本")')
+    check('GUI 重新编辑自动恢复草稿（正文与修订号 CLI 复核）')
+    // 另存为新版本：版本号自动递增（无手动输入），发布预览后确认。
+    await page.click('.nf-action-bar button[title^="以当前内容发布"]')
     const previewDialog = page.locator('.composite-publish-preview')
     await previewDialog.waitFor({ timeout: 20000 })
     const previewText = await previewDialog.innerText()
@@ -349,8 +349,16 @@ function ok(res, label) {
     const outerInstance = page.locator('.node-card-wrap:has([data-node-type="composite"])', { hasText: '标题整理' }).first()
     await runCard(outerInstance)
     await assertRunsCompleted(await waitForRun('gui-title-polish', '1.0', 1), 'OUTER')
-    const graphOuter = ok(await cli(dir, ['graph', 'get'], { projectId }), 'GRAPH_OUTER')
-    const outerNode = graphOuter.nodes.find((n) => n.type === 'composite' && n.title === '标题整理')
+    // 外层实例刚封装，画布异步防抖落盘：用 latest 视图并轮询取节点。
+    let outerNode = null
+    for (let i = 0; i < 20; i++) {
+      const graphOuter = ok(await cli(dir, ['graph', 'get'], { projectId, view: 'latest', limit: 200 }), 'GRAPH_OUTER')
+      outerNode = graphOuter.nodes.find((n) => n.type === 'composite' && n.title === '标题整理')
+      if (outerNode) break
+      await page.keyboard.press('Control+s')
+      await sleep(500)
+    }
+    if (!outerNode) throw new Error('OUTER_INSTANCE_NOT_FOUND')
     const outerText = await readOutputText(outerNode.nodeId, outer10.manifest)
     receipt.outputs.outerRunText = outerText
     if (!outerText.includes('标题正文') || !outerText.includes('内部说明')) throw new Error(`OUTER_TEXT_MISMATCH:${outerText}`)
@@ -410,26 +418,30 @@ function ok(res, label) {
     await shot('upgraded-instance-run')
     check('GUI 右键升级节点流：预检通过→确认升级→实例按 2.0 运行（引用形态）')
 
-    // ── 10. 关闭确认的另外两条路径：保存并关闭 / 放弃修改 ──
+    // ── 10. 保存/取消语义（第三轮裁决：取消即退出，无二次确认）──
+    // 保存草稿 → 取消关闭 → 草稿持久化。
     await editButton('文案整理')
     await typeIntoCard(innerCard(), '内部说明（临时保存）')
-    await page.click('button[aria-label="关闭节点流编辑"]')
-    await page.waitForSelector('.composite-close-confirm', { timeout: 10000 })
-    await page.click('.composite-close-confirm button:has-text("保存并关闭")')
-    await page.waitForSelector('.composite-canvas-overlay', { state: 'detached', timeout: 20000 })
-    const draftSavedClose = ok(await cli(dir, ['composite', 'draft', 'get'], { capabilityId: 'gui-copy-polish' }), 'DRAFT_SAVE_CLOSE')
-    if (!JSON.stringify(draftSavedClose.manifest).includes('临时保存')) throw new Error('SAVE_AND_CLOSE_NOT_PERSISTED')
+    await page.click('.nf-action-bar button[title^="暂存当前内容"]')
+    let draftSavedClose = null
+    for (let i = 0; i < 20; i++) {
+      draftSavedClose = ok(await cli(dir, ['composite', 'draft', 'get'], { capabilityId: 'gui-copy-polish' }), 'DRAFT_SAVE_CLOSE')
+      if (JSON.stringify(draftSavedClose.manifest).includes('临时保存')) break
+      await sleep(400)
+    }
+    if (!JSON.stringify(draftSavedClose.manifest).includes('临时保存')) throw new Error('SAVE_NOT_PERSISTED')
+    await page.click('.nf-action-bar button[title="退出编辑，返回画布"]')
+    await page.waitForSelector('.composite-canvas-overlay', { state: 'detached', timeout: 10000 })
+    // 修改但不保存 → 取消即退出（无确认）→ 草稿不含未保存修改。
     await editButton('文案整理')
     await typeIntoCard(innerCard(), '内部说明（将被放弃）')
-    await page.click('button[aria-label="关闭节点流编辑"]')
-    await page.waitForSelector('.composite-close-confirm', { timeout: 10000 })
-    await shot('close-confirm-discard')
-    await page.click('.composite-close-confirm button:has-text("放弃修改")')
+    await page.click('.nf-action-bar button[title="退出编辑，返回画布"]')
     await page.waitForSelector('.composite-canvas-overlay', { state: 'detached', timeout: 10000 })
+    await shot('cancel-close-no-confirm')
     const draftDiscard = ok(await cli(dir, ['composite', 'draft', 'get'], { capabilityId: 'gui-copy-polish' }), 'DRAFT_DISCARD')
     const draftJson = JSON.stringify(draftDiscard.manifest)
-    if (draftJson.includes('将被放弃') || !draftJson.includes('临时保存')) throw new Error('DISCARD_CHANGED_DRAFT')
-    check('GUI 关闭确认「保存并关闭」持久化草稿、「放弃修改」不改动草稿（CLI 复核）')
+    if (draftJson.includes('将被放弃') || !draftJson.includes('临时保存')) throw new Error('CANCEL_CHANGED_DRAFT')
+    check('GUI 保存持久化草稿、取消即退出且不保存未存修改（无二次确认，CLI 复核）')
 
     receipt.outputs.innerVersions = ok(await cli(dir, ['composite', 'version', 'list'], { capabilityId: 'gui-copy-polish' }), 'VERSION_LIST').map((v) => v.version)
     console.log(JSON.stringify({ ok: true, ...receipt }, null, 2))

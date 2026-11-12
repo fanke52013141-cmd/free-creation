@@ -12,6 +12,7 @@ import { countIncomingConnections } from '../../../canvas/graph'
 import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
+import { guiWorkflowInputOptions } from '../../../stores/workflowInput'
 import { useAppStore } from '../../../stores/app'
 import { AppSelect } from '../../../components/AppSelect'
 import { Icon } from '../../../components/Icon'
@@ -303,7 +304,16 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
     updateText(draft)
     setBusy(true)
     try {
-      await runNodeManually(editor, project.id, providers, shape.id)
+      await runNodeManually(
+        editor,
+        project.id,
+        providers,
+        shape.id,
+        undefined,
+        undefined,
+        undefined,
+        guiWorkflowInputOptions
+      )
     } finally {
       setBusy(false)
     }

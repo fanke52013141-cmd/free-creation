@@ -885,3 +885,169 @@ it('independent manual runs queue by resource, reject duplicates, and do not ove
     useEngineStore.getState().endRun()
   }
 })
+
+describe('批量补输入（汇总表单回调）', () => {
+  function emptyTextNode(id: string): { editor: Editor; target: NodeCardShape } {
+    const target = node(id, 'text', '')
+    const shapes = new Map([[target.id, target]])
+    const editor = {
+      getCurrentPageShapes: () => Array.from(shapes.values()),
+      getShape: (id: string) => shapes.get(id as never),
+      getBindingsFromShape: () => [],
+      updateShape: (patch: {
+        id: string
+        props?: Record<string, unknown>
+        meta?: Record<string, unknown>
+      }) => {
+        const shape = shapes.get(patch.id as never)!
+        if (patch.props) Object.assign(shape.props, patch.props)
+        if (patch.meta) Object.assign(shape.meta, patch.meta)
+      },
+      markHistoryStoppingPoint: () => undefined
+    } as unknown as Editor
+    return { editor, target }
+  }
+
+  it('单节点缺输入时汇总回调一次性补齐后运行', async () => {
+    const { editor, target } = emptyTextNode('shape:batch-fill')
+    const calls: Array<ReadonlyArray<{ nodeId: string; port: { id: string } }>> = []
+    const result = await runNodeManually(
+      editor,
+      'project-1',
+      [],
+      target.id,
+      undefined,
+      undefined,
+      undefined,
+      {
+        requestInputs: async (request) => {
+          calls.push(request.gaps)
+          return request.gaps.map((gap) => ({
+            nodeId: gap.nodeId,
+            portId: gap.port.id,
+            value: { kind: 'text' as const, text: '补充的文本' }
+          }))
+        }
+      }
+    )
+    expect(calls).toHaveLength(1)
+    expect(calls[0].some((gap) => gap.port.id === 'in-text')).toBe(true)
+    // 临时输入只作用本次运行（不写回 props.text）；运行完成即证明补齐生效。
+    expect(result.status).toBe('done')
+  })
+
+  it('工作流批量补齐后，补充值真实流入下游节点', async () => {
+    const source = node('shape:batch-flow-src', 'text', '')
+    const target = node('shape:batch-flow-proc', 'processor', '')
+    const arrow = {
+      id: 'shape:batch-flow-arrow',
+      type: 'arrow',
+      meta: { fromPort: 'out-text', toPort: 'in-value' }
+    }
+    const shapes = new Map<string, typeof source | typeof target | typeof arrow>([
+      [source.id, source],
+      [target.id, target],
+      [arrow.id, arrow]
+    ])
+    const editor = {
+      getCurrentPageShapes: () => Array.from(shapes.values()),
+      getShape: (id: string) => shapes.get(id),
+      getBindingsFromShape: (id: string) =>
+        id === arrow.id
+          ? [
+              { props: { terminal: 'start' }, toId: source.id },
+              { props: { terminal: 'end' }, toId: target.id }
+            ]
+          : [],
+      updateShape: (patch: {
+        id: string
+        props?: Record<string, unknown>
+        meta?: Record<string, unknown>
+      }) => {
+        const current = shapes.get(patch.id)
+        if (!current || current.type !== 'node-card') return
+        if (patch.props) Object.assign(current.props, patch.props)
+        if (patch.meta) Object.assign(current.meta, patch.meta)
+      },
+      markHistoryStoppingPoint: () => undefined
+    } as unknown as Editor
+    const calls: Array<ReadonlyArray<{ nodeId: string; port: { id: string } }>> = []
+    await runWorkflowForNodes(editor, 'project-1', [], [target.id], {
+      requestInputs: async (request) => {
+        calls.push(request.gaps)
+        return request.gaps.map((gap) => ({
+          nodeId: gap.nodeId,
+          portId: gap.port.id,
+          value: { kind: 'text' as const, text: '补充的文本' }
+        }))
+      }
+    })
+    expect(calls).toHaveLength(1)
+    expect(source.props.exec).toBe('success')
+    expect(target.props.exec).toBe('success')
+    expect(JSON.parse(String(target.meta.nodeResult))).toMatchObject({
+      kind: 'text',
+      text: '补充的文本'
+    })
+  })
+
+  it('汇总回调返回 null 时整个运行取消，不留成功输出', async () => {
+    const { editor, target } = emptyTextNode('shape:batch-cancel')
+    const result = await runNodeManually(
+      editor,
+      'project-1',
+      [],
+      target.id,
+      undefined,
+      undefined,
+      undefined,
+      {
+        requestInputs: async () => null
+      }
+    )
+    expect(result.status).toBe('skipped')
+    expect(target.props.exec).not.toBe('success')
+    expect(target.meta.nodeResult).toBeUndefined()
+  })
+
+  it('可选项留空跳过时不注入，节点按缺输入自然跳过', async () => {
+    const { editor, target } = emptyTextNode('shape:batch-skip')
+    const result = await runNodeManually(
+      editor,
+      'project-1',
+      [],
+      target.id,
+      undefined,
+      undefined,
+      undefined,
+      {
+        requestInputs: async () => []
+      }
+    )
+    expect(result.status).toBe('skipped')
+    expect(target.props.exec).not.toBe('success')
+  })
+
+  it('输入已满足时不调用汇总回调，直接运行', async () => {
+    const { editor, target } = emptyTextNode('shape:batch-satisfied')
+    target.props.text = '已有正文'
+    let called = 0
+    const result = await runNodeManually(
+      editor,
+      'project-1',
+      [],
+      target.id,
+      undefined,
+      undefined,
+      undefined,
+      {
+        requestInputs: async () => {
+          called++
+          return []
+        }
+      }
+    )
+    expect(called).toBe(0)
+    expect(result.status).toBe('done')
+  })
+})

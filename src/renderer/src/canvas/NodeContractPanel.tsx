@@ -24,6 +24,7 @@ import {
   type NodeTestInputs
 } from '../engine/executor'
 import { useMediaStore } from '../stores/media'
+import { guiWorkflowInputOptions } from '../stores/workflowInput'
 import { FlowAssetPanel } from './FlowAssetPanel'
 import { AgentCollaborationPanel } from '../nodes/specs/AgentCollaborationPanel'
 
@@ -528,8 +529,18 @@ export function NodeContractPanel({
   const run = async (kind: 'node' | 'subgraph'): Promise<void> => {
     setRunningAction(kind)
     try {
-      if (kind === 'node') await runNodeManually(editor, projectId, providers, shape.id)
-      else await runWorkflowToNode(editor, projectId, providers, shape.id)
+      if (kind === 'node')
+        await runNodeManually(
+          editor,
+          projectId,
+          providers,
+          shape.id,
+          undefined,
+          undefined,
+          undefined,
+          guiWorkflowInputOptions
+        )
+      else await runWorkflowToNode(editor, projectId, providers, shape.id, guiWorkflowInputOptions)
     } finally {
       setRunningAction(null)
     }

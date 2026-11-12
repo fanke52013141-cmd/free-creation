@@ -261,13 +261,15 @@
 }
 
 .side-panel-primary {
-  border: 1px solid rgba(131, 216, 255, 0.38);
-  background: linear-gradient(180deg, #53c5fa, #2caeea);
-  box-shadow: 0 7px 16px rgba(31, 173, 234, 0.14);
+  border: 0;
+  background: var(--primary-grad);
+  color: var(--primary-ink);
+  box-shadow: var(--primary-glow);
 }
 
 .side-panel-primary:hover:not(:disabled) {
-  background: linear-gradient(180deg, #67ceff, #37b8ef);
+  background: var(--primary-grad-hover);
+  box-shadow: var(--primary-glow-hover);
   transform: translateY(-1px);
 }
 
@@ -2821,16 +2823,20 @@ button {
   font-size: 11px;
 }
 
-/* 2026-10-04 UI 审查统一：面板主按钮对齐家族材质——36px 高（面板标准）、r7、
-   扁平品牌色（与顶栏「运行」一致），去除私有渐变；深浅主题同一高度。 */
+/* 2026-11-12 主按钮统一：面板主按钮接入全局主按钮主题令牌（与主页新建项目同源）。 */
 .contract-test-run {
   min-height: 36px;
-  border: 1px solid rgba(97, 205, 250, 0.46);
+  border: 0;
   border-radius: 7px;
-  background: var(--brand);
-  color: #06131a;
+  background: var(--primary-grad);
+  color: var(--primary-ink);
   font-size: 13px;
   font-weight: 700;
+  box-shadow: var(--primary-glow);
+}
+.contract-test-run:hover:not(:disabled) {
+  background: var(--primary-grad-hover);
+  box-shadow: var(--primary-glow-hover);
 }
 
 .contract-test-run:disabled {
@@ -3298,13 +3304,11 @@ button {
   width: 100%;
   min-height: 36px;
   margin-top: 0;
-  border: 1px solid rgb(103 232 249 / 45%);
+  border: 0;
   border-radius: 9px;
-  background: linear-gradient(100deg, #38bdf8 0%, #22d3ee 52%, #2dd4bf 100%);
-  box-shadow:
-    0 7px 18px rgb(34 211 238 / 18%),
-    inset 0 1px rgb(255 255 255 / 35%);
-  color: #06202b;
+  background: var(--primary-grad);
+  box-shadow: var(--primary-glow);
+  color: var(--primary-ink);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.015em;
@@ -3316,10 +3320,8 @@ button {
 
 .video-gen-panel .video-gen-submit:hover:not(:disabled) {
   transform: translateY(-1px);
-  filter: brightness(1.06);
-  box-shadow:
-    0 9px 22px rgb(34 211 238 / 26%),
-    inset 0 1px rgb(255 255 255 / 40%);
+  background: var(--primary-grad-hover);
+  box-shadow: var(--primary-glow-hover);
 }
 
 .video-gen-panel .video-gen-submit:active:not(:disabled) {

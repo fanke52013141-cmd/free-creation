@@ -15,6 +15,8 @@ export interface CompositeRunChainEntry {
 export interface CompositeRunContext {
   chain: CompositeRunChainEntry[]
   expandedNodes: number
+  /** headless 执行（脱离项目/画布）：跳过 Agent-Flow 占用门禁等画布特有检查。 */
+  headless?: boolean
 }
 
 export interface CompositeRunRequest {
@@ -22,11 +24,15 @@ export interface CompositeRunRequest {
   inputs: ContractInputMap
   /** 外层运行 ID（父运行）；节点流自身每次调用拥有独立 runId。 */
   runId?: string
+  /** 调用方指定的本次运行 ID（headless 外部入口预先分配，供台账轮询）；缺省内部生成。 */
+  ownRunId?: string
   /** 画布上的节点流实例 ID；用于运行记录关联到具体实例。 */
   instanceNodeId?: string
   signal?: CancelSignal
   /** 调用方节点流的祖先上下文；顶层调用缺省。 */
   parentContext?: CompositeRunContext
+  /** headless 执行标志（脱离项目/画布）；嵌套运行经 parentContext 继承。 */
+  headless?: boolean
 }
 
 export interface CompositeRunFailure {

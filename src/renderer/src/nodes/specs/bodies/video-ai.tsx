@@ -7,6 +7,7 @@ import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import type { VideoEngineStatus } from '@shared/contracts'
 import { AppSelect } from '../../../components/AppSelect'
 import { runNodeManually } from '../../../engine/executor'
+import { guiWorkflowInputOptions } from '../../../stores/workflowInput'
 import { useAppStore } from '../../../stores/app'
 import { useGatewayStore } from '../../../stores/gateway'
 import {
@@ -36,9 +37,10 @@ export function VideoAiBody({ shape }: NodeBodyProps): React.JSX.Element {
   const providers = useGatewayStore((s) => s.providers)
   const [submitting, setSubmitting] = useState(false)
   const mode: Mode = shape.props.nodeType === 'video-depth' ? 'depth' : 'clay'
-  const config = mode === 'depth'
-    ? parseVideoDepthConfig(shape.props.config || DEFAULT_VIDEO_DEPTH_CONFIG)
-    : parseVideoClayConfig(shape.props.config)
+  const config =
+    mode === 'depth'
+      ? parseVideoDepthConfig(shape.props.config || DEFAULT_VIDEO_DEPTH_CONFIG)
+      : parseVideoClayConfig(shape.props.config)
   const clayV1 = mode === 'clay' && config.version === 1
   const engineBusy = ['queued', 'running', 'pending'].includes(shape.props.exec)
 
@@ -46,7 +48,16 @@ export function VideoAiBody({ shape }: NodeBodyProps): React.JSX.Element {
     if (!project) return
     setSubmitting(true)
     try {
-      await runNodeManually(editor, project.id, providers, shape.id)
+      await runNodeManually(
+        editor,
+        project.id,
+        providers,
+        shape.id,
+        undefined,
+        undefined,
+        undefined,
+        guiWorkflowInputOptions
+      )
     } finally {
       setSubmitting(false)
     }
@@ -55,11 +66,21 @@ export function VideoAiBody({ shape }: NodeBodyProps): React.JSX.Element {
   return (
     <div className="video-ai-body">
       {mode === 'clay' ? (
-        <ClayOptions config={parseVideoClayConfig(shape.props.config)} onChange={(patch) => {
-          editor.updateShape({ id: shape.id, type: 'node-card', props: {
-            config: serializeVideoClayConfig({ ...parseVideoClayConfig(shape.props.config), ...patch })
-          } })
-        }} />
+        <ClayOptions
+          config={parseVideoClayConfig(shape.props.config)}
+          onChange={(patch) => {
+            editor.updateShape({
+              id: shape.id,
+              type: 'node-card',
+              props: {
+                config: serializeVideoClayConfig({
+                  ...parseVideoClayConfig(shape.props.config),
+                  ...patch
+                })
+              }
+            })
+          }}
+        />
       ) : null}
       <NodeIdentity />
       {/* 2026-11-02 用户裁决：配置行置顶、身份图标居中，补齐与其他节点一致的底部主操作。
@@ -90,38 +111,57 @@ export function VideoAiBody({ shape }: NodeBodyProps): React.JSX.Element {
   )
 }
 
-function ClayOptions({ config, onChange }: {
+function ClayOptions({
+  config,
+  onChange
+}: {
   config: VideoClayConfig
   onChange: (patch: Partial<VideoClayConfig>) => void
 }): React.JSX.Element {
-  if (config.version === 1) return (
-    <NodePrimaryButton onClick={() => onChange({ version: 2 })}>
-      <Icon name="spark" size={16} />
-      升级白模效果
-    </NodePrimaryButton>
+  if (config.version === 1)
+    return (
+      <NodePrimaryButton onClick={() => onChange({ version: 2 })}>
+        <Icon name="spark" size={16} />
+        升级白模效果
+      </NodePrimaryButton>
+    )
+  return (
+    <div className="video-clay-options">
+      <div className="settings-field">
+        <AppSelect
+          aria-label="白模效果"
+          className="gen-select"
+          value={config.preset}
+          onChange={(event) => {
+            const preset = event.currentTarget.value as VideoClayConfig['preset']
+            onChange({ preset, ...VIDEO_CLAY_PRESETS[preset] })
+          }}
+        >
+          <option value="soft">柔和白模</option>
+          <option value="studio">立体白模</option>
+          <option value="structure">结构白模</option>
+        </AppSelect>
+      </div>
+      <div className="settings-field">
+        <AppSelect
+          aria-label="质量"
+          className="gen-select"
+          value={config.quality}
+          onChange={(event) => {
+            const quality = event.currentTarget.value as VideoClayConfig['quality']
+            onChange({
+              quality,
+              maxResolution: quality === 'fast' ? 512 : quality === 'fine' ? 1024 : 768
+            })
+          }}
+        >
+          <option value="fast">快速</option>
+          <option value="standard">标准</option>
+          <option value="fine">精细</option>
+        </AppSelect>
+      </div>
+    </div>
   )
-  return <div className="video-clay-options">
-    <div className="settings-field">
-      <AppSelect aria-label="白模效果" className="gen-select" value={config.preset} onChange={(event) => {
-        const preset = event.currentTarget.value as VideoClayConfig['preset']
-        onChange({ preset, ...VIDEO_CLAY_PRESETS[preset] })
-      }}>
-        <option value="soft">柔和白模</option>
-        <option value="studio">立体白模</option>
-        <option value="structure">结构白模</option>
-      </AppSelect>
-    </div>
-    <div className="settings-field">
-      <AppSelect aria-label="质量" className="gen-select" value={config.quality} onChange={(event) => {
-        const quality = event.currentTarget.value as VideoClayConfig['quality']
-        onChange({ quality, maxResolution: quality === 'fast' ? 512 : quality === 'fine' ? 1024 : 768 })
-      }}>
-        <option value="fast">快速</option>
-        <option value="standard">标准</option>
-        <option value="fine">精细</option>
-      </AppSelect>
-    </div>
-  </div>
 }
 
 function EngineSetup(): React.JSX.Element {
@@ -141,15 +181,20 @@ function EngineSetup(): React.JSX.Element {
 
   useEffect(() => {
     let active = true
-    void window.api.getVideoEngineStatus().then((response) => {
-      if (!active) return
-      if (response.ok) setStatus(response.data)
-      else setError(response.error.message)
-    }).catch((statusError: unknown) => {
-      if (!active) return
-      setError(statusError instanceof Error ? statusError.message : String(statusError))
-    })
-    return () => { active = false }
+    void window.api
+      .getVideoEngineStatus()
+      .then((response) => {
+        if (!active) return
+        if (response.ok) setStatus(response.data)
+        else setError(response.error.message)
+      })
+      .catch((statusError: unknown) => {
+        if (!active) return
+        setError(statusError instanceof Error ? statusError.message : String(statusError))
+      })
+    return () => {
+      active = false
+    }
   }, [])
 
   useEffect(() => {
@@ -184,7 +229,10 @@ function EngineSetup(): React.JSX.Element {
       )}
       {!status?.ready && !status?.installing && (
         <>
-          <p>需要 Python 3.12、NVIDIA 显卡和 FFmpeg。首次安装会下载约 3.4 GB 的 CUDA 推理依赖与模型，建议预留 10 GB 磁盘空间；不会改系统 Python 环境。</p>
+          <p>
+            需要 Python 3.12、NVIDIA 显卡和 FFmpeg。首次安装会下载约 3.4 GB 的 CUDA
+            推理依赖与模型，建议预留 10 GB 磁盘空间；不会改系统 Python 环境。
+          </p>
           <button
             type="button"
             className="video-ai-install-button"
@@ -249,7 +297,9 @@ export function VideoAiSettings({ shape, editor }: NodeSettingsProps): React.JSX
             <AppSelect
               className="gen-select"
               value={depth.nearColor}
-              onChange={(event) => saveDepth({ nearColor: event.currentTarget.value as 'white' | 'black' })}
+              onChange={(event) =>
+                saveDepth({ nearColor: event.currentTarget.value as 'white' | 'black' })
+              }
             >
               <option value="white">白色</option>
               <option value="black">黑色</option>
@@ -266,16 +316,76 @@ export function VideoAiSettings({ shape, editor }: NodeSettingsProps): React.JSX
         </>
       ) : (
         <>
-          <RangeField label={clay.version === 1 ? '浮雕强度' : '立体程度'} min={0.25} max={5} step={0.05} value={clay.reliefStrength} onChange={(reliefStrength) => saveClay({ reliefStrength })} />
-          <RangeField label="光线方向" min={0} max={359} step={1} value={clay.lightAzimuth} onChange={(lightAzimuth) => saveClay({ lightAzimuth })} suffix="°" />
-          <RangeField label="光线高度" min={5} max={85} step={1} value={clay.lightElevation} onChange={(lightElevation) => saveClay({ lightElevation })} suffix="°" />
-          <RangeField label="环境光" min={0} max={0.9} step={0.01} value={clay.ambientLight} onChange={(ambientLight) => saveClay({ ambientLight })} />
-          {clay.version === 2 && <>
-            <RangeField label="阴影强度" min={0} max={1} step={0.05} value={clay.shadowStrength} onChange={(shadowStrength) => saveClay({ shadowStrength })} />
-            <RangeField label="时间稳定程度" min={0} max={1} step={0.05} value={clay.temporalStability} onChange={(temporalStability) => saveClay({ temporalStability })} />
-            <RangeField label="视角估计" min={25} max={90} step={1} value={clay.fieldOfView} onChange={(fieldOfView) => saveClay({ fieldOfView })} suffix="°" />
-          </>}
-          <button type="button" className="btn-ghost small" onClick={() => saveClay(DEFAULT_VIDEO_CLAY_CONFIG)}>恢复默认设置</button>
+          <RangeField
+            label={clay.version === 1 ? '浮雕强度' : '立体程度'}
+            min={0.25}
+            max={5}
+            step={0.05}
+            value={clay.reliefStrength}
+            onChange={(reliefStrength) => saveClay({ reliefStrength })}
+          />
+          <RangeField
+            label="光线方向"
+            min={0}
+            max={359}
+            step={1}
+            value={clay.lightAzimuth}
+            onChange={(lightAzimuth) => saveClay({ lightAzimuth })}
+            suffix="°"
+          />
+          <RangeField
+            label="光线高度"
+            min={5}
+            max={85}
+            step={1}
+            value={clay.lightElevation}
+            onChange={(lightElevation) => saveClay({ lightElevation })}
+            suffix="°"
+          />
+          <RangeField
+            label="环境光"
+            min={0}
+            max={0.9}
+            step={0.01}
+            value={clay.ambientLight}
+            onChange={(ambientLight) => saveClay({ ambientLight })}
+          />
+          {clay.version === 2 && (
+            <>
+              <RangeField
+                label="阴影强度"
+                min={0}
+                max={1}
+                step={0.05}
+                value={clay.shadowStrength}
+                onChange={(shadowStrength) => saveClay({ shadowStrength })}
+              />
+              <RangeField
+                label="时间稳定程度"
+                min={0}
+                max={1}
+                step={0.05}
+                value={clay.temporalStability}
+                onChange={(temporalStability) => saveClay({ temporalStability })}
+              />
+              <RangeField
+                label="视角估计"
+                min={25}
+                max={90}
+                step={1}
+                value={clay.fieldOfView}
+                onChange={(fieldOfView) => saveClay({ fieldOfView })}
+                suffix="°"
+              />
+            </>
+          )}
+          <button
+            type="button"
+            className="btn-ghost small"
+            onClick={() => saveClay(DEFAULT_VIDEO_CLAY_CONFIG)}
+          >
+            恢复默认设置
+          </button>
           <label className="video-ai-checkbox">
             <input
               type="checkbox"
@@ -287,7 +397,8 @@ export function VideoAiSettings({ shape, editor }: NodeSettingsProps): React.JSX
         </>
       )}
       <p className="contract-settings-hint">
-        最多处理 1800 帧。白模基于可见表面深度和估计视角渲染；输出为视频。精细档提高推理尺寸，需要更多显存。
+        最多处理 1800
+        帧。白模基于可见表面深度和估计视角渲染；输出为视频。精细档提高推理尺寸，需要更多显存。
       </p>
     </section>
   )
@@ -312,7 +423,13 @@ function RangeField({
 }): React.JSX.Element {
   return (
     <label className="video-ai-range">
-      <span>{label}<b>{value.toFixed(step < 1 ? 2 : 0)}{suffix}</b></span>
+      <span>
+        {label}
+        <b>
+          {value.toFixed(step < 1 ? 2 : 0)}
+          {suffix}
+        </b>
+      </span>
       <input
         type="range"
         min={min}

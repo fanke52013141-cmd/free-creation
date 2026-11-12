@@ -5,6 +5,17 @@ const capabilityId = z.string().min(1).max(80)
 const semver = z.string().regex(/^\d+\.0(\.0)?$/)
 const manifest = compositeManifestSchema
 
+/** headless 执行的公开输入值（与 WorkflowInput 值同口径；媒体按 mediaId 全局解析）。 */
+const executeInputValue = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('text'), text: z.string().min(1).max(100000) }).strict(),
+  z.object({ kind: z.literal('markdown'), text: z.string().min(1).max(100000) }).strict(),
+  z.object({ kind: z.literal('json'), data: z.unknown() }).strict(),
+  z.object({ kind: z.literal('media'), mediaId: z.string().min(1).max(180) }).strict()
+])
+const executeInputs = z
+  .array(z.object({ portId: z.string().min(1).max(100), value: executeInputValue }).strict())
+  .max(64)
+
 const summary = z
   .object({
     id: capabilityId,
@@ -52,11 +63,14 @@ export const COMPOSITE_OPERATIONS = {
     effect: 'write',
     description:
       '创建/更新组合草稿；允许未接完的图并返回问题；expectedRevision 用于乐观并发，冲突返回 DRAFT_REVISION_CONFLICT 且保留草稿',
-    input: z.object({ manifest, expectedRevision: z.number().int().nonnegative().optional() }).strict()
+    input: z
+      .object({ manifest, expectedRevision: z.number().int().nonnegative().optional() })
+      .strict()
   },
   'composite.validate': {
     effect: 'read',
-    description: '按 GUI 同一规则校验组合 manifest：端口、映射、类型、基数、必填来源、DAG、依赖与预算',
+    description:
+      '按 GUI 同一规则校验组合 manifest：端口、映射、类型、基数、必填来源、DAG、依赖与预算',
     input: z.object({ manifest }).strict()
   },
   'composite.publish': {
@@ -108,7 +122,34 @@ export const COMPOSITE_OPERATIONS = {
   'composite.run.list': {
     effect: 'read',
     description: '列出项目最近的组合运行（状态/能力/版本/时间）',
-    input: z.object({ projectId: z.string().min(1).max(120), limit: z.number().int().min(1).max(100).optional() }).strict()
+    input: z
+      .object({
+        projectId: z.string().min(1).max(120),
+        limit: z.number().int().min(1).max(100).optional()
+      })
+      .strict()
+  },
+  'composite.execute': {
+    effect: 'execute',
+    description:
+      'headless 执行已发布节点流：不依赖项目/画布，按公开输入端口喂值，异步运行返回 runId；终态与输出经 composite.run.get 读取。媒体输入按 mediaId 全局解析',
+    input: z
+      .object({
+        capabilityId,
+        version: semver.optional(),
+        inputs: executeInputs.optional()
+      })
+      .strict()
+  },
+  'composite.execute.wait': {
+    effect: 'read',
+    description: '阻塞等待 headless 运行到达终态：返回状态/公开输出/失败原因；超时返回当前状态',
+    input: z
+      .object({
+        runId: z.string().min(1).max(120),
+        timeoutMs: z.number().int().min(100).max(300000).optional()
+      })
+      .strict()
   },
   'composite.archive': {
     effect: 'write',
@@ -146,7 +187,12 @@ export const COMPOSITE_OUTPUTS = {
     })
     .strict(),
   'composite.draft.get': z
-    .object({ capabilityId, manifest, revision: z.number().int().nonnegative(), updatedAt: z.number() })
+    .object({
+      capabilityId,
+      manifest,
+      revision: z.number().int().nonnegative(),
+      updatedAt: z.number()
+    })
     .strict()
     .nullable(),
   'composite.draft.save': z
@@ -171,38 +217,54 @@ export const COMPOSITE_OUTPUTS = {
           addedOutputs: z.array(z.string().max(100)).max(64),
           removedOutputs: z.array(z.string().max(100)).max(64),
           typeChanged: z
-            .array(z.object({ portId: z.string().max(100), from: z.string().max(40), to: z.string().max(40) }).strict())
+            .array(
+              z
+                .object({
+                  portId: z.string().max(100),
+                  from: z.string().max(40),
+                  to: z.string().max(40)
+                })
+                .strict()
+            )
             .max(64),
           requiredChanged: z
-            .array(z.object({ portId: z.string().max(100), from: z.boolean(), to: z.boolean() }).strict())
+            .array(
+              z.object({ portId: z.string().max(100), from: z.boolean(), to: z.boolean() }).strict()
+            )
             .max(64),
           schemaChanged: z
             .array(
-              z.object({
-                portId: z.string().max(100),
-                from: z.string().max(120).nullable(),
-                to: z.string().max(120).nullable()
-              }).strict()
+              z
+                .object({
+                  portId: z.string().max(100),
+                  from: z.string().max(120).nullable(),
+                  to: z.string().max(120).nullable()
+                })
+                .strict()
             )
             .max(64),
           cardinalityChanged: z
             .array(
-              z.object({
-                portId: z.string().max(100),
-                from: z.enum(['one', 'many']),
-                to: z.enum(['one', 'many'])
-              }).strict()
+              z
+                .object({
+                  portId: z.string().max(100),
+                  from: z.enum(['one', 'many']),
+                  to: z.enum(['one', 'many'])
+                })
+                .strict()
             )
             .max(64),
           addedRequiredInputs: z.array(z.string().max(100)).max(64),
           breaking: z
             .array(
-              z.object({
-                portId: z.string().max(100),
-                reason: z.string().max(300),
-                nodeId: z.string().max(180).optional(),
-                edgeId: z.string().max(180).optional()
-              }).strict()
+              z
+                .object({
+                  portId: z.string().max(100),
+                  reason: z.string().max(300),
+                  nodeId: z.string().max(180).optional(),
+                  edgeId: z.string().max(180).optional()
+                })
+                .strict()
             )
             .max(64)
         })
@@ -228,8 +290,36 @@ export const COMPOSITE_OUTPUTS = {
     })
     .strict(),
   'composite.version.list': z.array(z.unknown()),
-  'composite.run.get': z.object({ run: z.unknown(), steps: z.array(z.unknown()) }).strict().nullable(),
+  'composite.run.get': z
+    .object({ run: z.unknown(), steps: z.array(z.unknown()) })
+    .strict()
+    .nullable(),
   'composite.run.list': z.array(z.unknown()),
+  'composite.execute': z
+    .object({
+      runId: z.string().min(1).max(120),
+      capabilityId,
+      version: semver,
+      status: z.literal('running')
+    })
+    .strict(),
+  'composite.execute.wait': z
+    .object({
+      runId: z.string().min(1).max(120),
+      status: z.enum(['running', 'completed', 'failed', 'cancelled']),
+      outputs: z.record(z.string(), z.unknown()).optional(),
+      reason: z.string().optional(),
+      failure: z
+        .object({
+          code: z.string(),
+          phase: z.string(),
+          nodeId: z.string().optional(),
+          portId: z.string().optional()
+        })
+        .strict()
+        .optional()
+    })
+    .strict(),
   'composite.archive': z.object({ capabilityId, archived: z.boolean() }).strict(),
   'composite.references': z
     .object({

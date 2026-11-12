@@ -36,7 +36,11 @@ export const compositeExecutor: NodeExecutor = async (
       const ref =
         parsed.ref ??
         (parsed.capabilityId
-          ? { capabilityId: parsed.capabilityId, version: parsed.version, contentHash: parsed.contentHash }
+          ? {
+              capabilityId: parsed.capabilityId,
+              version: parsed.version,
+              contentHash: parsed.contentHash
+            }
           : undefined)
       if (cached) {
         manifest = cached as import('../../composite/manifest').CompositeManifest
@@ -47,7 +51,11 @@ export const compositeExecutor: NodeExecutor = async (
           ...(ref.contentHash ? { contentHash: ref.contentHash } : {})
         })
         if (!resolved) {
-          return { status: 'failed', reason: '组合固定版本引用无法解析（版本不存在或摘要不符）', diagnosticPhase: 'input' }
+          return {
+            status: 'failed',
+            reason: '组合固定版本引用无法解析（版本不存在或摘要不符）',
+            diagnosticPhase: 'input'
+          }
         }
         manifest = resolved
       } else {
@@ -63,7 +71,8 @@ export const compositeExecutor: NodeExecutor = async (
     runId: ctx.runId,
     instanceNodeId: String(ctx.node.id),
     signal: ctx.signal,
-    ...(ctx.compositeRunContext ? { parentContext: ctx.compositeRunContext } : {})
+    ...(ctx.compositeRunContext ? { parentContext: ctx.compositeRunContext } : {}),
+    ...(ctx.compositeRunContext?.headless ? { headless: true } : {})
   })
   if (outcome.status === 'failed') {
     const phase =
@@ -109,7 +118,9 @@ export const compositeExecutor: NodeExecutor = async (
       mediaOutputs.length > 0
         ? mediaOutputs
             .filter(
-              (value): value is Extract<NodeValue, { kind: 'image' | 'video' | 'audio' | 'file' }> =>
+              (
+                value
+              ): value is Extract<NodeValue, { kind: 'image' | 'video' | 'audio' | 'file' }> =>
                 value.kind === 'image' ||
                 value.kind === 'video' ||
                 value.kind === 'audio' ||

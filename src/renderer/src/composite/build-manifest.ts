@@ -26,8 +26,7 @@ export interface CompositeBuildOptions {
 }
 
 export type CompositeBuildResult =
-  | { ok: true; manifest: CompositeManifest }
-  | { ok: false; issues: CompositeManifestIssue[] }
+  { ok: true; manifest: CompositeManifest } | { ok: false; issues: CompositeManifestIssue[] }
 
 function sanitizePublicId(value: string): string {
   const normalized = value
@@ -53,12 +52,12 @@ function portSnapshot(ports: readonly PortDecl[]): NonNullable<CompositeGraphNod
   return ports
     .filter((port) => (COMPOSITE_PORT_TYPES as readonly string[]).includes(port.type))
     .map((port) => ({
-    id: port.id,
-    name: port.name,
-    dir: port.dir,
-    type: port.type as CompositePort['type'],
-    required: port.required,
-    cardinality: port.cardinality,
+      id: port.id,
+      name: port.name,
+      dir: port.dir,
+      type: port.type as CompositePort['type'],
+      required: port.required,
+      cardinality: port.cardinality,
       ...(port.schema ? { schemaRef: { id: port.schema.id, version: port.schema.version } } : {})
     }))
 }
@@ -153,7 +152,10 @@ export function buildCompositeManifestFromGraph(
         continue
       }
       if (!(COMPOSITE_PORT_TYPES as readonly string[]).includes(port.type)) {
-        issues.push({ path: `inputs.${edge.id}`, message: `组合暂不支持 ${port.type} 类型的公开输入` })
+        issues.push({
+          path: `inputs.${edge.id}`,
+          message: `组合暂不支持 ${port.type} 类型的公开输入`
+        })
         continue
       }
       incomingExternal.add(`${edge.to.nodeId}:${edge.to.portId}`)
@@ -167,7 +169,9 @@ export function buildCompositeManifestFromGraph(
           required: port.required,
           cardinality: port.cardinality,
           ...(port.description ? { description: port.description } : {}),
-          ...(port.schema ? { schemaRef: { id: port.schema.id, version: port.schema.version } } : {}),
+          ...(port.schema
+            ? { schemaRef: { id: port.schema.id, version: port.schema.version } }
+            : {}),
           targets: [{ nodeId: internalIds.get(target.id)!, portId: port.id }]
         })
       }
@@ -181,7 +185,10 @@ export function buildCompositeManifestFromGraph(
         continue
       }
       if (!(COMPOSITE_PORT_TYPES as readonly string[]).includes(port.type)) {
-        issues.push({ path: `outputs.${edge.id}`, message: `组合暂不支持 ${port.type} 类型的公开输出` })
+        issues.push({
+          path: `outputs.${edge.id}`,
+          message: `组合暂不支持 ${port.type} 类型的公开输出`
+        })
         continue
       }
       outgoingExternal.add(`${edge.from.nodeId}:${edge.from.portId}`)
@@ -195,7 +202,9 @@ export function buildCompositeManifestFromGraph(
           required: port.required,
           cardinality: port.cardinality,
           ...(port.description ? { description: port.description } : {}),
-          ...(port.schema ? { schemaRef: { id: port.schema.id, version: port.schema.version } } : {}),
+          ...(port.schema
+            ? { schemaRef: { id: port.schema.id, version: port.schema.version } }
+            : {}),
           source: { nodeId: internalIds.get(source.id)!, portId: port.id }
         })
       }
@@ -203,8 +212,11 @@ export function buildCompositeManifestFromGraph(
   }
 
   // 边界源节点：没有内部上游。文本节点默认把正文变成公开输入；
-  // 其余源节点的必填输入端口也公开。外部连线已映射的目标不重复添加。
-  const internalIncoming = new Set(internalEdges.map((edge) => `${edge.to.nodeId}:${edge.to.portId}`))
+  // 其余源节点暴露其全部输入端口（含可选端口，保留 required/cardinality）。
+  // 外部连线已映射的目标不重复添加。
+  const internalIncoming = new Set(
+    internalEdges.map((edge) => `${edge.to.nodeId}:${edge.to.portId}`)
+  )
   for (const node of nodes) {
     const internalId = internalIds.get(node.id)!
     const hasInternalIncoming = internalEdges.some((edge) => edge.to.nodeId === internalId)
@@ -231,15 +243,15 @@ export function buildCompositeManifestFromGraph(
       }
     }
     for (const port of node.ports) {
-      if (port.dir !== 'in' || !port.required) continue
+      if (port.dir !== 'in') continue
       const key = `${node.id}:${port.id}`
       if (incomingExternal.has(key) || internalIncoming.has(`${internalId}:${port.id}`)) continue
       const id = uniquePublicId(`${internalId}-${port.id}`, usedInputIds)
-      inputs.set(`required-${key}`, {
+      inputs.set(`source-port-${key}`, {
         id,
         label: port.name,
         type: port.type as CompositePort['type'],
-        required: true,
+        required: port.required,
         cardinality: port.cardinality,
         ...(port.description ? { description: port.description } : {}),
         ...(port.schema ? { schemaRef: { id: port.schema.id, version: port.schema.version } } : {}),
@@ -271,7 +283,9 @@ export function buildCompositeManifestFromGraph(
       required: primary.required,
       cardinality: primary.cardinality,
       ...(primary.description ? { description: primary.description } : {}),
-      ...(primary.schema ? { schemaRef: { id: primary.schema.id, version: primary.schema.version } } : {}),
+      ...(primary.schema
+        ? { schemaRef: { id: primary.schema.id, version: primary.schema.version } }
+        : {}),
       source: { nodeId: internalId, portId: primary.id }
     })
   }

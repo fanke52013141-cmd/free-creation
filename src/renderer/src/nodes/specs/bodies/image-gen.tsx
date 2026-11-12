@@ -18,6 +18,7 @@ import { toast } from '../../../stores/toast'
 import { gatherUpstreamMediaSources } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
+import { guiWorkflowInputOptions } from '../../../stores/workflowInput'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
@@ -133,17 +134,26 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
   }
 
   // 所有图片都使用同一个多值端口，连接顺序就是 @图片 1…N 的顺序；N 的上限来自能力表。
-  const references = useValue('image prompt references', (): PromptMediaReference[] => {
-    const connected = gatherUpstreamMediaSources(editor, shape.id, 'in-images', 'image')
-    const seen = new Set<string>()
-    return connected.filter(({ value }) => {
-      if (seen.has(value.mediaId)) return false
-      seen.add(value.mediaId)
-      return true
-    })
-      .slice(0, capabilities.maxReferenceImages)
-      .map(({ source, value }, index) => ({ ...value, title: source.props.title, token: `@图片 ${index + 1}` }))
-  }, [editor, shape.id, capabilities.maxReferenceImages])
+  const references = useValue(
+    'image prompt references',
+    (): PromptMediaReference[] => {
+      const connected = gatherUpstreamMediaSources(editor, shape.id, 'in-images', 'image')
+      const seen = new Set<string>()
+      return connected
+        .filter(({ value }) => {
+          if (seen.has(value.mediaId)) return false
+          seen.add(value.mediaId)
+          return true
+        })
+        .slice(0, capabilities.maxReferenceImages)
+        .map(({ source, value }, index) => ({
+          ...value,
+          title: source.props.title,
+          token: `@图片 ${index + 1}`
+        }))
+    },
+    [editor, shape.id, capabilities.maxReferenceImages]
+  )
 
   const generate = async (): Promise<void> => {
     if (!project) return toast('项目未就绪')
@@ -153,7 +163,16 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
     updateText(canonicalizeMediaMentions(draft, references))
     setBusy(true)
     try {
-      await runNodeManually(editor, project.id, providers, shape.id)
+      await runNodeManually(
+        editor,
+        project.id,
+        providers,
+        shape.id,
+        undefined,
+        undefined,
+        undefined,
+        guiWorkflowInputOptions
+      )
     } finally {
       setBusy(false)
     }
@@ -291,7 +310,10 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
         spellCheck={false}
         placeholder="描述要生成的画面…"
         onValueChange={setDraft}
-        onCommit={(text) => { setDraft(text); updateText(text) }}
+        onCommit={(text) => {
+          setDraft(text)
+          updateText(text)
+        }}
         onPointerDown={(e) => e.stopPropagation()}
       />
       <NodePrimaryButton

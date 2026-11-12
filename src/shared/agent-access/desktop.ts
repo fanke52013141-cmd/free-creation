@@ -42,7 +42,9 @@ export const DesktopRequestSchema = z
       // F9 收尾：敏感动作（凭据包导入等）由**人在 GUI 亲眼确认**后才放行。
       'confirm-sensitive',
       // F9 收尾：取节点的运行记录（含历史），供外部导出节点诊断用。
-      'read-node-runs'
+      'read-node-runs',
+      // headless 节点流执行：脱离项目/画布，渲染层隔离 editor 异步运行，台账轮询终态。
+      'execute-composite-headless'
     ]),
     nodeId: z.string().optional(),
     agent: SkillAgentConfigSchema.optional(),
@@ -64,6 +66,15 @@ export const DesktopRequestSchema = z
     nodeIds: z.array(z.string().max(180)).min(1).max(NODE_EXECUTE_MAX_NODES).optional(),
     confirmPaidRerun: z.boolean().optional(),
     inputs: WorkflowInputsSchema.optional(),
+    /** execute-composite-headless：要执行的已发布节点流 manifest（main 已从能力仓库解析核对）。 */
+    compositeManifest: compositeManifestSchema.optional(),
+    /** execute-composite-headless：按公开输入端口喂值（main 已按 op 契约校验）。 */
+    compositeInputs: z
+      .array(z.object({ portId: z.string().min(1).max(100), value: z.unknown() }).strict())
+      .max(64)
+      .optional(),
+    /** execute-composite-headless：main 预分配的运行 ID（台账轮询用）。 */
+    ownRunId: z.string().min(1).max(120).optional(),
     /** graph-patch：main 预检解析的素材事实（按 mediaId 注入，外部输入不可携带路径）。 */
     mediaResolutions: z.record(z.string(), mediaResolutionSchema).optional(),
     /** graph-patch：main 预解析的组合固定版本快照（W3 引用形态；外部输入只携带引用）。 */

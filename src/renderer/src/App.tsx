@@ -11,8 +11,86 @@ import { ModelCatalogPanel } from './gateway/ModelCatalogPanel'
 import { ensureCanvasSaved } from './canvas/flow-asset-actions'
 import { useEditorStore } from './stores/editor'
 import { useSaveCoordinator } from './stores/save-coordinator'
+import { useGatewayStore } from './stores/gateway'
+import { runCompositeIsolated } from './composite/run-composite'
+import type { ContractInputMap, NodeValuePacket } from '@shared/engine/inputs'
+import type { NodeValue } from '@shared/engine/values'
+import type { PortType } from '@shared/types'
+import type { Editor } from 'tldraw'
+import type { DesktopRequest } from '@shared/agent-access/desktop'
 
 type BootState = { kind: 'loading' } | { kind: 'ready' } | { kind: 'failed'; message: string }
+
+/** NodeValue → 端口类型（headless 输入包构造用）。 */
+function nodeValuePortType(value: NodeValue): PortType {
+  switch (value.kind) {
+    case 'text':
+      return 'text'
+    case 'markdown':
+      return 'markdown'
+    case 'json':
+      return 'json'
+    case 'image':
+      return 'image'
+    case 'video':
+      return 'video'
+    case 'audio':
+      return 'audio'
+    case 'file':
+      return 'file'
+    default:
+      return 'any'
+  }
+}
+
+/**
+ * headless 节点流执行受理（脱离项目/画布）：立即回执释放 desktop 写入槽，
+ * 隔离 editor 异步运行，终态与输出经运行台账（composite.run.get）回填。
+ * 与画布执行共用 runCompositeIsolated，输出契约一致。
+ */
+async function handleHeadlessCompositeExecute(request: DesktopRequest): Promise<void> {
+  const reply = (ok: boolean, errorCode?: string): void => {
+    window.api.replyLocalAgentDesktop({
+      requestId: request.requestId,
+      projectId: request.projectId,
+      ok,
+      graphVersion: 0,
+      ...(ok ? {} : { validated: true, ...(errorCode ? { errorCode } : {}) })
+    })
+  }
+  try {
+    if (Date.now() >= request.expiresAt) throw new Error('REQUEST_EXPIRED')
+    const manifest = request.compositeManifest
+    if (!manifest) throw new Error('MANIFEST_MISSING')
+    await useGatewayStore.getState().load()
+    const providers = useGatewayStore.getState().providers
+    const runId = request.ownRunId ?? ''
+    const inputs = new Map<string, NodeValuePacket[]>()
+    for (const entry of request.compositeInputs ?? []) {
+      const value = entry.value as NodeValue
+      const packet: NodeValuePacket = {
+        type: nodeValuePortType(value),
+        value,
+        source: { nodeId: 'headless-input', portId: entry.portId, runId },
+        createdAt: Date.now()
+      }
+      const list = inputs.get(entry.portId) ?? []
+      list.push(packet)
+      inputs.set(entry.portId, list)
+    }
+    reply(true)
+    void runCompositeIsolated(null as unknown as Editor, request.projectId, providers, {
+      manifest,
+      inputs: inputs as ContractInputMap,
+      ownRunId: runId || undefined,
+      headless: true
+    }).catch(() => {
+      // 失败已由 runCompositeIsolated 写入台账；此处仅兜底未捕获异常。
+    })
+  } catch (error) {
+    reply(false, error instanceof Error ? error.message.slice(0, 80) : 'HEADLESS_EXECUTE_FAILED')
+  }
+}
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null }
@@ -70,6 +148,10 @@ function Content(): React.JSX.Element {
   useEffect(() => {
     if (bootState.kind !== 'ready') return
     return window.api.onLocalAgentDesktopRequest?.((request) => {
+      if (request.action === 'execute-composite-headless') {
+        void handleHeadlessCompositeExecute(request)
+        return
+      }
       if (request.action !== 'open') return
       void (async () => {
         const before = useAppStore.getState().currentProject?.id

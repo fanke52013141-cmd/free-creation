@@ -24,6 +24,7 @@ import { gatherUpstreamMedia } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import type { NodeCardShape } from '../../../canvas/NodeCardShape'
 import { runNodeManually } from '../../../engine/executor'
+import { guiWorkflowInputOptions } from '../../../stores/workflowInput'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { useAppStore } from '../../../stores/app'
 import { toast } from '../../../stores/toast'
@@ -681,7 +682,16 @@ function ImageEditEditorCore({
     // 工作台只是配置界面；提交后立即回到画布查看真实节点运行状态和产物。
     if (workbench) onRunSubmitted?.()
     try {
-      await runNodeManually(editor, projectId, providers, shape.id)
+      await runNodeManually(
+        editor,
+        projectId,
+        providers,
+        shape.id,
+        undefined,
+        undefined,
+        undefined,
+        guiWorkflowInputOptions
+      )
     } finally {
       setBusy(false)
     }
@@ -1011,9 +1021,7 @@ function ImageEditEditorCore({
         onChange={(e) => save({ ...config, instruction: e.target.value.slice(0, 4000) })}
       />
       {invalid && <p className="crop-invalid">{invalid}</p>}
-      {!options.length && (
-        <NoModelHint />
-      )}
+      {!options.length && <NoModelHint />}
       <button
         className="btn-primary small gen-go"
         disabled={busy || !source || !options.length || Boolean(invalid)}

@@ -13,29 +13,103 @@ function manifest(): CompositeManifest {
     graph: {
       nodes: [
         {
-          id: 'n1', nodeType: 'text', contractVersion: 3, title: '文本',
-          dx: 0, dy: 0, w: 340, h: 300,
+          id: 'n1',
+          nodeType: 'text',
+          contractVersion: 3,
+          title: '文本',
+          dx: 0,
+          dy: 0,
+          w: 340,
+          h: 300,
           ports: [
-            { id: 'in-text', name: '文本', dir: 'in', type: 'text', required: false, cardinality: 'many' },
-            { id: 'out-text', name: '文本', dir: 'out', type: 'text', required: true, cardinality: 'one' }
+            {
+              id: 'in-text',
+              name: '文本',
+              dir: 'in',
+              type: 'text',
+              required: false,
+              cardinality: 'many'
+            },
+            {
+              id: 'out-text',
+              name: '文本',
+              dir: 'out',
+              type: 'text',
+              required: true,
+              cardinality: 'one'
+            }
           ]
         },
         {
-          id: 'n2', nodeType: 'ai-process', contractVersion: 1, title: 'AI 处理',
-          dx: 400, dy: 0, w: 340, h: 300,
+          id: 'n2',
+          nodeType: 'ai-process',
+          contractVersion: 1,
+          title: 'AI 处理',
+          dx: 400,
+          dy: 0,
+          w: 340,
+          h: 300,
           ports: [
-            { id: 'in-text', name: '文本', dir: 'in', type: 'text', required: false, cardinality: 'many' },
-            { id: 'out-text', name: '文本', dir: 'out', type: 'text', required: true, cardinality: 'one' },
-            { id: 'out-markdown', name: 'Markdown', dir: 'out', type: 'markdown', required: false, cardinality: 'one' },
-            { id: 'out-json', name: 'JSON', dir: 'out', type: 'json', required: false, cardinality: 'one' }
+            {
+              id: 'in-text',
+              name: '文本',
+              dir: 'in',
+              type: 'text',
+              required: false,
+              cardinality: 'many'
+            },
+            {
+              id: 'out-text',
+              name: '文本',
+              dir: 'out',
+              type: 'text',
+              required: true,
+              cardinality: 'one'
+            },
+            {
+              id: 'out-markdown',
+              name: 'Markdown',
+              dir: 'out',
+              type: 'markdown',
+              required: false,
+              cardinality: 'one'
+            },
+            {
+              id: 'out-json',
+              name: 'JSON',
+              dir: 'out',
+              type: 'json',
+              required: false,
+              cardinality: 'one'
+            }
           ]
         },
         {
-          id: 'n3', nodeType: 'image-gen', contractVersion: 3, title: '生图',
-          dx: 800, dy: 0, w: 340, h: 300,
+          id: 'n3',
+          nodeType: 'image-gen',
+          contractVersion: 3,
+          title: '生图',
+          dx: 800,
+          dy: 0,
+          w: 340,
+          h: 300,
           ports: [
-            { id: 'in-text', name: '提示词', dir: 'in', type: 'text', required: false, cardinality: 'many' },
-            { id: 'out-image', name: '图片', dir: 'out', type: 'image', required: true, cardinality: 'one' }
+            {
+              id: 'in-text',
+              name: '提示词',
+              dir: 'in',
+              type: 'text',
+              required: false,
+              cardinality: 'many'
+            },
+            {
+              id: 'out-image',
+              name: '图片',
+              dir: 'out',
+              type: 'image',
+              required: true,
+              cardinality: 'one'
+            }
           ]
         }
       ],
@@ -56,7 +130,10 @@ describe('组合公开边界推导', () => {
   it('文本→AI→生图只得到 1 个文本输入和 1 个图片输出', () => {
     const boundary = deriveCompositeBoundary(manifest())
     expect(boundary.inputs).toHaveLength(1)
-    expect(boundary.inputs[0]).toMatchObject({ type: 'text', targets: [{ nodeId: 'n1', portId: 'in-text' }] })
+    expect(boundary.inputs[0]).toMatchObject({
+      type: 'text',
+      targets: [{ nodeId: 'n1', portId: 'in-text' }]
+    })
     expect(boundary.outputs).toHaveLength(1)
     expect(boundary.outputs[0]).toMatchObject({
       type: 'image',
@@ -66,6 +143,130 @@ describe('组合公开边界推导', () => {
 
   it('中间 AI 节点的 markdown/json 不作为公开输出', () => {
     const boundary = deriveCompositeBoundary(manifest())
-    expect(boundary.outputs.some((output) => output.type === 'markdown' || output.type === 'json')).toBe(false)
+    expect(
+      boundary.outputs.some((output) => output.type === 'markdown' || output.type === 'json')
+    ).toBe(false)
+  })
+})
+
+/** AI 处理作首节点（源节点）→ 生图（汇节点）：真实契约下 ai-process 输入皆可选。 */
+function aiFirstManifest(): CompositeManifest {
+  return {
+    schemaVersion: 1,
+    capabilityId: 'ai-to-image',
+    version: '1.0',
+    name: 'AI 处理生图',
+    inputs: [],
+    outputs: [],
+    graph: {
+      nodes: [
+        {
+          id: 'n1',
+          nodeType: 'ai-process',
+          contractVersion: 1,
+          title: 'AI 处理',
+          dx: 0,
+          dy: 0,
+          w: 340,
+          h: 300,
+          ports: [
+            {
+              id: 'in-text',
+              name: '文本',
+              dir: 'in',
+              type: 'text',
+              required: false,
+              cardinality: 'many'
+            },
+            {
+              id: 'in-json',
+              name: 'JSON',
+              dir: 'in',
+              type: 'json',
+              required: false,
+              cardinality: 'one'
+            },
+            {
+              id: 'out-text',
+              name: '文本',
+              dir: 'out',
+              type: 'text',
+              required: false,
+              cardinality: 'one'
+            }
+          ]
+        },
+        {
+          id: 'n2',
+          nodeType: 'image-gen',
+          contractVersion: 3,
+          title: '生图',
+          dx: 400,
+          dy: 0,
+          w: 340,
+          h: 300,
+          ports: [
+            {
+              id: 'in-text',
+              name: '提示词',
+              dir: 'in',
+              type: 'text',
+              required: false,
+              cardinality: 'many'
+            },
+            {
+              id: 'out-image',
+              name: '图片',
+              dir: 'out',
+              type: 'image',
+              required: true,
+              cardinality: 'one'
+            }
+          ]
+        }
+      ],
+      edges: [
+        { from: { nodeId: 'n1', portId: 'out-text' }, to: { nodeId: 'n2', portId: 'in-text' } }
+      ]
+    },
+    dependencies: [
+      { kind: 'node', id: 'ai-process', contractVersion: 1 },
+      { kind: 'node', id: 'image-gen', contractVersion: 3 }
+    ]
+  }
+}
+
+describe('组合公开边界推导：首节点输入即组合输入', () => {
+  it('AI 处理（可选输入）作首节点时，其输入端口仍被公开为组合输入', () => {
+    const boundary = deriveCompositeBoundary(aiFirstManifest())
+    // 首节点 ai-process 的 in-text / in-json 都应公开（修复前因 required:false 被漏掉，得到零输入）。
+    expect(boundary.inputs.length).toBeGreaterThanOrEqual(1)
+    const textInput = boundary.inputs.find((input) => input.targets[0]?.portId === 'in-text')
+    expect(textInput).toBeDefined()
+    expect(textInput).toMatchObject({
+      type: 'text',
+      targets: [{ nodeId: 'n1', portId: 'in-text' }]
+    })
+    const jsonInput = boundary.inputs.find((input) => input.targets[0]?.portId === 'in-json')
+    expect(jsonInput).toMatchObject({
+      type: 'json',
+      targets: [{ nodeId: 'n1', portId: 'in-json' }]
+    })
+  })
+
+  it('保留源端口自身的 required/cardinality，不强制改为必填', () => {
+    const boundary = deriveCompositeBoundary(aiFirstManifest())
+    const textInput = boundary.inputs.find((input) => input.targets[0]?.portId === 'in-text')
+    expect(textInput?.required).toBe(false)
+    expect(textInput?.cardinality).toBe('many')
+  })
+
+  it('输出仍取末节点（生图）的主输出图片', () => {
+    const boundary = deriveCompositeBoundary(aiFirstManifest())
+    expect(boundary.outputs).toHaveLength(1)
+    expect(boundary.outputs[0]).toMatchObject({
+      type: 'image',
+      source: { nodeId: 'n2', portId: 'out-image' }
+    })
   })
 })

@@ -1,4 +1,9 @@
-import { NodeFooterActions, NodeHeaderActions, NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
+import {
+  NodeFooterActions,
+  NodeHeaderActions,
+  NodeIdentity,
+  NodePrimaryButton
+} from '../../../canvas/NodePresentation'
 // 视频节点 Body（路线图 R6：bodies.tsx 拆分）
 import { useEffect, useState } from 'react'
 import { stopEventPropagation, useEditor, useValue } from 'tldraw'
@@ -17,6 +22,7 @@ import { markUndoPoint } from '../../../canvas/history'
 import { gatherUpstreamMediaList, gatherUpstreamMediaSources } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
+import { guiWorkflowInputOptions } from '../../../stores/workflowInput'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
@@ -133,11 +139,17 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const [draft, setDraft] = useState(shape.props.text)
   const [submitting, setSubmitting] = useState(false)
   // 视频的所有图片只占一个绿色端口；模式决定连接顺序的协议角色。
-  const images = useValue('video prompt references',
-    () => gatherUpstreamMediaSources(editor, shape.id, 'in-images', 'image'), [editor, shape.id])
+  const images = useValue(
+    'video prompt references',
+    () => gatherUpstreamMediaSources(editor, shape.id, 'in-images', 'image'),
+    [editor, shape.id]
+  )
 
-  const motionReferences = useValue('video prompt motion references',
-    () => gatherUpstreamMediaSources(editor, shape.id, 'in-reference-video', 'video'), [editor, shape.id])
+  const motionReferences = useValue(
+    'video prompt motion references',
+    () => gatherUpstreamMediaSources(editor, shape.id, 'in-reference-video', 'video'),
+    [editor, shape.id]
+  )
   const audioReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-audio', 'audio')
   // 图片引用按多值输入端口的连接顺序传入，提示词使用相同顺序。
   const opt = options.find((o) => o.key === data.modelKey)
@@ -157,14 +169,26 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       })
     : null
   const mode = modeResolution?.mode
-  const mentionImageCount = mode === 'reference'
-    ? Math.min(images.length, capabilities?.maxReferenceImages ?? 0)
-    : mode === 'first-frame' || mode === 'first-last-frame' ? images.length : 0
+  const mentionImageCount =
+    mode === 'reference'
+      ? Math.min(images.length, capabilities?.maxReferenceImages ?? 0)
+      : mode === 'first-frame' || mode === 'first-last-frame'
+        ? images.length
+        : 0
   const references: PromptMediaReference[] = [
-    ...images.slice(0, mentionImageCount)
-      .map(({ source, value }, index) => ({ ...value, title: source.props.title, token: `@图${index + 1}` })),
-    ...(mode === 'reference' ? motionReferences.slice(0, capabilities?.maxReferenceVideos ?? 0) : [])
-      .map(({ source, value }, index) => ({ ...value, title: source.props.title, token: `@视频${index + 1}` }))
+    ...images.slice(0, mentionImageCount).map(({ source, value }, index) => ({
+      ...value,
+      title: source.props.title,
+      token: `@图${index + 1}`
+    })),
+    ...(mode === 'reference'
+      ? motionReferences.slice(0, capabilities?.maxReferenceVideos ?? 0)
+      : []
+    ).map(({ source, value }, index) => ({
+      ...value,
+      title: source.props.title,
+      token: `@视频${index + 1}`
+    }))
   ]
   const firstFrame = mode === 'first-frame' || mode === 'first-last-frame' ? images[0] : undefined
   const lastFrame = mode === 'first-last-frame' ? images[1] : undefined
@@ -267,12 +291,20 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     updateText(canonicalizeMediaMentions(draft, references))
     setSubmitting(true)
     try {
-      await runNodeManually(editor, project.id, providers, shape.id)
+      await runNodeManually(
+        editor,
+        project.id,
+        providers,
+        shape.id,
+        undefined,
+        undefined,
+        undefined,
+        guiWorkflowInputOptions
+      )
     } finally {
       setSubmitting(false)
     }
   }
-
 
   if (isAssetNode && !shape.props.mediaPath) {
     // 视频资产空态：所有 Hook 已在上方无条件调用，这里早退是安全的。
@@ -357,49 +389,49 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         {/* 操作条与图片节点共用同一套公共样式（NODE_UI_STANDARD §19：按钮 32px、按可用宽度分配）：
             不再使用节点私有的浮层底、描边与背景模糊。 */}
         <NodeFooterActions>
-        <div
-          className="node-media-next-actions media-action-toolbar"
-          role="group"
-          aria-label="视频操作"
-        >
-          <div className="media-action-primary">
-            <button
-              className="btn-ghost small media-action-button"
-              title="替换视频"
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onClick={(e) => {
-                e.stopPropagation()
-                void chooseAsset()
-              }}
-            >
-              替换
-            </button>
-            <button
-              className="btn-ghost small media-action-button"
-              title="打开视频截取"
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onClick={(e) => {
-                e.stopPropagation()
-                setVideoOperationsMode('clip')
-                setVideoOperationsOpen(true)
-              }}
-            >
-              视频截取
-            </button>
-            <button
-              className="btn-ghost small media-action-button"
-              title="打开抽帧"
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onClick={(e) => {
-                e.stopPropagation()
-                setVideoOperationsMode('frame')
-                setVideoOperationsOpen(true)
-              }}
-            >
-              抽帧
-            </button>
+          <div
+            className="node-media-next-actions media-action-toolbar"
+            role="group"
+            aria-label="视频操作"
+          >
+            <div className="media-action-primary">
+              <button
+                className="btn-ghost small media-action-button"
+                title="替换视频"
+                onPointerDown={(e) => stopEventPropagation(e)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void chooseAsset()
+                }}
+              >
+                替换
+              </button>
+              <button
+                className="btn-ghost small media-action-button"
+                title="打开视频截取"
+                onPointerDown={(e) => stopEventPropagation(e)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setVideoOperationsMode('clip')
+                  setVideoOperationsOpen(true)
+                }}
+              >
+                视频截取
+              </button>
+              <button
+                className="btn-ghost small media-action-button"
+                title="打开抽帧"
+                onPointerDown={(e) => stopEventPropagation(e)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setVideoOperationsMode('frame')
+                  setVideoOperationsOpen(true)
+                }}
+              >
+                抽帧
+              </button>
+            </div>
           </div>
-        </div>
         </NodeFooterActions>
         <NodeHeaderActions>
           <button
@@ -434,8 +466,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     )
   }
 
-  if (!options.length)
-    return <NoModelHint />
+  if (!options.length) return <NoModelHint />
 
   return (
     <div className="gen-panel video-gen-panel">

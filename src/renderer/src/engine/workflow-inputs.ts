@@ -13,10 +13,62 @@ export type RequestWorkflowInput = (request: {
   onCancel: (listener: () => void) => () => void
 }) => Promise<WorkflowInput['value'] | null>
 
+/** 汇总表单的一次缺口项（节点 + 端口）。 */
+export interface WorkflowInputGap {
+  nodeId: string
+  title: string
+  port: PortDecl
+}
+
+/** 批量补输入：一次列出所有缺口，返回用户填写的输入集合；null 表示取消整个运行。 */
+export type RequestWorkflowInputs = (request: {
+  projectId: string
+  gaps: readonly WorkflowInputGap[]
+  onCancel: (listener: () => void) => () => void
+}) => Promise<readonly WorkflowInput[] | null>
+
 export interface WorkflowInputOptions {
   inputs?: readonly WorkflowInput[]
   requestInput?: RequestWorkflowInput
+  /** GUI 优先使用的汇总表单回调；缺省时回退串行 requestInput。 */
+  requestInputs?: RequestWorkflowInputs
   confirmPaidRerun?: boolean
+}
+
+/**
+ * 内容即输入的节点：内容缺失时执行器必然 skipped，需把 in-text 视为待补输入。
+ * 单一真值，供补输入缺口判定使用；判定条件与各执行器的 skipped 分支保持一致。
+ * hasSource(portId) 表示该端口已有上游连线/已收集输入/已供临时值。
+ */
+export function nodeNeedsContentInput(
+  nodeType: string,
+  body: string,
+  hasSource: (portId: string) => boolean
+): boolean {
+  switch (nodeType) {
+    case 'text':
+      return !body.trim()
+    case 'ai-process':
+      return !hasSource('in-json')
+    case 'image-gen':
+      return !body.trim() && !hasSource('in-prompt')
+    case 'speech':
+      return !body.trim() && !hasSource('in-text')
+    case 'chat':
+      return !hasSource('in-text')
+    case 'video':
+      return !body.trim() && !hasSource('in-prompt') && !hasSource('in-text')
+    case 'voice-design':
+      return !body.trim() && !hasSource('in-text')
+    case 'json':
+    case 'storyboard':
+      return !body.trim() && !hasSource('in-json') && !hasSource('in-text')
+    case 'structured':
+      // 正文是 JSON 模板（in-text 仅喂占位符）；正文空时需补模板，经 temporaryText 注入正文。
+      return !body.trim()
+    default:
+      return false
+  }
 }
 
 export function missingWorkflowPorts(
@@ -27,9 +79,12 @@ export function missingWorkflowPorts(
   supplied: readonly WorkflowInput[]
 ): PortDecl[] {
   const ports = portsOf(node).in
-  const connected = new Set(edges.filter((edge) => edge.to.nodeId === node.id).map((edge) => edge.to.portId))
+  const connected = new Set(
+    edges.filter((edge) => edge.to.nodeId === node.id).map((edge) => edge.to.portId)
+  )
   const hasInput = (id: string): boolean => (inputs.get(id)?.length ?? 0) > 0
-  const isSupplied = (id: string): boolean => supplied.some((entry) => entry.nodeId === node.id && entry.portId === id)
+  const isSupplied = (id: string): boolean =>
+    supplied.some((entry) => entry.nodeId === node.id && entry.portId === id)
   const hasSource = (id: string): boolean => hasInput(id) || connected.has(id) || isSupplied(id)
   // 节点流公开输入的 defaultValue 与运行时必填口径一致：不强制补充临时输入。
   const fixedSatisfied = new Set<string>()
@@ -43,27 +98,33 @@ export function missingWorkflowPorts(
       if (input.defaultValue !== undefined) fixedSatisfied.add(`in-${input.id}`)
     }
   }
-  const needsText =
-    (node.type === 'text' && !body.trim()) ||
-    (node.type === 'ai-process' && !hasSource('in-json')) ||
-    (node.type === 'image-gen' && !body.trim() && !hasSource('in-prompt'))
+  const needsText = nodeNeedsContentInput(node.type, body, hasSource)
   const groups = new Set<string>()
   return ports.filter((port) => {
     if (hasInput(port.id) || connected.has(port.id) || fixedSatisfied.has(port.id)) return false
     if (port.exclusiveGroup) {
-      if (groups.has(port.exclusiveGroup) || ports.some((other) =>
-        other.exclusiveGroup === port.exclusiveGroup && (hasInput(other.id) || connected.has(other.id))
-      )) return false
+      if (
+        groups.has(port.exclusiveGroup) ||
+        ports.some(
+          (other) =>
+            other.exclusiveGroup === port.exclusiveGroup &&
+            (hasInput(other.id) || connected.has(other.id))
+        )
+      )
+        return false
       // Respect an explicitly supplied member before picking a default for the form.
-      const preferred = supplied.find((entry) => entry.nodeId === node.id && ports.some((other) =>
-        other.id === entry.portId && other.exclusiveGroup === port.exclusiveGroup
-      ))
+      const preferred = supplied.find(
+        (entry) =>
+          entry.nodeId === node.id &&
+          ports.some(
+            (other) => other.id === entry.portId && other.exclusiveGroup === port.exclusiveGroup
+          )
+      )
       if (preferred && preferred.portId !== port.id) return false
       groups.add(port.exclusiveGroup)
       return true
     }
-    return port.required || (port.id === 'in-text' && needsText) ||
-      isSupplied(port.id)
+    return port.required || (port.id === 'in-text' && needsText) || isSupplied(port.id)
   })
 }
 

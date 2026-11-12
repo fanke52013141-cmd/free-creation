@@ -20,8 +20,10 @@ function unique(base: string, used: Set<string>): string {
 
 /**
  * 从固定版本内部图推导默认公开边界（P2/P4 修正）：
- * - 输入：没有内部上游的边界源节点。文本节点默认暴露文本输入；
- *   其余源节点只暴露必填输入端口；已有内部来源的端口不公开。
+ * - 输入：没有内部上游的边界源节点。文本节点默认暴露文本输入（带默认正文）；
+ *   其余源节点暴露其全部输入端口（含可选端口，保留端口自身 required/cardinality），
+ *   已有内部来源的端口不公开。这样「首节点允许的输入 = 组合输入」对任意首尾链成立，
+ *   避免 ai-process 这类「输入皆可选、无输入即跳过」的源节点被推导成零输入组合。
  * - 输出：只取没有内部下游的汇节点的单个主输出，媒体优先；
  *   中间节点的多路 text/markdown/json 不再自动公开。
  * 该函数只做结构推导，不做类型/连线合法性校验；发布前仍走 validateCompositeManifest。
@@ -55,13 +57,13 @@ export function deriveCompositeBoundary(manifest: CompositeManifest): DerivedBou
       continue
     }
     for (const port of ports) {
-      if (port.dir !== 'in' || !port.required) continue
+      if (port.dir !== 'in') continue
       if (incoming.has(`${node.id}:${port.id}`)) continue
       inputs.push({
         id: unique(`${node.id}-${port.id}`, usedInputIds),
         label: port.name,
         type: port.type as CompositeManifest['inputs'][number]['type'],
-        required: true,
+        required: port.required,
         cardinality: port.cardinality,
         ...(port.schemaRef ? { schemaRef: port.schemaRef } : {}),
         targets: [{ nodeId: node.id, portId: port.id }]
@@ -73,8 +75,7 @@ export function deriveCompositeBoundary(manifest: CompositeManifest): DerivedBou
     if (hasOutgoing.has(node.id)) continue
     const ports = ((node.ports ?? []) as NodePort[]).filter((port) => port.dir === 'out')
     const primary = [...ports].sort(
-      (a, b) =>
-        OUTPUT_PRIORITY.indexOf(a.type as never) - OUTPUT_PRIORITY.indexOf(b.type as never)
+      (a, b) => OUTPUT_PRIORITY.indexOf(a.type as never) - OUTPUT_PRIORITY.indexOf(b.type as never)
     )[0]
     if (!primary) continue
     outputs.push({

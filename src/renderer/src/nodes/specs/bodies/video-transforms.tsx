@@ -12,6 +12,7 @@ import { useAppStore } from '../../../stores/app'
 import { useGatewayStore } from '../../../stores/gateway'
 import { toast } from '../../../stores/toast'
 import { runNodeManually } from '../../../engine/executor'
+import { guiWorkflowInputOptions } from '../../../stores/workflowInput'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
 import { projectNodeOutputs } from '../../nodeValues'
@@ -355,7 +356,9 @@ function MediaTimeline({
       <div
         className="video-timeline-track"
         data-point={isPoint || undefined}
-        data-frame-time={integrated && isPoint ? workbenchTimecode(Math.round(currentPoint)) : undefined}
+        data-frame-time={
+          integrated && isPoint ? workbenchTimecode(Math.round(currentPoint)) : undefined
+        }
         style={
           {
             ...(isPoint
@@ -375,7 +378,9 @@ function MediaTimeline({
       >
         {integrated && thumbnails && thumbnails.length > 0 && (
           <div className="video-timeline-thumbnails" aria-hidden="true">
-            {thumbnails.map((src, index) => <img key={index} src={src} alt="" draggable={false} />)}
+            {thumbnails.map((src, index) => (
+              <img key={index} src={src} alt="" draggable={false} />
+            ))}
           </div>
         )}
         {integrated && typeof progressMs === 'number' && (
@@ -633,7 +638,11 @@ export function VideoOperationsWorkbench({
 
   const [mode, setMode] = useState<VideoOperationMode>(initialMode)
   const [durationMs, setDurationMs] = useState(0)
-  const [thumbnailResult, setThumbnailResult] = useState<{ sourceMediaId: string; projectId: string; thumbnails: string[] } | null>(null)
+  const [thumbnailResult, setThumbnailResult] = useState<{
+    sourceMediaId: string
+    projectId: string
+    thumbnails: string[]
+  } | null>(null)
   const [currentTimeMs, setCurrentTimeMs] = useState(0)
   const [previewBounds, setPreviewBounds] = useState({ width: 0, height: 0 })
   const [fps, setFps] = useState<number | null>(null)
@@ -642,7 +651,10 @@ export function VideoOperationsWorkbench({
   const [isMuted, setIsMuted] = useState(false)
   const [volume, setVolume] = useState(1)
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [clipCfg, setClipCfg] = useState<VideoClipConfig>(() => ({ ...parseVideoClipConfig(''), quality: 'balanced' }))
+  const [clipCfg, setClipCfg] = useState<VideoClipConfig>(() => ({
+    ...parseVideoClipConfig(''),
+    quality: 'balanced'
+  }))
   const [frameCfg, setFrameCfg] = useState<VideoFrameConfig>(() => parseVideoFrameConfig(''))
   const [clipOutput, setClipOutput] = useState<ClipOutput>('video-with-audio')
   const [extractVocals, setExtractVocals] = useState(false)
@@ -657,9 +669,10 @@ export function VideoOperationsWorkbench({
   const [submitting, setSubmitting] = useState(false)
 
   const max = durationMs || Math.max(clipCfg.endMs, frameCfg.timeMs + 1, 1000)
-  const thumbnails = thumbnailResult?.sourceMediaId === sourceMediaId && thumbnailResult.projectId === project?.id
-    ? thumbnailResult.thumbnails
-    : []
+  const thumbnails =
+    thumbnailResult?.sourceMediaId === sourceMediaId && thumbnailResult.projectId === project?.id
+      ? thumbnailResult.thumbnails
+      : []
   const hasVideoDuration = durationMs > 0
   const fittedPlayerWidth =
     videoAspectRatio && previewBounds.width > 0 && previewBounds.height > 0
@@ -750,12 +763,16 @@ export function VideoOperationsWorkbench({
     if (!project?.id || !sourceMediaId || !hasVideoDuration) return
     let active = true
     const projectId = project.id
-    void window.api.generateVideoThumbnails({ projectId, sourceMediaId, count: 10 })
+    void window.api
+      .generateVideoThumbnails({ projectId, sourceMediaId, count: 10 })
       .then((result) => {
-        if (active && result.ok) setThumbnailResult({ projectId, sourceMediaId, thumbnails: result.data.thumbnails })
+        if (active && result.ok)
+          setThumbnailResult({ projectId, sourceMediaId, thumbnails: result.data.thumbnails })
       })
       .catch(() => undefined)
-    return () => { active = false }
+    return () => {
+      active = false
+    }
   }, [project?.id, sourceMediaId, hasVideoDuration])
 
   const seek = (timeMs: number): void => {
@@ -856,9 +873,27 @@ export function VideoOperationsWorkbench({
     onClose()
     window.setTimeout(() => {
       if (clipId) {
-        void runNodeManually(editor, project.id, providers, clipId)
+        void runNodeManually(
+          editor,
+          project.id,
+          providers,
+          clipId,
+          undefined,
+          undefined,
+          undefined,
+          guiWorkflowInputOptions
+        )
       } else {
-        void runNodeManually(editor, project.id, providers, targetId)
+        void runNodeManually(
+          editor,
+          project.id,
+          providers,
+          targetId,
+          undefined,
+          undefined,
+          undefined,
+          guiWorkflowInputOptions
+        )
       }
     }, 0)
   }
@@ -881,7 +916,11 @@ export function VideoOperationsWorkbench({
         }
       }}
     >
-      <div className="video-trim-workbench video-operations-dialog" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+      <div
+        className="video-trim-workbench video-operations-dialog"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+      >
         <header className="video-trim-workbench-head video-operations-head">
           <div className="video-operations-title">
             <Icon name="video-asset" size={17} />
@@ -905,7 +944,13 @@ export function VideoOperationsWorkbench({
               event.preventDefault()
               event.stopPropagation()
               const next =
-                key === 'Home' ? 'clip' : key === 'End' ? 'frame' : mode === 'clip' ? 'frame' : 'clip'
+                key === 'Home'
+                  ? 'clip'
+                  : key === 'End'
+                    ? 'frame'
+                    : mode === 'clip'
+                      ? 'frame'
+                      : 'clip'
               setMode(next)
               event.currentTarget.querySelector<HTMLButtonElement>(`[data-mode="${next}"]`)?.focus()
             }}
@@ -1002,7 +1047,13 @@ export function VideoOperationsWorkbench({
                   disabled={durationMs <= 0}
                   onClick={() => jumpBy(-5000)}
                 >
-                  <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                  <svg
+                    width="17"
+                    height="17"
+                    viewBox="0 0 16 16"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
                     <path d="M3 2h2v12H3zm10 0L5 8l8 6z" />
                   </svg>
                 </button>
@@ -1024,7 +1075,13 @@ export function VideoOperationsWorkbench({
                   disabled={durationMs <= 0}
                   onClick={() => jumpBy(5000)}
                 >
-                  <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                  <svg
+                    width="17"
+                    height="17"
+                    viewBox="0 0 16 16"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
                     <path d="M11 2h2v12h-2zM3 2l8 6-8 6z" />
                   </svg>
                 </button>
@@ -1033,7 +1090,9 @@ export function VideoOperationsWorkbench({
                     {workbenchTimecode(currentTimeMs)}
                   </span>
                   <span className="video-operations-player-time-separator">/</span>
-                  <span className="video-operations-player-time">{workbenchTimecode(durationMs)}</span>
+                  <span className="video-operations-player-time">
+                    {workbenchTimecode(durationMs)}
+                  </span>
                 </div>
               </div>
               <div className="video-operations-controls-secondary">
@@ -1183,7 +1242,11 @@ export function VideoOperationsWorkbench({
 
             {mode === 'frame' ? (
               <div className="video-operations-option-line">
-                <div className="video-operations-output-choices" role="radiogroup" aria-label="取帧位置">
+                <div
+                  className="video-operations-output-choices"
+                  role="radiogroup"
+                  aria-label="取帧位置"
+                >
                   {(
                     [
                       ['first', '首帧'],
@@ -1243,7 +1306,11 @@ export function VideoOperationsWorkbench({
               <div className="video-operations-clip-options">
                 <div className="video-operations-option-line">
                   <span className="video-operations-option-label">保留内容</span>
-                  <div className="video-operations-output-choices" role="radiogroup" aria-label="保留内容">
+                  <div
+                    className="video-operations-output-choices"
+                    role="radiogroup"
+                    aria-label="保留内容"
+                  >
                     {(
                       [
                         ['video-only', '仅画面'],
@@ -1317,7 +1384,11 @@ export function VideoOperationsWorkbench({
                   {clipOutput !== 'audio-only' && (
                     <div className="video-operations-option-line">
                       <span className="video-operations-option-label">画面质量</span>
-                      <div className="video-operations-output-choices" role="radiogroup" aria-label="画面质量">
+                      <div
+                        className="video-operations-output-choices"
+                        role="radiogroup"
+                        aria-label="画面质量"
+                      >
                         {(
                           [
                             ['balanced', '平衡 · CRF 18'],
@@ -1832,7 +1903,16 @@ function VideoTransformSettings({
     onRunSubmitted?.()
     // 让关闭状态先完成一次 React 提交，下一事件周期再启动节点运行。
     window.setTimeout(() => {
-      void runNodeManually(editor, project.id, providers, shape.id)
+      void runNodeManually(
+        editor,
+        project.id,
+        providers,
+        shape.id,
+        undefined,
+        undefined,
+        undefined,
+        guiWorkflowInputOptions
+      )
     }, 0)
   }
 
@@ -2017,7 +2097,9 @@ function VideoTransformSettings({
                       onChange={(event) => setClipQuality(event.currentTarget.value as ClipQuality)}
                     >
                       {clipCfg.quality === 'fast' && (
-                        <option value="fast" disabled>旧版快速模式</option>
+                        <option value="fast" disabled>
+                          旧版快速模式
+                        </option>
                       )}
                       <option value="balanced">平衡（重编码 CRF 18）</option>
                       <option value="high">高质量（重编码 CRF 14）</option>

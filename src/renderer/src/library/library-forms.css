@@ -135,13 +135,14 @@
 }
 :is(.library-form-dialog.library-resource-form-dialog, .library-form-dialog.library-category-dialog)
   .library-form-footer > button.library-form-primary {
-  color: #06283d;
-  background: #3cdde3;
-  box-shadow: 0 4px 12px rgba(60, 221, 227, 0.22);
+  color: var(--primary-ink);
+  background: var(--primary-grad);
+  box-shadow: var(--primary-glow);
 }
 :is(.library-form-dialog.library-resource-form-dialog, .library-form-dialog.library-category-dialog)
   .library-form-footer > button.library-form-primary:hover:not(:disabled) {
-  background: #63e9ef;
+  background: var(--primary-grad-hover);
+  box-shadow: var(--primary-glow-hover);
 }
 
 /* ── 4. 错误行更醒目 ─────────────────────────────────────── */

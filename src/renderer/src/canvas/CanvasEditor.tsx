@@ -1,5 +1,6 @@
 import { WorkflowInputDialog } from './WorkflowInputDialog'
-import { requestWorkflowInput } from '../stores/workflowInput'
+import { WorkflowInputsDialog } from './WorkflowInputsDialog'
+import { requestWorkflowInput, requestWorkflowInputs } from '../stores/workflowInput'
 import { reportCanvasFailure } from './canvas-diagnostics'
 import { ensureCanvasSaved } from './flow-asset-actions'
 import { readNodeRunHistory, readNodeRunRecord } from '../engine/runRecord'
@@ -88,7 +89,15 @@ import { useGatewayStore } from '../stores/gateway'
 import { flowInitialConfig } from '@shared/agent-flow/model-defaults'
 import type { BuildPreview } from '@shared/agent-flow/builder'
 import { useEngineStore } from '../engine/store'
-import { runWorkflow, runWorkflowForNodes, previewWorkflowInputs, runNodeManually, cancelFlowCommandExecution, iterationBodyNodeIds, isDocumentOutputNode } from '../engine/executor'
+import {
+  runWorkflow,
+  runWorkflowForNodes,
+  previewWorkflowInputs,
+  runNodeManually,
+  cancelFlowCommandExecution,
+  iterationBodyNodeIds,
+  isDocumentOutputNode
+} from '../engine/executor'
 import { recoverRunningNodes } from '../engine/recoverVideoRuns'
 import {
   runPreparedFlowNodeCommand,
@@ -474,7 +483,10 @@ export function CanvasEditor({
     const run = (): void => {
       const editor = editorRef.current
       if (!editor) return
-      void runWorkflow(editor, project.id, providers, { requestInput: requestWorkflowInput })
+      void runWorkflow(editor, project.id, providers, {
+        requestInput: requestWorkflowInput,
+        requestInputs: requestWorkflowInputs
+      })
     }
     useEngineStore.getState().register(run)
     return () => {
@@ -522,7 +534,12 @@ export function CanvasEditor({
           if (shape.type !== 'node-card' && shape.type !== 'group') continue
           const bounds = editor.getShapePageBounds(shape.id)
           if (!bounds) continue
-          if (!(bounds.x <= maxX && bounds.maxX >= rect.x && bounds.y <= maxY && bounds.maxY >= rect.y))
+          if (!(
+            bounds.x <= maxX &&
+            bounds.maxX >= rect.x &&
+            bounds.y <= maxY &&
+            bounds.maxY >= rect.y
+          ))
             continue
           // 节点在分组内时，选分组本身，保持 tldraw 选择结构合法。
           const parentId = (shape as { parentId?: unknown }).parentId
@@ -1012,7 +1029,11 @@ export function CanvasEditor({
             }
             if (request.action === 'read-graph') {
               const save = useSaveCoordinator.getState()
-              const view = toGraphView(deriveGraph(editor), request.offset ?? 0, request.limit ?? 100)
+              const view = toGraphView(
+                deriveGraph(editor),
+                request.offset ?? 0,
+                request.limit ?? 100
+              )
               window.api.replyLocalAgentDesktop({
                 requestId: request.requestId,
                 projectId: project.id,
@@ -1027,7 +1048,10 @@ export function CanvasEditor({
               return
             }
             // ── F6 chat.patch：对话节点会话/消息结构编辑（与 GUI 同一 chat-data 解析）──
-            if (request.action === 'graph-patch' && (request.ops ?? []).some((op) => (op as { action?: string }).action === 'chat.patch')) {
+            if (
+              request.action === 'graph-patch' &&
+              (request.ops ?? []).some((op) => (op as { action?: string }).action === 'chat.patch')
+            ) {
               const replyFail = (validated: boolean, code: string, detail?: string): void => {
                 window.api.replyLocalAgentDesktop({
                   requestId: request.requestId,
@@ -1053,10 +1077,17 @@ export function CanvasEditor({
               saveTimerRef.current = null
               const preSave = useSaveCoordinator.getState()
               if (preSave.dirtyVersion !== preSave.persistedVersion) await ensureCanvasSaved()
-              if (editorRef.current !== editor || useAppStore.getState().currentProject?.id !== project.id)
+              if (
+                editorRef.current !== editor ||
+                useAppStore.getState().currentProject?.id !== project.id
+              )
                 throw new Error('CANVAS_CHANGED')
               if (graphVersionRef.current !== request.expectedGraphVersion) {
-                replyFail(true, 'REVISION_CONFLICT', `expected ${request.expectedGraphVersion}, current ${graphVersionRef.current}`)
+                replyFail(
+                  true,
+                  'REVISION_CONFLICT',
+                  `expected ${request.expectedGraphVersion}, current ${graphVersionRef.current}`
+                )
                 return
               }
               const admission = await window.api.commitLocalAgentDesktop({
@@ -1064,7 +1095,12 @@ export function CanvasEditor({
                 projectId: project.id,
                 graphVersion: graphVersionRef.current
               })
-              if (!admission.ok || Date.now() >= request.expiresAt || editorRef.current !== editor || useAppStore.getState().currentProject?.id !== project.id)
+              if (
+                !admission.ok ||
+                Date.now() >= request.expiresAt ||
+                editorRef.current !== editor ||
+                useAppStore.getState().currentProject?.id !== project.id
+              )
                 throw new Error('CHAT_PATCH_NOT_ADMITTED')
               // 逐条应用；任一失败按 unknown 核对（准入后语义）。
               for (const entry of chatOps) {
@@ -1119,7 +1155,10 @@ export function CanvasEditor({
               const latest = readNodeRunRecord(target.meta?.nodeRun)
               const history = readNodeRunHistory(target.meta?.nodeRunHistory)
               const records = latest
-                ? [latest, ...history.filter((record) => record.runId !== latest.runId)].slice(0, 13)
+                ? [latest, ...history.filter((record) => record.runId !== latest.runId)].slice(
+                    0,
+                    13
+                  )
                 : history.slice(0, 13)
               window.api.replyLocalAgentDesktop({
                 requestId: request.requestId,
@@ -1143,7 +1182,10 @@ export function CanvasEditor({
             if (request.action === 'confirm-sensitive') {
               const allowed = await useConfirmStore.getState().confirm({
                 title: (request.confirmTitle ?? '外部敏感操作').slice(0, 120),
-                message: (request.confirmMessage ?? '外部 Agent 请求执行一个敏感操作。').slice(0, 1000),
+                message: (request.confirmMessage ?? '外部 Agent 请求执行一个敏感操作。').slice(
+                  0,
+                  1000
+                ),
                 confirmText: (request.confirmText ?? '允许').slice(0, 40),
                 cancelText: (request.cancelText ?? '拒绝').slice(0, 40)
               })
@@ -1161,8 +1203,10 @@ export function CanvasEditor({
               const target = request.nodeId
                 ? editor.getShape<NodeCardShape>(request.nodeId as TLShapeId)
                 : undefined
-              const isDirector = !!target && target.type === 'node-card' && target.props.nodeType === 'director'
-              const modeLabel = request.publishMode === 'video' ? '预演视频（WebM）' : '静帧画面（PNG）'
+              const isDirector =
+                !!target && target.type === 'node-card' && target.props.nodeType === 'director'
+              const modeLabel =
+                request.publishMode === 'video' ? '预演视频（WebM）' : '静帧画面（PNG）'
               const allowed = isDirector
                 ? await useConfirmStore.getState().confirm({
                     title: '外部发布请求：导演台',
@@ -1280,7 +1324,13 @@ export function CanvasEditor({
                 })
               }
               const bindings = useGatewayStore.getState().modelBindings
-              const planned = planGraphPatch(editor, request.ops, bindings, request.mediaResolutions, request.compositeResolutions)
+              const planned = planGraphPatch(
+                editor,
+                request.ops,
+                bindings,
+                request.mediaResolutions,
+                request.compositeResolutions
+              )
               if (!planned.ok) {
                 // 校验失败发生在任何变更之前：整批不留半图。
                 replyFail(true, planned.issue.code, planned.issue.detail)
@@ -1319,7 +1369,13 @@ export function CanvasEditor({
               )
                 throw new Error('PATCH_NOT_ADMITTED')
               // 准入与校验之间用户可能继续编辑：整批重新校验；此时失败按 unknown 核对。
-              const replanned = planGraphPatch(editor, request.ops, bindings, request.mediaResolutions, request.compositeResolutions)
+              const replanned = planGraphPatch(
+                editor,
+                request.ops,
+                bindings,
+                request.mediaResolutions,
+                request.compositeResolutions
+              )
               if (!replanned.ok) {
                 replyFail(false, replanned.issue.code, replanned.issue.detail)
                 return
@@ -1473,9 +1529,7 @@ export function CanvasEditor({
                 const detail = error instanceof Error ? error.message : '建图提交失败'
                 // 未写入任何建图节点 = 准入前失败（可安全 failed）；已写入但保存/确认失败
                 // = unknown，由 main 按已保存图核对，不能报成功。
-                const applied = preview.nodes.some((node) =>
-                  editor.getShape(node.id as TLShapeId)
-                )
+                const applied = preview.nodes.some((node) => editor.getShape(node.id as TLShapeId))
                 replyFail(
                   !applied,
                   applied ? 'FLOW_BUILD_COMMIT_FAILED' : 'FLOW_BUILD_COMMIT_REJECTED',
@@ -2697,7 +2751,9 @@ export function CanvasEditor({
     }
     disposers.push(
       editor.sideEffects.registerAfterCreateHandler('shape', markBackdropLayoutDirty),
-      editor.sideEffects.registerAfterChangeHandler('shape', (_, shape) => markBackdropLayoutDirty(shape)),
+      editor.sideEffects.registerAfterChangeHandler('shape', (_, shape) =>
+        markBackdropLayoutDirty(shape)
+      ),
       editor.sideEffects.registerAfterDeleteHandler('shape', markBackdropLayoutDirty),
       editor.sideEffects.registerOperationCompleteHandler(() => {
         if (!backdropLayoutDirty) return
@@ -3050,6 +3106,7 @@ export function CanvasEditor({
       onPasteCapture={(e) => void handlePaste(e)}
     >
       <WorkflowInputDialog />
+      <WorkflowInputsDialog />
       {savePaused && (
         <div className="save-paused-banner" role="alert">
           <span>
@@ -3080,7 +3137,12 @@ export function CanvasEditor({
         <GroupOutlineLayer
           editor={editorInstance}
           hostRef={wrapRef}
-          onRunFlow={(ids) => void runWorkflowForNodes(editorInstance, project.id, providers, ids, { requestInput: requestWorkflowInput })}
+          onRunFlow={(ids) =>
+            void runWorkflowForNodes(editorInstance, project.id, providers, ids, {
+              requestInput: requestWorkflowInput,
+              requestInputs: requestWorkflowInputs
+            })
+          }
         />
       )}
       {editorInstance && <DataEdgeLayer editor={editorInstance} />}
@@ -3239,7 +3301,12 @@ export function CanvasEditor({
       {editorInstance && (
         <MultiSelectToolbar
           editor={editorInstance}
-          onRunFlow={(ids) => void runWorkflowForNodes(editorInstance, project.id, providers, ids, { requestInput: requestWorkflowInput })}
+          onRunFlow={(ids) =>
+            void runWorkflowForNodes(editorInstance, project.id, providers, ids, {
+              requestInput: requestWorkflowInput,
+              requestInputs: requestWorkflowInputs
+            })
+          }
           onSaveWorkflow={(ids) => setWorkflowSaveSelection(ids)}
         />
       )}

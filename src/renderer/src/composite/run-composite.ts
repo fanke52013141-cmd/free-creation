@@ -47,7 +47,9 @@ export function runCompositeIsolated(
   return execute(projectId, providers, request)
 }
 
-function findRunFailure(issues: ReadonlyArray<{ code: string; phase: string; nodeId?: string; portId?: string }>): CompositeRunFailure {
+function findRunFailure(
+  issues: ReadonlyArray<{ code: string; phase: string; nodeId?: string; portId?: string }>
+): CompositeRunFailure {
   const first = issues[0]
   return {
     code: first?.code ?? 'COMPOSITE_RUN_FAILED',
@@ -67,9 +69,15 @@ async function execute(
   // W3 运行期守卫：递归、嵌套深度与展开预算与发布校验同口径拒绝。
   // 拒绝同样写入运行台账（failurePhase=runtime），保证可定位、可审计。
   const budget = checkCompositeRunBudget(manifest, request.parentContext)
-  const runContext = { chain: budget.chain, expandedNodes: budget.expandedNodes }
-  // 每次调用独立运行 ID；request.runId 是外层（父）运行，用于父子关联。
-  const runId = crypto.randomUUID()
+  const headless = request.headless ?? request.parentContext?.headless ?? false
+  const runContext = {
+    chain: budget.chain,
+    expandedNodes: budget.expandedNodes,
+    ...(headless ? { headless: true } : {})
+  }
+  // 每次调用独立运行 ID；request.ownRunId 由 headless 外部入口预分配（供台账轮询）；
+  // request.runId 是外层（父）运行，用于父子关联。
+  const runId = request.ownRunId ?? crypto.randomUUID()
   const parentRunId = request.runId
   const runtimeVersion = compositeRuntimeVersion(manifest)
   const runEditor = createRunEditor()
@@ -77,6 +85,8 @@ async function execute(
   let ledgerFinished = false
   let successfulSteps = 0
   let failure: CompositeRunFailure | undefined
+  // 记录因缺少输入等被跳过的内部节点，输出缺失时给出可定位的原因。
+  const skippedNotes: string[] = []
   const report = async (fn: () => Promise<unknown>): Promise<void> => {
     try {
       await fn()
@@ -149,14 +159,22 @@ async function execute(
       const ref =
         parsed.ref ??
         (parsed.capabilityId
-          ? { capabilityId: parsed.capabilityId, version: parsed.version, contentHash: parsed.contentHash }
+          ? {
+              capabilityId: parsed.capabilityId,
+              version: parsed.version,
+              contentHash: parsed.contentHash
+            }
           : undefined)
       if (!ref?.capabilityId || !ref.version) continue
       const result = await window.api.composite.versionGet({
         capabilityId: ref.capabilityId,
         version: ref.version
       })
-      if (!result.ok || !result.data || (ref.contentHash && result.data.contentHash !== ref.contentHash)) {
+      if (
+        !result.ok ||
+        !result.data ||
+        (ref.contentHash && result.data.contentHash !== ref.contentHash)
+      ) {
         failure = { code: 'COMPOSITE_REF_NOT_RESOLVED', phase: 'input', nodeId: node.id }
         const reason = `内部组合节点固定版本引用无法解析：${ref.capabilityId}@${ref.version}`
         await finish('failed', {
@@ -211,7 +229,10 @@ async function execute(
         failure = findRunFailure(planned.issues)
         await finish('failed', {
           errorCode: failure.code,
-          errorMessage: planned.issues.map((issue) => issue.message).join('；').slice(0, 500),
+          errorMessage: planned.issues
+            .map((issue) => issue.message)
+            .join('；')
+            .slice(0, 500),
           failurePhase: failure.phase
         })
         return {
@@ -223,9 +244,7 @@ async function execute(
       }
       for (const binding of planned.bindings) {
         const targetId = shapeByNode.get(binding.target.nodeId)
-        const targetShape = targetId
-          ? runEditor.getShape<NodeCardShape>(targetId)
-          : undefined
+        const targetShape = targetId ? runEditor.getShape<NodeCardShape>(targetId) : undefined
         if (!targetShape) {
           failure = {
             code: 'INPUT_TARGET_MISSING',
@@ -234,7 +253,11 @@ async function execute(
             portId: binding.target.portId
           }
           const reason = `输入「${binding.label}」的目标 ${binding.target.nodeId}.${binding.target.portId} 不存在`
-          await finish('failed', { errorCode: failure.code, errorMessage: reason, failurePhase: 'input' })
+          await finish('failed', {
+            errorCode: failure.code,
+            errorMessage: reason,
+            failurePhase: 'input'
+          })
           return { status: 'failed', reason, failure, stepCount: 0 }
         }
         const sourceId = createVirtualSource(runEditor, binding, targetShape, shapeByNode.size)
@@ -255,7 +278,11 @@ async function execute(
             portId: binding.target.portId
           }
           const reason = `输入「${binding.label}」无法接入 ${binding.target.nodeId}.${binding.target.portId}（端口类型或映射不兼容）`
-          await finish('failed', { errorCode: failure.code, errorMessage: reason, failurePhase: 'input' })
+          await finish('failed', {
+            errorCode: failure.code,
+            errorMessage: reason,
+            failurePhase: 'input'
+          })
           return { status: 'failed', reason, failure, stepCount: 0 }
         }
       }
@@ -265,7 +292,12 @@ async function execute(
       const from = shapeByNode.get(edge.from.nodeId)
       const to = shapeByNode.get(edge.to.nodeId)
       if (!from || !to) {
-        failure = { code: 'INTERNAL_EDGE_MISSING', phase: 'step', nodeId: edge.from.nodeId, portId: edge.from.portId }
+        failure = {
+          code: 'INTERNAL_EDGE_MISSING',
+          phase: 'step',
+          nodeId: edge.from.nodeId,
+          portId: edge.from.portId
+        }
         await finish('failed', { errorCode: failure.code, failurePhase: 'step' })
         return { status: 'failed', reason: '内部连线映射缺失', failure, stepCount: successfulSteps }
       }
@@ -277,9 +309,18 @@ async function execute(
           false
         )
       ) {
-        failure = { code: 'INTERNAL_EDGE_INVALID', phase: 'step', nodeId: edge.from.nodeId, portId: edge.from.portId }
+        failure = {
+          code: 'INTERNAL_EDGE_INVALID',
+          phase: 'step',
+          nodeId: edge.from.nodeId,
+          portId: edge.from.portId
+        }
         const reason = `内部连线创建失败：${edge.from.nodeId}.${edge.from.portId} -> ${edge.to.nodeId}.${edge.to.portId}`
-        await finish('failed', { errorCode: failure.code, errorMessage: reason, failurePhase: 'step' })
+        await finish('failed', {
+          errorCode: failure.code,
+          errorMessage: reason,
+          failurePhase: 'step'
+        })
         return { status: 'failed', reason, failure, stepCount: successfulSteps }
       }
     }
@@ -295,7 +336,15 @@ async function execute(
       await report(() =>
         window.api.composite.runStep({ runId, stepKey: nodeId, nodeType, status: 'running' })
       )
-      const result = await runNodeManually(runEditor, projectId, providers, shapeId, undefined, undefined, runContext)
+      const result = await runNodeManually(
+        runEditor,
+        projectId,
+        providers,
+        shapeId,
+        undefined,
+        undefined,
+        runContext
+      )
       await report(() =>
         window.api.composite.runStep({
           runId,
@@ -319,6 +368,11 @@ async function execute(
           stepCount: successfulSteps
         }
       }
+      if (result.status === 'skipped') {
+        skippedNotes.push(
+          `内部节点「${nodeType || nodeId}」被跳过${result.reason ? `：${result.reason}` : '（缺少必要输入）'}`
+        )
+      }
       successfulSteps += 1
     }
 
@@ -334,11 +388,18 @@ async function execute(
       }
       failure = { code: 'REQUIRED_OUTPUT_MISSING', phase: 'output' }
       const reason = '节点流没有产生可投影的公开输出'
-      await finish('failed', { errorCode: 'NO_OUTPUT', errorMessage: reason, failurePhase: 'output' })
+      await finish('failed', {
+        errorCode: 'NO_OUTPUT',
+        errorMessage: reason,
+        failurePhase: 'output'
+      })
       return { status: 'failed', reason, failure, stepCount: successfulSteps }
     }
 
-    const read = (nodeId: string, portId: string): import('@shared/engine/values').NodeValue | undefined => {
+    const read = (
+      nodeId: string,
+      portId: string
+    ): import('@shared/engine/values').NodeValue | undefined => {
       const shapeId = shapeByNode.get(nodeId)
       const shape = shapeId ? runEditor.getShape<NodeCardShape>(shapeId) : undefined
       if (!shape) return undefined
@@ -347,7 +408,9 @@ async function execute(
     const collected = collectCompositeOutputs(manifest, read)
     if (collected.issues.length > 0) {
       failure = findRunFailure(collected.issues)
-      const reason = collected.issues.map((issue) => issue.message).join('；')
+      const outputReason = collected.issues.map((issue) => issue.message).join('；')
+      const reason =
+        skippedNotes.length > 0 ? `${skippedNotes.join('；')}。${outputReason}` : outputReason
       await finish('failed', {
         errorCode: failure.code,
         errorMessage: reason,
@@ -359,7 +422,8 @@ async function execute(
       window.api.composite.runFinish({
         runId,
         status: 'completed',
-        outputPorts: compositeOutputSummary(manifest, collected.outputs)
+        outputPorts: compositeOutputSummary(manifest, collected.outputs),
+        ...(headless ? { outputValues: collected.outputs } : {})
       })
     )
     ledgerFinished = true
@@ -418,7 +482,14 @@ function applyLegacyInputs(
         h: 260
       }
     })
-    if (!createEdge(editor, { shapeId: sourceId, portId: 'out-text' }, { shapeId: targetShape.id, portId: target.portId }, false))
+    if (
+      !createEdge(
+        editor,
+        { shapeId: sourceId, portId: 'out-text' },
+        { shapeId: targetShape.id, portId: target.portId },
+        false
+      )
+    )
       return `输入「${input.label}」无法接入 ${target.nodeId}.${target.portId}`
   }
   return null

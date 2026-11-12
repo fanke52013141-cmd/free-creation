@@ -25,6 +25,7 @@ import { useAppStore } from '../stores/app'
 import { ChatSkillAgentSettings } from '../nodes/specs/bodies/SkillAgentSettings'
 import { gatherUpstreamText } from './graph'
 import { runNodeManually } from '../engine/executor'
+import { guiWorkflowInputOptions } from '../stores/workflowInput'
 import { toast } from '../stores/toast'
 import { Icon } from '../components/Icon'
 import { AppSelect } from '../components/AppSelect'
@@ -457,7 +458,16 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
     setDraftImages([])
     setRunning(true)
     try {
-      await runNodeManually(editor, project.id, providers, shapeId)
+      await runNodeManually(
+        editor,
+        project.id,
+        providers,
+        shapeId,
+        undefined,
+        undefined,
+        undefined,
+        guiWorkflowInputOptions
+      )
     } finally {
       setRunning(false)
     }
@@ -501,7 +511,16 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
       return toast('请先在设置中选择对话模型')
     setRunning(true)
     try {
-      await runNodeManually(editor, project.id, providers, shapeId)
+      await runNodeManually(
+        editor,
+        project.id,
+        providers,
+        shapeId,
+        undefined,
+        undefined,
+        undefined,
+        guiWorkflowInputOptions
+      )
     } finally {
       setRunning(false)
     }
@@ -517,7 +536,16 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
     update(next)
     setRunning(true)
     try {
-      await runNodeManually(editor, project.id, providers, shapeId)
+      await runNodeManually(
+        editor,
+        project.id,
+        providers,
+        shapeId,
+        undefined,
+        undefined,
+        undefined,
+        guiWorkflowInputOptions
+      )
     } finally {
       setRunning(false)
     }
@@ -668,7 +696,9 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
         </label>
       )}
       <label>
-        <span className="chat-dialog-parameter-name">温度 <output>{data.temperature.toFixed(2)}</output></span>
+        <span className="chat-dialog-parameter-name">
+          温度 <output>{data.temperature.toFixed(2)}</output>
+        </span>
         <input
           type="range"
           min={0}
@@ -679,7 +709,9 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
         />
       </label>
       <label>
-        <span className="chat-dialog-parameter-name">最大输出 <output>{data.maxTokens}</output></span>
+        <span className="chat-dialog-parameter-name">
+          最大输出 <output>{data.maxTokens}</output>
+        </span>
         <input
           type="range"
           min={256}
@@ -820,7 +852,13 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                 return (
                   <article
                     className={`chat-dialog-message ${message.role}${isStreaming && message.content ? ' is-streaming' : ''}`}
-                    aria-label={message.role === 'user' ? '用户消息' : message.role === 'assistant' ? '助手消息' : '系统消息'}
+                    aria-label={
+                      message.role === 'user'
+                        ? '用户消息'
+                        : message.role === 'assistant'
+                          ? '助手消息'
+                          : '系统消息'
+                    }
                     key={`${index}-${message.content.slice(0, 24)}`}
                   >
                     <div className="chat-dialog-message-meta">

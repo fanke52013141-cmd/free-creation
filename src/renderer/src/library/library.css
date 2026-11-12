@@ -252,18 +252,18 @@
   transition: background-color 150ms ease, box-shadow 150ms ease, color 150ms ease, transform 150ms ease;
 }
 .library-primary {
-  color: #06283d;
-  background: var(--brand);
-  box-shadow: 0 4px 12px rgba(47, 174, 234, 0.28);
+  color: var(--primary-ink);
+  background: var(--primary-grad);
+  box-shadow: var(--primary-glow);
 }
-.library-primary:hover { background: #5fc8fb; }
+.library-primary:hover { background: var(--primary-grad-hover); box-shadow: var(--primary-glow-hover); }
 .library-primary:active { transform: translateY(1px); }
 .library-primary-icon {
   display: grid;
   place-items: center;
   width: 20px;
   height: 20px;
-  color: #06283d;
+  color: var(--primary-ink);
 }
 .library-secondary {
   color: var(--muted);
@@ -922,15 +922,16 @@
   flex: 0 0 auto;
   min-height: 36px;
   padding: 0 15px;
-  color: #06283d;
-  background: var(--brand);
+  color: var(--primary-ink);
+  background: var(--primary-grad);
   border-radius: 8px;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
+  box-shadow: var(--primary-glow);
   transition: background-color 150ms ease;
 }
-.library-use-row button:hover { background: #5fc8fb; }
+.library-use-row button:hover { background: var(--primary-grad-hover); box-shadow: var(--primary-glow-hover); }
 .library-use-row button:disabled { opacity: 0.45; cursor: default; }
 
 /* 详情底部操作：左侧归档（含说明），右侧主操作。 */
@@ -1048,11 +1049,11 @@
   background: rgba(255, 255, 255, 0.08);
 }
 .library-form-primary {
-  color: #06283d;
-  background: var(--brand);
-  box-shadow: 0 4px 12px rgba(47, 174, 234, 0.26);
+  color: var(--primary-ink);
+  background: var(--primary-grad);
+  box-shadow: var(--primary-glow);
 }
-.library-form-primary:hover { background: #5fc8fb; }
+.library-form-primary:hover { background: var(--primary-grad-hover); box-shadow: var(--primary-glow-hover); }
 .library-form-footer button:disabled { opacity: 0.5; cursor: wait; }
 
 /* 表单字段 */
@@ -1967,5 +1968,3 @@
   line-height: 1.6;
 }
 .composite-body-meta { color: var(--txt-secondary, var(--muted)); }
-
-.composite-card-actions { display: flex; gap: 4px; margin-top: 4px; }

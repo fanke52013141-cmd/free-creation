@@ -176,6 +176,14 @@ const EXTERNAL_ONLY_OPERATIONS = new Map([
   [
     'node.library.update',
     'GUI 节点库面板当前没有重命名入口；外部重命名复用同一 store 写口，待 GUI 补同入口或下线该操作'
+  ],
+  [
+    'composite.execute',
+    'headless 节点流执行：脱离项目/画布按公开输入直接运行，复用 runCompositeIsolated 隔离执行器；GUI 经画布实例运行（node.execute），无"免项目执行"按钮，属外部专用能力入口'
+  ],
+  [
+    'composite.execute.wait',
+    'headless 执行终态轮询：composite.execute 的便捷等待封装，按 runId 读同一运行台账；随 composite.execute 同为外部专用入口'
   ]
 ])
 

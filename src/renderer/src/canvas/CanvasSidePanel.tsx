@@ -13,7 +13,7 @@ import {
   type IndexedNodeRun,
   type RunStatusFilter
 } from '../engine/run-index'
-import { requestWorkflowInput } from '../stores/workflowInput'
+import { requestWorkflowInput, guiWorkflowInputOptions } from '../stores/workflowInput'
 import { useEngineStore } from '../engine/store'
 import { runNodeManually, runWorkflowForNodes } from '../engine/executor'
 import { useGatewayStore } from '../stores/gateway'
@@ -188,13 +188,19 @@ function WorkflowPanel({
     )
   }
 
-  const insertComposite = async (capability: CompositeCapabilitySummary): Promise<void> => {
+  const insertComposite = async (
+    capability: CompositeCapabilitySummary,
+    dropScreen?: { x: number; y: number }
+  ): Promise<void> => {
     if (!editor) return
     const version = capability.latestVersion
     if (!version) return toast('该组合还没有已发布版本')
     const result = await window.api.composite.versionGet({ capabilityId: capability.id, version })
     if (!result.ok || !result.data) return toast('读取组合版本失败')
-    const center = editor.getViewportPageBounds().center
+    // 拖拽落在光标处，点击放在视口中心。
+    const center = dropScreen
+      ? editor.screenToPage(dropScreen)
+      : editor.getViewportPageBounds().center
     const id = createShapeId()
     markUndoPoint(editor, 'insert-composite-node')
     editor.createShape({
@@ -291,56 +297,14 @@ function WorkflowPanel({
         ) : (
           <div className="assets-grid">
             {visibleComposites.map((capability) => (
-              <article
+              <CompositeCard
                 key={`composite-${capability.id}`}
-                className="asset-card"
-                title={`点击添加组合节点：${capability.id}@${capability.latestVersion ?? ''}`}
-                onClick={() => void insertComposite(capability)}
-              >
-                <LibraryCardCover icon="layers" compact />
-                <div className="asset-info">
-                  <span className="asset-name" title={capability.name}>
-                    {capability.name}
-                  </span>
-                </div>
-                {/* 与资产卡片一致：悬浮才显示动作（删除 / 编辑节点 / 编辑）。 */}
-                <span className="composite-card-actions">
-                  <button
-                    type="button"
-                    className="btn-ghost small composite-card-delete"
-                    title="删除节点流（先检查引用，再二次确认）"
-                    aria-label={`删除 ${capability.name}`}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      void handleDeleteComposite(capability)
-                    }}
-                  >
-                    删除
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost small"
-                    title="铺开画布编辑内部节点：可添加任意节点、调整内容与连线"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      void openCanvasEdit(capability)
-                    }}
-                  >
-                    编辑节点
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost small"
-                    title="编辑名称与说明（与创建时同一弹窗，不产生新版本）"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      setSettingsDialog(capability)
-                    }}
-                  >
-                    编辑
-                  </button>
-                </span>
-              </article>
+                capability={capability}
+                onInsert={(dropScreen) => void insertComposite(capability, dropScreen)}
+                onEditNodes={() => void openCanvasEdit(capability)}
+                onEditInfo={() => setSettingsDialog(capability)}
+                onDelete={() => void handleDeleteComposite(capability)}
+              />
             ))}
             {visibleTemplates.map((tmpl) => (
               <WorkflowCard
@@ -372,6 +336,79 @@ function WorkflowPanel({
         />
       )}
     </>
+  )
+}
+
+/** 组合能力卡片：与资产中心一致的悬浮纯图标动作；点击/拖拽到画布即插入固定版本实例。 */
+function CompositeCard({
+  capability,
+  onInsert,
+  onEditNodes,
+  onEditInfo,
+  onDelete
+}: {
+  capability: CompositeCapabilitySummary
+  onInsert: (dropScreen?: { x: number; y: number }) => void
+  onEditNodes: () => void
+  onEditInfo: () => void
+  onDelete: () => void
+}): React.JSX.Element {
+  const { startDrag, handleClick } = useDragToCanvas()
+  return (
+    <article
+      className="asset-card"
+      title="点击添加到画布，或直接拖到画布"
+      onPointerDown={(e) =>
+        startDrag(e, { label: capability.name, icon: 'layers' }, (x, y) => onInsert({ x, y }))
+      }
+      onClick={() => handleClick(() => onInsert())}
+    >
+      <LibraryCardCover icon="layers" compact />
+      <button
+        type="button"
+        className="composite-card-edit"
+        title="铺开画布编辑内部节点：可添加任意节点、调整内容与连线"
+        aria-label={`编辑节点 ${capability.name}`}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation()
+          onEditNodes()
+        }}
+      >
+        <Icon name="edit" size={12} />
+      </button>
+      <button
+        type="button"
+        className="composite-card-settings"
+        title="编辑名称与说明（与创建时同一弹窗，不产生新版本）"
+        aria-label={`编辑信息 ${capability.name}`}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation()
+          onEditInfo()
+        }}
+      >
+        <Icon name="settings" size={12} />
+      </button>
+      <div className="asset-info">
+        <span className="asset-name" title={capability.name}>
+          {capability.name}
+        </span>
+      </div>
+      <button
+        type="button"
+        className="asset-delete"
+        title="删除节点流（先检查引用，再二次确认）"
+        aria-label={`删除 ${capability.name}`}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation()
+          onDelete()
+        }}
+      >
+        <Icon name="trash" size={12} />
+      </button>
+    </article>
   )
 }
 
@@ -503,7 +540,16 @@ function RunsPanel({
     if (!shape || shape.type !== 'node-card') return toast('来源节点已删除或不可用')
     setRetrying(run.runId)
     try {
-      await runNodeManually(editor, projectId, providers, shape.id)
+      await runNodeManually(
+        editor,
+        projectId,
+        providers,
+        shape.id,
+        undefined,
+        undefined,
+        undefined,
+        guiWorkflowInputOptions
+      )
     } finally {
       setRetrying(null)
     }

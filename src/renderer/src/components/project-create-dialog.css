@@ -551,14 +551,15 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  color: #06283d;
-  background: var(--brand);
+  color: var(--primary-ink);
+  background: var(--primary-grad);
   border: 0;
-  box-shadow: 0 0 12px color-mix(in srgb, var(--brand) 30%, transparent);
+  box-shadow: var(--primary-glow);
 }
 
 .project-create-submit:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--brand) 86%, white);
+  background: var(--primary-grad-hover);
+  box-shadow: var(--primary-glow-hover);
 }
 .project-create-cancel:disabled,
 .project-create-submit:disabled {

@@ -7,10 +7,20 @@ import { toast } from '../../../stores/toast'
 import { countIncomingConnections } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
+import { guiWorkflowInputOptions } from '../../../stores/workflowInput'
 import { useAppStore } from '../../../stores/app'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
-import { MINIMAX_CLONE_MAX_BYTES, MINIMAX_CLONE_MAX_SECONDS, MINIMAX_CLONE_MIN_SECONDS, MINIMAX_CLONE_PROMPT_MAX_SECONDS, MINIMAX_VOICE_CLONE_MODELS, isValidMiniMaxVoiceId, parseTtsConfig, type TtsConfig } from '@shared/tts'
+import {
+  MINIMAX_CLONE_MAX_BYTES,
+  MINIMAX_CLONE_MAX_SECONDS,
+  MINIMAX_CLONE_MIN_SECONDS,
+  MINIMAX_CLONE_PROMPT_MAX_SECONDS,
+  MINIMAX_VOICE_CLONE_MODELS,
+  isValidMiniMaxVoiceId,
+  parseTtsConfig,
+  type TtsConfig
+} from '@shared/tts'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { parseNodeExtra } from '../../nodeValues'
 import { pickImportedAsset } from './shared'
@@ -26,38 +36,73 @@ export function TtsBody({ shape }: NodeBodyProps): React.JSX.Element {
   const [playing, setPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const models = modelsByModality(providers, 'audio').filter(
-    (option) => option.provider.specId === 'minimax' && MINIMAX_VOICE_CLONE_MODELS.includes(option.model.id)
+    (option) =>
+      option.provider.specId === 'minimax' && MINIMAX_VOICE_CLONE_MODELS.includes(option.model.id)
   )
-  const selected = models.find((option) => option.provider.id === config.providerId && option.model.id === config.modelId)
-    ?? (!config.providerId ? models[0] : undefined)
+  const selected =
+    models.find(
+      (option) => option.provider.id === config.providerId && option.model.id === config.modelId
+    ) ?? (!config.providerId ? models[0] : undefined)
   const profile = parseNodeExtra(shape.meta?.nodeExtra)['out-json']
-  const voiceId = profile && typeof profile === 'object' && !Array.isArray(profile)
-    ? String((profile as { voice_id?: unknown }).voice_id ?? '') : ''
+  const voiceId =
+    profile && typeof profile === 'object' && !Array.isArray(profile)
+      ? String((profile as { voice_id?: unknown }).voice_id ?? '')
+      : ''
   const invalidId = Boolean(config.voiceId.trim()) && !isValidMiniMaxVoiceId(config.voiceId.trim())
   const incomingRef = countIncomingConnections(editor, shape.id, 'in-audio')
 
-  useEffect(() => { if (!loaded) void loadProviders() }, [loaded, loadProviders])
+  useEffect(() => {
+    if (!loaded) void loadProviders()
+  }, [loaded, loadProviders])
   useEffect(() => () => audioRef.current?.pause(), [])
 
   const updateConfig = (patch: Partial<TtsConfig>): void => {
-    editor.updateShape({ id: shape.id, type: 'node-card', props: { config: JSON.stringify({ ...config, ...patch }) } })
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { config: JSON.stringify({ ...config, ...patch }) }
+    })
   }
 
   const uploadAudio = async (prompt: boolean): Promise<void> => {
     if (!project) return toast('项目未就绪')
     const response = await window.api.pickMedia(project.id)
     if (!response.ok) return toast(`上传失败：${response.error.message}`)
-    const asset = pickImportedAsset({ result: response.data, kind: 'audio', noun: prompt ? '一段辅助提示音' : '一段参考语音', mismatch: '请选择音频文件', projectId: project.id })
+    const asset = pickImportedAsset({
+      result: response.data,
+      kind: 'audio',
+      noun: prompt ? '一段辅助提示音' : '一段参考语音',
+      mismatch: '请选择音频文件',
+      projectId: project.id
+    })
     if (!asset) return
     const extension = asset.path.slice(asset.path.lastIndexOf('.')).toLowerCase()
     if (!['.mp3', '.m4a', '.wav'].includes(extension) || asset.sizeBytes > MINIMAX_CLONE_MAX_BYTES)
       return toast('仅支持 20 MB 以内的 mp3、m4a 或 wav 音频')
     if (typeof asset.durationSec === 'number' && asset.durationSec > 0) {
-      if (prompt && asset.durationSec >= MINIMAX_CLONE_PROMPT_MAX_SECONDS) return toast('辅助提示音必须短于 8 秒')
-      if (!prompt && (asset.durationSec < MINIMAX_CLONE_MIN_SECONDS || asset.durationSec > MINIMAX_CLONE_MAX_SECONDS)) return toast('参考语音须为 10 秒至 5 分钟')
+      if (prompt && asset.durationSec >= MINIMAX_CLONE_PROMPT_MAX_SECONDS)
+        return toast('辅助提示音必须短于 8 秒')
+      if (
+        !prompt &&
+        (asset.durationSec < MINIMAX_CLONE_MIN_SECONDS ||
+          asset.durationSec > MINIMAX_CLONE_MAX_SECONDS)
+      )
+        return toast('参考语音须为 10 秒至 5 分钟')
     }
-    if (prompt) updateConfig({ promptMediaId: asset.id, promptMediaPath: asset.path, promptMediaMime: asset.mime, promptMediaName: asset.name ?? '辅助提示音' })
-    else updateConfig({ refMediaId: asset.id, refMediaPath: asset.path, refMediaMime: asset.mime, refMediaName: asset.name ?? '参考语音' })
+    if (prompt)
+      updateConfig({
+        promptMediaId: asset.id,
+        promptMediaPath: asset.path,
+        promptMediaMime: asset.mime,
+        promptMediaName: asset.name ?? '辅助提示音'
+      })
+    else
+      updateConfig({
+        refMediaId: asset.id,
+        refMediaPath: asset.path,
+        refMediaMime: asset.mime,
+        refMediaName: asset.name ?? '参考语音'
+      })
   }
 
   const clone = async (): Promise<void> => {
@@ -65,8 +110,20 @@ export function TtsBody({ shape }: NodeBodyProps): React.JSX.Element {
     if (!selected) return toast('请选择 MiniMax 语音模型')
     updateConfig({ providerId: selected.provider.id, modelId: selected.model.id })
     setBusy(true)
-    try { await runNodeManually(editor, project.id, providers, shape.id) }
-    finally { setBusy(false) }
+    try {
+      await runNodeManually(
+        editor,
+        project.id,
+        providers,
+        shape.id,
+        undefined,
+        undefined,
+        undefined,
+        guiWorkflowInputOptions
+      )
+    } finally {
+      setBusy(false)
+    }
   }
 
   const toggleReference = (): void => {
@@ -77,35 +134,133 @@ export function TtsBody({ shape }: NodeBodyProps): React.JSX.Element {
     audioRef.current = audio
     audio.onpause = () => setPlaying(false)
     audio.onended = () => setPlaying(false)
-    void audio.play().then(() => setPlaying(true)).catch(() => toast('参考语音播放失败'))
+    void audio
+      .play()
+      .then(() => setPlaying(true))
+      .catch(() => toast('参考语音播放失败'))
   }
 
-  return <div className="node-tts node-tts-clone">
-    {config.refMediaId && <div className="tts-section tts-reference-section">
-      <NodeSectionTitle>参考语音</NodeSectionTitle>
-      <div className="tts-ref-player">
-        <button className="audio-play-btn tts-ref-play" aria-label={playing ? '暂停参考语音' : '试听参考语音'} onPointerDown={stopEventPropagation} onClick={(event) => { event.stopPropagation(); toggleReference() }}><Icon name={playing ? 'pause' : 'play'} size={15} /></button>
-        <span className="tts-ref-name">{config.refMediaName || '参考语音'}</span>
-        <button className="btn-ghost small" onPointerDown={stopEventPropagation} onClick={(event) => { event.stopPropagation(); audioRef.current?.pause(); audioRef.current = null; updateConfig({ refMediaId: '', refMediaPath: '', refMediaMime: '', refMediaName: '' }) }}>移除</button>
+  return (
+    <div className="node-tts node-tts-clone">
+      {config.refMediaId && (
+        <div className="tts-section tts-reference-section">
+          <NodeSectionTitle>参考语音</NodeSectionTitle>
+          <div className="tts-ref-player">
+            <button
+              className="audio-play-btn tts-ref-play"
+              aria-label={playing ? '暂停参考语音' : '试听参考语音'}
+              onPointerDown={stopEventPropagation}
+              onClick={(event) => {
+                event.stopPropagation()
+                toggleReference()
+              }}
+            >
+              <Icon name={playing ? 'pause' : 'play'} size={15} />
+            </button>
+            <span className="tts-ref-name">{config.refMediaName || '参考语音'}</span>
+            <button
+              className="btn-ghost small"
+              onPointerDown={stopEventPropagation}
+              onClick={(event) => {
+                event.stopPropagation()
+                audioRef.current?.pause()
+                audioRef.current = null
+                updateConfig({
+                  refMediaId: '',
+                  refMediaPath: '',
+                  refMediaMime: '',
+                  refMediaName: ''
+                })
+              }}
+            >
+              移除
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="tts-section tts-engine-section">
+        <NodeSectionTitle>MiniMax 音色克隆</NodeSectionTitle>
+        <AppSelect
+          className="gen-select"
+          aria-label="MiniMax 语音模型"
+          value={selected?.key ?? ''}
+          onPointerDown={(event) => event.stopPropagation()}
+          onChange={(event) => {
+            const next = models.find((option) => option.key === event.target.value)
+            if (next) updateConfig({ providerId: next.provider.id, modelId: next.model.id })
+          }}
+        >
+          <option value="">选择 MiniMax 模型…</option>
+          {models.map((option) => (
+            <option key={option.key} value={option.key}>
+              {option.label}
+            </option>
+          ))}
+        </AppSelect>
+        {loaded && !models.length && <span>请前往项目首页的模型设置添加 MiniMax 模型</span>}
+        <input
+          className="gen-input"
+          aria-label="自定义音色 ID"
+          placeholder="可选：自定义音色 ID"
+          value={config.voiceId}
+          onPointerDown={(event) => event.stopPropagation()}
+          onChange={(event) => updateConfig({ voiceId: event.target.value })}
+        />
+        {invalidId && (
+          <small className="gen-capability-note error">
+            音色 ID 需 8～256 位，以字母开头，末位不能是 - 或 _。
+          </small>
+        )}
+        <input
+          className="gen-input"
+          aria-label="参考语音原文"
+          placeholder="可选：参考语音原文，用于内容校验"
+          value={config.textValidation}
+          onPointerDown={(event) => event.stopPropagation()}
+          onChange={(event) => updateConfig({ textValidation: event.target.value.slice(0, 200) })}
+        />
       </div>
-    </div>}
-    <div className="tts-section tts-engine-section">
-      <NodeSectionTitle>MiniMax 音色克隆</NodeSectionTitle>
-      <AppSelect className="gen-select" aria-label="MiniMax 语音模型" value={selected?.key ?? ''} onPointerDown={(event) => event.stopPropagation()} onChange={(event) => {
-        const next = models.find((option) => option.key === event.target.value)
-        if (next) updateConfig({ providerId: next.provider.id, modelId: next.model.id })
-      }}><option value="">选择 MiniMax 模型…</option>{models.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</AppSelect>
-      {loaded && !models.length && <span>请前往项目首页的模型设置添加 MiniMax 模型</span>}
-      <input className="gen-input" aria-label="自定义音色 ID" placeholder="可选：自定义音色 ID" value={config.voiceId} onPointerDown={(event) => event.stopPropagation()} onChange={(event) => updateConfig({ voiceId: event.target.value })} />
-      {invalidId && <small className="gen-capability-note error">音色 ID 需 8～256 位，以字母开头，末位不能是 - 或 _。</small>}
-      <input className="gen-input" aria-label="参考语音原文" placeholder="可选：参考语音原文，用于内容校验" value={config.textValidation} onPointerDown={(event) => event.stopPropagation()} onChange={(event) => updateConfig({ textValidation: event.target.value.slice(0, 200) })} />
-    </div>
-    <NodePrimaryButton variant="secondary" onPointerDown={stopEventPropagation} onClick={(event) => { event.stopPropagation(); void uploadAudio(false) }}>{config.refMediaId ? '替换参考语音' : '上传参考语音'}</NodePrimaryButton>
-    {/* 2026-11-02 用户裁决：去掉「添加辅助提示音」——它和参考语音在上传上重复，
+      <NodePrimaryButton
+        variant="secondary"
+        onPointerDown={stopEventPropagation}
+        onClick={(event) => {
+          event.stopPropagation()
+          void uploadAudio(false)
+        }}
+      >
+        {config.refMediaId ? '替换参考语音' : '上传参考语音'}
+      </NodePrimaryButton>
+      {/* 2026-11-02 用户裁决：去掉「添加辅助提示音」——它和参考语音在上传上重复，
         克隆只需要一段参考语音；配置里的 prompt 字段保留以兼容旧项目与网关协议。 */}
-    <NodePrimaryButton disabled={busy || !selected || (incomingRef === 0 && !config.refMediaId) || invalidId} onPointerDown={stopEventPropagation} onClick={(event) => { event.stopPropagation(); void clone() }}>{busy ? '克隆中…' : '克隆音色'}</NodePrimaryButton>
-    {voiceId && <div className="tts-section voice-id-card"><NodeSectionTitle>已生成音色 ID</NodeSectionTitle>
-      <div className="voice-id-row"><code className="voice-id-value">{voiceId}</code><button className="btn-ghost small" onPointerDown={stopEventPropagation} onClick={(event) => { event.stopPropagation(); void navigator.clipboard.writeText(voiceId).then(() => toast('已复制音色 ID')) }}>复制</button></div>
-      <small>将右侧音色档案端口连接到“语音合成”节点，再输入要朗读的文字。</small></div>}
-  </div>
+      <NodePrimaryButton
+        disabled={busy || !selected || (incomingRef === 0 && !config.refMediaId) || invalidId}
+        onPointerDown={stopEventPropagation}
+        onClick={(event) => {
+          event.stopPropagation()
+          void clone()
+        }}
+      >
+        {busy ? '克隆中…' : '克隆音色'}
+      </NodePrimaryButton>
+      {voiceId && (
+        <div className="tts-section voice-id-card">
+          <NodeSectionTitle>已生成音色 ID</NodeSectionTitle>
+          <div className="voice-id-row">
+            <code className="voice-id-value">{voiceId}</code>
+            <button
+              className="btn-ghost small"
+              onPointerDown={stopEventPropagation}
+              onClick={(event) => {
+                event.stopPropagation()
+                void navigator.clipboard.writeText(voiceId).then(() => toast('已复制音色 ID'))
+              }}
+            >
+              复制
+            </button>
+          </div>
+          <small>将右侧音色档案端口连接到“语音合成”节点，再输入要朗读的文字。</small>
+        </div>
+      )}
+    </div>
+  )
 }

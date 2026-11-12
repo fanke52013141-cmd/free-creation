@@ -582,6 +582,8 @@ const api = {
       failurePhase?: string
       /** 已产生的公开输出端口（只记 portId/kind，不记正文）。 */
       outputPorts?: Array<{ portId: string; kind: string }>
+      /** headless 执行的完整公开输出（按公开端口 ID 的 NodeValue）。 */
+      outputValues?: Record<string, unknown>
     }): Promise<IpcEnvelope<boolean>> => ipcRenderer.invoke(IPC.composite.runFinish, input),
     runGet: (runId: string): Promise<IpcEnvelope<unknown>> =>
       ipcRenderer.invoke(IPC.composite.runGet, runId),

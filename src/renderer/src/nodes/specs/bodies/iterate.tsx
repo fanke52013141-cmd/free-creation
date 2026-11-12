@@ -10,6 +10,7 @@ import { AppSelect } from '../../../components/AppSelect'
 import { NumberStepper } from '../../../components/NumberStepper'
 import { NodePrimaryButton } from '../../../canvas/NodePresentation'
 import { runNodeManually } from '../../../engine/executor'
+import { guiWorkflowInputOptions } from '../../../stores/workflowInput'
 import { useAppStore } from '../../../stores/app'
 import { useGatewayStore } from '../../../stores/gateway'
 import {
@@ -108,7 +109,16 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
     if (!project || busy) return
     setBusy(true)
     try {
-      await runNodeManually(editor, project.id, providers, shape.id)
+      await runNodeManually(
+        editor,
+        project.id,
+        providers,
+        shape.id,
+        undefined,
+        undefined,
+        undefined,
+        guiWorkflowInputOptions
+      )
     } finally {
       setBusy(false)
     }
