@@ -97,28 +97,45 @@ export function AgentFlowRelationLayer({
     const target = byId.get(relation.targetNodeId)
     if (!source || !target) return []
     // 视图只依赖屏幕矩形：关系语义、授权范围和配置都不参与几何计算。
-    return [{ ...relation, ...buildControlRelationGeometry(source, target, rects) }]
+    // L3：返工线偏好下弧，避免与正向控制线挤在同一侧。
+    return [
+      {
+        ...relation,
+        ...buildControlRelationGeometry(source, target, rects, undefined, {
+          preferBottom: relation.kind === 'rework'
+        })
+      }
+    ]
   })
   if (!lines.length) return null
+  // L3 聚焦：选中节点时，两端都不在选区内的关系淡化（只读视图态，不落盘）。
+  const selectedIds = new Set(editor.getSelectedShapes().map((shape) => shape.id as string))
+  const focusActive = selectedIds.size > 0
+  const isDimmed = (line: (typeof lines)[number]): boolean =>
+    focusActive && !selectedIds.has(line.sourceNodeId) && !selectedIds.has(line.targetNodeId)
   const openOwner = (id: string): void => {
     useEdgeSelectionStore.getState().clear()
     editor.select(id as TLShapeId)
     useNodePanelStore.getState().open('contract', id as TLShapeId, 'settings')
   }
+  const CONTROL_KINDS = ['controls', 'observes', 'review-gate', 'rework'] as const
   return (
     <svg className="agent-flow-relation-layer" aria-label="控制关系（虚线，不是数据连线）">
       <defs>
-        <marker
-          id={`${maskId}-arrow`}
-          viewBox="0 0 8 8"
-          refX={7}
-          refY={4}
-          markerWidth={7}
-          markerHeight={7}
-          orient="auto"
-        >
-          <path d="M 0 0 L 8 4 L 0 8" fill="none" stroke={NODE_ACCENTS['state-machine']} />
-        </marker>
+        {CONTROL_KINDS.map((kind) => (
+          <marker
+            key={kind}
+            id={`${maskId}-arrow-${kind}`}
+            viewBox="0 0 8 8"
+            refX={7}
+            refY={4}
+            markerWidth={7}
+            markerHeight={7}
+            orient="auto"
+          >
+            <path d="M 0 0 L 8 4 L 0 8" fill="none" className={`flow-arrow-${kind}`} />
+          </marker>
+        ))}
         <mask id={maskId}>
           <rect width="100%" height="100%" fill="white" />
           {rects.map((rect) => (
@@ -139,9 +156,9 @@ export function AgentFlowRelationLayer({
             data-arrow-x={line.target.x}
             data-arrow-y={line.target.y}
             d={line.path}
-            markerEnd={`url(#${maskId}-arrow)`}
+            markerEnd={`url(#${maskId}-arrow-${line.kind})`}
             stroke={NODE_ACCENTS['state-machine']}
-            className="agent-flow-control-path"
+            className={`agent-flow-control-path${isDimmed(line) ? ' is-dimmed' : ''}`}
           />
         ))}
       </g>
@@ -151,7 +168,7 @@ export function AgentFlowRelationLayer({
           role="button"
           tabIndex={0}
           aria-label={`配置控制关系：${CONTROL_LABELS[line.kind]}`}
-          className="agent-flow-control-label"
+          className={`agent-flow-control-label${isDimmed(line) ? ' is-dimmed' : ''}`}
           transform={`translate(${line.labelX},${line.labelY})`}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => openOwner(line.ownerNodeId)}

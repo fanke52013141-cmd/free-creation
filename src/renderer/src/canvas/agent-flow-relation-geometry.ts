@@ -255,7 +255,8 @@ function round(value: number): number {
 function chooseAnchors(
   source: RelationRect,
   target: RelationRect,
-  obstacles: RelationRect[]
+  obstacles: RelationRect[],
+  preferBottom = false
 ): { source: RelationAnchor; target: RelationAnchor } {
   const sourceCenter = center(source)
   const targetCenter = center(target)
@@ -309,7 +310,9 @@ function chooseAnchors(
       const score =
         sidePairScore(sourceSide, targetSide, sourceAnchor, targetAnchor, delta) +
         (curveHit ? 260 : 0) +
-        (directHit ? 160 : 0)
+        (directHit ? 160 : 0) +
+        // L3：返工线偏好底边→底边（外法线向下，自然成下弧），穿卡罚分仍优先。
+        (preferBottom && sourceSide === 'bottom' && targetSide === 'bottom' ? -120 : 0)
       if (!best || score < best.score) {
         best = {
           source: sourceAnchor,
@@ -364,10 +367,11 @@ export function buildControlRelationGeometry(
   source: RelationRect,
   target: RelationRect,
   obstacles: RelationRect[] = [source, target],
-  label: RelationLabelBox = LABEL_DEFAULT
+  label: RelationLabelBox = LABEL_DEFAULT,
+  opts?: { preferBottom?: boolean }
 ): RelationGeometry {
   const others = obstacles.filter((rect) => rect !== source && rect !== target)
-  const anchors = chooseAnchors(source, target, others)
+  const anchors = chooseAnchors(source, target, others, opts?.preferBottom)
   const distance = Math.hypot(
     anchors.target.x - anchors.source.x,
     anchors.target.y - anchors.source.y

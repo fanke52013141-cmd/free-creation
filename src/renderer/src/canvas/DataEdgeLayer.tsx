@@ -12,11 +12,11 @@
 // 路径、滤镜、mask 只在文档变化时重算，相机变化只写一个 transform 字符串（在绘制前由
 // MutationObserver 同步），连线因此与节点卡片在同一合成层节奏上移动，不再闪烁。
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { Editor, TLShapeId } from 'tldraw'
+import { useValue, type Editor, type TLShapeId } from 'tldraw'
 import { getNodePorts, getNodeType, PORT_COLORS } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { useEdgeSelectionStore } from '../stores/edgeSelection'
-import { buildDataEdgePath, NODE_PORT_OUTSET } from './edge-geometry'
+import { buildDataEdgePath, isBackwardEdge, NODE_PORT_OUTSET } from './edge-geometry'
 import { useConnectionStore, type ConnectionFrom } from '../stores/connection'
 import { dynamicPortIdsForShape, portPairCompatible } from './graph'
 import { collectNodePortConnections, createNodePortLayout } from './node-port-layout'
@@ -163,7 +163,13 @@ function collectEdges(editor: Editor, draftFrom: ConnectionFrom | null): PageEdg
       invalid: portMissing,
       path: buildDataEdgePath(
         { x: sourceBounds.maxX + NODE_PORT_OUTSET, y: sourceAnchorY },
-        { x: targetBounds.x - NODE_PORT_OUTSET, y: targetAnchorY }
+        { x: targetBounds.x - NODE_PORT_OUTSET, y: targetAnchorY },
+        {
+          backward: isBackwardEdge(
+            sourceBounds.x + sourceBounds.width / 2,
+            targetBounds.x + targetBounds.width / 2
+          )
+        }
       )
     })
   }
@@ -220,7 +226,13 @@ function collectEdges(editor: Editor, draftFrom: ConnectionFrom | null): PageEdg
       provenance: true,
       path: buildDataEdgePath(
         { x: producerBounds.maxX + NODE_PORT_OUTSET, y: sourceAnchorY },
-        { x: assetBounds.x - NODE_PORT_OUTSET, y: targetAnchorY }
+        { x: assetBounds.x - NODE_PORT_OUTSET, y: targetAnchorY },
+        {
+          backward: isBackwardEdge(
+            producerBounds.x + producerBounds.width / 2,
+            assetBounds.x + assetBounds.width / 2
+          )
+        }
       )
     })
   }
@@ -318,6 +330,23 @@ export function DataEdgeLayer({
     clientX: number
     clientY: number
   } | null>(null)
+  // L3 聚焦：选中节点时淡化无关节点连线。useValue 追踪选区（实例态），
+  // 不触发几何重算——只改 class，相机/文档监听口径不变。
+  const selectedNodeIds = useValue(
+    'data-edge focus selection',
+    () =>
+      new Set(
+        editor
+          .getSelectedShapes()
+          .filter((shape) => shape.type === 'node-card')
+          .map((shape) => shape.id)
+      ),
+    [editor]
+  )
+  const isDimmed = (edge: PageEdge): boolean =>
+    selectedNodeIds.size > 0 &&
+    !selectedNodeIds.has(edge.sourceId) &&
+    !selectedNodeIds.has(edge.targetId)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const frameRef = useRef<HTMLDivElement | null>(null)
   const reactId = useId().replace(/:/g, '')
@@ -579,7 +608,7 @@ export function DataEdgeLayer({
                   if (edge.provenance) {
                     // 追溯线只在节点之外可见，但沿用普通连线的颜色和流动层级。
                     return (
-                      <g key={edge.id} data-edge-id={edge.id}>
+                      <g key={edge.id} data-edge-id={edge.id} className={isDimmed(edge) ? 'is-dimmed' : undefined}>
                         <path
                           className="data-edge-glow artifact-provenance-glow"
                           d={edge.path}
@@ -611,7 +640,7 @@ export function DataEdgeLayer({
                       <g
                         className={`data-edge is-invalid${active ? ' is-selected' : ''}${
                           hovered ? ' is-hovered' : ''
-                        }`}
+                        }${isDimmed(edge) ? ' is-dimmed' : ''}`}
                         key={edge.id}
                         data-edge-id={edge.id}
                       >
@@ -628,7 +657,7 @@ export function DataEdgeLayer({
                     <g
                       className={`data-edge${active ? ' is-selected' : ''}${
                         hovered ? ' is-hovered' : ''
-                      }`}
+                      }${isDimmed(edge) ? ' is-dimmed' : ''}`}
                       key={edge.id}
                       data-edge-id={edge.id}
                     >

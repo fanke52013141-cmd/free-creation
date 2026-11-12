@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "L1/L2 加性：新增 graph.layout 智能整理操作与 graph.patch autoLayout 可选标志；布局为视图操作只改坐标；内置构建器复用同一布局纯函数；既有操作 Schema 未变",
+  "reason": "L3 连线治理：agent 卡片角色徽标（agentFlow.tsx 纯呈现）；反向边外弧/控制线四色/选中聚焦为渲染层视图改动，无契约与操作变化",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -143,7 +143,7 @@
     "src/renderer/src/nodes/specs/AgentTaskControls.tsx": "89bb10ce430b7aebe724fa32537c307782edb16579d409e0a4f74ba7f2c6ee1c",
     "src/renderer/src/nodes/specs/FlowBuilderControls.tsx": "f8a40e693f912cbba854fa021d7c6894cbbd074f82fbbbc96f533971dadab33c",
     "src/renderer/src/nodes/specs/ReviewTaskControls.tsx": "e57b849a417afb155ef95414eb7b00a88d39344d8bac6c12a55a1ecb8b4a626e",
-    "src/renderer/src/nodes/specs/agentFlow.tsx": "026deec0bacce71ddae36c035811059d7f21421e357d20dabd6061240a8f6fbe",
+    "src/renderer/src/nodes/specs/agentFlow.tsx": "0b9b1976d413144232534c5550ac6cc4d2c1daaed14ef402a971e5bb38de90e6",
     "src/renderer/src/nodes/specs/agentFlowDiagnostics.ts": "6cc3721701ff31c4fd6522558afa1c6b46d05ac4b6d03a6952112262d1e773e8",
     "src/renderer/src/nodes/specs/agentFlowEditors.tsx": "527718988777334b40e4e4cb200c3d54cde7078386af5a8769237e47d3869fd7",
     "src/renderer/src/nodes/specs/bodies/ImageMentionPrompt.tsx": "5748dc56de07d357ca3ef06fcf0e74960c11cd8e61378fd93388a657097c8761",

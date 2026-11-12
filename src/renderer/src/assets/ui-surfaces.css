@@ -2523,6 +2523,18 @@ button {
   opacity: 0.38;
 }
 
+/* L3 聚焦：选中节点时，两端都不在选区内的连线（含追溯线）整体淡化；
+   选中/悬浮态优先级更高，保持可交互边的可见性。 */
+.data-edge.is-dimmed,
+[data-edge-id].is-dimmed {
+  opacity: 0.15;
+  transition: opacity 140ms ease;
+}
+.data-edge.is-dimmed.is-hovered,
+.data-edge.is-dimmed.is-selected {
+  opacity: 1;
+}
+
 .artifact-provenance-flow {
   pointer-events: none;
 }

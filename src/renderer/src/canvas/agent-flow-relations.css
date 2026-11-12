@@ -6,16 +6,55 @@
   pointer-events: none;
   z-index: 3;
   overflow: visible;
+  /* L3：控制线按语义着色——授权青、观察灰蓝、审核琥珀、返工红。
+     取值走应用主题变量体系（--brand/--txt-dim/--danger），缺省回退固定色。 */
+  --flow-relation-controls: var(--brand, #49d2ea);
+  --flow-relation-observes: var(--txt-dim, #8fa3b8);
+  --flow-relation-review: #e8b341;
+  --flow-relation-rework: var(--danger, var(--red, #e87979));
 }
 .agent-flow-control-path {
   fill: none;
   stroke-width: 1.5;
   stroke-dasharray: 6 5;
   opacity: 0.8;
+  transition: opacity 140ms ease;
+}
+.agent-flow-control-path[data-control-kind='controls'] {
+  stroke: var(--flow-relation-controls);
+}
+.agent-flow-control-path[data-control-kind='observes'] {
+  stroke: var(--flow-relation-observes);
+}
+.agent-flow-control-path[data-control-kind='review-gate'] {
+  stroke: var(--flow-relation-review);
+}
+.agent-flow-control-path[data-control-kind='rework'] {
+  stroke: var(--flow-relation-rework);
+}
+.flow-arrow-controls {
+  stroke: var(--flow-relation-controls);
+}
+.flow-arrow-observes {
+  stroke: var(--flow-relation-observes);
+}
+.flow-arrow-review-gate {
+  stroke: var(--flow-relation-review);
+}
+.flow-arrow-rework {
+  stroke: var(--flow-relation-rework);
+}
+/* L3 聚焦：选中节点时无关关系淡化，相关关系保持。 */
+.agent-flow-control-path.is-dimmed {
+  opacity: 0.12;
 }
 .agent-flow-control-label {
   pointer-events: auto;
   cursor: pointer;
+  transition: opacity 140ms ease;
+}
+.agent-flow-control-label.is-dimmed {
+  opacity: 0.15;
 }
 .agent-flow-control-label rect {
   fill: var(--panel-bg, var(--bg));

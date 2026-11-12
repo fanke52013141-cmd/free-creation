@@ -206,4 +206,38 @@ describe('控制关系连线几何', () => {
       expect(lastY).toBeCloseTo(geometry.target.y)
     }
   })
+
+  it('L3：preferBottom（返工线）水平布局时改走底边→底边下弧', () => {
+    const source = card(760, 100)
+    const target = card(100, 100)
+    const plain = buildControlRelationGeometry(source, target)
+    const rework = buildControlRelationGeometry(source, target, [source, target], undefined, {
+      preferBottom: true
+    })
+    expect(rework.source.side).toBe('bottom')
+    expect(rework.target.side).toBe('bottom')
+    // 下弧：路径采样点整体不低于两端底边（向外法线向下）。
+    const bottomY = source.y + source.h
+    for (const point of samplePath(rework.path))
+      expect(point.y).toBeGreaterThanOrEqual(bottomY - 1)
+    // 不传偏好时保持原选边（左右相对边）。
+    expect(plain.source.side).toBe('left')
+    expect(plain.target.side).toBe('right')
+  })
+
+  it('L3：preferBottom 遇穿卡障碍仍让位于避障罚分', () => {
+    const source = card(100, 100)
+    const target = card(760, 100)
+    // 底边路径正下方放一张障碍卡：底→底曲线会穿卡，罚分应压过偏好。
+    const blocker = card(380, 420)
+    const geometry = buildControlRelationGeometry(source, target, [source, target, blocker], undefined, {
+      preferBottom: true
+    })
+    const hitsBlocker = samplePath(geometry.path).some(
+      (point) =>
+        point.x > blocker.x && point.x < blocker.x + blocker.w &&
+        point.y > blocker.y && point.y < blocker.y + blocker.h
+    )
+    expect(hitsBlocker).toBe(false)
+  })
 })

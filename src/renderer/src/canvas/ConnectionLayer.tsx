@@ -17,8 +17,8 @@ export function ConnectionLayer(): React.JSX.Element | null {
 
   const { startPt, pointer, from } = draft
   const color = from.nodeColor ?? PORT_COLORS[from.portType] ?? '#09caf5'
-  // 与正式连线使用同一套比例几何，拖拽预览在反向拖动时也不会翻折成 S 型。
-  const path = buildDataEdgePath(startPt, pointer)
+  // 与正式连线使用同一套比例几何：反向拖动走上方外弧，不翻折成 S 型。
+  const path = buildDataEdgePath(startPt, pointer, { backward: pointer.x < startPt.x })
   return createPortal(
     <svg className="conn-overlay">
       <defs>
@@ -89,7 +89,7 @@ export function PendingConnectionLayer({
 
   const startPt = editor.pageToScreen(startPage)
   const color = from.nodeColor ?? PORT_COLORS[from.portType] ?? '#09caf5'
-  const path = buildDataEdgePath(startPt, endPt)
+  const path = buildDataEdgePath(startPt, endPt, { backward: endPt.x < startPt.x })
   return createPortal(
     <svg className="conn-overlay conn-menu-link" aria-hidden="true">
       <path className="conn-glow-path" d={path} style={{ stroke: color }} />

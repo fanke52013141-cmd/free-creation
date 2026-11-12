@@ -216,6 +216,13 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
   }
   return (
     <div className={`agent-flow-body${review ? ' is-review' : ''}`}>
+      {agent && (
+        <div className="agent-flow-role-row">
+          <span className={`agent-flow-role-chip is-${config.role ?? 'specialist'}`}>
+            {config.role === 'coordinator' ? '主控' : config.role === 'builder' ? '搭建' : '专业'}
+          </span>
+        </div>
+      )}
       {shape.props.nodeType !== 'state-machine' && (
         <label className="agent-flow-text">
           <span>{review ? '审核标准' : '任务目标'}</span>

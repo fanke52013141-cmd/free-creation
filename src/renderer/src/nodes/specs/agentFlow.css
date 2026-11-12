@@ -4,6 +4,38 @@
   gap: 8px;
   min-height: 0;
 }
+/* L3 角色徽标：紧凑身份标识（主控/专业/搭建），不是被裁决移除的摘要行——
+   单行小 chip，不撑高正文，颜色走节点身份色体系。 */
+.agent-flow-role-row {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.agent-flow-role-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  /* 设计系统：徽标为硬边微矩形（2px 圆角 + 1px 内描边），不用胶囊形。 */
+  border-radius: 2px;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--border-soft, rgba(255, 255, 255, 0.1));
+  color: var(--txt-dim, #9aa4b5);
+  background: var(--sunk, #2a2a2a);
+}
+.agent-flow-role-chip.is-coordinator {
+  color: var(--brand, #09caf5);
+  border-color: color-mix(in srgb, var(--brand, #09caf5) 45%, transparent);
+}
+.agent-flow-role-chip.is-specialist {
+  color: #59d4cd;
+  border-color: rgba(89, 212, 205, 0.4);
+}
+.agent-flow-role-chip.is-builder {
+  color: #a889ff;
+  border-color: rgba(168, 137, 255, 0.4);
+}
 .agent-flow-summary,
 .agent-flow-pending {
   font-size: 12px;
