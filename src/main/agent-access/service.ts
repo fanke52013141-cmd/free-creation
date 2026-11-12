@@ -471,6 +471,11 @@ export class LocalAccessService {
           metadataCommitted = true
         })
 
+      } else if (operationId === 'graph.layout') {
+        result = await this.executeGraphLayout(id!, active, input, () => {
+          metadataCommitted = true
+        })
+
       } else if (
         operationId === 'director.publish.prepare' ||
         operationId === 'director.publish.status' ||
@@ -1376,6 +1381,7 @@ export class LocalAccessService {
         projectId: id,
         ops: input.ops as GraphPatchOp[],
         expectedGraphVersion: input.expectedGraphVersion as number,
+        ...(input.autoLayout ? { autoLayout: true } : {}),
         ...(Object.keys(mediaResolutions).length ? { mediaResolutions } : {}),
         ...(Object.keys(chatMediaResolutions).length ? { mediaResolutions: chatMediaResolutions } : {}),
         ...(Object.keys(compositeResolutions).length ? { compositeResolutions } : {})
@@ -1400,6 +1406,7 @@ export class LocalAccessService {
         created?: Array<{ ref?: string; nodeId?: string }>
         groups?: Array<{ ref?: string; groupId?: string }>
         counts?: Partial<Record<'nodeCreated' | 'nodeUpdated' | 'nodeDeleted' | 'edgeCreated' | 'edgeDeleted', number>>
+        layout?: { mode?: string; moved?: number }
       }
       const createdNodes = (payload.created ?? []).filter((c): c is { ref?: string; nodeId: string } =>
         typeof c.nodeId === 'string'
@@ -1425,8 +1432,75 @@ export class LocalAccessService {
           (group): group is { ref?: string; groupId: string } =>
             typeof (group as { groupId?: unknown }).groupId === 'string'
         ),
-        applied: counts
+        applied: counts,
+        // L2：autoLayout 启用时回传智能整理结果（模式与移动节点数）。
+        ...(payload.layout &&
+        (payload.layout.mode === 'flow' || payload.layout.mode === 'lanes' || payload.layout.mode === 'grid')
+          ? { layout: { mode: payload.layout.mode, moved: payload.layout.moved ?? 0 } }
+          : {})
       }
+  }
+
+  /**
+   * L2 智能整理：与 graph.patch 同一权威宿主握手（版本核对 → 准入 → 原子应用 →
+   * 保存屏障 → 落盘核对）。布局算法在 renderer 侧与 GUI 按钮共用 layoutGraph，
+   * main 只做准入与事实核对，不另算一份坐标（避免三入口分叉）。
+   */
+  private async executeGraphLayout(
+    id: string,
+    activeId: string | null | undefined,
+    input: Record<string, unknown>,
+    markCommitted: () => void
+  ): Promise<unknown> {
+    if (id !== activeId || !this.options.desktop)
+      throw new AccessFailure(
+        'ACTIVE_PROJECT_REQUIRED',
+        'desktop-ownership',
+        'project.open the target canvas first, then retry graph.layout'
+      )
+    const current = projects.openProject(id)
+    if (!current) throw new AccessFailure('NOT_FOUND', 'read')
+    const nodeIds = input.nodeIds as string[] | undefined
+    if (nodeIds) {
+      const known = new Set(current.nodes.map((node) => node.id))
+      const missing = nodeIds.filter((nodeId) => !known.has(nodeId))
+      if (missing.length > 0)
+        throw new AccessFailure('NODE_NOT_FOUND', 'precheck', missing[0]!.slice(0, 60))
+    }
+    const layoutResult = await this.options.desktop.run(
+      {
+        action: 'graph-layout',
+        projectId: id,
+        layoutMode: (input.mode as 'auto' | 'flow' | 'lanes' | 'grid' | undefined) ?? 'auto',
+        ...(nodeIds ? { nodeIds } : {}),
+        expectedGraphVersion: input.expectedGraphVersion as number
+      },
+      (version) => {
+        if (this.options.activeProjectId() !== id)
+          throw new AccessFailure('RESOURCE_BUSY', 'desktop-ownership')
+        this.assertNoActiveTasks(id)
+        const admitted = projects.openProject(id)
+        if (!admitted || admitted.meta.graphVersion !== version)
+          throw new AccessFailure('REVISION_CONFLICT', 'layout-admission')
+        markCommitted()
+        return admitted.meta
+      }
+    )
+    const savedFile = projects.openProject(id)
+    if (!savedFile || savedFile.meta.graphVersion !== layoutResult.graphVersion)
+      throw new AccessFailure('REVISION_CONFLICT', 'layout-verify')
+    const payload = (layoutResult.result ?? {}) as { mode?: string; moved?: number }
+    const mode =
+      payload.mode === 'flow' || payload.mode === 'lanes' || payload.mode === 'grid'
+        ? payload.mode
+        : 'grid'
+    return {
+      projectId: id,
+      graphVersion: layoutResult.graphVersion,
+      saved: true,
+      mode,
+      moved: payload.moved ?? 0
+    }
   }
 
 

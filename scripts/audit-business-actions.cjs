@@ -118,6 +118,7 @@ const CANVAS_ACTIONS = [
   ['canvas.backdrop.configure-arrange', '背景板命名、配色和整理'],
   ['canvas.backdrop.move', '移动背景板及成员'],
   ['canvas.align', '多选工具栏对齐/均分'],
+  ['canvas.flow_layout', '底部坞智能整理按钮/Shift+Alt+F（流程分层/角色泳道/网格）'],
   ['canvas.history.undo-redo', '历史坞撤销/重做'],
   ['canvas.workflow.run-all', '画布运行全部工作流'],
   ['canvas.workflow.run-selection', '多选运行所选节点及上游闭包'],

@@ -14,6 +14,7 @@ import {
   ReviewNodeConfigSchema
 } from '../../shared/agent-flow/node-contracts'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
+import { layoutGraph } from '../../shared/flow-layout'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import { projectSemanticRevision } from './command-intent'
 import type { ModelIdentity } from '../../shared/agent-flow/coordination'
@@ -528,41 +529,63 @@ export class FlowBuilderHost {
   }
 
   private assignPreviewPositions(preview: BuildPreview, file: ProjectFile, builder: Shape): void {
+    // L2：相对坐标改由共享 layoutGraph（lanes）计算——与 GUI 智能整理/graph.layout
+    // 同一算法（三入口 parity）。尺寸与 NODE_UI.width/height.default 一致（340×300；
+    // main 不跨包 import renderer 令牌，真值见 node-ui-tokens.ts）。
     const width = 340,
-      height = 260,
+      height = 300,
       horizontalGap = 100,
-      verticalGap = 100,
-      columnGap = width + horizontalGap,
-      rowGap = height + verticalGap,
-      extentWidth = preview.plan.steps.length * columnGap + width,
-      hasReview = preview.plan.steps.some((step) => step.review),
-      extentHeight = (hasReview ? 2 : 1) * rowGap + height
+      verticalGap = 100
+    const layoutNodes = preview.nodes.map((node) => {
+      let role: 'builder' | 'coordinator' | 'specialist' | undefined
+      let controls: string[] | undefined
+      try {
+        const config = JSON.parse(node.config) as {
+          role?: unknown
+          allowedNodeIds?: unknown
+          gatedNodeIds?: unknown
+        }
+        if (config.role === 'builder' || config.role === 'coordinator' || config.role === 'specialist')
+          role = config.role
+        const targets = node.type === 'agent' ? config.allowedNodeIds : config.gatedNodeIds
+        if (Array.isArray(targets))
+          controls = targets.filter((id): id is string => typeof id === 'string')
+      } catch {
+        // 配置损坏按无角色处理，布局不报错。
+      }
+      return {
+        id: node.id,
+        type: node.type,
+        x: 0,
+        y: 0,
+        w: width,
+        h: height,
+        title: node.title,
+        ...(role ? { role } : {}),
+        ...(controls ? { controls } : {})
+      }
+    })
+    const layoutEdges = preview.edges.map((edge) => ({
+      from: edge.from.nodeId,
+      to: edge.to.nodeId
+    }))
+    const layout = layoutGraph(layoutNodes, layoutEdges, 'lanes', {
+      origin: { x: 0, y: 0 },
+      columnGap: horizontalGap,
+      rowGap: verticalGap
+    })
+    const positionById = new Map(layout.positions.map((pos) => [pos.id, pos]))
+    const relative = preview.nodes.map((node) => {
+      const pos = positionById.get(node.id)
+      if (!pos) throw new AgentRuntimeError('FLOW_BUILD_CONFIG_INVALID', 'builder')
+      return { node, x: pos.x, y: pos.y }
+    })
+    const extentWidth = Math.max(...relative.map((item) => item.x + width), width)
+    const extentHeight = Math.max(...relative.map((item) => item.y + height), height)
     const builderX = builder.x ?? 0,
       builderY = builder.y ?? 0,
       builderWidth = builder.props.w ?? width,
       builderHeight = builder.props.h ?? height
-    const relative = preview.nodes.map((node) => {
-      const main = node.id.endsWith('-main')
-      const state = node.id.endsWith('-state')
-      const targetIndex = preview.plan.steps.findIndex((_, index) =>
-        node.id.endsWith(`-target-${index}`)
-      )
-      const agentIndex = preview.plan.steps.findIndex((_, index) =>
-        node.id.endsWith(`-agent-${index}`)
-      )
-      const reviewIndex = preview.plan.steps.findIndex(
-        (step, index) => Boolean(step.review) && node.id.endsWith(`-review-${index}`)
-      )
-      const index = targetIndex >= 0 ? targetIndex : agentIndex >= 0 ? agentIndex : reviewIndex
-      if (main) return { node, x: 0, y: 0 }
-      if (state) return { node, x: 0, y: rowGap }
-      if (index < 0) throw new AgentRuntimeError('FLOW_BUILD_CONFIG_INVALID', 'builder')
-      return {
-        node,
-        x: (index + 1) * columnGap,
-        y: targetIndex >= 0 ? rowGap : reviewIndex >= 0 ? 2 * rowGap : 0
-      }
-    })
     const shapes = (file.tldrawSnapshot as { store: Record<string, Shape & { type?: string }> })
       .store
     const obstacles = Object.values(shapes).flatMap((shape) => {

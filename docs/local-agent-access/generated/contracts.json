@@ -1708,7 +1708,7 @@
       "operationId": "graph.patch",
       "operationVersion": 1,
       "effect": "write",
-      "description": "向当前打开项目提交一批类型化画布编辑（建/改/删节点与连线）；整体校验后原子应用并保存；返回ID映射与保存版本",
+      "description": "向当前打开项目提交一批类型化画布编辑（建/改/删节点与连线）；整体校验后原子应用并保存；返回ID映射与保存版本。autoLayout=true 时应用后在同一撤销步内智能整理坐标",
       "requires": [
         "openProject"
       ],
@@ -2503,6 +2503,10 @@
                 }
               ]
             }
+          },
+          "autoLayout": {
+            "default": false,
+            "type": "boolean"
           }
         },
         "required": [
@@ -2636,6 +2640,29 @@
                   "edgeDeleted"
                 ],
                 "additionalProperties": false
+              },
+              "layout": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "flow",
+                      "lanes",
+                      "grid"
+                    ]
+                  },
+                  "moved": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "mode",
+                  "moved"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -2644,6 +2671,164 @@
               "saved",
               "created",
               "applied"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "graph.layout",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "对当前打开项目按拓扑分层/角色泳道/网格重排节点坐标（与 GUI 智能整理同一算法）；只改位置不改配置，单撤销步并保存",
+      "requires": [],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "expectedGraphVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "mode": {
+            "default": "auto",
+            "type": "string",
+            "enum": [
+              "auto",
+              "flow",
+              "lanes",
+              "grid"
+            ]
+          },
+          "nodeIds": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 180
+            }
+          }
+        },
+        "required": [
+          "projectId",
+          "expectedGraphVersion"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "graph.layout"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "graphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "saved": {
+                "type": "boolean",
+                "const": true
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "flow",
+                  "lanes",
+                  "grid"
+                ]
+              },
+              "moved": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "projectId",
+              "graphVersion",
+              "saved",
+              "mode",
+              "moved"
             ],
             "additionalProperties": false
           },

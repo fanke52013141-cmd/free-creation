@@ -129,8 +129,21 @@ export const ACCESS_OPERATIONS = {
   'graph.patch': {
     effect: 'write',
     description:
-      '向当前打开项目提交一批类型化画布编辑（建/改/删节点与连线）；整体校验后原子应用并保存；返回ID映射与保存版本',
-    input: revision.extend({ ops: GraphPatchOpsSchema }).strict()
+      '向当前打开项目提交一批类型化画布编辑（建/改/删节点与连线）；整体校验后原子应用并保存；返回ID映射与保存版本。autoLayout=true 时应用后在同一撤销步内智能整理坐标',
+    input: revision
+      .extend({ ops: GraphPatchOpsSchema, autoLayout: z.boolean().default(false) })
+      .strict()
+  },
+  'graph.layout': {
+    effect: 'write',
+    description:
+      '对当前打开项目按拓扑分层/角色泳道/网格重排节点坐标（与 GUI 智能整理同一算法）；只改位置不改配置，单撤销步并保存',
+    input: revision
+      .extend({
+        mode: z.enum(['auto', 'flow', 'lanes', 'grid']).default('auto'),
+        nodeIds: z.array(z.string().min(1).max(180)).min(1).max(GRAPH_VIEW_MAX_NODES).optional()
+      })
+      .strict()
   },
   'node.runPlan': {
     effect: 'read',
@@ -619,7 +632,24 @@ export const ACCESS_OUTPUTS = {
           edgeCreated: z.number().int().nonnegative(),
           edgeDeleted: z.number().int().nonnegative()
         })
+        .strict(),
+      /** autoLayout=true 时的智能整理结果（L2）；未启用则缺省。 */
+      layout: z
+        .object({
+          mode: z.enum(['flow', 'lanes', 'grid']),
+          moved: z.number().int().nonnegative()
+        })
         .strict()
+        .optional()
+    })
+    .strict(),
+  'graph.layout': z
+    .object({
+      projectId: identifier,
+      graphVersion: z.number().int().nonnegative(),
+      saved: z.literal(true),
+      mode: z.enum(['flow', 'lanes', 'grid']),
+      moved: z.number().int().nonnegative()
     })
     .strict(),
   'node.runPlan': z.object({

@@ -2251,6 +2251,16 @@
       "phase": "excluded",
       "reason": "renderer 流式事件通道；外部经 run 事件/结果协议读取（F3/F6），不原样转发 IPC",
       "note": "renderer 流式事件通道；外部经 run 事件/结果协议读取（F3/F6），不原样转发 IPC"
+    },
+    "canvas.flow_layout": {
+      "label": "智能整理（流程分层/角色泳道/网格）",
+      "gui": "底部坞智能整理按钮 / Shift+Alt+F",
+      "phase": "external",
+      "note": "L2：经 graph.layout op 与 graph.patch autoLayout；与 GUI 同一 layoutGraph 纯函数，只改坐标、单撤销步、保存屏障；auto=agent flow→lanes/有边→flow/无边→grid",
+      "external": [
+        "graph.layout",
+        "graph.patch"
+      ]
     }
   }
 }

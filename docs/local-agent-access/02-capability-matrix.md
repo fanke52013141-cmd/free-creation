@@ -102,7 +102,8 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 | 能力                 | 建议 `operationId`                          | 阶段  | 当前外部状态 | 风险与约束                                                                         | 验收                                       |
 | -------------------- | ------------------------------------------- | ----- | ------------ | ---------------------------------------------------------------------------------- | ------------------------------------------ |
 | 读取图与契约目录     | `graph.get` / `node.type.list`              | A1    | planned      | 返回稳定 nodeId/type/contractVersion/ports/schema 引用                             | 与注册表快照一致                           |
-| 受控原子图写         | `graph.patch`                               | A2    | planned      | 显式 add/update/remove node/edge 与关系类型；不接收任意快照覆盖                    | 全成或全拒绝、修订冲突、关系类型校验       |
+| 受控原子图写         | `graph.patch`                               | A2    | planned      | 显式 add/update/remove node/edge 与关系类型；不接收任意快照覆盖；autoLayout 可选智能整理 | 全成或全拒绝、修订冲突、关系类型校验       |
+| 智能整理坐标         | `graph.layout`                              | A2    | verified（L2） | 拓扑分层/角色泳道/网格，与 GUI 智能整理同一 layoutGraph 纯函数；只改坐标不改配置，单撤销步 | 三入口坐标一致、零重叠、保存屏障、修订冲突 |
 | 创建节点             | `node.create`                               | A2    | planned      | 只接受 Active 类型与声明 config/text；必须经注册校验                               | 32 类型逐项创建、旧类型拒绝                |
 | 读取节点/运行摘要    | `node.get`                                  | A2    | planned      | 默认安全摘要；正文可在显式字段选择下返回，但不得进入诊断                           | 结果与保存快照一致                         |
 | 更新配置或正文       | `node.update`                               | A2    | planned      | config 与 text 分离；契约版本不可由更新伪造                                        | 输入 schema、冲突、保存恢复                |

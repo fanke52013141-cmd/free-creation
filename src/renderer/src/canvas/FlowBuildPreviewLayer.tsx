@@ -128,7 +128,8 @@ export function FlowBuildPreviewLayer({
       x: topLeft.x - hostBounds.left,
       y: topLeft.y - hostBounds.top,
       w: 340 * zoom,
-      h: 260 * zoom
+      // 与提交后真实节点尺寸一致（NODE_UI.height.default=300；旧 260 为遗留偏差）。
+      h: 300 * zoom
     }
   }
   const rectForExisting = (nodeId: string): Rect | null => {

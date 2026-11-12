@@ -39,12 +39,14 @@ const NODE_EXECUTION_ACTIONS = [
   'ipc.media.videoClip',
   'ipc.media.soundAdjust',
   'ipc.media.timelineCompose',
-  'ipc.keys.imageGenerate',
-  'ipc.keys.imageEdit',
-  'ipc.keys.videoSubmit',
-  'ipc.keys.speechGenerate',
-  'ipc.keys.voiceDesign',
-  'ipc.keys.audioGenerate',
+  // 生成类通道在 IPC 契约中归属 gateway 族（db91832d 修正 keys 嵌套缩进后，
+  // 审计按 ipc.gateway.* 解析；旧 ipc.keys.* 为缩进异常时期的误判命名）。
+  'ipc.gateway.imageGenerate',
+  'ipc.gateway.imageEdit',
+  'ipc.gateway.videoSubmit',
+  'ipc.gateway.speechGenerate',
+  'ipc.gateway.voiceDesign',
+  'ipc.gateway.audioGenerate',
   'ipc.media.indexttsSynthesize'
 ]
 
@@ -129,7 +131,7 @@ describe('F4/F5 动作路由', () => {
   it('被排除的预览/维护动作必须写明理由', () => {
     const mediaExcluded = entries.filter(
       ([id, entry]) =>
-        entry.phase === 'excluded' && /^ipc\.(media|keys)\./.test(id)
+        entry.phase === 'excluded' && /^ipc\.(media|keys|gateway)\./.test(id)
     )
     expect(mediaExcluded.length).toBeGreaterThanOrEqual(5)
     for (const [id, entry] of mediaExcluded) {
@@ -141,8 +143,8 @@ describe('F4/F5 动作路由', () => {
 
   it('任务控制动作映射到任务族，且不声称取消即成功', () => {
     for (const id of [
-      'ipc.keys.videoTask',
-      'ipc.keys.videoCancel',
+      'ipc.gateway.videoTask',
+      'ipc.gateway.videoCancel',
       'ipc.media.videoConvertCancel',
       'ipc.media.cancelTransforms'
     ]) {

@@ -4,10 +4,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { type Editor, type TLShapeId } from 'tldraw'
 import type { NodeCardShape } from './NodeCardShape'
 import { getNodeType } from '../nodes/registry'
-import { markUndoPoint } from './history'
 import { Icon } from '../components/Icon'
 import { Tooltip } from '../components/Tooltip'
 import { focusCanvas } from './focus-canvas'
+import { applyFlowLayout } from './flow-layout-apply'
+import { toast } from '../stores/toast'
 
 const BOX_W = 220
 const BOX_H = 150
@@ -48,60 +49,18 @@ interface DockProps {
   editor: Editor | null
 }
 
-/** 画布整理：把所有节点按行列网格自动排列 */
+/** 画布智能整理：agent flow → 角色泳道；有数据边 → 拓扑分层；否则网格兜底。
+ *  与 graph.layout op / graph.patch autoLayout 共用 layoutGraph 纯函数（三入口 parity）。 */
 function organizeCanvas(editor: Editor): void {
-  const shapes = editor
-    .getCurrentPageShapes()
-    .filter((s): s is NodeCardShape => s.type === 'node-card')
-  if (shapes.length === 0) return
-
-  const sorted = [...shapes].sort((a, b) => {
-    const ay = a.y + a.props.h / 2
-    const by = b.y + b.props.h / 2
-    if (Math.abs(ay - by) < 80) return a.x - b.x
-    return ay - by
-  })
-
-  const GAP_X = 60
-  const GAP_Y = 80
-  const COLS = Math.max(1, Math.ceil(Math.sqrt(sorted.length)))
-  const startX = sorted[0].x
-  const startY = sorted[0].y
-
-  // 使用每个节点的真实宽高计算网格，避免旧版固定 260px 列宽导致节点重叠。
-  const colWidths = Array.from({ length: COLS }, (_, col) =>
-    Math.max(...sorted.filter((_, i) => i % COLS === col).map((s) => s.props.w))
+  const result = applyFlowLayout(editor, 'auto')
+  if (result.moved === 0) return
+  toast(
+    result.mode === 'lanes'
+      ? '已按角色泳道整理（控制→执行→成果→审核）'
+      : result.mode === 'flow'
+        ? '已按流程分层整理（左→右）'
+        : '已整理为网格'
   )
-  const rowCount = Math.ceil(sorted.length / COLS)
-  const rowHeights = Array.from({ length: rowCount }, (_, row) =>
-    Math.max(...sorted.slice(row * COLS, row * COLS + COLS).map((s) => s.props.h))
-  )
-  const colOffsets = colWidths.map((_, col) =>
-    colWidths.slice(0, col).reduce((sum, width) => sum + width + GAP_X, 0)
-  )
-  const rowOffsets = rowHeights.map((_, row) =>
-    rowHeights.slice(0, row).reduce((sum, height) => sum + height + GAP_Y, 0)
-  )
-
-  const updates: Array<{ id: TLShapeId; x: number; y: number }> = []
-  for (const [index, s] of sorted.entries()) {
-    const col = index % COLS
-    const row = Math.floor(index / COLS)
-    const x = startX + colOffsets[col]
-    const y = startY + rowOffsets[row]
-    updates.push({ id: s.id, x, y })
-  }
-
-  editor.updateShapes(
-    updates.map((u) => ({
-      id: u.id,
-      type: 'node-card' as const,
-      x: u.x,
-      y: u.y
-    }))
-  )
-  markUndoPoint(editor, 'organize-canvas')
-  focusCanvas(editor)
 }
 
 export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
@@ -493,6 +452,15 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
               }
             >
               <Icon name="zoom-out" size={16} />
+            </button>
+          </Tooltip>
+          <Tooltip label="智能整理（流程分层/角色泳道）Shift+Alt+F">
+            <button
+              className="dock-btn"
+              aria-label="智能整理画布"
+              onClick={() => editor && organizeCanvas(editor)}
+            >
+              <Icon name="align-horizontal" size={16} />
             </button>
           </Tooltip>
           <Tooltip label="定位画布内容">

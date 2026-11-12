@@ -20,6 +20,8 @@ export const DesktopRequestSchema = z
       'rename',
       'bind-skills',
       'graph-patch',
+      // L2：智能整理（拓扑分层/角色泳道/网格），与 GUI 同一 layoutGraph 纯函数。
+      'graph-layout',
       'read-graph',
       'workflow-run-plan',
       'execute-nodes',
@@ -49,6 +51,10 @@ export const DesktopRequestSchema = z
     ops: GraphPatchOpsSchema.optional(),
     /** graph.patch 提交方期望的图版本；权威宿主在保存未保存内容后核对。 */
     expectedGraphVersion: z.number().int().nonnegative().optional(),
+    /** graph-layout：布局模式（auto/flow/lanes/grid）；nodeIds 复用为可选作用域。 */
+    layoutMode: z.enum(['auto', 'flow', 'lanes', 'grid']).optional(),
+    /** graph.patch：应用后在同一撤销步内智能整理坐标（L2，只改位置不改配置）。 */
+    autoLayout: z.boolean().optional(),
     /** read-graph：latest 视图分页参数。 */
     offset: z.number().int().min(0).max(100000).optional(),
     limit: z.number().int().min(1).max(GRAPH_VIEW_MAX_NODES).optional(),

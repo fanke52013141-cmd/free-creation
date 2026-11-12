@@ -47,22 +47,24 @@ describe('SQLite user_version migrations', () => {
     expect(schemas.some((sql) => sql.includes('CREATE TABLE process_locks'))).toBe(true)
     // 尾部断言随迁移增长同步维护：M18 工具调用验证 → M19 外部回执 → M20 密钥库 →
     // M21 外部运行账本 → M22 发布授权账本 → M23 历史快照图数据 → M24 命令主体标记 →
-    // M25 组合能力定义/版本/草稿 → M26 组合运行账本 → M27 运行等待 → M28 W1 运行关联。
-    expect(schemas.at(-11)).toContain('agent_tool_calling_validations')
-    expect(schemas.at(-10)).toContain('local_agent_operations')
-    expect(schemas.at(-9)).toContain('secret_vault')
-    expect(schemas.at(-9)).toContain('key_imports')
-    expect(schemas.at(-8)).toContain('CREATE TABLE external_runs')
-    expect(schemas.at(-7)).toContain('director_publish_requests')
-    expect(schemas.at(-6)).toContain('ADD COLUMN graph_json')
-    expect(schemas.at(-5)).toContain('principal')
-    expect(schemas.at(-4)).toContain('composite_capabilities')
-    expect(schemas.at(-4)).toContain('composite_versions')
-    expect(schemas.at(-4)).toContain('composite_drafts')
-    expect(schemas.at(-3)).toContain('composite_runs')
-    expect(schemas.at(-2)).toContain('composite_run_waits')
-    expect(schemas.at(-1)).toContain('parent_run_id')
-    expect(schemas.at(-1)).toContain('failure_phase')
+    // M25 组合能力定义/版本/草稿 → M26 组合运行账本 → M27 运行等待 → M28 W1 运行关联 →
+    // M29 媒体路径索引。
+    expect(schemas.at(-12)).toContain('agent_tool_calling_validations')
+    expect(schemas.at(-11)).toContain('local_agent_operations')
+    expect(schemas.at(-10)).toContain('secret_vault')
+    expect(schemas.at(-10)).toContain('key_imports')
+    expect(schemas.at(-9)).toContain('CREATE TABLE external_runs')
+    expect(schemas.at(-8)).toContain('director_publish_requests')
+    expect(schemas.at(-7)).toContain('ADD COLUMN graph_json')
+    expect(schemas.at(-6)).toContain('principal')
+    expect(schemas.at(-5)).toContain('composite_capabilities')
+    expect(schemas.at(-5)).toContain('composite_versions')
+    expect(schemas.at(-5)).toContain('composite_drafts')
+    expect(schemas.at(-4)).toContain('composite_runs')
+    expect(schemas.at(-3)).toContain('composite_run_waits')
+    expect(schemas.at(-2)).toContain('parent_run_id')
+    expect(schemas.at(-2)).toContain('failure_phase')
+    expect(schemas.at(-1)).toContain('idx_media_path')
   })
 
   it('每个迁移整体包在单个事务里：迁移语句与 user_version 推进同提交', () => {
@@ -196,6 +198,15 @@ describe('SQLite user_version migrations', () => {
     )
     sqlite.exec(
       'CREATE TABLE library_collection_items (collection_id TEXT NOT NULL, resource_id TEXT NOT NULL, added_at INTEGER NOT NULL, PRIMARY KEY(collection_id, resource_id))'
+    )
+    // M29 在 media(path) 上建索引；media 由 M1 创建、M5 加 name 列，
+    // 真实 v7 库必然存在，按事实补齐（含 M5 后的 name 列）。
+    sqlite.exec(
+      `CREATE TABLE media (
+        id TEXT PRIMARY KEY, kind TEXT NOT NULL, mime TEXT NOT NULL, path TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL, width INTEGER, height INTEGER, duration_sec REAL,
+        thumb_path TEXT, created_at INTEGER NOT NULL, name TEXT
+      )`
     )
     expect(migrateDatabase(adapter)).toBe(7)
     expect(Number(adapter.pragma('user_version', { simple: true }))).toBe(DB_SCHEMA_VERSION)

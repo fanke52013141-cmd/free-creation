@@ -4,6 +4,7 @@ import { reportCanvasFailure } from './canvas-diagnostics'
 import { ensureCanvasSaved } from './flow-asset-actions'
 import { readNodeRunHistory, readNodeRunRecord } from '../engine/runRecord'
 import { commitFlowBuild } from './flow-build-actions'
+import { applyFlowLayout } from './flow-layout-apply'
 import { useAppStore } from '../stores/app'
 import { nodeTextField } from './node-pointer-policy'
 import { ResourceInsertRequest } from '../library/ResourceInsertRequest'
@@ -1323,8 +1324,15 @@ export function CanvasEditor({
                 replyFail(false, replanned.issue.code, replanned.issue.detail)
                 return
               }
+              let autoLayoutResult: { mode: 'flow' | 'lanes' | 'grid'; moved: number } | undefined
               editor.run(() => {
                 replanned.plan.apply(editor)
+                // L2：autoLayout 与建图同一撤销步；布局只改坐标，不碰配置。
+                if (request.autoLayout)
+                  autoLayoutResult = applyFlowLayout(editor, 'auto', undefined, {
+                    undo: false,
+                    focus: false
+                  })
               })
               markUndoPoint(editor, 'agent-graph-patch')
               await ensureCanvasSaved()
@@ -1342,8 +1350,64 @@ export function CanvasEditor({
                     ...(group.ref ? { ref: group.ref } : {}),
                     groupId: group.groupId
                   })),
-                  counts: replanned.plan.counts
+                  counts: replanned.plan.counts,
+                  ...(autoLayoutResult ? { layout: autoLayoutResult } : {})
                 }
+              })
+              return
+            }
+            // ── L2 graph-layout：智能整理（与 GUI 按钮同一 layoutGraph）──
+            // 握手骨架与 graph-patch 一致：保存未保存内容 → 版本核对 → 准入 →
+            // 原子应用（单撤销步）→ 保存屏障 → 回执。只改坐标，不改配置。
+            if (request.action === 'graph-layout') {
+              const replyFail = (validated: boolean, code: string, detail?: string): void => {
+                window.api.replyLocalAgentDesktop({
+                  requestId: request.requestId,
+                  projectId: project.id,
+                  ok: false,
+                  validated,
+                  graphVersion: graphVersionRef.current,
+                  errorCode: code,
+                  ...(detail ? { errorDetail: detail.slice(0, 300) } : {})
+                })
+              }
+              if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+              saveTimerRef.current = null
+              const preSave = useSaveCoordinator.getState()
+              if (preSave.dirtyVersion !== preSave.persistedVersion) await ensureCanvasSaved()
+              if (
+                editorRef.current !== editor ||
+                useAppStore.getState().currentProject?.id !== project.id
+              )
+                throw new Error('CANVAS_CHANGED')
+              if (graphVersionRef.current !== request.expectedGraphVersion) {
+                replyFail(
+                  true,
+                  'REVISION_CONFLICT',
+                  `expected ${request.expectedGraphVersion}, current ${graphVersionRef.current}`
+                )
+                return
+              }
+              const admission = await window.api.commitLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                graphVersion: graphVersionRef.current
+              })
+              if (
+                !admission.ok ||
+                Date.now() >= request.expiresAt ||
+                editorRef.current !== editor ||
+                useAppStore.getState().currentProject?.id !== project.id
+              )
+                throw new Error('PATCH_NOT_ADMITTED')
+              const layout = applyFlowLayout(editor, request.layoutMode ?? 'auto', request.nodeIds)
+              await ensureCanvasSaved()
+              window.api.replyLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                ok: true,
+                graphVersion: graphVersionRef.current,
+                result: { mode: layout.mode, moved: layout.moved }
               })
               return
             }
