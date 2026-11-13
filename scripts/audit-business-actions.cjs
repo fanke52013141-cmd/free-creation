@@ -1,5 +1,5 @@
 /* eslint-disable no-regex-spaces, @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
+ 
 // F0 业务动作分母审计：把 GUI 业务动作（IPC 契约 + 画布级动作）与外部 Registry 覆盖对照。
 // 产物：docs/local-agent-access/generated/action-inventory.json
 // 校验：每个 IPC 通道与画布动作都有登记；登记的阶段合法；external 引用的操作必须真实存在。
@@ -198,6 +198,14 @@ const EXTERNAL_ONLY_OPERATIONS = new Map([
   [
     'composite.run.resubmit',
     'headless 运行人工补交：仅 failed/interrupted 可一次性补齐全部公开输出，completed 但 manualSubmission=true 如实标记；GUI 无对应补交按钮，属外部专用能力入口'
+  ],
+  [
+    'composite.run.submitHuman',
+    'AF-07 headless 节点流人工等待提交：向 waiting-input 运行的内部人工任务节点提交结果（满足开放人工等待），经续跑消费为正式输出；GUI 经画布人工任务提交，headless 隔离执行属外部专用入口'
+  ],
+  [
+    'composite.run.resume',
+    'AF-07 headless 节点流人工等待续跑：消费已满足提交、跳过已完成步骤（保护已付费任务）从等待节点继续；仅 waiting-input 可续跑；随 composite.execute 同为外部专用入口'
   ]
 ])
 

@@ -19524,6 +19524,292 @@
       ]
     },
     {
+      "operationId": "composite.run.submitHuman",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "向等待人工的节点流运行提交某内部人工任务节点的结果（满足开放人工等待）；仅 waiting-input 且该节点有开放等待时接受；提交值经续跑消费为正式输出，不伪造自动成功",
+      "requires": [],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "nodeId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "value": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "text"
+                  },
+                  "text": {
+                    "type": "string",
+                    "maxLength": 1048576
+                  }
+                },
+                "required": [
+                  "kind",
+                  "text"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "json"
+                  },
+                  "data": {}
+                },
+                "required": [
+                  "kind",
+                  "data"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "runId",
+          "nodeId",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "composite.run.submitHuman"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "runId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "nodeId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "satisfied": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "runId",
+              "nodeId",
+              "satisfied"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "composite.run.resume",
+      "operationVersion": 1,
+      "effect": "execute",
+      "description": "续跑等待人工的节点流运行：消费已满足的人工提交，跳过已完成步骤（保护已付费任务），从等待节点继续；仅 waiting-input 可续跑；返回 runId，终态经 composite.run.get 读取",
+      "requires": [],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "runId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "composite.run.resume"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "runId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "capabilityId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^\\d+\\.0(\\.0)?$"
+              },
+              "status": {
+                "type": "string",
+                "const": "running"
+              }
+            },
+            "required": [
+              "runId",
+              "capabilityId",
+              "version",
+              "status"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
       "operationId": "composite.run.resubmit",
       "operationVersion": 1,
       "effect": "write",
@@ -22340,6 +22626,1982 @@
       ]
     },
     {
+      "operationId": "flowStage.context.preview",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "预览固定顺序主控某阶段的输入编制清单（当前已交付事实下会采用的字段/片段、缺项、预算）；只读，默认不含正文，includeBody=true 才返回内容；无运行或无阶段输入声明返回 null",
+      "requires": [
+        "openProject",
+        "agentNode"
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "nodeId": {
+            "type": "string",
+            "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+          },
+          "stageKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-zA-Z0-9_.:-]+$"
+          },
+          "includeBody": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projectId",
+          "nodeId",
+          "stageKey"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "flowStage.context.preview"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "nodeId": {
+                "type": "string",
+                "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+              },
+              "preview": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "stageKey": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      },
+                      "manifestHash": {
+                        "type": "string",
+                        "maxLength": 80
+                      },
+                      "entries": {
+                        "maxItems": 128,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "sourceStageKey": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "path": {
+                              "type": "string",
+                              "maxLength": 256
+                            },
+                            "kind": {
+                              "type": "string",
+                              "maxLength": 20
+                            },
+                            "bytes": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "required": {
+                              "type": "boolean"
+                            },
+                            "purpose": {
+                              "type": "string",
+                              "maxLength": 256
+                            },
+                            "value": {}
+                          },
+                          "required": [
+                            "sourceStageKey",
+                            "path",
+                            "kind",
+                            "bytes",
+                            "required"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "missing": {
+                        "maxItems": 128,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "dropped": {
+                        "maxItems": 128,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "budget": {
+                        "type": "object",
+                        "properties": {
+                          "limitBytes": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "usedBytes": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "exceeded": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "limitBytes",
+                          "usedBytes",
+                          "exceeded"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "blocking": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "stageKey",
+                      "manifestHash",
+                      "entries",
+                      "missing",
+                      "dropped",
+                      "budget",
+                      "blocking"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "projectId",
+              "nodeId",
+              "preview"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "flowStage.rework",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "对固定顺序主控从指定阶段局部返工：移除该阶段及下游子任务并以新轮次重跑，上游已完成阶段不重跑；旧交付移入历史、下游标过期；返工轮次上限 10，在途 pending/unknown 命令未结算时拒绝；非固定顺序/非主控如实拒绝",
+      "requires": [
+        "openProject",
+        "agentNode"
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "nodeId": {
+            "type": "string",
+            "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+          },
+          "stageKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-zA-Z0-9_.:-]+$"
+          }
+        },
+        "required": [
+          "projectId",
+          "nodeId",
+          "stageKey"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "flowStage.rework"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "nodeId": {
+                "type": "string",
+                "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+              },
+              "task": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "taskId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "ready",
+                          "running",
+                          "waiting",
+                          "blocked",
+                          "completed",
+                          "failed",
+                          "cancelled"
+                        ]
+                      },
+                      "waitKind": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "human",
+                              "reconcile"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "waitRevision": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "decisions": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "tools": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "code": {
+                        "type": "string",
+                        "maxLength": 120
+                      },
+                      "prepared": {
+                        "type": "boolean"
+                      },
+                      "phase": {
+                        "type": "string",
+                        "maxLength": 80
+                      },
+                      "recovery": {
+                        "type": "object",
+                        "properties": {
+                          "reasons": {
+                            "maxItems": 8,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "maxLength": 80
+                            }
+                          },
+                          "canRestore": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "reasons",
+                          "canRestore"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "reviewFeedback": {
+                        "type": "object",
+                        "properties": {
+                          "reviewNodeId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          },
+                          "reviewId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          },
+                          "feedback": {
+                            "type": "string",
+                            "maxLength": 16384
+                          },
+                          "round": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "state": {
+                            "type": "string",
+                            "maxLength": 40
+                          },
+                          "subjects": {
+                            "maxItems": 128,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "assetId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 160,
+                                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                },
+                                "versionId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 160,
+                                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                },
+                                "sourceNodeId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 160,
+                                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                },
+                                "sourcePortId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 160,
+                                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                }
+                              },
+                              "required": [
+                                "assetId",
+                                "versionId",
+                                "sourceNodeId",
+                                "sourcePortId"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "reviewNodeId",
+                          "reviewId",
+                          "feedback",
+                          "round",
+                          "state",
+                          "subjects"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "taskId",
+                      "state",
+                      "waitKind",
+                      "waitRevision",
+                      "decisions",
+                      "tools"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "projectId",
+              "nodeId",
+              "task"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "flowDefinition.publish",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "从固定顺序主控的已保存配置发布一个不可变流程定义版本（阶段/方法/输入/进入条件快照，版本递增）；只存定义内容，不存运行正文/产物；非固定顺序如实拒绝",
+      "requires": [
+        "openProject",
+        "agentNode"
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "definitionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-zA-Z0-9_.:-]+$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "coordinatorNodeId": {
+            "type": "string",
+            "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+          }
+        },
+        "required": [
+          "projectId",
+          "definitionId",
+          "name",
+          "coordinatorNodeId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "flowDefinition.publish"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "definition": {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "definitionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "coordinatorGoal": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32768
+                  },
+                  "stages": {
+                    "minItems": 1,
+                    "maxItems": 32,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "stageKey": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[a-zA-Z0-9_.:-]+$"
+                        },
+                        "nodeId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[a-zA-Z0-9_.:-]+$"
+                        },
+                        "goal": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 8192
+                        },
+                        "completion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4096
+                        },
+                        "requireHumanDecision": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "entry": {
+                          "default": [],
+                          "maxItems": 16,
+                          "type": "array",
+                          "items": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "output-field"
+                                  },
+                                  "stageKey": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                  },
+                                  "path": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 256
+                                  },
+                                  "op": {
+                                    "type": "string",
+                                    "enum": [
+                                      "exists",
+                                      "missing",
+                                      "equals",
+                                      "type"
+                                    ]
+                                  },
+                                  "value": {},
+                                  "valueType": {
+                                    "type": "string",
+                                    "enum": [
+                                      "string",
+                                      "number",
+                                      "boolean",
+                                      "object",
+                                      "array"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "stageKey",
+                                  "path",
+                                  "op"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "output-count"
+                                  },
+                                  "stageKey": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                  },
+                                  "op": {
+                                    "type": "string",
+                                    "enum": [
+                                      "gte",
+                                      "lte"
+                                    ]
+                                  },
+                                  "count": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 128
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "stageKey",
+                                  "op",
+                                  "count"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "human-decision"
+                                  },
+                                  "stageKey": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "stageKey"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "review-passed"
+                                  },
+                                  "reviewNodeId": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "reviewNodeId"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        },
+                        "inputs": {
+                          "type": "object",
+                          "properties": {
+                            "selectors": {
+                              "minItems": 1,
+                              "maxItems": 32,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "sourceStageKey": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                  },
+                                  "path": {
+                                    "default": "",
+                                    "type": "string",
+                                    "maxLength": 256
+                                  },
+                                  "required": {
+                                    "default": true,
+                                    "type": "boolean"
+                                  },
+                                  "purpose": {
+                                    "type": "string",
+                                    "maxLength": 256
+                                  }
+                                },
+                                "required": [
+                                  "sourceStageKey",
+                                  "path",
+                                  "required"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "budgetBytes": {
+                              "default": 131072,
+                              "type": "integer",
+                              "minimum": 1024,
+                              "maximum": 1048576
+                            }
+                          },
+                          "required": [
+                            "selectors",
+                            "budgetBytes"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "method": {
+                          "type": "object",
+                          "properties": {
+                            "instructions": {
+                              "type": "string",
+                              "maxLength": 8192
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "stageKey",
+                        "nodeId",
+                        "goal",
+                        "completion",
+                        "requireHumanDecision",
+                        "entry"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "contentHash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  },
+                  "createdAt": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "definitionId",
+                  "version",
+                  "name",
+                  "coordinatorGoal",
+                  "stages",
+                  "contentHash",
+                  "createdAt"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "projectId",
+              "definition"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "flowDefinition.list",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "列出项目各流程定义的最新版本（只读定义快照，不含运行产物）",
+      "requires": [
+        "openProject"
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "flowDefinition.list"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "definitions": {
+                "maxItems": 256,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "definitionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
+                    "coordinatorGoal": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 32768
+                    },
+                    "stages": {
+                      "minItems": 1,
+                      "maxItems": 32,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "stageKey": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          },
+                          "nodeId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          },
+                          "goal": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 8192
+                          },
+                          "completion": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "requireHumanDecision": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "entry": {
+                            "default": [],
+                            "maxItems": 16,
+                            "type": "array",
+                            "items": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "output-field"
+                                    },
+                                    "stageKey": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                    },
+                                    "path": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 256
+                                    },
+                                    "op": {
+                                      "type": "string",
+                                      "enum": [
+                                        "exists",
+                                        "missing",
+                                        "equals",
+                                        "type"
+                                      ]
+                                    },
+                                    "value": {},
+                                    "valueType": {
+                                      "type": "string",
+                                      "enum": [
+                                        "string",
+                                        "number",
+                                        "boolean",
+                                        "object",
+                                        "array"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "stageKey",
+                                    "path",
+                                    "op"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "output-count"
+                                    },
+                                    "stageKey": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                    },
+                                    "op": {
+                                      "type": "string",
+                                      "enum": [
+                                        "gte",
+                                        "lte"
+                                      ]
+                                    },
+                                    "count": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 128
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "stageKey",
+                                    "op",
+                                    "count"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "human-decision"
+                                    },
+                                    "stageKey": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "stageKey"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "review-passed"
+                                    },
+                                    "reviewNodeId": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "reviewNodeId"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            }
+                          },
+                          "inputs": {
+                            "type": "object",
+                            "properties": {
+                              "selectors": {
+                                "minItems": 1,
+                                "maxItems": 32,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "sourceStageKey": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                    },
+                                    "path": {
+                                      "default": "",
+                                      "type": "string",
+                                      "maxLength": 256
+                                    },
+                                    "required": {
+                                      "default": true,
+                                      "type": "boolean"
+                                    },
+                                    "purpose": {
+                                      "type": "string",
+                                      "maxLength": 256
+                                    }
+                                  },
+                                  "required": [
+                                    "sourceStageKey",
+                                    "path",
+                                    "required"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "budgetBytes": {
+                                "default": 131072,
+                                "type": "integer",
+                                "minimum": 1024,
+                                "maximum": 1048576
+                              }
+                            },
+                            "required": [
+                              "selectors",
+                              "budgetBytes"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "method": {
+                            "type": "object",
+                            "properties": {
+                              "instructions": {
+                                "type": "string",
+                                "maxLength": 8192
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "stageKey",
+                          "nodeId",
+                          "goal",
+                          "completion",
+                          "requireHumanDecision",
+                          "entry"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "contentHash": {
+                      "type": "string",
+                      "pattern": "^sha256:[a-f0-9]{64}$"
+                    },
+                    "createdAt": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "definitionId",
+                    "version",
+                    "name",
+                    "coordinatorGoal",
+                    "stages",
+                    "contentHash",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "projectId",
+              "definitions"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "flowDefinition.get",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "读取某流程定义指定版本（缺省最新）；不存在返回 null",
+      "requires": [
+        "openProject"
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "definitionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-zA-Z0-9_.:-]+$"
+          },
+          "version": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "projectId",
+          "definitionId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "flowDefinition.get"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "definition": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "schemaVersion": {
+                        "type": "number",
+                        "const": 1
+                      },
+                      "definitionId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      },
+                      "version": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120
+                      },
+                      "coordinatorGoal": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32768
+                      },
+                      "stages": {
+                        "minItems": 1,
+                        "maxItems": 32,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "stageKey": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "nodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "goal": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 8192
+                            },
+                            "completion": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4096
+                            },
+                            "requireHumanDecision": {
+                              "default": false,
+                              "type": "boolean"
+                            },
+                            "entry": {
+                              "default": [],
+                              "maxItems": 16,
+                              "type": "array",
+                              "items": {
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "output-field"
+                                      },
+                                      "stageKey": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 128,
+                                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                      },
+                                      "path": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 256
+                                      },
+                                      "op": {
+                                        "type": "string",
+                                        "enum": [
+                                          "exists",
+                                          "missing",
+                                          "equals",
+                                          "type"
+                                        ]
+                                      },
+                                      "value": {},
+                                      "valueType": {
+                                        "type": "string",
+                                        "enum": [
+                                          "string",
+                                          "number",
+                                          "boolean",
+                                          "object",
+                                          "array"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "stageKey",
+                                      "path",
+                                      "op"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "output-count"
+                                      },
+                                      "stageKey": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 128,
+                                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                      },
+                                      "op": {
+                                        "type": "string",
+                                        "enum": [
+                                          "gte",
+                                          "lte"
+                                        ]
+                                      },
+                                      "count": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 128
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "stageKey",
+                                      "op",
+                                      "count"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "human-decision"
+                                      },
+                                      "stageKey": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 128,
+                                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "stageKey"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "review-passed"
+                                      },
+                                      "reviewNodeId": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 128,
+                                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reviewNodeId"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              }
+                            },
+                            "inputs": {
+                              "type": "object",
+                              "properties": {
+                                "selectors": {
+                                  "minItems": 1,
+                                  "maxItems": 32,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "sourceStageKey": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 128,
+                                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                      },
+                                      "path": {
+                                        "default": "",
+                                        "type": "string",
+                                        "maxLength": 256
+                                      },
+                                      "required": {
+                                        "default": true,
+                                        "type": "boolean"
+                                      },
+                                      "purpose": {
+                                        "type": "string",
+                                        "maxLength": 256
+                                      }
+                                    },
+                                    "required": [
+                                      "sourceStageKey",
+                                      "path",
+                                      "required"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "budgetBytes": {
+                                  "default": 131072,
+                                  "type": "integer",
+                                  "minimum": 1024,
+                                  "maximum": 1048576
+                                }
+                              },
+                              "required": [
+                                "selectors",
+                                "budgetBytes"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "method": {
+                              "type": "object",
+                              "properties": {
+                                "instructions": {
+                                  "type": "string",
+                                  "maxLength": 8192
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "stageKey",
+                            "nodeId",
+                            "goal",
+                            "completion",
+                            "requireHumanDecision",
+                            "entry"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "contentHash": {
+                        "type": "string",
+                        "pattern": "^sha256:[a-f0-9]{64}$"
+                      },
+                      "createdAt": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "schemaVersion",
+                      "definitionId",
+                      "version",
+                      "name",
+                      "coordinatorGoal",
+                      "stages",
+                      "contentHash",
+                      "createdAt"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "projectId",
+              "definition"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "flowDefinition.diff",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "差异预览：比较同一流程定义两个版本的名称/目标/阶段增删改及变更字段（只读）",
+      "requires": [
+        "openProject"
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "definitionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-zA-Z0-9_.:-]+$"
+          },
+          "versionA": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "versionB": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "projectId",
+          "definitionId",
+          "versionA",
+          "versionB"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "flowDefinition.diff"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "definitionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[a-zA-Z0-9_.:-]+$"
+              },
+              "diff": {
+                "type": "object",
+                "properties": {
+                  "nameChanged": {
+                    "type": "boolean"
+                  },
+                  "goalChanged": {
+                    "type": "boolean"
+                  },
+                  "stages": {
+                    "maxItems": 64,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "stageKey": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160,
+                          "pattern": "^[a-zA-Z0-9_.:-]+$"
+                        },
+                        "change": {
+                          "type": "string",
+                          "enum": [
+                            "added",
+                            "removed",
+                            "changed"
+                          ]
+                        },
+                        "fields": {
+                          "maxItems": 16,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 40
+                          }
+                        }
+                      },
+                      "required": [
+                        "stageKey",
+                        "change"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "nameChanged",
+                  "goalChanged",
+                  "stages"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "projectId",
+              "definitionId",
+              "diff"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
       "operationId": "flowAgent.catalog",
       "operationVersion": 1,
       "effect": "read",
@@ -22914,6 +25176,10 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "workingDraft": {
+                "type": "string",
+                "maxLength": 1048576
               }
             },
             "required": [

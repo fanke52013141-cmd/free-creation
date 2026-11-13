@@ -2281,6 +2281,82 @@
         "humanTask.submit",
         "humanTask.get"
       ]
+    },
+    "ipc.flowAgents.stageContextPreview": {
+      "label": "Flow 阶段输入预览",
+      "channel": "flow-agents:stage-context-preview",
+      "gui": "Agent 主控设置面板「预览输入编制」按钮",
+      "phase": "external",
+      "external": [
+        "flowStage.context.preview"
+      ],
+      "note": "AF-02 新增：只读预览固定顺序主控某阶段的输入编制清单（当前已交付事实下会采用的字段/片段、缺项、预算），与 GUI 同一宿主 previewStageContext 方法；默认不含正文，includeBody=true 才返回内容；无运行或无阶段输入声明返回 null；零写副作用"
+    },
+    "ipc.flowAgents.stageRework": {
+      "label": "Flow 阶段局部返工",
+      "channel": "flow-agents:stage-rework",
+      "gui": "Agent 主控设置面板阶段「返工」按钮",
+      "phase": "external",
+      "external": [
+        "flowStage.rework"
+      ],
+      "note": "AF-05 新增：从指定阶段局部返工，移除该阶段及下游子任务并以新轮次重跑，上游已完成阶段不重跑；旧交付移入历史、下游标过期；返工轮次上限 10，在途 pending/unknown 命令未结算时拒绝；与 GUI 同一宿主 coordinator.reworkStage，经共享端口调用不另建权威；非固定顺序/非主控如实拒绝"
+    },
+    "ipc.flowAgents.definitionPublish": {
+      "label": "Flow 定义发布",
+      "channel": "flow-agents:definition-publish",
+      "gui": "Agent 主控设置面板流程定义区",
+      "phase": "external",
+      "external": [
+        "flowDefinition.publish"
+      ],
+      "note": "AF-06：从固定顺序主控已保存配置发布不可变定义版本（阶段/方法/输入/进入条件快照），与运行分离；只存定义内容不存运行产物；与外部同一 FlowDefinitionStore"
+    },
+    "ipc.flowAgents.definitionList": {
+      "label": "Flow 定义列表",
+      "channel": "flow-agents:definition-list",
+      "gui": "Agent 主控设置面板流程定义区",
+      "phase": "external",
+      "external": [
+        "flowDefinition.list"
+      ],
+      "note": "AF-06：列出各定义最新版本，只读"
+    },
+    "ipc.flowAgents.definitionGet": {
+      "label": "Flow 定义读取",
+      "channel": "flow-agents:definition-get",
+      "gui": "Agent 主控设置面板流程定义区",
+      "phase": "external",
+      "external": [
+        "flowDefinition.get"
+      ],
+      "note": "AF-06：读取指定版本（缺省最新），不存在返回 null"
+    },
+    "ipc.flowAgents.definitionDiff": {
+      "label": "Flow 定义差异",
+      "channel": "flow-agents:definition-diff",
+      "gui": "Agent 主控设置面板流程定义区",
+      "phase": "external",
+      "external": [
+        "flowDefinition.diff"
+      ],
+      "note": "AF-06：差异预览比较两版本名称/目标/阶段增删改及变更字段，只读"
+    },
+    "ipc.composite.runWait": {
+      "label": "组合运行人工等待",
+      "channel": "composite:run:wait",
+      "gui": "组合运行账本",
+      "phase": "excluded",
+      "external": [],
+      "note": "AF-07 运行器内部账本写入：节点流停在 waiting-input 并开放人工等待，不是外部业务动作；外部经 composite.run.submitHuman/resume 续跑"
+    },
+    "ipc.composite.runStepOutput": {
+      "label": "组合运行步骤输出持久化",
+      "channel": "composite:run:step-output",
+      "gui": "组合运行账本",
+      "phase": "excluded",
+      "external": [],
+      "note": "AF-07 运行器内部账本写入：持久化已完成节点运行结果供续跑回放，不是外部业务动作"
     }
   }
 }
