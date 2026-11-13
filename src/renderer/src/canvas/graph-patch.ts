@@ -594,8 +594,10 @@ export function planGraphPatch(
     const fromSpec = getNodeType(fromNode.nodeType)
     const toSpec = getNodeType(toNode.nodeType)
     if (!fromSpec || !toSpec) return fail(index, 'NODE_TYPE_INVALID')
-    const fromPorts = livePorts(fromNode.nodeType, fromNode.config, 260).out
-    const toPorts = livePorts(toNode.nodeType, toNode.config, 260).in
+    // 引用形态 composite 实例的端口来自 meta.compositeManifest 快照；
+    // 漏传会让公开端口解析为空，外部连线被误拒（EDGE_PORT_INVALID）。
+    const fromPorts = livePorts(fromNode.nodeType, fromNode.config, 260, fromNode.compositeManifest).out
+    const toPorts = livePorts(toNode.nodeType, toNode.config, 260, toNode.compositeManifest).in
     const fromPort = fromPorts.find((p) => p.id === op.from.portId)
     const toPort = toPorts.find((p) => p.id === op.to.portId)
     if (!fromPort || !toPort) return fail(index, 'EDGE_PORT_INVALID', `${op.from.portId}->${op.to.portId}`)

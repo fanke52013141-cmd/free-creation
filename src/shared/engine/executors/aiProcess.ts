@@ -9,8 +9,8 @@
 //     result?: { kind, text?/data? } }
 import { inputJson, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
-import { validateNodeSchema } from '@shared/node-schemas'
-import type { PortSchemaRef } from '@shared/types'
+import { validateNodeSchema } from '../../node-schemas'
+import type { PortSchemaRef } from '../../types'
 import { featureKeyOf, modelKeyOf, resolveFeatureOption } from '../models'
 import { parseJsonObj, waitForChat } from '../helpers'
 import { readNodeConfig } from '../node-config'

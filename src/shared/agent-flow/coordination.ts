@@ -10,7 +10,10 @@ export const CoordinationDecisionSchema = z.discriminatedUnion('kind', [
       nodeId: z.string().min(1).max(128),
       goal: z.string().min(1).max(8192),
       completion: z.string().min(1).max(4096),
-      inputs: z.array(AgentFlowAssetRefSchema).min(1).max(32)
+      // 二-1：inputs 允许为空——所选专家没有固定上游输入时仍可分派。
+      // "有固定输入则至少选一条"的条件约束由主控模型端口在决策解析后校验
+      // （runtime-model.coordinate），schema 层无法感知候选的可用输入。
+      inputs: z.array(AgentFlowAssetRefSchema).min(0).max(32)
     })
     .strict(),
   z
@@ -27,7 +30,7 @@ export const CoordinationDecisionSchema = z.discriminatedUnion('kind', [
               nodeId: z.string().min(1).max(128),
               goal: z.string().min(1).max(8192),
               completion: z.string().min(1).max(4096),
-              inputs: z.array(AgentFlowAssetRefSchema).min(1).max(32)
+              inputs: z.array(AgentFlowAssetRefSchema).min(0).max(32)
             })
             .strict()
         )
@@ -37,6 +40,28 @@ export const CoordinationDecisionSchema = z.discriminatedUnion('kind', [
     .strict()
 ])
 export type CoordinationDecision = z.infer<typeof CoordinationDecisionSchema>
+
+/**
+ * 二-1：条件化最小输入校验（纯函数，GUI/CLI/MCP 与模型端口共用口径）。
+ * 所选候选有固定输入时，分派必须至少携带一条（逐字复制由 exactRefs 保证）；
+ * 候选没有固定输入时允许空清单——无输入专家可分派。
+ * finish/wait 决策不涉及 inputs，恒满足。
+ */
+export function dispatchInputsSatisfied(
+  decision: CoordinationDecision,
+  available: CoordinationContext['available']
+): boolean {
+  const assignments =
+    decision.kind === 'dispatch'
+      ? [decision]
+      : decision.kind === 'dispatch-many'
+        ? decision.assignments
+        : []
+  return assignments.every((assignment) => {
+    const candidate = available.find((item) => item.nodeId === assignment.nodeId)
+    return !(assignment.inputs.length === 0 && candidate && candidate.inputs.length > 0)
+  })
+}
 export interface CoordinationContext {
   goal: string
   mode: 'collaborative' | 'autonomous'

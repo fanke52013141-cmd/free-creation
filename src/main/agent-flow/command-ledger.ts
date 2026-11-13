@@ -4,6 +4,7 @@ import type { ProjectFile, PortDecl } from '../../shared/types'
 import type { NodeShape } from '../../shared/engine/executor-types'
 import {
   codeFlowSingleOutputConfig,
+  aiProcessFlowTextConfig,
   cropFlowConfigValid,
   flowTargetContract,
   splitFlowConfigValid,
@@ -304,6 +305,8 @@ export class FlowCommandLedger {
       fail('FLOW_INPUT_CONTRACT_INVALID', 'split-config')
     if (node.type === 'code' && !codeFlowSingleOutputConfig(targetConfig))
       fail('FLOW_INPUT_CONTRACT_INVALID', 'code-config')
+    if (node.type === 'ai-process' && !aiProcessFlowTextConfig(targetConfig))
+      fail('FLOW_INPUT_CONTRACT_INVALID', 'ai-process-config')
     if (
       command.contractVersion !== node.contractVersion ||
       portIdentity(node.ports) !== portIdentity(flowTargetPorts(node)) ||

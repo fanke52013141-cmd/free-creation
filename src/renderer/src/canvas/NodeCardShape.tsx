@@ -97,8 +97,10 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
       ...shape,
       props: {
         ...shape.props,
+        // 二-2：默认透传（pass）——pick 需要 JSON 输入与字段路径，新建节点喂文本
+        // 必失败（R1 实测根因）；提取字段/模板由用户在设置里显式选择。
         config: JSON.stringify({
-          operation: 'pick',
+          operation: 'pass',
           valueType: 'any',
           fallback: '',
           path: '',

@@ -388,6 +388,35 @@ describe('graph.patch 规划器校验矩阵', () => {
     expect(created.props.config.length).toBeLessThan(512)
   })
 
+  it('C1 回归：引用形态实例的公开端口可被 edge.create 连接（meta 快照参与端口解析）', () => {
+    const manifest = {
+      schemaVersion: 1,
+      runtimeVersion: 2,
+      capabilityId: 'copy-polish',
+      version: '1.0',
+      name: '文案整理',
+      inputs: [
+        { id: 'copy', label: '文案', type: 'text', required: true, cardinality: 'one', targets: [{ nodeId: 'n1', portId: 'in-text' }] }
+      ],
+      outputs: [
+        { id: 'polished', label: '结果', type: 'text', required: true, cardinality: 'one', source: { nodeId: 'n1', portId: 'out-text' } }
+      ],
+      graph: { nodes: [], edges: [] },
+      dependencies: []
+    }
+    const instance = {
+      ...card('inst', 'composite', JSON.stringify({ capabilityId: 'copy-polish', version: '1.0', contentHash: 'a'.repeat(64) })),
+      meta: { compositeManifest: manifest }
+    }
+    const source = card('src', 'text', '', '上游正文')
+    const planned = planGraphPatch(
+      mockEditor([instance, source]),
+      [{ action: 'edge.create', from: { nodeId: 'shape:src', portId: 'out-text' }, to: { nodeId: 'shape:inst', portId: 'in-copy' } }],
+      []
+    )
+    expect(planned.ok).toBe(true)
+  })
+
   it('W3：引用升级 node.update 替换实例绑定，并按新端口校验现有连线', () => {
     const oldManifest = {
       schemaVersion: 1,

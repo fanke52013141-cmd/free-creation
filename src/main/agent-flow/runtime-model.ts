@@ -26,6 +26,7 @@ import type { AgentModelContext, AgentModelPort } from './runtime'
 import type { FlowAssetStore } from './asset-store'
 import {
   CoordinationDecisionSchema,
+  dispatchInputsSatisfied,
   type CoordinationContext,
   type CoordinationDecision
 } from '../../shared/agent-flow/coordination'
@@ -376,7 +377,7 @@ export class AgentSdkModel implements AgentModelPort {
               ),
               inputs: z
                 .array(exactRefs(input.available.flatMap((candidate) => candidate.inputs)))
-                .min(1)
+                .min(0)
                 .max(32)
             })
       const result = streamText({
@@ -391,7 +392,7 @@ export class AgentSdkModel implements AgentModelPort {
         tools: {
           dispatch_agent: tool({
             description:
-              '给一个就绪专业 Agent 分派独立任务；从其允许的固定输入中选择最小清单，填写目标和完成条件。',
+              '给一个就绪专业 Agent 分派独立任务；从其允许的固定输入中选择最小清单（该节点没有固定输入时 inputs 传空数组），填写目标和完成条件。',
             inputSchema: dispatchSchema
           }),
           ...(input.maxParallelTasks !== undefined && input.maxParallelTasks > 1 && input.available.length >= 2
@@ -429,7 +430,7 @@ export class AgentSdkModel implements AgentModelPort {
             : {})
         },
         system:
-          '你是当前画布的主 Agent，仅协调已授权专业 Agent。每轮必须选择恰好一个工具。available 是目前可派发的真实节点和固定输入，completed 是真实完成记录；不能伪造完成或读取其他会话。按 goal 的要求分派，不要重复已完成任务。dispatch_agent 的 inputs 必须逐字复制所选节点的固定引用，goal 与 completion 明确且符合该节点原职责。只有显式允许且分支无数据依赖时，才用 dispatch_parallel 同时分派 2 至 4 个任务。available 为空且任务未完成时不能捏造结果。所有任务完成后 finish_flow 仅复制已完成记录的输出引用，不再派发。专业任务内部自主工具循环由专业 Agent 执行。',
+          '你是当前画布的主 Agent，仅协调已授权专业 Agent。每轮必须选择恰好一个工具。available 是目前可派发的真实节点和固定输入，completed 是真实完成记录；不能伪造完成或读取其他会话。按 goal 的要求分派，不要重复已完成任务。dispatch_agent 的 inputs 必须逐字复制所选节点的固定引用；所选节点没有固定输入时 inputs 传空数组，不要捏造引用。goal 与 completion 明确且符合该节点原职责。只有显式允许且分支无数据依赖时，才用 dispatch_parallel 同时分派 2 至 4 个任务。available 为空且任务未完成时不能捏造结果。所有任务完成后 finish_flow 仅复制已完成记录的输出引用，不再派发。专业任务内部自主工具循环由专业 Agent 执行。',
         messages: [{ role: 'user', content }]
       })
       for await (const part of result.fullStream)
@@ -452,6 +453,10 @@ export class AgentSdkModel implements AgentModelPort {
                   ? 'wait'
                   : 'invalid'
       })
+      // 二-1：条件化最小输入——所选候选有固定输入时必须至少携带一条（逐字复制），
+      // 没有固定输入时允许空清单（无输入专家可分派）。纯函数与契约同包，便于单测。
+      if (!dispatchInputsSatisfied(decision, input.available))
+        throw new AgentRuntimeError('AGENT_MODEL_ACTION_INVALID', 'coordination')
       emitGatewayEvent('model.request.completed', '主 Agent 决策完成', context, {
         attributes,
         status: 'success'

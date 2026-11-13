@@ -41,6 +41,9 @@ import {
   localImageFlowInputsValid,
   splitFlowConfigValid,
   ttsFlowConfigValid,
+  textFlowInputsValid,
+  aiProcessFlowTextConfig,
+  aiProcessFlowInputsValid,
   flowTargetContract,
   flowTargetPorts
 } from '../../shared/agent-flow/video-adapter'
@@ -469,6 +472,32 @@ export class FlowAgentDesktopHost {
               .map((version) => version.value)
           }))
         )
+      )
+        throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
+      // C1：文本/AI 处理目标——输入类型校验与适配器同包；AI 处理限 text 输出模式。
+      if (
+        node.type === 'text' &&
+        !textFlowInputsValid(
+          inputs.map((input) => ({
+            targetPortId: input.targetPortId,
+            values: this.assets
+              .resolveInputs(raw.projectId, input.assets)
+              .map((version) => version.value)
+          }))
+        )
+      )
+        throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
+      if (
+        node.type === 'ai-process' &&
+        (!aiProcessFlowTextConfig(targetConfig) ||
+          !aiProcessFlowInputsValid(
+            inputs.map((input) => ({
+              targetPortId: input.targetPortId,
+              values: this.assets
+                .resolveInputs(raw.projectId, input.assets)
+                .map((version) => version.value)
+            }))
+          ))
       )
         throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
       return { nodeId, contractVersion: node.contractVersion as 1 | 2 | 3 | 4 | 7, inputs }

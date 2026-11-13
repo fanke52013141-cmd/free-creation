@@ -1,6 +1,6 @@
 import type { NodeShape } from './executor-types'
 import { parseStoredNodeValue, parseMediaResultCollection, type RawNodeOutputs } from './values'
-import { projectAgentOutputs } from '../agent-flow/agent-outputs'
+import { projectAgentOutputs, projectStateMachineOutputs } from '../agent-flow/agent-outputs'
 import { projectReviewOutputs } from '../agent-flow/review'
 import { readStoredNodeRunStatus } from './run-status'
 import { validateNodeSchema } from '../node-schemas'
@@ -21,8 +21,33 @@ import {
 } from './family-projections'
 
 // These exact functions are registered by the desktop NodeTypeSpecs.
-export const projectTextOutputs = (shape: NodeShape): RawNodeOutputs =>
-  shape.props.text.trim() ? { 'out-text': { kind: 'text', text: shape.props.text.trim() } } : {}
+/** C1：文本节点被 Agent 调度执行时合并结果存 nodeResult（含 runId）；
+ *  仅当与当前 nodeRun 同一次运行时优先投影，普通执行/历史残留仍读正文。 */
+function flowTextResult(shape: NodeShape): string | null {
+  try {
+    const raw = shape.meta?.nodeResult
+    if (typeof raw !== 'string' || !raw) return null
+    const parsed = JSON.parse(raw) as { kind?: unknown; text?: unknown; runId?: unknown }
+    const runId = (shape.meta?.nodeRun as { runId?: unknown } | undefined)?.runId
+    if (
+      parsed.kind === 'text' &&
+      typeof parsed.text === 'string' &&
+      parsed.text.trim() &&
+      typeof parsed.runId === 'string' &&
+      parsed.runId === runId
+    )
+      return parsed.text.trim()
+    return null
+  } catch {
+    return null
+  }
+}
+
+export const projectTextOutputs = (shape: NodeShape): RawNodeOutputs => {
+  const flowText = flowTextResult(shape)
+  if (flowText) return { 'out-text': { kind: 'text', text: flowText } }
+  return shape.props.text.trim() ? { 'out-text': { kind: 'text', text: shape.props.text.trim() } } : {}
+}
 
 export const projectJsonOutputs = (shape: NodeShape): RawNodeOutputs => {
   try {
@@ -69,6 +94,8 @@ export const DETERMINISTIC_PROJECTIONS = {
   'ai-process': projectAiProcessOutputsShared,
   'ai-review': projectReviewOutputs,
   agent: projectAgentOutputs,
+  // C3：状态机正式 out-state 投影（持久化实例 → flow.state@1），与 GUI specs 同源。
+  'state-machine': projectStateMachineOutputs,
   // W1：节点流实例只暴露本次运行的显式映射结果；旧版本继续按媒体结果兼容。
   composite: projectCompositeOutputs,
   text: projectTextOutputs,

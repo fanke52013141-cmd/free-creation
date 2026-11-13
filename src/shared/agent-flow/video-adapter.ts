@@ -12,6 +12,7 @@ import {
   outputFieldPortId,
   parseCodeConfigs
 } from '../engine/executors/code'
+import { parseAiProcess } from '../engine/executors/aiProcess'
 
 /** Structural ceiling; the selected provider's lower reference limits also apply. */
 export const VIDEO_FLOW_MAX_REFERENCES = 30
@@ -29,6 +30,15 @@ export function videoFlowAssetValid(portId: string, value: FlowAssetValue): bool
 export function flowTargetContract(node: CanvasNode): { inputs: string[]; output: string } | null {
   if (node.type === 'processor' && node.contractVersion === 1)
     return { inputs: ['in-value'], output: 'out-value' }
+  // C1：文本目标——确定性合并上游文本与节点正文，写作垂类的基础可调度节点。
+  if (node.type === 'text' && node.contractVersion === 3)
+    return { inputs: ['in-text'], output: 'out-text' }
+  // C1：AI 处理目标——仅接受 text 输出模式（out-text 端口固定可预期；
+  // markdown/json 模式的输出端口随结果漂移，不适合固定资产交付）。
+  if (node.type === 'ai-process' && node.contractVersion === 1) {
+    if (!aiProcessFlowTextConfig(node.params.config)) return null
+    return { inputs: ['in-text', 'in-json'], output: 'out-text' }
+  }
   if (node.type === 'video' && node.contractVersion === 7)
     return {
       inputs: ['in-text', 'in-prompt', 'in-images', 'in-reference-video', 'in-reference-audio'],
@@ -53,6 +63,38 @@ export function flowTargetContract(node: CanvasNode): { inputs: string[]; output
     return { inputs: codeFlowInputPortIds(node.params.config), output: codeFlowOutputPortId(node.params.config) }
   }
   return null
+}
+
+/** C1：AI 处理目标只接受 text 输出模式（解析与执行器同一 parseAiProcess，默认 text）。 */
+export function aiProcessFlowTextConfig(rawConfig: unknown): boolean {
+  try {
+    const text = typeof rawConfig === 'string' ? rawConfig : JSON.stringify(rawConfig ?? {})
+    return parseAiProcess(text).mode === 'text'
+  } catch {
+    return false
+  }
+}
+
+/** C1：文本目标输入——in-text 有序文本/markdown；允许空（节点正文可独立参与合并）。 */
+export function textFlowInputsValid(inputs: FlowInputValues[]): boolean {
+  if (new Set(inputs.map((input) => input.targetPortId)).size !== inputs.length) return false
+  return inputs.every(
+    (input) =>
+      input.targetPortId === 'in-text' &&
+      input.values.every((value) => value.kind === 'text' || value.kind === 'markdown')
+  )
+}
+
+/** C1：AI 处理目标输入——in-text 文本/markdown、in-json 结构化值；允许空输入端口。 */
+export function aiProcessFlowInputsValid(inputs: FlowInputValues[]): boolean {
+  if (new Set(inputs.map((input) => input.targetPortId)).size !== inputs.length) return false
+  return inputs.every((input) =>
+    input.targetPortId === 'in-text'
+      ? input.values.every((value) => value.kind === 'text' || value.kind === 'markdown')
+      : input.targetPortId === 'in-json'
+        ? input.values.every((value) => value.kind === 'json')
+        : false
+  )
 }
 
 /** Agent 调度的 code 目标只接受单参数、单输出（single 模式）配置。 */
@@ -444,6 +486,79 @@ export const TTS_FLOW_PORTS: PortDecl[] = [
   }
 ]
 
+/** C1：文本目标端口与注册表一致（in-text 多值可选；out-text 单值必填）。 */
+export const TEXT_FLOW_PORTS: PortDecl[] = [
+  {
+    id: 'in-text',
+    name: '文本',
+    dir: 'in',
+    type: 'text',
+    description: '一个或多个上游文本，执行时与节点正文合并。',
+    required: false,
+    cardinality: 'many'
+  },
+  {
+    id: 'out-text',
+    name: '文本',
+    dir: 'out',
+    type: 'text',
+    description: '节点正文与上游文本合并后的纯文本内容。',
+    required: true,
+    cardinality: 'one'
+  }
+]
+
+/** C1：AI 处理目标端口与注册表一致（三个输出口都保留，交付固定走 out-text）。 */
+export const AI_PROCESS_FLOW_PORTS: PortDecl[] = [
+  {
+    id: 'in-text',
+    name: '文本',
+    dir: 'in',
+    type: 'text',
+    description: '一个或多个上游文本，作为本次转换的输入。',
+    required: false,
+    cardinality: 'many'
+  },
+  {
+    id: 'in-json',
+    name: 'JSON 上下文',
+    dir: 'in',
+    type: 'json',
+    description: '可选的结构化上下文，注入本次转换。',
+    required: false,
+    cardinality: 'one',
+    schema: { id: 'json.any', version: 1 }
+  },
+  {
+    id: 'out-text',
+    name: '文本',
+    dir: 'out',
+    type: 'text',
+    description: '模型返回的纯文本结果。',
+    required: false,
+    cardinality: 'one'
+  },
+  {
+    id: 'out-markdown',
+    name: 'Markdown',
+    dir: 'out',
+    type: 'markdown',
+    description: '模型返回的 Markdown 结果。',
+    required: false,
+    cardinality: 'one'
+  },
+  {
+    id: 'out-json',
+    name: 'JSON',
+    dir: 'out',
+    type: 'json',
+    description: '模型返回并校验后的结构化值（按所选 Schema）。',
+    required: false,
+    cardinality: 'one',
+    schema: { id: 'json.any', version: 1 }
+  }
+]
+
 /** 裁剪/拆图目标端口与注册表一致（in-image 必填单值；拆图另暴露集合口）。 */
 export const CROP_FLOW_PORTS: PortDecl[] = [
   {
@@ -606,6 +721,8 @@ export function codeFlowInputsValid(rawConfig: unknown, inputs: FlowInputValues[
 
 export function flowTargetPorts(node: CanvasNode): PortDecl[] {
   if (node.type === 'processor') return [...PROCESSOR_PORTS.in, ...PROCESSOR_PORTS.out]
+  if (node.type === 'text') return TEXT_FLOW_PORTS
+  if (node.type === 'ai-process') return AI_PROCESS_FLOW_PORTS
   if (node.type === 'image-crop') return CROP_FLOW_PORTS
   if (node.type === 'image-split') return SPLIT_FLOW_PORTS
   if (node.type === 'code') return codeFlowPorts(node.params.config)

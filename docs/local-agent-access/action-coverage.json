@@ -2261,6 +2261,16 @@
         "graph.layout",
         "graph.patch"
       ]
+    },
+    "canvas.state_machine.event": {
+      "label": "状态机人工事件提交与状态读取",
+      "gui": "状态机卡片「提交事件」按钮 / 当前阶段与合法事件展示",
+      "phase": "external",
+      "note": "C3：flowStateMachine.submitEvent 与 GUI 按钮同一 meta.stateMachinePending 写入（修订核对+保存屏障），迁移由运行时执行器校验；flowStateMachine.get 只读持久化实例；output.get 增 state-machine out-state 投影",
+      "external": [
+        "flowStateMachine.submitEvent",
+        "flowStateMachine.get"
+      ]
     }
   }
 }

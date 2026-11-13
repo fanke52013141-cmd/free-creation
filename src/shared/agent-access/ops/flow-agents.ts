@@ -255,6 +255,27 @@ export const FLOW_AGENTS_OPERATIONS = {
     description:
       '在 ai-review 节点上提交一次模型审核并读取报告（与 GUI 同一 FlowReviewHost 与同一证据/预算规则）；审核结论由模型产生，外部不能改写为通过；需要已验证工具调用能力的模型，模型预检失败时零模型请求；request/trace/span 由 main 生成',
     input: project.extend({ nodeId }).strict()
+  },
+  // C3：状态机外部事件——与 GUI「提交事件」按钮同一语义（写 meta.stateMachinePending，
+  // 运行节点时由 stateMachineExecutor 校验修订与迁移并推进）；外部不能直接改状态。
+  'flowStateMachine.submitEvent': {
+    effect: 'write',
+    description:
+      '向状态机节点提交一个人工事件（与 GUI 提交事件按钮同一待处理写入）；携带观察到的 expectedRevision，过期提交拒绝；事件合法性与迁移在运行节点时由同一执行器校验；要求目标项目已在桌面打开',
+    input: project
+      .extend({
+        nodeId,
+        event: z.string().trim().min(1).max(120),
+        expectedRevision: z.number().int().min(1),
+        eventId: flowId.optional()
+      })
+      .strict()
+  },
+  'flowStateMachine.get': {
+    effect: 'read',
+    description:
+      '读取状态机节点的当前阶段/修订/合法出边事件与待处理提交（只读持久化事实；未运行时按配置初始阶段与修订 1 返回）',
+    input: project.extend({ nodeId }).strict()
   }
 } as const
 
@@ -410,6 +431,31 @@ export const FLOW_AGENTS_OUTPUTS = {
       nodeId,
       graphVersion: z.number().int().nonnegative(),
       decision: reviewDecisionDto
+    })
+    .strict(),
+  'flowStateMachine.submitEvent': z
+    .object({
+      projectId: identifier,
+      nodeId,
+      graphVersion: z.number().int().nonnegative(),
+      /** 提交时观察到的实例修订（待处理事件基于它，运行节点时校验）。 */
+      revision: z.number().int().min(1),
+      eventId: flowId,
+      event: z.string().max(120),
+      pending: z.literal(true)
+    })
+    .strict(),
+  'flowStateMachine.get': z
+    .object({
+      projectId: identifier,
+      nodeId,
+      state: z.string().max(120),
+      revision: z.number().int().min(1),
+      legalEvents: z.array(z.string().max(120)).max(256),
+      pending: z
+        .object({ eventId: flowId, event: z.string().max(120), expectedRevision: z.number().int().min(1) })
+        .strict()
+        .nullable()
     })
     .strict()
 } as const

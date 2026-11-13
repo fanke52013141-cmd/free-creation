@@ -124,7 +124,7 @@ export class FlowAssetStore {
         const runStatus = readStoredNodeRunStatus(record.meta?.nodeRun)
         if (
           !pinned &&
-          ['processor', 'agent', 'video', 'image-gen', 'image-edit', 'speech', 'tts', 'timeline'].includes(
+          ['processor', 'ai-process', 'agent', 'video', 'image-gen', 'image-edit', 'speech', 'tts', 'timeline'].includes(
             record.props.nodeType
           ) &&
           runStatus &&
@@ -134,11 +134,13 @@ export class FlowAssetStore {
         const declaredPort =
           record.props.nodeType === 'text'
             ? 'out-text'
-            : record.props.nodeType === 'json'
-              ? 'out-json'
-              : record.props.nodeType === 'audio'
-                ? 'out-audio'
-                : ['image-gen', 'image-edit'].includes(record.props.nodeType)
+            : record.props.nodeType === 'ai-process'
+              ? 'out-text'
+              : record.props.nodeType === 'json'
+                ? 'out-json'
+                : record.props.nodeType === 'audio'
+                  ? 'out-audio'
+                  : ['image-gen', 'image-edit'].includes(record.props.nodeType)
                   ? 'out-image'
                   : record.props.nodeType === 'speech'
                     ? 'out-audio'

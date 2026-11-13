@@ -52,6 +52,9 @@ export interface NodeShape {
 export interface NodeMetaPatch {
   agentTask?: string
   nodeExtra?: string
+  /** C1：文本节点被 Agent 调度执行时，合并结果写 nodeResult（不写回正文，
+   *  保持固定语义修订）；输出投影按 nodeRun.runId 匹配读取。 */
+  nodeResult?: string
   /** 视频供应商任务号：仅供退出/重进后接回后台任务，不属于节点配置意图。 */
   videoTaskId?: string
   /** 状态机节点权威实例（仅 stateMachineExecutor 写入）。 */

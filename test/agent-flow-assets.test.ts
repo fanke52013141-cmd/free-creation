@@ -243,3 +243,35 @@ describe('production immutable text/JSON asset versions', () => {
     expect(list[0].ref.versionId).toBe(version.ref.versionId)
   })
 })
+
+describe('C1：ai-process 目标资产端口（out-text）', () => {
+  function aiProcessFixture() {
+    const f = fixture()
+    const shape = f.file.tldrawSnapshot.store['shape:a'] as NodeShape
+    shape.props.nodeType = 'ai-process'
+    shape.props.config = JSON.stringify({ mode: 'text' })
+    shape.meta = {
+      nodeRun: { runId: 'run-ap', status: 'success', startedAt: 1, inputs: {} },
+      nodeResult: JSON.stringify({ kind: 'text', text: '模型整理后的正文' })
+    }
+    return f
+  }
+
+  it('ai-process out-text 提交成功（declaredPort 映射）', () => {
+    const { store, input } = aiProcessFixture()
+    const version = store.submit({ ...input, portId: 'out-text' })
+    expect(version.value).toEqual({ kind: 'text', text: '模型整理后的正文' })
+  })
+
+  it('ai-process 非 out-text 端口拒绝（ASSET_PORT_INVALID）', () => {
+    const { store, input } = aiProcessFixture()
+    expect(() => store.submit({ ...input, portId: 'out-value' })).toThrow(/ASSET_PORT_INVALID/)
+  })
+
+  it('ai-process 运行未成功时拒绝提交（ASSET_OUTPUT_UNAVAILABLE）', () => {
+    const f = aiProcessFixture()
+    const sh = f.file.tldrawSnapshot.store['shape:a'] as NodeShape
+    sh.meta = { ...sh.meta, nodeRun: { runId: 'run-ap', status: 'failed', startedAt: 1, inputs: {} } }
+    expect(() => f.store.submit({ ...f.input, portId: 'out-text' })).toThrow(/ASSET_OUTPUT_UNAVAILABLE/)
+  })
+})

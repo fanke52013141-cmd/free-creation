@@ -61,6 +61,10 @@ import { FLOW_AGENT_OPERATION_IDS, runFlowAgentOperation } from './flow-agents-o
 import { FLOW_AGENT_RUN_OPERATION_IDS, runFlowAgentRunOperation } from './flow-agent-run-ops'
 import { FLOW_AGENT_BUILD_OPERATION_IDS, runFlowAgentBuildOperation } from './flow-agent-build-ops'
 import { nodeContract } from '../../shared/agent-access/node-contracts'
+import {
+  parseStateMachineInstance,
+  parseStateMachinePending
+} from '../../shared/engine/executors/agentFlow'
 import { FLOW_ASSET_OPERATION_IDS, runFlowAssetOperation } from './flow-assets-ops'
 import { isFlowCommandOperation, runFlowCommandOperation } from './flow-commands-ops'
 import { isSettingsOperation, runSettingsOperation } from './settings-ops'
@@ -984,6 +988,12 @@ export class LocalAccessService {
         result = await runFlowAgentRunOperation(operationId, input, {
           activeProjectId: this.options.activeProjectId
         })
+      } else if (operationId === 'flowStateMachine.submitEvent') {
+        // C3：状态机人工事件——与 GUI 提交事件按钮同一 meta.stateMachinePending 写入，
+        // 经渲染器权威动作（修订核对 + 保存屏障）；迁移合法性仍由运行时的同一执行器校验。
+        result = await this.executeStateMachineEvent(id!, active, input)
+      } else if (operationId === 'flowStateMachine.get') {
+        result = this.readStateMachine(id!, input)
       } else if (FLOW_AGENT_BUILD_OPERATION_IDS.has(operationId)) {
         // F8（收官）：建图预览/提交与模型审核同样只经 flow-bridge 发布的同一 builder/review
         // 宿主；propose/review 先走与 IPC 相同的模型能力预检，commit 走渲染器权威动作
@@ -1640,10 +1650,123 @@ export class LocalAccessService {
     }
   }
 
-  private async execute(
-    operation: AccessOperationId,
+  /**
+   * C3：状态机人工事件提交。渲染器权威动作核对实例修订并写 meta.stateMachinePending
+   * （与 GUI 按钮同一写入）；main 核对落盘事实。事件迁移合法性由运行时执行器校验，
+   * 外部不能直接改状态——满足"模型文字不能直接赋予成功状态"的协同门槛。
+   */
+  private async executeStateMachineEvent(
+    id: string,
+    activeId: string | null | undefined,
     input: Record<string, unknown>
   ): Promise<unknown> {
+    if (id !== activeId || !this.options.desktop)
+      throw new AccessFailure(
+        'ACTIVE_PROJECT_REQUIRED',
+        'desktop-ownership',
+        'project.open the target canvas first, then retry flowStateMachine.submitEvent'
+      )
+    const current = projects.openProject(id)
+    if (!current) throw new AccessFailure('NOT_FOUND', 'read')
+    const nodeId = input.nodeId as string
+    const node = current.nodes.find((item) => item.id === nodeId)
+    if (!node) throw new AccessFailure('NODE_NOT_FOUND', 'precheck', nodeId.slice(0, 60))
+    if (node.type !== 'state-machine')
+      throw new AccessFailure('INVALID_INPUT', 'precheck', 'state-machine-node-required')
+    const reply = await this.options.desktop.run(
+      {
+        action: 'state-machine-event',
+        projectId: id,
+        nodeId,
+        stateMachineEvent: input.event as string,
+        stateMachineExpectedRevision: input.expectedRevision as number,
+        ...(typeof input.eventId === 'string' ? { stateMachineEventId: input.eventId } : {})
+      },
+      (version) => {
+        if (this.options.activeProjectId() !== id)
+          throw new AccessFailure('RESOURCE_BUSY', 'desktop-ownership')
+        const admitted = projects.openProject(id)
+        if (!admitted || admitted.meta.graphVersion !== version)
+          throw new AccessFailure('REVISION_CONFLICT', 'event-admission')
+        return admitted.meta
+      },
+      30000
+    )
+    const saved = projects.openProject(id)
+    if (!saved) throw new AccessFailure('REVISION_CONFLICT', 'event-verify')
+    const payload = (reply.result ?? {}) as {
+      revision?: number
+      eventId?: string
+      event?: string
+    }
+    // 落盘核对：待处理事件必须真实写入目标节点 meta。
+    const shape = (saved.tldrawSnapshot as { store: Record<string, { meta?: Record<string, unknown> }> })
+      .store[nodeId]
+    const pendingRaw = shape?.meta?.stateMachinePending
+    const pending =
+      typeof pendingRaw === 'string'
+        ? (JSON.parse(pendingRaw) as { eventId?: string; event?: string; expectedRevision?: number })
+        : null
+    if (
+      !pending ||
+      pending.event !== (input.event as string) ||
+      pending.expectedRevision !== (input.expectedRevision as number) ||
+      (payload.eventId !== undefined && pending.eventId !== payload.eventId)
+    )
+      throw new AccessFailure('STORAGE_INCONSISTENT', 'event-verify')
+    return {
+      projectId: id,
+      nodeId,
+      graphVersion: saved.meta.graphVersion,
+      revision: payload.revision ?? (input.expectedRevision as number),
+      eventId: pending.eventId ?? '',
+      event: pending.event ?? (input.event as string),
+      pending: true
+    }
+  }
+
+  /** C3：状态机只读视图——当前阶段/修订/合法出边事件/待处理提交（持久化事实）。 */
+  private readStateMachine(id: string, input: Record<string, unknown>): unknown {
+    const file = projects.openProject(id)
+    if (!file) throw new AccessFailure('NOT_FOUND', 'read')
+    const nodeId = input.nodeId as string
+    const node = file.nodes.find((item) => item.id === nodeId)
+    if (!node) throw new AccessFailure('NODE_NOT_FOUND', 'read', nodeId.slice(0, 60))
+    if (node.type !== 'state-machine')
+      throw new AccessFailure('INVALID_INPUT', 'read', 'state-machine-node-required')
+    const shape = (file.tldrawSnapshot as { store: Record<string, { props?: { config?: string }; meta?: Record<string, unknown> }> })
+      .store[nodeId]
+    let config: { initialState?: string; transitions?: Array<{ from: string; event: string; to: string }> }
+    try {
+      config = JSON.parse(shape?.props?.config || '{}')
+    } catch {
+      throw new AccessFailure('INVALID_INPUT', 'read', 'state-machine-config-invalid')
+    }
+    const instance = parseStateMachineInstance(shape?.meta?.stateMachine)
+    const state = instance?.state ?? String(config.initialState ?? '')
+    const revision = instance?.revision ?? 1
+    const legalEvents = [
+      ...new Set(
+        (Array.isArray(config.transitions) ? config.transitions : [])
+          .filter((transition) => transition.from === state)
+          .map((transition) => transition.event)
+      )
+    ]
+    const pending = parseStateMachinePending(shape?.meta?.stateMachinePending)
+    return {
+      projectId: id,
+      nodeId,
+      state,
+      revision,
+      legalEvents,
+      pending: pending
+        ? { eventId: pending.eventId, event: pending.event, expectedRevision: pending.expectedRevision }
+        : null
+    }
+  }
+
+
+  private async execute(operation: AccessOperationId, input: Record<string, unknown>): Promise<unknown> {
     const id = input.projectId as string
     switch (operation) {
       case 'media.getRecipe':

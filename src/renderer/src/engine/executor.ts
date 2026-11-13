@@ -1550,10 +1550,15 @@ async function executeNodeUnscheduled(
               }
             }
             if (!found) throw new Error('Agent 固定资产引用缺失')
-          } else materializeDocumentArtifact(editor, latest, portId, packet.value, ctx.runId)
-          recordRunTrace(ctx, node, record, 'output', 'info', '已创建独立文档结果节点', {
-            name: 'node.document_materialized'
-          })
+          } else if (!ctx.command) {
+            // C1：Agent 调度执行不物化独立文档产物卡——新节点会改变 admitted
+            // 语义图，导致固定修订提交失败（FLOW_REVISION_CONFLICT）。
+            // 固定资产由命令台账从输出投影提交；产物卡仅是 GUI 便利。
+            materializeDocumentArtifact(editor, latest, portId, packet.value, ctx.runId)
+            recordRunTrace(ctx, node, record, 'output', 'info', '已创建独立文档结果节点', {
+              name: 'node.document_materialized'
+            })
+          }
         }
       } catch {
         const reason = '文档结果节点创建失败；已生成的内容可在节点运行记录中查看'

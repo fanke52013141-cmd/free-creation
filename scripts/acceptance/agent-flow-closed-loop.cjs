@@ -14,6 +14,12 @@ const { randomUUID } = require('node:crypto')
 const root = path.resolve(__dirname, '..', '..')
 const evidenceDir = path.join(root, 'qa', 'agent-flow-closed-loop')
 const MODEL_ID = process.env.CANVAS_TEST_MODEL || 'glm-5.3-flash'
+// 二-1/二-2 验证变体：专家无上游输入（dispatch 空 inputs）+ processor 不带显式配置
+// （走新建默认 pass）。缺省变体仍为带输入 + 显式 pass。
+const NO_INPUT = process.env.CANVAS_TEST_NO_INPUT === '1'
+// C1 验证变体：专家目标节点类型 processor（缺省）/ text（确定性）/ ai-process（真实模型）。
+const TARGET = process.env.CANVAS_TEST_TARGET || 'processor'
+const TARGET_OUT_PORT = TARGET === 'processor' ? 'out-value' : 'out-text'
 const key = () => `${Date.now()}:${randomUUID()}`
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -64,7 +70,8 @@ async function patchWithRetry(dir, projectId, ops, label) {
   if (!process.env.CANVAS_TEST_API_KEY) throw new Error('CANVAS_TEST_API_KEY_MISSING')
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'canvas-flow-closed-loop-'))
   let app
-  const receipt = { mode: 'real-model (paid, small)', model: MODEL_ID, checks: [], outputs: {} }
+  let projectId = null
+  const receipt = { mode: 'real-model (paid, small)', model: MODEL_ID, target: TARGET, variant: NO_INPUT ? 'no-input-specialist+default-processor' : 'with-input+explicit-config', checks: [], outputs: {} }
   const check = (label) => { receipt.checks.push(label); console.log(`[check] ${label}`) }
   try {
     const launchEnv = { ...process.env, CANVAS_DATA_DIR: dir }
@@ -96,16 +103,34 @@ async function patchWithRetry(dir, projectId, ops, label) {
       id: 'glm-test-model', connectionId: 'zhipu-official', name: MODEL_ID,
       modelId: MODEL_ID, capabilities: [{ operation: 'text.generate', streaming: true }]
     }), 'DEFINITION_SAVE')
-    const validate = ok(await cli(dir, ['model', 'validateAgentToolCalling'], {
-      connectionId: 'zhipu-official', modelDefinitionId: 'glm-test-model',
-      confirmNetwork: true, confirmCost: true
-    }), 'VALIDATE')
-    if (validate.status !== 'verified') throw new Error(`MODEL_NOT_VERIFIED:${JSON.stringify(validate)}`)
-    check(`模型 ${MODEL_ID} 工具调用验证通过（真实探针）`)
+    // 验证探针可能 OUTCOME_UNKNOWN（connect 超时，宿主仍在执行）：等待后重试，最多 4 次。
+    let validate = null
+    for (let attempt = 0; attempt < 4; attempt++) {
+      validate = await cli(dir, ['model', 'validateAgentToolCalling'], {
+        connectionId: 'zhipu-official', modelDefinitionId: 'glm-test-model',
+        confirmNetwork: true, confirmCost: true
+      })
+      if (validate.response?.status === 'completed' && validate.response?.data?.status === 'verified') break
+      if (validate.response?.error?.code === 'OUTCOME_UNKNOWN') { await sleep(6000); continue }
+      throw new Error(`MODEL_NOT_VERIFIED:${JSON.stringify(validate.response).slice(0, 400)}`)
+    }
+    if (validate.response?.data?.status !== 'verified') throw new Error(`MODEL_NOT_VERIFIED:${JSON.stringify(validate.response).slice(0, 400)}`)
+    // C1：ai-process 目标需要 text.process 功能绑定已验证模型。
+    if (TARGET === 'ai-process') {
+      ok(await cli(dir, ['model', 'validate'], {
+        connectionId: 'zhipu-official', modelDefinitionId: 'glm-test-model',
+        operation: 'text.generate', confirmNetwork: true, confirmCost: true
+      }), 'CAPABILITY_VALIDATE')
+      ok(await cli(dir, ['model', 'binding', 'save'], {
+        featureKey: 'text.process', connectionId: 'zhipu-official',
+        modelDefinitionId: 'glm-test-model', operation: 'text.generate'
+      }), 'BINDING_SAVE')
+    }
+    check(`模型 ${MODEL_ID} 工具调用验证通过（真实探针${TARGET === 'ai-process' ? ' + text.process 绑定' : ''}）`)
 
     // ── 建 flow：状态机 + 主控 + 专家 + processor（pass）+ 素材源 ──
     const created = ok(await cli(dir, ['project', 'create'], { name: '[TEST] Agent Flow 闭环' }), 'CREATE')
-    const projectId = created.meta.id
+    projectId = created.meta.id
     ok(await cli(dir, ['project', 'open'], { projectId }), 'OPEN')
     const batch1 = await patchWithRetry(dir, projectId, [
       { action: 'node.create', ref: 'sm', nodeType: 'state-machine', title: '流程状态', x: 0, y: 0, config: {
@@ -132,8 +157,12 @@ async function patchWithRetry(dir, projectId, ops, label) {
           modelDefinitionId: 'glm-test-model', skills: [],
           tools: [{ id: 'node.execute', version: '1' }],
           allowedNodeIds: [], maxSteps: 12, relations: [] } },
-      { action: 'node.create', ref: 'p1', nodeType: 'processor', title: '初稿', x: 1320, y: 0,
-        config: { operation: 'pass', valueType: 'any', fallback: '', path: '', template: '' } },
+      { action: 'node.create', ref: 'p1', nodeType: TARGET, title: '初稿', x: 1320, y: 0,
+        ...(TARGET === 'processor'
+          ? (NO_INPUT ? {} : { config: { operation: 'pass', valueType: 'any', fallback: '', path: '', template: '' } })
+          : TARGET === 'text'
+            ? { text: '初稿正文：AI 协作让人深度参与创作。' }
+            : { config: { mode: 'text', system: '你是写作助手。把素材整理成一段连贯的短文正文，直接输出正文。', temperature: 0.3, maxTokens: 1024 } }) },
       { action: 'node.create', ref: 'src', nodeType: 'text', title: '素材源', x: 440, y: 420,
         text: 'AI 协作素材：人负责判断与取舍，AI 负责生成候选；每一步人都可以编辑、替换或重试。' }
     ], 'BATCH1')
@@ -144,10 +173,11 @@ async function patchWithRetry(dir, projectId, ops, label) {
         relations: [{ relationId: 'obs-1', kind: 'observes', sourceNodeId: byRef.coord, targetNodeId: byRef.sm }]
       } },
       { action: 'node.update', nodeId: byRef.s1, config: { allowedNodeIds: [byRef.p1] } },
-      { action: 'edge.create', from: { nodeId: byRef.src, portId: 'out-text' }, to: { nodeId: byRef.s1, portId: 'in-text' } },
-      { action: 'edge.create', from: { nodeId: byRef.src, portId: 'out-text' }, to: { nodeId: byRef.p1, portId: 'in-value' } }
+      // 二-1 变体：不给专家接上游输入（directInputs 为空），dispatch 必须允许空 inputs。
+      ...(NO_INPUT ? [] : [{ action: 'edge.create', from: { nodeId: byRef.src, portId: 'out-text' }, to: { nodeId: byRef.s1, portId: 'in-text' } }]),
+      { action: 'edge.create', from: { nodeId: byRef.src, portId: 'out-text' }, to: { nodeId: byRef.p1, portId: TARGET === 'processor' ? 'in-value' : 'in-text' } }
     ], 'BATCH2')
-    check('CLI 建 flow（状态机/主控/专家/processor/素材源 + 控制关系 + 数据边）')
+    check(`CLI 建 flow（目标=${TARGET}；变体=${NO_INPUT ? '无输入专家+默认processor' : '带输入+显式配置'}）`)
 
     // ── 素材源先运行，产出固定资产 ──
     const srcGraph = ok(await cli(dir, ['graph', 'get'], { projectId }), 'SRC_GRAPH')
@@ -182,6 +212,23 @@ async function patchWithRetry(dir, projectId, ops, label) {
     for (let i = 0; i < 60; i++) {
       await sleep(2000)
       specialist = (await cli(dir, ['flowAgent', 'inspect'], { projectId, nodeId: byRef.s1 })).response?.data?.task
+      // 长模型调用可能 OUTCOME_UNKNOWN → reconcile 等待：触发核对后续跑，不盲目重试。
+      // reconcile 必须携带观察到的 taskId/waitRevision + 本次事件 eventId（执行层 superRefine）。
+      if (specialist?.state === 'waiting' && specialist?.waitKind === 'reconcile') {
+        const rec = await cli(dir, ['flowAgent', 'run'], {
+          projectId, nodeId: byRef.s1, action: 'reconcile', eventId: randomUUID(),
+          expectedTaskId: specialist.taskId, expectedWaitRevision: specialist.waitRevision
+        })
+        console.log('[reconcile]', JSON.stringify(rec.response).slice(0, 300))
+        // 命令级对账：暴露台账稳定原因（宿主 reconcile 静默吞掉 commit 错误）。
+        const dbNow = await queryDb().catch(() => null)
+        for (const cmd of dbNow?.commands ?? []) {
+          if (cmd.state === 'pending' || cmd.state === 'unknown') {
+            const cr = await cli(dir, ['flow', 'command', 'reconcile'], { projectId, commandId: cmd.command_id })
+            console.log('[cmd.reconcile]', JSON.stringify(cr.response).slice(0, 600))
+          }
+        }
+      }
       dbOut = await queryDb().catch(() => null)
       const state = dbOut?.run?.state
       if (state && ['completed', 'failed', 'cancelled'].includes(state)) break
@@ -196,10 +243,10 @@ async function patchWithRetry(dir, projectId, ops, label) {
       throw new Error(`COORD_NOT_COMPLETED:${coordRun?.state}:${coordRun?.code ?? ''}`)
     check(`主控协调台账 completed（decisions=${coordRun.decisions}）`)
     if (assetRows.length < 2) throw new Error(`ASSETS_MISSING:${JSON.stringify(assetRows)}`)
-    if (!assetRows.some((a) => a.node_id === byRef.p1 && a.port_id === 'out-value'))
+    if (!assetRows.some((a) => a.node_id === byRef.p1 && a.port_id === TARGET_OUT_PORT))
       throw new Error(`TARGET_ASSET_MISSING:${JSON.stringify(assetRows)}`)
     receipt.outputs.assets = assetRows
-    check(`固定资产提交 ${assetRows.length} 个（含 processor out-value 成果）`)
+    check(`固定资产提交 ${assetRows.length} 个（含 ${TARGET} ${TARGET_OUT_PORT} 成果）`)
 
     console.log(JSON.stringify({ ok: true, ...receipt }, null, 2))
     fs.mkdirSync(evidenceDir, { recursive: true })
@@ -208,6 +255,16 @@ async function patchWithRetry(dir, projectId, ops, label) {
     console.log(JSON.stringify({ ok: false, error: String(error?.stack || error), ...receipt }, null, 2))
     fs.mkdirSync(evidenceDir, { recursive: true })
     fs.writeFileSync(path.join(evidenceDir, 'receipt.json'), JSON.stringify({ ok: false, error: String(error?.stack || error), ...receipt }, null, 2))
+    // 失败留档：项目文件与数据库，供离线比对语义修订。
+    try {
+      if (projectId) {
+        const projDir = path.join(dir, 'projects', projectId)
+        if (fs.existsSync(projDir)) fs.cpSync(projDir, path.join(evidenceDir, 'project'), { recursive: true })
+        for (const f of ['app.db', 'app.db-wal', 'app.db-shm']) {
+          if (fs.existsSync(path.join(dir, f))) fs.copyFileSync(path.join(dir, f), path.join(evidenceDir, f))
+        }
+      }
+    } catch { /* 留档失败不影响退出码 */ }
     process.exitCode = 1
   } finally {
     if (app) await app.close().catch(() => undefined)

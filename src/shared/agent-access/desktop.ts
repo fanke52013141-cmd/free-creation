@@ -22,6 +22,8 @@ export const DesktopRequestSchema = z
       'graph-patch',
       // L2：智能整理（拓扑分层/角色泳道/网格），与 GUI 同一 layoutGraph 纯函数。
       'graph-layout',
+      // C3：状态机人工事件提交（与 GUI 提交事件按钮同一 meta.stateMachinePending 写入）。
+      'state-machine-event',
       'read-graph',
       'workflow-run-plan',
       'execute-nodes',
@@ -57,6 +59,10 @@ export const DesktopRequestSchema = z
     layoutMode: z.enum(['auto', 'flow', 'lanes', 'grid']).optional(),
     /** graph.patch：应用后在同一撤销步内智能整理坐标（L2，只改位置不改配置）。 */
     autoLayout: z.boolean().optional(),
+    /** state-machine-event：人工事件与观察到的实例修订（C3）；eventId 缺省由宿主生成。 */
+    stateMachineEvent: z.string().trim().min(1).max(120).optional(),
+    stateMachineExpectedRevision: z.number().int().min(1).optional(),
+    stateMachineEventId: z.string().min(1).max(160).optional(),
     /** read-graph：latest 视图分页参数。 */
     offset: z.number().int().min(0).max(100000).optional(),
     limit: z.number().int().min(1).max(GRAPH_VIEW_MAX_NODES).optional(),

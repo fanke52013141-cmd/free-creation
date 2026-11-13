@@ -1467,6 +1467,88 @@ export function CanvasEditor({
               })
               return
             }
+            // ── C3 state-machine-event：人工事件提交（与 GUI 提交事件按钮同一写入）──
+            // 修订核对 → 准入 → 写 meta.stateMachinePending → 保存屏障 → 回执。
+            // 迁移合法性由运行节点时的 stateMachineExecutor 校验，此处不推进状态。
+            if (request.action === 'state-machine-event') {
+              const replyFail = (validated: boolean, code: string, detail?: string): void => {
+                window.api.replyLocalAgentDesktop({
+                  requestId: request.requestId,
+                  projectId: project.id,
+                  ok: false,
+                  validated,
+                  graphVersion: graphVersionRef.current,
+                  errorCode: code,
+                  ...(detail ? { errorDetail: detail.slice(0, 300) } : {})
+                })
+              }
+              const nodeId = request.nodeId ?? ''
+              const shape = editor.getShape<NodeCardShape>(nodeId as TLShapeId)
+              if (!shape || shape.type !== 'node-card' || shape.props.nodeType !== 'state-machine') {
+                replyFail(true, 'INVALID_INPUT', 'state-machine-node-required')
+                return
+              }
+              const event = request.stateMachineEvent ?? ''
+              const expectedRevision = request.stateMachineExpectedRevision ?? 0
+              if (!event || expectedRevision < 1) {
+                replyFail(true, 'INVALID_INPUT', 'event/expectedRevision required')
+                return
+              }
+              const meta = shape.meta as Record<string, unknown> | undefined
+              let currentRevision = 1
+              try {
+                const instance = JSON.parse(String(meta?.stateMachine ?? '')) as { revision?: number }
+                if (typeof instance?.revision === 'number') currentRevision = instance.revision
+              } catch {
+                // 无实例：初始修订 1（与执行器初始化一致）。
+              }
+              if (expectedRevision !== currentRevision) {
+                replyFail(
+                  true,
+                  'STATE_MACHINE_REVISION_CONFLICT',
+                  `expected ${expectedRevision}, current ${currentRevision}`
+                )
+                return
+              }
+              if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+              saveTimerRef.current = null
+              const preSave = useSaveCoordinator.getState()
+              if (preSave.dirtyVersion !== preSave.persistedVersion) await ensureCanvasSaved()
+              if (
+                editorRef.current !== editor ||
+                useAppStore.getState().currentProject?.id !== project.id
+              )
+                throw new Error('CANVAS_CHANGED')
+              const admission = await window.api.commitLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                graphVersion: graphVersionRef.current
+              })
+              if (
+                !admission.ok ||
+                Date.now() >= request.expiresAt ||
+                editorRef.current !== editor ||
+                useAppStore.getState().currentProject?.id !== project.id
+              )
+                throw new Error('PATCH_NOT_ADMITTED')
+              const eventId = request.stateMachineEventId ?? crypto.randomUUID()
+              editor.updateShape({
+                id: nodeId as TLShapeId,
+                type: 'node-card',
+                meta: {
+                  stateMachinePending: JSON.stringify({ eventId, event, expectedRevision })
+                }
+              })
+              await ensureCanvasSaved()
+              window.api.replyLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                ok: true,
+                graphVersion: graphVersionRef.current,
+                result: { revision: currentRevision, eventId, event }
+              })
+              return
+            }
             // ── F8 收官：外部提交建图预览到权威画布 ──
             // 与 GUI 面板同一 commitFlowBuild（authorize → 语义修订核对 → 单撤销步 →
             // 保存屏障 → confirm）。main 只给 buildId，预览内容来自 main 侧同一宿主；

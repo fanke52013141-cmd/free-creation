@@ -12,6 +12,15 @@ import {
 /** REL-03 的 Agent 支持目标矩阵：执行器实际接入的节点类型与契约版本。 */
 const SUPPORTED = [
   { type: 'processor', contractVersion: 1, inputs: ['in-value'], output: 'out-value' },
+  // C1：文本（确定性合并）与 AI 处理（限 text 输出模式）可调度目标。
+  { type: 'text', contractVersion: 3, inputs: ['in-text'], output: 'out-text' },
+  {
+    type: 'ai-process',
+    contractVersion: 1,
+    inputs: ['in-text', 'in-json'],
+    output: 'out-text',
+    config: { mode: 'text' }
+  },
   {
     type: 'video',
     contractVersion: 7,
@@ -53,7 +62,6 @@ const SUPPORTED = [
 ] as const
 
 const UNSUPPORTED_TYPES = [
-  'text',
   'image',
   'video-clip',
   'sound-adjust',
@@ -63,7 +71,6 @@ const UNSUPPORTED_TYPES = [
   'chat',
   'json',
   'storyboard',
-  'ai-process',
   'agent',
   'state-machine',
   'ai-review',
@@ -183,5 +190,12 @@ describe('REL-03 Agent 支持目标矩阵', () => {
     const volc = flowTargetPorts(node('speech', 4, { backend: 'volc' })).map((port) => port.id)
     expect(volc).toContain('in-audio')
     expect(volc).not.toContain('in-voice')
+  })
+
+  it('C1：ai-process 仅 text 输出模式可调度（markdown/json 输出端口漂移，显式拒绝）', () => {
+    expect(flowTargetContract(node('ai-process', 1, { mode: 'text' }))).not.toBeNull()
+    expect(flowTargetContract(node('ai-process', 1, {}))).not.toBeNull()
+    expect(flowTargetContract(node('ai-process', 1, { mode: 'markdown' }))).toBeNull()
+    expect(flowTargetContract(node('ai-process', 1, { mode: 'json' }))).toBeNull()
   })
 })
