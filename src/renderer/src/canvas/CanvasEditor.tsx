@@ -3546,6 +3546,18 @@ export function CanvasEditor({
               <span className="palette-label">运行</span>
             </button>
           </Tooltip>
+          <Tooltip label="打开待你处理收件箱">
+            <button
+              className="palette-item"
+              aria-label="打开待你处理收件箱"
+              onClick={() => setPanelTab('tasks')}
+            >
+              <span className="palette-icon">
+                <Icon name="edit" size={20} />
+              </span>
+              <span className="palette-label">待办</span>
+            </button>
+          </Tooltip>
         </div>
       </div>
       <CanvasBottomDock editor={editorInstance} />

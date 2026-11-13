@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "O1 trusted state-machine projection: add internal push channel flowAgents:stateProjection (excluded, no external equivalent); desktop schema adds optional stateMachineEventSource (default human, backward compatible); external flowStateMachine.submitEvent forced human, agent only via internal coordinator projection; executor event-source audit backward compatible; coordinator projection callback optional, behavior unchanged when absent.",
+  "reason": "O2 read-only human inbox: add shared/agent-flow/human-inbox.ts pure aggregation (deriveHumanInbox) plus a read-only side-panel tasks tab aggregating pending human-task and collaborative-agent nodes with click-to-locate. No new external operation or IPC channel; no submission interaction change; backward compatible.",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -131,8 +131,8 @@
     "src/main/store/transfer.ts": "9bb2c234482ddb97a70fbaee3ebd28a38f975f23fa5647239d1da17b42f0d4da",
     "src/preload/index.ts": "933d099d21ee7386538de3dac49775202f41510f097622ed4095a82ce30cb9ae",
     "src/renderer/src/App.tsx": "91611250d276ca1a9aec7c436c596615147fb34b220481964d307426869de9f9",
-    "src/renderer/src/canvas/CanvasEditor.tsx": "768ece48564d1fc8c1133173b1dcc03802fdf6e18b2dceead303e54eb4c79fe1",
-    "src/renderer/src/canvas/CanvasSidePanel.tsx": "24ba6a73edd540ad4ff9ad463e7ebc3f25fa591259ea5e5a7fcff31d1fa1fc44",
+    "src/renderer/src/canvas/CanvasEditor.tsx": "863b238fa021d45dfe6246629a67314a31213b810d6f5ef185c42c8a4559cf62",
+    "src/renderer/src/canvas/CanvasSidePanel.tsx": "0937e05c3bc879f85a49bbbcfb941289ad0eff8d2c5b86fa81260431116c13fa",
     "src/renderer/src/canvas/ChatSidePanel.tsx": "5de2de0fc5f694361cfbfef1bd061db02725aad5d86c7621cd00e0a60bce91ba",
     "src/renderer/src/canvas/RunTimeline.tsx": "c29fef7a5460a75a6f1d0dfb0f02afbd87d419014b6d0d7122949d5cfd4924a6",
     "src/renderer/src/canvas/flow-asset-actions.ts": "0dd4e5a53510d9566771618052954004bfdc17b31f8f94afe08c0d624554a94f",

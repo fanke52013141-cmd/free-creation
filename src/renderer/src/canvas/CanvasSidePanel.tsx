@@ -39,8 +39,9 @@ import { LibraryCardCover } from '../library/LibraryCardCover'
 import { AppSelect } from '../components/AppSelect'
 import { AssetsPanel } from './side-panel/AssetsPanel'
 import { useDragToCanvas } from './drag-to-canvas'
+import { deriveHumanInbox, type HumanInboxItem } from '@shared/agent-flow/human-inbox'
 
-export type SidePanelTab = 'assets' | 'workflow' | 'history' | 'runs'
+export type SidePanelTab = 'assets' | 'workflow' | 'history' | 'runs' | 'tasks'
 
 interface CanvasSidePanelProps {
   tab: SidePanelTab | null
@@ -55,7 +56,8 @@ const TAB_META: Record<SidePanelTab, { title: string; icon: IconName }> = {
   assets: { title: '资产中心', icon: 'assets' },
   workflow: { title: '节点流', icon: 'node-library' },
   history: { title: '历史记录', icon: 'history' },
-  runs: { title: '运行中心', icon: 'play' }
+  runs: { title: '运行中心', icon: 'play' },
+  tasks: { title: '待你处理', icon: 'edit' }
 }
 
 const RUN_CENTER_FILTERS: { key: RunStatusFilter; label: string }[] = [
@@ -894,6 +896,53 @@ function HistoryPanel({
   )
 }
 
+// O2：只读"待你处理"收件箱——聚合等待人工的节点，点击定位。不改变任何提交交互。
+function TasksPanel({
+  editor,
+  items
+}: {
+  editor: Editor | null
+  items: HumanInboxItem[]
+}): React.JSX.Element {
+  const locate = (item: HumanInboxItem): void => {
+    if (!editor) return toast('画布尚未就绪')
+    const shape = editor.getShape(item.nodeId as TLShapeId)
+    if (!shape || shape.type !== 'node-card') return toast('来源节点已删除或不可用')
+    editor.setSelectedShapes([shape.id])
+    editor.zoomToSelection({ animation: { duration: 220 } })
+    toast(`已定位到「${item.title}」`)
+  }
+  return (
+    <div className="side-panel-body runs-panel">
+      {items.length === 0 ? (
+        <div className="side-panel-empty">
+          暂无待你处理的节点。人工任务待提交、或协作 Agent 等待确认时会出现在这里。
+        </div>
+      ) : (
+        <div className="runs-list">
+          {items.map((item) => (
+            <article className="run-card" key={item.nodeId}>
+              <div className="run-card-head">
+                <div>
+                  <strong>{item.title}</strong>
+                  <small>
+                    {item.kind === 'human-task' ? '人工任务' : '协作 Agent'} · {item.reason}
+                  </small>
+                </div>
+              </div>
+              <div className="run-card-actions">
+                <button onClick={() => locate(item)}>
+                  <Icon name="target" size={12} /> 回到节点
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function CanvasSidePanel({
   tab,
   projectId,
@@ -909,6 +958,18 @@ export function CanvasSidePanel({
     () =>
       tab === 'runs' && editor
         ? buildRunIndex(
+            editor
+              .getCurrentPageShapes()
+              .filter((shape): shape is NodeCardShape => shape.type === 'node-card')
+          )
+        : [],
+    [tab, editor]
+  )
+  const humanInbox = useValue(
+    'human inbox items',
+    () =>
+      tab === 'tasks' && editor
+        ? deriveHumanInbox(
             editor
               .getCurrentPageShapes()
               .filter((shape): shape is NodeCardShape => shape.type === 'node-card')
@@ -940,6 +1001,7 @@ export function CanvasSidePanel({
         <strong className="side-panel-title">
           {meta.title}
           {tab === 'runs' && <span className="side-panel-count">（{runEntries.length} 条）</span>}
+          {tab === 'tasks' && <span className="side-panel-count">（{humanInbox.length} 项）</span>}
         </strong>
         <button className="side-panel-close" aria-label="关闭面板" onClick={onClose}>
           <Icon name="close" size={15} />
@@ -965,6 +1027,7 @@ export function CanvasSidePanel({
           onClearFocus={() => setRunFocus(null)}
         />
       )}
+      {tab === 'tasks' && <TasksPanel editor={editor} items={humanInbox} />}
     </div>
   )
 }
