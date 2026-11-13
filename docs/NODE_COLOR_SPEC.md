@@ -90,6 +90,7 @@
 | chat | AI 对话 | 冰青 | `#A9E4E6` |
 | ai-review | AI 审核 | 青蓝 | `#00AEBD` |
 | state-machine | 状态机 | 亮青蓝 | `#49D2EA` |
+| human-task | 人工任务 | 琥珀 | `#E0A458` |
 | composite | 节点流 | 雾蓝 | `#7C9CFF` |
 
 入口色仍为品牌蓝 `#42B9F5`；成员节点统一在青蓝带，与视频蓝（236–286°）保持 ≥22° 色相间距，不再与 input 玫红、data 橙发生跨族撞色。

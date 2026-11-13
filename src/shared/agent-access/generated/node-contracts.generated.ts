@@ -1679,5 +1679,66 @@ export const GENERATED_NODE_CONTRACTS: NodeContractRecord[] = [
         }
       ]
     }
+  },
+  {
+    "typeId": "human-task",
+    "contractVersion": 1,
+    "label": "人工任务",
+    "description": "纯人工任务：人工填写并提交结果，运行后正式交付；未提交时停等，不伪造成功。",
+    "category": "ai",
+    "creatable": true,
+    "defaultSize": {
+      "w": 340,
+      "h": 300
+    },
+    "sizePolicy": "standard",
+    "executionMode": "auto",
+    "outputSource": "run",
+    "initialConfig": "{\"schemaVersion\":1,\"outputType\":\"text\",\"instructions\":\"\"}",
+    "dynamicPorts": false,
+    "ports": {
+      "in": [
+        {
+          "id": "in-text",
+          "dir": "in",
+          "type": "text",
+          "required": false,
+          "cardinality": "many",
+          "name": "文本",
+          "description": "可选上下文：供人工参考的已提交资产，不自动决定结果。"
+        },
+        {
+          "id": "in-json",
+          "dir": "in",
+          "type": "json",
+          "required": false,
+          "cardinality": "many",
+          "name": "结构数据",
+          "description": "可选上下文：供人工参考的已提交资产，不自动决定结果。",
+          "schema": "json.any@1"
+        }
+      ],
+      "out": [
+        {
+          "id": "out-text",
+          "dir": "out",
+          "type": "text",
+          "required": false,
+          "cardinality": "one",
+          "name": "文本",
+          "description": "人工正式提交并运行后才输出的结果；未提交不产生输出。"
+        },
+        {
+          "id": "out-json",
+          "dir": "out",
+          "type": "json",
+          "required": false,
+          "cardinality": "one",
+          "name": "结构数据",
+          "description": "人工正式提交并运行后才输出的结果；未提交不产生输出。",
+          "schema": "json.any@1"
+        }
+      ]
+    }
   }
 ]

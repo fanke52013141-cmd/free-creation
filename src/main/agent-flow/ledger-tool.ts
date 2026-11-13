@@ -8,6 +8,17 @@ import type { FlowCommandLedger } from './command-ledger'
 
 export interface AgentToolPort {
   execute(command: NodeExecuteCommand, signal: AbortSignal): Promise<FlowCommandReceipt>
+  /** C2 受控联网搜索（豆包）：main 侧执行并结算为固定资产候选，无需 renderer deliver。 */
+  search?(input: AgentSearchInput, signal: AbortSignal): Promise<FlowCommandReceipt>
+}
+
+export interface AgentSearchInput {
+  projectId: string
+  taskId: string
+  agentNodeId: string
+  commandId: string
+  query: string
+  count?: number
 }
 
 /** Uses the C2 ledger and desktop grant transport, never another business executor. */

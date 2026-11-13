@@ -24,6 +24,8 @@ import { agentReplyOutputProjection } from '../../shared/agent-flow/agent-output
 import { createAgentRuntime, type AgentRuntime, type AgentModelPort } from './runtime'
 import { createAgentTelemetry } from './runtime-diagnostics'
 import { createLedgerToolPort } from './ledger-tool'
+import { createSearchPort } from './search-tool'
+import { getProvider } from '../gateway/providers.repo'
 import { stopAgentVideos } from './video-tasks'
 import { controlVideoTask } from '../gateway/video'
 import {
@@ -247,7 +249,8 @@ export class FlowAgentDesktopHost {
         { id: 'node.execute', version: '1', name: '执行画布数据处理或视频节点' },
         { id: 'graph.preview', version: '1', name: '文本模板流程预览' },
         { id: 'agent.dispatch', version: '1', name: '分派专业 Agent 任务' },
-        { id: 'review.execute', version: '1', name: '执行范围内的固定版本审核' }
+        { id: 'review.execute', version: '1', name: '执行范围内的固定版本审核' },
+        { id: 'web.search', version: '1', name: '受控联网搜索（豆包搜索，需显式启用）' }
       ],
       skills: this.skills.list().map(({ id, version, name, description }) => ({
         id,
@@ -267,7 +270,13 @@ export class FlowAgentDesktopHost {
     if (!config.modelDefinitionId) throw new AgentRuntimeError('AGENT_MODEL_REQUIRED', 'admission')
     if (!config.tools.some((tool) => tool.id === 'node.execute' && tool.version === '1'))
       throw new AgentRuntimeError('AGENT_TOOL_REQUIRED', 'admission')
-    if (config.tools.some((tool) => tool.id !== 'node.execute' || tool.version !== '1'))
+    // C2：specialist 必选 node.execute@1，可选受控联网 web.search@1；其余工具仍拒绝。
+    if (
+      config.tools.some(
+        (tool) =>
+          !((tool.id === 'node.execute' || tool.id === 'web.search') && tool.version === '1')
+      )
+    )
       throw new AgentRuntimeError('AGENT_TOOL_UNSUPPORTED', 'admission')
     const versions = new Map<string, z.infer<typeof AgentFlowAssetRefSchema>>()
     const freeze = (
@@ -1138,7 +1147,10 @@ export class FlowAgentDesktopHost {
         store: this.store,
         skills: this.skills,
         model,
-        tools: createLedgerToolPort(this.desktop.ledger, this.desktop.deliver),
+        tools: {
+          ...createLedgerToolPort(this.desktop.ledger, this.desktop.deliver),
+          search: createSearchPort(this.assets, async (id) => (await getProvider(id))?.apiKey ?? '')
+        },
         telemetry,
         diagnostics: { traceId: input.traceId, spanId: input.spanId },
         assertRevision: (fixed) => {

@@ -419,6 +419,22 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     }),
     def('model.request.failed', 'error', 'main/gateway/*', MODEL_ATTRS),
     def('model.request.cancelled', 'info', 'main/gateway/*', MODEL_ATTRS),
+    // web.search.*：受控联网搜索（豆包搜索）调用边界。红线：不记 query 正文、
+    // 搜索结果正文、密钥或原始异常；failed 只传稳定错误码。
+    def('web.search.started', 'info', 'main/gateway/doubao-search.ts', {
+      operation: 'short',
+      connectionId: 'id'
+    }),
+    def('web.search.completed', 'info', 'main/gateway/doubao-search.ts', {
+      operation: 'short',
+      connectionId: 'id',
+      resultCount: 'int'
+    }),
+    def('web.search.failed', 'error', 'main/gateway/doubao-search.ts', {
+      operation: 'short',
+      connectionId: 'id',
+      code: 'short'
+    }),
     // task.*：持久任务调度器（视频任务库等）
     def('task.state_changed', 'info', 'main/gateway/video.ts', { state: 'short' }),
     def('task.control.started', 'info', 'main/gateway/video.ts', {}),

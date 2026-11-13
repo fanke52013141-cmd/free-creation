@@ -312,7 +312,8 @@ describe('flowAgent.catalog', () => {
       'node.execute',
       'graph.preview',
       'agent.dispatch',
-      'review.execute'
+      'review.execute',
+      'web.search'
     ])
     expect(data.models).toEqual([
       { id: 'model-1', name: '验收模型', imageInput: false, audioInput: false }

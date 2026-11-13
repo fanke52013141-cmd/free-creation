@@ -26,7 +26,7 @@ const FULL_NODE_GROUPS = {
     'director'
   ],
   audio: ['speech', 'audio', 'tts', 'voice-design', 'sound-adjust'],
-  ai: ['agent', 'ai-process', 'chat', 'ai-review', 'state-machine'],
+  ai: ['agent', 'ai-process', 'chat', 'ai-review', 'state-machine', 'human-task'],
   data: ['processor', 'json', 'structured', 'iterate', 'code']
 } as const satisfies Record<PaletteCategoryId, readonly string[]>
 

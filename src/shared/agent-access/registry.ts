@@ -962,7 +962,8 @@ export const NODE_ACCESS_DECLARATIONS = [
   'director',
   'agent',
   'state-machine',
-  'ai-review'
+  'ai-review',
+  'human-task'
 ] as const
 
 export function nodeAccessDirectorySummary(): ReturnType<typeof nodeActionSummary> {

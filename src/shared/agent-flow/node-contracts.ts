@@ -103,6 +103,47 @@ export const StateMachineNodeConfigSchema = z
       transitions.add(key)
     }
   })
+export const HumanTaskNodeConfigSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    /** 人工交付的结果类型：text 走 out-text，json 走 out-json（json.any@1）。 */
+    outputType: z.enum(['text', 'json']).default('text'),
+    instructions: z.string().max(4096).optional()
+  })
+  .strict()
+export type HumanTaskNodeConfig = z.infer<typeof HumanTaskNodeConfigSchema>
+
+/** 人工任务结果值：仅文本或结构化 JSON，与公开端口类型一致。 */
+export const HumanTaskValueSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('text'), text: z.string().max(1048576) }).strict(),
+  z.object({ kind: z.literal('json'), data: z.unknown() }).strict()
+])
+export type HumanTaskValue = z.infer<typeof HumanTaskValueSchema>
+
+/** 权威实例（持久化于 meta.humanTask）：执行器是唯一推进权威。 */
+export const HumanTaskInstanceSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    nodeId: id,
+    revision: z.number().int().positive(),
+    status: z.enum(['pending', 'completed']),
+    result: HumanTaskValueSchema.optional(),
+    lastSubmissionId: id.optional(),
+    submittedAt: z.number().optional()
+  })
+  .strict()
+export type HumanTaskInstance = z.infer<typeof HumanTaskInstanceSchema>
+
+/** 待应用的人工提交（UI/外部 op 只写 meta.humanTaskPending，执行器校验后消费）。 */
+export const HumanTaskPendingSchema = z
+  .object({
+    submissionId: id,
+    expectedRevision: z.number().int().positive(),
+    value: HumanTaskValueSchema
+  })
+  .strict()
+export type HumanTaskPending = z.infer<typeof HumanTaskPendingSchema>
+
 export const ReviewDecisionSchema = z
   .object({
     schemaVersion: z.literal(1),

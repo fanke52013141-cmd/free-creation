@@ -276,6 +276,30 @@ export const FLOW_AGENTS_OPERATIONS = {
     description:
       '读取状态机节点的当前阶段/修订/合法出边事件与待处理提交（只读持久化事实；未运行时按配置初始阶段与修订 1 返回）',
     input: project.extend({ nodeId }).strict()
+  },
+  // C4：纯人工任务外部提交——与 GUI「提交结果」按钮同一语义（写 meta.humanTaskPending，
+  // 运行节点时由 humanTaskExecutor 校验修订/去重并交付）；外部不能直接改完成状态。
+  'humanTask.submit': {
+    effect: 'write',
+    description:
+      '向人工任务节点提交结果（与 GUI 提交结果按钮同一待处理写入）；携带观察到的 expectedRevision，过期提交拒绝；结果类型须与节点声明一致；完成状态在运行节点时由同一执行器校验；要求目标项目已在桌面打开',
+    input: project
+      .extend({
+        nodeId,
+        expectedRevision: z.number().int().min(1),
+        submissionId: flowId.optional(),
+        value: z.discriminatedUnion('kind', [
+          z.object({ kind: z.literal('text'), text: z.string().max(1048576) }).strict(),
+          z.object({ kind: z.literal('json'), data: z.unknown() }).strict()
+        ])
+      })
+      .strict()
+  },
+  'humanTask.get': {
+    effect: 'read',
+    description:
+      '读取人工任务节点的当前状态/修订/已交付结果与待处理提交（只读持久化事实；未运行时按 pending 修订 1 返回）',
+    input: project.extend({ nodeId }).strict()
   }
 } as const
 
@@ -454,6 +478,35 @@ export const FLOW_AGENTS_OUTPUTS = {
       legalEvents: z.array(z.string().max(120)).max(256),
       pending: z
         .object({ eventId: flowId, event: z.string().max(120), expectedRevision: z.number().int().min(1) })
+        .strict()
+        .nullable()
+    })
+    .strict(),
+  'humanTask.submit': z
+    .object({
+      projectId: identifier,
+      nodeId,
+      graphVersion: z.number().int().nonnegative(),
+      revision: z.number().int().min(1),
+      submissionId: flowId,
+      pending: z.literal(true)
+    })
+    .strict(),
+  'humanTask.get': z
+    .object({
+      projectId: identifier,
+      nodeId,
+      status: z.enum(['pending', 'completed']),
+      revision: z.number().int().min(1),
+      outputType: z.enum(['text', 'json']),
+      result: z
+        .discriminatedUnion('kind', [
+          z.object({ kind: z.literal('text'), text: z.string() }).strict(),
+          z.object({ kind: z.literal('json'), data: z.unknown() }).strict()
+        ])
+        .nullable(),
+      pending: z
+        .object({ submissionId: flowId, expectedRevision: z.number().int().min(1) })
         .strict()
         .nullable()
     })

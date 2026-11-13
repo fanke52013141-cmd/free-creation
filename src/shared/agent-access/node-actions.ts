@@ -281,6 +281,19 @@ const NODE_TABLE: Record<string, Overrides> = {
   },
   'state-machine': { contractVersion: 1, family: 'agent' },
   'ai-review': { contractVersion: 1, family: 'agent' },
+  // C4：纯人工任务节点——人工提交结果、执行器权威交付；停等语义，composite 内 fail-closed。
+  'human-task': {
+    contractVersion: 1,
+    family: 'agent',
+    extra: {
+      N5: C(
+        'humanTaskExecutor 停等语义：未提交返回 skipped 不伪造成功；人工提交经 expectedRevision 防过期 + submissionId 去重后交付（test/human-task.test.ts）'
+      ),
+      N7: C(
+        'humanTask.submit/get 与 GUI 提交结果按钮同一 meta.humanTaskPending 写入（渲染器权威动作 + 保存屏障）；composite 内部人工节点 fail-closed 显式拒绝'
+      )
+    }
+  },
   // 导演台
   director: { contractVersion: 3, family: 'director' }
 }

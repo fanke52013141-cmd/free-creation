@@ -84,7 +84,10 @@ export const compositeExecutor: NodeExecutor = async (
     return {
       status: 'failed',
       reason: outcome.reason ?? '组合运行失败',
-      diagnosticPhase: phase
+      diagnosticPhase: phase,
+      // W4 失败定位：把内部失败节点/端口透传到执行器结果，不再在此边界丢弃。
+      ...(outcome.failure?.nodeId ? { failureNodeId: outcome.failure.nodeId } : {}),
+      ...(outcome.failure?.portId ? { failurePortId: outcome.failure.portId } : {})
     }
   }
 

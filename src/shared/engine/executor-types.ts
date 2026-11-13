@@ -61,6 +61,10 @@ export interface NodeMetaPatch {
   stateMachine?: string
   /** 状态机节点待应用人工事件；执行器消费后写空串清除（tldraw meta 浅合并，删键不生效）。 */
   stateMachinePending?: string
+  /** C4：人工任务节点权威实例（仅 humanTaskExecutor 写入）。 */
+  humanTask?: string
+  /** C4：人工任务待应用结果提交；执行器消费后写空串清除（tldraw meta 浅合并，删键不生效）。 */
+  humanTaskPending?: string
 }
 
 /** 运行控制信号。暂停在当前原子任务结束后生效；停止会解除暂停等待。 */
@@ -214,6 +218,9 @@ export interface NodeExecutionResult {
   status: 'done' | 'skipped' | 'failed'
   reason?: string
   diagnosticPhase?: NodeExecutionPhase
+  /** W4 失败定位：组合等嵌套执行失败时，可定位的内部节点/端口 ID（只存 ID）。 */
+  failureNodeId?: string
+  failurePortId?: string
   /** Materialize these validated document outputs as independent canvas result nodes. */
   artifactOutputPorts?: readonly string[]
 }

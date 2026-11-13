@@ -24,6 +24,8 @@ export const DesktopRequestSchema = z
       'graph-layout',
       // C3：状态机人工事件提交（与 GUI 提交事件按钮同一 meta.stateMachinePending 写入）。
       'state-machine-event',
+      // C4：纯人工任务结果提交（与 GUI 提交结果按钮同一 meta.humanTaskPending 写入）。
+      'human-task-submit',
       'read-graph',
       'workflow-run-plan',
       'execute-nodes',
@@ -63,6 +65,15 @@ export const DesktopRequestSchema = z
     stateMachineEvent: z.string().trim().min(1).max(120).optional(),
     stateMachineExpectedRevision: z.number().int().min(1).optional(),
     stateMachineEventId: z.string().min(1).max(160).optional(),
+    /** human-task-submit：人工结果与观察到的实例修订（C4）；submissionId 缺省由宿主生成。 */
+    humanTaskExpectedRevision: z.number().int().min(1).optional(),
+    humanTaskSubmissionId: z.string().min(1).max(160).optional(),
+    humanTaskValue: z
+      .discriminatedUnion('kind', [
+        z.object({ kind: z.literal('text'), text: z.string().max(1048576) }).strict(),
+        z.object({ kind: z.literal('json'), data: z.unknown() }).strict()
+      ])
+      .optional(),
     /** read-graph：latest 视图分页参数。 */
     offset: z.number().int().min(0).max(100000).optional(),
     limit: z.number().int().min(1).max(GRAPH_VIEW_MAX_NODES).optional(),

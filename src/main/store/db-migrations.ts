@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 30
+export const DB_SCHEMA_VERSION = 31
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -610,6 +610,14 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
     database.exec(`
       ALTER TABLE composite_runs ADD COLUMN output_values TEXT;
+    `)
+  },
+  // M31: W4 失败定位——持久化失败的内部节点/端口 ID，供 run.get/execute.wait 与桌面
+  // 实例详情精确定位失败位置。只存 ID，不存正文、提示词或媒体路径。
+  (database) => {
+    database.exec(`
+      ALTER TABLE composite_runs ADD COLUMN failure_node_id TEXT;
+      ALTER TABLE composite_runs ADD COLUMN failure_port_id TEXT;
     `)
   }
 ]

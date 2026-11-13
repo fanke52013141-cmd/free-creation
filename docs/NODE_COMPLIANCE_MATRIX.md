@@ -2,7 +2,7 @@
 
 > 审计基线：`f519ac3` · 2026-08-31。详细审计、连线关系和参考项目差异见 [NODE_PROTOCOL_AUDIT_2026_08_31.md](./NODE_PROTOCOL_AUDIT_2026_08_31.md)。
 
-本表是当前 **32 个可创建节点** 的发布前协议索引；下表共 34 行 = 32 个可创建节点 + 2 个历史节点行（`video-audio`、`vocal-separate`，结论「退役」）。`composite`（节点流）为内部创建节点，只登记在「历史节点」表，不进入创建菜单。新增或修改节点前必须同步更新本表、`NODE_CONTRACT_SPEC.md`、契约快照与连线测试；历史节点仅为兼容读取，不进入创建菜单。表中「版本 / 端口 id」以及明确写出的端口类型、基数和 Schema 由 `test/compliance-matrix-doc.test.ts` 与注册契约逐行比对；「32 个可创建节点」计数、退役行结论与「历史节点」表也由该测试校验，写错、漏行或计数漂移会直接让测试变红。
+本表是当前 **33 个可创建节点** 的发布前协议索引；下表共 35 行 = 33 个可创建节点 + 2 个历史节点行（`video-audio`、`vocal-separate`，结论「退役」）。`composite`（节点流）为内部创建节点，只登记在「历史节点」表，不进入创建菜单。新增或修改节点前必须同步更新本表、`NODE_CONTRACT_SPEC.md`、契约快照与连线测试；历史节点仅为兼容读取，不进入创建菜单。表中「版本 / 端口 id」以及明确写出的端口类型、基数和 Schema 由 `test/compliance-matrix-doc.test.ts` 与注册契约逐行比对；「33 个可创建节点」计数、退役行结论与「历史节点」表也由该测试校验，写错、漏行或计数漂移会直接让测试变红。
 
 | 节点                      | 版本 | 输入端口（类型 / 基数）                                         | 输出端口（类型 / Schema）                                       | 执行与投影                               | 结论 |
 | ------------------------- | ---- | --------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------- | ---- |
@@ -47,7 +47,7 @@
 - `test/node-compliance.test.ts`：Active/Legacy 类型、executor、投影、版本、说明与创建菜单分类。
 - `test/node-contract-snapshot.test.ts`：节点注册、端口命名、Schema 与关键契约快照；历史 `vocal-separate`、`video-audio` 继续保留读取兼容。
 - `test/connection-matrix.test.ts`：端口类型兼容/拒绝矩阵和代表性工作流。
-- `test/compliance-matrix-doc.test.ts`：本表每一行的「版本 / 端口 id」与注册契约逐行比对，并检查每个可创建节点都有一行；同时校验「32 个可创建节点」计数、`creatable=false` 节点与「历史节点」表互相对应。
+- `test/compliance-matrix-doc.test.ts`：本表每一行的「版本 / 端口 id」与注册契约逐行比对，并检查每个可创建节点都有一行；同时校验「33 个可创建节点」计数、`creatable=false` 节点与「历史节点」表互相对应。
 - `npm run verify`：本项目发布前的统一自动验证命令。
 
 ## C1 配置节点
@@ -59,6 +59,7 @@ C1 新增配置节点（契约 v1，自动执行尚未接入，未产生业务�
 | Agent `agent`          | 1    | `in-text` text / many；`in-json` json `json.any@1` / many；`in-image` image / many；`in-video` video / many；`in-audio` audio / many；`in-file` file / many | `out-text` text；`out-json` json `json.any@1`              | executor 明确 skipped + 空 projectOutputs | C1 配置；执行待接入 |
 | 状态机 `state-machine` | 1    | `in-json` json `json.any@1` / many                                                                                                                          | `out-state` json `flow.state@1`                            | executor 明确 skipped + 空 projectOutputs | C1 配置；执行待接入 |
 | AI 审核 `ai-review`    | 1    | `in-text` text / many；`in-json` json `json.any@1` / many；`in-image` image / many；`in-video` video / many；`in-audio` audio / many；`in-file` file / many | `out-review` json `review.decision@1`；`out-feedback` text | executor 明确 skipped + 空 projectOutputs | C1 配置；执行待接入 |
+| 人工任务 `human-task`  | 1    | `in-text` text / many（可选上下文）；`in-json` json `json.any@1` / many（可选上下文）                                                                          | `out-text` text；`out-json` json `json.any@1`              | humanTaskExecutor 停等（未提交 skipped）+ projectHumanTaskOutputs（仅 completed 投影） | C4 已接入；composite 内 fail-closed |
 
 ## 历史节点
 

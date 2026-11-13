@@ -1778,7 +1778,8 @@
                             "director",
                             "agent",
                             "state-machine",
-                            "ai-review"
+                            "ai-review",
+                            "human-task"
                           ]
                         },
                         {
@@ -5984,7 +5985,8 @@
                         "director",
                         "agent",
                         "state-machine",
-                        "ai-review"
+                        "ai-review",
+                        "human-task"
                       ]
                     },
                     "contractVersion": {
@@ -25775,6 +25777,411 @@
       ]
     },
     {
+      "operationId": "humanTask.submit",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "向人工任务节点提交结果（与 GUI 提交结果按钮同一待处理写入）；携带观察到的 expectedRevision，过期提交拒绝；结果类型须与节点声明一致；完成状态在运行节点时由同一执行器校验；要求目标项目已在桌面打开",
+      "requires": [
+        "openProject"
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "nodeId": {
+            "type": "string",
+            "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "submissionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-zA-Z0-9_.:-]+$"
+          },
+          "value": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "text"
+                  },
+                  "text": {
+                    "type": "string",
+                    "maxLength": 1048576
+                  }
+                },
+                "required": [
+                  "kind",
+                  "text"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "json"
+                  },
+                  "data": {}
+                },
+                "required": [
+                  "kind",
+                  "data"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "projectId",
+          "nodeId",
+          "expectedRevision",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "humanTask.submit"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "nodeId": {
+                "type": "string",
+                "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+              },
+              "graphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "submissionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[a-zA-Z0-9_.:-]+$"
+              },
+              "pending": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "projectId",
+              "nodeId",
+              "graphVersion",
+              "revision",
+              "submissionId",
+              "pending"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "humanTask.get",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "读取人工任务节点的当前状态/修订/已交付结果与待处理提交（只读持久化事实；未运行时按 pending 修订 1 返回）",
+      "requires": [
+        "openProject"
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "nodeId": {
+            "type": "string",
+            "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+          }
+        },
+        "required": [
+          "projectId",
+          "nodeId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "humanTask.get"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "nodeId": {
+                "type": "string",
+                "pattern": "^shape:[a-zA-Z0-9_-]{1,160}$"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "completed"
+                ]
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "outputType": {
+                "type": "string",
+                "enum": [
+                  "text",
+                  "json"
+                ]
+              },
+              "result": {
+                "anyOf": [
+                  {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "text"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "json"
+                          },
+                          "data": {}
+                        },
+                        "required": [
+                          "kind",
+                          "data"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "pending": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "submissionId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      },
+                      "expectedRevision": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "submissionId",
+                      "expectedRevision"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "projectId",
+              "nodeId",
+              "status",
+              "revision",
+              "outputType",
+              "result",
+              "pending"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "currentGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
       "operationId": "flow.command.lookup",
       "operationVersion": 1,
       "effect": "read",
@@ -30378,7 +30785,8 @@
               "director",
               "agent",
               "state-machine",
-              "ai-review"
+              "ai-review",
+              "human-task"
             ]
           }
         },
@@ -30453,7 +30861,8 @@
                   "director",
                   "agent",
                   "state-machine",
-                  "ai-review"
+                  "ai-review",
+                  "human-task"
                 ]
               },
               "contractVersion": {
@@ -37976,6 +38385,66 @@
         "desktopTested": 0,
         "contractTested": 4,
         "planned": 3,
+        "notApplicable": 1
+      }
+    },
+    {
+      "typeId": "human-task",
+      "contractVersion": 1,
+      "actions": [
+        {
+          "actionId": "N1",
+          "label": "查询类型、默认值、字段、端口与依赖",
+          "status": "contract-tested",
+          "evidence": "node.type.get 读取生成快照（test/node-contracts-export.test.ts 漂移门禁）；含端口/初始配置/执行方式/输出真值来源；动态端口节点导出默认配置结果"
+        },
+        {
+          "actionId": "N2",
+          "label": "创建/读写标题位置尺寸、克隆、删除、组合与排列",
+          "status": "planned",
+          "evidence": "内部 Agent 运行由桌面宿主实例独占，外部创建/运行未开放（F8 剩余）"
+        },
+        {
+          "actionId": "N3",
+          "label": "配置、正文、素材、模型与节点专有字段读写",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N4",
+          "label": "创建/修改/删除连线与动态端口",
+          "status": "contract-tested",
+          "evidence": "test/local-agent-graph-access.test.ts（创建/读写/连线/删除）"
+        },
+        {
+          "actionId": "N5",
+          "label": "执行、显式发布或作为素材输出",
+          "status": "contract-tested",
+          "evidence": "humanTaskExecutor 停等语义：未提交返回 skipped 不伪造成功；人工提交经 expectedRevision 防过期 + submissionId 去重后交付（test/human-task.test.ts）"
+        },
+        {
+          "actionId": "N6",
+          "label": "结果、版本选择、输出投影与物化",
+          "status": "contract-tested",
+          "evidence": "output.get 服务级投影测试（确定性族）"
+        },
+        {
+          "actionId": "N7",
+          "label": "状态、任务、取消、暂停与恢复",
+          "status": "contract-tested",
+          "evidence": "humanTask.submit/get 与 GUI 提交结果按钮同一 meta.humanTaskPending 写入（渲染器权威动作 + 保存屏障）；composite 内部人工节点 fail-closed 显式拒绝"
+        },
+        {
+          "actionId": "N8",
+          "label": "节点库保存/实例化、资源捕获与跨画布复用",
+          "status": "not-applicable",
+          "evidence": "Agent/状态机/审核节点的运行身份不可由外部伪造，节点库组合只保存结构与配置"
+        }
+      ],
+      "summary": {
+        "desktopTested": 0,
+        "contractTested": 6,
+        "planned": 1,
         "notApplicable": 1
       }
     }

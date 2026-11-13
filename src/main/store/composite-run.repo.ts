@@ -26,6 +26,10 @@ export interface CompositeRunRecord {
   errorMessage: string | null
   /** input / step / output / runtime；成功时为 null。 */
   failurePhase: string | null
+  /** W4 失败定位：失败的内部节点 ID（只存 ID，不存正文）；无则为 null。 */
+  failureNodeId: string | null
+  /** W4 失败定位：失败的内部端口 ID；无则为 null。 */
+  failurePortId: string | null
   /** 已产生的公开输出摘要：[{portId, kind}]，不含正文。 */
   outputSummary: Array<{ portId: string; kind: string }>
   /** headless 执行的完整公开输出（按公开端口 ID 的 NodeValue）；画布执行为 null。 */
@@ -57,6 +61,8 @@ interface RunRow {
   error_code: string | null
   error_message: string | null
   failure_phase: string | null
+  failure_node_id: string | null
+  failure_port_id: string | null
   output_summary: string | null
   output_values: string | null
   created_at: number
@@ -118,6 +124,8 @@ function rowToRun(row: RunRow): CompositeRunRecord {
     errorCode: row.error_code,
     errorMessage: row.error_message,
     failurePhase: row.failure_phase ?? null,
+    failureNodeId: row.failure_node_id ?? null,
+    failurePortId: row.failure_port_id ?? null,
     outputSummary: parseOutputSummary(row.output_summary),
     outputValues: parseOutputValues(row.output_values),
     createdAt: row.created_at
@@ -218,6 +226,9 @@ export function finishCompositeRun(input: {
   errorCode?: string
   errorMessage?: string
   failurePhase?: string
+  /** W4 失败定位：失败内部节点/端口 ID（只存 ID）。 */
+  failureNodeId?: string
+  failurePortId?: string
   outputPorts?: Array<{ portId: string; kind: string }>
   outputValues?: Record<string, unknown>
 }): boolean {
@@ -225,7 +236,7 @@ export function finishCompositeRun(input: {
     getDb()
       .prepare(
         `UPDATE composite_runs SET status = ?, finished_at = ?, error_code = ?, error_message = ?,
-           failure_phase = ?, output_summary = ?, output_values = ?
+           failure_phase = ?, failure_node_id = ?, failure_port_id = ?, output_summary = ?, output_values = ?
          WHERE id = ? AND status IN ('accepted','running','waiting-input')`
       )
       .run(
@@ -234,6 +245,8 @@ export function finishCompositeRun(input: {
         input.errorCode ?? null,
         input.errorMessage?.slice(0, 500) ?? null,
         input.failurePhase?.slice(0, 40) ?? null,
+        input.failureNodeId?.slice(0, 120) ?? null,
+        input.failurePortId?.slice(0, 120) ?? null,
         input.outputPorts?.length ? JSON.stringify(input.outputPorts.slice(0, 32)) : null,
         input.outputValues ? JSON.stringify(input.outputValues) : null,
         input.runId

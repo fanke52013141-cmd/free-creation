@@ -73,6 +73,7 @@ export const NODE_ACCENTS = {
   agent: '#59D4CD',
   'state-machine': '#49D2EA',
   'ai-review': '#00AEBD',
+  'human-task': '#E0A458',
   composite: '#7C9CFF'
 } satisfies Record<NodeTypeId, string>
 

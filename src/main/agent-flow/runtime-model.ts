@@ -539,6 +539,20 @@ export class AgentSdkModel implements AgentModelPort {
             })
             .strict()
         }),
+        ...(input.searchEnabled
+          ? {
+              web_search: tool({
+                description:
+                  '受控联网搜索（豆包搜索），仅在节点配置启用时可用。返回外部不可信观察材料（标题/链接/摘要），须人工或后续处理核实，不得直接当作已验证成果；搜索词不超过 100 字符。',
+                inputSchema: z
+                  .object({
+                    query: z.string().trim().min(1).max(100),
+                    count: z.number().int().min(1).max(20).optional()
+                  })
+                  .strict()
+              })
+            }
+          : {}),
         finish_task: tool({
           description: '提交真实 committed 回执中的固定资产引用；文字声称完成无效。',
           inputSchema: z
@@ -592,11 +606,13 @@ export class AgentSdkModel implements AgentModelPort {
             ? 'execute'
             : call.toolName === 'load_skill'
               ? 'load-skill'
-              : call.toolName === 'finish_task'
-                ? 'finish'
-                : call.toolName === 'wait_for_human' && input.mode === 'collaborative'
-                  ? 'wait'
-                  : 'invalid'
+              : call.toolName === 'web_search' && input.searchEnabled
+                ? 'search'
+                : call.toolName === 'finish_task'
+                  ? 'finish'
+                  : call.toolName === 'wait_for_human' && input.mode === 'collaborative'
+                    ? 'wait'
+                    : 'invalid'
       })
       emitGatewayEvent('model.request.completed', 'Agent 单步决策请求完成', context, {
         attributes,

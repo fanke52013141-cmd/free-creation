@@ -130,6 +130,14 @@ export const AgentDecisionSchema = z.discriminatedUnion('kind', [
       resource: z.string().max(128).optional()
     })
     .strict(),
+  z
+    .object({
+      kind: z.literal('search'),
+      /** 受控联网搜索词（豆包搜索 Query 上限 100 字符）。 */
+      query: z.string().trim().min(1).max(100),
+      count: z.number().int().min(1).max(20).optional()
+    })
+    .strict(),
   z.object({ kind: z.literal('wait') }).strict(),
   z
     .object({

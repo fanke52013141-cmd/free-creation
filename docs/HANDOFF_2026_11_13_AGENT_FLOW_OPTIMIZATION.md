@@ -6,8 +6,9 @@
 
 > **一句话现状**：二-1/二-2 产品改进、C1 文本可调度目标、C3 状态机外部事件、第三类可靠性
 > （多专家+审核闭环/重启恢复/人工等待继续）全部实现并经真实模型验收；
-> **唯一未通过项**：composite 节点流内部 ai-process 的真实模型运行（第三类-d），
-> 卡在组合隔离执行的模型功能解析，诊断证据与下一步见 §3。
+> P0（composite 内部 ai-process 真实模型运行）已修复闭环（§3）；
+> **C2/C4/W4 批次已闭环**（§8）：C2 豆包受控联网搜索、C4 纯人工任务节点、W4 composite 失败定位，
+> 均经真实端到端/桌面级验收，三门禁全绿，全量零新增失败。改动尚未提交，待授权。
 
 ## 1. 本批完成项（均有真实验证证据）
 
@@ -74,32 +75,35 @@
 密钥经 `CANVAS_TEST_API_KEY` 环境变量注入（不进仓库/日志）；`CANVAS_TEST_MODEL` 默认 glm-5.3-flash。
 回执与截图留档 `qa/`（gitignore）。
 
-## 3. 未通过项：composite 真实模型运行（第三类-d）——下一步最高优先
+## 3. 已解决：composite 真实模型运行（第三类-d）——P0 闭环
 
-**现象**：`acceptance:agent-flow-composite-model` 前 3 项通过（能力验证+绑定、发布组合、
-引用实例连线），运行失败：`REQUIRED_OUTPUT_MISSING：公开输出 polished 缺少内部 n1.out-text`。
-内部步骤台账：n1(ai-process) status=completed 但 **reason="功能 text.process 尚未绑定已验证文本模型"**，
-全程 ~60ms（无模型请求）——实为执行器 skipped，组合按非失败放行导致输出缺失。
+**根因（已确证）**：execute-nodes 桌面处理器的 **闭包陈旧 providers**。
+`CanvasEditor.tsx` 注册 `onLocalAgentDesktopRequest` 的 useEffect 依赖仅 `[project.id]`
+（约 1979 行），回调捕获注册时的组件闭包 `providers`（gateway store 初始为 `[]`）。
+gateway store 的异步 `load()` 在项目打开后才完成，store 更新触发重渲染但 effect 不重注册
+→ execute-nodes 永远拿空目录。`resolveFeatureOptionDetailed` 精确报：
+**"能力绑定指向的供应商 zhipu-official 未加载"**（main 侧 binding 解析成功，渲染层查找失败）。
 
-**已排除**：
-- 绑定与验证真实存在（model.validate text.generate 成功 + model.binding.save text.process 成功，
-  同一数据目录内顶层 ai-process 节点的真实模型闭环已通过）。
-- 组合输入注入路径（公开输入 raw→n1.in-text）与端口解析正常（连线验收通过）。
+**二分证据**：验收脚本加 `provider.list` 诊断 → main 侧目录含 zhipu-official（true），
+但执行时 ctx.providers 无 → 锁定渲染层闭包，而非 main catalog/验证过滤。
+顶层 ai-process 闭环之所以通过：flow command 路径用 `useGatewayStore.getState().providers`
+新鲜读取（约 454 行），不受闭包影响；headless 路径（App.tsx:65-66）先 `await load()` 再新鲜读取，亦不受影响。
 
-**嫌疑方向（按优先级）**：
-1. **providers 目录时机**：`resolveFeatureOption` 在 main 解析出 binding 目标后，还要在
-   `ctx.providers`（渲染层 gateway store）里找到 provider/model 才返回非 null。
-   gateway store 仅在项目打开时 load 一次（CanvasEditor useEffect [project.id]）；
-   execute-nodes 路径用的是组件闭包 providers。需确认组合执行时 providers 是否包含
-   新建 catalog 连接（listProviders 的 catalogConfigs 异步路径/验证过滤）。
-2. 组合隔离编辑器（runCompositeIsolated）传入的 providers 与顶层执行是否同源；
-   可在 aiProcess 跳过分支临时输出 resolveFeatureOptionDetailed 的 reason 定位
-   （是 resolveModelFeature 返回 null 还是 providers 查找失败）。
-3. 若确认为 store 时机问题：修复方向是执行前确保 gateway.load()（或组合执行路径
-   主动刷新 providers），而不是放宽解析校验。
+**修复**：
+- `CanvasEditor.tsx` execute-nodes 两处（single `runNodeManually` / workflow `runWorkflowForNodes`）
+  改为执行时 `useGatewayStore.getState().providers` 新鲜读取，与 flow command 路径一致。
+- `aiProcess.ts` 改用 `resolveFeatureOptionDetailed`，把精确 reason 并入 skipped 文案
+  （诊断改进，便于后续台账直接定位失败环节）。
+- 验收脚本加 provider.list 二分诊断（保留）。
 
-**复现**：`$env:CANVAS_TEST_API_KEY='<key>'; node scripts/acceptance/agent-flow-composite-model.cjs`
-（脚本已含 validate 前置诊断与内部步骤 reason 输出）。
+**验证证据**：`acceptance:agent-flow-composite-model` **ok=true**，4 项全过：
+能力验证+绑定 / 发布组合 model-polish@1.0 / 引用实例连线 / **composite 真实模型运行 completed，
+公开输出为模型生成文本（88 字）**。定向 aiProcess/composite-executor/composite-runtime 全过。
+三门禁全绿（契约 contracts.json 零 diff = 纯加性；164 操作 / 32 节点 / 190 IPC + 49 canvas / 239 actions）。
+全量零新增失败（见 §5）。
+
+**避坑**：凡 useEffect 依赖不含响应式 store 值、却在回调里用该值的，都是闭包陈旧嫌疑点；
+执行路径应执行时 `getState()` 新鲜读取，不要依赖注册时闭包。
 
 ## 4. 关键机制事实（本批实测，供后续 Agent 避坑）
 
@@ -125,11 +129,15 @@
 
 ## 5. 验证汇总与基线
 
-- 全量 `npm run test`：**293 文件、3280 过、3 失败、7 跳过**。3 失败 = 2 项 provider 夹具基线
-  （local-agent-provider-network-access，与本批无关）+ 1 项 recovery-contention 全量负载波动
-  （单跑 15/15 过，已知波动项，不放宽断言）。**零新增失败**。
-- 门禁：`guard:agent-parity` / `verify:agent-access` / `verify:logging` 全绿
-  （**162 操作** / 32 节点 / 190 IPC + 49 canvas actions）；契约加性刷新（人工核对 diff）。
+- 全量 `npm run test`（规范 runner `scripts/run-vitest.cjs`，处理原生模块 ABI）：
+  **296 文件、3351 过、2 失败、7 跳过**（P0 修复后干净重跑）。2 失败 = provider 夹具基线
+  （local-agent-provider-network-access 的 provider.testConnection 2 项，与本批无关）。
+  recovery-contention 为全量负载波动项（单跑 15/15 过、本次全量亦过；重负载跑可现 2 项波动），
+  不放宽断言。**零新增失败**。注意：裸 `npx vitest` 绕过 runner 会触发 better-sqlite3
+  Node/Electron ABI 不匹配（composite-run-wait 等），属环境而非回归，须用规范 runner。
+- 门禁：`check-agent-access` / `audit-business-actions` 全绿
+  （**164 操作** / 32 节点 / 190 IPC + 49 canvas actions / 239 actions）；
+  P0 修复仅执行器内部逻辑，契约 contracts.json **零 diff**（纯加性，影响声明已刷新）。
 - 类型：web/node 检查通过；`electron-vite build` 通过。
 - `npm run verify` 仍卡基线 lint 25 条（license 两脚本，本批文件零新增错误）。
 
@@ -145,10 +153,36 @@
 
 ## 7. 下一批建议（按优先级）
 
-1. **修复 composite 真实模型运行**（§3）：定位 providers 解析时机，修复后跑
-   acceptance:agent-flow-composite-model 全过；随后 composite W4 剩余项（失败定位/人工补交/
-   受控重试的桌面级证据）。
-2. C2 联网搜索工具（需用户定搜索供应方与密钥）。
-3. C4 纯人工任务节点 / headless 宿主（需架构评审）。
+1. **composite W4 剩余项**：人工补交 / 受控重试的桌面级证据（失败定位已闭环，见 §8.3）。
+2. C2 后续：外部 CLI/MCP `flowAgent.search` op（本批为内部 specialist 工具）；搜索供应方扩展。
+3. C4 后续：人工节点作为 Agent 调度目标（flowTargetContract + skipped 回执账本语义，需评审）；headless 宿主。
 4. 人工鼠标点击验收（W1–L3 累积 GUI 链路）与窄屏/长名称/出错状态复核。
 5. 基线债处置（provider 夹具 2 项 + verify lint 25 条）需任务发起人授权。
+
+## 8. C2/C4/W4 批次闭环（2026-11-13，均有真实验证证据）
+
+方案：[C2/C4/W4 实施方案](AGENT_FLOW_C2C4W4_PLAN_2026_11_13.md)。用户裁决：顺序 W4→C2→C4；
+C2 用豆包搜索（内部工具+方案 A 资产来源，授权免费额度冒烟）；C4 停等+composite fail-closed。
+
+### 8.1 C2 豆包受控联网搜索（web.search@1）
+- **核实纠正**：原假设「skill 可注入联网」不成立——skill 仅注入提示词+静态资源（`skill-agent.ts:18` 唯一工具 skill.read-resource），无网络工具。故新增受控搜索工具。
+- **API**：火山官方文档（volcengine.com/docs/87772/2272953）核实，`POST https://open.feedcoopapi.com/search_api/web_search`，Bearer 独立搜索 key，500 次/月免费、独立于模型 token；错误在 ResponseMetadata.Error（HTTP 可能 200）。
+- **实现**：`gateway/doubao-search.ts`（fetchUpstream+错误归一+脱敏事件）；specialist 决策增 search 变体（`runtime-contracts.ts`）+ LangGraph search 节点（`runtime.ts`）+ `search-tool.ts` 端口；`asset-store.submitSearchResult` 把结果结算为 agent out-json 固定候选资产（非静默采用，finish_task 只能引用 committed refs）；准入白名单加性放宽（node.execute 必选+web.search 可选）；UI 勾选；web.search.* 脱敏事件。搜索连接 id=doubao-search（legacy provider，无需模型验证）。
+- **验证**：单测 16 项（doubao-search 7 + web-search-asset 9）+ 回归 59 项 + catalog 断言维护；真实端到端冒烟 `acceptance:agent-flow-web-search` **10 项全过**（主控分派搜索专家→真实豆包搜索 5 条结果→固定候选资产→completed）。
+
+### 8.2 C4 纯人工任务节点（human-task）
+- **实现**：一等节点（契约/Spec/Body/设置面板/执行器/投影）；停等语义（未提交 skipped 不伪造成功）；执行器权威推进（expectedRevision 防过期+submissionId 去重+类型校验）；外部 op `humanTask.submit/get`（与 GUI 同一 meta.humanTaskPending 写入，渲染器权威动作+保存屏障）；composite 内部人工节点 **fail-closed**（HUMAN_TASK_UNSUPPORTED_IN_COMPOSITE，定位内部节点）；output.get 投影同源（DETERMINISTIC_PROJECTIONS/OUTPUT_SOURCES）。
+- **验证**：单测 12 项 + 注册表/parity 47 项 + 规格门禁（合规矩阵/颜色/调色板）维护；桌面级验收 `acceptance:agent-flow-human-task` **10 项全过**（停等/外部提交/修订冲突/out-text 投影/composite fail-closed 定位）。
+
+### 8.3 W4 composite 失败定位
+- **实现**：M31 迁移持久化 failure_node_id/failure_port_id；执行器边界+meta.nodeRun.error 透传；skipped 步骤如实记账（不再误记 completed）；execute.wait 填充 nodeId/portId；CompositeBody 失败定位+内部步骤台账 UI（parentRunId 下钻）。
+- **验证**：repo/executor 单测 + 迁移测试维护；桌面级验收 `acceptance:agent-flow-composite-failure` **9 项全过**（failurePhase=output/failureNodeId=n1/failurePortId=out-text/skipped 台账）。
+
+### 8.4 门禁与全量
+- 三门禁全绿：**166 操作 / 33 节点 / 190 IPC + 50 canvas / 240 动作**。契约为加性（新增 humanTask.submit/get + human-task 节点；graph.patch/node.type.list/node.type.get 仅增 human-task 枚举值，向后兼容，已用 --accept-contract-change 并人工核对 diff 确证纯加性）。
+- 全量 `npm run test`：**3390 过 / 2 失败 / 7 跳过**，唯一失败 = provider 夹具基线 2 项，**零新增失败**。
+- 类型 web/node 通过；electron-vite build 通过。
+
+### 8.5 未验证边界（如实）
+- 人工鼠标点击 GUI 链路未做（验收为 CLI 驱动桌面宿主）；C2 外部 CLI/MCP op、C4 调度目标、W4 人工补交/受控重试留后续。
+- 改动尚未提交（含 P0），待任务发起人授权。

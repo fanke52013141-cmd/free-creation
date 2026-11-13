@@ -5,6 +5,7 @@ import { projectReviewOutputs } from '../agent-flow/review'
 import { readStoredNodeRunStatus } from './run-status'
 import { validateNodeSchema } from '../node-schemas'
 import { projectCompositeOutputs } from '../composite/outputs'
+import { projectHumanTaskOutputs } from './executors/humanTask'
 
 
 
@@ -96,6 +97,8 @@ export const DETERMINISTIC_PROJECTIONS = {
   agent: projectAgentOutputs,
   // C3：状态机正式 out-state 投影（持久化实例 → flow.state@1），与 GUI specs 同源。
   'state-machine': projectStateMachineOutputs,
+  // C4：人工任务正式 out-text/out-json 投影（仅 completed 的权威实例），与 GUI specs 同源。
+  'human-task': projectHumanTaskOutputs,
   // W1：节点流实例只暴露本次运行的显式映射结果；旧版本继续按媒体结果兼容。
   composite: projectCompositeOutputs,
   text: projectTextOutputs,

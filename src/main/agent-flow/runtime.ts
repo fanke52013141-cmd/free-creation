@@ -38,6 +38,8 @@ export interface AgentModelContext {
   humanFeedback?: string
   rework?: AgentTaskSnapshot['rework']
   selectedOutputs?: AgentTaskRecord['outputRefs']
+  /** C2：节点配置是否启用受控联网搜索工具 web.search@1。 */
+  searchEnabled?: boolean
 }
 export interface AgentModelPort {
   review?(
@@ -178,7 +180,10 @@ export function createAgentRuntime(options: {
               humanAccepted: state.humanAccepted,
               humanFeedback: state.humanFeedback || record.snapshot.humanFeedback,
               rework: record.snapshot.rework,
-              selectedOutputs: state.selectedOutputs
+              selectedOutputs: state.selectedOutputs,
+              searchEnabled: record.snapshot.config.tools.some(
+                (item) => item.id === 'web.search' && item.version === '1'
+              )
             },
             signal
           )
@@ -279,6 +284,45 @@ export function createAgentRuntime(options: {
       store.setState(thread, 'running')
       return { receipts: [...state.receipts, receipt], retryTool: false }
     })
+    .addNode('search', async (state) => {
+      const record = valid()
+      store.setState(thread, 'running')
+      store.reserve(thread, 'tools')
+      if (state.decision.kind !== 'search')
+        throw new AgentRuntimeError('INVALID_DECISION', 'search')
+      // C2 受控联网：仅当节点配置显式勾选 web.search@1 才允许（默认不联网）。
+      if (
+        !record.snapshot.config.tools.some(
+          (item) => item.id === 'web.search' && item.version === '1'
+        ) ||
+        !tools.search
+      )
+        throw new AgentRuntimeError('AGENT_TOOL_DENIED', 'tool-scope')
+      const decision = state.decision
+      const commandId = `agent:search:${createHash('sha256').update(`${thread}:${state.receipts.length}`).digest('hex')}`
+      const receipt = await timed(() =>
+        tools.search!(
+          {
+            projectId: record.snapshot.projectId,
+            taskId: record.snapshot.taskId,
+            agentNodeId: record.snapshot.agentNodeId,
+            commandId,
+            query: decision.query,
+            count: decision.count
+          },
+          signal
+        )
+      )
+      if (
+        receipt.commandId !== commandId ||
+        receipt.projectId !== record.snapshot.projectId ||
+        receipt.taskId !== record.snapshot.taskId ||
+        receipt.state !== 'committed'
+      )
+        throw new AgentRuntimeError('AGENT_RECEIPT_INVALID', 'receipt')
+      // 搜索结果作为 committed 候选资产入回执；finish_task/人工选择只能引用固定引用。
+      return { receipts: [...state.receipts, receipt] }
+    })
     .addNode('human', (state) => {
       const response = wait('human')
       if (!response.accepted) throw new AgentRuntimeError('HUMAN_REJECTED', 'human')
@@ -327,6 +371,7 @@ export function createAgentRuntime(options: {
     .addConditionalEdges('decide', (state) => state.decision.kind, {
       execute: 'tool',
       'load-skill': 'skill',
+      search: 'search',
       wait: 'human',
       finish: 'finish'
     })
@@ -335,6 +380,7 @@ export function createAgentRuntime(options: {
       decide: 'decide'
     })
     .addEdge('skill', 'decide')
+    .addEdge('search', 'decide')
     .addEdge('human', 'decide')
     .addEdge('finish', END)
     .compile({ checkpointer: new FlowSqliteSaver(store.db, telemetry) })

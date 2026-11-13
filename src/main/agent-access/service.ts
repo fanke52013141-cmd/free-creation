@@ -65,6 +65,11 @@ import {
   parseStateMachineInstance,
   parseStateMachinePending
 } from '../../shared/engine/executors/agentFlow'
+import {
+  HumanTaskInstanceSchema,
+  HumanTaskPendingSchema,
+  HumanTaskNodeConfigSchema
+} from '../../shared/agent-flow/node-contracts'
 import { FLOW_ASSET_OPERATION_IDS, runFlowAssetOperation } from './flow-assets-ops'
 import { isFlowCommandOperation, runFlowCommandOperation } from './flow-commands-ops'
 import { isSettingsOperation, runSettingsOperation } from './settings-ops'
@@ -535,7 +540,15 @@ export class LocalAccessService {
           ...(record.outputValues ? { outputs: record.outputValues } : {}),
           ...(record.errorMessage ? { reason: record.errorMessage } : {}),
           ...(record.failurePhase
-            ? { failure: { code: record.errorCode ?? 'FAILED', phase: record.failurePhase } }
+            ? {
+                failure: {
+                  code: record.errorCode ?? 'FAILED',
+                  phase: record.failurePhase,
+                  // W4 失败定位：填充结构化失败节点/端口（schema 早已允许，此前从不填）。
+                  ...(record.failureNodeId ? { nodeId: record.failureNodeId } : {}),
+                  ...(record.failurePortId ? { portId: record.failurePortId } : {})
+                }
+              }
             : {})
         }
       } else if (operationId === 'run.cancel') {
@@ -994,6 +1007,12 @@ export class LocalAccessService {
         result = await this.executeStateMachineEvent(id!, active, input)
       } else if (operationId === 'flowStateMachine.get') {
         result = this.readStateMachine(id!, input)
+      } else if (operationId === 'humanTask.submit') {
+        // C4：人工任务结果——与 GUI 提交结果按钮同一 meta.humanTaskPending 写入，
+        // 经渲染器权威动作（修订核对 + 保存屏障）；完成状态仍由运行时同一执行器校验。
+        result = await this.executeHumanTaskSubmit(id!, active, input)
+      } else if (operationId === 'humanTask.get') {
+        result = this.readHumanTask(id!, input)
       } else if (FLOW_AGENT_BUILD_OPERATION_IDS.has(operationId)) {
         // F8（收官）：建图预览/提交与模型审核同样只经 flow-bridge 发布的同一 builder/review
         // 宿主；propose/review 先走与 IPC 相同的模型能力预检，commit 走渲染器权威动作
@@ -1761,6 +1780,132 @@ export class LocalAccessService {
       legalEvents,
       pending: pending
         ? { eventId: pending.eventId, event: pending.event, expectedRevision: pending.expectedRevision }
+        : null
+    }
+  }
+
+  /**
+   * C4：人工任务结果提交。渲染器权威动作核对实例修订并写 meta.humanTaskPending
+   * （与 GUI 按钮同一写入）；main 核对落盘事实。完成状态由运行时执行器校验，
+   * 外部不能直接改完成状态——满足「模型文字不能直接赋予成功状态」的协同门槛。
+   */
+  private async executeHumanTaskSubmit(
+    id: string,
+    activeId: string | null | undefined,
+    input: Record<string, unknown>
+  ): Promise<unknown> {
+    if (id !== activeId || !this.options.desktop)
+      throw new AccessFailure(
+        'ACTIVE_PROJECT_REQUIRED',
+        'desktop-ownership',
+        'project.open the target canvas first, then retry humanTask.submit'
+      )
+    const current = projects.openProject(id)
+    if (!current) throw new AccessFailure('NOT_FOUND', 'read')
+    const nodeId = input.nodeId as string
+    const node = current.nodes.find((item) => item.id === nodeId)
+    if (!node) throw new AccessFailure('NODE_NOT_FOUND', 'precheck', nodeId.slice(0, 60))
+    if (node.type !== 'human-task')
+      throw new AccessFailure('INVALID_INPUT', 'precheck', 'human-task-node-required')
+    const value = input.value as
+      | { kind: 'text'; text: string }
+      | { kind: 'json'; data: unknown }
+    const reply = await this.options.desktop.run(
+      {
+        action: 'human-task-submit',
+        projectId: id,
+        nodeId,
+        humanTaskExpectedRevision: input.expectedRevision as number,
+        humanTaskValue: value,
+        ...(typeof input.submissionId === 'string' ? { humanTaskSubmissionId: input.submissionId } : {})
+      },
+      (version) => {
+        if (this.options.activeProjectId() !== id)
+          throw new AccessFailure('RESOURCE_BUSY', 'desktop-ownership')
+        const admitted = projects.openProject(id)
+        if (!admitted || admitted.meta.graphVersion !== version)
+          throw new AccessFailure('REVISION_CONFLICT', 'human-task-admission')
+        return admitted.meta
+      },
+      30000
+    )
+    const saved = projects.openProject(id)
+    if (!saved) throw new AccessFailure('REVISION_CONFLICT', 'human-task-verify')
+    const payload = (reply.result ?? {}) as { revision?: number; submissionId?: string }
+    const shape = (saved.tldrawSnapshot as { store: Record<string, { meta?: Record<string, unknown> }> })
+      .store[nodeId]
+    const pendingRaw = shape?.meta?.humanTaskPending
+    const pending =
+      typeof pendingRaw === 'string' && pendingRaw.trim()
+        ? (JSON.parse(pendingRaw) as { submissionId?: string; expectedRevision?: number })
+        : null
+    if (
+      !pending ||
+      pending.expectedRevision !== (input.expectedRevision as number) ||
+      (payload.submissionId !== undefined && pending.submissionId !== payload.submissionId)
+    )
+      throw new AccessFailure('STORAGE_INCONSISTENT', 'human-task-verify')
+    return {
+      projectId: id,
+      nodeId,
+      graphVersion: saved.meta.graphVersion,
+      revision: payload.revision ?? (input.expectedRevision as number),
+      submissionId: pending.submissionId ?? '',
+      pending: true
+    }
+  }
+
+  /** C4：人工任务只读视图——当前状态/修订/已交付结果/待处理提交（持久化事实）。 */
+  private readHumanTask(id: string, input: Record<string, unknown>): unknown {
+    const file = projects.openProject(id)
+    if (!file) throw new AccessFailure('NOT_FOUND', 'read')
+    const nodeId = input.nodeId as string
+    const node = file.nodes.find((item) => item.id === nodeId)
+    if (!node) throw new AccessFailure('NODE_NOT_FOUND', 'read', nodeId.slice(0, 60))
+    if (node.type !== 'human-task')
+      throw new AccessFailure('INVALID_INPUT', 'read', 'human-task-node-required')
+    const shape = (file.tldrawSnapshot as { store: Record<string, { props?: { config?: string }; meta?: Record<string, unknown> }> })
+      .store[nodeId]
+    const config = HumanTaskNodeConfigSchema.safeParse(
+      (() => {
+        try {
+          return JSON.parse(shape?.props?.config || '{}')
+        } catch {
+          return null
+        }
+      })()
+    )
+    const outputType = config.success ? config.data.outputType : 'text'
+    const instance = HumanTaskInstanceSchema.safeParse(
+      (() => {
+        try {
+          return JSON.parse(String(shape?.meta?.humanTask ?? ''))
+        } catch {
+          return null
+        }
+      })()
+    )
+    const status = instance.success ? instance.data.status : 'pending'
+    const revision = instance.success ? instance.data.revision : 1
+    const result = instance.success && instance.data.status === 'completed' ? instance.data.result ?? null : null
+    const pending = HumanTaskPendingSchema.safeParse(
+      (() => {
+        try {
+          return JSON.parse(String(shape?.meta?.humanTaskPending ?? ''))
+        } catch {
+          return null
+        }
+      })()
+    )
+    return {
+      projectId: id,
+      nodeId,
+      status,
+      revision,
+      outputType,
+      result,
+      pending: pending.success
+        ? { submissionId: pending.data.submissionId, expectedRevision: pending.data.expectedRevision }
         : null
     }
   }

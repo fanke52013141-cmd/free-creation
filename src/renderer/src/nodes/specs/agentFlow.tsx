@@ -624,6 +624,33 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
               执行范围内的审核与有界返工
             </label>
           )}
+          {draft.role === 'specialist' && (
+            <label className="agent-flow-target-option">
+              <input
+                type="checkbox"
+                aria-label="启用受控联网搜索"
+                checked={(draft.tools as Array<{ id: string }>).some(
+                  (tool) => tool.id === 'web.search'
+                )}
+                onChange={(event) =>
+                  update(
+                    'tools',
+                    event.target.checked
+                      ? [
+                          ...(draft.tools as Array<{ id: string; version: string }>).filter(
+                            (tool) => tool.id !== 'web.search'
+                          ),
+                          { id: 'web.search', version: '1' }
+                        ]
+                      : (draft.tools as Array<{ id: string }>).filter(
+                          (tool) => tool.id !== 'web.search'
+                        )
+                  )
+                }
+              />
+              受控联网搜索（豆包搜索，结果为待核实候选材料）
+            </label>
+          )}
           {targetList(
             draft.role === 'builder' ? '材料来源（一个文本节点）' : '允许处理的节点',
             'allowedNodeIds'

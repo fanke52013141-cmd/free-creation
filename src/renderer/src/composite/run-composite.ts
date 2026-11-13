@@ -104,7 +104,11 @@ async function execute(
       window.api.composite.runFinish({
         runId,
         status,
-        ...options
+        ...options,
+        // W4 失败定位：失败时把内存 failure 的结构化节点/端口落库，
+        // 供 run.get/execute.wait 与桌面实例详情精确定位（一处覆盖所有失败点）。
+        ...(status === 'failed' && failure?.nodeId ? { failureNodeId: failure.nodeId } : {}),
+        ...(status === 'failed' && failure?.portId ? { failurePortId: failure.portId } : {})
       })
     )
   }
@@ -333,6 +337,21 @@ async function execute(
       const shapeId = shapeByNode.get(nodeId)
       if (!shapeId) continue
       const nodeType = manifest.graph.nodes.find((node) => node.id === nodeId)?.nodeType ?? ''
+      // C4 fail-closed：节点流隔离执行没有人工提交通道，内部纯人工任务节点不能静默
+      // 跳过或伪造完成——显式拒绝并定位到该节点，由人在主画布单独完成后再编排。
+      if (nodeType === 'human-task') {
+        failure = { code: 'HUMAN_TASK_UNSUPPORTED_IN_COMPOSITE', phase: 'step', nodeId }
+        const reason = `节点流内部不支持纯人工任务节点「${nodeId}」：隔离执行无人工提交通道，请在主画布完成该人工任务`
+        await report(() =>
+          window.api.composite.runStep({ runId, stepKey: nodeId, nodeType, status: 'failed', reason })
+        )
+        await finish('failed', {
+          errorCode: failure.code,
+          errorMessage: reason,
+          failurePhase: 'step'
+        })
+        return { status: 'failed', reason, failure, stepCount: successfulSteps }
+      }
       await report(() =>
         window.api.composite.runStep({ runId, stepKey: nodeId, nodeType, status: 'running' })
       )
@@ -350,7 +369,13 @@ async function execute(
           runId,
           stepKey: nodeId,
           nodeType,
-          status: result.status === 'failed' ? 'failed' : 'completed',
+          // W4：skipped 如实记账（此前误记 completed），跳过原因随步骤台账可查。
+          status:
+            result.status === 'failed'
+              ? 'failed'
+              : result.status === 'skipped'
+                ? 'skipped'
+                : 'completed',
           ...(result.reason ? { reason: result.reason } : {})
         })
       )

@@ -19,7 +19,8 @@ beforeEach(() => {
     CREATE TABLE composite_runs (
       id TEXT PRIMARY KEY, project_id TEXT NOT NULL, capability_id TEXT NOT NULL,
       capability_version TEXT NOT NULL, content_hash TEXT NOT NULL, instance_node_id TEXT,
-      parent_run_id TEXT, failure_phase TEXT, output_summary TEXT, output_values TEXT,
+      parent_run_id TEXT, failure_phase TEXT, failure_node_id TEXT, failure_port_id TEXT,
+      output_summary TEXT, output_values TEXT,
       status TEXT NOT NULL, started_at INTEGER NOT NULL, finished_at INTEGER,
       error_code TEXT, error_message TEXT, created_at INTEGER NOT NULL
     );
@@ -109,5 +110,71 @@ describe('组合运行账本（P3 基础）', () => {
     expect(run?.failurePhase).toBe('output')
     expect(run?.outputSummary).toEqual([{ portId: 'out-text', kind: 'text' }])
     expect(run?.status).toBe('failed')
+  })
+
+  it('W4：失败内部节点/端口 ID 持久化并可查（只存 ID）', () => {
+    createCompositeRun({
+      id: 'run-loc',
+      projectId: 'project',
+      capabilityId: 'model-polish',
+      capabilityVersion: '1.0',
+      contentHash: 'e'.repeat(64)
+    })
+    recordCompositeRunStep({ runId: 'run-loc', stepKey: 'n1', nodeType: 'ai-process', status: 'running' })
+    recordCompositeRunStep({
+      runId: 'run-loc',
+      stepKey: 'n1',
+      nodeType: 'ai-process',
+      status: 'failed',
+      reason: '功能 text.process 尚未绑定已验证文本模型'
+    })
+    finishCompositeRun({
+      runId: 'run-loc',
+      status: 'failed',
+      errorCode: 'NODE_FAILED',
+      failurePhase: 'step',
+      failureNodeId: 'n1',
+      failurePortId: 'out-text'
+    })
+    const record = getCompositeRun('run-loc')
+    expect(record?.run.failureNodeId).toBe('n1')
+    expect(record?.run.failurePortId).toBe('out-text')
+    expect(record?.run.failurePhase).toBe('step')
+    expect(record?.steps[0].status).toBe('failed')
+    expect(record?.steps[0].reason).toContain('text.process')
+  })
+
+  it('W4：skipped 步骤如实记账，不再误记 completed', () => {
+    createCompositeRun({
+      id: 'run-skip',
+      projectId: 'project',
+      capabilityId: 'model-polish',
+      capabilityVersion: '1.0',
+      contentHash: 'f'.repeat(64)
+    })
+    recordCompositeRunStep({
+      runId: 'run-skip',
+      stepKey: 'n2',
+      nodeType: 'ai-process',
+      status: 'skipped',
+      reason: '缺少必要输入'
+    })
+    const record = getCompositeRun('run-skip')
+    expect(record?.steps[0].status).toBe('skipped')
+    expect(record?.steps[0].reason).toBe('缺少必要输入')
+  })
+
+  it('W4：成功运行不携带失败定位字段', () => {
+    createCompositeRun({
+      id: 'run-ok',
+      projectId: 'project',
+      capabilityId: 'model-polish',
+      capabilityVersion: '1.0',
+      contentHash: '1'.repeat(64)
+    })
+    finishCompositeRun({ runId: 'run-ok', status: 'completed' })
+    const run = getCompositeRun('run-ok')?.run
+    expect(run?.failureNodeId).toBeNull()
+    expect(run?.failurePortId).toBeNull()
   })
 })

@@ -3,6 +3,7 @@ import { PROCESSOR_PORTS, PROCESSOR_CONTRACT_VERSION } from '@shared/agent-flow/
 // 端口声明对齐路线图的节点类型表；any 万能口，其余类型需一致才可连
 import type { PortCardinality, PortDecl, PortSchemaRef } from '@shared/types'
 import { registerAgentFlowNodeTypes } from './agentFlow'
+import { registerHumanTaskNodeType } from './humanTask'
 import { CompositeBody } from '../../composite/CompositeBody'
 import { compositeExecutor } from '@shared/engine/executors/composite'
 import { projectCompositeOutputs } from '@shared/composite/outputs'
@@ -278,6 +279,7 @@ function speechStaticPorts(): {
 
 export function registerBaseNodeTypes(): void {
   registerAgentFlowNodeTypes()
+  registerHumanTaskNodeType()
   registerNodeType({
     type: 'text',
     contractVersion: 3,

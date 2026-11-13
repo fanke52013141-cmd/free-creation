@@ -38,7 +38,13 @@ export interface NodeRunRecord {
   durationMs?: number
   inputs: Record<string, NodeRunSource[]>
   outputPorts?: string[]
-  error?: { phase: NodeRunPhase; reason: string }
+  error?: {
+    phase: NodeRunPhase
+    reason: string
+    /** W4 失败定位：组合等嵌套执行失败的内部节点/端口 ID（只存 ID，不存正文）。 */
+    failureNodeId?: string
+    failurePortId?: string
+  }
   target?: NodeExecutionTarget
   estimateFeatures?: GenerationTimingFeatures
   estimateProviderKey?: string

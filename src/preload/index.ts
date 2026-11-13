@@ -580,6 +580,9 @@ const api = {
       errorCode?: string
       errorMessage?: string
       failurePhase?: string
+      /** W4 失败定位：失败内部节点/端口 ID（只存 ID，不存正文）。 */
+      failureNodeId?: string
+      failurePortId?: string
       /** 已产生的公开输出端口（只记 portId/kind，不记正文）。 */
       outputPorts?: Array<{ portId: string; kind: string }>
       /** headless 执行的完整公开输出（按公开端口 ID 的 NodeValue）。 */

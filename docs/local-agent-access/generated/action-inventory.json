@@ -2,13 +2,13 @@
   "schemaVersion": 1,
   "generatedFrom": {
     "ipcChannels": 190,
-    "canvasActions": 49,
-    "externalOperations": 164
+    "canvasActions": 50,
+    "externalOperations": 166
   },
   "totals": {
-    "actions": 239,
+    "actions": 240,
     "byPhase": {
-      "external": 197,
+      "external": 198,
       "excluded": 34,
       "F9": 8
     }
@@ -2282,6 +2282,16 @@
       "external": [
         "flowStateMachine.submitEvent",
         "flowStateMachine.get"
+      ]
+    },
+    "canvas.human_task.submit": {
+      "label": "人工任务结果提交与状态读取",
+      "gui": "人工任务卡片「提交结果」按钮 / 状态与已交付结果展示",
+      "phase": "external",
+      "note": "C4：humanTask.submit 与 GUI 按钮同一 meta.humanTaskPending 写入（修订核对+保存屏障），完成状态由 humanTaskExecutor 校验；humanTask.get 只读持久化实例；composite 内部人工节点 fail-closed",
+      "external": [
+        "humanTask.submit",
+        "humanTask.get"
       ]
     }
   }

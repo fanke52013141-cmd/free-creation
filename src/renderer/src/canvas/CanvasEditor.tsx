@@ -1549,6 +1549,88 @@ export function CanvasEditor({
               })
               return
             }
+            // ── C4 human-task-submit：人工任务结果提交（与 GUI 提交结果按钮同一写入）──
+            // 修订核对 → 准入 → 写 meta.humanTaskPending → 保存屏障 → 回执。
+            // 完成状态由运行节点时的 humanTaskExecutor 校验，此处不推进完成。
+            if (request.action === 'human-task-submit') {
+              const replyFail = (validated: boolean, code: string, detail?: string): void => {
+                window.api.replyLocalAgentDesktop({
+                  requestId: request.requestId,
+                  projectId: project.id,
+                  ok: false,
+                  validated,
+                  graphVersion: graphVersionRef.current,
+                  errorCode: code,
+                  ...(detail ? { errorDetail: detail.slice(0, 300) } : {})
+                })
+              }
+              const nodeId = request.nodeId ?? ''
+              const shape = editor.getShape<NodeCardShape>(nodeId as TLShapeId)
+              if (!shape || shape.type !== 'node-card' || shape.props.nodeType !== 'human-task') {
+                replyFail(true, 'INVALID_INPUT', 'human-task-node-required')
+                return
+              }
+              const expectedRevision = request.humanTaskExpectedRevision ?? 0
+              const value = request.humanTaskValue
+              if (expectedRevision < 1 || !value) {
+                replyFail(true, 'INVALID_INPUT', 'expectedRevision/value required')
+                return
+              }
+              const meta = shape.meta as Record<string, unknown> | undefined
+              let currentRevision = 1
+              try {
+                const instance = JSON.parse(String(meta?.humanTask ?? '')) as { revision?: number }
+                if (typeof instance?.revision === 'number') currentRevision = instance.revision
+              } catch {
+                // 无实例：初始修订 1（与执行器初始化一致）。
+              }
+              if (expectedRevision !== currentRevision) {
+                replyFail(
+                  true,
+                  'HUMAN_TASK_REVISION_CONFLICT',
+                  `expected ${expectedRevision}, current ${currentRevision}`
+                )
+                return
+              }
+              if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+              saveTimerRef.current = null
+              const preSave = useSaveCoordinator.getState()
+              if (preSave.dirtyVersion !== preSave.persistedVersion) await ensureCanvasSaved()
+              if (
+                editorRef.current !== editor ||
+                useAppStore.getState().currentProject?.id !== project.id
+              )
+                throw new Error('CANVAS_CHANGED')
+              const admission = await window.api.commitLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                graphVersion: graphVersionRef.current
+              })
+              if (
+                !admission.ok ||
+                Date.now() >= request.expiresAt ||
+                editorRef.current !== editor ||
+                useAppStore.getState().currentProject?.id !== project.id
+              )
+                throw new Error('PATCH_NOT_ADMITTED')
+              const submissionId = request.humanTaskSubmissionId ?? crypto.randomUUID()
+              editor.updateShape({
+                id: nodeId as TLShapeId,
+                type: 'node-card',
+                meta: {
+                  humanTaskPending: JSON.stringify({ submissionId, expectedRevision, value })
+                }
+              })
+              await ensureCanvasSaved()
+              window.api.replyLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                ok: true,
+                graphVersion: graphVersionRef.current,
+                result: { revision: currentRevision, submissionId }
+              })
+              return
+            }
             // ── F8 收官：外部提交建图预览到权威画布 ──
             // 与 GUI 面板同一 commitFlowBuild（authorize → 语义修订核对 → 单撤销步 →
             // 保存屏障 → confirm）。main 只给 buildId，预览内容来自 main 侧同一宿主；
@@ -1717,7 +1799,10 @@ export function CanvasEditor({
                     const result = await runNodeManually(
                       editor,
                       project.id,
-                      providers,
+                      // 本 effect 依赖仅 [project.id]，闭包 providers 是注册时的旧值
+                      // （gateway store 异步 load 完成后不会重注册）。执行时新鲜读取，
+                      // 与 flow command 路径一致，避免组合内部模型节点拿到空目录。
+                      useGatewayStore.getState().providers,
                       executeNodeIds[0] as TLShapeId
                     )
                     if (result.status === 'done') outcome = 'completed'
@@ -1730,7 +1815,8 @@ export function CanvasEditor({
                     const result = await runWorkflowForNodes(
                       editor,
                       project.id,
-                      providers,
+                      // 同上：执行时新鲜读取，避免闭包陈旧 providers。
+                      useGatewayStore.getState().providers,
                       executeNodeIds as TLShapeId[],
                       { inputs: request.inputs, confirmPaidRerun: request.confirmPaidRerun }
                     )

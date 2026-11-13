@@ -1589,7 +1589,13 @@ async function executeNodeUnscheduled(
       })
       recordRunTrace(ctx, node, record, diagnosticPhase, 'error', result.reason ?? '执行失败')
       finishRunRecord(ctx, node, shapeId, record, 'failed', {
-        error: { phase: diagnosticPhase, reason: result.reason ?? '执行失败' }
+        error: {
+          phase: diagnosticPhase,
+          reason: result.reason ?? '执行失败',
+          // W4 失败定位：组合内部失败节点/端口随顶层节点运行记录持久化。
+          ...(result.failureNodeId ? { failureNodeId: result.failureNodeId } : {}),
+          ...(result.failurePortId ? { failurePortId: result.failurePortId } : {})
+        }
       })
     } else {
       setExec(editor, shapeId, 'idle')

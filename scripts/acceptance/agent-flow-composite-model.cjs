@@ -172,6 +172,12 @@ function compositeManifest() {
     check('插入引用形态实例并连接素材 → 公开输入')
 
     // 运行实例（内部 ai-process 走真实模型；长调用可能 reconcile）。
+    // 诊断：main 侧供应商目录是否包含该连接（二分 main catalog vs 渲染层 store）。
+    const providerList = await cli(dir, ['provider', 'list'], {})
+    const providers = providerList.response?.data?.items ?? providerList.response?.data ?? []
+    const hasZhipu = JSON.stringify(providers).includes('zhipu-official')
+    console.log(`[diag] provider.list contains zhipu-official: ${hasZhipu}`)
+    receipt.outputs.providerListHasZhipu = hasZhipu
     const g2 = ok(await cli(dir, ['graph', 'get'], { projectId }), 'GRAPH2')
     const exec = ok(await cli(dir, ['node', 'execute'], {
       projectId, expectedGraphVersion: g2.graphVersion, nodeIds: [r.inst], mode: 'single'

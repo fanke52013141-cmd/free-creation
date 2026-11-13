@@ -85,4 +85,38 @@ describe('composite executor（P2）', () => {
     expect(result).toMatchObject({ status: 'failed', reason: '内部节点失败：n1' })
     expect(ctx.updateResult).not.toHaveBeenCalled()
   })
+
+  it('W4：内部失败的结构化节点/端口透传到执行器结果，不在边界丢弃', async () => {
+    const ctx = context({
+      runComposite: vi.fn(async () => ({
+        status: 'failed' as const,
+        reason: '内部节点失败：n1',
+        failure: { code: 'NODE_FAILED', phase: 'step' as const, nodeId: 'n1', portId: 'out-text' }
+      }))
+    })
+    const result = await compositeExecutor(ctx)
+    expect(result.status).toBe('failed')
+    expect(result.failureNodeId).toBe('n1')
+    expect(result.failurePortId).toBe('out-text')
+    expect(result.diagnosticPhase).toBe('execution')
+  })
+
+  it('W4：输出阶段失败携带节点/端口，diagnosticPhase 归 output', async () => {
+    const ctx = context({
+      runComposite: vi.fn(async () => ({
+        status: 'failed' as const,
+        reason: '公开输出缺失',
+        failure: {
+          code: 'REQUIRED_OUTPUT_MISSING',
+          phase: 'output' as const,
+          nodeId: 'n1',
+          portId: 'out-image'
+        }
+      }))
+    })
+    const result = await compositeExecutor(ctx)
+    expect(result.diagnosticPhase).toBe('output')
+    expect(result.failureNodeId).toBe('n1')
+    expect(result.failurePortId).toBe('out-image')
+  })
 })

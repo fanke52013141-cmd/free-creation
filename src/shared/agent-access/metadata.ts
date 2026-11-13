@@ -35,6 +35,8 @@ export const OPERATION_REQUIREMENTS: Record<string, readonly string[]> = {
   'flowAgent.build.propose': ['openProject', 'agentNode', 'verifiedModel'],
   'flowAgent.build.commit': ['openProject', 'agentNode', 'buildPreview'],
   'flowAgent.review': ['openProject', 'agentNode', 'verifiedModel'],
+  'humanTask.submit': ['openProject'],
+  'humanTask.get': ['openProject'],
   'flow.command.lookup': ['openProject'],
   'flow.command.availability': ['openProject'],
   'flow.command.check': ['openProject', 'command'],

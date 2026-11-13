@@ -91,6 +91,8 @@ export const DETERMINISTIC_OUTPUT_SOURCES: Record<string, 'document' | 'run' | '
   'ai-review': 'run',
   // C3：状态机正式 out-state 来自运行推进后的持久化实例。
   'state-machine': 'run',
+  // C4：人工任务正式 out-text/out-json 来自人工提交并运行后的权威实例。
+  'human-task': 'run',
   // W1：节点流实例的正式输出只来自本次固定版本运行写入的映射结果。
   composite: 'run'
 }

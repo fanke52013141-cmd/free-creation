@@ -313,6 +313,77 @@ export class FlowAssetStore {
     return receipt ? this.read(projectId, receipt.version_id) : null
   }
 
+  /**
+   * W4/C2 受控联网搜索资产来源：搜索结果无对应画布节点，不能走 submit 的画布投影。
+   * 由 main 侧搜索结算直接写入固定 JSON 资产（agent 节点 out-json 端口），幂等 submissionId。
+   * 结果成为 committed 回执候选资产，finish_task/人工选择只能引用固定引用——非静默采用。
+   * 红线：只存搜索结果结构化值（标题/链接/摘要），不存密钥；值大小有界。
+   */
+  submitSearchResult(input: {
+    projectId: string
+    agentNodeId: string
+    submissionId: string
+    data: unknown
+  }): FlowAssetVersion {
+    const portId = 'out-json'
+    const signature = hash(JSON.stringify([input.agentNodeId, portId, input.submissionId]))
+    let phase = 'project-read'
+    try {
+      return this.db.transaction(() => {
+        const project = this.project(input.projectId) ?? fail('ASSET_PROJECT_MISSING')
+        phase = 'receipt-lookup'
+        const previous = this.db
+          .prepare(
+            'SELECT signature, version_id FROM flow_asset_submissions WHERE project_id = ? AND submission_id = ?'
+          )
+          .get(input.projectId, input.submissionId) as
+          | { signature: string; version_id: string }
+          | undefined
+        if (previous) {
+          if (previous.signature !== signature) fail('ASSET_SUBMISSION_CONFLICT')
+          return this.read(input.projectId, previous.version_id)
+        }
+        phase = 'value-validate'
+        const value = { kind: 'json' as const, data: input.data }
+        const body = JSON.stringify(value)
+        if (Buffer.byteLength(body, 'utf8') > 1024 * 1024) fail('ASSET_VALUE_TOO_LARGE')
+        phase = 'version-persist'
+        const last = this.db
+          .prepare(
+            'SELECT asset_id, ordinal FROM flow_asset_versions WHERE project_id = ? AND node_id = ? AND port_id = ? ORDER BY ordinal DESC LIMIT 1'
+          )
+          .get(input.projectId, input.agentNodeId, portId) as
+          | { asset_id: string; ordinal: number }
+          | undefined
+        const versionId = randomUUID()
+        this.db
+          .prepare('INSERT INTO flow_asset_versions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(
+            versionId,
+            last?.asset_id ?? randomUUID(),
+            input.projectId,
+            input.agentNodeId,
+            portId,
+            (last?.ordinal ?? 0) + 1,
+            project.meta.graphVersion,
+            Date.now(),
+            hash(body),
+            body
+          )
+        phase = 'receipt-persist'
+        this.db
+          .prepare('INSERT INTO flow_asset_submissions VALUES (?, ?, ?, ?)')
+          .run(input.projectId, input.submissionId, signature, versionId)
+        return this.read(input.projectId, versionId)
+      })()
+    } catch (error) {
+      throw new FlowAssetError(
+        error instanceof FlowAssetError ? error.code : 'ASSET_STORAGE_FAILED',
+        phase
+      )
+    }
+  }
+
   read(projectId: string, versionId: string): FlowAssetVersion {
     if (!this.project(projectId)) fail('ASSET_PROJECT_MISSING')
     const row = this.db

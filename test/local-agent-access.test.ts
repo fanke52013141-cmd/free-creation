@@ -767,7 +767,7 @@ describe('local Agent vertical slice', () => {
     expect(validateAccessRegistry(['text'], ['text', 'text'])).toContain('DUPLICATE_NODE')
     // F9：节点目录不再是"一律 planned"，而是逐节点 N1–N8 状态 + 可复核证据。
     const directory = nodeAccessDirectory()
-    expect(directory).toHaveLength(32)
+    expect(directory).toHaveLength(33)
     for (const node of directory) {
       expect(node.actions).toHaveLength(8)
       for (const action of node.actions) {

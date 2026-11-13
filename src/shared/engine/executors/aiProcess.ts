@@ -11,7 +11,7 @@ import { inputJson, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { validateNodeSchema } from '../../node-schemas'
 import type { PortSchemaRef } from '../../types'
-import { featureKeyOf, modelKeyOf, resolveFeatureOption } from '../models'
+import { featureKeyOf, modelKeyOf, resolveFeatureOptionDetailed } from '../models'
 import { parseJsonObj, waitForChat } from '../helpers'
 import { readNodeConfig } from '../node-config'
 import { parseRetryConfig, withRetry, type RetryConfig } from '../retry'
@@ -152,14 +152,19 @@ export const aiProcessExecutor = async (
   if (!ctx.gateway.resolveModelFeature && !config.modelKey) {
     return { status: 'skipped', reason: '未选择可用文本模型' }
   }
-  const option = await resolveFeatureOption(
+  const resolution = await resolveFeatureOptionDetailed(
     ctx.gateway,
     ctx.providers,
     featureKeyOf(config, 'text.process'),
     'text.generate',
     modelKeyOf(config)
   )
-  if (!option) return { status: 'skipped', reason: '功能 text.process 尚未绑定已验证文本模型' }
+  if (!resolution.option)
+    return {
+      status: 'skipped',
+      reason: `功能 text.process 尚未绑定已验证文本模型${resolution.reason ? `：${resolution.reason}` : ''}`
+    }
+  const option = resolution.option
 
   // W1：模型调用与输出规范化整体纳入重试。可重试错误（空返回 / 坏 JSON / Schema
   // 校验不过 / 瞬时网络错误）按指数退避重试；配置类错误立即失败。取消随时生效。

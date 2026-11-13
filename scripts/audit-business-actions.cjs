@@ -120,6 +120,7 @@ const CANVAS_ACTIONS = [
   ['canvas.align', '多选工具栏对齐/均分'],
   ['canvas.flow_layout', '底部坞智能整理按钮/Shift+Alt+F（流程分层/角色泳道/网格）'],
   ['canvas.state_machine.event', '状态机卡片提交事件按钮/阶段与合法事件展示'],
+  ['canvas.human_task.submit', '人工任务卡片提交结果按钮/状态与已交付结果展示（C4）'],
   ['canvas.history.undo-redo', '历史坞撤销/重做'],
   ['canvas.workflow.run-all', '画布运行全部工作流'],
   ['canvas.workflow.run-selection', '多选运行所选节点及上游闭包'],
