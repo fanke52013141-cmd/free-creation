@@ -9,6 +9,16 @@ export interface DerivedBoundary {
 }
 
 const OUTPUT_PRIORITY = ['image', 'video', 'audio', 'file', 'text', 'markdown', 'json'] as const
+const INPUT_PRIORITY = [
+  'text',
+  'markdown',
+  'json',
+  'image',
+  'video',
+  'audio',
+  'file',
+  'any'
+] as const
 
 function unique(base: string, used: Set<string>): string {
   let id = base
@@ -19,14 +29,34 @@ function unique(base: string, used: Set<string>): string {
 }
 
 /**
- * 从固定版本内部图推导默认公开边界（P2/P4 修正）：
- * - 输入：没有内部上游的边界源节点。文本节点默认暴露文本输入（带默认正文）；
- *   其余源节点暴露其全部输入端口（含可选端口，保留端口自身 required/cardinality），
- *   已有内部来源的端口不公开。这样「首节点允许的输入 = 组合输入」对任意首尾链成立，
- *   避免 ai-process 这类「输入皆可选、无输入即跳过」的源节点被推导成零输入组合。
+ * 源节点的主输入端口（2026-11-13 用户裁决：节点流默认是单输入单输出黑盒）。
+ * 必填端口优先（节点真正赖以运行的输入），其次按内容类型优先级（文本驱动优先），
+ * 同级保持声明顺序。组合默认只公开每个源节点的这一个主输入；辅助可选端口
+ * （如 ai-process 的 in-json 上下文）不自动公开。多个源节点 → 多个公开输入，
+ * 即「多种输入进来才分裂成多个输入端口」，与节点的黑盒心智一致。
+ */
+export function primaryInputPort<T extends { dir: string; type: string; required?: boolean }>(
+  ports: readonly T[]
+): T | undefined {
+  const inputs = ports.filter((port) => port.dir === 'in')
+  if (inputs.length === 0) return undefined
+  const rank = (port: T): number => {
+    const typeRank = INPUT_PRIORITY.indexOf(port.type as never)
+    return (port.required ? 0 : 1) * 100 + (typeRank < 0 ? 99 : typeRank)
+  }
+  return [...inputs].sort((a, b) => rank(a) - rank(b))[0]
+}
+
+/**
+ * 从固定版本内部图推导默认公开边界（2026-11-13 修正：单主输入黑盒）：
+ * - 输入：没有内部上游的边界源节点，每个源节点只公开一个主输入（primaryInputPort），
+ *   并标为必填——这样缺输入点运行会触发补输入弹窗，而不是空跑后下游契约失败。
+ *   文本节点默认暴露文本输入（带默认正文）；辅助可选端口不自动公开。
+ *   多个源节点各自贡献一个主输入 → 多输入。已有内部来源的端口不公开。
  * - 输出：只取没有内部下游的汇节点的单个主输出，媒体优先；
  *   中间节点的多路 text/markdown/json 不再自动公开。
  * 该函数只做结构推导，不做类型/连线合法性校验；发布前仍走 validateCompositeManifest。
+ * 公开边界始终随内部图自动推导（2026-11-11 裁决），不提供手动挑选。
  */
 export function deriveCompositeBoundary(manifest: CompositeManifest): DerivedBoundary {
   const nodes = manifest.graph.nodes
@@ -56,17 +86,18 @@ export function deriveCompositeBoundary(manifest: CompositeManifest): DerivedBou
       })
       continue
     }
-    for (const port of ports) {
-      if (port.dir !== 'in') continue
-      if (incoming.has(`${node.id}:${port.id}`)) continue
+    const primary = primaryInputPort(
+      ports.filter((port) => port.dir === 'in' && !incoming.has(`${node.id}:${port.id}`))
+    )
+    if (primary) {
       inputs.push({
-        id: unique(`${node.id}-${port.id}`, usedInputIds),
-        label: port.name,
-        type: port.type as CompositeManifest['inputs'][number]['type'],
-        required: port.required,
-        cardinality: port.cardinality,
-        ...(port.schemaRef ? { schemaRef: port.schemaRef } : {}),
-        targets: [{ nodeId: node.id, portId: port.id }]
+        id: unique(`${node.id}-${primary.id}`, usedInputIds),
+        label: primary.name,
+        type: primary.type as CompositeManifest['inputs'][number]['type'],
+        required: true,
+        cardinality: primary.cardinality,
+        ...(primary.schemaRef ? { schemaRef: primary.schemaRef } : {}),
+        targets: [{ nodeId: node.id, portId: primary.id }]
       })
     }
   }

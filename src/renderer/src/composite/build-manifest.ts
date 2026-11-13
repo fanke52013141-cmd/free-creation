@@ -11,6 +11,7 @@ import type {
   CompositeOutput
 } from '@shared/composite/manifest'
 import { parseCompositeManifest } from '@shared/composite/manifest'
+import { primaryInputPort } from '@shared/composite/boundary'
 import { readCompositeInstanceManifest } from '@shared/composite/outputs'
 
 export interface CompositeBuildOptions {
@@ -212,8 +213,8 @@ export function buildCompositeManifestFromGraph(
   }
 
   // 边界源节点：没有内部上游。文本节点默认把正文变成公开输入；
-  // 其余源节点暴露其全部输入端口（含可选端口，保留 required/cardinality）。
-  // 外部连线已映射的目标不重复添加。
+  // 其余源节点只公开一个主输入（primaryInputPort，标必填），辅助可选端口不自动公开。
+  // 多个源节点 → 多个公开输入。外部连线已映射的目标不重复添加。
   const internalIncoming = new Set(
     internalEdges.map((edge) => `${edge.to.nodeId}:${edge.to.portId}`)
   )
@@ -242,20 +243,27 @@ export function buildCompositeManifestFromGraph(
         }
       }
     }
-    for (const port of node.ports) {
-      if (port.dir !== 'in') continue
-      const key = `${node.id}:${port.id}`
-      if (incomingExternal.has(key) || internalIncoming.has(`${internalId}:${port.id}`)) continue
-      const id = uniquePublicId(`${internalId}-${port.id}`, usedInputIds)
+    const primary = primaryInputPort(
+      node.ports.filter((port) => {
+        if (port.dir !== 'in') return false
+        const key = `${node.id}:${port.id}`
+        return !incomingExternal.has(key) && !internalIncoming.has(`${internalId}:${port.id}`)
+      })
+    )
+    if (primary) {
+      const key = `${node.id}:${primary.id}`
+      const id = uniquePublicId(`${internalId}-${primary.id}`, usedInputIds)
       inputs.set(`source-port-${key}`, {
         id,
-        label: port.name,
-        type: port.type as CompositePort['type'],
-        required: port.required,
-        cardinality: port.cardinality,
-        ...(port.description ? { description: port.description } : {}),
-        ...(port.schema ? { schemaRef: { id: port.schema.id, version: port.schema.version } } : {}),
-        targets: [{ nodeId: internalId, portId: port.id }]
+        label: primary.name,
+        type: primary.type as CompositePort['type'],
+        required: true,
+        cardinality: primary.cardinality,
+        ...(primary.description ? { description: primary.description } : {}),
+        ...(primary.schema
+          ? { schemaRef: { id: primary.schema.id, version: primary.schema.version } }
+          : {}),
+        targets: [{ nodeId: internalId, portId: primary.id }]
       })
       incomingExternal.add(key)
     }

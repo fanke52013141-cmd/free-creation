@@ -114,3 +114,110 @@ describe('T1.3 输入已满足时不列缺口', () => {
     expect(gaps('storyboard', '{"shots":[]}')).toEqual([])
   })
 })
+
+describe('T1.4 节点流公开输入缺口（2026-11-13 单主输入必填裁决）', () => {
+  function compositeNode(defaultValue?: string): CanvasNode {
+    const manifest = {
+      schemaVersion: 1,
+      runtimeVersion: 2,
+      capabilityId: 'role-design',
+      version: '1.0',
+      name: '角色设计',
+      inputs: [
+        {
+          id: 'n1-in-text',
+          label: '文本',
+          type: 'text',
+          required: true,
+          cardinality: 'many',
+          targets: [{ nodeId: 'n1', portId: 'in-text' }],
+          ...(defaultValue !== undefined ? { defaultValue } : {})
+        }
+      ],
+      outputs: [
+        {
+          id: 'n1-out-text',
+          label: '文本',
+          type: 'text',
+          required: true,
+          cardinality: 'one',
+          source: { nodeId: 'n1', portId: 'out-text' }
+        }
+      ],
+      graph: {
+        nodes: [
+          {
+            id: 'n1',
+            nodeType: 'text',
+            contractVersion: 3,
+            title: '文本',
+            dx: 0,
+            dy: 0,
+            w: 340,
+            h: 300,
+            ports: [
+              {
+                id: 'in-text',
+                name: '文本',
+                dir: 'in',
+                type: 'text',
+                required: false,
+                cardinality: 'many'
+              },
+              {
+                id: 'out-text',
+                name: '文本',
+                dir: 'out',
+                type: 'text',
+                required: true,
+                cardinality: 'one'
+              }
+            ]
+          }
+        ],
+        edges: []
+      },
+      dependencies: [{ kind: 'node', id: 'text', contractVersion: 3 }]
+    }
+    return {
+      id: 'shape:composite',
+      type: 'composite',
+      title: '角色设计',
+      ports: [
+        {
+          id: 'in-n1-in-text',
+          name: '文本',
+          dir: 'in',
+          type: 'text',
+          required: true,
+          cardinality: 'many'
+        }
+      ],
+      text: '',
+      params: { config: JSON.stringify({ manifest }) },
+      meta: {}
+    } as unknown as CanvasNode
+  }
+
+  it('组合必填公开输入缺值时列出缺口 → 触发补输入弹窗', () => {
+    const gaps = missingWorkflowPorts(compositeNode(), '', [], new Map() as never, [])
+    expect(gaps.map((p) => p.id)).toEqual(['in-n1-in-text'])
+  })
+
+  it('组合公开输入带 defaultValue（内部固定正文）时不列缺口', () => {
+    const gaps = missingWorkflowPorts(compositeNode('默认正文'), '', [], new Map() as never, [])
+    expect(gaps).toEqual([])
+  })
+
+  it('组合公开输入已连线时不列缺口', () => {
+    const edges = [
+      {
+        id: 'e1',
+        from: { nodeId: 'shape:up', portId: 'out-text' },
+        to: { nodeId: 'shape:composite', portId: 'in-n1-in-text' }
+      }
+    ]
+    const gaps = missingWorkflowPorts(compositeNode(), '', edges as never, new Map() as never, [])
+    expect(gaps).toEqual([])
+  })
+})

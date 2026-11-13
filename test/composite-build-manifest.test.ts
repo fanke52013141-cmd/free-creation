@@ -57,7 +57,14 @@ function fixture(): { nodes: CanvasNode[]; edges: CanvasEdge[] } {
     x: 760,
     ports: [
       port({ id: 'in-prompt', dir: 'in', type: 'text', name: '提示词' }),
-      port({ id: 'in-images', dir: 'in', type: 'image', name: '参考图', required: false, cardinality: 'many' }),
+      port({
+        id: 'in-images',
+        dir: 'in',
+        type: 'image',
+        name: '参考图',
+        required: false,
+        cardinality: 'many'
+      }),
       port({ id: 'out-image', dir: 'out', type: 'image', name: '人物设计图' })
     ]
   })
@@ -128,7 +135,64 @@ describe('组合草稿边界提取（P1）', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     // ai.in-text 必填且只在选区内部没有来源 → 应列为公开输入
-    expect(result.manifest.inputs.some((input) => input.targets[0]?.portId === 'in-text')).toBe(true)
+    expect(result.manifest.inputs.some((input) => input.targets[0]?.portId === 'in-text')).toBe(
+      true
+    )
+  })
+
+  it('AI 处理源节点带文本+JSON 两端口时只公开单个必填文本主输入（单输入黑盒）', () => {
+    const ai = node({
+      id: 'shape:ai',
+      type: 'ai-process',
+      title: '整理描述',
+      ports: [
+        port({
+          id: 'in-text',
+          dir: 'in',
+          type: 'text',
+          name: '输入文本',
+          required: false,
+          cardinality: 'many'
+        }),
+        port({ id: 'in-json', dir: 'in', type: 'json', name: 'JSON 上下文', required: false }),
+        port({ id: 'out-text', dir: 'out', type: 'text', name: '结果文本' })
+      ]
+    })
+    const image = node({
+      id: 'shape:image',
+      type: 'image-gen',
+      title: '生成人物图',
+      x: 380,
+      ports: [
+        port({ id: 'in-prompt', dir: 'in', type: 'text', name: '提示词', required: false }),
+        port({ id: 'out-image', dir: 'out', type: 'image', name: '人物设计图' })
+      ]
+    })
+    const result = buildCompositeManifestFromGraph({
+      capabilityId: 'ai-to-image',
+      name: 'AI 处理生图',
+      version: '1.0',
+      nodes: [ai, image],
+      edges: [
+        {
+          id: 'e1',
+          from: { nodeId: 'shape:ai', portId: 'out-text' },
+          to: { nodeId: 'shape:image', portId: 'in-prompt' }
+        }
+      ],
+      selectedNodeIds: ['shape:ai', 'shape:image']
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.manifest.inputs).toHaveLength(1)
+    expect(result.manifest.inputs[0]).toMatchObject({
+      type: 'text',
+      required: true,
+      targets: [{ nodeId: 'n1', portId: 'in-text' }]
+    })
+    expect(result.manifest.inputs.some((input) => input.targets[0]?.portId === 'in-json')).toBe(
+      false
+    )
   })
 
   it('没有可达输出时拒绝生成', () => {
@@ -184,8 +248,22 @@ describe('组合草稿边界提取（P1）', () => {
             w: 340,
             h: 300,
             ports: [
-              { id: 'in-text', name: 'in-text', dir: 'in', type: 'text', required: true, cardinality: 'one' },
-              { id: 'out-text', name: 'out-text', dir: 'out', type: 'text', required: true, cardinality: 'one' }
+              {
+                id: 'in-text',
+                name: 'in-text',
+                dir: 'in',
+                type: 'text',
+                required: true,
+                cardinality: 'one'
+              },
+              {
+                id: 'out-text',
+                name: 'out-text',
+                dir: 'out',
+                type: 'text',
+                required: true,
+                cardinality: 'one'
+              }
             ]
           }
         ],

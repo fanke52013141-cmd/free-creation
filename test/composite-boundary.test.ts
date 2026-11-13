@@ -236,29 +236,24 @@ function aiFirstManifest(): CompositeManifest {
   }
 }
 
-describe('组合公开边界推导：首节点输入即组合输入', () => {
-  it('AI 处理（可选输入）作首节点时，其输入端口仍被公开为组合输入', () => {
+describe('组合公开边界推导：单主输入黑盒（2026-11-13 裁决）', () => {
+  it('AI 处理作首节点时只公开一个主输入（文本），辅助 in-json 不自动公开', () => {
     const boundary = deriveCompositeBoundary(aiFirstManifest())
-    // 首节点 ai-process 的 in-text / in-json 都应公开（修复前因 required:false 被漏掉，得到零输入）。
-    expect(boundary.inputs.length).toBeGreaterThanOrEqual(1)
-    const textInput = boundary.inputs.find((input) => input.targets[0]?.portId === 'in-text')
-    expect(textInput).toBeDefined()
-    expect(textInput).toMatchObject({
+    expect(boundary.inputs).toHaveLength(1)
+    expect(boundary.inputs[0]).toMatchObject({
       type: 'text',
+      required: true,
       targets: [{ nodeId: 'n1', portId: 'in-text' }]
     })
-    const jsonInput = boundary.inputs.find((input) => input.targets[0]?.portId === 'in-json')
-    expect(jsonInput).toMatchObject({
-      type: 'json',
-      targets: [{ nodeId: 'n1', portId: 'in-json' }]
-    })
+    // 辅助可选端口（JSON 上下文）不再自动公开，避免默认出现 2 输入。
+    expect(boundary.inputs.some((input) => input.targets[0]?.portId === 'in-json')).toBe(false)
   })
 
-  it('保留源端口自身的 required/cardinality，不强制改为必填', () => {
+  it('主输入标必填以触发补输入弹窗，保留源端口 cardinality', () => {
     const boundary = deriveCompositeBoundary(aiFirstManifest())
-    const textInput = boundary.inputs.find((input) => input.targets[0]?.portId === 'in-text')
-    expect(textInput?.required).toBe(false)
-    expect(textInput?.cardinality).toBe('many')
+    const textInput = boundary.inputs[0]
+    expect(textInput.required).toBe(true)
+    expect(textInput.cardinality).toBe('many')
   })
 
   it('输出仍取末节点（生图）的主输出图片', () => {
@@ -268,5 +263,31 @@ describe('组合公开边界推导：首节点输入即组合输入', () => {
       type: 'image',
       source: { nodeId: 'n2', portId: 'out-image' }
     })
+  })
+
+  it('多个源节点（多种输入进来）才分裂成多个公开输入', () => {
+    const base = aiFirstManifest()
+    // 增加第二个源 AI 处理节点 n0，其输出也喂入生图 n2 的 many 文本输入。
+    const secondSource = {
+      ...base.graph.nodes[0],
+      id: 'n0',
+      title: 'AI 处理 2',
+      dx: -400
+    }
+    const manifest: CompositeManifest = {
+      ...base,
+      graph: {
+        nodes: [secondSource, ...base.graph.nodes],
+        edges: [
+          ...base.graph.edges,
+          { from: { nodeId: 'n0', portId: 'out-text' }, to: { nodeId: 'n2', portId: 'in-text' } }
+        ]
+      }
+    }
+    const boundary = deriveCompositeBoundary(manifest)
+    expect(boundary.inputs).toHaveLength(2)
+    expect(boundary.inputs.map((input) => input.targets[0]?.nodeId).sort()).toEqual(['n0', 'n1'])
+    expect(boundary.inputs.every((input) => input.required)).toBe(true)
+    expect(boundary.outputs).toHaveLength(1)
   })
 })
