@@ -37,6 +37,17 @@ export interface CompositeRunRequest {
   inputValues?: Record<string, unknown>
   /** W4 受控重试：重试链根运行 ID（受控上限按根计数）。 */
   retryOf?: string
+  /** AF-07：续跑同一运行（人工等待满足后）；复用既有 runId，跳过已完成步骤。 */
+  resumeRunId?: string
+  /** AF-07：已满足的人工等待提交值（按内部节点 ID），续跑时消费为人工任务输出。 */
+  humanSubmissions?: Record<
+    string,
+    { kind: 'text'; text: string } | { kind: 'json'; data: unknown }
+  >
+  /** AF-07：续跑时已完成的内部节点 ID（跳过重跑，保护已付费任务）。 */
+  completedSteps?: string[]
+  /** AF-07：已完成节点的运行结果回放（nodeId → {nodeResult,nodeRun}），续跑时写入隔离 editor 供下游消费。 */
+  stepOutputs?: Record<string, { nodeResult: string | null; nodeRun: unknown }>
 }
 
 export interface CompositeRunFailure {
@@ -50,8 +61,10 @@ export interface CompositeRunFailure {
 }
 
 export interface CompositeRunOutcome {
-  status: 'done' | 'failed'
+  status: 'done' | 'failed' | 'waiting'
   reason?: string
+  /** AF-07：等待人工的内部节点 ID（status=waiting 时）；提交后经续跑消费。 */
+  waitingStepKey?: string
   /** 本次运行按公开输出 ID 收集的正式结果；不含未映射的内部结果。 */
   outputs?: Record<string, NodeValue>
   /** 兼容旧执行器的单一业务媒体产物。 */

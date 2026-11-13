@@ -21,6 +21,7 @@ import { SqliteModelHost } from '../model-host/sqlite-model-host'
 import { createCatalogChatModel } from '../gateway/factory'
 import { AgentSdkModel } from '../agent-flow/runtime-model'
 import { FlowAssetStore } from '../agent-flow/asset-store'
+import { FlowDefinitionStore } from '../agent-flow/definition-store'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import { newTraceId, newSpanId } from '../../shared/observability'
 import { FlowCoordinatorHost } from '../agent-flow/coordinator-host'
@@ -31,7 +32,10 @@ import { BuildRequestSchema, type BuildRequest } from '../../shared/agent-flow/b
 import { FlowReviewHost } from '../agent-flow/review-host'
 import { FlowReviewStore, reviewBinding } from '../agent-flow/review-store'
 import { readStoredNodeRunStatus } from '../../shared/engine/run-status'
-import { AgentNodeConfigSchema, ReviewNodeConfigSchema } from '../../shared/agent-flow/node-contracts'
+import {
+  AgentNodeConfigSchema,
+  ReviewNodeConfigSchema
+} from '../../shared/agent-flow/node-contracts'
 import { ReviewRequestSchema, type ReviewRequest } from '../../shared/agent-flow/review'
 import { registerSkillLibraryIpc } from './skill-library.ipc'
 
@@ -105,8 +109,7 @@ export function registerFlowAgentsIpc(
     }
     const parsed = AgentNodeConfigSchema.safeParse(rawConfig)
     if (!parsed.success) throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
-    if (parsed.data.modelDefinitionId)
-      await assertToolCallingModel(parsed.data.modelDefinitionId)
+    if (parsed.data.modelDefinitionId) await assertToolCallingModel(parsed.data.modelDefinitionId)
     for (const targetId of parsed.data.allowedNodeIds) {
       const target = (
         file?.tldrawSnapshot as {
@@ -138,10 +141,7 @@ export function registerFlowAgentsIpc(
    * 与 IPC review 分支同一预检：ai-review 节点若配置了模型，必须已通过工具调用/
    * 审核证据验证。IPC 与本地外部接入共用本函数，避免两条入口的模型门禁漂移。
    */
-  const assertReviewToolCalling = async (
-    projectId: string,
-    nodeId: string
-  ): Promise<void> => {
+  const assertReviewToolCalling = async (projectId: string, nodeId: string): Promise<void> => {
     const file = openProject(projectId)
     const shape = (
       file?.tldrawSnapshot as {
@@ -165,9 +165,7 @@ export function registerFlowAgentsIpc(
         audio: ['audio', 'audio-video'].includes(parsed.data.reviewMode ?? 'text-json')
       })
   }
-  const resolveModel = async (
-    snapshot: ModelIdentity
-  ): Promise<AgentModelPort> => {
+  const resolveModel = async (snapshot: ModelIdentity): Promise<AgentModelPort> => {
     const definition = await catalog.getModel(snapshot.config.modelDefinitionId ?? '')
     if (
       !definition?.enabled ||
@@ -278,9 +276,10 @@ export function registerFlowAgentsIpc(
                 ['success', 'skipped'].includes(
                   readStoredNodeRunStatus((shape?.meta as Record<string, unknown>)?.nodeRun) ?? ''
                 ) &&
-                ((shape?.meta as Record<string, unknown>)?.nodeRun as
-                  | { runId?: string }
-                  | undefined)?.runId === grant.taskId &&
+                (
+                  (shape?.meta as Record<string, unknown>)?.nodeRun as
+                    { runId?: string } | undefined
+                )?.runId === grant.taskId &&
                 (task.state === 'waiting' ||
                   (task.state === 'completed' && result.taskId === grant.taskId))
               )
@@ -305,12 +304,18 @@ export function registerFlowAgentsIpc(
     'pause',
     'catalog',
     'collaboration',
-    'cooperate'
+    'cooperate',
+    'stageContextPreview',
+    'stageRework'
   ] as const) {
     ipcMain.handle(IPC.flowAgents[phase], async (event, raw): Promise<IpcEnvelope<unknown>> => {
       const context = { traceId: newTraceId(), spanId: newSpanId() }
       const query = FlowAgentQuerySchema.safeParse(
-        ['run', 'cooperate', 'build', 'review'].includes(phase) && raw && typeof raw === 'object'
+        ['run', 'cooperate', 'build', 'review', 'stageContextPreview', 'stageRework'].includes(
+          phase
+        ) &&
+          raw &&
+          typeof raw === 'object'
           ? { projectId: raw.projectId, nodeId: raw.nodeId }
           : raw
       )
@@ -325,7 +330,10 @@ export function registerFlowAgentsIpc(
           ? collaboration.data.action
           : undefined
       if (collaboration?.success) Object.assign(context, { taskId: collaboration.data.taskId })
-      const log = phase !== 'inspect' && !(phase === 'build' && action === 'inspect')
+      const log =
+        phase !== 'inspect' &&
+        phase !== 'stageContextPreview' &&
+        !(phase === 'build' && action === 'inspect')
       if (log)
         emitGatewayEvent('agent.desktop.started', '画布 Agent 操作开始', context, {
           attributes: { phase, action }
@@ -358,40 +366,48 @@ export function registerFlowAgentsIpc(
             await assertReviewToolCalling(request.data.projectId, request.data.nodeId)
         }
         const data =
-          phase === 'review'
-            ? await review.run(raw)
-            : phase === 'build'
-              ? await builder.handle(raw)
-              : phase === 'run'
-                ? await host.run(raw)
-                : phase === 'cooperate'
-                  ? await host.cooperate(raw)
-                  : phase === 'collaboration'
-                    ? host.collaboration(query.data)
-                    : phase === 'stop'
-                      ? host.stop(query.data)
-                      : phase === 'pause'
-                        ? host.pause(query.data)
-                        : phase === 'inspect'
-                          ? host.inspect(query.data)
-                          : host.catalog(
-                              query.data,
-                              catalog
-                                .listModels()
-                                .filter(
-                                  (model) =>
-                                    model.enabled &&
-                                    model.capabilities.some(
-                                      (capability) => capability.operation === 'text.generate'
+          phase === 'stageRework'
+            ? host.reworkStage(query.data, String((raw as { stageKey?: unknown }).stageKey ?? ''))
+            : phase === 'stageContextPreview'
+              ? host.previewStageContext(
+                  query.data,
+                  String((raw as { stageKey?: unknown }).stageKey ?? ''),
+                  (raw as { includeBody?: unknown }).includeBody === true
+                )
+              : phase === 'review'
+                ? await review.run(raw)
+                : phase === 'build'
+                  ? await builder.handle(raw)
+                  : phase === 'run'
+                    ? await host.run(raw)
+                    : phase === 'cooperate'
+                      ? await host.cooperate(raw)
+                      : phase === 'collaboration'
+                        ? host.collaboration(query.data)
+                        : phase === 'stop'
+                          ? host.stop(query.data)
+                          : phase === 'pause'
+                            ? host.pause(query.data)
+                            : phase === 'inspect'
+                              ? host.inspect(query.data)
+                              : host.catalog(
+                                  query.data,
+                                  catalog
+                                    .listModels()
+                                    .filter(
+                                      (model) =>
+                                        model.enabled &&
+                                        model.capabilities.some(
+                                          (capability) => capability.operation === 'text.generate'
+                                        )
                                     )
+                                    .map((model) => ({
+                                      id: model.id,
+                                      name: model.name,
+                                      imageInput: supportsSampledVideoReview(model),
+                                      audioInput: supportsReviewAudioInput(model)
+                                    }))
                                 )
-                                .map((model) => ({
-                                  id: model.id,
-                                  name: model.name,
-                                  imageInput: supportsSampledVideoReview(model),
-                                  audioInput: supportsReviewAudioInput(model)
-                                }))
-                            )
         if (log)
           emitGatewayEvent('agent.desktop.completed', '画布 Agent 操作完成', context, {
             status: 'success',
@@ -430,6 +446,61 @@ export function registerFlowAgentsIpc(
       }
     })
   }
+  // AF-06：流程定义版本（与运行分离）。读已保存配置/定义快照，不经运行宿主；
+  // 与外部 flowDefinition.* 同一 FlowDefinitionStore 实现。
+  const definitionStore = new FlowDefinitionStore(getDb(), openProject)
+  const definitionHandle = (
+    channel: string,
+    run: (raw: Record<string, unknown>) => unknown
+  ): void => {
+    ipcMain.handle(channel, async (event, raw): Promise<IpcEnvelope<unknown>> => {
+      try {
+        const active = window()
+        if (
+          !active ||
+          active.isDestroyed() ||
+          event.sender !== active.webContents ||
+          event.senderFrame !== event.sender.mainFrame
+        )
+          throw new AgentRuntimeError('FLOW_SENDER_REJECTED', 'authorize')
+        return { ok: true, data: run((raw ?? {}) as Record<string, unknown>) }
+      } catch (error) {
+        const code = error instanceof AgentRuntimeError ? error.code : 'AGENT_DESKTOP_FAILED'
+        return { ok: false, error: { code, message: flowAgentFailureMessage(code) } }
+      }
+    })
+  }
+  definitionHandle(IPC.flowAgents.definitionPublish, (raw) => ({
+    projectId: raw.projectId,
+    definition: definitionStore.publish({
+      projectId: String(raw.projectId),
+      definitionId: String(raw.definitionId),
+      name: String(raw.name),
+      coordinatorNodeId: String(raw.coordinatorNodeId)
+    })
+  }))
+  definitionHandle(IPC.flowAgents.definitionList, (raw) => ({
+    projectId: raw.projectId,
+    definitions: definitionStore.list(String(raw.projectId))
+  }))
+  definitionHandle(IPC.flowAgents.definitionGet, (raw) => ({
+    projectId: raw.projectId,
+    definition: definitionStore.get(
+      String(raw.projectId),
+      String(raw.definitionId),
+      typeof raw.version === 'number' ? raw.version : undefined
+    )
+  }))
+  definitionHandle(IPC.flowAgents.definitionDiff, (raw) => ({
+    projectId: raw.projectId,
+    definitionId: raw.definitionId,
+    diff: definitionStore.diff(
+      String(raw.projectId),
+      String(raw.definitionId),
+      Number(raw.versionA),
+      Number(raw.versionB)
+    )
+  }))
   // F8：把**同一个**宿主实例以窄接口发布给本地外部接入（CLI/MCP）。
   // 外部 run/pause/stop/build/review 一律经由它调用；另建实例会出现两个权威并互相覆盖事实。
   publishFlowAgentAccessPort({
@@ -442,7 +513,9 @@ export function registerFlowAgentsIpc(
     review: (raw) => review.run(raw as ReviewRequest),
     assertReviewToolCalling: (projectId, nodeId) => assertReviewToolCalling(projectId, nodeId),
     cooperate: (raw) => host.cooperate(raw),
-    collaboration: (query) => host.collaboration(query)
+    collaboration: (query) => host.collaboration(query),
+    reworkStage: (query) =>
+      host.reworkStage({ projectId: query.projectId, nodeId: query.nodeId }, query.stageKey)
   })
   return host
 }

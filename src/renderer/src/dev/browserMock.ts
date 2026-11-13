@@ -152,6 +152,12 @@ export function installBrowserMock(): void {
     pauseFlowAgent: async () => ({ ok: true, data: null }),
     onFlowAgentPublication: () => () => undefined,
     flowAgentCollaboration: async () => ({ ok: true, data: null }),
+    flowAgentStageContextPreview: async () => ({ ok: true, data: null }),
+    flowAgentStageRework: async () => ({ ok: true, data: null }),
+    flowDefinitionPublish: async () => notImplementedInDemo('流程定义发布'),
+    flowDefinitionList: async () => ({ ok: true, data: { projectId: '', definitions: [] } }),
+    flowDefinitionGet: async () => ({ ok: true, data: { projectId: '', definition: null } }),
+    flowDefinitionDiff: async () => notImplementedInDemo('流程定义差异'),
     cooperateFlowAgent: async () => notImplementedInDemo('Agent 人机协作'),
     stopFlowAgent: async () => ({ ok: true, data: null }),
     flowAgentCatalog: async () => ({
@@ -554,6 +560,8 @@ export function installBrowserMock(): void {
       runStart: (input: { id: string }) => Promise.resolve({ ok: true, data: { id: input.id } }),
       runStep: () => Promise.resolve({ ok: true, data: true }),
       runFinish: () => Promise.resolve({ ok: true, data: true }),
+      runWait: () => Promise.resolve({ ok: true, data: true }),
+      runStepOutput: () => Promise.resolve({ ok: true, data: true }),
       runGet: () => Promise.resolve({ ok: true, data: null }),
       runList: () => Promise.resolve({ ok: true, data: [] })
     } as unknown as WindowApi['composite'],

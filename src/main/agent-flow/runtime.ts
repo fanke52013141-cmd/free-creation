@@ -10,6 +10,7 @@ import {
 } from '../../shared/agent-flow/runtime-contracts'
 import type { FlowCommandReceipt } from '../../shared/agent-flow/commands'
 import { FlowCommandError } from '../../shared/agent-flow/commands'
+import { composeExecutionEnvelope } from '../../shared/agent-flow/execution-envelope'
 import { FlowAssetError } from '../../shared/agent-flow/assets'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import { FlowSqliteSaver } from './checkpoint'
@@ -27,6 +28,8 @@ export interface AgentModelContext {
   mode: AgentTaskSnapshot['config']['interactionMode']
   targets: AgentTaskSnapshot['targets']
   directInputs?: AgentTaskSnapshot['directInputs']
+  /** AF-02：阶段输入清单；存在时决策上下文只取清单内容。 */
+  contextManifest?: AgentTaskSnapshot['contextManifest']
   skills: Array<
     Pick<FixedSkill, 'id' | 'version' | 'name' | 'description' | 'contentHash'> & {
       resources?: string[]
@@ -56,7 +59,8 @@ export interface AgentModelPort {
     goal: string,
     history: Array<{ text: string; reply?: string }>,
     message: string,
-    signal: AbortSignal
+    signal: AbortSignal,
+    workingDraft?: string
   ): Promise<string>
 }
 export interface AgentRuntime {
@@ -165,6 +169,7 @@ export function createAgentRuntime(options: {
               mode: record.snapshot.config.interactionMode,
               targets: record.snapshot.targets,
               directInputs: record.snapshot.directInputs,
+              contextManifest: record.snapshot.contextManifest,
               skills: record.skills.map(
                 ({ id, version, name, description, contentHash, resources }) => ({
                   id,
@@ -262,6 +267,20 @@ export function createAgentRuntime(options: {
                 }
               : {}),
             expectedSemanticRevision: record.snapshot.semanticRevision,
+            ...((): {
+              envelope?: import('../../shared/agent-flow/execution-envelope').ExecutionEnvelope
+            } => {
+              const base = record.snapshot.executionEnvelope
+              if (!base) return {}
+              const envelope = composeExecutionEnvelope({
+                stageGoal: base.stageGoal,
+                methodInstructions: base.methodInstructions,
+                outputRequirements: base.outputRequirements,
+                humanFeedback: state.humanFeedback || record.snapshot.humanFeedback,
+                reworkFeedback: record.snapshot.rework?.feedback
+              })
+              return envelope ? { envelope } : {}
+            })(),
             traceId: options.diagnostics?.traceId ?? record.snapshot.traceId,
             spanId: options.diagnostics?.spanId ?? record.snapshot.spanId
           },

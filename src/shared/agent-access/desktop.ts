@@ -96,6 +96,14 @@ export const DesktopRequestSchema = z
     compositeInputValues: z.record(z.string(), z.unknown()).optional(),
     /** execute-composite-headless：W4 重试链根运行 ID（受控上限按根计数）。 */
     compositeRetryOf: z.string().min(1).max(120).optional(),
+    /** AF-07：续跑同一运行（人工等待满足后），复用既有 runId。 */
+    compositeResumeRunId: z.string().min(1).max(120).optional(),
+    /** AF-07：已满足的人工提交值（按内部节点 ID），续跑消费为人工任务输出。 */
+    compositeHumanSubmissions: z.record(z.string(), z.unknown()).optional(),
+    /** AF-07：续跑时已完成的内部节点 ID（跳过重跑）。 */
+    compositeCompletedSteps: z.array(z.string().min(1).max(120)).max(256).optional(),
+    /** AF-07：已完成节点运行结果回放（nodeId → {nodeResult,nodeRun}）。 */
+    compositeStepOutputs: z.record(z.string(), z.unknown()).optional(),
     /** graph-patch：main 预检解析的素材事实（按 mediaId 注入，外部输入不可携带路径）。 */
     mediaResolutions: z.record(z.string(), mediaResolutionSchema).optional(),
     /** graph-patch：main 预解析的组合固定版本快照（W3 引用形态；外部输入只携带引用）。 */

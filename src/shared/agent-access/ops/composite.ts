@@ -157,6 +157,28 @@ export const COMPOSITE_OPERATIONS = {
       '受控重试失败的 headless 运行：仅 failed/interrupted 可重试，按原固定版本与原公开输入复跑（输入未记录则拒绝）；同一根运行重试上限 3 次；返回新 runId，终态经 composite.run.get 读取',
     input: z.object({ runId: z.string().min(1).max(120) }).strict()
   },
+  // AF-07：含人工等待的节点流——提交人工结果并续跑（父子运行/外部续接）。
+  'composite.run.submitHuman': {
+    effect: 'write',
+    description:
+      '向等待人工的节点流运行提交某内部人工任务节点的结果（满足开放人工等待）；仅 waiting-input 且该节点有开放等待时接受；提交值经续跑消费为正式输出，不伪造自动成功',
+    input: z
+      .object({
+        runId: z.string().min(1).max(120),
+        nodeId: z.string().min(1).max(120),
+        value: z.discriminatedUnion('kind', [
+          z.object({ kind: z.literal('text'), text: z.string().max(1048576) }).strict(),
+          z.object({ kind: z.literal('json'), data: z.unknown() }).strict()
+        ])
+      })
+      .strict()
+  },
+  'composite.run.resume': {
+    effect: 'execute',
+    description:
+      '续跑等待人工的节点流运行：消费已满足的人工提交，跳过已完成步骤（保护已付费任务），从等待节点继续；仅 waiting-input 可续跑；返回 runId，终态经 composite.run.get 读取',
+    input: z.object({ runId: z.string().min(1).max(120) }).strict()
+  },
   'composite.run.resubmit': {
     effect: 'write',
     description:
@@ -170,8 +192,12 @@ export const COMPOSITE_OPERATIONS = {
               .object({
                 portId: z.string().min(1).max(100),
                 value: z.discriminatedUnion('kind', [
-                  z.object({ kind: z.literal('text'), text: z.string().min(1).max(100000) }).strict(),
-                  z.object({ kind: z.literal('markdown'), text: z.string().min(1).max(100000) }).strict(),
+                  z
+                    .object({ kind: z.literal('text'), text: z.string().min(1).max(100000) })
+                    .strict(),
+                  z
+                    .object({ kind: z.literal('markdown'), text: z.string().min(1).max(100000) })
+                    .strict(),
                   z.object({ kind: z.literal('json'), data: z.unknown() }).strict()
                 ])
               })
@@ -371,6 +397,21 @@ export const COMPOSITE_OUTPUTS = {
       status: z.literal('completed'),
       manualSubmission: z.literal(true),
       outputPorts: z.array(z.string().max(100)).max(64)
+    })
+    .strict(),
+  'composite.run.submitHuman': z
+    .object({
+      runId: z.string().min(1).max(120),
+      nodeId: z.string().min(1).max(120),
+      satisfied: z.boolean()
+    })
+    .strict(),
+  'composite.run.resume': z
+    .object({
+      runId: z.string().min(1).max(120),
+      capabilityId,
+      version: semver,
+      status: z.literal('running')
     })
     .strict(),
   'composite.archive': z.object({ capabilityId, archived: z.boolean() }).strict(),

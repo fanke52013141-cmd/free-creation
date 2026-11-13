@@ -126,7 +126,10 @@ export class AgentSdkModel implements AgentModelPort {
     )
       throw new FlowAssetError('FLOW_MEDIA_REVIEW_NOT_FIXED')
     if (
-      !samples && !imageInput && !audioInput && !audioVideoInput &&
+      !samples &&
+      !imageInput &&
+      !audioInput &&
+      !audioVideoInput &&
       input.subjects.some(
         (value) => value.kind === 'video' || value.kind === 'image' || value.kind === 'audio'
       )
@@ -179,11 +182,11 @@ export class AgentSdkModel implements AgentModelPort {
                 { type: 'file', data: audioVideoInput.audioBytes, mediaType: 'audio/wav' }
               ]
             : input.subjects
-          .map(
-            (value, index) =>
-              `${input.subjects.length > 1 ? `对象 ${index}（${value.kind}）：\n` : ''}${value.kind === 'json' ? JSON.stringify(value.data) : 'text' in value ? value.text : ''}`
-          )
-          .join('\n\n')
+                .map(
+                  (value, index) =>
+                    `${input.subjects.length > 1 ? `对象 ${index}（${value.kind}）：\n` : ''}${value.kind === 'json' ? JSON.stringify(value.data) : 'text' in value ? value.text : ''}`
+                )
+                .join('\n\n')
     const context = { ...this.diagnostics, requestId: ensureRequestId(undefined) }
     const attributes: { operation: string; toolCallCount?: number; finishReason?: string } = {
       operation: 'agent.review'
@@ -303,13 +306,14 @@ export class AgentSdkModel implements AgentModelPort {
     goal: string,
     history: Array<{ text: string; reply?: string }>,
     message: string,
-    signal: AbortSignal
+    signal: AbortSignal,
+    workingDraft?: string
   ): Promise<string> {
     const context = { ...this.diagnostics, requestId: ensureRequestId(undefined) }
     const attributes = { operation: 'agent.collaboration.discuss' }
     emitGatewayEvent('model.request.started', 'Agent 讨论请求开始', context, { attributes })
     try {
-      if (Buffer.byteLength(JSON.stringify({ goal, history, message })) > 131072)
+      if (Buffer.byteLength(JSON.stringify({ goal, history, message, workingDraft })) > 131072)
         throw new AgentRuntimeError('COLLABORATION_LIMIT', 'discussion-context')
       const result = streamText({
         model: this.model,
@@ -321,8 +325,18 @@ export class AgentSdkModel implements AgentModelPort {
         onError: () => {},
         experimental_telemetry: { isEnabled: false },
         system:
-          '在当前画布 Agent 节点讨论任务目标并提出建议。本轮没有业务执行工具，不能声称已执行、改目标、选择资产或完成任务。修改必须由用户明确采用，讨论不是正式资产。',
-        messages: [{ role: 'user', content: JSON.stringify({ goal, history, message }) }]
+          '在当前画布 Agent 节点围绕工作稿讨论任务目标并提出建议。workingDraft 是当前实际工作稿（如有），意见必须针对它的具体内容。本轮没有业务执行工具，不能声称已执行、改目标、选择资产或完成任务。修改必须由用户明确采用，讨论不是正式资产。',
+        messages: [
+          {
+            role: 'user',
+            content: JSON.stringify({
+              goal,
+              history,
+              message,
+              ...(workingDraft ? { workingDraft } : {})
+            })
+          }
+        ]
       })
       let reply = ''
       for await (const part of result.fullStream) {
@@ -395,11 +409,12 @@ export class AgentSdkModel implements AgentModelPort {
               '给一个就绪专业 Agent 分派独立任务；从其允许的固定输入中选择最小清单（该节点没有固定输入时 inputs 传空数组），填写目标和完成条件。',
             inputSchema: dispatchSchema
           }),
-          ...(input.maxParallelTasks !== undefined && input.maxParallelTasks > 1 && input.available.length >= 2
+          ...(input.maxParallelTasks !== undefined &&
+          input.maxParallelTasks > 1 &&
+          input.available.length >= 2
             ? {
                 dispatch_parallel: tool({
-                  description:
-                    `同时分派 2 至 ${Math.min(input.maxParallelTasks, input.available.length)} 路无数据依赖的就绪专业任务，各自固定输入、目标与完成条件。`,
+                  description: `同时分派 2 至 ${Math.min(input.maxParallelTasks, input.available.length)} 路无数据依赖的就绪专业任务，各自固定输入、目标与完成条件。`,
                   inputSchema: z
                     .object({
                       assignments: z
@@ -484,7 +499,17 @@ export class AgentSdkModel implements AgentModelPort {
         ...(input.directInputs ?? []),
         ...input.targets.flatMap((target) => target.inputs.flatMap((port) => port.assets))
       ]
-      const fixedInputs = this.assets.resolveInputs(this.projectId, refs)
+      // AF-02：存在阶段输入清单时，决策上下文只取清单内已编制内容（字段/片段），
+      // 不读取未声明的上游全文；缺省沿用固定输入解析（旧语义）。
+      const fixedInputs = input.contextManifest
+        ? input.contextManifest.entries.map((entry) => ({
+            sourceStageKey: entry.sourceStageKey,
+            path: entry.path,
+            kind: entry.kind,
+            value: entry.value,
+            ...(entry.purpose ? { purpose: entry.purpose } : {})
+          }))
+        : this.assets.resolveInputs(this.projectId, refs)
       const rejectedOutputs = this.assets.resolveInputs(
         this.projectId,
         input.rework?.rejectedOutputs ?? []

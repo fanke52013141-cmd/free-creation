@@ -856,7 +856,10 @@ async function invokeExecutor(
             projectId: ctx.projectId,
             commandId: ctx.command.grant.command.commandId,
             leaseId: ctx.command.grant.leaseId
-          }
+          },
+          ...(ctx.command.grant.command.envelope
+            ? { executionEnvelope: ctx.command.grant.command.envelope }
+            : {})
         }
       : {}),
     providers: ctx.providers,

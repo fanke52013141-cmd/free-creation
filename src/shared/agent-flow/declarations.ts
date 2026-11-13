@@ -86,6 +86,14 @@ export function resolveFlowDeclaration(
       result.issues.push('允许处理的节点重复')
     config.allowedNodeIds.forEach((target) => add('controls', target, `scope:${target}`))
   }
+  // AF-01：阶段承载节点必须是图中真实存在的专业 Agent（范围成员资格由配置 Schema 校验）。
+  if ('stages' in config && config.stages) {
+    for (const stage of config.stages) {
+      const carrier = byId.get(stage.nodeId)
+      if (!carrier) result.issues.push('阶段承载节点已删除')
+      else if (carrier.type !== 'agent') result.issues.push('阶段承载节点必须是 Agent 节点')
+    }
+  }
   if ('gatedNodeIds' in config) {
     if (new Set(config.gatedNodeIds).size !== config.gatedNodeIds.length)
       result.issues.push('等待审核的节点重复')

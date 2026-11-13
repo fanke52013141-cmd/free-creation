@@ -17,7 +17,10 @@ export const CoordinationDecisionSchema = z.discriminatedUnion('kind', [
     })
     .strict(),
   z
-    .object({ kind: z.literal('finish'), outputs: z.array(AgentFlowAssetRefSchema).min(1).max(128) })
+    .object({
+      kind: z.literal('finish'),
+      outputs: z.array(AgentFlowAssetRefSchema).min(1).max(128)
+    })
     .strict(),
   z.object({ kind: z.literal('wait') }).strict(),
   z
@@ -78,6 +81,29 @@ export interface CoordinatorPort {
   inspect(input: { projectId: string; nodeId: string }): FlowAgentView | null
   stop(input: { projectId: string; nodeId: string }): FlowAgentView | null
   pause(input: { projectId: string; nodeId: string }): FlowAgentView | null
+  /** AF-02：预览阶段输入编制（只读，固定顺序模式）；旧模式宿主可不实现。 */
+  previewStageContext?(
+    input: { projectId: string; nodeId: string },
+    stageKey: string,
+    includeBody?: boolean
+  ): StageContextPreview | null
+}
+export interface StageContextPreview {
+  stageKey: string
+  manifestHash: string
+  entries: Array<{
+    sourceStageKey: string
+    path: string
+    kind: string
+    bytes: number
+    required: boolean
+    purpose?: string
+    value?: unknown
+  }>
+  missing: Array<{ sourceStageKey: string; path: string; required: boolean; code: string }>
+  dropped: Array<{ sourceStageKey: string; path: string; required: boolean; code: string }>
+  budget: { limitBytes: number; usedBytes: number; exceeded: boolean }
+  blocking: boolean
 }
 export interface AgentPublication {
   kind?: 'review'

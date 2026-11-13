@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   aiProcessFlowInputsValid,
-  aiProcessFlowTextConfig,
+  aiProcessFlowConfigValid,
+  aiProcessFlowOutputPort,
+  humanTaskFlowConfigValid,
+  humanTaskFlowOutputPort,
   flowTargetContract,
   flowTargetPorts,
   textFlowInputsValid
@@ -59,16 +62,42 @@ describe('C1：text/ai-process 可调度目标', () => {
     })
   })
 
-  it('ai-process markdown/json 模式 → 不支持（输出端口漂移）', () => {
-    expect(flowTargetContract(node('ai-process', 1, { mode: 'markdown' }))).toBeNull()
-    expect(flowTargetContract(node('ai-process', 1, { mode: 'json' }))).toBeNull()
+  it('AF-01：ai-process markdown/json 模式 → 输出端口由配置 mode 稳定派生', () => {
+    expect(flowTargetContract(node('ai-process', 1, { mode: 'markdown' }))).toEqual({
+      inputs: ['in-text', 'in-json'],
+      output: 'out-markdown'
+    })
+    expect(flowTargetContract(node('ai-process', 1, { mode: 'json' }))).toEqual({
+      inputs: ['in-text', 'in-json'],
+      output: 'out-json'
+    })
   })
 
-  it('aiProcessFlowTextConfig 与执行器解析同口径', () => {
-    expect(aiProcessFlowTextConfig('{"mode":"text"}')).toBe(true)
-    expect(aiProcessFlowTextConfig('{}')).toBe(true)
-    expect(aiProcessFlowTextConfig({ mode: 'json' })).toBe(false)
-    expect(aiProcessFlowTextConfig('not-json')).toBe(true) // parseAiProcess 容错默认 text
+  it('AF-01：aiProcessFlowConfigValid/OutputPort 与执行器解析同口径', () => {
+    expect(aiProcessFlowConfigValid('{"mode":"text"}')).toBe(true)
+    expect(aiProcessFlowConfigValid('{}')).toBe(true)
+    expect(aiProcessFlowConfigValid({ mode: 'json' })).toBe(true)
+    expect(aiProcessFlowConfigValid('not-json')).toBe(true) // parseAiProcess 容错默认 text
+    expect(aiProcessFlowOutputPort('{}')).toBe('out-text')
+    expect(aiProcessFlowOutputPort({ mode: 'markdown' })).toBe('out-markdown')
+    expect(aiProcessFlowOutputPort({ mode: 'json' })).toBe('out-json')
+  })
+
+  it('AF-01：human-task 输出端口由 outputType 派生（text/json）', () => {
+    expect(flowTargetContract(node('human-task', 1, { schemaVersion: 1 }))).toEqual({
+      inputs: ['in-text', 'in-json'],
+      output: 'out-text'
+    })
+    expect(
+      flowTargetContract(node('human-task', 1, { schemaVersion: 1, outputType: 'json' }))
+    ).toEqual({
+      inputs: ['in-text', 'in-json'],
+      output: 'out-json'
+    })
+    expect(humanTaskFlowConfigValid({ schemaVersion: 1, outputType: 'json' })).toBe(true)
+    expect(humanTaskFlowConfigValid({ schemaVersion: 1, outputType: 'bogus' })).toBe(false)
+    expect(humanTaskFlowOutputPort({ schemaVersion: 1, outputType: 'json' })).toBe('out-json')
+    expect(humanTaskFlowOutputPort({ schemaVersion: 1 })).toBe('out-text')
   })
 
   it('text 输入校验：有序文本/markdown，拒绝媒体与未知端口', () => {
@@ -85,29 +114,58 @@ describe('C1：text/ai-process 可调度目标', () => {
         { targetPortId: 'in-json', values: [JSON_VALUE] }
       ])
     ).toBe(true)
-    expect(aiProcessFlowInputsValid([{ targetPortId: 'in-text', values: [JSON_VALUE] }])).toBe(false)
-    expect(aiProcessFlowInputsValid([{ targetPortId: 'in-json', values: [TEXT_VALUE] }])).toBe(false)
+    expect(aiProcessFlowInputsValid([{ targetPortId: 'in-text', values: [JSON_VALUE] }])).toBe(
+      false
+    )
+    expect(aiProcessFlowInputsValid([{ targetPortId: 'in-json', values: [TEXT_VALUE] }])).toBe(
+      false
+    )
   })
 
   it('flowTargetPorts 与注册表端口逐字段一致（portIdentity 口径）', async () => {
     const { getNodeType, getNodePorts } = await import('../src/renderer/src/nodes/registry')
-    const identity = (ports: { id: string; dir: string; type: string; required: boolean; cardinality: string; schema?: { id: string; version: number }; exclusiveGroup?: string }[]) =>
+    const identity = (
+      ports: {
+        id: string
+        dir: string
+        type: string
+        required: boolean
+        cardinality: string
+        schema?: { id: string; version: number }
+        exclusiveGroup?: string
+      }[]
+    ) =>
       JSON.stringify(
         [...ports]
           .sort((a, b) => a.id.localeCompare(b.id))
-          .map((p) => [p.id, p.dir, p.type, p.required, p.cardinality, p.schema ?? null, p.exclusiveGroup ?? null])
+          .map((p) => [
+            p.id,
+            p.dir,
+            p.type,
+            p.required,
+            p.cardinality,
+            p.schema ?? null,
+            p.exclusiveGroup ?? null
+          ])
       )
-    for (const type of ['text', 'ai-process'] as const) {
+    for (const type of ['text', 'ai-process', 'human-task'] as const) {
       const spec = getNodeType(type)
       expect(spec, `${type} 注册存在`).toBeTruthy()
       const registered = [...spec!.ports.in, ...spec!.ports.out]
-      expect(identity(flowTargetPorts(node(type, spec!.contractVersion)))).toBe(identity(registered))
+      expect(identity(flowTargetPorts(node(type, spec!.contractVersion)))).toBe(
+        identity(registered)
+      )
     }
   })
 })
 
 describe('C1：text 目标执行不写回正文（固定语义修订）', () => {
-  function textCtx(over: { flowCommand?: unknown; runId?: string; body?: string; upstream?: string }) {
+  function textCtx(over: {
+    flowCommand?: unknown
+    runId?: string
+    body?: string
+    upstream?: string
+  }) {
     const metaPatches: Record<string, unknown>[] = []
     const propPatches: Record<string, unknown>[] = []
     const inputs = new Map(
@@ -136,7 +194,10 @@ describe('C1：text 目标执行不写回正文（固定语义修订）', () => 
   it('Agent 调度执行：不写回正文，合并结果走 nodeResult（含 runId）', async () => {
     const { textExecutor } = await import('../src/shared/engine/executors/text')
     const { ctx, propPatches, metaPatches } = textCtx({
-      body: '正文', upstream: '上游', flowCommand: { commandId: 'c1', leaseId: 'l1' }, runId: 'run-9'
+      body: '正文',
+      upstream: '上游',
+      flowCommand: { commandId: 'c1', leaseId: 'l1' },
+      runId: 'run-9'
     })
     expect(textExecutor(ctx).status).toBe('done')
     expect(propPatches).toHaveLength(0)

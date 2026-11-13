@@ -44,9 +44,9 @@ import {
   splitFlowConfigValid,
   ttsFlowConfigValid,
   textFlowInputsValid,
-  aiProcessFlowTextConfig,
+  aiProcessFlowConfigValid,
   aiProcessFlowInputsValid,
-  humanTaskFlowTextConfig,
+  humanTaskFlowConfigValid,
   humanTaskFlowInputsValid,
   flowTargetContract,
   flowTargetPorts
@@ -109,7 +109,8 @@ export class FlowAgentDesktopHost {
     this.store = new FlowTaskStore(db)
     this.skills = new FlowSkillStore(db)
     this.assets = new FlowAssetStore(db, open)
-    for (const skill of [...BUILTIN_FLOW_SKILLS, ...BUILTIN_CONTENT_SKILLS]) this.skills.import(skill)
+    for (const skill of [...BUILTIN_FLOW_SKILLS, ...BUILTIN_CONTENT_SKILLS])
+      this.skills.import(skill)
   }
 
   private key(input: Identity): string {
@@ -461,7 +462,9 @@ export class FlowAgentDesktopHost {
         throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
       if (
         (node.type === 'image-crop' || node.type === 'image-split') &&
-        (!(node.type === 'image-crop' ? cropFlowConfigValid(targetConfig) : splitFlowConfigValid(targetConfig)) ||
+        (!(node.type === 'image-crop'
+          ? cropFlowConfigValid(targetConfig)
+          : splitFlowConfigValid(targetConfig)) ||
           !localImageFlowInputsValid(
             inputs.map((input) => ({
               targetPortId: input.targetPortId,
@@ -485,7 +488,7 @@ export class FlowAgentDesktopHost {
         )
       )
         throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
-      // C1：文本/AI 处理目标——输入类型校验与适配器同包；AI 处理限 text 输出模式。
+      // C1：文本/AI 处理目标——输入类型校验与适配器同包；AF-01 输出端口由配置 mode 派生。
       if (
         node.type === 'text' &&
         !textFlowInputsValid(
@@ -500,7 +503,7 @@ export class FlowAgentDesktopHost {
         throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
       if (
         node.type === 'ai-process' &&
-        (!aiProcessFlowTextConfig(targetConfig) ||
+        (!aiProcessFlowConfigValid(targetConfig) ||
           !aiProcessFlowInputsValid(
             inputs.map((input) => ({
               targetPortId: input.targetPortId,
@@ -511,10 +514,10 @@ export class FlowAgentDesktopHost {
           ))
       )
         throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
-      // C4：人工任务目标——输入为参考上下文（类型校验同适配器）；限 text 输出模式。
+      // C4：人工任务目标——输入为参考上下文（类型校验同适配器）；AF-01 输出端口由 outputType 派生。
       if (
         node.type === 'human-task' &&
-        (!humanTaskFlowTextConfig(targetConfig) ||
+        (!humanTaskFlowConfigValid(targetConfig) ||
           !humanTaskFlowInputsValid(
             inputs.map((input) => ({
               targetPortId: input.targetPortId,
@@ -577,6 +580,36 @@ export class FlowAgentDesktopHost {
       throw new AgentRuntimeError('FLOW_SCOPE_REJECTED', 'assignment')
     return record
   }
+  /**
+   * AF-01：指定子任务是否存在显式人工采用（accepted=true 的 human 续接）。
+   * 仅读取已持久化续接事实；任务身份/范围不符时返回 false，不推断同意。
+   */
+  humanDecision(input: Identity, coordinatorTaskId: string, taskId: string): boolean {
+    const record = this.assignment(input, coordinatorTaskId)
+    if (!record || record.snapshot.taskId !== taskId) return false
+    return this.store.humanAccepted(
+      agentThread({ projectId: input.projectId, agentNodeId: input.nodeId, taskId })
+    )
+  }
+  /** AF-02：预览主控阶段输入编制（只读）；非主控/无声明返回 null。 */
+  previewStageContext(
+    input: Identity,
+    stageKey: string,
+    includeBody = false
+  ): import('../../shared/agent-flow/coordination').StageContextPreview | null {
+    if (!this.coordinator || agentRoleOf(this.saved(input).shape.props.config) !== 'coordinator')
+      return null
+    return this.coordinator.previewStageContext?.(input, stageKey, includeBody) ?? null
+  }
+  /** AF-05：局部返工（固定顺序主控）；非主控/不支持返回 null。 */
+  reworkStage(input: Identity, stageKey: string): FlowAgentView | null {
+    if (!this.coordinator || agentRoleOf(this.saved(input).shape.props.config) !== 'coordinator')
+      return null
+    const coordinator = this.coordinator as CoordinatorPort & {
+      reworkStage?: (input: Identity, stageKey: string) => FlowAgentView
+    }
+    return coordinator.reworkStage?.(input, stageKey) ?? null
+  }
   prepareRework(
     input: Identity,
     coordinatorTaskId: string,
@@ -602,7 +635,13 @@ export class FlowAgentDesktopHost {
   }
   private assignmentSnapshot(
     input: FlowAgentRun,
-    assignment: { goal: string; completion: string; inputs: FlowAgentReply['refs'] },
+    assignment: {
+      goal: string
+      completion: string
+      inputs: FlowAgentReply['refs']
+      contextManifest?: AgentTaskSnapshot['contextManifest']
+      executionEnvelope?: AgentTaskSnapshot['executionEnvelope']
+    },
     coordinatorTaskId: string,
     prepared?: AgentTaskSnapshot
   ): AgentTaskSnapshot {
@@ -639,21 +678,37 @@ export class FlowAgentDesktopHost {
     snapshot.goal = `${snapshot.goal}\n本次主控分派要求：${assignment.goal}\n完成条件：${assignment.completion}`
     snapshot.directInputs = assignment.inputs
     snapshot.coordinatorTaskId = coordinatorTaskId
+    if (assignment.contextManifest) snapshot.contextManifest = assignment.contextManifest
+    if (assignment.executionEnvelope) snapshot.executionEnvelope = assignment.executionEnvelope
     return AgentTaskSnapshotSchema.parse(snapshot)
   }
   prepareAssignment(
     input: FlowAgentRun,
-    assignment: { goal: string; completion: string; inputs: FlowAgentReply['refs'] },
+    assignment: {
+      goal: string
+      completion: string
+      inputs: FlowAgentReply['refs']
+      contextManifest?: AgentTaskSnapshot['contextManifest']
+      executionEnvelope?: AgentTaskSnapshot['executionEnvelope']
+    },
     coordinatorTaskId: string,
     prepared?: AgentTaskSnapshot
   ): AgentTaskSnapshot {
     const snapshot = this.assignmentSnapshot(input, assignment, coordinatorTaskId, prepared)
-    return this.store.create(snapshot, this.skills.bind(snapshot.config.skills, snapshot.config.tools))
-      .snapshot
+    return this.store.create(
+      snapshot,
+      this.skills.bind(snapshot.config.skills, snapshot.config.tools)
+    ).snapshot
   }
   async runAssignment(
     input: FlowAgentRun,
-    assignment: { goal: string; completion: string; inputs: FlowAgentReply['refs'] },
+    assignment: {
+      goal: string
+      completion: string
+      inputs: FlowAgentReply['refs']
+      contextManifest?: AgentTaskSnapshot['contextManifest']
+      executionEnvelope?: AgentTaskSnapshot['executionEnvelope']
+    },
     coordinatorTaskId: string,
     prepared?: AgentTaskSnapshot
   ): Promise<FlowAgentReply> {
@@ -681,6 +736,17 @@ export class FlowAgentDesktopHost {
     const record = this.latest(input)
     if (!record) return null
     const events = new FlowCollaborationStore(this.db).read(agentThread(record.snapshot))
+    const candidates = this.receipts(record)
+      .filter((item) => item.state === 'committed')
+      .flatMap((item) => item.outputRefs)
+    // AF-04：当前工作稿 = 最近一次已提交候选成果正文（讨论与 GUI 共用同一事实）。
+    let workingDraft: string | undefined
+    if (candidates.length) {
+      const versions = this.assets.resolveInputs(input.projectId, candidates)
+      const last = versions[versions.length - 1]?.value
+      if (last && (last.kind === 'text' || last.kind === 'markdown')) workingDraft = last.text
+      else if (last && last.kind === 'json') workingDraft = JSON.stringify(last.data)
+    }
     return {
       task: view(record),
       goal: record.snapshot.goal,
@@ -708,9 +774,8 @@ export class FlowAgentDesktopHost {
         ...record.snapshot.directInputs,
         ...record.snapshot.targets.flatMap((target) => target.inputs.flatMap((port) => port.assets))
       ],
-      candidates: this.receipts(record)
-        .filter((item) => item.state === 'committed')
-        .flatMap((item) => item.outputRefs)
+      candidates,
+      ...(workingDraft !== undefined ? { workingDraft } : {})
     }
   }
   private receipts(record: AgentTaskRecord): FlowCommandReceipt[] {
@@ -727,11 +792,7 @@ export class FlowAgentDesktopHost {
     receipts: FlowCommandReceipt[],
     shapeMeta: Record<string, unknown> | undefined
   ): FlowCommandReceipt | null {
-    if (
-      record.snapshot.parentTaskId ||
-      record.snapshot.coordinatorTaskId ||
-      receipts.length !== 1
-    )
+    if (record.snapshot.parentTaskId || record.snapshot.coordinatorTaskId || receipts.length !== 1)
       return null
     const [receipt] = receipts
     if (
@@ -753,8 +814,7 @@ export class FlowAgentDesktopHost {
       )
       const projected = shapeMeta?.nodeResult
       if (projected !== undefined && projected !== null) {
-        const saved =
-          typeof projected === 'string' ? JSON.parse(projected) : (projected as object)
+        const saved = typeof projected === 'string' ? JSON.parse(projected) : (projected as object)
         if (
           canonicalFlowJson(saved) !==
           canonicalFlowJson({
@@ -928,11 +988,21 @@ export class FlowAgentDesktopHost {
           const model = await this.model(record.snapshot, AbortSignal.timeout(30000))
           if (!model.discuss)
             throw new AgentRuntimeError('AGENT_DISCUSSION_UNAVAILABLE', 'discussion')
+          // AF-04：讨论自动携带当前工作稿（最近一次已提交候选成果），模型针对实际稿件提意见。
+          const candidates = this.collaboration(input)?.candidates ?? []
+          let workingDraft: string | undefined
+          if (candidates.length) {
+            const versions = this.assets.resolveInputs(input.projectId, candidates)
+            const last = versions[versions.length - 1]?.value
+            if (last && (last.kind === 'text' || last.kind === 'markdown')) workingDraft = last.text
+            else if (last && last.kind === 'json') workingDraft = JSON.stringify(last.data)
+          }
           reply = await model.discuss(
             record.snapshot.goal,
             store.read(rows.thread).map(({ text, reply }) => ({ text, reply })),
             input.text,
-            AbortSignal.timeout(30000)
+            AbortSignal.timeout(30000),
+            workingDraft
           )
           this.saved(input)
           if (

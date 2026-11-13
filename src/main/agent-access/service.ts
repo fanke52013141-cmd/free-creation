@@ -54,8 +54,14 @@ import { getCompositeVersion, getCompositeCapability } from '../store/composite.
 import {
   getCompositeRun,
   countCompositeRetries,
-  resubmitCompositeRun
+  resubmitCompositeRun,
+  getCompositeStepOutputs
 } from '../store/composite-run.repo'
+import {
+  getOpenCompositeRunWait,
+  satisfyCompositeRunWait,
+  getSatisfiedHumanSubmissions
+} from '../store/composite-run-wait.repo'
 import { validateCompositeManifest } from '../../shared/composite/validate'
 import { compositeContentHash } from '../../shared/composite/manifest'
 import type { CompositeResolutionMap } from '../../shared/agent-access/graph-ops'
@@ -571,6 +577,10 @@ export class LocalAccessService {
         result = await this.executeCompositeRunRetry(input)
       } else if (operationId === 'composite.run.resubmit') {
         result = this.executeCompositeRunResubmit(input)
+      } else if (operationId === 'composite.run.submitHuman') {
+        result = this.executeCompositeSubmitHuman(input)
+      } else if (operationId === 'composite.run.resume') {
+        result = await this.executeCompositeRunResume(input)
       } else if (operationId === 'run.cancel') {
         const row = getExternalRun(input.taskId as string)
         if (!row || row.project_id !== id)
@@ -1743,12 +1753,17 @@ export class LocalAccessService {
       event?: string
     }
     // 落盘核对：待处理事件必须真实写入目标节点 meta。
-    const shape = (saved.tldrawSnapshot as { store: Record<string, { meta?: Record<string, unknown> }> })
-      .store[nodeId]
+    const shape = (
+      saved.tldrawSnapshot as { store: Record<string, { meta?: Record<string, unknown> }> }
+    ).store[nodeId]
     const pendingRaw = shape?.meta?.stateMachinePending
     const pending =
       typeof pendingRaw === 'string'
-        ? (JSON.parse(pendingRaw) as { eventId?: string; event?: string; expectedRevision?: number })
+        ? (JSON.parse(pendingRaw) as {
+            eventId?: string
+            event?: string
+            expectedRevision?: number
+          })
         : null
     if (
       !pending ||
@@ -1777,9 +1792,15 @@ export class LocalAccessService {
     if (!node) throw new AccessFailure('NODE_NOT_FOUND', 'read', nodeId.slice(0, 60))
     if (node.type !== 'state-machine')
       throw new AccessFailure('INVALID_INPUT', 'read', 'state-machine-node-required')
-    const shape = (file.tldrawSnapshot as { store: Record<string, { props?: { config?: string }; meta?: Record<string, unknown> }> })
-      .store[nodeId]
-    let config: { initialState?: string; transitions?: Array<{ from: string; event: string; to: string }> }
+    const shape = (
+      file.tldrawSnapshot as {
+        store: Record<string, { props?: { config?: string }; meta?: Record<string, unknown> }>
+      }
+    ).store[nodeId]
+    let config: {
+      initialState?: string
+      transitions?: Array<{ from: string; event: string; to: string }>
+    }
     try {
       config = JSON.parse(shape?.props?.config || '{}')
     } catch {
@@ -1803,7 +1824,11 @@ export class LocalAccessService {
       revision,
       legalEvents,
       pending: pending
-        ? { eventId: pending.eventId, event: pending.event, expectedRevision: pending.expectedRevision }
+        ? {
+            eventId: pending.eventId,
+            event: pending.event,
+            expectedRevision: pending.expectedRevision
+          }
         : null
     }
   }
@@ -1817,7 +1842,11 @@ export class LocalAccessService {
    * 同一根运行重试上限 3 次；输入未记录（M32 前的旧运行）明确拒绝，不伪造输入。 */
   private async executeCompositeRunRetry(input: Record<string, unknown>): Promise<unknown> {
     if (!this.options.desktop)
-      throw new AccessFailure('DESKTOP_UNAVAILABLE', 'desktop-ownership', 'retry requires the desktop host running')
+      throw new AccessFailure(
+        'DESKTOP_UNAVAILABLE',
+        'desktop-ownership',
+        'retry requires the desktop host running'
+      )
     const runId = String(input.runId ?? '')
     const existing = getCompositeRun(runId)?.run
     if (!existing) throw new AccessFailure('NOT_FOUND', 'read', 'composite-run')
@@ -1828,8 +1857,7 @@ export class LocalAccessService {
     if (retriesUsed >= 3)
       throw new AccessFailure('RETRY_LIMIT_EXCEEDED', 'precheck', 'max 3 retries per root run')
     const record = getCompositeVersion(existing.capabilityId, existing.capabilityVersion)
-    if (!record)
-      throw new AccessFailure('VERSION_NOT_PUBLISHED', 'precheck', 'published-version')
+    if (!record) throw new AccessFailure('VERSION_NOT_PUBLISHED', 'precheck', 'published-version')
     const validation = validateCompositeManifest(record.manifest)
     if (!validation.ok) throw new AccessFailure('STORAGE_INCONSISTENT', 'read', 'manifest-invalid')
     if (!existing.inputValues)
@@ -1877,6 +1905,90 @@ export class LocalAccessService {
     }
   }
 
+  /** AF-07：向等待人工的节点流提交某内部人工任务结果（满足开放人工等待）。 */
+  private executeCompositeSubmitHuman(input: Record<string, unknown>): unknown {
+    const runId = String(input.runId ?? '')
+    const nodeId = String(input.nodeId ?? '')
+    const existing = getCompositeRun(runId)?.run
+    if (!existing) throw new AccessFailure('NOT_FOUND', 'read', 'composite-run')
+    if (existing.status !== 'waiting-input')
+      throw new AccessFailure('RUN_NOT_WAITING', 'precheck', `status:${existing.status}`)
+    const wait = getOpenCompositeRunWait(runId)
+    if (!wait || wait.stepKey !== nodeId)
+      throw new AccessFailure('HUMAN_WAIT_NOT_FOUND', 'precheck', `node:${nodeId}`)
+    const satisfied = satisfyCompositeRunWait({
+      requestId: wait.requestId,
+      revision: wait.revision,
+      value: input.value,
+      submittedBy: 'external'
+    })
+    if (!satisfied.ok)
+      throw new AccessFailure(satisfied.reason ?? 'HUMAN_WAIT_REJECTED', 'precheck', 'wait')
+    return { runId, nodeId, satisfied: true }
+  }
+
+  /** AF-07：续跑等待人工的节点流——消费已满足提交、跳过已完成步骤（保护已付费任务）。 */
+  private async executeCompositeRunResume(input: Record<string, unknown>): Promise<unknown> {
+    if (!this.options.desktop)
+      throw new AccessFailure(
+        'DESKTOP_UNAVAILABLE',
+        'desktop-ownership',
+        'resume requires the desktop host running'
+      )
+    const runId = String(input.runId ?? '')
+    const existing = getCompositeRun(runId)?.run
+    if (!existing) throw new AccessFailure('NOT_FOUND', 'read', 'composite-run')
+    if (existing.status !== 'waiting-input')
+      throw new AccessFailure('RUN_NOT_WAITING', 'precheck', `status:${existing.status}`)
+    const record = getCompositeVersion(existing.capabilityId, existing.capabilityVersion)
+    if (!record) throw new AccessFailure('VERSION_NOT_PUBLISHED', 'precheck', 'published-version')
+    const validation = validateCompositeManifest(record.manifest)
+    if (!validation.ok) throw new AccessFailure('STORAGE_INCONSISTENT', 'read', 'manifest-invalid')
+    // 已完成步骤（completed）跳过重跑；其输出回放供下游消费。
+    const steps = getCompositeRun(runId)?.steps ?? []
+    const completedSteps = steps.filter((s) => s.status === 'completed').map((s) => s.stepKey)
+    const stepOutputs = getCompositeStepOutputs(runId)
+    // 已满足的人工等待 → 提交值（按节点），续跑消费为正式输出。
+    const humanSubmissions = getSatisfiedHumanSubmissions(runId)
+    const resolvedInputs: Array<{ portId: string; value: unknown }> = []
+    for (const [portId, raw] of Object.entries(existing.inputValues ?? {})) {
+      const value = raw as { kind?: string; mediaId?: string }
+      if (value?.kind === 'media' || (value && 'mediaPath' in (value as object))) {
+        const asset = getMediaAsset(String(value.mediaId ?? ''))
+        if (!asset) throw new AccessFailure('NOT_FOUND', 'precheck', `media:${value.mediaId}`)
+        resolvedInputs.push({
+          portId,
+          value: { kind: asset.kind, mediaId: asset.id, mediaPath: asset.path, mime: asset.mime }
+        })
+      } else {
+        resolvedInputs.push({ portId, value: raw })
+      }
+    }
+    try {
+      await this.options.desktop.run({
+        action: 'execute-composite-headless',
+        projectId: `headless-${runId}`,
+        compositeManifest: record.manifest,
+        compositeInputs: resolvedInputs,
+        ownRunId: runId,
+        compositeResumeRunId: runId,
+        compositeHumanSubmissions: humanSubmissions,
+        compositeCompletedSteps: completedSteps,
+        compositeStepOutputs: stepOutputs
+      })
+    } catch (error) {
+      if (error instanceof DesktopAccessError && !error.unknownOutcome)
+        throw new AccessFailure(error.code, 'execute-handshake', error.detail)
+      throw error
+    }
+    return {
+      runId,
+      capabilityId: existing.capabilityId,
+      version: existing.capabilityVersion,
+      status: 'running'
+    }
+  }
+
   /** W4 人工补交：仅 failed/interrupted 可补交；须一次性补齐全部公开输出端口，
    * 类型与端口声明兼容；补交后 completed 但 manualSubmission=true 如实标记。 */
   private executeCompositeRunResubmit(input: Record<string, unknown>): unknown {
@@ -1898,15 +2010,17 @@ export class LocalAccessService {
       submittedIds.length !== declared.length ||
       declared.some((port) => !submittedIds.includes(port.id))
     )
-      throw new AccessFailure('OUTPUT_PORTS_MISMATCH', 'precheck', 'all public outputs required exactly once')
+      throw new AccessFailure(
+        'OUTPUT_PORTS_MISMATCH',
+        'precheck',
+        'all public outputs required exactly once'
+      )
     const outputValues: Record<string, unknown> = {}
     for (const entry of outputs) {
       const port = declared.find((item) => item.id === entry.portId)!
       const kind = entry.value.kind
       const compatible =
-        port.type === 'any' ||
-        port.type === kind ||
-        (port.type === 'text' && kind === 'markdown')
+        port.type === 'any' || port.type === kind || (port.type === 'text' && kind === 'markdown')
       if (!compatible)
         throw new AccessFailure('OUTPUT_TYPE_INVALID', 'precheck', `${entry.portId}:${port.type}`)
       outputValues[entry.portId] = entry.value
@@ -1941,9 +2055,7 @@ export class LocalAccessService {
     if (!node) throw new AccessFailure('NODE_NOT_FOUND', 'precheck', nodeId.slice(0, 60))
     if (node.type !== 'human-task')
       throw new AccessFailure('INVALID_INPUT', 'precheck', 'human-task-node-required')
-    const value = input.value as
-      | { kind: 'text'; text: string }
-      | { kind: 'json'; data: unknown }
+    const value = input.value as { kind: 'text'; text: string } | { kind: 'json'; data: unknown }
     const reply = await this.options.desktop.run(
       {
         action: 'human-task-submit',
@@ -1951,7 +2063,9 @@ export class LocalAccessService {
         nodeId,
         humanTaskExpectedRevision: input.expectedRevision as number,
         humanTaskValue: value,
-        ...(typeof input.submissionId === 'string' ? { humanTaskSubmissionId: input.submissionId } : {})
+        ...(typeof input.submissionId === 'string'
+          ? { humanTaskSubmissionId: input.submissionId }
+          : {})
       },
       (version) => {
         if (this.options.activeProjectId() !== id)
@@ -1966,8 +2080,9 @@ export class LocalAccessService {
     const saved = projects.openProject(id)
     if (!saved) throw new AccessFailure('REVISION_CONFLICT', 'human-task-verify')
     const payload = (reply.result ?? {}) as { revision?: number; submissionId?: string }
-    const shape = (saved.tldrawSnapshot as { store: Record<string, { meta?: Record<string, unknown> }> })
-      .store[nodeId]
+    const shape = (
+      saved.tldrawSnapshot as { store: Record<string, { meta?: Record<string, unknown> }> }
+    ).store[nodeId]
     const pendingRaw = shape?.meta?.humanTaskPending
     const pending =
       typeof pendingRaw === 'string' && pendingRaw.trim()
@@ -1998,8 +2113,11 @@ export class LocalAccessService {
     if (!node) throw new AccessFailure('NODE_NOT_FOUND', 'read', nodeId.slice(0, 60))
     if (node.type !== 'human-task')
       throw new AccessFailure('INVALID_INPUT', 'read', 'human-task-node-required')
-    const shape = (file.tldrawSnapshot as { store: Record<string, { props?: { config?: string }; meta?: Record<string, unknown> }> })
-      .store[nodeId]
+    const shape = (
+      file.tldrawSnapshot as {
+        store: Record<string, { props?: { config?: string }; meta?: Record<string, unknown> }>
+      }
+    ).store[nodeId]
     const config = HumanTaskNodeConfigSchema.safeParse(
       (() => {
         try {
@@ -2021,7 +2139,10 @@ export class LocalAccessService {
     )
     const status = instance.success ? instance.data.status : 'pending'
     const revision = instance.success ? instance.data.revision : 1
-    const result = instance.success && instance.data.status === 'completed' ? instance.data.result ?? null : null
+    const result =
+      instance.success && instance.data.status === 'completed'
+        ? (instance.data.result ?? null)
+        : null
     const pending = HumanTaskPendingSchema.safeParse(
       (() => {
         try {
@@ -2039,13 +2160,18 @@ export class LocalAccessService {
       outputType,
       result,
       pending: pending.success
-        ? { submissionId: pending.data.submissionId, expectedRevision: pending.data.expectedRevision }
+        ? {
+            submissionId: pending.data.submissionId,
+            expectedRevision: pending.data.expectedRevision
+          }
         : null
     }
   }
 
-
-  private async execute(operation: AccessOperationId, input: Record<string, unknown>): Promise<unknown> {
+  private async execute(
+    operation: AccessOperationId,
+    input: Record<string, unknown>
+  ): Promise<unknown> {
     const id = input.projectId as string
     switch (operation) {
       case 'media.getRecipe':
@@ -2682,6 +2808,12 @@ export class LocalAccessService {
         // graph.patch 在 dispatch 中经权威宿主握手执行，不落在这里。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'flowAgent.inspect':
+      case 'flowStage.context.preview':
+      case 'flowStage.rework':
+      case 'flowDefinition.publish':
+      case 'flowDefinition.list':
+      case 'flowDefinition.get':
+      case 'flowDefinition.diff':
       case 'flowAgent.catalog':
       case 'flowAgent.collaboration':
       case 'flowAgent.cooperate':

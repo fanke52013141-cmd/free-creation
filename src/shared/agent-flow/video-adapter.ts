@@ -34,18 +34,18 @@ export function flowTargetContract(node: CanvasNode): { inputs: string[]; output
   // C1：文本目标——确定性合并上游文本与节点正文，写作垂类的基础可调度节点。
   if (node.type === 'text' && node.contractVersion === 3)
     return { inputs: ['in-text'], output: 'out-text' }
-  // C1：AI 处理目标——仅接受 text 输出模式（out-text 端口固定可预期；
-  // markdown/json 模式的输出端口随结果漂移，不适合固定资产交付）。
+  // AF-01：AI 处理目标——输出端口由保存配置的 mode 稳定派生（text/markdown/json），
+  // 投影、适配器、资产登记与外部读取同源；不再限 text 模式。
   if (node.type === 'ai-process' && node.contractVersion === 1) {
-    if (!aiProcessFlowTextConfig(node.params.config)) return null
-    return { inputs: ['in-text', 'in-json'], output: 'out-text' }
+    if (!aiProcessFlowConfigValid(node.params.config)) return null
+    return { inputs: ['in-text', 'in-json'], output: aiProcessFlowOutputPort(node.params.config) }
   }
-  // C4：人工任务目标——仅接受 text 输出模式（固定 out-text 交付）；
-  // 执行语义为停等：未提交时回执 skipped，人工提交后再执行消费 pending 转 committed。
+  // C4：人工任务目标——执行语义为停等：未提交时回执 skipped，人工提交后再执行消费 pending 转 committed。
   // 输入端口是供人工参考的上下文资产，不自动决定结果。
+  // AF-01：输出端口由保存配置的 outputType 稳定派生（text/json）。
   if (node.type === 'human-task' && node.contractVersion === 1) {
-    if (!humanTaskFlowTextConfig(node.params.config)) return null
-    return { inputs: ['in-text', 'in-json'], output: 'out-text' }
+    if (!humanTaskFlowConfigValid(node.params.config)) return null
+    return { inputs: ['in-text', 'in-json'], output: humanTaskFlowOutputPort(node.params.config) }
   }
   if (node.type === 'video' && node.contractVersion === 7)
     return {
@@ -68,30 +68,61 @@ export function flowTargetContract(node: CanvasNode): { inputs: string[]; output
     return { inputs: ['in-image'], output: 'out-image' }
   if (node.type === 'code' && node.contractVersion === 3) {
     if (!codeFlowSingleOutputConfig(node.params.config)) return null
-    return { inputs: codeFlowInputPortIds(node.params.config), output: codeFlowOutputPortId(node.params.config) }
+    return {
+      inputs: codeFlowInputPortIds(node.params.config),
+      output: codeFlowOutputPortId(node.params.config)
+    }
   }
   return null
 }
 
-/** C1：AI 处理目标只接受 text 输出模式（解析与执行器同一 parseAiProcess，默认 text）。 */
-export function aiProcessFlowTextConfig(rawConfig: unknown): boolean {
+/** AF-01：AI 处理配置可被公共执行器同源解析（parseAiProcess 容错默认 text）。 */
+export function aiProcessFlowConfigValid(rawConfig: unknown): boolean {
   try {
-    const text = typeof rawConfig === 'string' ? rawConfig : JSON.stringify(rawConfig ?? {})
-    return parseAiProcess(text).mode === 'text'
+    parseAiProcess(typeof rawConfig === 'string' ? rawConfig : JSON.stringify(rawConfig ?? {}))
+    return true
   } catch {
     return false
   }
 }
 
-/** C4：人工任务目标只接受 text 输出模式（与执行器同一 HumanTaskNodeConfigSchema，默认 text）。 */
-export function humanTaskFlowTextConfig(rawConfig: unknown): boolean {
+/** AF-01：AI 处理正式交付端口 = out-${mode}，与执行器输出投影同一派生规则。 */
+export function aiProcessFlowOutputPort(
+  rawConfig: unknown
+): 'out-text' | 'out-markdown' | 'out-json' {
+  const mode = parseAiProcess(
+    typeof rawConfig === 'string' ? rawConfig : JSON.stringify(rawConfig ?? {})
+  ).mode
+  return `out-${mode}`
+}
+
+/** AF-01：人工任务配置与执行器同一 HumanTaskNodeConfigSchema（outputType 默认 text）。 */
+export function humanTaskFlowConfigValid(rawConfig: unknown): boolean {
   try {
-    const raw = typeof rawConfig === 'string' ? JSON.parse(rawConfig || '{}') : rawConfig ?? {}
-    const parsed = HumanTaskNodeConfigSchema.safeParse(raw)
-    return parsed.success && parsed.data.outputType === 'text'
+    const raw = typeof rawConfig === 'string' ? JSON.parse(rawConfig || '{}') : (rawConfig ?? {})
+    return HumanTaskNodeConfigSchema.safeParse(raw).success
   } catch {
     return false
   }
+}
+
+/** AF-01：人工任务正式交付端口由 outputType 派生（text→out-text，json→out-json）。 */
+export function humanTaskFlowOutputPort(rawConfig: unknown): 'out-text' | 'out-json' {
+  const raw = typeof rawConfig === 'string' ? JSON.parse(rawConfig || '{}') : (rawConfig ?? {})
+  const parsed = HumanTaskNodeConfigSchema.parse(raw)
+  return parsed.outputType === 'json' ? 'out-json' : 'out-text'
+}
+
+/**
+ * AF-01：流目标正式交付端口的唯一派生入口（适配器与资产登记同源）。
+ * 仅覆盖配置派生型节点；静态端口节点仍由各自契约声明。
+ */
+export function flowDeclaredOutputPort(nodeType: string, rawConfig: unknown): string | null {
+  if (nodeType === 'ai-process')
+    return aiProcessFlowConfigValid(rawConfig) ? aiProcessFlowOutputPort(rawConfig) : null
+  if (nodeType === 'human-task')
+    return humanTaskFlowConfigValid(rawConfig) ? humanTaskFlowOutputPort(rawConfig) : null
+  return null
 }
 
 /** C4：人工任务目标输入——in-text 文本/markdown、in-json 结构化参考上下文；允许空（人工可独立填写结果）。 */
@@ -132,7 +163,9 @@ export function aiProcessFlowInputsValid(inputs: FlowInputValues[]): boolean {
 export function codeFlowSingleOutputConfig(rawConfig: unknown): boolean {
   let config
   try {
-    config = parseCodeConfigs(typeof rawConfig === 'string' ? rawConfig : JSON.stringify(rawConfig ?? {}))
+    config = parseCodeConfigs(
+      typeof rawConfig === 'string' ? rawConfig : JSON.stringify(rawConfig ?? {})
+    )
   } catch {
     return false
   }
@@ -142,7 +175,9 @@ export function codeFlowSingleOutputConfig(rawConfig: unknown): boolean {
 }
 
 function codeFlowParsed(rawConfig: unknown): ReturnType<typeof parseCodeConfigs> {
-  return parseCodeConfigs(typeof rawConfig === 'string' ? rawConfig : JSON.stringify(rawConfig ?? {}))
+  return parseCodeConfigs(
+    typeof rawConfig === 'string' ? rawConfig : JSON.stringify(rawConfig ?? {})
+  )
 }
 
 export function codeFlowInputPortIds(rawConfig: unknown): string[] {
@@ -539,7 +574,7 @@ export const TEXT_FLOW_PORTS: PortDecl[] = [
   }
 ]
 
-/** C1：AI 处理目标端口与注册表一致（三个输出口都保留，交付固定走 out-text）。 */
+/** C1：AI 处理目标端口与注册表一致（AF-01：正式交付端口由保存配置 mode 派生）。 */
 export const AI_PROCESS_FLOW_PORTS: PortDecl[] = [
   {
     id: 'in-text',
@@ -735,10 +770,10 @@ export function localImageFlowInputsValid(inputs: FlowInputValues[]): boolean {
   const source = inputs.find((input) => input.targetPortId === 'in-image')
   return Boolean(
     source &&
-      inputs.length === 1 &&
-      source.values.length === 1 &&
-      source.values[0].kind === 'image' &&
-      source.values[0].contentSha256
+    inputs.length === 1 &&
+    source.values.length === 1 &&
+    source.values[0].kind === 'image' &&
+    source.values[0].contentSha256
   )
 }
 

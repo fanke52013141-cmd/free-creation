@@ -76,9 +76,11 @@ async function execute(
     ...(headless ? { headless: true } : {})
   }
   // 每次调用独立运行 ID；request.ownRunId 由 headless 外部入口预分配（供台账轮询）；
-  // request.runId 是外层（父）运行，用于父子关联。
-  const runId = request.ownRunId ?? crypto.randomUUID()
+  // request.runId 是外层（父）运行，用于父子关联。AF-07 续跑复用既有 runId。
+  const resuming = Boolean(request.resumeRunId)
+  const runId = request.resumeRunId ?? request.ownRunId ?? crypto.randomUUID()
   const parentRunId = request.runId
+  const completedSteps = new Set(request.completedSteps ?? [])
   const runtimeVersion = compositeRuntimeVersion(manifest)
   const runEditor = createRunEditor()
   let ledgerStarted = false
@@ -115,20 +117,22 @@ async function execute(
   const shapeByNode = new Map<string, TLShapeId>()
   try {
     const contentHash = await compositeContentHash(manifest)
-    await report(() =>
-      window.api.composite.runStart({
-        id: runId,
-        projectId,
-        capabilityId: manifest.capabilityId,
-        capabilityVersion: manifest.version,
-        contentHash,
-        ...(parentRunId ? { parentRunId } : {}),
-        ...(request.instanceNodeId ? { instanceNodeId: request.instanceNodeId } : {}),
-        // W4 受控重试：公开输入值/重试链随运行创建原子落盘（仅 headless 入口携带）。
-        ...(request.inputValues ? { inputValues: request.inputValues } : {}),
-        ...(request.retryOf ? { retryOf: request.retryOf } : {})
-      })
-    )
+    if (!resuming) {
+      await report(() =>
+        window.api.composite.runStart({
+          id: runId,
+          projectId,
+          capabilityId: manifest.capabilityId,
+          capabilityVersion: manifest.version,
+          contentHash,
+          ...(parentRunId ? { parentRunId } : {}),
+          ...(request.instanceNodeId ? { instanceNodeId: request.instanceNodeId } : {}),
+          // W4 受控重试：公开输入值/重试链随运行创建原子落盘（仅 headless 入口携带）。
+          ...(request.inputValues ? { inputValues: request.inputValues } : {}),
+          ...(request.retryOf ? { retryOf: request.retryOf } : {})
+        })
+      )
+    }
     ledgerStarted = true
     if (budget.issue) {
       failure = { code: budget.issue.code, phase: 'runtime' }
@@ -332,6 +336,22 @@ async function execute(
       }
     }
 
+    // AF-07：续跑回放已完成节点的运行结果到隔离 editor（供下游消费，不重跑）。
+    if (resuming && request.stepOutputs) {
+      for (const [nodeId, output] of Object.entries(request.stepOutputs)) {
+        const shapeId = shapeByNode.get(nodeId)
+        if (!shapeId) continue
+        runEditor.updateShape({
+          id: shapeId,
+          type: 'node-card',
+          meta: {
+            nodeResult: output.nodeResult ?? undefined,
+            nodeRun: output.nodeRun ? JSON.parse(JSON.stringify(output.nodeRun)) : undefined
+          }
+        })
+      }
+    }
+
     for (const nodeId of topologicalOrder(manifest)) {
       if (request.signal?.cancelled) {
         await finish('cancelled')
@@ -340,20 +360,44 @@ async function execute(
       const shapeId = shapeByNode.get(nodeId)
       if (!shapeId) continue
       const nodeType = manifest.graph.nodes.find((node) => node.id === nodeId)?.nodeType ?? ''
-      // C4 fail-closed：节点流隔离执行没有人工提交通道，内部纯人工任务节点不能静默
-      // 跳过或伪造完成——显式拒绝并定位到该节点，由人在主画布单独完成后再编排。
+      // AF-07：续跑跳过已完成步骤（保护已付费任务，不自动重做）。
+      if (completedSteps.has(nodeId)) {
+        successfulSteps++
+        continue
+      }
+      // AF-07：内部纯人工任务节点——停等人工提交（不再 fail-closed）。
+      // 已满足的提交值消费为正式输出；否则开放人工等待并停在 waiting-input，
+      // 由外部 humanTask.submit 满足后经 composite.run.resume 续跑。
       if (nodeType === 'human-task') {
-        failure = { code: 'HUMAN_TASK_UNSUPPORTED_IN_COMPOSITE', phase: 'step', nodeId }
-        const reason = `节点流内部不支持纯人工任务节点「${nodeId}」：隔离执行无人工提交通道，请在主画布完成该人工任务`
-        await report(() =>
-          window.api.composite.runStep({ runId, stepKey: nodeId, nodeType, status: 'failed', reason })
-        )
-        await finish('failed', {
-          errorCode: failure.code,
-          errorMessage: reason,
-          failurePhase: 'step'
-        })
-        return { status: 'failed', reason, failure, stepCount: successfulSteps }
+        const submission = request.humanSubmissions?.[nodeId]
+        if (submission) {
+          const instance = {
+            schemaVersion: 1,
+            nodeId,
+            revision: 1,
+            status: 'completed',
+            result: submission,
+            lastSubmissionId: `composite:${runId}:${nodeId}`,
+            submittedAt: Date.now()
+          }
+          runEditor.updateShape({
+            id: shapeId,
+            type: 'node-card',
+            meta: { humanTask: JSON.stringify(instance), humanTaskPending: '' }
+          })
+          await report(() =>
+            window.api.composite.runStep({ runId, stepKey: nodeId, nodeType, status: 'completed' })
+          )
+          successfulSteps++
+          continue
+        }
+        await report(() => window.api.composite.runWait({ runId, stepKey: nodeId, nodeType }))
+        return {
+          status: 'waiting',
+          waitingStepKey: nodeId,
+          reason: `节点流等待人工任务「${nodeId}」提交后续跑`,
+          stepCount: successfulSteps
+        }
       }
       await report(() =>
         window.api.composite.runStep({ runId, stepKey: nodeId, nodeType, status: 'running' })
@@ -382,6 +426,19 @@ async function execute(
           ...(result.reason ? { reason: result.reason } : {})
         })
       )
+      // AF-07：持久化已完成节点的运行结果（供人工等待续跑回放，跳过重跑）。
+      if (result.status !== 'failed' && result.status !== 'skipped') {
+        const meta = runEditor.getShape<NodeCardShape>(shapeId)?.meta as
+          Record<string, unknown> | undefined
+        await report(() =>
+          window.api.composite.runStepOutput({
+            runId,
+            nodeId,
+            nodeResult: typeof meta?.nodeResult === 'string' ? meta.nodeResult : null,
+            nodeRun: meta?.nodeRun ?? null
+          })
+        )
+      }
       if (result.status === 'failed') {
         failure = { code: 'NODE_FAILED', phase: 'step', nodeId }
         await finish('failed', {

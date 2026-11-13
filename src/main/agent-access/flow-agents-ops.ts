@@ -20,6 +20,14 @@ import { supportsReviewAudioInput } from '../../shared/agent-flow/media-review'
 import { FlowAgentDesktopHost } from '../agent-flow/desktop-host'
 import { FlowCommandLedger } from '../agent-flow/command-ledger'
 import { CoordinationStore } from '../agent-flow/coordination-store'
+import { FlowAssetStore } from '../agent-flow/asset-store'
+import { FlowTaskStore, agentThread } from '../agent-flow/task-store'
+import { FlowDefinitionStore } from '../agent-flow/definition-store'
+import {
+  buildContextManifest,
+  contextManifestBlocking
+} from '../../shared/agent-flow/context-manifest'
+import type { StageDeliveryFact } from '../../shared/agent-flow/stage-contracts'
 import { getDb } from '../store/db'
 import { openProject } from '../store/projects.repo'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
@@ -30,7 +38,13 @@ export const FLOW_AGENT_OPERATION_IDS: ReadonlySet<AccessOperationId> = new Set(
   'flowAgent.inspect',
   'flowAgent.catalog',
   'flowAgent.collaboration',
-  'flowAgent.cooperate'
+  'flowAgent.cooperate',
+  'flowStage.context.preview',
+  'flowStage.rework',
+  'flowDefinition.publish',
+  'flowDefinition.list',
+  'flowDefinition.get',
+  'flowDefinition.diff'
 ] as AccessOperationId[])
 
 export interface FlowAgentOperationContext {
@@ -49,7 +63,8 @@ function refuse(code: string, detail?: string): never {
 
 function fail(error: unknown): never {
   if (error instanceof DesktopAccessError) throw error
-  if (error instanceof AgentRuntimeError) throw new DesktopAccessError(error.code, false, error.phase)
+  if (error instanceof AgentRuntimeError)
+    throw new DesktopAccessError(error.code, false, error.phase)
   throw error
 }
 
@@ -179,7 +194,10 @@ function inspectCoordinationReadOnly(projectId: string, nodeId: string): FlowAge
   }
 }
 
-function inspectFlowAgent(input: Record<string, unknown>, context: FlowAgentOperationContext): unknown {
+function inspectFlowAgent(
+  input: Record<string, unknown>,
+  context: FlowAgentOperationContext
+): unknown {
   const projectId = input.projectId as string
   const nodeId = input.nodeId as string
   const file = projectFile(projectId)
@@ -243,7 +261,10 @@ function inspectFlowAgent(input: Record<string, unknown>, context: FlowAgentOper
 }
 
 /** 读取能力目录（模型/工具/技能摘要），与 GUI 目录同一投影、同一前置条件。 */
-function catalogFlowAgent(input: Record<string, unknown>, context: FlowAgentOperationContext): unknown {
+function catalogFlowAgent(
+  input: Record<string, unknown>,
+  context: FlowAgentOperationContext
+): unknown {
   const projectId = input.projectId as string
   const file = projectFile(projectId)
   const models = new SqliteModelHost(getDb())
@@ -294,7 +315,8 @@ function collaborationFlowAgent(
       ...(message.reply !== undefined ? { reply: message.reply } : {})
     })),
     inputs: view.inputs,
-    candidates: view.candidates
+    candidates: view.candidates,
+    ...(view.workingDraft !== undefined ? { workingDraft: view.workingDraft } : {})
   }
 }
 
@@ -344,6 +366,7 @@ async function cooperateFlowAgent(
     messages: Array<{ eventId: string; kind: string; text: string; reply?: string }>
     inputs: unknown[]
     candidates: unknown[]
+    workingDraft?: string
   }
   if (!view || !view.task) refuse('FLOW_AGENT_REPLY_INVALID', 'host reply missing task view')
   return {
@@ -360,8 +383,142 @@ async function cooperateFlowAgent(
       ...(message.reply !== undefined ? { reply: message.reply } : {})
     })),
     inputs: view.inputs,
-    candidates: view.candidates
+    candidates: view.candidates,
+    ...(view.workingDraft !== undefined ? { workingDraft: view.workingDraft } : {})
   }
+}
+
+/** AF-02：阶段输入编制预览（只读账本投影，零写副作用；与宿主 previewStageContext 同口径）。 */
+function previewStageContext(
+  input: Record<string, unknown>,
+  context: FlowAgentOperationContext
+): unknown {
+  const projectId = input.projectId as string
+  const nodeId = input.nodeId as string
+  const stageKey = input.stageKey as string
+  const includeBody = input.includeBody === true
+  projectFile(projectId)
+  if (context.activeProjectId() !== projectId)
+    refuse('FLOW_PROJECT_INACTIVE', 'preview: project.open the target canvas first')
+  const db = getDb()
+  const run = new CoordinationStore(db).latest(projectId, nodeId)
+  const empty = { projectId, nodeId, preview: null }
+  if (!run || !run.config.stages) return empty
+  const stage = run.config.stages.find((item) => item.stageKey === stageKey)
+  if (!stage || !stage.inputs) return empty
+  const assets = new FlowAssetStore(db, openProject)
+  const tasks = new FlowTaskStore(db)
+  const stageByNode = new Map(run.config.stages.map((item) => [item.nodeId, item]))
+  const deliveries: StageDeliveryFact[] = []
+  for (const child of run.children) {
+    const childStage = stageByNode.get(child.nodeId)
+    if (!childStage || child.state !== 'completed') continue
+    const versions = assets.resolveInputs(projectId, child.outputs)
+    deliveries.push({
+      stageKey: childStage.stageKey,
+      nodeId: child.nodeId,
+      outputs: versions.map((version) => version.value),
+      humanDecided: tasks.humanAccepted(
+        agentThread({ projectId, agentNodeId: child.nodeId, taskId: child.taskId })
+      )
+    })
+  }
+  const manifest = buildContextManifest(stageKey, stage.inputs, deliveries)
+  return {
+    projectId,
+    nodeId,
+    preview: {
+      stageKey,
+      manifestHash: manifest.manifestHash,
+      entries: manifest.entries.map((entry) => ({
+        sourceStageKey: entry.sourceStageKey,
+        path: entry.path,
+        kind: entry.kind,
+        bytes: entry.bytes,
+        required: entry.required,
+        ...(entry.purpose ? { purpose: entry.purpose } : {}),
+        ...(includeBody ? { value: entry.value } : {})
+      })),
+      missing: manifest.missing,
+      dropped: manifest.dropped,
+      budget: manifest.budget,
+      blocking: contextManifestBlocking(manifest)
+    }
+  }
+}
+
+/** AF-05：局部返工（写）——经由共享宿主端口调用同一 coordinator.reworkStage，不另建权威。 */
+function reworkStage(input: Record<string, unknown>, context: FlowAgentOperationContext): unknown {
+  const projectId = input.projectId as string
+  const nodeId = input.nodeId as string
+  const stageKey = input.stageKey as string
+  projectFile(projectId)
+  if (context.activeProjectId() !== projectId)
+    refuse('FLOW_PROJECT_INACTIVE', 'rework: project.open the target canvas first')
+  const port = flowAgentAccessPort()
+  if (!port) refuse('FLOW_AGENTS_UNAVAILABLE', 'flow agent host is not running in this instance')
+  const task = port.reworkStage({ projectId, nodeId, stageKey }) as
+    Parameters<typeof taskDto>[0] | null
+  return { projectId, nodeId, task: task ? taskDto(task) : null }
+}
+
+/** AF-06：流程定义版本（与运行分离；只读定义快照，publish 读已保存配置）。 */
+function definitionStore(): FlowDefinitionStore {
+  return new FlowDefinitionStore(getDb(), openProject)
+}
+function assertActive(projectId: string, context: FlowAgentOperationContext, action: string): void {
+  projectFile(projectId)
+  if (context.activeProjectId() !== projectId)
+    refuse('FLOW_PROJECT_INACTIVE', `${action}: project.open the target canvas first`)
+}
+function publishDefinition(
+  input: Record<string, unknown>,
+  context: FlowAgentOperationContext
+): unknown {
+  const projectId = input.projectId as string
+  assertActive(projectId, context, 'definition.publish')
+  const definition = definitionStore().publish({
+    projectId,
+    definitionId: input.definitionId as string,
+    name: input.name as string,
+    coordinatorNodeId: input.coordinatorNodeId as string
+  })
+  return { projectId, definition }
+}
+function listDefinitions(
+  input: Record<string, unknown>,
+  context: FlowAgentOperationContext
+): unknown {
+  const projectId = input.projectId as string
+  assertActive(projectId, context, 'definition.list')
+  return { projectId, definitions: definitionStore().list(projectId) }
+}
+function getDefinition(
+  input: Record<string, unknown>,
+  context: FlowAgentOperationContext
+): unknown {
+  const projectId = input.projectId as string
+  assertActive(projectId, context, 'definition.get')
+  const definition = definitionStore().get(
+    projectId,
+    input.definitionId as string,
+    input.version as number | undefined
+  )
+  return { projectId, definition }
+}
+function diffDefinitions(
+  input: Record<string, unknown>,
+  context: FlowAgentOperationContext
+): unknown {
+  const projectId = input.projectId as string
+  assertActive(projectId, context, 'definition.diff')
+  const diff = definitionStore().diff(
+    projectId,
+    input.definitionId as string,
+    input.versionA as number,
+    input.versionB as number
+  )
+  return { projectId, definitionId: input.definitionId, diff }
 }
 
 /** dispatch 的分组委托入口：只分发本族操作，其余明确拒绝（防误接）。 */
@@ -380,6 +537,18 @@ export async function runFlowAgentOperation(
         return collaborationFlowAgent(input, context)
       case 'flowAgent.cooperate':
         return cooperateFlowAgent(input, context)
+      case 'flowStage.context.preview':
+        return previewStageContext(input, context)
+      case 'flowStage.rework':
+        return reworkStage(input, context)
+      case 'flowDefinition.publish':
+        return publishDefinition(input, context)
+      case 'flowDefinition.list':
+        return listDefinitions(input, context)
+      case 'flowDefinition.get':
+        return getDefinition(input, context)
+      case 'flowDefinition.diff':
+        return diffDefinitions(input, context)
       default:
         refuse('UNSUPPORTED_OPERATION', 'flow-agents-dispatch')
     }

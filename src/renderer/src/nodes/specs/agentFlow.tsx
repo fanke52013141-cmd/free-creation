@@ -125,10 +125,12 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
     return (
       <div className="agent-flow-body">
         <NodeIdentity>
-          {instance && <div className="agent-flow-summary">
-            当前阶段：{currentState}
-            {instance ? `（修订 ${instance.revision}）` : '（未启动）'}
-          </div>}
+          {instance && (
+            <div className="agent-flow-summary">
+              当前阶段：{currentState}
+              {instance ? `（修订 ${instance.revision}）` : '（未启动）'}
+            </div>
+          )}
           {pendingSubmission ? (
             <p className="agent-flow-pending" role="status">
               已提交事件「{pendingSubmission.event}」（基于修订 {pendingSubmission.expectedRevision}
@@ -155,7 +157,11 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
             value={chosenEvent}
             onChange={(event) => setSelectedEvent(event.currentTarget.value)}
           >
-            {eventOptions.map((event) => <option key={event} value={event}>{event}</option>)}
+            {eventOptions.map((event) => (
+              <option key={event} value={event}>
+                {event}
+              </option>
+            ))}
           </AppSelect>
         )}
         {eventOptions.length > 0 && (
@@ -186,7 +192,8 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
             onClick={async () => {
               const confirmed = await useConfirmStore.getState().confirm({
                 title: '重置状态机任务',
-                message: '将清除该节点的状态机实例与待应用事件，回到初始阶段。已产出的下游输出不受影响。',
+                message:
+                  '将清除该节点的状态机实例与待应用事件，回到初始阶段。已产出的下游输出不受影响。',
                 confirmText: '重置',
                 danger: true
               })
@@ -274,6 +281,7 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
   const [error, setError] = useState('')
   const [catalog, setCatalog] = useState<FlowAgentCatalog | null>(null)
   const [repairConfirmed, setRepairConfirmed] = useState(false)
+  const [contextPreview, setContextPreview] = useState<Record<number, string>>({})
   const savedConfigIsValid = parsedConfigOf(shape) !== null
   useEffect(() => {
     if (type === 'state-machine' || !window.api.flowAgentCatalog) return
@@ -398,6 +406,422 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
       />
     </label>
   )
+  // AF-01：固定顺序模式的阶段声明编辑（与 CLI/MCP 共用 AgentNodeConfigSchema 校验）。
+  type StageDraft = {
+    stageKey: string
+    nodeId: string
+    goal: string
+    completion: string
+    requireHumanDecision?: boolean
+    entry?: Array<Record<string, unknown>>
+    inputs?: { selectors: Array<Record<string, unknown>>; budgetBytes?: number }
+    method?: { instructions?: string }
+  }
+  const stages = (Array.isArray(draft.stages) ? draft.stages : []) as StageDraft[]
+  const setStages = (next: StageDraft[]): void => update('stages', next)
+  const patchStage = (index: number, patch: Partial<StageDraft>): void =>
+    setStages(stages.map((stage, i) => (i === index ? { ...stage, ...patch } : stage)))
+  const stageKeys = stages.map((stage) => stage.stageKey).filter(Boolean)
+  const conditionEditor = (stage: StageDraft, index: number): React.JSX.Element => {
+    const entry = stage.entry ?? []
+    const setEntry = (next: Array<Record<string, unknown>>): void =>
+      patchStage(index, { entry: next })
+    return (
+      <div className="agent-flow-stage-conditions">
+        {entry.map((condition, ci) => {
+          const kind = String(condition.kind ?? 'output-field')
+          const patchCondition = (patch: Record<string, unknown>): void =>
+            setEntry(entry.map((item, i) => (i === ci ? { ...item, ...patch } : item)))
+          return (
+            <div className="agent-flow-stage-condition" key={ci}>
+              <AppSelect
+                aria-label={`阶段 ${stage.stageKey} 条件 ${ci + 1} 类型`}
+                value={kind}
+                onChange={(event) => {
+                  const nextKind = event.target.value
+                  patchCondition({
+                    kind: nextKind,
+                    ...(nextKind === 'output-field'
+                      ? { path: '', op: 'exists' }
+                      : nextKind === 'output-count'
+                        ? { op: 'gte', count: 1 }
+                        : nextKind === 'review-passed'
+                          ? { reviewNodeId: '' }
+                          : {})
+                  })
+                }}
+              >
+                <option value="output-field">输出字段</option>
+                <option value="output-count">输出数量</option>
+                <option value="human-decision">人工已采用</option>
+                <option value="review-passed">审核已通过</option>
+              </AppSelect>
+              {kind !== 'review-passed' && (
+                <AppSelect
+                  aria-label={`阶段 ${stage.stageKey} 条件 ${ci + 1} 来源阶段`}
+                  value={String(condition.stageKey ?? '')}
+                  onChange={(event) => patchCondition({ stageKey: event.target.value })}
+                >
+                  <option value="">选择阶段</option>
+                  {stageKeys
+                    .filter((key) => key !== stage.stageKey)
+                    .map((key) => (
+                      <option key={key} value={key}>
+                        {key}
+                      </option>
+                    ))}
+                </AppSelect>
+              )}
+              {kind === 'output-field' && (
+                <>
+                  <input
+                    aria-label={`阶段 ${stage.stageKey} 条件 ${ci + 1} 字段路径`}
+                    placeholder="字段路径，如 evidence.0.src"
+                    value={String(condition.path ?? '')}
+                    onChange={(event) => patchCondition({ path: event.target.value })}
+                  />
+                  <AppSelect
+                    aria-label={`阶段 ${stage.stageKey} 条件 ${ci + 1} 比较`}
+                    value={String(condition.op ?? 'exists')}
+                    onChange={(event) => patchCondition({ op: event.target.value })}
+                  >
+                    <option value="exists">存在</option>
+                    <option value="missing">缺失</option>
+                    <option value="equals">等于</option>
+                    <option value="type">类型</option>
+                  </AppSelect>
+                  {condition.op === 'equals' && (
+                    <input
+                      aria-label={`阶段 ${stage.stageKey} 条件 ${ci + 1} 期望值`}
+                      placeholder="期望值（JSON）"
+                      value={condition.value === undefined ? '' : JSON.stringify(condition.value)}
+                      onChange={(event) => {
+                        try {
+                          patchCondition({ value: JSON.parse(event.target.value) })
+                        } catch {
+                          patchCondition({ value: event.target.value })
+                        }
+                      }}
+                    />
+                  )}
+                  {condition.op === 'type' && (
+                    <AppSelect
+                      aria-label={`阶段 ${stage.stageKey} 条件 ${ci + 1} 类型`}
+                      value={String(condition.valueType ?? 'string')}
+                      onChange={(event) => patchCondition({ valueType: event.target.value })}
+                    >
+                      <option value="string">文本</option>
+                      <option value="number">数字</option>
+                      <option value="boolean">布尔</option>
+                      <option value="object">对象</option>
+                      <option value="array">数组</option>
+                    </AppSelect>
+                  )}
+                </>
+              )}
+              {kind === 'output-count' && (
+                <>
+                  <AppSelect
+                    aria-label={`阶段 ${stage.stageKey} 条件 ${ci + 1} 数量比较`}
+                    value={String(condition.op ?? 'gte')}
+                    onChange={(event) => patchCondition({ op: event.target.value })}
+                  >
+                    <option value="gte">不少于</option>
+                    <option value="lte">不多于</option>
+                  </AppSelect>
+                  <input
+                    aria-label={`阶段 ${stage.stageKey} 条件 ${ci + 1} 数量`}
+                    type="number"
+                    min={0}
+                    value={String(condition.count ?? 1)}
+                    onChange={(event) =>
+                      patchCondition({ count: Math.max(0, Number(event.target.value) || 0) })
+                    }
+                  />
+                </>
+              )}
+              {kind === 'review-passed' && (
+                <input
+                  aria-label={`阶段 ${stage.stageKey} 条件 ${ci + 1} 审核节点`}
+                  placeholder="审核节点 ID"
+                  value={String(condition.reviewNodeId ?? '')}
+                  onChange={(event) => patchCondition({ reviewNodeId: event.target.value })}
+                />
+              )}
+              <button
+                type="button"
+                aria-label={`删除阶段 ${stage.stageKey} 条件 ${ci + 1}`}
+                onClick={() => setEntry(entry.filter((_, i) => i !== ci))}
+              >
+                删除条件
+              </button>
+            </div>
+          )
+        })}
+        <button
+          type="button"
+          aria-label={`为阶段 ${stage.stageKey} 添加进入条件`}
+          onClick={() =>
+            setEntry([...entry, { kind: 'output-field', stageKey: '', path: '', op: 'exists' }])
+          }
+        >
+          添加进入条件
+        </button>
+      </div>
+    )
+  }
+  // AF-02：阶段输入编制编辑（声明选择器 + 预算）；与 CLI/MCP 共用 StageInputsSchema 校验。
+  const inputsEditor = (stage: StageDraft, index: number): React.JSX.Element => {
+    const enabled = Boolean(stage.inputs)
+    const selectors = stage.inputs?.selectors ?? []
+    const setInputs = (next: StageDraft['inputs']): void => patchStage(index, { inputs: next })
+    const patchSelector = (si: number, patch: Record<string, unknown>): void =>
+      setInputs({
+        budgetBytes: stage.inputs?.budgetBytes ?? 131072,
+        selectors: selectors.map((item, i) => (i === si ? { ...item, ...patch } : item))
+      })
+    return (
+      <div className="agent-flow-stage-inputs">
+        <label className="agent-flow-target-option">
+          <input
+            type="checkbox"
+            aria-label={`阶段 ${index + 1} 启用输入编制`}
+            checked={enabled}
+            onChange={(event) =>
+              setInputs(
+                event.target.checked
+                  ? {
+                      selectors: [{ sourceStageKey: '', path: '', required: true }],
+                      budgetBytes: 131072
+                    }
+                  : undefined
+              )
+            }
+          />
+          <span>只读取声明输入（输入编制）</span>
+        </label>
+        {enabled && (
+          <>
+            <label className="settings-field">
+              输入预算（字节）
+              <input
+                aria-label={`阶段 ${index + 1} 输入预算`}
+                type="number"
+                min={1024}
+                max={1048576}
+                value={String(stage.inputs?.budgetBytes ?? 131072)}
+                onChange={(event) =>
+                  setInputs({
+                    selectors,
+                    budgetBytes: Math.max(1024, Number(event.target.value) || 131072)
+                  })
+                }
+              />
+            </label>
+            {selectors.map((selector, si) => (
+              <div className="agent-flow-stage-condition" key={si}>
+                <AppSelect
+                  aria-label={`阶段 ${index + 1} 输入 ${si + 1} 来源阶段`}
+                  value={String(selector.sourceStageKey ?? '')}
+                  onChange={(event) => patchSelector(si, { sourceStageKey: event.target.value })}
+                >
+                  <option value="">选择来源阶段</option>
+                  {stageKeys
+                    .filter((key) => key !== stage.stageKey)
+                    .map((key) => (
+                      <option key={key} value={key}>
+                        {key}
+                      </option>
+                    ))}
+                </AppSelect>
+                <input
+                  aria-label={`阶段 ${index + 1} 输入 ${si + 1} 字段路径`}
+                  placeholder="字段路径（空=整值）"
+                  value={String(selector.path ?? '')}
+                  onChange={(event) => patchSelector(si, { path: event.target.value })}
+                />
+                <label className="agent-flow-target-option">
+                  <input
+                    type="checkbox"
+                    aria-label={`阶段 ${index + 1} 输入 ${si + 1} 必需`}
+                    checked={selector.required !== false}
+                    onChange={(event) => patchSelector(si, { required: event.target.checked })}
+                  />
+                  <span>必需</span>
+                </label>
+                <button
+                  type="button"
+                  aria-label={`删除阶段 ${index + 1} 输入 ${si + 1}`}
+                  onClick={() =>
+                    setInputs({
+                      budgetBytes: stage.inputs?.budgetBytes ?? 131072,
+                      selectors: selectors.filter((_, i) => i !== si)
+                    })
+                  }
+                >
+                  删除
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              aria-label={`为阶段 ${index + 1} 添加输入选择器`}
+              onClick={() =>
+                setInputs({
+                  budgetBytes: stage.inputs?.budgetBytes ?? 131072,
+                  selectors: [...selectors, { sourceStageKey: '', path: '', required: true }]
+                })
+              }
+            >
+              添加输入选择器
+            </button>
+            <button
+              type="button"
+              aria-label={`预览阶段 ${index + 1} 输入编制`}
+              onClick={() => {
+                void window.api
+                  .flowAgentStageContextPreview({
+                    projectId,
+                    nodeId: shape.id,
+                    stageKey: stage.stageKey
+                  })
+                  .then((reply) => {
+                    if (!reply.ok) {
+                      setContextPreview((prev) => ({
+                        ...prev,
+                        [index]: `预览失败：${reply.error.code}`
+                      }))
+                      return
+                    }
+                    const preview = reply.data
+                    if (!preview) {
+                      setContextPreview((prev) => ({ ...prev, [index]: '暂无运行或无输入声明' }))
+                      return
+                    }
+                    const missing = preview.missing.filter((m) => m.required).length
+                    setContextPreview((prev) => ({
+                      ...prev,
+                      [index]: `采用 ${preview.entries.length} 项 / ${preview.budget.usedBytes} 字节（上限 ${preview.budget.limitBytes}）；必需缺项 ${missing}${preview.blocking ? '；将阻断分派' : ''}`
+                    }))
+                  })
+                  .catch(() => setContextPreview((prev) => ({ ...prev, [index]: '预览不可用' })))
+              }}
+            >
+              预览输入编制
+            </button>
+            {contextPreview[index] && (
+              <p className="contract-settings-hint" role="status">
+                {contextPreview[index]}
+              </p>
+            )}
+          </>
+        )}
+      </div>
+    )
+  }
+  const stageEditor = (
+    <fieldset className="agent-flow-targets">
+      <legend>阶段声明（按顺序执行）</legend>
+      {stages.map((stage, index) => (
+        <div className="agent-flow-stage" key={index}>
+          <div className="agent-flow-stage-row">
+            <input
+              aria-label={`阶段 ${index + 1} 标识`}
+              placeholder="阶段标识，如 organize"
+              value={stage.stageKey}
+              onChange={(event) => patchStage(index, { stageKey: event.target.value })}
+            />
+            <AppSelect
+              aria-label={`阶段 ${index + 1} 承载节点`}
+              value={stage.nodeId}
+              onChange={(event) => patchStage(index, { nodeId: event.target.value })}
+            >
+              <option value="">选择专业 Agent</option>
+              {list('allowedNodeIds').map((id) => (
+                <option key={id} value={id}>
+                  {options.find((option) => option.id === id)?.label ?? id}
+                </option>
+              ))}
+            </AppSelect>
+            <button
+              type="button"
+              aria-label={`删除阶段 ${index + 1}`}
+              onClick={() => setStages(stages.filter((_, i) => i !== index))}
+            >
+              删除阶段
+            </button>
+          </div>
+          <label className="settings-field">
+            阶段目标
+            <textarea
+              aria-label={`阶段 ${index + 1} 目标`}
+              value={stage.goal}
+              onChange={(event) => patchStage(index, { goal: event.target.value })}
+            />
+          </label>
+          <label className="settings-field">
+            完成条件
+            <textarea
+              aria-label={`阶段 ${index + 1} 完成条件`}
+              value={stage.completion}
+              onChange={(event) => patchStage(index, { completion: event.target.value })}
+            />
+          </label>
+          <label className="settings-field">
+            固定工作方法（可选）
+            <textarea
+              aria-label={`阶段 ${index + 1} 工作方法`}
+              placeholder="如：先案例后分析；随执行指令传到内容生成"
+              value={String(
+                (stage.method as { instructions?: string } | undefined)?.instructions ?? ''
+              )}
+              onChange={(event) =>
+                patchStage(index, {
+                  method: event.target.value ? { instructions: event.target.value } : undefined
+                })
+              }
+            />
+          </label>
+          <label className="agent-flow-target-option">
+            <input
+              type="checkbox"
+              aria-label={`阶段 ${index + 1} 需要人工采用`}
+              checked={Boolean(stage.requireHumanDecision)}
+              onChange={(event) =>
+                patchStage(index, { requireHumanDecision: event.target.checked })
+              }
+            />
+            <span>交付需要显式人工采用</span>
+          </label>
+          {conditionEditor(stage, index)}
+          {inputsEditor(stage, index)}
+          <button
+            type="button"
+            aria-label={`返工阶段 ${index + 1}`}
+            onClick={() => {
+              void window.api
+                .flowAgentStageRework({ projectId, nodeId: shape.id, stageKey: stage.stageKey })
+                .then((reply) => {
+                  setError(reply.ok ? '' : `返工失败：${reply.error.code}`)
+                })
+                .catch(() => setError('返工不可用'))
+            }}
+          >
+            从此阶段返工
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        aria-label="添加阶段"
+        onClick={() =>
+          setStages([...stages, { stageKey: '', nodeId: '', goal: '', completion: '', entry: [] }])
+        }
+      >
+        添加阶段
+      </button>
+    </fieldset>
+  )
   const save = (): void => {
     const terminal = beginFlowConfigEdit(projectId, shape.id, type)
     if (!savedConfigIsValid && !repairConfirmed) {
@@ -484,37 +908,103 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
           </label>
           {numberField('最多处理步数', 'maxSteps', 1, 64)}
           {draft.role === 'coordinator' && (
-            <label className="settings-field">
-              任务调度
-              <AppSelect
-                aria-label="任务调度"
-                value={String(draft.maxParallelTasks ?? 1)}
-                onChange={(event) => update('maxParallelTasks', Number(event.target.value))}
-              >
-                <option value="1">顺序执行</option>
-                <option value="2">独立任务并行（最多两路）</option>
-                <option value="3">独立任务并行（最多三路）</option>
-                <option value="4">独立任务并行（最多四路）</option>
-              </AppSelect>
-            </label>
+            <>
+              <label className="settings-field">
+                执行模式
+                <AppSelect
+                  aria-label="执行模式"
+                  value={String(draft.executionMode ?? 'model')}
+                  onChange={(event) => {
+                    const mode = event.target.value
+                    if (mode === 'fixed-order') update('executionMode', 'fixed-order')
+                    else {
+                      const next = { ...draft }
+                      delete next.executionMode
+                      delete next.stages
+                      setDraft(next)
+                      setError('')
+                    }
+                  }}
+                >
+                  <option value="model">模型协调（自主分派）</option>
+                  <option value="fixed-order">固定顺序（按阶段声明推进）</option>
+                </AppSelect>
+              </label>
+              {draft.executionMode !== 'fixed-order' && (
+                <label className="settings-field">
+                  任务调度
+                  <AppSelect
+                    aria-label="任务调度"
+                    value={String(draft.maxParallelTasks ?? 1)}
+                    onChange={(event) => update('maxParallelTasks', Number(event.target.value))}
+                  >
+                    <option value="1">顺序执行</option>
+                    <option value="2">独立任务并行（最多两路）</option>
+                    <option value="3">独立任务并行（最多三路）</option>
+                    <option value="4">独立任务并行（最多四路）</option>
+                  </AppSelect>
+                </label>
+              )}
+              {draft.executionMode === 'fixed-order' && stageEditor}
+              {draft.executionMode === 'fixed-order' && (
+                <fieldset className="agent-flow-targets">
+                  <legend>流程定义版本（可复用，与运行分离）</legend>
+                  <button
+                    type="button"
+                    aria-label="发布流程定义版本"
+                    onClick={() => {
+                      void window.api
+                        .flowDefinitionPublish({
+                          projectId,
+                          definitionId: shape.id,
+                          name: String(draft.name ?? shape.props.title ?? '流程定义'),
+                          coordinatorNodeId: shape.id
+                        })
+                        .then((reply) => {
+                          setError(reply.ok ? '' : `发布失败：${reply.error.code}`)
+                          if (reply.ok)
+                            setContextPreview((prev) => ({
+                              ...prev,
+                              [-1]: `已发布定义 v${reply.data.definition.version}`
+                            }))
+                        })
+                        .catch(() => setError('发布不可用'))
+                    }}
+                  >
+                    发布为新定义版本
+                  </button>
+                  {contextPreview[-1] && (
+                    <p className="contract-settings-hint" role="status">
+                      {contextPreview[-1]}
+                    </p>
+                  )}
+                </fieldset>
+              )}
+            </>
           )}
           {catalog && (
             <>
-              <label className="settings-field">
-                决策模型
-                <AppSelect
-                  aria-label="决策模型"
-                  value={String(draft.modelDefinitionId ?? '')}
-                  onChange={(event) => update('modelDefinitionId', event.target.value)}
-                >
-                  <option value="">选择文本模型</option>
-                  {catalog.models.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.name}
-                    </option>
-                  ))}
-                </AppSelect>
-              </label>
+              {!(
+                type === 'agent' &&
+                draft.role === 'coordinator' &&
+                draft.executionMode === 'fixed-order'
+              ) && (
+                <label className="settings-field">
+                  决策模型
+                  <AppSelect
+                    aria-label="决策模型"
+                    value={String(draft.modelDefinitionId ?? '')}
+                    onChange={(event) => update('modelDefinitionId', event.target.value)}
+                  >
+                    <option value="">选择文本模型</option>
+                    {catalog.models.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.name}
+                      </option>
+                    ))}
+                  </AppSelect>
+                </label>
+              )}
               <fieldset className="agent-flow-targets">
                 <legend>选择 Skills</legend>
                 {catalog.skills.map((skill) => (

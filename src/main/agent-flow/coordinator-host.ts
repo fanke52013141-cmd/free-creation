@@ -17,9 +17,25 @@ import {
 } from '../../shared/agent-flow/desktop-tasks'
 import {
   CoordinationDecisionSchema,
+  type CoordinationDecision,
   type AgentPublication,
   type ModelIdentity
 } from '../../shared/agent-flow/coordination'
+import {
+  evaluateStageEntry,
+  StageDeliveryRecordSchema,
+  type ContextManifest,
+  type StageDeliveryFact,
+  type StageEntryFacts
+} from '../../shared/agent-flow/stage-contracts'
+import {
+  buildContextManifest,
+  contextManifestBlocking
+} from '../../shared/agent-flow/context-manifest'
+import {
+  composeExecutionEnvelope,
+  type ExecutionEnvelope
+} from '../../shared/agent-flow/execution-envelope'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import type { AgentModelPort } from './runtime'
 import type { FlowAgentDesktopHost } from './desktop-host'
@@ -69,7 +85,7 @@ export class FlowCoordinatorHost {
   private readonly reviews: CoordinatorReviews
   private readonly reports: FlowReviewStore
   constructor(
-    db: Database.Database,
+    private readonly db: Database.Database,
     private readonly open: (id: string) => ProjectFile | null,
     private readonly isActive: (id: string) => boolean,
     private readonly specialists: FlowAgentDesktopHost,
@@ -166,11 +182,13 @@ export class FlowCoordinatorHost {
     const file = this.file(input),
       root = shape(file, input.nodeId)
     const config = AgentNodeConfigSchema.parse(JSON.parse(root.props.config))
+    const fixedOrder = config.executionMode === 'fixed-order'
     if (
       root.props.nodeType !== 'agent' ||
       config.role !== 'coordinator' ||
       !root.props.text.trim() ||
-      !config.modelDefinitionId
+      // AF-01：固定顺序模式由规则推进，主控不需要决策模型；旧模式仍要求模型。
+      (!fixedOrder && !config.modelDefinitionId)
     )
       throw new AgentRuntimeError('FLOW_COORDINATOR_CONFIG_INVALID', 'admission')
     if (
@@ -205,13 +223,29 @@ export class FlowCoordinatorHost {
       if (child.props.nodeType !== 'agent' || cfg.role !== 'specialist' || id === input.nodeId)
         throw new AgentRuntimeError('FLOW_COORDINATOR_SCOPE_INVALID', 'scope')
       for (const target of cfg.allowedNodeIds) {
-        if (reservedControls.has(target)) throw new AgentRuntimeError('FLOW_CONTROL_OCCUPIED', 'scope')
+        if (reservedControls.has(target))
+          throw new AgentRuntimeError('FLOW_CONTROL_OCCUPIED', 'scope')
         controls.add(target)
       }
       controls.add(id)
       const task = this.specialists.inspect({ projectId: input.projectId, nodeId: id })
       if (task && !['completed', 'cancelled', 'failed'].includes(task.state))
         throw new AgentRuntimeError('AGENT_TASK_OCCUPIED', 'scope')
+    }
+    // AF-01：固定顺序模式要求每个专业子节点恰好被一个声明阶段承载；
+    // 要求人工采用的阶段必须由人机协作子节点承载（纯自主节点无法产生人工决定）。
+    if (fixedOrder) {
+      const stages = config.stages!
+      const stageByNode = new Map(stages.map((stage) => [stage.nodeId, stage]))
+      if (stages.length !== childIds.length || childIds.some((id) => !stageByNode.has(id)))
+        throw new AgentRuntimeError('FLOW_STAGE_SCOPE_INVALID', 'scope')
+      for (const id of childIds) {
+        const stage = stageByNode.get(id)!
+        if (!stage.requireHumanDecision) continue
+        const childConfig = AgentNodeConfigSchema.parse(JSON.parse(shape(file, id).props.config))
+        if (childConfig.interactionMode !== 'collaborative')
+          throw new AgentRuntimeError('FLOW_STAGE_HUMAN_MODE_REQUIRED', 'scope')
+      }
     }
     const states = config.relations.filter(
       (r) =>
@@ -260,7 +294,8 @@ export class FlowCoordinatorHost {
     return run
   }
   private reply(run: CoordinationRun): FlowAgentReply {
-    const versions = run.state === 'completed' ? this.assets.resolveInputs(run.projectId, run.outputs) : []
+    const versions =
+      run.state === 'completed' ? this.assets.resolveInputs(run.projectId, run.outputs) : []
     const outputs = agentReplyOutputProjection(
       run.outputs,
       versions.map((version) => version.value)
@@ -308,8 +343,13 @@ export class FlowCoordinatorHost {
       fixed.traceId = input.traceId
       fixed.spanId = input.spanId
       this.store.save(fixed, false)
-      const model = await this.model({ ...fixed, agentNodeId: fixed.nodeId }, controller.signal)
-      if (!model.coordinate) throw new AgentRuntimeError('AGENT_TOOL_UNSUPPORTED', 'coordination')
+      // AF-01：固定顺序模式不调用主控模型；旧模式保持原有模型协调语义。
+      const fixedOrder = fixed.config.executionMode === 'fixed-order'
+      const model = fixedOrder
+        ? null
+        : await this.model({ ...fixed, agentNodeId: fixed.nodeId }, controller.signal)
+      if (!fixedOrder && !model!.coordinate)
+        throw new AgentRuntimeError('AGENT_TOOL_UNSUPPORTED', 'coordination')
       const Graph = Annotation.Root({
         again: Annotation<boolean>({ reducer: (_, value) => value, default: () => true })
       })
@@ -347,7 +387,7 @@ export class FlowCoordinatorHost {
   private async step(
     run: CoordinationRun,
     input: FlowAgentRun,
-    model: AgentModelPort,
+    model: AgentModelPort | null,
     signal: AbortSignal
   ): Promise<boolean> {
     const stored = this.store.latest(run.projectId, run.nodeId)!
@@ -425,12 +465,15 @@ export class FlowCoordinatorHost {
         const identity = { projectId: run.projectId, nodeId: child.nodeId }
         let task = this.specialists.assignment(identity, run.taskId)
         if (!task || task.snapshot.taskId !== child.taskId) {
-          const candidate = this.specialists.describeAssignment({
-            ...input,
-            nodeId: child.nodeId,
-            action: 'start',
-            requestId: child.taskId
-          }, true)
+          const candidate = this.specialists.describeAssignment(
+            {
+              ...input,
+              nodeId: child.nodeId,
+              action: 'start',
+              requestId: child.taskId
+            },
+            true
+          )
           if (
             child.inputs.some(
               (ref) =>
@@ -469,6 +512,8 @@ export class FlowCoordinatorHost {
       if (waiting) return this.wait(run, 'human.wait')
       return true
     }
+    // AF-01：固定顺序模式——由声明阶段与进入条件确定性推进，不调用主控模型。
+    if (run.config.executionMode === 'fixed-order') return this.fixedOrderStep(run, input, signal)
     if (run.decisions + (run.controlSteps ?? 0) >= run.config.maxSteps)
       throw new AgentRuntimeError('AGENT_BUDGET_EXHAUSTED', 'coordination')
     const available = [] as Array<{ nodeId: string; goal: string; inputs: FlowAgentReply['refs'] }>
@@ -487,12 +532,15 @@ export class FlowCoordinatorHost {
     for (const id of run.childIds.filter((id) => !run.children.some((c) => c.nodeId === id))) {
       if (pendingGates.some((gates) => gates.has(id))) continue
       try {
-        const child = this.specialists.describeAssignment({
-          ...input,
-          nodeId: id,
-          action: 'start',
-          requestId: hash([run.taskId, id])
-        }, true)
+        const child = this.specialists.describeAssignment(
+          {
+            ...input,
+            nodeId: id,
+            action: 'start',
+            requestId: hash([run.taskId, id])
+          },
+          true
+        )
         candidates.set(id, child)
         available.push({ nodeId: id, goal: child.goal, inputs: child.directInputs })
       } catch (error) {
@@ -505,7 +553,7 @@ export class FlowCoordinatorHost {
     let timeout: ReturnType<typeof setTimeout> | undefined
     const decision = CoordinationDecisionSchema.parse(
       await Promise.race([
-        model.coordinate!(
+        model!.coordinate!(
           {
             goal: run.goal,
             mode: run.config.interactionMode,
@@ -559,23 +607,49 @@ export class FlowCoordinatorHost {
       this.assets.resolveInputs(run.projectId, decision.outputs)
       run.outputs = decision.outputs
       run.decisionPending = false
-      this.store.event(run, `${run.taskId}:completed`, 'flow.completed', run.revision)
+      this.store.event(
+        run,
+        `${run.taskId}:completed${run.reworkRound ? `:${run.reworkRound}` : ''}`,
+        'flow.completed',
+        run.revision
+      )
       run.state = 'completed'
       this.store.save(run)
       return false
     }
+    return this.dispatchDecision(run, decision, candidates, signal)
+  }
+
+  /**
+   * 分派执行（模型决策与固定顺序共用）：先持久化任务身份与固定输入，再产生副作用。
+   * 候选快照来自准入 describeAssignment；inputs 逐字校验由 admitAssignments 保证。
+   */
+  private async dispatchDecision(
+    run: CoordinationRun,
+    decision: Extract<CoordinationDecision, { kind: 'dispatch' } | { kind: 'dispatch-many' }>,
+    candidates: Map<string, AgentTaskSnapshot>,
+    signal: AbortSignal,
+    contextManifests?: Map<string, ContextManifest>,
+    envelopes?: Map<string, ExecutionEnvelope>
+  ): Promise<boolean> {
     const file = this.check(run)
     const assignments = admitAssignments(run, decision, candidates)
     const waves = assignmentWaves(assignments, candidates, file)
     const firstWaveIds = new Set(waves[0]?.map((assignment) => assignment.nodeId) ?? [])
     const children = assignments.map((assignment) => ({
       nodeId: assignment.nodeId,
-      taskId: hash([run.taskId, assignment.nodeId]),
+      taskId: hash([run.taskId, assignment.nodeId, ...(run.reworkRound ? [run.reworkRound] : [])]),
       goal: assignment.goal,
       completion: assignment.completion,
       inputs: assignment.inputs,
       state: firstWaveIds.has(assignment.nodeId) ? 'ready' : 'queued',
-      outputs: [] as FlowAgentReply['refs']
+      outputs: [] as FlowAgentReply['refs'],
+      ...(contextManifests?.get(assignment.nodeId)
+        ? { contextManifest: contextManifests.get(assignment.nodeId) }
+        : {}),
+      ...(envelopes?.get(assignment.nodeId)
+        ? { executionEnvelope: envelopes.get(assignment.nodeId) }
+        : {})
     }))
     run.children.push(...children)
     run.controlSteps = (run.controlSteps ?? 0) + children.length - 1
@@ -611,6 +685,373 @@ export class FlowCoordinatorHost {
       return false
     if (waiting) return this.wait(run, 'human.wait')
     return true
+  }
+
+  /**
+   * AF-01 固定顺序推进：按声明顺序取第一个未分派阶段，校验进入条件后分派；
+   * 全部阶段交付后以最后阶段的正式产物完成。缺字段/缺人工决定不能越过该阶段。
+   */
+  private async fixedOrderStep(
+    run: CoordinationRun,
+    input: FlowAgentRun,
+    signal: AbortSignal
+  ): Promise<boolean> {
+    const stages = run.config.stages!
+    const facts = this.stageFacts(run)
+    // AF-05：同步阶段交付验收记录（已完成阶段的正式产物绑定）。
+    this.recordStageDeliveries(run)
+    this.store.save(run)
+    // 要求人工采用的阶段：子任务即使技术完成，没有显式人工决定也不能交付/推进。
+    const undecided = stages.filter((stage) => {
+      if (!stage.requireHumanDecision) return false
+      const fact = facts.deliveries.find((delivery) => delivery.stageKey === stage.stageKey)
+      return fact && !fact.humanDecided
+    })
+    if (undecided.length) {
+      emitGatewayEvent(
+        'agent.coordination.stage_human_decision_missing',
+        '阶段等待显式人工采用',
+        {
+          projectId: run.projectId,
+          nodeId: run.nodeId,
+          taskId: run.taskId,
+          traceId: run.traceId,
+          spanId: run.spanId
+        },
+        {
+          status: 'skipped',
+          attributes: {
+            stageKey: undecided[0]!.stageKey,
+            missingCount: undecided.length
+          }
+        }
+      )
+      return this.wait(run, 'human.wait')
+    }
+    const dispatched = new Set(run.children.map((child) => child.nodeId))
+    const next = stages.find((stage) => !dispatched.has(stage.nodeId))
+    if (!next) {
+      // 所有阶段已分派：此处只剩全部完成的收尾（未完成子任务已在 step 前段处理/抛错）。
+      const last = stages[stages.length - 1]!
+      const finalChild = run.children.find((child) => child.nodeId === last.nodeId)!
+      if (
+        run.children.length !== run.childIds.length ||
+        run.children.some((child) => child.state !== 'completed') ||
+        run.reviews?.some((review) => review.state !== 'passed') ||
+        (run.stageDeliveries ?? []).some((record) => record.stale) ||
+        !finalChild.outputs.length
+      )
+        throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'stage-delivery')
+      this.assets.resolveInputs(run.projectId, finalChild.outputs)
+      run.outputs = finalChild.outputs
+      this.store.event(
+        run,
+        `${run.taskId}:completed${run.reworkRound ? `:${run.reworkRound}` : ''}`,
+        'flow.completed',
+        run.revision
+      )
+      run.state = 'completed'
+      this.store.save(run)
+      return false
+    }
+    if (run.decisions + (run.controlSteps ?? 0) >= run.config.maxSteps)
+      throw new AgentRuntimeError('AGENT_BUDGET_EXHAUSTED', 'coordination')
+    const entry = evaluateStageEntry(next, facts)
+    if (!entry.ok) {
+      const humanPending = entry.reasons.every(
+        (reason) =>
+          reason.code === 'STAGE_ENTRY_HUMAN_DECISION_MISSING' ||
+          reason.code === 'STAGE_ENTRY_REVIEW_NOT_PASSED'
+      )
+      emitGatewayEvent(
+        'agent.coordination.stage_entry_blocked',
+        '阶段进入条件未满足',
+        {
+          projectId: run.projectId,
+          nodeId: run.nodeId,
+          taskId: run.taskId,
+          traceId: run.traceId,
+          spanId: run.spanId
+        },
+        {
+          status: humanPending ? 'skipped' : 'failed',
+          attributes: {
+            stageKey: next.stageKey,
+            code: entry.reasons[0]!.code,
+            missingCount: entry.reasons.length
+          }
+        }
+      )
+      if (humanPending) return this.wait(run, 'human.wait')
+      throw new AgentRuntimeError('FLOW_STAGE_ENTRY_UNMET', 'stage-entry')
+    }
+    // AF-02：声明式输入编制——只取规定内容；必需缺项/超预算阻断，不静默截断。
+    let contextManifest: ContextManifest | undefined
+    if (next.inputs) {
+      contextManifest = buildContextManifest(next.stageKey, next.inputs, facts.deliveries)
+      const diag = {
+        projectId: run.projectId,
+        nodeId: run.nodeId,
+        taskId: run.taskId,
+        traceId: run.traceId,
+        spanId: run.spanId
+      }
+      if (contextManifestBlocking(contextManifest)) {
+        emitGatewayEvent('agent.coordination.stage_context_blocked', '阶段输入编制未通过', diag, {
+          status: 'failed',
+          attributes: {
+            stageKey: next.stageKey,
+            code: contextManifest.budget.exceeded
+              ? 'CONTEXT_OVER_BUDGET'
+              : 'CONTEXT_REQUIRED_MISSING',
+            missingCount: contextManifest.missing.filter((item) => item.required).length
+          }
+        })
+        throw new AgentRuntimeError(
+          contextManifest.budget.exceeded
+            ? 'FLOW_CONTEXT_OVER_BUDGET'
+            : 'FLOW_CONTEXT_REQUIRED_MISSING',
+          'stage-context'
+        )
+      }
+      emitGatewayEvent('agent.coordination.stage_context_compiled', '阶段输入编制完成', diag, {
+        attributes: {
+          stageKey: next.stageKey,
+          entryCount: contextManifest.entries.length,
+          usedBytes: contextManifest.budget.usedBytes
+        }
+      })
+    }
+    const candidate = this.specialists.describeAssignment(
+      {
+        ...input,
+        nodeId: next.nodeId,
+        action: 'start',
+        requestId: hash([run.taskId, next.nodeId, ...(run.reworkRound ? [run.reworkRound] : [])])
+      },
+      true
+    )
+    const candidates = new Map<string, AgentTaskSnapshot>([[next.nodeId, candidate]])
+    run.decisions++
+    this.store.save(run)
+    emitGatewayEvent(
+      'agent.coordination.stage_dispatched',
+      '按声明顺序分派阶段',
+      {
+        projectId: run.projectId,
+        nodeId: run.nodeId,
+        taskId: run.taskId,
+        traceId: run.traceId,
+        spanId: run.spanId
+      },
+      {
+        attributes: {
+          stageKey: next.stageKey,
+          carrierNodeId: next.nodeId,
+          inputCount: candidate.directInputs.length
+        }
+      }
+    )
+    // 阶段目标/完成条件逐字来自声明配置；固定输入来自准入候选，不由模型补写。
+    // AF-03：执行信封（阶段目标/固定方法/输出要求）随子任务下发，公共内容执行器消费。
+    const envelope = composeExecutionEnvelope({
+      stageGoal: next.goal,
+      methodInstructions: next.method?.instructions,
+      outputRequirements: next.completion
+    })
+    return this.dispatchDecision(
+      run,
+      {
+        kind: 'dispatch',
+        nodeId: next.nodeId,
+        goal: next.goal,
+        completion: next.completion,
+        inputs: candidate.directInputs
+      },
+      candidates,
+      signal,
+      contextManifest ? new Map([[next.nodeId, contextManifest]]) : undefined,
+      envelope ? new Map([[next.nodeId, envelope]]) : undefined
+    )
+  }
+
+  /** 由权威资产与续接记录构造阶段交付事实（不接受调用方正文）。 */
+  private stageFacts(run: CoordinationRun): StageEntryFacts {
+    const stageByNode = new Map(run.config.stages!.map((stage) => [stage.nodeId, stage]))
+    const deliveries: StageDeliveryFact[] = []
+    for (const child of run.children) {
+      const stage = stageByNode.get(child.nodeId)
+      if (!stage || child.state !== 'completed') continue
+      const versions = this.assets.resolveInputs(run.projectId, child.outputs)
+      deliveries.push({
+        stageKey: stage.stageKey,
+        nodeId: child.nodeId,
+        outputs: versions.map((version) => version.value),
+        humanDecided: this.specialists.humanDecision(
+          { projectId: run.projectId, nodeId: child.nodeId },
+          run.taskId,
+          child.taskId
+        )
+      })
+    }
+    return {
+      deliveries,
+      reviews: (run.reviews ?? []).map((review) => ({ nodeId: review.nodeId, state: review.state }))
+    }
+  }
+
+  /**
+   * AF-02：预览阶段输入编制（只读）。返回当前已交付事实下该阶段会采用的清单摘要；
+   * includeBody=false 时不含正文（默认），正文显式读取才返回。无运行/无阶段声明返回 null。
+   */
+  previewStageContext(
+    input: Identity,
+    stageKey: string,
+    includeBody = false
+  ): {
+    stageKey: string
+    manifestHash: string
+    entries: Array<{
+      sourceStageKey: string
+      path: string
+      kind: string
+      bytes: number
+      required: boolean
+      purpose?: string
+      value?: unknown
+    }>
+    missing: ContextManifest['missing']
+    dropped: ContextManifest['dropped']
+    budget: ContextManifest['budget']
+    blocking: boolean
+  } | null {
+    const run = this.store.latest(input.projectId, input.nodeId)
+    if (!run || !run.config.stages) return null
+    const stage = run.config.stages.find((item) => item.stageKey === stageKey)
+    if (!stage || !stage.inputs) return null
+    const manifest = buildContextManifest(stageKey, stage.inputs, this.stageFacts(run).deliveries)
+    return {
+      stageKey,
+      manifestHash: manifest.manifestHash,
+      entries: manifest.entries.map((entry) => ({
+        sourceStageKey: entry.sourceStageKey,
+        path: entry.path,
+        kind: entry.kind,
+        bytes: entry.bytes,
+        required: entry.required,
+        ...(entry.purpose ? { purpose: entry.purpose } : {}),
+        ...(includeBody ? { value: entry.value } : {})
+      })),
+      missing: manifest.missing,
+      dropped: manifest.dropped,
+      budget: manifest.budget,
+      blocking: contextManifestBlocking(manifest)
+    }
+  }
+
+  /** AF-05：为已完成阶段同步交付验收记录（引用既有不可变资产，不复制全文）。 */
+  private recordStageDeliveries(run: CoordinationRun): void {
+    const stageByNode = new Map(run.config.stages!.map((stage) => [stage.nodeId, stage]))
+    const records = run.stageDeliveries ?? []
+    const reviewsPassed = !(run.reviews ?? []).some((review) => review.state !== 'passed')
+    for (const child of run.children) {
+      const stage = stageByNode.get(child.nodeId)
+      if (!stage || child.state !== 'completed' || !child.outputs.length) continue
+      if (records.some((record) => record.taskId === child.taskId && !record.stale)) continue
+      records.push(
+        StageDeliveryRecordSchema.parse({
+          schemaVersion: 1,
+          stageKey: stage.stageKey,
+          nodeId: child.nodeId,
+          taskId: child.taskId,
+          outputRefs: child.outputs,
+          ...(child.contextManifest
+            ? { contextManifestHash: child.contextManifest.manifestHash }
+            : {}),
+          ...(child.executionEnvelope
+            ? { envelopeHash: `sha256:${hash(child.executionEnvelope)}` }
+            : {}),
+          humanDecided: this.specialists.humanDecision(
+            { projectId: run.projectId, nodeId: child.nodeId },
+            run.taskId,
+            child.taskId
+          ),
+          reviewPassed: reviewsPassed,
+          definitionRevision: `sha256:${run.scopeRevision}`,
+          acceptedAt: Date.now(),
+          stale: false
+        })
+      )
+    }
+    run.stageDeliveries = records
+  }
+
+  /**
+   * AF-05：局部返工——从指定阶段起重跑，仅影响该阶段及其下游；上游已完成阶段不重跑。
+   * 旧交付移入 reworkHistory（不改写），下游交付标 stale；子任务身份用新轮次派生。
+   * 有界：返工轮次上限 10；unknown/pending 命令未结算时拒绝（不盲目重发）。
+   */
+  reworkStage(input: Identity, stageKey: string): FlowAgentView {
+    const run = this.store.latest(input.projectId, input.nodeId)
+    if (!run || !run.config.stages || run.config.executionMode !== 'fixed-order')
+      throw new AgentRuntimeError('FLOW_STAGE_REWORK_UNSUPPORTED', 'rework')
+    if (this.active.has(run.taskId)) throw new AgentRuntimeError('AGENT_TASK_BUSY', 'rework')
+    if (!['completed', 'waiting', 'blocked'].includes(run.state))
+      throw new AgentRuntimeError('FLOW_STAGE_REWORK_BUSY', 'rework')
+    const stages = run.config.stages
+    const index = stages.findIndex((stage) => stage.stageKey === stageKey)
+    if (index < 0) throw new AgentRuntimeError('FLOW_STAGE_MISSING', 'rework')
+    if ((run.reworkRound ?? 0) >= 10)
+      throw new AgentRuntimeError('FLOW_REWORK_BUDGET_EXHAUSTED', 'rework')
+    // 未结算命令（pending/unknown）存在时拒绝返工，避免重发在途副作用。
+    const unresolved = this.db
+      .prepare(
+        "SELECT 1 FROM flow_commands WHERE project_id=? AND task_id=? AND state IN ('pending','unknown') LIMIT 1"
+      )
+      .get(run.projectId, run.taskId)
+    if (unresolved) throw new AgentRuntimeError('FLOW_COMMAND_OUTCOME_UNKNOWN', 'rework')
+    this.check(run)
+    const affected = new Set(stages.slice(index).map((stage) => stage.nodeId))
+    const history = run.reworkHistory ?? []
+    const kept: CoordinationRun['stageDeliveries'] = []
+    for (const record of run.stageDeliveries ?? []) {
+      if (affected.has(record.nodeId)) history.push({ ...record, stale: true })
+      else kept.push(record)
+    }
+    // 移除受影响阶段的子任务（上游保留）；旧 specialist 任务作为历史保留在任务表。
+    run.children = run.children.filter((child) => !affected.has(child.nodeId))
+    run.stageDeliveries = kept
+    run.reworkHistory = history
+    run.reworkRound = (run.reworkRound ?? 0) + 1
+    run.outputs = []
+    run.code = undefined
+    run.decisionPending = false
+    this.store.event(run, `${run.taskId}:rework:${run.reworkRound}`, 'flow.rework', run.revision)
+    // 返工后停在等待态，由显式 continue 恢复固定顺序推进（不自动重发）。
+    run.state = 'waiting'
+    run.waitRevision++
+    // 完成时曾 release 控制范围；返工重新占用，保证续跑时范围归属一致。
+    this.store.reoccupy(run, run.scopeIds)
+    this.store.save(run)
+    emitGatewayEvent(
+      'agent.coordination.stage_rework',
+      '阶段局部返工',
+      {
+        projectId: run.projectId,
+        nodeId: run.nodeId,
+        taskId: run.taskId,
+        traceId: run.traceId,
+        spanId: run.spanId
+      },
+      {
+        attributes: {
+          stageKey,
+          round: run.reworkRound,
+          affectedCount: affected.size
+        }
+      }
+    )
+    return this.view(run)
   }
 
   private async executeAssignmentWave(
@@ -872,7 +1313,13 @@ export class FlowCoordinatorHost {
       if (controller.signal.aborted) throw new AgentRuntimeError('AGENT_CANCELLED', 'recovery')
       run.recovery = { reasons: [...new Set(reasons)], canRestore }
       if (!reasons.length) {
-        if (this.store.hasEvent(run, `${run.taskId}:completed`, 'flow.completed')) {
+        if (
+          this.store.hasEvent(
+            run,
+            `${run.taskId}:completed${run.reworkRound ? `:${run.reworkRound}` : ''}`,
+            'flow.completed'
+          )
+        ) {
           const allowed = new Set(
             run.children.flatMap((child) => child.outputs).map(canonicalFlowJson)
           )

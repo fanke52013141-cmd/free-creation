@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { identifier, nodeId, project } from './common'
+import { FlowDefinitionSchema } from '../../agent-flow/flow-definition'
 
 /**
  * 内部 Agent Flow 的**观察**操作（F8，flowAgents 族）。
@@ -160,12 +161,65 @@ const reviewDecisionDto = z
   })
   .strict()
 
+/** AF-06：流程定义版本 DTO（不可变定义快照，与运行分离）。 */
+const flowDefinitionDto = FlowDefinitionSchema
+
 export const FLOW_AGENTS_OPERATIONS = {
   'flowAgent.inspect': {
     effect: 'read',
     description:
       '读取已保存 Agent Flow 任务的观察视图（状态/等待/决策与工具计数/审核反馈）；只读账本事实，不判定会话存活、不触发会话恢复、不改写任务状态',
     input: project.extend({ nodeId }).strict()
+  },
+  // AF-02：阶段输入编制预览（只读）。默认返回摘要与大小，正文需 includeBody 显式读取；
+  // 与 GUI 阶段详情同一宿主方法，不另写编制器。
+  'flowStage.context.preview': {
+    effect: 'read',
+    description:
+      '预览固定顺序主控某阶段的输入编制清单（当前已交付事实下会采用的字段/片段、缺项、预算）；只读，默认不含正文，includeBody=true 才返回内容；无运行或无阶段输入声明返回 null',
+    input: project
+      .extend({ nodeId, stageKey: flowId, includeBody: z.boolean().optional() })
+      .strict()
+  },
+  // AF-05：局部返工（写）。从指定阶段起重跑，仅影响该阶段及下游；上游不重跑；
+  // 旧交付保留为历史，下游标过期；有界轮次；在途命令未结算时拒绝。与 GUI 同一宿主方法。
+  'flowStage.rework': {
+    effect: 'write',
+    description:
+      '对固定顺序主控从指定阶段局部返工：移除该阶段及下游子任务并以新轮次重跑，上游已完成阶段不重跑；旧交付移入历史、下游标过期；返工轮次上限 10，在途 pending/unknown 命令未结算时拒绝；非固定顺序/非主控如实拒绝',
+    input: project.extend({ nodeId, stageKey: flowId }).strict()
+  },
+  // AF-06：流程定义版本（与运行分离）。定义为固定顺序主控的可复用快照，不可变。
+  'flowDefinition.publish': {
+    effect: 'write',
+    description:
+      '从固定顺序主控的已保存配置发布一个不可变流程定义版本（阶段/方法/输入/进入条件快照，版本递增）；只存定义内容，不存运行正文/产物；非固定顺序如实拒绝',
+    input: project
+      .extend({ definitionId: flowId, name: z.string().min(1).max(120), coordinatorNodeId: nodeId })
+      .strict()
+  },
+  'flowDefinition.list': {
+    effect: 'read',
+    description: '列出项目各流程定义的最新版本（只读定义快照，不含运行产物）',
+    input: project
+  },
+  'flowDefinition.get': {
+    effect: 'read',
+    description: '读取某流程定义指定版本（缺省最新）；不存在返回 null',
+    input: project
+      .extend({ definitionId: flowId, version: z.number().int().positive().optional() })
+      .strict()
+  },
+  'flowDefinition.diff': {
+    effect: 'read',
+    description: '差异预览：比较同一流程定义两个版本的名称/目标/阶段增删改及变更字段（只读）',
+    input: project
+      .extend({
+        definitionId: flowId,
+        versionA: z.number().int().positive(),
+        versionB: z.number().int().positive()
+      })
+      .strict()
   },
   'flowAgent.catalog': {
     effect: 'read',
@@ -317,6 +371,83 @@ export const FLOW_AGENTS_OUTPUTS = {
       task: flowTaskView.nullable()
     })
     .strict(),
+  'flowStage.context.preview': z
+    .object({
+      projectId: identifier,
+      nodeId,
+      preview: z
+        .object({
+          stageKey: flowId,
+          manifestHash: z.string().max(80),
+          entries: z
+            .array(
+              z
+                .object({
+                  sourceStageKey: flowId,
+                  path: z.string().max(256),
+                  kind: z.string().max(20),
+                  bytes: z.number().int().nonnegative(),
+                  required: z.boolean(),
+                  purpose: z.string().max(256).optional(),
+                  value: z.unknown().optional()
+                })
+                .strict()
+            )
+            .max(128),
+          missing: z.array(z.record(z.string(), z.unknown())).max(128),
+          dropped: z.array(z.record(z.string(), z.unknown())).max(128),
+          budget: z
+            .object({
+              limitBytes: z.number().int().positive(),
+              usedBytes: z.number().int().nonnegative(),
+              exceeded: z.boolean()
+            })
+            .strict(),
+          blocking: z.boolean()
+        })
+        .strict()
+        .nullable()
+    })
+    .strict(),
+  'flowStage.rework': z
+    .object({
+      projectId: identifier,
+      nodeId,
+      task: flowTaskView.nullable()
+    })
+    .strict(),
+  'flowDefinition.publish': z
+    .object({ projectId: identifier, definition: flowDefinitionDto })
+    .strict(),
+  'flowDefinition.list': z
+    .object({ projectId: identifier, definitions: z.array(flowDefinitionDto).max(256) })
+    .strict(),
+  'flowDefinition.get': z
+    .object({ projectId: identifier, definition: flowDefinitionDto.nullable() })
+    .strict(),
+  'flowDefinition.diff': z
+    .object({
+      projectId: identifier,
+      definitionId: flowId,
+      diff: z
+        .object({
+          nameChanged: z.boolean(),
+          goalChanged: z.boolean(),
+          stages: z
+            .array(
+              z
+                .object({
+                  stageKey: flowId,
+                  change: z.enum(['added', 'removed', 'changed']),
+                  fields: z.array(z.string().max(40)).max(16).optional()
+                })
+                .strict()
+            )
+            .max(64)
+        })
+        .strict()
+    })
+    .strict(),
   'flowAgent.catalog': z
     .object({
       projectId: identifier,
@@ -379,7 +510,9 @@ export const FLOW_AGENTS_OUTPUTS = {
         )
         .max(100),
       inputs: z.array(flowAssetRef).max(256),
-      candidates: z.array(flowAssetRef).max(128)
+      candidates: z.array(flowAssetRef).max(128),
+      /** AF-04：当前工作稿正文（最近一次已提交候选成果）；无候选时缺省。加性可选字段。 */
+      workingDraft: z.string().max(1048576).optional()
     })
     .strict(),
   'flowAgent.cooperate': z
@@ -417,12 +550,8 @@ export const FLOW_AGENTS_OUTPUTS = {
       outputs: z.record(z.string(), z.json())
     })
     .strict(),
-  'flowAgent.pause': z
-    .object({ projectId: identifier, nodeId, task: flowTaskView })
-    .strict(),
-  'flowAgent.stop': z
-    .object({ projectId: identifier, nodeId, task: flowTaskView })
-    .strict(),
+  'flowAgent.pause': z.object({ projectId: identifier, nodeId, task: flowTaskView }).strict(),
+  'flowAgent.stop': z.object({ projectId: identifier, nodeId, task: flowTaskView }).strict(),
   'flowAgent.build.inspect': z
     .object({
       projectId: identifier,
@@ -477,7 +606,11 @@ export const FLOW_AGENTS_OUTPUTS = {
       revision: z.number().int().min(1),
       legalEvents: z.array(z.string().max(120)).max(256),
       pending: z
-        .object({ eventId: flowId, event: z.string().max(120), expectedRevision: z.number().int().min(1) })
+        .object({
+          eventId: flowId,
+          event: z.string().max(120),
+          expectedRevision: z.number().int().min(1)
+        })
         .strict()
         .nullable()
     })

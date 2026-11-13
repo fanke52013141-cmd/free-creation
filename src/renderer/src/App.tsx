@@ -86,7 +86,15 @@ async function handleHeadlessCompositeExecute(request: DesktopRequest): Promise<
       headless: true,
       // W4 受控重试：公开输入值/重试链随运行创建原子落盘。
       inputValues: request.compositeInputValues,
-      retryOf: request.compositeRetryOf
+      retryOf: request.compositeRetryOf,
+      // AF-07：人工等待续跑——复用 runId、消费已满足提交、跳过已完成步骤。
+      resumeRunId: request.compositeResumeRunId,
+      humanSubmissions: request.compositeHumanSubmissions as
+        | Record<string, { kind: 'text'; text: string } | { kind: 'json'; data: unknown }>
+        | undefined,
+      completedSteps: request.compositeCompletedSteps,
+      stepOutputs: request.compositeStepOutputs as
+        Record<string, { nodeResult: string | null; nodeRun: unknown }> | undefined
     }).catch(() => {
       // 失败已由 runCompositeIsolated 写入台账；此处仅兜底未捕获异常。
     })

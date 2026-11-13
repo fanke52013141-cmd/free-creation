@@ -15,6 +15,7 @@ import {
 import { readStoredNodeRunStatus } from '../../shared/engine/run-status'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import { agentReplyOutputProjection } from '../../shared/agent-flow/agent-outputs'
+import { flowDeclaredOutputPort } from '../../shared/agent-flow/video-adapter'
 import {
   AssetSubmitSchema,
   FlowAssetError,
@@ -124,35 +125,55 @@ export class FlowAssetStore {
         const runStatus = readStoredNodeRunStatus(record.meta?.nodeRun)
         if (
           !pinned &&
-          ['processor', 'ai-process', 'human-task', 'agent', 'video', 'image-gen', 'image-edit', 'speech', 'tts', 'timeline'].includes(
-            record.props.nodeType
-          ) &&
+          [
+            'processor',
+            'ai-process',
+            'human-task',
+            'agent',
+            'video',
+            'image-gen',
+            'image-edit',
+            'speech',
+            'tts',
+            'timeline'
+          ].includes(record.props.nodeType) &&
           runStatus &&
           runStatus !== 'success'
+        )
+          fail('ASSET_OUTPUT_UNAVAILABLE')
+        // AF-01：ai-process/human-task 的正式交付端口由保存配置派生（与适配器同源），
+        // 不再硬编码 out-text；其余节点保持静态声明端口。
+        const configDerivedPort =
+          record.props.nodeType === 'ai-process' || record.props.nodeType === 'human-task'
+            ? flowDeclaredOutputPort(record.props.nodeType, record.props.config)
+            : null
+        if (
+          (record.props.nodeType === 'ai-process' || record.props.nodeType === 'human-task') &&
+          !configDerivedPort
         )
           fail('ASSET_OUTPUT_UNAVAILABLE')
         const declaredPort =
           record.props.nodeType === 'text'
             ? 'out-text'
-            : record.props.nodeType === 'ai-process'
-              ? 'out-text'
-              : record.props.nodeType === 'human-task'
-                ? 'out-text'
-                : record.props.nodeType === 'json'
+            : record.props.nodeType === 'ai-process' || record.props.nodeType === 'human-task'
+              ? configDerivedPort!
+              : record.props.nodeType === 'json'
                 ? 'out-json'
                 : record.props.nodeType === 'audio'
                   ? 'out-audio'
                   : ['image-gen', 'image-edit'].includes(record.props.nodeType)
-                  ? 'out-image'
-                  : record.props.nodeType === 'speech'
-                    ? 'out-audio'
-                    : record.props.nodeType === 'tts'
-                      ? 'out-json'
-                      : ['video', 'video-asset', 'timeline', 'image'].includes(record.props.nodeType)
-                        ? record.props.nodeType === 'image'
-                          ? 'out-image'
-                          : 'out-video'
-                        : 'out-value'
+                    ? 'out-image'
+                    : record.props.nodeType === 'speech'
+                      ? 'out-audio'
+                      : record.props.nodeType === 'tts'
+                        ? 'out-json'
+                        : ['video', 'video-asset', 'timeline', 'image'].includes(
+                              record.props.nodeType
+                            )
+                          ? record.props.nodeType === 'image'
+                            ? 'out-image'
+                            : 'out-video'
+                          : 'out-value'
         if (record.props.nodeType === 'agent') {
           if (!['out-text', 'out-json'].includes(input.portId)) fail('ASSET_PORT_INVALID')
           if (runStatus !== 'success') fail('ASSET_OUTPUT_UNAVAILABLE')
@@ -339,8 +360,7 @@ export class FlowAssetStore {
             'SELECT signature, version_id FROM flow_asset_submissions WHERE project_id = ? AND submission_id = ?'
           )
           .get(input.projectId, input.submissionId) as
-          | { signature: string; version_id: string }
-          | undefined
+          { signature: string; version_id: string } | undefined
         if (previous) {
           if (previous.signature !== signature) fail('ASSET_SUBMISSION_CONFLICT')
           return this.read(input.projectId, previous.version_id)
@@ -355,8 +375,7 @@ export class FlowAssetStore {
             'SELECT asset_id, ordinal FROM flow_asset_versions WHERE project_id = ? AND node_id = ? AND port_id = ? ORDER BY ordinal DESC LIMIT 1'
           )
           .get(input.projectId, input.agentNodeId, portId) as
-          | { asset_id: string; ordinal: number }
-          | undefined
+          { asset_id: string; ordinal: number } | undefined
         const versionId = randomUUID()
         this.db
           .prepare('INSERT INTO flow_asset_versions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')

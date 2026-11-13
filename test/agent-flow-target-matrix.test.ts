@@ -87,7 +87,11 @@ const UNSUPPORTED_TYPES = [
   'timeline'
 ]
 
-function node(type: string, contractVersion: number, config: Record<string, unknown> = {}): CanvasNode {
+function node(
+  type: string,
+  contractVersion: number,
+  config: Record<string, unknown> = {}
+): CanvasNode {
   return {
     id: `shape:${type}`,
     type: type as CanvasNode['type'],
@@ -118,9 +122,14 @@ describe('REL-03 Agent 支持目标矩阵', () => {
         node(entry.type, entry.contractVersion, 'config' in entry ? entry.config : {})
       )
       const requiredInputs =
-        entry.type === 'speech' ? entry.inputs.filter((portId) => portId !== 'in-audio') : entry.inputs
+        entry.type === 'speech'
+          ? entry.inputs.filter((portId) => portId !== 'in-audio')
+          : entry.inputs
       for (const portId of requiredInputs) {
-        expect(ports.some((port) => port.id === portId && port.dir === 'in'), `${entry.type} 缺少端口 ${portId}`).toBe(true)
+        expect(
+          ports.some((port) => port.id === portId && port.dir === 'in'),
+          `${entry.type} 缺少端口 ${portId}`
+        ).toBe(true)
       }
       expect(ports.some((port) => port.id === entry.output && port.dir === 'out')).toBe(true)
     }
@@ -154,27 +163,44 @@ describe('REL-03 Agent 支持目标矩阵', () => {
     expect(flowTargetContract(node('code', 3, single))?.inputs).toEqual(['in-param-input'])
     const fields = { ...single, outputMode: 'fields', outputs: [{ name: 'a', type: 'string' }] }
     expect(flowTargetContract(node('code', 3, fields))).toBeNull()
-    const multiParams = { ...single, params: [{ name: 'a', type: 'string' }, { name: 'b', type: 'string' }] }
+    const multiParams = {
+      ...single,
+      params: [
+        { name: 'a', type: 'string' },
+        { name: 'b', type: 'string' }
+      ]
+    }
     expect(flowTargetContract(node('code', 3, multiParams))).toBeNull()
-    const image = { kind: 'image', mediaId: 'm1', mediaPath: 'p', mime: 'image/png', contentSha256: 'a'.repeat(64) }
+    const image = {
+      kind: 'image',
+      mediaId: 'm1',
+      mediaPath: 'p',
+      mime: 'image/png',
+      contentSha256: 'a'.repeat(64)
+    }
     expect(
       codeFlowInputsValid(single, [
         { targetPortId: 'in-param-input', values: [{ kind: 'text', text: 'hello' }] }
       ])
     ).toBe(true)
     expect(
-      codeFlowInputsValid(single, [
-        { targetPortId: 'in-param-input', values: [image as never] }
-      ])
+      codeFlowInputsValid(single, [{ targetPortId: 'in-param-input', values: [image as never] }])
     ).toBe(false)
-    expect(localImageFlowInputsValid([{ targetPortId: 'in-image', values: [image as never] }])).toBe(true)
+    expect(
+      localImageFlowInputsValid([{ targetPortId: 'in-image', values: [image as never] }])
+    ).toBe(true)
     expect(
       localImageFlowInputsValid([
         { targetPortId: 'in-image', values: [{ kind: 'text', text: 'x' } as never] }
       ])
     ).toBe(false)
     expect(
-      cropFlowConfigValid({ version: 1, mode: 'rect', aspectRatio: 'free', rect: { x: 0, y: 0, width: 0.5, height: 0.5 } })
+      cropFlowConfigValid({
+        version: 1,
+        mode: 'rect',
+        aspectRatio: 'free',
+        rect: { x: 0, y: 0, width: 0.5, height: 0.5 }
+      })
     ).toBe(true)
     // parse 归一化把未知枚举/越界值收敛为安全默认（与主进程 IPC 完全一致），
     // 因此“无效配置”不存在——准入闸门拒绝的是非对象/坏 JSON。
@@ -191,7 +217,9 @@ describe('REL-03 Agent 支持目标矩阵', () => {
   })
 
   it('speech 目标的输入端口随保存的后端收敛', () => {
-    const minimax = flowTargetPorts(node('speech', 4, { backend: 'minimax' })).map((port) => port.id)
+    const minimax = flowTargetPorts(node('speech', 4, { backend: 'minimax' })).map(
+      (port) => port.id
+    )
     expect(minimax).toContain('in-voice')
     expect(minimax).not.toContain('in-audio')
 
@@ -200,17 +228,23 @@ describe('REL-03 Agent 支持目标矩阵', () => {
     expect(volc).not.toContain('in-voice')
   })
 
-  it('C1：ai-process 仅 text 输出模式可调度（markdown/json 输出端口漂移，显式拒绝）', () => {
-    expect(flowTargetContract(node('ai-process', 1, { mode: 'text' }))).not.toBeNull()
-    expect(flowTargetContract(node('ai-process', 1, {}))).not.toBeNull()
-    expect(flowTargetContract(node('ai-process', 1, { mode: 'markdown' }))).toBeNull()
-    expect(flowTargetContract(node('ai-process', 1, { mode: 'json' }))).toBeNull()
+  it('AF-01：ai-process text/markdown/json 均可调度，输出端口由配置 mode 稳定派生', () => {
+    expect(flowTargetContract(node('ai-process', 1, { mode: 'text' }))?.output).toBe('out-text')
+    expect(flowTargetContract(node('ai-process', 1, {}))?.output).toBe('out-text')
+    expect(flowTargetContract(node('ai-process', 1, { mode: 'markdown' }))?.output).toBe(
+      'out-markdown'
+    )
+    expect(flowTargetContract(node('ai-process', 1, { mode: 'json' }))?.output).toBe('out-json')
   })
 
-  it('C4：human-task 仅 text 输出模式可调度（json 输出端口漂移，显式拒绝；配置与执行器同一 strict 解析）', () => {
-    expect(flowTargetContract(node('human-task', 1, { schemaVersion: 1, outputType: 'text' }))).not.toBeNull()
-    expect(flowTargetContract(node('human-task', 1, { schemaVersion: 1 }))).not.toBeNull()
-    expect(flowTargetContract(node('human-task', 1, { schemaVersion: 1, outputType: 'json' }))).toBeNull()
+  it('AF-01：human-task text/json 均可调度，输出端口由 outputType 派生（配置与执行器同一 strict 解析）', () => {
+    expect(
+      flowTargetContract(node('human-task', 1, { schemaVersion: 1, outputType: 'text' }))?.output
+    ).toBe('out-text')
+    expect(flowTargetContract(node('human-task', 1, { schemaVersion: 1 }))?.output).toBe('out-text')
+    expect(
+      flowTargetContract(node('human-task', 1, { schemaVersion: 1, outputType: 'json' }))?.output
+    ).toBe('out-json')
     // 缺 schemaVersion / 未知字段与执行器一致按无效配置拒绝（不静默放行）。
     expect(flowTargetContract(node('human-task', 1, {}))).toBeNull()
     expect(flowTargetContract(node('human-task', 2, { schemaVersion: 1 }))).toBeNull()

@@ -50,19 +50,33 @@ export class FlowTaskStore {
 
   /** Read persisted facts without loading prompts, skills, outputs or checkpoint payloads. */
   summary(projectId: string, taskId: string): AccessOutput<'run.get'> | null {
-    const row = this.db.prepare(`SELECT state, wait_revision, wait_kind FROM flow_agent_tasks
-      WHERE project_id=? AND task_id=?`).get(projectId, taskId) as
-      Pick<Row, 'state' | 'wait_revision' | 'wait_kind'> | undefined
+    const row = this.db
+      .prepare(
+        `SELECT state, wait_revision, wait_kind FROM flow_agent_tasks
+      WHERE project_id=? AND task_id=?`
+      )
+      .get(projectId, taskId) as Pick<Row, 'state' | 'wait_revision' | 'wait_kind'> | undefined
     if (!row) return null
     const waitKind = row.state === 'waiting' || row.state === 'blocked' ? row.wait_kind : null
     return {
-      projectId, taskId, source: 'flow-agent-task' as const, state: row.state,
-      waitRevision: row.wait_revision, waitKind,
-      stateReason: waitKind === 'reconcile' ? 'RECONCILE_REQUIRED'
-        : waitKind === 'human' ? 'HUMAN_REQUIRED'
-          : row.state === 'blocked' ? 'TASK_BLOCKED'
-            : row.state === 'failed' ? 'TASK_FAILED' : null,
-      reconcileRequired: waitKind === 'reconcile', allowedActions: []
+      projectId,
+      taskId,
+      source: 'flow-agent-task' as const,
+      state: row.state,
+      waitRevision: row.wait_revision,
+      waitKind,
+      stateReason:
+        waitKind === 'reconcile'
+          ? 'RECONCILE_REQUIRED'
+          : waitKind === 'human'
+            ? 'HUMAN_REQUIRED'
+            : row.state === 'blocked'
+              ? 'TASK_BLOCKED'
+              : row.state === 'failed'
+                ? 'TASK_FAILED'
+                : null,
+      reconcileRequired: waitKind === 'reconcile',
+      allowedActions: []
     }
   }
 
@@ -209,5 +223,23 @@ export class FlowTaskStore {
         .run(thread, response.eventId, signature, response.waitRevision)
       return { response, replay: false }
     })()
+  }
+
+  /**
+   * AF-01：本任务是否存在显式人工采用（kind=human 且 accepted=true 的续接记录）。
+   * 只读已持久化的续接事实，供固定顺序模式判定「人工决定」进入条件；不从聊天文字推断。
+   */
+  humanAccepted(thread: string): boolean {
+    const rows = this.db
+      .prepare('SELECT signature FROM flow_agent_responses WHERE thread=?')
+      .all(thread) as Array<{ signature: string }>
+    return rows.some((row) => {
+      try {
+        const response = JSON.parse(row.signature) as { kind?: string; accepted?: boolean }
+        return response.kind === 'human' && response.accepted === true
+      } catch {
+        return false
+      }
+    })
   }
 }

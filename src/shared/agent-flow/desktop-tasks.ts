@@ -78,6 +78,8 @@ export interface FlowAgentCollaborationView {
   messages: Array<{ eventId: string; kind: string; text: string; reply?: string }>
   inputs: Array<{ sourceNodeId: string; sourcePortId: string; versionId: string }>
   candidates: import('zod').infer<typeof importedAssetRef>[]
+  /** AF-04：当前工作稿（最近一次已提交候选成果正文）；无候选时为 undefined。 */
+  workingDraft?: string
 }
 export interface FlowAgentReply {
   refs: import('zod').infer<typeof import('./node-contracts').AgentFlowAssetRefSchema>[]

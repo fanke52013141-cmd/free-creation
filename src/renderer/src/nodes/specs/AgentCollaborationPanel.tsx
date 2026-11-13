@@ -135,6 +135,12 @@ export function AgentCollaborationPanel({
       ) : (
         <>
           <p>当前目标：{view.goal}</p>
+          {view.workingDraft !== undefined && (
+            <div className="contract-section">
+              <p>当前工作稿（讨论围绕它进行）：</p>
+              <pre className="agent-flow-output">{view.workingDraft}</pre>
+            </div>
+          )}
           <p role="status">
             {view.task.prepared
               ? '新修订已准备，等待启动'

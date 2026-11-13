@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { VideoReviewEvidenceSchema } from './video-review'
+import { FlowStagesSchema } from './stage-contracts'
 import {
   AudioReviewEvidenceSchema,
   AudioVideoTimelineEvidenceSchema,
@@ -42,9 +43,34 @@ export const AgentNodeConfigSchema = z
     allowedNodeIds: z.array(id).max(128),
     maxSteps: z.number().int().min(1).max(64),
     maxParallelTasks: z.number().int().min(1).max(4).optional(),
+    /**
+     * AF-01：显式任务型执行模式。缺省（undefined）= 旧模型协调语义，存量不迁移。
+     * fixed-order = 按声明阶段顺序确定性推进，主控不调用模型补写目标。
+     */
+    executionMode: z.enum(['model', 'fixed-order']).optional(),
+    /** fixed-order 模式的阶段声明；顺序即执行顺序。 */
+    stages: FlowStagesSchema.optional(),
     relations: z.array(AgentFlowRelationSchema).max(256)
   })
   .strict()
+  .superRefine((config, context) => {
+    const fixedOrder = config.executionMode === 'fixed-order'
+    if (fixedOrder && !config.stages)
+      context.addIssue({ code: 'custom', message: 'fixed-order requires stages' })
+    if (!fixedOrder && config.stages)
+      context.addIssue({ code: 'custom', message: 'stages require fixed-order executionMode' })
+    if (fixedOrder && config.stages) {
+      if ((config.maxParallelTasks ?? 1) !== 1)
+        context.addIssue({ code: 'custom', message: 'fixed-order runs stages sequentially' })
+      const allowed = new Set(config.allowedNodeIds)
+      for (const stage of config.stages)
+        if (!allowed.has(stage.nodeId))
+          context.addIssue({
+            code: 'custom',
+            message: 'Stage carrier must be an allowed child node'
+          })
+    }
+  })
 export function getAgentModelBindingStatus(
   rawConfig: unknown
 ): 'invalid' | 'missing' | 'configured' {
@@ -187,8 +213,12 @@ export const ReviewDecisionSchema = z
         (report.evidenceScope !== 'complete-audio' || report.subjects.length !== 1)) ||
       (report.audioVideoEvidence &&
         (report.evidenceScope !== 'audio-video-timeline' || report.subjects.length !== 1)) ||
-      [report.videoEvidence, report.imageEvidence, report.audioEvidence, report.audioVideoEvidence]
-        .filter(Boolean).length > 1 ||
+      [
+        report.videoEvidence,
+        report.imageEvidence,
+        report.audioEvidence,
+        report.audioVideoEvidence
+      ].filter(Boolean).length > 1 ||
       refs.size !== report.subjects.length ||
       report.issues.some((issue) => !refs.has(JSON.stringify([issue.assetId, issue.versionId])))
     ) {

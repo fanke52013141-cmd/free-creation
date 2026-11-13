@@ -226,6 +226,49 @@ const api = {
   }): Promise<
     IpcEnvelope<import('../shared/agent-flow/desktop-tasks').FlowAgentCollaborationView | null>
   > => ipcRenderer.invoke(IPC.flowAgents.collaboration, input),
+  flowAgentStageContextPreview: (input: {
+    projectId: string
+    nodeId: string
+    stageKey: string
+    includeBody?: boolean
+  }): Promise<
+    IpcEnvelope<import('../shared/agent-flow/coordination').StageContextPreview | null>
+  > => ipcRenderer.invoke(IPC.flowAgents.stageContextPreview, input),
+  flowAgentStageRework: (input: {
+    projectId: string
+    nodeId: string
+    stageKey: string
+  }): Promise<
+    IpcEnvelope<import('../shared/agent-flow/desktop-tasks').FlowAgentView | null>
+  > => ipcRenderer.invoke(IPC.flowAgents.stageRework, input),
+  flowDefinitionPublish: (input: {
+    projectId: string
+    definitionId: string
+    name: string
+    coordinatorNodeId: string
+  }): Promise<
+    IpcEnvelope<{ projectId: string; definition: import('../shared/agent-flow/flow-definition').FlowDefinition }>
+  > => ipcRenderer.invoke(IPC.flowAgents.definitionPublish, input),
+  flowDefinitionList: (input: {
+    projectId: string
+  }): Promise<
+    IpcEnvelope<{ projectId: string; definitions: import('../shared/agent-flow/flow-definition').FlowDefinition[] }>
+  > => ipcRenderer.invoke(IPC.flowAgents.definitionList, input),
+  flowDefinitionGet: (input: {
+    projectId: string
+    definitionId: string
+    version?: number
+  }): Promise<
+    IpcEnvelope<{ projectId: string; definition: import('../shared/agent-flow/flow-definition').FlowDefinition | null }>
+  > => ipcRenderer.invoke(IPC.flowAgents.definitionGet, input),
+  flowDefinitionDiff: (input: {
+    projectId: string
+    definitionId: string
+    versionA: number
+    versionB: number
+  }): Promise<
+    IpcEnvelope<{ projectId: string; definitionId: string; diff: import('../shared/agent-flow/flow-definition').DefinitionDiff }>
+  > => ipcRenderer.invoke(IPC.flowAgents.definitionDiff, input),
   cooperateFlowAgent: (
     input: import('../shared/agent-flow/desktop-tasks').FlowAgentCollaboration
   ): Promise<
@@ -592,6 +635,17 @@ const api = {
       /** headless 执行的完整公开输出（按公开端口 ID 的 NodeValue）。 */
       outputValues?: Record<string, unknown>
     }): Promise<IpcEnvelope<boolean>> => ipcRenderer.invoke(IPC.composite.runFinish, input),
+    runWait: (input: {
+      runId: string
+      stepKey: string
+      nodeType: string
+    }): Promise<IpcEnvelope<boolean>> => ipcRenderer.invoke(IPC.composite.runWait, input),
+    runStepOutput: (input: {
+      runId: string
+      nodeId: string
+      nodeResult: string | null
+      nodeRun: unknown
+    }): Promise<IpcEnvelope<boolean>> => ipcRenderer.invoke(IPC.composite.runStepOutput, input),
     runGet: (runId: string): Promise<IpcEnvelope<unknown>> =>
       ipcRenderer.invoke(IPC.composite.runGet, runId),
     runList: (input: { projectId: string; limit?: number }): Promise<IpcEnvelope<unknown>> =>

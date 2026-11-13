@@ -60,7 +60,13 @@ export const IPC = {
     stop: 'flow-agents:stop',
     catalog: 'flow-agents:catalog',
     collaboration: 'flow-agents:collaboration',
-    cooperate: 'flow-agents:cooperate'
+    cooperate: 'flow-agents:cooperate',
+    stageContextPreview: 'flow-agents:stage-context-preview',
+    stageRework: 'flow-agents:stage-rework',
+    definitionPublish: 'flow-agents:definition-publish',
+    definitionList: 'flow-agents:definition-list',
+    definitionGet: 'flow-agents:definition-get',
+    definitionDiff: 'flow-agents:definition-diff'
   },
   flowCommands: {
     attach: 'flow-commands:attach',
@@ -167,6 +173,8 @@ export const IPC = {
     runStart: 'composite:run:start',
     runStep: 'composite:run:step',
     runFinish: 'composite:run:finish',
+    runWait: 'composite:run:wait',
+    runStepOutput: 'composite:run:step-output',
     runGet: 'composite:run:get',
     runList: 'composite:run:list'
   },

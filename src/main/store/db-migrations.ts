@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 32
+export const DB_SCHEMA_VERSION = 34
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -628,6 +628,29 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
       ALTER TABLE composite_runs ADD COLUMN input_values TEXT;
       ALTER TABLE composite_runs ADD COLUMN retry_of TEXT;
       ALTER TABLE composite_runs ADD COLUMN manual_submission INTEGER NOT NULL DEFAULT 0;
+    `)
+  },
+  // M33: AF-06 流程定义版本——固定顺序主控的可复用定义快照（与运行分离）。
+  // 不可变版本：同一 definition_id 下 version 递增；body_json 存阶段/方法/子节点配置快照，
+  // content_hash 用于差异预览与复用核对。只存配置定义，不存运行正文/产物。
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS flow_definitions (
+        project_id TEXT NOT NULL,
+        definition_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        body_json TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (project_id, definition_id, version)
+      );
+    `)
+  },
+  // M34: AF-07 人工等待续跑——持久化已完成内部节点的输出（按 nodeId），
+  // 续跑时回放到隔离 editor，跳过重跑（保护已付费任务）。只存公开节点输出值。
+  (database) => {
+    database.exec(`
+      ALTER TABLE composite_runs ADD COLUMN step_outputs TEXT;
     `)
   }
 ]

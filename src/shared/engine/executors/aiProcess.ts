@@ -17,6 +17,7 @@ import { readNodeConfig } from '../node-config'
 import { parseRetryConfig, withRetry, type RetryConfig } from '../retry'
 import { runSkillAgent } from '../skill-agent'
 import { skillAgentConfig, type SkillAgentConfig } from '../../skill-agent'
+import { envelopeSystemSuffix, envelopeUserPrefix } from '../../agent-flow/execution-envelope'
 
 export type AiOutputMode = 'text' | 'markdown' | 'json'
 
@@ -136,7 +137,10 @@ export const aiProcessExecutor = async (
   // 组装一次性的用户消息：优先用上游文本；上游 JSON 作为补充上下文注入。
   const textInput = inputText(ctx.inputs, 'in-text').trim()
   const jsonInputs = inputJson(ctx.inputs, 'in-json')
+  // AF-03：已采用人工意见/返工反馈置于业务输入之前（必须落实/修正）。
+  const envelopePrefix = envelopeUserPrefix(ctx.executionEnvelope)
   const userContent = [
+    envelopePrefix,
     textInput,
     ...(jsonInputs.length > 0
       ? [`上下文 JSON：\n${JSON.stringify(jsonInputs.length === 1 ? jsonInputs[0] : jsonInputs)}`]
@@ -165,6 +169,8 @@ export const aiProcessExecutor = async (
       reason: `功能 text.process 尚未绑定已验证文本模型${resolution.reason ? `：${resolution.reason}` : ''}`
     }
   const option = resolution.option
+  // AF-03：固定阶段职责/方法/输出约束追加到 system（不覆盖节点原 system 安全边界）。
+  const envelopeSuffix = envelopeSystemSuffix(ctx.executionEnvelope)
 
   // W1：模型调用与输出规范化整体纳入重试。可重试错误（空返回 / 坏 JSON / Schema
   // 校验不过 / 瞬时网络错误）按指数退避重试；配置类错误立即失败。取消随时生效。
@@ -179,6 +185,7 @@ export const aiProcessExecutor = async (
           modelId: option.model.id,
           system: [
             config.system,
+            envelopeSuffix,
             `最终输出格式：${config.mode}${config.jsonSchema ? `；Schema：${config.jsonSchema.id}@${config.jsonSchema.version}` : ''}`
           ]
             .filter(Boolean)
@@ -200,7 +207,7 @@ export const aiProcessExecutor = async (
             {
               providerId: option.provider.id,
               modelId: option.model.id,
-              system: config.system || undefined,
+              system: [config.system, envelopeSuffix].filter(Boolean).join('\n') || undefined,
               messages: [{ role: 'user', content: userContent }],
               temperature: config.temperature,
               maxTokens: config.maxTokens
@@ -241,6 +248,8 @@ export const aiProcessExecutor = async (
   const outputPort = `out-${config.mode}`
   return {
     status: 'done',
-    artifactOutputPorts: ctx.outgoing?.some((edge) => edge.fromPortId === outputPort) ? [] : [outputPort]
+    artifactOutputPorts: ctx.outgoing?.some((edge) => edge.fromPortId === outputPort)
+      ? []
+      : [outputPort]
   }
 }

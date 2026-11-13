@@ -49,12 +49,20 @@ export interface CoordinationRun {
     inputs: FlowAgentReply['refs']
     state: string
     outputs: FlowAgentReply['refs']
+    contextManifest?: import('../../shared/agent-flow/stage-contracts').ContextManifest
+    executionEnvelope?: import('../../shared/agent-flow/execution-envelope').ExecutionEnvelope
   }>
   outputs: FlowAgentReply['refs']
   reviews?: CoordinationReview[]
   controlSteps?: number
   decisionPending?: boolean
   recovery?: { reasons: string[]; canRestore: boolean }
+  /** AF-05：阶段交付验收记录（按阶段身份索引；返工后下游标 stale）。 */
+  stageDeliveries?: import('../../shared/agent-flow/stage-contracts').StageDeliveryRecord[]
+  /** AF-05：局部返工轮次（用于派生新子任务身份，旧历史不改写）。 */
+  reworkRound?: number
+  /** AF-05：返工保留的旧交付历史（只读事实）。 */
+  reworkHistory?: import('../../shared/agent-flow/stage-contracts').StageDeliveryRecord[]
 }
 
 /** A public review executor may join an occupied scope only for the persisted pending request. */
@@ -133,6 +141,15 @@ export class CoordinationStore {
     this.db
       .prepare('DELETE FROM flow_coordination_scope WHERE project_id=? AND task_id=?')
       .run(run.projectId, run.taskId)
+  }
+  /** AF-05：返工后重新占用控制范围（完成时曾 release）；幂等。 */
+  reoccupy(run: CoordinationRun, occupied: string[]): void {
+    this.db.transaction(() => {
+      for (const id of occupied)
+        this.db
+          .prepare('INSERT OR IGNORE INTO flow_coordination_scope VALUES (?,?,?)')
+          .run(run.projectId, id, run.taskId)
+    })()
   }
   hasEvent(run: CoordinationRun, eventId: string, event: string): boolean {
     const row = this.db

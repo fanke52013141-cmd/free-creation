@@ -49,6 +49,8 @@ export interface FlowAgentAccessPort {
   cooperate(raw: unknown): Promise<unknown>
   /** 读取某节点当前的协作视图；没有持久化任务时返回 null（用于在写协作事件前给稳定错误码）。 */
   collaboration(query: { projectId: string; nodeId: string }): unknown
+  /** AF-05：局部返工（固定顺序主控），与 GUI 同一宿主 coordinator.reworkStage；不支持返回 null。 */
+  reworkStage(query: { projectId: string; nodeId: string; stageKey: string }): unknown
 }
 
 let published: FlowAgentAccessPort | null = null

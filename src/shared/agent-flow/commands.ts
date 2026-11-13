@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { AgentFlowAssetRefSchema } from './node-contracts'
+import { ExecutionEnvelopeSchema } from './execution-envelope'
 
 const id = z
   .string()
@@ -34,6 +35,8 @@ const NodeExecuteCommandObjectSchema = z
       })
       .strict()
       .optional(),
+    /** AF-03：执行信封（阶段目标/方法/人工意见/返工反馈），公共内容执行器显式消费。 */
+    envelope: ExecutionEnvelopeSchema.optional(),
     traceId: id,
     spanId: id
   })

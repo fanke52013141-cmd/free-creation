@@ -143,6 +143,48 @@
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
 }
+/* AF-01 固定顺序阶段声明编辑器 */
+.agent-flow-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-width: 0;
+}
+.agent-flow-stage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.agent-flow-stage-row input,
+.agent-flow-stage-row select {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.agent-flow-stage-row button {
+  flex: 0 0 auto;
+}
+.agent-flow-stage-conditions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.agent-flow-stage-condition {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.agent-flow-stage-condition input,
+.agent-flow-stage-condition select {
+  flex: 1 1 96px;
+  min-width: 0;
+}
+.agent-flow-stage-condition button {
+  flex: 0 0 auto;
+}
 .agent-collaboration,
 .agent-collaboration label {
   display: flex;

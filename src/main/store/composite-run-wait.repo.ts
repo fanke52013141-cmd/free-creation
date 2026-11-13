@@ -70,7 +70,9 @@ export function openCompositeRunWait(input: {
 }): CompositeRunWait {
   const db = getDb()
   const current = db
-    .prepare('SELECT revision FROM composite_run_waits WHERE run_id = ? ORDER BY revision DESC LIMIT 1')
+    .prepare(
+      'SELECT revision FROM composite_run_waits WHERE run_id = ? ORDER BY revision DESC LIMIT 1'
+    )
     .get(input.runId) as { revision: number } | undefined
   const revision = (current?.revision ?? 0) + 1
   db.prepare(
@@ -92,14 +94,15 @@ export function openCompositeRunWait(input: {
 
 export function getCompositeRunWait(requestId: string): CompositeRunWait | null {
   const row = getDb().prepare('SELECT * FROM composite_run_waits WHERE id = ?').get(requestId) as
-    | WaitRow
-    | undefined
+    WaitRow | undefined
   return row ? rowToWait(row) : null
 }
 
 export function getOpenCompositeRunWait(runId: string): CompositeRunWait | null {
   const row = getDb()
-    .prepare("SELECT * FROM composite_run_waits WHERE run_id = ? AND state = 'open' ORDER BY revision DESC LIMIT 1")
+    .prepare(
+      "SELECT * FROM composite_run_waits WHERE run_id = ? AND state = 'open' ORDER BY revision DESC LIMIT 1"
+    )
     .get(runId) as WaitRow | undefined
   return row ? rowToWait(row) : null
 }
@@ -113,16 +116,18 @@ export function satisfyCompositeRunWait(input: {
 }): { ok: boolean; reason?: string; wait?: CompositeRunWait } {
   const db = getDb()
   const row = db.prepare('SELECT * FROM composite_run_waits WHERE id = ?').get(input.requestId) as
-    | WaitRow
-    | undefined
+    WaitRow | undefined
   if (!row) return { ok: false, reason: 'WAIT_NOT_FOUND' }
   if (row.state === 'satisfied') return { ok: true, wait: rowToWait(row) }
   if (row.state !== 'open') return { ok: false, reason: 'WAIT_CLOSED' }
   if (row.revision !== input.revision) return { ok: false, reason: 'WAIT_REVISION_CONFLICT' }
   const latest = db
-    .prepare('SELECT revision FROM composite_run_waits WHERE run_id = ? ORDER BY revision DESC LIMIT 1')
+    .prepare(
+      'SELECT revision FROM composite_run_waits WHERE run_id = ? ORDER BY revision DESC LIMIT 1'
+    )
     .get(row.run_id) as { revision: number } | undefined
-  if (latest && latest.revision !== row.revision) return { ok: false, reason: 'WAIT_REVISION_CONFLICT' }
+  if (latest && latest.revision !== row.revision)
+    return { ok: false, reason: 'WAIT_REVISION_CONFLICT' }
   if (row.expires_at !== null && Date.now() > row.expires_at) {
     db.prepare("UPDATE composite_run_waits SET state = 'expired' WHERE id = ?").run(input.requestId)
     return { ok: false, reason: 'WAIT_EXPIRED' }
@@ -140,4 +145,23 @@ export function cancelCompositeRunWait(requestId: string): boolean {
       .prepare("UPDATE composite_run_waits SET state = 'cancelled' WHERE id = ? AND state = 'open'")
       .run(requestId).changes > 0
   )
+}
+
+/** AF-07：读取某运行已满足的人工等待提交值（按节点 ID），供续跑消费为正式输出。 */
+export function getSatisfiedHumanSubmissions(runId: string): Record<string, unknown> {
+  const rows = getDb()
+    .prepare(
+      "SELECT step_key, value_json FROM composite_run_waits WHERE run_id = ? AND kind = 'human' AND state = 'satisfied'"
+    )
+    .all(runId) as Array<{ step_key: string | null; value_json: string | null }>
+  const result: Record<string, unknown> = {}
+  for (const row of rows) {
+    if (!row.step_key || !row.value_json) continue
+    try {
+      result[row.step_key] = JSON.parse(row.value_json)
+    } catch {
+      /* 损坏提交值跳过，续跑会再次停等而非伪造。 */
+    }
+  }
+  return result
 }

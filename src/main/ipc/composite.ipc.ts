@@ -24,15 +24,20 @@ import {
 import {
   createCompositeRun,
   finishCompositeRun,
+  waitCompositeRun,
+  recordCompositeStepOutput,
   getCompositeRun,
   listCompositeRuns,
   recordCompositeRunStep
 } from '../store/composite-run.repo'
-import {
-  compositeErrorCode
-} from '../../shared/composite/errors'
+import { openCompositeRunWait } from '../store/composite-run-wait.repo'
+import { compositeErrorCode } from '../../shared/composite/errors'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
-import { previewCompositeUpgrade, findCompositeReferences, deleteCompositeCapabilityChecked } from '../agent-access/composite-ops'
+import {
+  previewCompositeUpgrade,
+  findCompositeReferences,
+  deleteCompositeCapabilityChecked
+} from '../agent-access/composite-ops'
 import { newSpanId } from '../../shared/observability'
 import type { GatewayDiagnosticsContext } from '../../shared/contracts'
 
@@ -102,19 +107,14 @@ export function registerCompositeIpc(): void {
         recordCompositeRunStep(input)
         if (input.status === 'failed') {
           const context = runDiagnostics(input.runId)
-          emitGatewayEvent(
-            'composite.run.step_failed',
-            '节点流内部步骤失败',
-            context,
-            {
-              phase: 'step',
-              attributes: {
-                code: 'STEP_FAILED',
-                stepKey: input.stepKey,
-                nodeType: input.nodeType
-              }
+          emitGatewayEvent('composite.run.step_failed', '节点流内部步骤失败', context, {
+            phase: 'step',
+            attributes: {
+              code: 'STEP_FAILED',
+              stepKey: input.stepKey,
+              nodeType: input.nodeType
             }
-          )
+          })
         }
         return ok(true)
       } catch (error) {
@@ -136,17 +136,22 @@ export function registerCompositeIpc(): void {
               : input.status === 'cancelled'
                 ? 'composite.run.cancelled'
                 : 'composite.run.failed'
-          emitGatewayEvent(event, input.status === 'completed' ? '节点流运行完成' : '节点流运行结束', context, {
-            phase: input.failurePhase ?? 'run',
-            attributes: {
-              ...(input.errorCode ? { code: input.errorCode } : {}),
-              ...(record?.capabilityId ? { capabilityId: record.capabilityId } : {}),
-              ...(record?.capabilityVersion
-                ? { capabilityVersion: record.capabilityVersion }
-                : {}),
-              outputPortCount: input.outputPorts?.length ?? 0
+          emitGatewayEvent(
+            event,
+            input.status === 'completed' ? '节点流运行完成' : '节点流运行结束',
+            context,
+            {
+              phase: input.failurePhase ?? 'run',
+              attributes: {
+                ...(input.errorCode ? { code: input.errorCode } : {}),
+                ...(record?.capabilityId ? { capabilityId: record.capabilityId } : {}),
+                ...(record?.capabilityVersion
+                  ? { capabilityVersion: record.capabilityVersion }
+                  : {}),
+                outputPortCount: input.outputPorts?.length ?? 0
+              }
             }
-          })
+          )
         }
         return ok(changed)
       } catch (error) {
@@ -155,15 +160,64 @@ export function registerCompositeIpc(): void {
     }
   )
   ipcMain.handle(
-    IPC.composite.runGet,
-    (_event, runId: string): IpcEnvelope<unknown> => {
+    IPC.composite.runWait,
+    (_event, input: { runId: string; stepKey: string; nodeType: string }): IpcEnvelope<boolean> => {
       try {
-        return ok(getCompositeRun(runId ?? ''))
+        const changed = waitCompositeRun({ runId: input.runId, stepKey: input.stepKey })
+        if (changed) {
+          openCompositeRunWait({
+            requestId: `${input.runId}:${input.stepKey}`,
+            runId: input.runId,
+            stepKey: input.stepKey,
+            kind: 'human',
+            fields: [
+              {
+                fieldId: 'result',
+                label: '人工任务结果',
+                type: 'text',
+                required: true,
+                cardinality: 'one',
+                target: { nodeId: input.stepKey, portId: 'out-text' }
+              }
+            ]
+          })
+          emitGatewayEvent(
+            'composite.run.waiting',
+            '节点流等待人工提交',
+            runDiagnostics(input.runId),
+            {
+              phase: 'step',
+              attributes: { code: 'HUMAN_WAIT', stepKey: input.stepKey }
+            }
+          )
+        }
+        return ok(changed)
       } catch (error) {
         return failure(error)
       }
     }
   )
+  ipcMain.handle(
+    IPC.composite.runStepOutput,
+    (
+      _event,
+      input: { runId: string; nodeId: string; nodeResult: string | null; nodeRun: unknown }
+    ): IpcEnvelope<boolean> => {
+      try {
+        recordCompositeStepOutput(input)
+        return ok(true)
+      } catch (error) {
+        return failure(error)
+      }
+    }
+  )
+  ipcMain.handle(IPC.composite.runGet, (_event, runId: string): IpcEnvelope<unknown> => {
+    try {
+      return ok(getCompositeRun(runId ?? ''))
+    } catch (error) {
+      return failure(error)
+    }
+  })
   ipcMain.handle(
     IPC.composite.runList,
     (_event, input: { projectId: string; limit?: number }): IpcEnvelope<unknown> => {
@@ -318,7 +372,9 @@ export function registerCompositeIpc(): void {
           previousVersion: preview.previousVersion,
           nextVersion: preview.nextVersion,
           ok: preview.ok,
-          ...(preview.runtimeVersion !== undefined ? { runtimeVersion: preview.runtimeVersion } : {}),
+          ...(preview.runtimeVersion !== undefined
+            ? { runtimeVersion: preview.runtimeVersion }
+            : {}),
           ...(preview.issues ? { issues: preview.issues } : {}),
           impact: preview.impact
         })

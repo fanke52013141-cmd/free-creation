@@ -139,6 +139,8 @@ export interface NodeExecutionContext {
   runId?: string
   /** Admitted command identity; media submissions bind to this persisted lease. */
   flowCommand?: import('../agent-flow/commands').CommandLease
+  /** AF-03：执行信封（阶段目标/方法/人工意见/返工反馈）；内容执行器显式消费，不入日志。 */
+  executionEnvelope?: import('../agent-flow/execution-envelope').ExecutionEnvelope
   providers: ProviderSummary[]
   signal: CancelSignal
   /** Best-effort, redacted stage logging persisted with this run and relayed to main.log. */
@@ -178,7 +180,9 @@ export interface NodeExecutionContext {
   outgoing?: Array<{ nodeId: string; fromPortId: string; toPortId: string }>
   runSubflow?: (request: SubflowRequest) => Promise<SubflowOutput>
   /** 组合节点执行入口：由 renderer 注入隔离执行服务（不把内部节点写进用户当前画布）。 */
-  runComposite?: (request: import('./composite-run-contract').CompositeRunRequest) => Promise<import('./composite-run-contract').CompositeRunOutcome>
+  runComposite?: (
+    request: import('./composite-run-contract').CompositeRunRequest
+  ) => Promise<import('./composite-run-contract').CompositeRunOutcome>
   /**
    * 当前执行所属节点流运行的祖先上下文（W3）：含当前节点流自身与累计展开节点数。
    * 顶层画布执行缺省；嵌套 composite 执行器据此向子运行传递递归/深度/预算守卫。

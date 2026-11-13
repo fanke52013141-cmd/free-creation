@@ -113,6 +113,40 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
         { phase: 'short', code: 'short', resumesTraceId: 'id' }
       )
     ),
+    // AF-01 固定顺序协调：阶段分派/进入条件受阻/等待人工采用（只记身份与计数，不记正文）。
+    def('agent.coordination.stage_dispatched', 'info', 'main/agent-flow/coordinator-host', {
+      stageKey: 'short',
+      carrierNodeId: 'id',
+      inputCount: 'int'
+    }),
+    def('agent.coordination.stage_entry_blocked', 'info', 'main/agent-flow/coordinator-host', {
+      stageKey: 'short',
+      code: 'short',
+      missingCount: 'int'
+    }),
+    def(
+      'agent.coordination.stage_human_decision_missing',
+      'info',
+      'main/agent-flow/coordinator-host',
+      { stageKey: 'short', missingCount: 'int' }
+    ),
+    // AF-02 输入编制：只记阶段身份/计数/字节数/hash 由宿主侧关联，不记输入正文。
+    def('agent.coordination.stage_context_compiled', 'info', 'main/agent-flow/coordinator-host', {
+      stageKey: 'short',
+      entryCount: 'int',
+      usedBytes: 'int'
+    }),
+    def('agent.coordination.stage_context_blocked', 'info', 'main/agent-flow/coordinator-host', {
+      stageKey: 'short',
+      code: 'short',
+      missingCount: 'int'
+    }),
+    // AF-05 局部返工：只记阶段身份/轮次/受影响计数，不记交付正文。
+    def('agent.coordination.stage_rework', 'info', 'main/agent-flow/coordinator-host', {
+      stageKey: 'short',
+      round: 'int',
+      affectedCount: 'int'
+    }),
     def('agent.publication.failed', 'error', 'renderer/engine/flow-command-bridge', {
       phase: 'short'
     }),
@@ -181,6 +215,12 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
       code: 'short',
       stepKey: 'id',
       nodeType: 'short'
+    }),
+    // AF-07：节点流人工等待（只记等待步骤身份，不记提交正文）。
+    def('composite.run.waiting', 'info', 'main/ipc/composite.ipc', {
+      phase: 'short',
+      code: 'short',
+      stepKey: 'id'
     }),
     def('composite.draft.saved', 'info', 'main/store/composite.repo', {
       phase: 'short',
@@ -392,9 +432,22 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
       ...MODEL_ATTRS,
       skillId: 'id'
     }),
-    def('media.batch_delete_started', 'info', 'renderer/canvas/side-panel/AssetsPanel.tsx', { count: 'int' }),    def('media.batch_delete_cancelled', 'info', 'renderer/canvas/side-panel/AssetsPanel.tsx', { count: 'int' }),
-    def('media.batch_delete_completed', 'info', 'renderer/canvas/side-panel/AssetsPanel.tsx', { count: 'int', deleted: 'int', failed: 'int' }),
-    def('media.batch_delete_failed', 'error', 'renderer/canvas/side-panel/AssetsPanel.tsx', { count: 'int', deleted: 'int', failed: 'int' }),
+    def('media.batch_delete_started', 'info', 'renderer/canvas/side-panel/AssetsPanel.tsx', {
+      count: 'int'
+    }),
+    def('media.batch_delete_cancelled', 'info', 'renderer/canvas/side-panel/AssetsPanel.tsx', {
+      count: 'int'
+    }),
+    def('media.batch_delete_completed', 'info', 'renderer/canvas/side-panel/AssetsPanel.tsx', {
+      count: 'int',
+      deleted: 'int',
+      failed: 'int'
+    }),
+    def('media.batch_delete_failed', 'error', 'renderer/canvas/side-panel/AssetsPanel.tsx', {
+      count: 'int',
+      deleted: 'int',
+      failed: 'int'
+    }),
     def('media.export_started', 'info', 'main/ipc/media.ipc.ts', { projectId: 'id', count: 'int' }),
     def('media.export_completed', 'info', 'main/ipc/media.ipc.ts', {
       projectId: 'id',
@@ -508,10 +561,22 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
       code: 'short'
     }),
     // library.*
-    def('library.batch_delete_started', 'info', 'renderer/library/ResourceLibraryPage.tsx', { count: 'int' }),
-    def('library.batch_delete_cancelled', 'info', 'renderer/library/ResourceLibraryPage.tsx', { count: 'int' }),
-    def('library.batch_delete_completed', 'info', 'renderer/library/ResourceLibraryPage.tsx', { count: 'int', deleted: 'int', failed: 'int' }),
-    def('library.batch_delete_failed', 'error', 'renderer/library/ResourceLibraryPage.tsx', { count: 'int', deleted: 'int', failed: 'int' }),
+    def('library.batch_delete_started', 'info', 'renderer/library/ResourceLibraryPage.tsx', {
+      count: 'int'
+    }),
+    def('library.batch_delete_cancelled', 'info', 'renderer/library/ResourceLibraryPage.tsx', {
+      count: 'int'
+    }),
+    def('library.batch_delete_completed', 'info', 'renderer/library/ResourceLibraryPage.tsx', {
+      count: 'int',
+      deleted: 'int',
+      failed: 'int'
+    }),
+    def('library.batch_delete_failed', 'error', 'renderer/library/ResourceLibraryPage.tsx', {
+      count: 'int',
+      deleted: 'int',
+      failed: 'int'
+    }),
     def('library.transfer.started', 'info', 'main/ipc/library.ipc.ts', { operation: 'short' }),
     def('library.transfer.completed', 'info', 'main/ipc/library.ipc.ts', { operation: 'short' }),
     def('library.transfer.cancelled', 'info', 'main/ipc/library.ipc.ts', {

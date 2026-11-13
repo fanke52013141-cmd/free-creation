@@ -209,9 +209,8 @@ export function attachCompositeRunInputs(
 /** W4 受控重试：标记重试链根运行（运行记录由渲染层创建，握手返回后落盘）。 */
 export function attachCompositeRunRetry(runId: string, retryOf: string): boolean {
   return (
-    getDb()
-      .prepare('UPDATE composite_runs SET retry_of = ? WHERE id = ?')
-      .run(retryOf, runId).changes > 0
+    getDb().prepare('UPDATE composite_runs SET retry_of = ? WHERE id = ?').run(retryOf, runId)
+      .changes > 0
   )
 }
 
@@ -325,6 +324,51 @@ export function finishCompositeRun(input: {
         input.runId
       ).changes > 0
   )
+}
+
+/** AF-07：人工等待——运行停在 waiting-input，记录等待步骤（不伪造完成）。 */
+export function waitCompositeRun(input: { runId: string; stepKey: string }): boolean {
+  return (
+    getDb()
+      .prepare(
+        `UPDATE composite_runs SET status = 'waiting-input'
+         WHERE id = ? AND status IN ('accepted','running','waiting-input')`
+      )
+      .run(input.runId).changes > 0
+  )
+}
+
+/** AF-07：持久化已完成内部节点的运行结果（续跑回放，跳过重跑）。只存节点结果，不存媒体路径。 */
+export function recordCompositeStepOutput(input: {
+  runId: string
+  nodeId: string
+  nodeResult: string | null
+  nodeRun: unknown
+}): void {
+  const db = getDb()
+  const row = db
+    .prepare('SELECT step_outputs FROM composite_runs WHERE id = ?')
+    .get(input.runId) as { step_outputs: string | null } | undefined
+  const map = row?.step_outputs ? (JSON.parse(row.step_outputs) as Record<string, unknown>) : {}
+  map[input.nodeId] = { nodeResult: input.nodeResult, nodeRun: input.nodeRun }
+  db.prepare('UPDATE composite_runs SET step_outputs = ? WHERE id = ?').run(
+    JSON.stringify(map),
+    input.runId
+  )
+}
+
+/** AF-07：读取已完成节点的运行结果回放表。 */
+export function getCompositeStepOutputs(
+  runId: string
+): Record<string, { nodeResult: string | null; nodeRun: unknown }> {
+  const row = getDb().prepare('SELECT step_outputs FROM composite_runs WHERE id = ?').get(runId) as
+    { step_outputs: string | null } | undefined
+  return row?.step_outputs
+    ? (JSON.parse(row.step_outputs) as Record<
+        string,
+        { nodeResult: string | null; nodeRun: unknown }
+      >)
+    : {}
 }
 
 export function getCompositeRun(runId: string): {

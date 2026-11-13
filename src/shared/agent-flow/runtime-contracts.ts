@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { AgentFlowAssetRefSchema, AgentNodeConfigSchema } from './node-contracts'
+import { ContextManifestSchema } from './stage-contracts'
+import { ExecutionEnvelopeSchema } from './execution-envelope'
 import { FixedNodeInputSchema } from './commands'
 
 const id = z
@@ -68,6 +70,10 @@ export const AgentTaskSnapshotSchema = z
       .strict()
       .optional(),
     directInputs: z.array(AgentFlowAssetRefSchema).max(128).default([]),
+    /** AF-02：固定顺序阶段编制的输入清单；存在时专业决策只读取清单内容（缺省=旧语义）。 */
+    contextManifest: ContextManifestSchema.optional(),
+    /** AF-03：执行信封（阶段目标/方法/人工意见/返工反馈）；随命令传到公共内容执行器。 */
+    executionEnvelope: ExecutionEnvelopeSchema.optional(),
     targets: z
       .array(
         z
@@ -146,8 +152,13 @@ export const AgentDecisionSchema = z.discriminatedUnion('kind', [
     })
     .strict()
     .superRefine((decision, context) => {
-      if (new Set(decision.outputs.map((ref) => JSON.stringify(ref))).size !== decision.outputs.length)
-        context.addIssue({ code: 'custom', message: 'Task outputs must be unique fixed references' })
+      if (
+        new Set(decision.outputs.map((ref) => JSON.stringify(ref))).size !== decision.outputs.length
+      )
+        context.addIssue({
+          code: 'custom',
+          message: 'Task outputs must be unique fixed references'
+        })
     })
 ])
 export type AgentDecision = z.infer<typeof AgentDecisionSchema>
