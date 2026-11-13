@@ -12,7 +12,7 @@
  */
 const { _electron: electron } = require('playwright')
 const { execFileSync } = require('node:child_process')
-const { writeFileSync, existsSync, readFileSync, mkdirSync, mkdtempSync } = require('node:fs')
+const { writeFileSync, existsSync, mkdtempSync } = require('node:fs')
 const { join, resolve } = require('node:path')
 const { tmpdir } = require('node:os')
 

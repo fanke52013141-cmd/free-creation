@@ -16,7 +16,22 @@ import { randomUUID } from 'node:crypto'
 
 const testProviderMock = vi.fn()
 const validateModelMock = vi.fn()
+const getProviderMock = vi.fn()
 
+// 设备密钥库替身：testConnection 外部只传 providerId，密钥/地址由 main 从密钥库读取。
+// 这里模拟密钥库返回的受控连接，用于断言"外部无法注入密钥或地址"。
+const vaultProvider = {
+  id: 'conn-1',
+  name: 'Vault Connection',
+  specId: 'openai-compatible',
+  baseURL: 'https://vault.example.com/v1',
+  apiKey: 'vault-secret-key',
+  models: []
+}
+
+vi.mock('../src/main/gateway/providers.repo', () => ({
+  getProvider: (...args: unknown[]) => getProviderMock(...args)
+}))
 vi.mock('../src/main/gateway/factory', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/main/gateway/factory')>()
   return {
@@ -61,6 +76,8 @@ beforeEach(() => {
   process.env.CANVAS_DATA_DIR = directory
   testProviderMock.mockReset()
   validateModelMock.mockReset()
+  getProviderMock.mockReset()
+  getProviderMock.mockResolvedValue(vaultProvider)
   const fetchSpy = vi.spyOn(globalThis, 'fetch')
   fetchSpy.mockRejectedValue(new Error('NETWORK_FORBIDDEN_IN_TEST'))
   setGatewayEventSink({ emit: () => undefined })
@@ -99,11 +116,17 @@ describe('provider.testConnection', () => {
     const data = response.data as { reachable: boolean; message: string; modelCount: number }
     expect(data.reachable).toBe(false)
     expect(data.modelCount).toBe(0)
-    // 只传 id：外部无法借这个接口注入密钥或探测任意地址
+    // 只传 id：外部无法借这个接口注入密钥或探测任意地址；密钥/地址来自密钥库。
     expect(testProviderMock).toHaveBeenCalledTimes(1)
-    expect(testProviderMock.mock.calls[0][0]).toEqual({ id: 'conn-1' })
-    // 回执去敏
+    expect(getProviderMock).toHaveBeenCalledWith('conn-1')
+    expect(testProviderMock.mock.calls[0][0]).toMatchObject({
+      id: 'conn-1',
+      apiKey: 'vault-secret-key',
+      baseURL: 'https://vault.example.com/v1'
+    })
+    // 回执去敏：不含供应商地址，也不含密钥库密钥
     expect(JSON.stringify(response.data)).not.toContain('secret.example.com')
+    expect(JSON.stringify(response.data)).not.toContain('vault-secret-key')
   })
 
   it('可用时返回模型数量', async () => {

@@ -18,7 +18,7 @@
  *   node scripts/license-tool.cjs backup / restore
  */
 const { spawnSync } = require('node:child_process')
-const { cpSync, existsSync, mkdirSync, readFileSync, rmSync } = require('node:fs')
+const { cpSync, existsSync, mkdirSync, readFileSync } = require('node:fs')
 const { homedir } = require('node:os')
 const { join, resolve } = require('node:path')
 

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "C2/C4/W4后续批加性变更已人工核对：新增webSearch.run（双确认受控搜索）、composite.run.retry（受控重试上限3）、composite.run.resubmit（人工补交manualSubmission标记）；composite.execute.wait仅新增可选manualSubmission/retryOf输出字段；既有op输入与行为不变。",
+  "reason": "AF-00基线：humanTask.tsx instanceOf 补显式返回类型 HumanTaskInstance|null 并补类型导入，纯类型修复无行为/契约变化；eslint 配置对纯JS工具脚本语言适配，不涉业务语义。",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -186,7 +186,7 @@
     "src/renderer/src/nodes/specs/bodies/vocal-separate.tsx": "c7b1675fdb44b9a84b1646ad0986140191f429987e1482b718085ea7a3834d63",
     "src/renderer/src/nodes/specs/bodies/voice-design.tsx": "31bed7c2bc5d1ede53d4b5f578ab31ab703c2d4dec193ace9d88ad891dcab242",
     "src/renderer/src/nodes/specs/bodies/website.tsx": "1ebe23d394926b903ec218c8d6381a92538c115ba30dbedefdc6e0fa5c6a1dfe",
-    "src/renderer/src/nodes/specs/humanTask.tsx": "46ec564266b66fd3de0b553d81ef4bc55a0b9fc0dc4748d359d55bd8991b26f1",
+    "src/renderer/src/nodes/specs/humanTask.tsx": "54feac48eb8eca4342d36a40266a40217113b083ad9c3a236640c0760cb03231",
     "src/renderer/src/nodes/specs/index.tsx": "170b20b344df519f8fd3a3d66d7513e65fe66fd843d11a86a52e7a092c9bac0f",
     "src/renderer/src/nodes/specs/outputProjections.ts": "742fa77e8fb2270158f1c9ab14bbcadaa96300ea7f58c6a280d499c76591583a",
     "src/renderer/src/nodes/storyboard-editor.ts": "8b5e31508a4905d6f2638663c05436ea24de0242635cbc3e2c4d0ba354cb4fd4",

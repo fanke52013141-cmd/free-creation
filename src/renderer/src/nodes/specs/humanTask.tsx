@@ -5,7 +5,8 @@ import type { PortDecl } from '@shared/types'
 import {
   HumanTaskNodeConfigSchema,
   HumanTaskInstanceSchema,
-  type HumanTaskNodeConfig
+  type HumanTaskNodeConfig,
+  type HumanTaskInstance
 } from '@shared/agent-flow/node-contracts'
 import { humanTaskExecutor, projectHumanTaskOutputs } from '@shared/engine/executors/humanTask'
 import { NODE_ACCENTS, registerNodeType, type NodeBodyProps, type NodeSettingsProps } from '../registry'
@@ -34,7 +35,7 @@ function configOf(shape: NodeBodyProps['shape']): HumanTaskNodeConfig {
   return parsed.success ? parsed.data : DEFAULT_HUMAN_TASK_CONFIG
 }
 
-function instanceOf(shape: NodeBodyProps['shape']) {
+function instanceOf(shape: NodeBodyProps['shape']): HumanTaskInstance | null {
   const raw = (shape.meta as Record<string, unknown> | undefined)?.humanTask
   if (typeof raw !== 'string' || !raw.trim()) return null
   const parsed = HumanTaskInstanceSchema.safeParse(

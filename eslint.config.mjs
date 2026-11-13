@@ -39,5 +39,16 @@ export default defineConfig(
       '@typescript-eslint/no-unused-vars': 'off'
     }
   },
+  // 独立 Node 工具脚本（.cjs CommonJS / docs 下 .mjs 验证脚本）是纯 JavaScript，
+  // 不是 TypeScript：写 TS 返回类型注解会破坏 Node 执行，require() 是 CommonJS 合法导入。
+  // 因此关闭这两条仅适用于 TS 的规则；未使用变量等通用质量规则仍然保留。
+  // 生产源码（src/**）与测试不受此影响。
+  {
+    files: ['scripts/**/*.cjs', 'docs/**/*.mjs'],
+    rules: {
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      '@typescript-eslint/no-require-imports': 'off'
+    }
+  },
   eslintConfigPrettier
 )

@@ -42,7 +42,7 @@ const glmFetch = async (input, init) => {
     try {
       const b = JSON.parse(init.body);
       if (b?.model === MODEL) { b.thinking = { type: 'enabled' }; b.reasoning_effort = b.reasoning_effort ?? 'low'; init = { ...init, body: JSON.stringify(b) }; }
-    } catch {}
+    } catch { /* 非 JSON 正文按原样透传 */ }
   }
   return fetch(input, { ...init, redirect: 'manual' });
 };
