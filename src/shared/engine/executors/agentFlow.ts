@@ -154,7 +154,7 @@ export interface StateMachineInstance {
   revision: number
   state: string
   lastEventId?: string
-  /** 已应用的事件历史（仅 ID/事件/迁移/修订，不含用户正文）。 */
+  /** 已应用的事件历史（仅 ID/事件/迁移/修订/来源，不含用户正文）。 */
   history: Array<{
     eventId: string
     event: string
@@ -162,6 +162,8 @@ export interface StateMachineInstance {
     to: string
     revision: number
     at: number
+    /** O1：事件来源。human=人工提交；agent=协调器可信投影（仅账本回执/资产/审核事实）。缺省 human（存量兼容）。 */
+    source?: 'human' | 'agent'
   }>
 }
 
@@ -169,6 +171,12 @@ export interface StateMachinePendingEvent {
   eventId: string
   event: string
   expectedRevision: number
+  /**
+   * O1：事件来源。外部 flowStateMachine.submitEvent 只允许 human（默认）；
+   * agent 仅由协调器内部可信投影写入（来源限定为账本回执/资产登记/审核结论），
+   * 外部接口拒绝 agent，守住"模型文字不能直接赋予成功状态"。
+   */
+  source?: 'human' | 'agent'
 }
 
 const STATE_MACHINE_MAX_HISTORY = 200
@@ -204,6 +212,9 @@ export function parseStateMachinePending(raw: unknown): StateMachinePendingEvent
     if (typeof value?.expectedRevision !== 'number' || !Number.isInteger(value.expectedRevision)) {
       return null
     }
+    if (value.source !== undefined && value.source !== 'human' && value.source !== 'agent') {
+      return null
+    }
     return value
   } catch {
     return null
@@ -220,6 +231,44 @@ export function stateMachineFlowState(instance: StateMachineInstance): FlowState
     state: instance.state,
     ...(instance.lastEventId ? { lastEventId: instance.lastEventId } : {})
   })
+}
+
+/**
+ * O1：可信事件投影的纯迁移计算（与 stateMachineExecutor 同一修订 CAS / 去重 / 合法性语义）。
+ * 仅来源 agent 的内部协调器投影使用：把协调器已核对的可信事实（账本回执/资产登记/审核结论）
+ * 投影到画布状态机实例，使可见节点随节点完成自动推进。修订冲突 / 重复事件 / 非法迁移返回 null
+ * （调用方按失败处理，不静默改状态）。纯函数，渲染器权威动作与单测共用。
+ */
+export function projectTrustedStateMachineEvent(
+  instance: StateMachineInstance,
+  transitions: Array<{ from: string; event: string; to: string }>,
+  pending: StateMachinePendingEvent
+): StateMachineInstance | null {
+  if (pending.expectedRevision !== instance.revision) return null
+  if (instance.lastEventId && pending.eventId === instance.lastEventId) return null
+  const transition = transitions.find(
+    (item) => item.from === instance.state && item.event === pending.event
+  )
+  if (!transition) return null
+  const nextRevision = instance.revision + 1
+  return {
+    ...instance,
+    state: transition.to,
+    revision: nextRevision,
+    lastEventId: pending.eventId,
+    history: [
+      ...instance.history,
+      {
+        eventId: pending.eventId,
+        event: pending.event,
+        from: transition.from,
+        to: transition.to,
+        revision: nextRevision,
+        at: Date.now(),
+        source: 'agent' as const
+      }
+    ].slice(-STATE_MACHINE_MAX_HISTORY)
+  }
 }
 
 export const stateMachineExecutor: NodeExecutor = (ctx) => {
@@ -319,7 +368,8 @@ export const stateMachineExecutor: NodeExecutor = (ctx) => {
           from: transition.from,
           to: transition.to,
           revision: nextRevision,
-          at: Date.now()
+          at: Date.now(),
+          source: pending.source ?? 'human'
         }
       ].slice(-STATE_MACHINE_MAX_HISTORY)
     }

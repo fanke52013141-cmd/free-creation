@@ -17,6 +17,7 @@ import { emitDomainEvent } from './diagnostics/ipc-domain-events'
 import { registerFlowAssetsIpc } from './ipc/flow-assets.ipc'
 import { registerFlowCommandsIpc } from './ipc/flow-commands.ipc'
 import { registerFlowAgentsIpc } from './ipc/flow-agents.ipc'
+import { IPC } from '../shared/contracts'
 import { ProjectFileWatcher } from './ipc/project-watcher'
 import { registerMediaIpc } from './ipc/media.ipc'
 import { registerGatewayIpc } from './ipc/gateway.ipc'
@@ -713,7 +714,12 @@ app.whenReady().then(async () => {
   registerFlowAssetsIpc(() => mainWindow)
   registerFlowCommandsIpc(
     () => mainWindow,
-    (desktop) => registerFlowAgentsIpc(() => mainWindow, desktop)
+    (desktop) =>
+      registerFlowAgentsIpc(() => mainWindow, desktop, (projection) => {
+        const active = mainWindow
+        if (active && !active.isDestroyed())
+          active.webContents.send(IPC.flowAgents.stateProjection, projection)
+      })
   )
 
   if (process.argv.includes('--local-agent-access')) {

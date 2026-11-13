@@ -151,6 +151,7 @@ export function installBrowserMock(): void {
     inspectFlowAgent: async () => ({ ok: true, data: null }),
     pauseFlowAgent: async () => ({ ok: true, data: null }),
     onFlowAgentPublication: () => () => undefined,
+    onFlowAgentStateProjection: () => () => undefined,
     flowAgentCollaboration: async () => ({ ok: true, data: null }),
     flowAgentStageContextPreview: async () => ({ ok: true, data: null }),
     flowAgentStageRework: async () => ({ ok: true, data: null }),

@@ -41,7 +41,15 @@ import { registerSkillLibraryIpc } from './skill-library.ipc'
 
 export function registerFlowAgentsIpc(
   window: () => BrowserWindow | null,
-  desktop: FlowCommandDesktop
+  desktop: FlowCommandDesktop,
+  // O1：可信状态投影发送器（main→renderer，正常模式）。缺省则协调器不投影（存量兼容）。
+  sendStateProjection?: (projection: {
+    projectId: string
+    stateNodeId: string
+    event: string
+    expectedRevision: number
+    eventId: string
+  }) => void
 ): FlowAgentDesktopHost {
   registerSkillLibraryIpc(window)
   process.env.LANGSMITH_TRACING = 'false'
@@ -292,7 +300,10 @@ export function registerFlowAgentsIpc(
         }
         throw new AgentRuntimeError('FLOW_PUBLICATION_UNCONFIRMED', 'publication')
       },
-      (projectId, nodeId) => review.cancel(projectId, nodeId)
+      (projectId, nodeId) => review.cancel(projectId, nodeId),
+      async (projectId, stateNodeId, event, expectedRevision, eventId) => {
+        sendStateProjection?.({ projectId, stateNodeId, event, expectedRevision, eventId })
+      }
     )
   )
   for (const phase of [

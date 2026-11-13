@@ -65,6 +65,12 @@ export const DesktopRequestSchema = z
     stateMachineEvent: z.string().trim().min(1).max(120).optional(),
     stateMachineExpectedRevision: z.number().int().min(1).optional(),
     stateMachineEventId: z.string().min(1).max(160).optional(),
+    /**
+     * O1：state-machine-event 事件来源。human=人工提交（外部接口唯一允许值）；
+     * agent=协调器可信投影（仅内部 desktop 调用，来源限定账本回执/资产/审核事实）。
+     * 缺省 human（存量兼容）。外部 flowStateMachine.submitEvent 强制 human。
+     */
+    stateMachineEventSource: z.enum(['human', 'agent']).optional(),
     /** human-task-submit：人工结果与观察到的实例修订（C4）；submissionId 缺省由宿主生成。 */
     humanTaskExpectedRevision: z.number().int().min(1).optional(),
     humanTaskSubmissionId: z.string().min(1).max(160).optional(),

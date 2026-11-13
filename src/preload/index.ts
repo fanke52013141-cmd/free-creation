@@ -215,6 +215,30 @@ const api = {
       ipcRenderer.removeListener(IPC.flowAgents.publication, handler)
     }
   },
+  onFlowAgentStateProjection: (
+    listener: (projection: {
+      projectId: string
+      stateNodeId: string
+      event: string
+      expectedRevision: number
+      eventId: string
+    }) => void
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      projection: {
+        projectId: string
+        stateNodeId: string
+        event: string
+        expectedRevision: number
+        eventId: string
+      }
+    ): void => listener(projection)
+    ipcRenderer.on(IPC.flowAgents.stateProjection, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC.flowAgents.stateProjection, handler)
+    }
+  },
   flowAgentCatalog: (input: {
     projectId: string
     nodeId: string

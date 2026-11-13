@@ -1733,6 +1733,8 @@ export class LocalAccessService {
         nodeId,
         stateMachineEvent: input.event as string,
         stateMachineExpectedRevision: input.expectedRevision as number,
+        // O1：外部接口强制 human——可信 agent 投影只走协调器内部通道，外部不能伪造成功状态。
+        stateMachineEventSource: 'human',
         ...(typeof input.eventId === 'string' ? { stateMachineEventId: input.eventId } : {})
       },
       (version) => {

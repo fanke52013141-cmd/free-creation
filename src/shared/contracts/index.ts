@@ -55,6 +55,8 @@ export const IPC = {
     build: 'flow-agents:build',
     pause: 'flowAgents:pause',
     publication: 'flowAgents:publication',
+    // O1：协调器可信状态投影（main→renderer，正常模式可用；来源 agent，仅内部）。
+    stateProjection: 'flowAgents:stateProjection',
     run: 'flow-agents:run',
     inspect: 'flow-agents:inspect',
     stop: 'flow-agents:stop',

@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "generatedFrom": {
-    "ipcChannels": 198,
+    "ipcChannels": 199,
     "canvasActions": 50,
     "externalOperations": 177
   },
   "totals": {
-    "actions": 248,
+    "actions": 249,
     "byPhase": {
       "external": 204,
-      "excluded": 36,
+      "excluded": 37,
       "F9": 8
     }
   },
@@ -80,6 +80,13 @@
       "gui": "Agent Flow 面板",
       "phase": "excluded",
       "note": "主→渲染的**推送通道**（flowAgents:publication 只在 main 侧 webContents.send，渲染器 on 监听），没有入站的独立业务语义：它是协调运行内部\"发布确认\"人工门禁的一部分，由 flowAgent.run 的协调流程触发，普通人确认在 GUI 上完成。因此不设外部等价操作——把它做成可调用的外部动作等于让 Agent自己确认发布，与人工门禁冲突"
+    },
+    "ipc.flowAgents.stateProjection": {
+      "label": "Flow 状态机可信投影",
+      "channel": "flowAgents:stateProjection",
+      "gui": "画布状态机节点",
+      "phase": "excluded",
+      "note": "O1：主→渲染的**内部推送通道**（main 侧 webContents.send，渲染器 onFlowAgentStateProjection 监听），把协调器已核对的可信事实（账本回执/资产登记/审核结论）投影到画布状态机节点 meta.stateMachine，使可见节点随节点完成自动推进。无入站独立业务语义：来源限定 agent（协调器内部 emitTrustedEvent），修订 CAS/去重/合法性由 projectTrustedStateMachineEvent 校验；外部 flowStateMachine.submitEvent 强制 human，不能伪造 agent 投影。因此不设外部等价操作——做成可调用外部动作等于让模型文字直接赋予成功状态，与协同铁律冲突"
     },
     "ipc.flowAgents.run": {
       "label": "Flow 运行",

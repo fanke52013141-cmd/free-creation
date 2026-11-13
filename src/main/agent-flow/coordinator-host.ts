@@ -94,12 +94,69 @@ export class FlowCoordinatorHost {
       signal: AbortSignal
     ) => Promise<AgentModelPort>,
     private readonly publish: (input: AgentPublication, signal: AbortSignal) => Promise<void>,
-    private readonly cancelReview?: (projectId: string, nodeId: string) => void
+    private readonly cancelReview?: (projectId: string, nodeId: string) => void,
+    /**
+     * O1：把协调器已核对的可信事实投影到画布状态机节点（来源 agent，仅内部通道）。
+     * best-effort：run.phase 是权威，投影失败/修订竞态不阻断 flow。缺省则不投影（存量兼容）。
+     */
+    private readonly projectStateEvent?: (
+      projectId: string,
+      stateNodeId: string,
+      event: string,
+      expectedRevision: number,
+      eventId: string
+    ) => Promise<void>
   ) {
     this.store = new CoordinationStore(db)
     this.reports = new FlowReviewStore(db)
     this.assets = new FlowAssetStore(db, open)
     this.reviews = new CoordinatorReviews(db, open, specialists, publish, (run) => this.check(run))
+  }
+  /**
+   * O1：可信事件 choke point。先推进协调器权威 run.phase（store.event：修订 CAS + 迁移合法性，
+   * 事件来源限定为账本回执/资产登记/审核结论），再把同一可信事实投影到画布状态机节点，使可见
+   * 节点随节点完成自动推进。投影 best-effort：失败/竞态仅诊断记录，不阻断 flow（run.phase 权威）。
+   * 与 store.event 同签名，便于在全部事件发射点统一替换。
+   */
+  private emitTrustedEvent(
+    run: CoordinationRun,
+    eventId: string,
+    event: string,
+    expectedRevision: number
+  ): void {
+    this.store.event.bind(this.store)(run, eventId, event, expectedRevision)
+    if (!this.projectStateEvent) return
+    let canvasRevision = 1
+    try {
+      const file = this.open(run.projectId)
+      const shape = (
+        file?.tldrawSnapshot as { store?: Record<string, { meta?: Record<string, unknown> }> }
+      )?.store?.[run.stateNodeId]
+      const instance = JSON.parse(String(shape?.meta?.stateMachine ?? '')) as { revision?: number }
+      if (typeof instance?.revision === 'number') canvasRevision = instance.revision
+    } catch {
+      /* 无实例：初始修订 1（与执行器初始化一致）。 */
+    }
+    void this.projectStateEvent(
+      run.projectId,
+      run.stateNodeId,
+      event,
+      canvasRevision,
+      eventId
+    ).catch(() => {
+      emitGatewayEvent(
+        'agent.coordination.state_projection_skipped',
+        '状态机可信投影未应用（run.phase 仍为权威）',
+        {
+          traceId: run.traceId,
+          spanId: run.spanId,
+          projectId: run.projectId,
+          nodeId: run.stateNodeId,
+          taskId: run.taskId
+        },
+        { status: 'failed', phase: 'state-projection', attributes: { event } }
+      )
+    })
   }
   private file(input: Identity): ProjectFile {
     const file = this.open(input.projectId)
@@ -337,7 +394,7 @@ export class FlowCoordinatorHost {
     })
     try {
       const event = input.action === 'start' ? 'flow.started' : 'human.continue'
-      this.store.event(fixed, input.eventId ?? `${fixed.taskId}:start`, event, fixed.revision)
+      this.emitTrustedEvent(fixed, input.eventId ?? `${fixed.taskId}:start`, event, fixed.revision)
       fixed.state = 'running'
       fixed.paused = false
       fixed.traceId = input.traceId
@@ -439,7 +496,7 @@ export class FlowCoordinatorHost {
         pending.outputs = reply.refs
         this.store.save(run)
         await this.publishChild(run, pending.nodeId, reply, signal)
-        this.store.event(run, `${pending.taskId}:completed`, 'agent.completed', run.revision)
+        this.emitTrustedEvent(run, `${pending.taskId}:completed`, 'agent.completed', run.revision)
         pendingProgress = true
       } catch (error) {
         pendingFailure ??= error
@@ -607,7 +664,7 @@ export class FlowCoordinatorHost {
       this.assets.resolveInputs(run.projectId, decision.outputs)
       run.outputs = decision.outputs
       run.decisionPending = false
-      this.store.event(
+      this.emitTrustedEvent(
         run,
         `${run.taskId}:completed${run.reworkRound ? `:${run.reworkRound}` : ''}`,
         'flow.completed',
@@ -657,7 +714,7 @@ export class FlowCoordinatorHost {
     // All task identities and fixed inputs survive interruption before the first effect.
     this.store.save(run)
     for (const child of children)
-      this.store.event(run, `${child.taskId}:dispatch`, 'agent.dispatched', run.revision)
+      this.emitTrustedEvent(run, `${child.taskId}:dispatch`, 'agent.dispatched', run.revision)
     const prepared = new Map<string, AgentTaskSnapshot>()
     for (const child of children) {
       const candidate = candidates.get(child.nodeId)
@@ -744,7 +801,7 @@ export class FlowCoordinatorHost {
         throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'stage-delivery')
       this.assets.resolveInputs(run.projectId, finalChild.outputs)
       run.outputs = finalChild.outputs
-      this.store.event(
+      this.emitTrustedEvent(
         run,
         `${run.taskId}:completed${run.reworkRound ? `:${run.reworkRound}` : ''}`,
         'flow.completed',
@@ -1026,7 +1083,7 @@ export class FlowCoordinatorHost {
     run.outputs = []
     run.code = undefined
     run.decisionPending = false
-    this.store.event(run, `${run.taskId}:rework:${run.reworkRound}`, 'flow.rework', run.revision)
+    this.emitTrustedEvent(run, `${run.taskId}:rework:${run.reworkRound}`, 'flow.rework', run.revision)
     // 返工后停在等待态，由显式 continue 恢复固定顺序推进（不自动重发）。
     run.state = 'waiting'
     run.waitRevision++
@@ -1103,7 +1160,7 @@ export class FlowCoordinatorHost {
       try {
         if (child.state === 'completed') {
           await this.publishChild(run, child.nodeId, reply, signal)
-          this.store.event(run, `${child.taskId}:completed`, 'agent.completed', run.revision)
+          this.emitTrustedEvent(run, `${child.taskId}:completed`, 'agent.completed', run.revision)
         } else if (child.state !== 'waiting')
           throw new AgentRuntimeError(reply.task.code ?? 'FLOW_CHILD_BLOCKED', 'handoff')
       } catch (error) {
@@ -1214,7 +1271,7 @@ export class FlowCoordinatorHost {
         cycle.decision = record.decision
         cycle.originalInputs ??= record.decision.subjects
         cycle.state = record.decision.passed ? 'passed' : 'rejected'
-        this.store.event(
+        this.emitTrustedEvent(
           run,
           `${cycle.requestId}:${record.decision.passed ? 'review.passed' : 'review.rejected'}`,
           record.decision.passed ? 'review.passed' : 'review.rejected',
@@ -1306,7 +1363,7 @@ export class FlowCoordinatorHost {
         if (child.state !== 'completed') {
           child.state = 'completed'
           child.outputs = record.outputRefs
-          this.store.event(run, `${child.taskId}:completed`, 'agent.completed', run.revision)
+          this.emitTrustedEvent(run, `${child.taskId}:completed`, 'agent.completed', run.revision)
         }
       }
       if (!observed) reasons.push('FLOW_TASK_CHECKPOINT_UNCONFIRMED')
@@ -1344,7 +1401,7 @@ export class FlowCoordinatorHost {
             (t) => t.from === run.phase && t.event === 'human.continue'
           )?.from
         )
-          this.store.event(run, `${input.eventId}:recovery-wait`, 'human.wait', run.revision)
+          this.emitTrustedEvent(run, `${input.eventId}:recovery-wait`, 'human.wait', run.revision)
         run.state = 'waiting'
         run.waitRevision++
         run.code = undefined
@@ -1388,7 +1445,7 @@ export class FlowCoordinatorHost {
     }
   }
   private wait(run: CoordinationRun, event: string): false {
-    this.store.event(run, `${run.taskId}:wait:${run.waitRevision + 1}`, event, run.revision)
+    this.emitTrustedEvent(run, `${run.taskId}:wait:${run.waitRevision + 1}`, event, run.revision)
     run.state = 'waiting'
     run.waitRevision++
     this.store.save(run)

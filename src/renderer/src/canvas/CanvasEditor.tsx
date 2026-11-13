@@ -16,6 +16,11 @@ import 'tldraw/tldraw.css'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ProjectMeta, MediaAsset, NodeTypeId } from '@shared/types'
 import type { WorkspaceProfile } from '@shared/workspace-profile'
+import {
+  parseStateMachineInstance,
+  projectTrustedStateMachineEvent
+} from '@shared/engine/executors/agentFlow'
+import { StateMachineNodeConfigSchema } from '@shared/agent-flow/node-contracts'
 import { Tooltip } from '../components/Tooltip'
 import { NodeCardUtil, type NodeCardProps, type NodeCardShape } from './NodeCardShape'
 import { CarrierArrowUtil } from './CarrierArrowUtil'
@@ -456,6 +461,38 @@ export function CanvasEditor({
     const unsubscribeAgent = window.api.onFlowAgentPublication?.((grant) => {
       void publishFlowAgent(editorInstance, grant)
     })
+    // O1：协调器可信状态投影——把已核对的可信事实应用到画布状态机节点（可见自动推进）。
+    // 修订 CAS / 去重 / 合法性由 projectTrustedStateMachineEvent 校验；不匹配则静默跳过（run.phase 权威）。
+    const unsubscribeProjection = window.api.onFlowAgentStateProjection?.((projection) => {
+      if (projection.projectId !== project.id) return
+      const shape = editorInstance.getShape<NodeCardShape>(projection.stateNodeId as TLShapeId)
+      if (!shape || shape.type !== 'node-card' || shape.props.nodeType !== 'state-machine') return
+      const meta = shape.meta as Record<string, unknown> | undefined
+      const instance = parseStateMachineInstance(meta?.stateMachine)
+      const configParsed = StateMachineNodeConfigSchema.safeParse(
+        (() => {
+          try {
+            return JSON.parse(shape.props.config || '{}')
+          } catch {
+            return null
+          }
+        })()
+      )
+      if (!instance || !configParsed.success) return
+      const next = projectTrustedStateMachineEvent(instance, configParsed.data.transitions, {
+        eventId: projection.eventId,
+        event: projection.event,
+        expectedRevision: projection.expectedRevision,
+        source: 'agent'
+      })
+      if (!next) return
+      editorInstance.updateShape({
+        id: projection.stateNodeId as TLShapeId,
+        type: 'node-card',
+        meta: { stateMachine: JSON.stringify(next), stateMachinePending: '' }
+      })
+      void ensureCanvasSaved()
+    })
     const unsubscribe = window.api.onFlowCommandGrant((grant) => {
       void runPreparedFlowNodeCommand(
         editorInstance,
@@ -472,6 +509,7 @@ export function CanvasEditor({
       .catch(() => reportFlowCanvasBindingFailure(project.id, 'attach'))
     return () => {
       unsubscribeAgent?.()
+      unsubscribeProjection?.()
       unsubscribe()
       unsubscribeCancel()
       void window.api
@@ -1532,11 +1570,57 @@ export function CanvasEditor({
               )
                 throw new Error('PATCH_NOT_ADMITTED')
               const eventId = request.stateMachineEventId ?? crypto.randomUUID()
+              const source = request.stateMachineEventSource ?? 'human'
+              if (source === 'agent') {
+                // O1：协调器可信投影——把已核对的可信事实（账本回执/资产/审核）立即应用到
+                // meta.stateMachine，使可见状态机节点随节点完成自动推进。仅内部 desktop 调用可达。
+                const instance = parseStateMachineInstance(meta?.stateMachine)
+                const configParsed = StateMachineNodeConfigSchema.safeParse(
+                  (() => {
+                    try {
+                      return JSON.parse(shape.props.config || '{}')
+                    } catch {
+                      return null
+                    }
+                  })()
+                )
+                if (!instance || !configParsed.success) {
+                  replyFail(true, 'STATE_MACHINE_TRUSTED_PROJECTION_INVALID', 'instance/config required')
+                  return
+                }
+                const next = projectTrustedStateMachineEvent(
+                  instance,
+                  configParsed.data.transitions,
+                  { eventId, event, expectedRevision, source: 'agent' }
+                )
+                if (!next) {
+                  replyFail(
+                    true,
+                    'STATE_MACHINE_TRUSTED_PROJECTION_DENIED',
+                    `revision/event mismatch at ${currentRevision}`
+                  )
+                  return
+                }
+                editor.updateShape({
+                  id: nodeId as TLShapeId,
+                  type: 'node-card',
+                  meta: { stateMachine: JSON.stringify(next), stateMachinePending: '' }
+                })
+                await ensureCanvasSaved()
+                window.api.replyLocalAgentDesktop({
+                  requestId: request.requestId,
+                  projectId: project.id,
+                  ok: true,
+                  graphVersion: graphVersionRef.current,
+                  result: { revision: next.revision, eventId, event, state: next.state }
+                })
+                return
+              }
               editor.updateShape({
                 id: nodeId as TLShapeId,
                 type: 'node-card',
                 meta: {
-                  stateMachinePending: JSON.stringify({ eventId, event, expectedRevision })
+                  stateMachinePending: JSON.stringify({ eventId, event, expectedRevision, source: 'human' })
                 }
               })
               await ensureCanvasSaved()
