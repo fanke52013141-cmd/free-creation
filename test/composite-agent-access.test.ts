@@ -104,8 +104,8 @@ function manifest(): CompositeManifest {
 }
 
 describe('组合能力 Agent 契约（P1 对等）', () => {
-  it('composite.* 十六项操作全部进入统一 Registry，输入输出成对', () => {
-    expect(Object.keys(COMPOSITE_OPERATIONS)).toHaveLength(16)
+  it('composite.* 十八项操作全部进入统一 Registry，输入输出成对', () => {
+    expect(Object.keys(COMPOSITE_OPERATIONS)).toHaveLength(18)
     expect(COMPOSITE_OPERATIONS).toHaveProperty('composite.upgrade.apply')
     expect(COMPOSITE_OPERATIONS).toHaveProperty('composite.references')
     expect(COMPOSITE_OPERATIONS).toHaveProperty('composite.delete')

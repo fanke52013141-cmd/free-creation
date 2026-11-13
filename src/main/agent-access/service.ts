@@ -51,7 +51,11 @@ import { DesktopAccessError, type AccessDesktop } from './desktop'
 import { runNodeLibraryOperation } from './node-library-ops'
 import { runCompositeOperation, previewCompositeUpgrade } from './composite-ops'
 import { getCompositeVersion, getCompositeCapability } from '../store/composite.repo'
-import { getCompositeRun } from '../store/composite-run.repo'
+import {
+  getCompositeRun,
+  countCompositeRetries,
+  resubmitCompositeRun
+} from '../store/composite-run.repo'
 import { validateCompositeManifest } from '../../shared/composite/validate'
 import { compositeContentHash } from '../../shared/composite/manifest'
 import type { CompositeResolutionMap } from '../../shared/agent-access/graph-ops'
@@ -80,6 +84,7 @@ import { LIBRARY_CAPTURE_OPERATION_IDS, runLibraryCaptureOperation } from './lib
 import { CANVAS_HISTORY_OPERATION_IDS, runCanvasHistoryOperation } from './canvas-history-ops'
 import { PROVIDER_OPERATION_IDS, runProviderOperation } from './providers-ops'
 import { PROVIDER_NETWORK_OPERATION_IDS, runProviderNetworkOperation } from './provider-network-ops'
+import { WEB_SEARCH_OPERATION_IDS, runWebSearchOperation } from './web-search-ops'
 import { PROVIDER_ADMIN_OPERATION_IDS, runProviderAdminOperation } from './provider-admin-ops'
 import { KEY_PACKAGE_OPERATION_IDS, runKeyPackageOperation } from './key-package-ops'
 import { runProjectSettingsOperation } from './project-settings-ops'
@@ -394,6 +399,9 @@ export class LocalAccessService {
       // 推进（reconcile）或只放弃从未准入的外部命令（abort），不伪造成功。
       // F8：flowAgent.run/pause/stop 的作用对象就是账本里的那条 Agent 任务——run 要启动/继续
       // 它、pause/stop 要控制它；若按"存在活动任务"拒绝，就永远无法操作自己刚创建的任务。
+      // C4：humanTask.submit 同理——专家执行 human-task 停等（waitKind=human）的目的就是
+      // 让人提交结果；pending 写入不占执行权（执行器按 expectedRevision 权威消费），
+      // 与 GUI 提交按钮同一语义，若按占用拒绝则人工等待永远无法解锁。
       if (
         id &&
         spec.effect !== 'read' &&
@@ -403,7 +411,8 @@ export class LocalAccessService {
         operationId !== 'flow.command.abort' &&
         operationId !== 'flowAgent.run' &&
         operationId !== 'flowAgent.pause' &&
-        operationId !== 'flowAgent.stop'
+        operationId !== 'flowAgent.stop' &&
+        operationId !== 'humanTask.submit'
       )
         this.assertNoActiveTasks(id)
       const active = this.options.activeProjectId()
@@ -516,7 +525,11 @@ export class LocalAccessService {
             projectId: headlessScope,
             compositeManifest: record.manifest,
             compositeInputs: resolvedInputs,
-            ownRunId: runId
+            ownRunId: runId,
+            // W4 受控重试：公开输入值随运行创建原子落盘（握手 fire-and-forget，事后 UPDATE 会竞态）。
+            compositeInputValues: Object.fromEntries(
+              resolvedInputs.map((entry) => [entry.portId, entry.value])
+            )
           })
         } catch (error) {
           if (error instanceof DesktopAccessError && !error.unknownOutcome)
@@ -539,6 +552,9 @@ export class LocalAccessService {
           status: record.status,
           ...(record.outputValues ? { outputs: record.outputValues } : {}),
           ...(record.errorMessage ? { reason: record.errorMessage } : {}),
+          // W4：人工补交/重试链事实如实暴露（不伪造自动成功）。
+          ...(record.manualSubmission ? { manualSubmission: true } : {}),
+          ...(record.retryOf ? { retryOf: record.retryOf } : {}),
           ...(record.failurePhase
             ? {
                 failure: {
@@ -551,6 +567,10 @@ export class LocalAccessService {
               }
             : {})
         }
+      } else if (operationId === 'composite.run.retry') {
+        result = await this.executeCompositeRunRetry(input)
+      } else if (operationId === 'composite.run.resubmit') {
+        result = this.executeCompositeRunResubmit(input)
       } else if (operationId === 'run.cancel') {
         const row = getExternalRun(input.taskId as string)
         if (!row || row.project_id !== id)
@@ -1057,6 +1077,10 @@ export class LocalAccessService {
         // F9：供应商连通性测试与模型真实验证。默认不执行——必须显式 confirmNetwork=true
         // （validate 还需 confirmCost=true），否则拒绝且不发任何请求（用户已授权此边界）。
         result = await runProviderNetworkOperation(operationId, input)
+      } else if (WEB_SEARCH_OPERATION_IDS.has(operationId)) {
+        // C2：受控联网搜索外部 op。默认不执行——必须显式 confirmNetwork=true 与
+        // confirmCost=true，否则拒绝且不发任何请求；密钥由 main 从设备密钥库读取。
+        result = await runWebSearchOperation(operationId, input)
       } else if (PROVIDER_ADMIN_OPERATION_IDS.has(operationId)) {
         // F9 收尾：供应商管理与凭据包导入（导入需人在 GUI 确认）。
         result = await runProviderAdminOperation(operationId, input, {
@@ -1789,6 +1813,116 @@ export class LocalAccessService {
    * （与 GUI 按钮同一写入）；main 核对落盘事实。完成状态由运行时执行器校验，
    * 外部不能直接改完成状态——满足「模型文字不能直接赋予成功状态」的协同门槛。
    */
+  /** W4 受控重试：仅 failed/interrupted 的 headless 运行可按原固定版本与原公开输入复跑；
+   * 同一根运行重试上限 3 次；输入未记录（M32 前的旧运行）明确拒绝，不伪造输入。 */
+  private async executeCompositeRunRetry(input: Record<string, unknown>): Promise<unknown> {
+    if (!this.options.desktop)
+      throw new AccessFailure('DESKTOP_UNAVAILABLE', 'desktop-ownership', 'retry requires the desktop host running')
+    const runId = String(input.runId ?? '')
+    const existing = getCompositeRun(runId)?.run
+    if (!existing) throw new AccessFailure('NOT_FOUND', 'read', 'composite-run')
+    if (existing.status !== 'failed' && existing.status !== 'interrupted')
+      throw new AccessFailure('RUN_NOT_RETRYABLE', 'precheck', `status:${existing.status}`)
+    const rootRunId = existing.retryOf ?? existing.id
+    const retriesUsed = countCompositeRetries(rootRunId)
+    if (retriesUsed >= 3)
+      throw new AccessFailure('RETRY_LIMIT_EXCEEDED', 'precheck', 'max 3 retries per root run')
+    const record = getCompositeVersion(existing.capabilityId, existing.capabilityVersion)
+    if (!record)
+      throw new AccessFailure('VERSION_NOT_PUBLISHED', 'precheck', 'published-version')
+    const validation = validateCompositeManifest(record.manifest)
+    if (!validation.ok) throw new AccessFailure('STORAGE_INCONSISTENT', 'read', 'manifest-invalid')
+    if (!existing.inputValues)
+      throw new AccessFailure('INPUTS_NOT_RECORDED', 'precheck', 'run predates input persistence')
+    // 媒体输入按 mediaId 重新解析（资产可能已清理）；非媒体值按原样复跑。
+    const resolvedInputs: Array<{ portId: string; value: unknown }> = []
+    for (const [portId, raw] of Object.entries(existing.inputValues)) {
+      const value = raw as { kind?: string; mediaId?: string }
+      if (value?.kind === 'media' || (value && 'mediaPath' in (value as object))) {
+        const asset = getMediaAsset(String(value.mediaId ?? ''))
+        if (!asset) throw new AccessFailure('NOT_FOUND', 'precheck', `media:${value.mediaId}`)
+        resolvedInputs.push({
+          portId,
+          value: { kind: asset.kind, mediaId: asset.id, mediaPath: asset.path, mime: asset.mime }
+        })
+      } else {
+        resolvedInputs.push({ portId, value: raw })
+      }
+    }
+    const newRunId = randomUUID()
+    try {
+      await this.options.desktop.run({
+        action: 'execute-composite-headless',
+        projectId: `headless-${newRunId}`,
+        compositeManifest: record.manifest,
+        compositeInputs: resolvedInputs,
+        ownRunId: newRunId,
+        compositeInputValues: Object.fromEntries(
+          resolvedInputs.map((entry) => [entry.portId, entry.value])
+        ),
+        compositeRetryOf: rootRunId
+      })
+    } catch (error) {
+      if (error instanceof DesktopAccessError && !error.unknownOutcome)
+        throw new AccessFailure(error.code, 'execute-handshake', error.detail)
+      throw error
+    }
+    return {
+      runId: newRunId,
+      retryOf: rootRunId,
+      capabilityId: existing.capabilityId,
+      version: existing.capabilityVersion,
+      status: 'running',
+      retriesUsed: retriesUsed + 1
+    }
+  }
+
+  /** W4 人工补交：仅 failed/interrupted 可补交；须一次性补齐全部公开输出端口，
+   * 类型与端口声明兼容；补交后 completed 但 manualSubmission=true 如实标记。 */
+  private executeCompositeRunResubmit(input: Record<string, unknown>): unknown {
+    const runId = String(input.runId ?? '')
+    const existing = getCompositeRun(runId)?.run
+    if (!existing) throw new AccessFailure('NOT_FOUND', 'read', 'composite-run')
+    if (existing.status !== 'failed' && existing.status !== 'interrupted')
+      throw new AccessFailure('RUN_NOT_RESUBMITTABLE', 'precheck', `status:${existing.status}`)
+    const record = getCompositeVersion(existing.capabilityId, existing.capabilityVersion)
+    if (!record) throw new AccessFailure('VERSION_NOT_PUBLISHED', 'precheck', 'published-version')
+    const outputs = (input.outputs ?? []) as Array<{
+      portId: string
+      value: { kind: 'text' | 'markdown' | 'json'; text?: string; data?: unknown }
+    }>
+    const declared = record.manifest.outputs
+    const submittedIds = outputs.map((entry) => entry.portId)
+    if (
+      new Set(submittedIds).size !== submittedIds.length ||
+      submittedIds.length !== declared.length ||
+      declared.some((port) => !submittedIds.includes(port.id))
+    )
+      throw new AccessFailure('OUTPUT_PORTS_MISMATCH', 'precheck', 'all public outputs required exactly once')
+    const outputValues: Record<string, unknown> = {}
+    for (const entry of outputs) {
+      const port = declared.find((item) => item.id === entry.portId)!
+      const kind = entry.value.kind
+      const compatible =
+        port.type === 'any' ||
+        port.type === kind ||
+        (port.type === 'text' && kind === 'markdown')
+      if (!compatible)
+        throw new AccessFailure('OUTPUT_TYPE_INVALID', 'precheck', `${entry.portId}:${port.type}`)
+      outputValues[entry.portId] = entry.value
+    }
+    const changed = resubmitCompositeRun({
+      runId,
+      outputPorts: declared.map((port) => ({
+        portId: port.id,
+        kind: outputValues[port.id] ? (outputValues[port.id] as { kind: string }).kind : 'text'
+      })),
+      outputValues
+    })
+    if (!changed) throw new AccessFailure('RUN_NOT_RESUBMITTABLE', 'precheck', 'state-race')
+    return { runId, status: 'completed', manualSubmission: true, outputPorts: submittedIds }
+  }
+
   private async executeHumanTaskSubmit(
     id: string,
     activeId: string | null | undefined,

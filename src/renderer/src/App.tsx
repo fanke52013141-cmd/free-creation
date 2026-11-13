@@ -83,7 +83,10 @@ async function handleHeadlessCompositeExecute(request: DesktopRequest): Promise<
       manifest,
       inputs: inputs as ContractInputMap,
       ownRunId: runId || undefined,
-      headless: true
+      headless: true,
+      // W4 受控重试：公开输入值/重试链随运行创建原子落盘。
+      inputValues: request.compositeInputValues,
+      retryOf: request.compositeRetryOf
     }).catch(() => {
       // 失败已由 runCompositeIsolated 写入台账；此处仅兜底未捕获异常。
     })

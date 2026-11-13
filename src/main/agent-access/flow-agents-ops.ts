@@ -19,6 +19,7 @@ import { supportsSampledVideoReview } from '../../shared/agent-flow/video-review
 import { supportsReviewAudioInput } from '../../shared/agent-flow/media-review'
 import { FlowAgentDesktopHost } from '../agent-flow/desktop-host'
 import { FlowCommandLedger } from '../agent-flow/command-ledger'
+import { CoordinationStore } from '../agent-flow/coordination-store'
 import { getDb } from '../store/db'
 import { openProject } from '../store/projects.repo'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
@@ -148,6 +149,36 @@ function projectFile(projectId: string): NonNullable<ReturnType<typeof openProje
  * 因此"预检看到的状态"与"宿主读取的状态"不会漂移，不会出现外部把运行中任务
  * 误判为丢失的竞态。预检命中宿主会写账本的分支时直接返回账本事实。
  */
+/** C4：协调运行只读投影——与桌面 coordinator.view 同字段口径，但零写副作用。 */
+function inspectCoordinationReadOnly(projectId: string, nodeId: string): FlowAgentView | null {
+  const db = getDb()
+  const run = new CoordinationStore(db).latest(projectId, nodeId)
+  if (!run) return null
+  return {
+    taskId: run.taskId,
+    state: run.state,
+    waitKind: run.state === 'waiting' ? 'human' : null,
+    waitRevision: run.waitRevision,
+    decisions: run.decisions,
+    tools: run.children.length,
+    code: run.code,
+    recovery: run.recovery,
+    phase: run.phase,
+    children: run.children.map((child) => {
+      const live = db
+        .prepare(
+          'SELECT task_id, state FROM flow_agent_tasks WHERE project_id=? AND agent_node_id=? ORDER BY rowid DESC LIMIT 1'
+        )
+        .get(projectId, child.nodeId) as { task_id: string; state: string } | undefined
+      return {
+        nodeId: child.nodeId,
+        taskId: child.taskId,
+        state: live?.task_id === child.taskId ? live.state : child.state
+      }
+    })
+  }
+}
+
 function inspectFlowAgent(input: Record<string, unknown>, context: FlowAgentOperationContext): unknown {
   const projectId = input.projectId as string
   const nodeId = input.nodeId as string
@@ -157,6 +188,26 @@ function inspectFlowAgent(input: Record<string, unknown>, context: FlowAgentOper
       'FLOW_PROJECT_INACTIVE',
       'inspect: project.open the target canvas first (GUI admission requires the saved desktop canvas)'
     )
+  // C4：主控/状态机节点的协调运行只读投影。桌面宿主的 coordinator.inspect 带
+  // AGENT_SESSION_LOST 写副作用（running→blocked 落盘），那是桌面本地运行上下文的事实；
+  // 外部读路径复用会把应用内正在运行的主控误判为会话丢失。这里直读协调台账，绝不改写。
+  const node = file.nodes.find((item) => item.id === nodeId)
+  let role: unknown
+  try {
+    role = (JSON.parse(String(node?.params.config || '{}')) as { role?: unknown }).role
+  } catch {
+    role = undefined
+  }
+  if (node?.type === 'state-machine' || (node?.type === 'agent' && role === 'coordinator')) {
+    const view = inspectCoordinationReadOnly(projectId, nodeId)
+    return {
+      projectId,
+      nodeId,
+      graphVersion: file.meta.graphVersion,
+      ownership: 'ledger-only',
+      task: view ? taskDto(view) : null
+    }
+  }
   const latest = latestTask(projectId, nodeId)
   const liveOwned =
     !!latest &&

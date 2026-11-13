@@ -77,6 +77,7 @@ export const OPERATION_REQUIREMENTS: Record<string, readonly string[]> = {
   'director.publish.status': ['publishRequest'],
   'director.publish.continue': ['publishRequest', 'humanAuthorization'],
   'provider.testConnection': ['savedProvider', 'networkConfirm'],
+  'webSearch.run': ['savedConnection', 'networkConfirm', 'costConfirm'],
   'model.validate': ['savedConnection', 'modelDefinition', 'networkConfirm', 'costConfirm'],
   'model.definition.save': ['savedConnection'],
   'model.binding.save': ['savedConnection', 'modelDefinition'],

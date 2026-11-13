@@ -124,7 +124,7 @@ export class FlowAssetStore {
         const runStatus = readStoredNodeRunStatus(record.meta?.nodeRun)
         if (
           !pinned &&
-          ['processor', 'ai-process', 'agent', 'video', 'image-gen', 'image-edit', 'speech', 'tts', 'timeline'].includes(
+          ['processor', 'ai-process', 'human-task', 'agent', 'video', 'image-gen', 'image-edit', 'speech', 'tts', 'timeline'].includes(
             record.props.nodeType
           ) &&
           runStatus &&
@@ -136,7 +136,9 @@ export class FlowAssetStore {
             ? 'out-text'
             : record.props.nodeType === 'ai-process'
               ? 'out-text'
-              : record.props.nodeType === 'json'
+              : record.props.nodeType === 'human-task'
+                ? 'out-text'
+                : record.props.nodeType === 'json'
                 ? 'out-json'
                 : record.props.nodeType === 'audio'
                   ? 'out-audio'

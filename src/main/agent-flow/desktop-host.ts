@@ -46,6 +46,8 @@ import {
   textFlowInputsValid,
   aiProcessFlowTextConfig,
   aiProcessFlowInputsValid,
+  humanTaskFlowTextConfig,
+  humanTaskFlowInputsValid,
   flowTargetContract,
   flowTargetPorts
 } from '../../shared/agent-flow/video-adapter'
@@ -500,6 +502,20 @@ export class FlowAgentDesktopHost {
         node.type === 'ai-process' &&
         (!aiProcessFlowTextConfig(targetConfig) ||
           !aiProcessFlowInputsValid(
+            inputs.map((input) => ({
+              targetPortId: input.targetPortId,
+              values: this.assets
+                .resolveInputs(raw.projectId, input.assets)
+                .map((version) => version.value)
+            }))
+          ))
+      )
+        throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
+      // C4：人工任务目标——输入为参考上下文（类型校验同适配器）；限 text 输出模式。
+      if (
+        node.type === 'human-task' &&
+        (!humanTaskFlowTextConfig(targetConfig) ||
+          !humanTaskFlowInputsValid(
             inputs.map((input) => ({
               targetPortId: input.targetPortId,
               values: this.assets

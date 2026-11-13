@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 31
+export const DB_SCHEMA_VERSION = 32
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -618,6 +618,16 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
     database.exec(`
       ALTER TABLE composite_runs ADD COLUMN failure_node_id TEXT;
       ALTER TABLE composite_runs ADD COLUMN failure_port_id TEXT;
+    `)
+  },
+  // M32: W4 受控重试与人工补交——持久化 headless 执行的公开输入值（重试按原输入复跑）；
+  // retry_of 记录重试链根运行（受控上限按根计数）；manual_submission 标记人工补交完成
+  // （不伪造自动成功，run.get/execute.wait 如实暴露）。输入值仅存公开端口值，不存媒体路径。
+  (database) => {
+    database.exec(`
+      ALTER TABLE composite_runs ADD COLUMN input_values TEXT;
+      ALTER TABLE composite_runs ADD COLUMN retry_of TEXT;
+      ALTER TABLE composite_runs ADD COLUMN manual_submission INTEGER NOT NULL DEFAULT 0;
     `)
   }
 ]

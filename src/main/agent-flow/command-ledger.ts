@@ -5,6 +5,7 @@ import type { NodeShape } from '../../shared/engine/executor-types'
 import {
   codeFlowSingleOutputConfig,
   aiProcessFlowTextConfig,
+  humanTaskFlowTextConfig,
   cropFlowConfigValid,
   flowTargetContract,
   splitFlowConfigValid,
@@ -307,6 +308,8 @@ export class FlowCommandLedger {
       fail('FLOW_INPUT_CONTRACT_INVALID', 'code-config')
     if (node.type === 'ai-process' && !aiProcessFlowTextConfig(targetConfig))
       fail('FLOW_INPUT_CONTRACT_INVALID', 'ai-process-config')
+    if (node.type === 'human-task' && !humanTaskFlowTextConfig(targetConfig))
+      fail('FLOW_INPUT_CONTRACT_INVALID', 'human-task-config')
     if (
       command.contractVersion !== node.contractVersion ||
       portIdentity(node.ports) !== portIdentity(flowTargetPorts(node)) ||

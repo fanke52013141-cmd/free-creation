@@ -186,3 +186,28 @@ C2 用豆包搜索（内部工具+方案 A 资产来源，授权免费额度冒�
 ### 8.5 未验证边界（如实）
 - 人工鼠标点击 GUI 链路未做（验收为 CLI 驱动桌面宿主）；C2 外部 CLI/MCP op、C4 调度目标、W4 人工补交/受控重试留后续。
 - 改动尚未提交（含 P0），待任务发起人授权。
+
+## 9. 后续批闭环：C2 外部 op / C4 调度目标 / W4 重试补交（2026-11-13）
+
+### 9.1 C2 外部 CLI/MCP op `webSearch.run`
+- **实现**：`ops/web-search.ts`（双确认契约：confirmNetwork+confirmCost，首拒 NETWORK_CONFIRM_REQUIRED/COST_CONFIRM_REQUIRED）+ `web-search-ops.ts`（复用 agent 内部同一豆包客户端与官方真实端点；密钥按 well-known id doubao-search 从设备密钥库读取；直接返回结构化结果，不做资产结算——固定资产候选仍是 agent 内部路径专属）；registry/service 接线；CLI/MCP 从 ACCESS_OPERATIONS 自动派生（CLI `webSearch run`，MCP `webSearch_run`）。
+- **验证**：单测 8 项（契约登记/双确认拒绝/无密钥/成功/错误归一）；桌面验收脚本 `acceptance:agent-flow-web-search-op` 已就绪，**真实搜索冒烟待豆包 key 重新提供**（上批临时数据目录已清理，本会话无该密钥）。
+
+### 9.2 C4 human-task 可调度目标
+- **实现**：flowTargetContract/flowTargetPorts/输入校验（限 text 输出模式，固定 out-text；配置与执行器同一 strict 解析）；desktop-host 准入 + command-ledger 配置校验 + asset-store 端口映射/运行状态门禁；执行语义=skipped 停等回执→专家 wait_for_human（需 interactionMode=collaborative）→人工 humanTask.submit→continue 后再执行消费 pending→committed 交付。
+- **修复两个真实产品缺陷**：①humanTask.submit 被通用写操作占用门控误拒（专家人工等待期间无法提交，与 GUI 语义矛盾）→加入豁免清单（service.ts，与 flowAgent.run 同理）；②CLI 读路径 flowAgent.inspect 对主控返回 null（setCoordinator 仅 GUI IPC 接线）→inspectFlowAgent 对主控/状态机节点改纯只读协调投影（直读 CoordinationStore，零写副作用；不复用 coordinator.inspect 因其带 AGENT_SESSION_LOST 写副作用，外部读路径复用会误判应用内运行中的主控）。
+- **验证**：目标矩阵/模式限制单测；真实模型桌面验收 `acceptance:agent-flow-human-task-dispatch` **8 项全过**（主控分派→专家执行停等→人工提交→执行器权威消费→固定资产交付→主控 finish_flow completed）。
+
+### 9.3 W4 受控重试 + 人工补交
+- **实现**：M32 迁移（composite_runs 增 input_values/retry_of/manual_submission）；`composite.run.retry`（仅 failed/interrupted、原固定版本原公开输入复跑、同一根运行上限 3 次、输入未记录拒绝 INPUTS_NOT_RECORDED）；`composite.run.resubmit`（仅 failed/interrupted、一次性补齐全部公开输出端口、类型兼容校验、completed 但 manualSubmission=true 如实标记不伪造自动成功）；execute.wait/run.get 暴露 manualSubmission/retryOf。
+- **修复真实缺陷**：公开输入值落盘竞态——headless 握手 fire-and-forget（App.tsx `void runCompositeIsolated`），事后 UPDATE 落空；改为输入值/重试链经 desktop 请求→runStart IPC 在运行创建时原子落盘（desktop.ts/composite-run-contract/App.tsx/run-composite/preload/repo 全链路）。
+- **验证**：repo 单测（重试链计数/补交状态机守卫）+ 迁移测试维护；确定性桌面验收 `acceptance:agent-flow-composite-retry` **14 项全过**（无模型无计费：原输入落盘/重试链根计数/上限拒绝/补交端口校验/manualSubmission 暴露/终态守卫）。
+
+### 9.4 门禁与全量
+- 三门禁全绿：**169 操作 / 33 节点 / 190 IPC + 50 canvas / 240 动作**。契约 diff 人工核对：**0 行删除 / 520 行新增**，仅 3 个新 op + execute.wait 可选字段，纯加性（--accept-contract-change 已记录理由）。
+- 全量：**3402 过 / 2 失败 / 7 跳过**，唯一失败 = provider 夹具基线 2 项，**零新增失败**。
+- 类型 web/node 通过；electron-vite build 通过；composite 操作数断言维护（16→18）。
+
+### 9.5 未验证边界（如实）
+- C2 外部 op 真实搜索冒烟待豆包 key（脚本与单测已就绪）；人工鼠标点击 GUI 链路未做。
+- 改动尚未提交，待任务发起人授权。

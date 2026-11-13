@@ -21,6 +21,14 @@ const SUPPORTED = [
     output: 'out-text',
     config: { mode: 'text' }
   },
+  // C4：人工任务（限 text 输出模式；停等语义，输入为参考上下文）。
+  {
+    type: 'human-task',
+    contractVersion: 1,
+    inputs: ['in-text', 'in-json'],
+    output: 'out-text',
+    config: { schemaVersion: 1, outputType: 'text' }
+  },
   {
     type: 'video',
     contractVersion: 7,
@@ -197,5 +205,14 @@ describe('REL-03 Agent 支持目标矩阵', () => {
     expect(flowTargetContract(node('ai-process', 1, {}))).not.toBeNull()
     expect(flowTargetContract(node('ai-process', 1, { mode: 'markdown' }))).toBeNull()
     expect(flowTargetContract(node('ai-process', 1, { mode: 'json' }))).toBeNull()
+  })
+
+  it('C4：human-task 仅 text 输出模式可调度（json 输出端口漂移，显式拒绝；配置与执行器同一 strict 解析）', () => {
+    expect(flowTargetContract(node('human-task', 1, { schemaVersion: 1, outputType: 'text' }))).not.toBeNull()
+    expect(flowTargetContract(node('human-task', 1, { schemaVersion: 1 }))).not.toBeNull()
+    expect(flowTargetContract(node('human-task', 1, { schemaVersion: 1, outputType: 'json' }))).toBeNull()
+    // 缺 schemaVersion / 未知字段与执行器一致按无效配置拒绝（不静默放行）。
+    expect(flowTargetContract(node('human-task', 1, {}))).toBeNull()
+    expect(flowTargetContract(node('human-task', 2, { schemaVersion: 1 }))).toBeNull()
   })
 })

@@ -92,6 +92,10 @@ export const DesktopRequestSchema = z
       .optional(),
     /** execute-composite-headless：main 预分配的运行 ID（台账轮询用）。 */
     ownRunId: z.string().min(1).max(120).optional(),
+    /** execute-composite-headless：W4 公开输入值（创建运行时原子落盘，供受控重试复跑）。 */
+    compositeInputValues: z.record(z.string(), z.unknown()).optional(),
+    /** execute-composite-headless：W4 重试链根运行 ID（受控上限按根计数）。 */
+    compositeRetryOf: z.string().min(1).max(120).optional(),
     /** graph-patch：main 预检解析的素材事实（按 mediaId 注入，外部输入不可携带路径）。 */
     mediaResolutions: z.record(z.string(), mediaResolutionSchema).optional(),
     /** graph-patch：main 预解析的组合固定版本快照（W3 引用形态；外部输入只携带引用）。 */

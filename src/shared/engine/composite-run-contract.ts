@@ -33,6 +33,10 @@ export interface CompositeRunRequest {
   parentContext?: CompositeRunContext
   /** headless 执行标志（脱离项目/画布）；嵌套运行经 parentContext 继承。 */
   headless?: boolean
+  /** W4 受控重试：headless 公开输入值（创建运行时原子落盘，供失败后按原输入复跑）。 */
+  inputValues?: Record<string, unknown>
+  /** W4 受控重试：重试链根运行 ID（受控上限按根计数）。 */
+  retryOf?: string
 }
 
 export interface CompositeRunFailure {

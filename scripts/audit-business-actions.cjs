@@ -186,6 +186,18 @@ const EXTERNAL_ONLY_OPERATIONS = new Map([
   [
     'composite.execute.wait',
     'headless 执行终态轮询：composite.execute 的便捷等待封装，按 runId 读同一运行台账；随 composite.execute 同为外部专用入口'
+  ],
+  [
+    'webSearch.run',
+    '受控联网搜索直查入口：复用 agent 内部 web.search@1 同一豆包客户端与官方真实端点，双确认（confirmNetwork+confirmCost）才执行；GUI 搜索经专家工具触发，无独立直查按钮，属外部专用能力入口'
+  ],
+  [
+    'composite.run.retry',
+    'headless 运行受控重试：仅 failed/interrupted 按原固定版本与原公开输入复跑，同一根运行上限 3 次；GUI 实例运行经画布重跑，无"按台账原输入复跑"按钮，随 composite.execute 同为外部专用入口'
+  ],
+  [
+    'composite.run.resubmit',
+    'headless 运行人工补交：仅 failed/interrupted 可一次性补齐全部公开输出，completed 但 manualSubmission=true 如实标记；GUI 无对应补交按钮，属外部专用能力入口'
   ]
 ])
 

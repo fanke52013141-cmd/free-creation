@@ -34,6 +34,12 @@ export interface CompositeRunRecord {
   outputSummary: Array<{ portId: string; kind: string }>
   /** headless 执行的完整公开输出（按公开端口 ID 的 NodeValue）；画布执行为 null。 */
   outputValues: Record<string, unknown> | null
+  /** W4 受控重试：headless 执行的公开输入值（按公开端口 ID）；未记录为 null。 */
+  inputValues: Record<string, unknown> | null
+  /** W4 受控重试：重试链根运行 ID；非重试运行为 null。 */
+  retryOf: string | null
+  /** W4 人工补交：true 表示输出由人工补交而非自动执行产生（不伪造自动成功）。 */
+  manualSubmission: boolean
   createdAt: number
 }
 
@@ -65,6 +71,9 @@ interface RunRow {
   failure_port_id: string | null
   output_summary: string | null
   output_values: string | null
+  input_values: string | null
+  retry_of: string | null
+  manual_submission: number
   created_at: number
 }
 
@@ -128,6 +137,9 @@ function rowToRun(row: RunRow): CompositeRunRecord {
     failurePortId: row.failure_port_id ?? null,
     outputSummary: parseOutputSummary(row.output_summary),
     outputValues: parseOutputValues(row.output_values),
+    inputValues: parseOutputValues(row.input_values),
+    retryOf: row.retry_of ?? null,
+    manualSubmission: row.manual_submission === 1,
     createdAt: row.created_at
   }
 }
@@ -152,14 +164,18 @@ export function createCompositeRun(input: {
   contentHash: string
   instanceNodeId?: string
   parentRunId?: string
+  /** W4 受控重试：重试链根运行 ID（重试上限按根计数）。 */
+  retryOf?: string
+  /** W4 受控重试：headless 公开输入值（创建时原子落盘，供失败后按原输入复跑）。 */
+  inputValues?: Record<string, unknown>
 }): CompositeRunRecord {
   const now = Date.now()
   getDb()
     .prepare(
       `INSERT INTO composite_runs
        (id, project_id, capability_id, capability_version, content_hash,
-        instance_node_id, parent_run_id, status, started_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)`
+        instance_node_id, parent_run_id, retry_of, input_values, status, started_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)`
     )
     .run(
       input.id,
@@ -169,11 +185,68 @@ export function createCompositeRun(input: {
       input.contentHash,
       input.instanceNodeId ?? null,
       input.parentRunId ?? null,
+      input.retryOf ?? null,
+      input.inputValues ? JSON.stringify(input.inputValues) : null,
       now,
       now
     )
   const row = getDb().prepare('SELECT * FROM composite_runs WHERE id = ?').get(input.id) as RunRow
   return rowToRun(row)
+}
+
+/** W4 受控重试：落盘 headless 执行的公开输入值（仅公开端口值，不存媒体路径）。 */
+export function attachCompositeRunInputs(
+  runId: string,
+  inputValues: Record<string, unknown>
+): boolean {
+  return (
+    getDb()
+      .prepare('UPDATE composite_runs SET input_values = ? WHERE id = ?')
+      .run(JSON.stringify(inputValues), runId).changes > 0
+  )
+}
+
+/** W4 受控重试：标记重试链根运行（运行记录由渲染层创建，握手返回后落盘）。 */
+export function attachCompositeRunRetry(runId: string, retryOf: string): boolean {
+  return (
+    getDb()
+      .prepare('UPDATE composite_runs SET retry_of = ? WHERE id = ?')
+      .run(retryOf, runId).changes > 0
+  )
+}
+
+/** W4 受控重试：按重试链根计数（根本身不计入；上限由调用方裁决）。 */
+export function countCompositeRetries(rootRunId: string): number {
+  const row = getDb()
+    .prepare('SELECT COUNT(*) AS n FROM composite_runs WHERE retry_of = ?')
+    .get(rootRunId) as { n: number }
+  return row.n
+}
+
+/**
+ * W4 人工补交：仅 failed/interrupted 的运行可补交；补交后状态 completed 但
+ * manual_submission=1 如实标记（不伪造自动成功）。输出值由调用方按公开端口校验后传入。
+ */
+export function resubmitCompositeRun(input: {
+  runId: string
+  outputPorts: Array<{ portId: string; kind: string }>
+  outputValues: Record<string, unknown>
+}): boolean {
+  return (
+    getDb()
+      .prepare(
+        `UPDATE composite_runs SET status = 'completed', finished_at = ?, error_code = NULL,
+           error_message = NULL, failure_phase = NULL, failure_node_id = NULL, failure_port_id = NULL,
+           output_summary = ?, output_values = ?, manual_submission = 1
+         WHERE id = ? AND status IN ('failed','interrupted')`
+      )
+      .run(
+        Date.now(),
+        JSON.stringify(input.outputPorts.slice(0, 32)),
+        JSON.stringify(input.outputValues),
+        input.runId
+      ).changes > 0
+  )
 }
 
 export function recordCompositeRunStep(input: {

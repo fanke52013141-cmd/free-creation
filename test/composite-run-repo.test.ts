@@ -10,7 +10,11 @@ import {
   getCompositeRun,
   listCompositeRuns,
   recordCompositeRunStep,
-  settleInterruptedCompositeRuns
+  settleInterruptedCompositeRuns,
+  attachCompositeRunInputs,
+  attachCompositeRunRetry,
+  countCompositeRetries,
+  resubmitCompositeRun
 } from '../src/main/store/composite-run.repo'
 
 beforeEach(() => {
@@ -21,6 +25,7 @@ beforeEach(() => {
       capability_version TEXT NOT NULL, content_hash TEXT NOT NULL, instance_node_id TEXT,
       parent_run_id TEXT, failure_phase TEXT, failure_node_id TEXT, failure_port_id TEXT,
       output_summary TEXT, output_values TEXT,
+      input_values TEXT, retry_of TEXT, manual_submission INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL, started_at INTEGER NOT NULL, finished_at INTEGER,
       error_code TEXT, error_message TEXT, created_at INTEGER NOT NULL
     );
@@ -176,5 +181,89 @@ describe('组合运行账本（P3 基础）', () => {
     const run = getCompositeRun('run-ok')?.run
     expect(run?.failureNodeId).toBeNull()
     expect(run?.failurePortId).toBeNull()
+  })
+
+  it('W4 受控重试：输入值/重试链落盘，按根计数', () => {
+    createCompositeRun({
+      id: 'root',
+      projectId: 'project',
+      capabilityId: 'model-polish',
+      capabilityVersion: '1.0',
+      contentHash: '1'.repeat(64)
+    })
+    expect(attachCompositeRunInputs('root', { 'in-text': { kind: 'text', text: '原输入' } })).toBe(true)
+    finishCompositeRun({ runId: 'root', status: 'failed', errorCode: 'REQUIRED_OUTPUT_MISSING' })
+    expect(countCompositeRetries('root')).toBe(0)
+    createCompositeRun({
+      id: 'retry-1',
+      projectId: 'project',
+      capabilityId: 'model-polish',
+      capabilityVersion: '1.0',
+      contentHash: '1'.repeat(64),
+      retryOf: 'root'
+    })
+    expect(attachCompositeRunRetry('retry-1', 'root')).toBe(true)
+    expect(countCompositeRetries('root')).toBe(1)
+    const root = getCompositeRun('root')?.run
+    expect(root?.inputValues).toEqual({ 'in-text': { kind: 'text', text: '原输入' } })
+    expect(root?.retryOf).toBeNull()
+    expect(getCompositeRun('retry-1')?.run.retryOf).toBe('root')
+  })
+
+  it('W4 人工补交：仅 failed/interrupted 可补交，completed 但 manualSubmission 如实标记', () => {
+    createCompositeRun({
+      id: 'run-fail',
+      projectId: 'project',
+      capabilityId: 'model-polish',
+      capabilityVersion: '1.0',
+      contentHash: '1'.repeat(64)
+    })
+    finishCompositeRun({
+      runId: 'run-fail',
+      status: 'failed',
+      errorCode: 'REQUIRED_OUTPUT_MISSING',
+      failurePhase: 'output',
+      failureNodeId: 'n1',
+      failurePortId: 'out-text'
+    })
+    expect(
+      resubmitCompositeRun({
+        runId: 'run-fail',
+        outputPorts: [{ portId: 'polished', kind: 'text' }],
+        outputValues: { polished: { kind: 'text', text: '人工补交结果' } }
+      })
+    ).toBe(true)
+    const run = getCompositeRun('run-fail')?.run
+    expect(run?.status).toBe('completed')
+    expect(run?.manualSubmission).toBe(true)
+    expect(run?.outputValues).toEqual({ polished: { kind: 'text', text: '人工补交结果' } })
+    // 补交清空失败定位（运行已交付），但补交标记永不移除。
+    expect(run?.failureNodeId).toBeNull()
+    // 已 completed 的运行不可再次补交（状态机守卫）。
+    expect(
+      resubmitCompositeRun({
+        runId: 'run-fail',
+        outputPorts: [{ portId: 'polished', kind: 'text' }],
+        outputValues: { polished: { kind: 'text', text: '再次补交' } }
+      })
+    ).toBe(false)
+  })
+
+  it('W4 人工补交：running/completed 运行拒绝补交', () => {
+    createCompositeRun({
+      id: 'run-live',
+      projectId: 'project',
+      capabilityId: 'model-polish',
+      capabilityVersion: '1.0',
+      contentHash: '1'.repeat(64)
+    })
+    expect(
+      resubmitCompositeRun({
+        runId: 'run-live',
+        outputPorts: [{ portId: 'polished', kind: 'text' }],
+        outputValues: { polished: { kind: 'text', text: 'x' } }
+      })
+    ).toBe(false)
+    expect(getCompositeRun('run-live')?.run.status).toBe('running')
   })
 })

@@ -151,6 +151,37 @@ export const COMPOSITE_OPERATIONS = {
       })
       .strict()
   },
+  'composite.run.retry': {
+    effect: 'execute',
+    description:
+      '受控重试失败的 headless 运行：仅 failed/interrupted 可重试，按原固定版本与原公开输入复跑（输入未记录则拒绝）；同一根运行重试上限 3 次；返回新 runId，终态经 composite.run.get 读取',
+    input: z.object({ runId: z.string().min(1).max(120) }).strict()
+  },
+  'composite.run.resubmit': {
+    effect: 'write',
+    description:
+      '人工补交失败 headless 运行的公开输出：仅 failed/interrupted 可补交，须一次性补齐全部公开输出端口（text/markdown/json；媒体补交暂不支持）；补交后运行 completed 但 manualSubmission=true 如实标记，不伪造自动成功',
+    input: z
+      .object({
+        runId: z.string().min(1).max(120),
+        outputs: z
+          .array(
+            z
+              .object({
+                portId: z.string().min(1).max(100),
+                value: z.discriminatedUnion('kind', [
+                  z.object({ kind: z.literal('text'), text: z.string().min(1).max(100000) }).strict(),
+                  z.object({ kind: z.literal('markdown'), text: z.string().min(1).max(100000) }).strict(),
+                  z.object({ kind: z.literal('json'), data: z.unknown() }).strict()
+                ])
+              })
+              .strict()
+          )
+          .min(1)
+          .max(64)
+      })
+      .strict()
+  },
   'composite.archive': {
     effect: 'write',
     description: '归档/恢复组合能力；归档后默认搜索不可见，已引用版本仍可读取',
@@ -317,7 +348,29 @@ export const COMPOSITE_OUTPUTS = {
           portId: z.string().optional()
         })
         .strict()
-        .optional()
+        .optional(),
+      /** W4：人工补交完成的运行如实标记（不伪造自动成功）。 */
+      manualSubmission: z.boolean().optional(),
+      /** W4：重试链根运行 ID（非重试运行缺省）。 */
+      retryOf: z.string().max(120).optional()
+    })
+    .strict(),
+  'composite.run.retry': z
+    .object({
+      runId: z.string().min(1).max(120),
+      retryOf: z.string().min(1).max(120),
+      capabilityId,
+      version: semver,
+      status: z.literal('running'),
+      retriesUsed: z.number().int().min(1).max(3)
+    })
+    .strict(),
+  'composite.run.resubmit': z
+    .object({
+      runId: z.string().min(1).max(120),
+      status: z.literal('completed'),
+      manualSubmission: z.literal(true),
+      outputPorts: z.array(z.string().max(100)).max(64)
     })
     .strict(),
   'composite.archive': z.object({ capabilityId, archived: z.boolean() }).strict(),

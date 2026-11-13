@@ -13,6 +13,7 @@ import {
   parseCodeConfigs
 } from '../engine/executors/code'
 import { parseAiProcess } from '../engine/executors/aiProcess'
+import { HumanTaskNodeConfigSchema } from './node-contracts'
 
 /** Structural ceiling; the selected provider's lower reference limits also apply. */
 export const VIDEO_FLOW_MAX_REFERENCES = 30
@@ -37,6 +38,13 @@ export function flowTargetContract(node: CanvasNode): { inputs: string[]; output
   // markdown/json 模式的输出端口随结果漂移，不适合固定资产交付）。
   if (node.type === 'ai-process' && node.contractVersion === 1) {
     if (!aiProcessFlowTextConfig(node.params.config)) return null
+    return { inputs: ['in-text', 'in-json'], output: 'out-text' }
+  }
+  // C4：人工任务目标——仅接受 text 输出模式（固定 out-text 交付）；
+  // 执行语义为停等：未提交时回执 skipped，人工提交后再执行消费 pending 转 committed。
+  // 输入端口是供人工参考的上下文资产，不自动决定结果。
+  if (node.type === 'human-task' && node.contractVersion === 1) {
+    if (!humanTaskFlowTextConfig(node.params.config)) return null
     return { inputs: ['in-text', 'in-json'], output: 'out-text' }
   }
   if (node.type === 'video' && node.contractVersion === 7)
@@ -73,6 +81,29 @@ export function aiProcessFlowTextConfig(rawConfig: unknown): boolean {
   } catch {
     return false
   }
+}
+
+/** C4：人工任务目标只接受 text 输出模式（与执行器同一 HumanTaskNodeConfigSchema，默认 text）。 */
+export function humanTaskFlowTextConfig(rawConfig: unknown): boolean {
+  try {
+    const raw = typeof rawConfig === 'string' ? JSON.parse(rawConfig || '{}') : rawConfig ?? {}
+    const parsed = HumanTaskNodeConfigSchema.safeParse(raw)
+    return parsed.success && parsed.data.outputType === 'text'
+  } catch {
+    return false
+  }
+}
+
+/** C4：人工任务目标输入——in-text 文本/markdown、in-json 结构化参考上下文；允许空（人工可独立填写结果）。 */
+export function humanTaskFlowInputsValid(inputs: FlowInputValues[]): boolean {
+  if (new Set(inputs.map((input) => input.targetPortId)).size !== inputs.length) return false
+  return inputs.every((input) =>
+    input.targetPortId === 'in-text'
+      ? input.values.every((value) => value.kind === 'text' || value.kind === 'markdown')
+      : input.targetPortId === 'in-json'
+        ? input.values.every((value) => value.kind === 'json')
+        : false
+  )
 }
 
 /** C1：文本目标输入——in-text 有序文本/markdown；允许空（节点正文可独立参与合并）。 */
@@ -559,6 +590,48 @@ export const AI_PROCESS_FLOW_PORTS: PortDecl[] = [
   }
 ]
 
+/** C4：人工任务目标端口与注册表一致（输入为参考上下文；输出仅人工提交后产生）。 */
+export const HUMAN_TASK_FLOW_PORTS: PortDecl[] = [
+  {
+    id: 'in-text',
+    name: '文本',
+    dir: 'in',
+    type: 'text',
+    description: '可选上下文：供人工参考的已提交资产，不自动决定结果。',
+    required: false,
+    cardinality: 'many'
+  },
+  {
+    id: 'in-json',
+    name: '结构数据',
+    dir: 'in',
+    type: 'json',
+    description: '可选上下文：供人工参考的已提交资产，不自动决定结果。',
+    required: false,
+    cardinality: 'many',
+    schema: { id: 'json.any', version: 1 }
+  },
+  {
+    id: 'out-text',
+    name: '文本',
+    dir: 'out',
+    type: 'text',
+    description: '人工正式提交并运行后才输出的结果；未提交不产生输出。',
+    required: false,
+    cardinality: 'one'
+  },
+  {
+    id: 'out-json',
+    name: '结构数据',
+    dir: 'out',
+    type: 'json',
+    description: '人工正式提交并运行后才输出的结果；未提交不产生输出。',
+    required: false,
+    cardinality: 'one',
+    schema: { id: 'json.any', version: 1 }
+  }
+]
+
 /** 裁剪/拆图目标端口与注册表一致（in-image 必填单值；拆图另暴露集合口）。 */
 export const CROP_FLOW_PORTS: PortDecl[] = [
   {
@@ -723,6 +796,7 @@ export function flowTargetPorts(node: CanvasNode): PortDecl[] {
   if (node.type === 'processor') return [...PROCESSOR_PORTS.in, ...PROCESSOR_PORTS.out]
   if (node.type === 'text') return TEXT_FLOW_PORTS
   if (node.type === 'ai-process') return AI_PROCESS_FLOW_PORTS
+  if (node.type === 'human-task') return HUMAN_TASK_FLOW_PORTS
   if (node.type === 'image-crop') return CROP_FLOW_PORTS
   if (node.type === 'image-split') return SPLIT_FLOW_PORTS
   if (node.type === 'code') return codeFlowPorts(node.params.config)

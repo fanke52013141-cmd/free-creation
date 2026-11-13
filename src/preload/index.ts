@@ -566,6 +566,10 @@ const api = {
       instanceNodeId?: string
       /** 外层运行 ID；节点流自身每次调用使用独立 id。 */
       parentRunId?: string
+      /** W4 受控重试：重试链根运行 ID。 */
+      retryOf?: string
+      /** W4 受控重试：headless 公开输入值（创建时原子落盘）。 */
+      inputValues?: Record<string, unknown>
     }): Promise<IpcEnvelope<unknown>> => ipcRenderer.invoke(IPC.composite.runStart, input),
     runStep: (input: {
       runId: string

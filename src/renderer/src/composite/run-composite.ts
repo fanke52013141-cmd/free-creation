@@ -123,7 +123,10 @@ async function execute(
         capabilityVersion: manifest.version,
         contentHash,
         ...(parentRunId ? { parentRunId } : {}),
-        ...(request.instanceNodeId ? { instanceNodeId: request.instanceNodeId } : {})
+        ...(request.instanceNodeId ? { instanceNodeId: request.instanceNodeId } : {}),
+        // W4 受控重试：公开输入值/重试链随运行创建原子落盘（仅 headless 入口携带）。
+        ...(request.inputValues ? { inputValues: request.inputValues } : {}),
+        ...(request.retryOf ? { retryOf: request.retryOf } : {})
       })
     )
     ledgerStarted = true
