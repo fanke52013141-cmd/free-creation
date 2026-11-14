@@ -20,6 +20,8 @@ import { supportsReviewAudioInput } from '../../shared/agent-flow/media-review'
 import { FlowAgentDesktopHost } from '../agent-flow/desktop-host'
 import { FlowCommandLedger } from '../agent-flow/command-ledger'
 import { CoordinationStore } from '../agent-flow/coordination-store'
+import { FlowGraphSchema, validateFlowGraph } from '../../shared/agent-flow/flow-graph'
+import { compileFlowGraph, FlowGraphCompileError } from '../../shared/agent-flow/flow-graph-compiler'
 import { FlowAssetStore } from '../agent-flow/asset-store'
 import { FlowTaskStore, agentThread } from '../agent-flow/task-store'
 import { FlowDefinitionStore } from '../agent-flow/definition-store'
@@ -45,7 +47,9 @@ export const FLOW_AGENT_OPERATION_IDS: ReadonlySet<AccessOperationId> = new Set(
   'flowDefinition.list',
   'flowDefinition.get',
   'flowDefinition.diff',
-  'flowRun.overview'
+  'flowRun.overview',
+  'flowGraph.validate',
+  'flowGraph.compile'
 ] as AccessOperationId[])
 
 export interface FlowAgentOperationContext {
@@ -531,6 +535,46 @@ function overviewFlowRun(
   return { projectId, overview }
 }
 
+/** O4-P5：静态校验外部生成的 FlowGraph（只读，纯函数；不写画布、不执行）。 */
+function validateFlowGraphOp(input: Record<string, unknown>): unknown {
+  const parsed = FlowGraphSchema.safeParse(input.graph)
+  if (!parsed.success)
+    return {
+      ok: false,
+      errors: [
+        {
+          code: 'FLOW_GRAPH_SCHEMA_INVALID',
+          message: (parsed.error.issues[0]?.message ?? 'invalid graph').slice(0, 512)
+        }
+      ]
+    }
+  const result = validateFlowGraph(parsed.data)
+  return result.ok ? { ok: true, errors: [] } : { ok: false, errors: result.errors }
+}
+
+/** O4-P5：把 FlowGraph 编译为画布图预览（只读，纯函数；不写画布）。非法图返回 ok=false。 */
+function compileFlowGraphOp(input: Record<string, unknown>): unknown {
+  const parsed = FlowGraphSchema.safeParse(input.graph)
+  if (!parsed.success)
+    return {
+      ok: false,
+      compiled: null,
+      errors: [
+        {
+          code: 'FLOW_GRAPH_SCHEMA_INVALID',
+          message: (parsed.error.issues[0]?.message ?? 'invalid graph').slice(0, 512)
+        }
+      ]
+    }
+  try {
+    return { ok: true, compiled: compileFlowGraph(parsed.data), errors: [] }
+  } catch (error) {
+    if (error instanceof FlowGraphCompileError)
+      return { ok: false, compiled: null, errors: error.errors }
+    throw error
+  }
+}
+
 /** dispatch 的分组委托入口：只分发本族操作，其余明确拒绝（防误接）。 */
 export async function runFlowAgentOperation(
   operationId: AccessOperationId,
@@ -561,6 +605,10 @@ export async function runFlowAgentOperation(
         return diffDefinitions(input, context)
       case 'flowRun.overview':
         return overviewFlowRun(input, context)
+      case 'flowGraph.validate':
+        return validateFlowGraphOp(input)
+      case 'flowGraph.compile':
+        return compileFlowGraphOp(input)
       default:
         refuse('UNSUPPORTED_OPERATION', 'flow-agents-dispatch')
     }

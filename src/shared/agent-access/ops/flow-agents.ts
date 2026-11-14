@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { identifier, nodeId, project } from './common'
 import { FlowDefinitionSchema } from '../../agent-flow/flow-definition'
+import { FlowGraphSchema } from '../../agent-flow/flow-graph'
 
 /**
  * 内部 Agent Flow 的**观察**操作（F8，flowAgents 族）。
@@ -226,6 +227,18 @@ export const FLOW_AGENTS_OPERATIONS = {
     description:
       'O3：读取某协调运行的一次流程运行统一总览（状态/阶段/修订/子任务 + 可回放事件时间线，事件来源 user/agent 归因）；只读投影，权威仍是命令账本与运行实例；不存在返回 null',
     input: project.extend({ nodeId: flowId }).strict()
+  },
+  'flowGraph.validate': {
+    effect: 'read',
+    description:
+      'O4-P5：静态校验外部生成的 FlowGraph（引用/参与合法性/环须有界/可达/预算），返回 ok 与稳定错误码；只读，不写画布、不执行',
+    input: z.object({ graph: FlowGraphSchema }).strict()
+  },
+  'flowGraph.compile': {
+    effect: 'read',
+    description:
+      'O4-P5：把 FlowGraph 编译为画布图预览（节点配置+边+派生状态机，与建图预览同构）；只读预览不写画布；非法图返回 ok=false 与错误',
+    input: z.object({ graph: FlowGraphSchema }).strict()
   },
   'flowAgent.catalog': {
     effect: 'read',
@@ -499,6 +512,69 @@ export const FLOW_AGENTS_OUTPUTS = {
         })
         .strict()
         .nullable()
+    })
+    .strict(),
+  'flowGraph.validate': z
+    .object({
+      ok: z.boolean(),
+      errors: z
+        .array(
+          z
+            .object({
+              code: z.string().max(80),
+              nodeId: flowId.optional(),
+              message: z.string().max(512)
+            })
+            .strict()
+        )
+        .max(64)
+    })
+    .strict(),
+  'flowGraph.compile': z
+    .object({
+      ok: z.boolean(),
+      compiled: z
+        .object({
+          nodes: z
+            .array(
+              z
+                .object({
+                  id: flowId,
+                  type: z.string().max(40),
+                  title: z.string().max(200),
+                  text: z.string().max(65536),
+                  config: z.string().max(262144),
+                  contractVersion: z.number().int().nonnegative()
+                })
+                .strict()
+            )
+            .max(128),
+          edges: z
+            .array(
+              z
+                .object({
+                  from: z.object({ nodeId: flowId, portId: flowId }).strict(),
+                  to: z.object({ nodeId: flowId, portId: flowId }).strict()
+                })
+                .strict()
+            )
+            .max(256),
+          coordinatorNodeId: flowId,
+          stateNodeId: flowId
+        })
+        .strict()
+        .nullable(),
+      errors: z
+        .array(
+          z
+            .object({
+              code: z.string().max(80),
+              nodeId: flowId.optional(),
+              message: z.string().max(512)
+            })
+            .strict()
+        )
+        .max(64)
     })
     .strict(),
   'flowAgent.catalog': z

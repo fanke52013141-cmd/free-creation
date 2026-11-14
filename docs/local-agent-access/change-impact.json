@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "O4-P4 loop execution: router settledNodes/loopNeedsAnotherIteration (exitCondition or maxIterations), graphStep re-dispatches loop nodes with iteration-specific task ids, run.loopIterations state, graphFacts uses latest iteration delivery. Backward compatible: non-graph modes unaffected (loopIterations unset); graph mode opt-in.",
+  "reason": "O4-P5 external flow generation: add read-only flowGraph.validate and flowGraph.compile ops (pure functions reusing FlowGraph schema + compiler); external god-agent generates flow JSON then validates and compiles to canvas-graph preview; no canvas write, no execution; confirm-to-canvas remains a later human-gated step. Backward compatible: new read-only ops only.",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -12,7 +12,7 @@
     "src/main/agent-access/diagnostics-ops.ts": "bf6ec45da287db9faae352b4ae57e6c5d1f4f7c95ae0dd4fb28ae9099597cdef",
     "src/main/agent-access/flow-agent-build-ops.ts": "d864e2c81e4b48b54af4aaec14df1021c653919463544d3fd5279b32e946d6aa",
     "src/main/agent-access/flow-agent-run-ops.ts": "c0860217de0bc290d3fefb536984bf42e44a9402e26c74dcaf1a65e596f46d83",
-    "src/main/agent-access/flow-agents-ops.ts": "2bf234830c39e786dbd4fd6868562bf6ec1fc70f4a93c88bda85bf227feedff1",
+    "src/main/agent-access/flow-agents-ops.ts": "659280066cc2647521f91f26989e71ee8b36644bab4124556c684179c2fc8bf1",
     "src/main/agent-access/flow-assets-ops.ts": "8240ee3017f10e31222c44a36e0a564534b19f51041adad52e45a989a58c5e3b",
     "src/main/agent-access/flow-bridge.ts": "346c5ef4ea576a26a02a5f42c09d410ab6276a85133831fc59f808f74e8de8a6",
     "src/main/agent-access/flow-command-bridge.ts": "3ecb4ddeb24461b4fc51d5ab153a63fcf3b34d0e314781dbcf89b17653655afe",
@@ -207,7 +207,7 @@
     "src/shared/agent-access/ops/common.ts": "4b326393fdfa7d7b77a51507130bee4b75ce898fa0e3052cc89e8a1bd3b214bc",
     "src/shared/agent-access/ops/composite.ts": "5c8e29ee09d36c4353bcb17f473740faf89409d5367258efee5c724a7bdfee67",
     "src/shared/agent-access/ops/diagnostics.ts": "a0cb7a6a5dd53a42029214b6bad1a290017bb253e60ee9f11de85d6accd2c0ce",
-    "src/shared/agent-access/ops/flow-agents.ts": "ecfadb17b53ec3a957f520564b2e5d0b66e5f347975521423ac5db7d97274e7a",
+    "src/shared/agent-access/ops/flow-agents.ts": "b62ac65f4ec522f9c8ebe4f30b8495089801e600777a7de564c4993db5ca8634",
     "src/shared/agent-access/ops/flow-assets.ts": "b1b67db6a2f3fdc810f4654ab93eb371870a7bc8b9fcb9b234cc5889d15a2b58",
     "src/shared/agent-access/ops/flow-commands.ts": "e267019ed67b5df93d258b68c99e3f0f824d30665620e613b8ab25ea52987a9e",
     "src/shared/agent-access/ops/history.ts": "24896212e69e8cfd579393d3c2f830cfb0f6e5dd741ba6b9376b76a7c5d8515b",

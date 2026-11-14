@@ -180,6 +180,14 @@ const EXTERNAL_ONLY_OPERATIONS = new Map([
     'O3 流程运行统一总览：只读投影协调运行状态/阶段/修订/子任务 + 可回放事件时间线（user/agent 来源归因），复用 CoordinationStore 同一运行与事件表；权威仍是命令账本与运行实例。GUI 经画布状态机节点与运行中心查看，无独立"运行总览"按钮，属外部专用只读观察入口'
   ],
   [
+    'flowGraph.validate',
+    'O4-P5 外部生成 FlowGraph 静态校验：只读纯函数（引用/参与/环须有界/可达/预算），不写画布不执行；上帝 Agent 生成 flow JSON 后的校验入口，GUI 建图预览内置同一校验，无独立按钮，属外部专用只读入口'
+  ],
+  [
+    'flowGraph.compile',
+    'O4-P5 外部生成 FlowGraph 编译预览：只读纯函数编译为画布图（节点配置+边+派生状态机），不写画布；上帝 Agent 生成 flow JSON 后的编译预览入口，落画布仍走人工确认（后续），属外部专用只读入口'
+  ],
+  [
     'node.library.update',
     'GUI 节点库面板当前没有重命名入口；外部重命名复用同一 store 写口，待 GUI 补同入口或下线该操作'
   ],
