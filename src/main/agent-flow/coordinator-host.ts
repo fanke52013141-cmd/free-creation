@@ -33,6 +33,7 @@ import {
   isFlowComplete,
   loopNeedsAnotherIteration
 } from '../../shared/agent-flow/flow-graph-router'
+import type { FlowNode, FlowGraph } from '../../shared/agent-flow/flow-graph'
 import {
   buildContextManifest,
   contextManifestBlocking
@@ -187,8 +188,13 @@ export class FlowCoordinatorHost {
       recovery: run.recovery,
       phase: run.phase,
       children: run.children.map(({ nodeId, taskId, state }) => {
+        // ②：capability 子节点无 agent 任务，不就绪态查询 specialist（避免 AGENT_NODE_MISSING）。
+        const graphNodes = run.config.graph?.nodes
+        const isAgent = !graphNodes || graphNodes.find((node) => node.nodeId === nodeId)?.kind === 'agent'
         const live =
-          state === 'ready' ? this.specialists.inspect({ projectId: run.projectId, nodeId }) : null
+          state === 'ready' && isAgent
+            ? this.specialists.inspect({ projectId: run.projectId, nodeId })
+            : null
         return { nodeId, taskId, state: live?.taskId === taskId ? live.state : state }
       })
     }
@@ -281,8 +287,16 @@ export class FlowCoordinatorHost {
     for (const id of reviewIds) controls.add(id)
     const reservedControls = new Set([...controls, ...childIds])
     for (const id of childIds) {
-      const child = shape(file, id),
-        cfg = AgentNodeConfigSchema.parse(JSON.parse(child.props.config))
+      const child = shape(file, id)
+      const graphNode = graphMode ? config.graph!.nodes.find((node) => node.nodeId === id) : undefined
+      // ②：capability 子节点是处理器节点（直接执行），不是 agent specialist，跳过 agent 契约校验。
+      if (graphNode?.kind === 'capability') {
+        if (child.props.nodeType === 'agent' || id === input.nodeId)
+          throw new AgentRuntimeError('FLOW_COORDINATOR_SCOPE_INVALID', 'scope')
+        controls.add(id)
+        continue
+      }
+      const cfg = AgentNodeConfigSchema.parse(JSON.parse(child.props.config))
       if (child.props.nodeType !== 'agent' || cfg.role !== 'specialist' || id === input.nodeId)
         throw new AgentRuntimeError('FLOW_COORDINATOR_SCOPE_INVALID', 'scope')
       for (const target of cfg.allowedNodeIds) {
@@ -310,11 +324,11 @@ export class FlowCoordinatorHost {
           throw new AgentRuntimeError('FLOW_STAGE_HUMAN_MODE_REQUIRED', 'scope')
       }
     }
-    // O4-P3：图模式首期支持 agent 节点（专业子节点）路由；能力/人工/审核节点执行属后续。
-    // 图节点承载必须与专业子节点一一对应；路由只认交付事实（见 graphStep）。
+    // O4-P3/②：图模式支持 agent + capability 节点路由（human-task 随后阶段）；
+    // 图节点承载必须与子节点一一对应；路由只认交付事实（见 graphStep）。
     if (graphMode) {
       const graph = config.graph!
-      if (graph.nodes.some((node) => node.kind !== 'agent'))
+      if (graph.nodes.some((node) => node.kind !== 'agent' && node.kind !== 'capability'))
         throw new AgentRuntimeError('FLOW_GRAPH_NODE_KIND_UNSUPPORTED', 'scope')
       const graphNodeIds = new Set(graph.nodes.map((node) => node.nodeId))
       if (graphNodeIds.size !== childIds.length || childIds.some((id) => !graphNodeIds.has(id)))
@@ -1009,6 +1023,10 @@ export class FlowCoordinatorHost {
     }
     if (run.decisions + (run.controlSteps ?? 0) >= run.config.maxSteps)
       throw new AgentRuntimeError('AGENT_BUDGET_EXHAUSTED', 'coordination')
+    // ②：capability 图节点直接执行（复用 node.execute 账本端口），不经 agent 分派。
+    if (next.kind === 'capability') {
+      return this.dispatchCapability(run, next, graph, loopIterations, signal)
+    }
     let contextManifest: ContextManifest | undefined
     if (next.inputs) {
       contextManifest = buildContextManifest(next.nodeId, next.inputs, facts.deliveries)
@@ -1072,6 +1090,108 @@ export class FlowCoordinatorHost {
     )
   }
 
+  /**
+   * ②：capability 图节点直接执行。按图数据边从已交付子节点输出编制固定输入，经
+   * node.execute 同一账本端口执行（复用 renderer 执行器），回执 committed 才记交付。
+   * 路由只认交付事实；不经 agent 分派、不调模型。
+   */
+  private async dispatchCapability(
+    run: CoordinationRun,
+    next: FlowNode,
+    graph: FlowGraph,
+    loopIterations: Record<string, number>,
+    signal: AbortSignal
+  ): Promise<boolean> {
+    const file = this.check(run)
+    const node = file.nodes.find((item) => item.id === next.nodeId)
+    if (!node) throw new AgentRuntimeError('FLOW_GRAPH_SCOPE_INVALID', 'graph-capability')
+    const taskId = hash([
+      run.taskId,
+      next.nodeId,
+      ...(run.reworkRound ? [run.reworkRound] : []),
+      ...(loopIterations[next.nodeId] ? [`loop:${loopIterations[next.nodeId]}`] : [])
+    ])
+    const commandId = `graph:${hash([run.taskId, next.nodeId, 'capability', loopIterations[next.nodeId] ?? 0])}`
+    const inputPorts = node.ports.filter((port) => port.dir === 'in')
+    const incoming = graph.edges.filter(
+      (edge) => edge.to.nodeId === next.nodeId && edge.kind === 'data'
+    )
+    const inputs = incoming.map((edge, index) => {
+      const upstream = run.children
+        .filter((child) => child.nodeId === edge.from.nodeId && child.state === 'completed')
+        .at(-1)
+      if (!upstream) throw new AgentRuntimeError('FLOW_HANDOFF_INPUT_REJECTED', 'graph-capability')
+      const port = inputPorts[index] ?? inputPorts[0]
+      if (!port) throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'graph-capability')
+      // 与 agent bind 的 freeze 同一机制：assets.submit 生成 sourceNodeId=上游节点的固定引用，
+      // 与画布边 from 一致，账本输入源校验通过（raw 子任务 outputRefs 指向底层处理器，源不符）。
+      const { ref } = this.assets.submit({
+        projectId: run.projectId,
+        nodeId: edge.from.nodeId,
+        portId: edge.from.portId,
+        submissionId: `${taskId}:cap-input:${index}`,
+        expectedGraphVersion: file.meta.graphVersion,
+        traceId: run.traceId,
+        spanId: run.spanId
+      })
+      return { targetPortId: port.id, assets: [ref] }
+    })
+    const child: CoordinationRun['children'][number] = {
+      nodeId: next.nodeId,
+      taskId,
+      goal: next.goal,
+      completion: next.completion,
+      inputs: [],
+      state: 'ready',
+      outputs: []
+    }
+    run.children.push(child)
+    run.decisions++
+    this.store.save(run)
+    this.emitTrustedEvent(run, `${taskId}:dispatch`, 'agent.dispatched', run.revision)
+    emitGatewayEvent(
+      'agent.coordination.graph_dispatched',
+      '按声明式图路由分派节点',
+      {
+        projectId: run.projectId,
+        nodeId: run.nodeId,
+        taskId: run.taskId,
+        traceId: run.traceId,
+        spanId: run.spanId
+      },
+      { attributes: { carrierNodeId: next.nodeId, kind: 'capability', inputCount: inputs.length } }
+    )
+    const receipt = await this.specialists.executeNodeCommand(
+      {
+        schemaVersion: 1,
+        kind: 'node.execute',
+        commandId,
+        projectId: run.projectId,
+        taskId,
+        agentNodeId: run.nodeId,
+        targetNodeId: next.nodeId,
+        contractVersion: node.contractVersion,
+        inputs,
+        expectedSemanticRevision: projectSemanticRevision(file),
+        traceId: run.traceId,
+        spanId: run.spanId
+      },
+      signal
+    )
+    if (signal.aborted || this.store.latest(run.projectId, run.nodeId)!.state === 'cancelled')
+      return false
+    if (receipt.state !== 'committed') {
+      child.state = 'blocked'
+      this.store.save(run)
+      throw new AgentRuntimeError(receipt.code ?? 'FLOW_CHILD_BLOCKED', 'graph-capability')
+    }
+    child.state = 'completed'
+    child.outputs = receipt.outputRefs
+    this.store.save(run)
+    this.emitTrustedEvent(run, `${taskId}:completed`, 'agent.completed', run.revision)
+    return true
+  }
+
   /** O4-P3/P4：图模式交付事实——stageKey 即节点 id；循环节点取最近一次迭代交付。只读权威资产与续接记录。 */
   private graphFacts(run: CoordinationRun): StageEntryFacts {
     const latestByNode = new Map<string, (typeof run.children)[number]>()
@@ -1080,17 +1200,22 @@ export class FlowCoordinatorHost {
       latestByNode.set(child.nodeId, child)
     }
     const deliveries: StageDeliveryFact[] = []
+    const graphNodes = run.config.graph?.nodes ?? []
     for (const child of latestByNode.values()) {
       const versions = this.assets.resolveInputs(run.projectId, child.outputs)
+      // ②：capability 节点是处理器，无 agent 任务/人工采用；humanDecision 仅对 agent 子节点查询。
+      const isAgent = graphNodes.find((node) => node.nodeId === child.nodeId)?.kind === 'agent'
       deliveries.push({
         stageKey: child.nodeId,
         nodeId: child.nodeId,
         outputs: versions.map((version) => version.value),
-        humanDecided: this.specialists.humanDecision(
-          { projectId: run.projectId, nodeId: child.nodeId },
-          run.taskId,
-          child.taskId
-        )
+        humanDecided: isAgent
+          ? this.specialists.humanDecision(
+              { projectId: run.projectId, nodeId: child.nodeId },
+              run.taskId,
+              child.taskId
+            )
+          : false
       })
     }
     return {

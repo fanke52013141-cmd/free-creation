@@ -306,9 +306,23 @@ export function compileFlowGraph(graph: FlowGraph): CompiledGraph {
     }
   ]
 
+  // ②：capability 节点的数据边端口重映射到处理器实际端口（in-value/out-value 等），
+  // 否则落画布 createEdge 与 node.execute 输入端口校验会因 FlowGraph 通用端口名失配。
+  const capabilityByNode = new Map(
+    graph.nodes
+      .filter((node) => node.kind === 'capability')
+      .map((node) => [canvasNodeId(node.nodeId), CAPABILITY_COMPILE[node.capability!]])
+  )
   const edges: CompiledEdge[] = mapped.edges
     .filter((edge) => edge.kind === 'data')
-    .map((edge) => ({ from: edge.from, to: edge.to }))
+    .map((edge) => {
+      const fromCap = capabilityByNode.get(edge.from.nodeId)
+      const toCap = capabilityByNode.get(edge.to.nodeId)
+      return {
+        from: { nodeId: edge.from.nodeId, portId: fromCap ? fromCap.outputPort : edge.from.portId },
+        to: { nodeId: edge.to.nodeId, portId: toCap ? toCap.inputPort : edge.to.portId }
+      }
+    })
 
   // P5：编译产物直接带布局坐标（与建图预览同构，落画布无需再排版）。复用共享 layoutGraph
   // （lanes）——与 GUI 智能整理/graph.layout/builder 同一算法（三入口 parity）。尺寸与

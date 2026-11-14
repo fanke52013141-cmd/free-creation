@@ -54,7 +54,7 @@ import {
 import type { FlowCommandDesktop } from '../ipc/flow-commands.ipc'
 import { projectSemanticRevision, collaborationScopeRevision } from './command-intent'
 import { FlowCollaborationStore } from './collaboration-store'
-import type { FlowCommandReceipt } from '../../shared/agent-flow/commands'
+import type { FlowCommandReceipt, NodeExecuteCommand } from '../../shared/agent-flow/commands'
 import { readPinnedOutputs } from '../../shared/engine/deterministic-projections'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import type { z } from 'zod'
@@ -714,6 +714,17 @@ export class FlowAgentDesktopHost {
   ): Promise<FlowAgentReply> {
     const snapshot = this.assignmentSnapshot(input, assignment, coordinatorTaskId, prepared)
     return this.run({ ...input, expectedTaskId: snapshot.taskId }, snapshot)
+  }
+  /**
+   * ②：graph 模式直接执行能力/人工节点——复用 agent node.execute 同一账本端口
+   * （createLedgerToolPort + 同一 renderer deliver），不另建执行器。协调器按图路由
+   * 构造 NodeExecuteCommand 后经此执行，回执 committed 才算交付。
+   */
+  async executeNodeCommand(
+    command: NodeExecuteCommand,
+    signal: AbortSignal
+  ): Promise<FlowCommandReceipt> {
+    return createLedgerToolPort(this.desktop.ledger, this.desktop.deliver).execute(command, signal)
   }
   private reply(record: AgentTaskRecord): FlowAgentReply {
     const versions =

@@ -67,6 +67,7 @@ if (video || videoReview || mediaReview || parallelMedia)
   ])
 const collaboration = process.argv.includes('--collaboration')
 const coordination = process.argv.includes('--coordination')
+const capabilityGraph = process.argv.includes('--capability-graph')
 const agentHum07Pause = process.argv.includes('--agent-hum07-pause')
 const recovery = process.argv.includes('--recovery')
 const builderParallelMode = process.argv.includes('--builder-parallel')
@@ -2384,6 +2385,42 @@ if (
           return {projectId,checks:['preview survives fresh process','public commit button saves complete graph','repeated commit creates no duplicates','built flow runs through public executors','two independent specialists','real transformed text output']};
         })()`)
         if (phase === 'execute') writeFileSync(statePath, JSON.stringify(report))
+      } else if (capabilityGraph) {
+        report = await active.webContents.executeJavaScript(`(async()=>{
+          const projectId=${JSON.stringify(projectId)};
+          const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;
+          const {ensureCanvasSaved}=await import('/src/canvas/flow-asset-actions.ts');
+          const value=(reply)=>{if(!reply.ok)throw new Error(reply.error.code);return reply.data};
+          const delay=()=>new Promise(r=>setTimeout(r,150));
+          const graph={schemaVersion:1,graphId:'cg',name:'能力图',goal:'先分析再能力处理',nodes:[{nodeId:'shape:cg-first',title:'分析',participation:'autonomous',kind:'agent',goal:'执行处理并交付',completion:'交付处理结果'},{nodeId:'shape:cg-cap',title:'能力处理',participation:'autonomous',kind:'capability',capability:'text-pass@1',goal:'透传',completion:'交付'}],edges:[{from:{nodeId:'shape:cg-first',portId:'out-text'},to:{nodeId:'shape:cg-cap',portId:'in-text'},kind:'data'}],entry:'shape:cg-first',exits:['shape:cg-cap']};
+          const specialist={schemaVersion:1,role:'specialist',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'node.execute',version:'1'}],allowedNodeIds:['shape:cg-p1'],maxSteps:8,relations:[]};
+          const rootConfig={schemaVersion:1,role:'coordinator',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'agent.dispatch',version:'1'}],allowedNodeIds:['shape:cg-first','shape:cg-cap'],maxSteps:8,executionMode:'graph',graph,relations:[{relationId:'state',kind:'observes',sourceNodeId:'shape:cg-root',targetNodeId:'shape:cg-state'}]};
+          const stateConfig={schemaVersion:1,initialState:'draft',states:['draft','working','waiting','completed'],transitions:[{from:'draft',event:'flow.started',to:'working'},...['agent.dispatched','agent.completed','human.wait','flow.paused','flow.completed'].map(event=>({from:'working',event,to:event==='flow.completed'?'completed':['human.wait','flow.paused'].includes(event)?'waiting':'working'})),{from:'waiting',event:'human.continue',to:'working'}],relations:[]};
+          const nodes=[
+            {id:'shape:cg-source',nodeType:'text',title:'材料',text:'private-cg-material',x:50,y:80},
+            {id:'shape:cg-first',nodeType:'agent',title:'分析 Agent',text:'执行 shape:cg-p1 两次并观察真实回执，用第二次 committed 回执的 outputRefs 完成，不等待人。',config:JSON.stringify(specialist),x:450,y:80},
+            {id:'shape:cg-p1',nodeType:'processor',title:'分析处理',config:JSON.stringify({operation:'pass'}),x:450,y:650},
+            {id:'shape:cg-cap',nodeType:'processor',title:'能力处理',config:JSON.stringify({operation:'pass'}),x:850,y:650},
+            {id:'shape:cg-root',nodeType:'agent',title:'主 Agent',text:'按声明式图路由：先分析 Agent，再能力处理节点。',config:JSON.stringify(rootConfig),x:50,y:400},
+            {id:'shape:cg-state',nodeType:'state-machine',title:'Flow 阶段',config:JSON.stringify(stateConfig),x:1250,y:80}
+          ];
+          nodes.forEach(({id,x,y,...props})=>editor.createShape({id,type:'node-card',x,y,props}));
+          const {createEdge}=await import('/src/canvas/graph.ts');
+          for(const [from,port,to,target] of [['shape:cg-source','out-text','shape:cg-first','in-text'],['shape:cg-source','out-text','shape:cg-p1','in-value'],['shape:cg-first','out-text','shape:cg-cap','in-value']])if(!createEdge(editor,{shapeId:from,portId:port},{shapeId:to,portId:target}))throw new Error('CG_EDGE_MISSING');
+          await ensureCanvasSaved();await delay();
+          const button=document.querySelector('[data-node-id="shape:cg-root"] .node-standard-primary');if(!button||button.disabled)throw new Error('CG_ROOT_BUTTON_UNAVAILABLE');button.click();
+          const inspectRoot=()=>window.api.inspectFlowAgent({projectId,nodeId:'shape:cg-root'}).then(value);
+          let root;for(let i=0;i<1800;i++){root=await inspectRoot();if(root?.state==='completed')break;if(root&&['blocked','failed'].includes(root.state))throw new Error(root.code||'CG_ROOT_FAILED');await delay();}
+          if(root?.state!=='completed')throw new Error('CG_ROOT_TIMEOUT');
+          await ensureCanvasSaved();
+          const capShape=editor.getShape('shape:cg-cap');
+          const capRun=capShape.meta.nodeRun;
+          if(capRun?.status!=='success')throw new Error('CG_CAP_NOT_EXECUTED');
+          const capChild=root.children.find(c=>c.nodeId==='shape:cg-cap');
+          if(!capChild||capChild.state!=='completed')throw new Error('CG_CAP_CHILD_NOT_COMPLETED');
+          if(!capShape.meta.nodeResult)throw new Error('CG_CAP_NO_OUTPUT');
+          return {status:'pass',projectId,rootTaskId:root.taskId,capRunStatus:capRun.status,capChildState:capChild.state,checks:['capability graph node executes via the shared node.execute ledger port','graph routing adopts the capability delivery as final output','coordinator completes in graph mode']};
+        })()`)
       } else if (coordination) {
         if (recovery && phase === 'reopen') {
           const row = getDb()

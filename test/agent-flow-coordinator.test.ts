@@ -1880,15 +1880,15 @@ describe('O4-P3 graph mode execution（声明式图路由，mock 模型）', () 
     expect(f.byId.second.meta.nodeResult).toBeTruthy()
   })
 
-  it('图模式拒绝非 agent 节点（首期范围）', async () => {
+  it('图模式拒绝 review 节点（门禁返工属后续阶段）', async () => {
     const badGraph = FlowGraphSchema.parse({
       schemaVersion: 1,
       graphId: 'g',
-      name: '含能力节点',
+      name: '含审核节点',
       goal: 'x',
       nodes: [
         graphNode('first'),
-        { nodeId: 'second', title: 'second', participation: 'autonomous', kind: 'capability', capability: 'text-pass@1', goal: 'x', completion: 'x' }
+        { nodeId: 'second', title: 'second', participation: 'autonomous', kind: 'review', review: { criteria: 'x', rejectPolicy: 'stop', maxReworks: 1 }, goal: 'x', completion: 'x' }
       ],
       edges: [
         { from: { nodeId: 'first', portId: 'out-text' }, to: { nodeId: 'second', portId: 'in-text' }, kind: 'data' }
