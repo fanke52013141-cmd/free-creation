@@ -193,4 +193,78 @@ export class CoordinationStore {
       }
     })()
   }
+  /**
+   * O3：一次流程运行的统一总览（只读投影）。把权威运行（flow_coordination_runs）与
+   * 事件日志（flow_coordination_events）聚合为单一视图：运行状态/阶段/修订 + 子任务 +
+   * 可回放事件时间线。事件来源归因：human.* 记 user，其余协调器可信事件记 agent。
+   * 不写任何状态；权威仍是命令账本与运行实例，本视图仅供总览/回放。
+   */
+  overview(projectId: string, nodeId: string): FlowRunOverview | null {
+    const run = this.latest(projectId, nodeId)
+    if (!run) return null
+    const rows = this.db
+      .prepare(
+        `SELECT event_id, revision, signature, state FROM flow_coordination_events
+         WHERE project_id=? AND task_id=? ORDER BY revision`
+      )
+      .all(projectId, run.taskId) as Array<{
+      event_id: string
+      revision: number
+      signature: string
+      state: string
+    }>
+    const events = rows.map((row) => {
+      let event = ''
+      try {
+        event = (JSON.parse(row.signature) as { event?: string }).event ?? ''
+      } catch {
+        /* 损坏签名按空事件处理，不阻断总览。 */
+      }
+      return {
+        eventId: row.event_id,
+        revision: row.revision,
+        event,
+        state: row.state,
+        source: (event.startsWith('human.') ? 'user' : 'agent') as 'user' | 'agent'
+      }
+    })
+    return {
+      projectId,
+      nodeId: run.nodeId,
+      taskId: run.taskId,
+      state: run.state,
+      phase: run.phase,
+      revision: run.revision,
+      goal: run.goal,
+      paused: run.paused,
+      ...(run.code ? { code: run.code } : {}),
+      children: run.children.map((child) => ({
+        nodeId: child.nodeId,
+        taskId: child.taskId,
+        state: child.state
+      })),
+      events
+    }
+  }
+}
+
+/** O3：流程运行统一总览（只读投影，非权威实体）。 */
+export interface FlowRunOverview {
+  projectId: string
+  nodeId: string
+  taskId: string
+  state: FlowAgentView['state']
+  phase: string
+  revision: number
+  goal: string
+  paused: boolean
+  code?: string
+  children: Array<{ nodeId: string; taskId: string; state: string }>
+  events: Array<{
+    eventId: string
+    revision: number
+    event: string
+    state: string
+    source: 'user' | 'agent'
+  }>
 }

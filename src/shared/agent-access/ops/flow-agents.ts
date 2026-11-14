@@ -221,6 +221,12 @@ export const FLOW_AGENTS_OPERATIONS = {
       })
       .strict()
   },
+  'flowRun.overview': {
+    effect: 'read',
+    description:
+      'O3：读取某协调运行的一次流程运行统一总览（状态/阶段/修订/子任务 + 可回放事件时间线，事件来源 user/agent 归因）；只读投影，权威仍是命令账本与运行实例；不存在返回 null',
+    input: project.extend({ nodeId: flowId }).strict()
+  },
   'flowAgent.catalog': {
     effect: 'read',
     description:
@@ -446,6 +452,53 @@ export const FLOW_AGENTS_OUTPUTS = {
             .max(64)
         })
         .strict()
+    })
+    .strict(),
+  'flowRun.overview': z
+    .object({
+      projectId: identifier,
+      overview: z
+        .object({
+          projectId: identifier,
+          nodeId: flowId,
+          taskId: flowId,
+          state: z.enum([
+            'ready',
+            'running',
+            'waiting',
+            'blocked',
+            'completed',
+            'failed',
+            'cancelled'
+          ]),
+          phase: z.string().max(80),
+          revision: z.number().int().nonnegative(),
+          goal: z.string().max(16384),
+          paused: z.boolean(),
+          code: z.string().max(120).optional(),
+          children: z
+            .array(
+              z
+                .object({ nodeId: flowId, taskId: flowId, state: z.string().max(40) })
+                .strict()
+            )
+            .max(128),
+          events: z
+            .array(
+              z
+                .object({
+                  eventId: flowId,
+                  revision: z.number().int().nonnegative(),
+                  event: z.string().max(120),
+                  state: z.string().max(80),
+                  source: z.enum(['user', 'agent'])
+                })
+                .strict()
+            )
+            .max(2000)
+        })
+        .strict()
+        .nullable()
     })
     .strict(),
   'flowAgent.catalog': z

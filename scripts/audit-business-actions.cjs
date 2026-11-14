@@ -176,6 +176,10 @@ const META_OPERATIONS = new Map([
 ])
 const EXTERNAL_ONLY_OPERATIONS = new Map([
   [
+    'flowRun.overview',
+    'O3 流程运行统一总览：只读投影协调运行状态/阶段/修订/子任务 + 可回放事件时间线（user/agent 来源归因），复用 CoordinationStore 同一运行与事件表；权威仍是命令账本与运行实例。GUI 经画布状态机节点与运行中心查看，无独立"运行总览"按钮，属外部专用只读观察入口'
+  ],
+  [
     'node.library.update',
     'GUI 节点库面板当前没有重命名入口；外部重命名复用同一 store 写口，待 GUI 补同入口或下线该操作'
   ],

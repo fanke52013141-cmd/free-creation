@@ -44,7 +44,8 @@ export const FLOW_AGENT_OPERATION_IDS: ReadonlySet<AccessOperationId> = new Set(
   'flowDefinition.publish',
   'flowDefinition.list',
   'flowDefinition.get',
-  'flowDefinition.diff'
+  'flowDefinition.diff',
+  'flowRun.overview'
 ] as AccessOperationId[])
 
 export interface FlowAgentOperationContext {
@@ -520,6 +521,15 @@ function diffDefinitions(
   )
   return { projectId, definitionId: input.definitionId, diff }
 }
+function overviewFlowRun(
+  input: Record<string, unknown>,
+  context: FlowAgentOperationContext
+): unknown {
+  const projectId = input.projectId as string
+  assertActive(projectId, context, 'flowRun.overview')
+  const overview = new CoordinationStore(getDb()).overview(projectId, input.nodeId as string)
+  return { projectId, overview }
+}
 
 /** dispatch 的分组委托入口：只分发本族操作，其余明确拒绝（防误接）。 */
 export async function runFlowAgentOperation(
@@ -549,6 +559,8 @@ export async function runFlowAgentOperation(
         return getDefinition(input, context)
       case 'flowDefinition.diff':
         return diffDefinitions(input, context)
+      case 'flowRun.overview':
+        return overviewFlowRun(input, context)
       default:
         refuse('UNSUPPORTED_OPERATION', 'flow-agents-dispatch')
     }
