@@ -71,6 +71,9 @@ const capabilityGraph = process.argv.includes('--capability-graph')
 const humanTaskGraph = process.argv.includes('--human-task-graph')
 const parallelGraph = process.argv.includes('--parallel-graph')
 const reviewGraph = process.argv.includes('--review-graph')
+const collabGraph = process.argv.includes('--collab-graph')
+const endToEndGraph = process.argv.includes('--end-to-end-graph')
+const mediaReviewGraph = process.argv.includes('--media-review-graph')
 const agentHum07Pause = process.argv.includes('--agent-hum07-pause')
 const recovery = process.argv.includes('--recovery')
 const builderParallelMode = process.argv.includes('--builder-parallel')
@@ -315,6 +318,10 @@ if (
         const { installVideoReworkSupplier } = await import('./video-rework-acceptance')
         installVideoReworkSupplier(directory, phase!)
       }
+      if (mediaReviewGraph) {
+        const { installGraphMediaReviewSupplier } = await import('./graph-media-review-acceptance')
+        installGraphMediaReviewSupplier(directory)
+      }
       stage = 'setup-model'
       await host.saveConnection({
         id: 'agent-test-connection',
@@ -335,7 +342,7 @@ if (
             operation: 'text.generate',
             asynchronous: false,
             streaming: true,
-            acceptedAssetKinds: mediaReview ? ['image', 'audio'] : videoReview ? ['image'] : [],
+            acceptedAssetKinds: mediaReview ? ['image', 'audio'] : videoReview || mediaReviewGraph ? ['image'] : [],
             producedAssetKinds: [],
             controls: {}
           }
@@ -361,7 +368,7 @@ if (
           expectedModelRevision: revisions.modelRevision
         })
       }
-      if (videoReview || mediaReview || agentRun06Fault)
+      if (videoReview || mediaReview || mediaReviewGraph || agentRun06Fault)
         await host.saveValidation({
           connectionId: 'agent-test-connection',
           modelDefinitionId: 'agent-test-model',
@@ -2545,6 +2552,117 @@ if (
           if(!secondChild||secondChild.state!=='completed')throw new Error('RV_SECOND_NOT_COMPLETED');
           return {status:'pass',projectId,rootTaskId:root.taskId,reviewPassed:decision.passed,reviewRevision:decision.reviewRevision,checks:['graph review gate blocks downstream until review passes','reject triggers bounded rework of responsible agent','rework output passes review and downstream proceeds','coordinator completes with reviewed final output']};
         })()`)
+      } else if (collabGraph) {
+        report = await active.webContents.executeJavaScript(`(async()=>{
+          const projectId=${JSON.stringify(projectId)};
+          const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;
+          const {ensureCanvasSaved}=await import('/src/canvas/flow-asset-actions.ts');
+          const {runNodeManually}=await import('/src/engine/executor.ts');
+          const value=(reply)=>{if(!reply.ok)throw new Error(reply.error.code);return reply.data};
+          const delay=()=>new Promise(r=>setTimeout(r,150));
+          const inspectNode=(nodeId)=>window.api.inspectFlowAgent({projectId,nodeId}).then(value);
+          const until=async(nodeId,state)=>{for(let i=0;i<1800;i++){const t=await inspectNode(nodeId);if(t?.state===state)return t;if(t&&['blocked','failed'].includes(t.state))throw new Error(t.code||'CG_TASK_FAILED');await delay();}throw new Error('CG_TASK_TIMEOUT');};
+          const graph={schemaVersion:1,graphId:'cg',name:'协作图',goal:'协作整理后下游',nodes:[{nodeId:'shape:cg-collab',title:'协作整理',participation:'collaborative',kind:'agent',goal:'整理并交付',completion:'交付整理成果',decisions:{allowed:['approve','edit','reject','respond']}},{nodeId:'shape:cg-down',title:'下游',participation:'autonomous',kind:'agent',goal:'执行处理并交付',completion:'交付处理结果'}],edges:[{from:{nodeId:'shape:cg-collab',portId:'out-text'},to:{nodeId:'shape:cg-down',portId:'in-text'},kind:'data'}],entry:'shape:cg-collab',exits:['shape:cg-down']};
+          const specialist=(target,mode)=>({schemaVersion:1,role:'specialist',interactionMode:mode,modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'node.execute',version:'1'}],allowedNodeIds:[target],maxSteps:12,relations:[]});
+          const rootConfig={schemaVersion:1,role:'coordinator',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'agent.dispatch',version:'1'}],allowedNodeIds:['shape:cg-collab','shape:cg-down'],maxSteps:16,executionMode:'graph',graph,relations:[{relationId:'state',kind:'observes',sourceNodeId:'shape:cg-main',targetNodeId:'shape:cg-state'}]};
+          const stateConfig={schemaVersion:1,initialState:'draft',states:['draft','working','waiting','completed'],transitions:[{from:'draft',event:'flow.started',to:'working'},...['agent.dispatched','agent.completed','human.wait','flow.paused','flow.completed'].map(event=>({from:'working',event,to:event==='flow.completed'?'completed':['human.wait','flow.paused'].includes(event)?'waiting':'working'})),{from:'waiting',event:'human.continue',to:'working'}],relations:[]};
+          const nodes=[
+            {id:'shape:cg-source',nodeType:'text',title:'材料',text:'private-cg-material',x:50,y:80},
+            {id:'shape:cg-collab',nodeType:'agent',title:'协作整理 Agent',text:'执行 shape:cg-org 两次并观察真实回执，两次后 wait_for_human。humanAccepted=true 后提交人工 selectedOutputs 或第二次回执 outputRefs，不再执行。',config:JSON.stringify(specialist('shape:cg-org','collaborative')),x:450,y:80},
+            {id:'shape:cg-org',nodeType:'processor',title:'整理',config:JSON.stringify({operation:'template',field:'',template:'整理：{{value}}'}),x:450,y:650},
+            {id:'shape:cg-down',nodeType:'agent',title:'下游 Agent',text:'执行 shape:cg-downp 两次并交付第二次唯一固定成果。',config:JSON.stringify(specialist('shape:cg-downp','autonomous')),x:850,y:80},
+            {id:'shape:cg-downp',nodeType:'processor',title:'下游处理',config:JSON.stringify({operation:'pass'}),x:850,y:650},
+            {id:'shape:cg-main',nodeType:'agent',title:'主 Agent',text:'按声明式图路由：协作整理→下游。',config:JSON.stringify(rootConfig),x:50,y:400},
+            {id:'shape:cg-state',nodeType:'state-machine',title:'Flow 阶段',config:JSON.stringify(stateConfig),x:50,y:700}
+          ];
+          nodes.forEach(({id,x,y,...props})=>editor.createShape({id,type:'node-card',x,y,props}));
+          const {createEdge}=await import('/src/canvas/graph.ts');
+          for(const [from,to,port] of [['shape:cg-source','shape:cg-collab','in-text'],['shape:cg-source','shape:cg-org','in-value'],['shape:cg-collab','shape:cg-down','in-text'],['shape:cg-collab','shape:cg-downp','in-value']])if(!createEdge(editor,{shapeId:from,portId:'out-text'},{shapeId:to,portId:port}))throw new Error('CG_EDGE_MISSING');
+          await ensureCanvasSaved();await delay();
+          const button=document.querySelector('[data-node-id="shape:cg-main"] .node-standard-primary');if(!button||button.disabled)throw new Error('CG_ROOT_BUTTON_UNAVAILABLE');button.click();
+          const waiting=await until('shape:cg-collab','waiting');
+          const publicRun=async(nodeId)=>{await ensureCanvasSaved();const task=await inspectNode(nodeId);if(task)editor.updateShape({id:nodeId,type:'node-card',meta:{...editor.getShape(nodeId).meta,agentTask:JSON.stringify(task)}});const reply=await runNodeManually(editor,projectId,[],nodeId);if(reply.status==='failed')throw new Error('CG_EXECUTOR_FAILED');await ensureCanvasSaved();return await inspectNode(nodeId)};
+          const collaborate=async(action,text,accepted)=>{const task=await inspectNode('shape:cg-collab');const view=value(await window.api.flowAgentCollaboration({projectId,nodeId:'shape:cg-collab'}));return value(await window.api.cooperateFlowAgent({projectId,nodeId:'shape:cg-collab',taskId:task.taskId,waitRevision:task.waitRevision,revision:view.revision,eventId:'cg-'+action+'-'+view.revision,text,action,...(accepted!==undefined?{accepted}:{})}));};
+          await collaborate('note','private-cg-note');
+          await collaborate('discuss','private-cg-discuss');
+          await collaborate('submit','明确接受整理成果',true);
+          await publicRun('shape:cg-collab');
+          let root=await publicRun('shape:cg-main');
+          for(let i=0;i<1800&&root?.state!=='completed';i++){if(root&&['blocked','failed'].includes(root.state))throw new Error(root.code||'CG_ROOT_FAILED');await delay();root=await inspectNode('shape:cg-main');}
+          if(root?.state!=='completed')throw new Error('CG_ROOT_TIMEOUT');
+          await ensureCanvasSaved();
+          const downRun=editor.getShape('shape:cg-downp').meta.nodeRun;
+          if(downRun?.status!=='success')throw new Error('CG_DOWNSTREAM_NOT_EXECUTED');
+          const history=value(await window.api.flowAgentCollaboration({projectId,nodeId:'shape:cg-collab'}));
+          const actions=history.messages.map(m=>m.kind);
+          if(!actions.includes('note')||!actions.includes('discuss')||!actions.includes('submit'))throw new Error('CG_COLLABORATION_HISTORY_MISSING');
+          return {status:'pass',projectId,rootTaskId:root.taskId,collaborationActions:actions,checks:['graph collaborative agent waits for human (no fake success)','node-local note + AI discuss + explicit submit accepted','continue resumes collaborative agent and downstream proceeds','collaboration history persisted on the graph node']};
+        })()`)
+      } else if (endToEndGraph) {
+        report = await active.webContents.executeJavaScript(`(async()=>{
+          const projectId=${JSON.stringify(projectId)};
+          const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;
+          const {ensureCanvasSaved}=await import('/src/canvas/flow-asset-actions.ts');
+          const {runNodeManually}=await import('/src/engine/executor.ts');
+          const value=(reply)=>{if(!reply.ok)throw new Error(reply.error.code);return reply.data};
+          const delay=()=>new Promise(r=>setTimeout(r,150));
+          const inspectNode=(nodeId)=>window.api.inspectFlowAgent({projectId,nodeId}).then(value);
+          const publicRun=async(nodeId)=>{await ensureCanvasSaved();const task=await inspectNode(nodeId);if(task)editor.updateShape({id:nodeId,type:'node-card',meta:{...editor.getShape(nodeId).meta,agentTask:JSON.stringify(task)}});const reply=await runNodeManually(editor,projectId,[],nodeId);if(reply.status==='failed')throw new Error('E2_EXECUTOR_FAILED');await ensureCanvasSaved();return await inspectNode(nodeId)};
+          const graph={schemaVersion:1,graphId:'e2e',name:'垂类贯穿图',goal:'材料→分析→协作整理→审核→返工→最终资产',nodes:[{nodeId:'shape:e2-analysis',title:'分析',participation:'autonomous',kind:'agent',goal:'分析材料',completion:'交付分析'},{nodeId:'shape:e2-org',title:'协作整理',participation:'collaborative',kind:'agent',goal:'协作整理并交付',completion:'交付整理成果',decisions:{allowed:['approve','edit','reject','respond']}},{nodeId:'shape:e2-review',title:'审核',participation:'autonomous',kind:'review',goal:'审核交付',completion:'审核通过',review:{criteria:'必须以交付：开头',rejectPolicy:'rework',maxReworks:1}},{nodeId:'shape:e2-down',title:'最终资产',participation:'autonomous',kind:'agent',goal:'产出最终资产',completion:'交付最终资产'}],edges:[{from:{nodeId:'shape:e2-analysis',portId:'out-text'},to:{nodeId:'shape:e2-org',portId:'in-text'},kind:'data'},{from:{nodeId:'shape:e2-org',portId:'out-text'},to:{nodeId:'shape:e2-review',portId:'in-text'},kind:'data'},{from:{nodeId:'shape:e2-review',portId:'out-text'},to:{nodeId:'shape:e2-down',portId:'in-text'},kind:'data'}],entry:'shape:e2-analysis',exits:['shape:e2-down']};
+          const specialist=(targets,mode)=>({schemaVersion:1,role:'specialist',interactionMode:mode,modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'node.execute',version:'1'}],allowedNodeIds:targets,maxSteps:12,relations:[]});
+          const rootConfig={schemaVersion:1,role:'coordinator',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'agent.dispatch',version:'1'},{id:'review.execute',version:'1'}],allowedNodeIds:['shape:e2-analysis','shape:e2-org','shape:e2-review','shape:e2-down'],maxSteps:32,executionMode:'graph',graph,relations:[{relationId:'state',kind:'observes',sourceNodeId:'shape:e2-main',targetNodeId:'shape:e2-state'}]};
+          const stateConfig={schemaVersion:1,initialState:'draft',states:['draft','working','waiting','completed'],transitions:[{from:'draft',event:'flow.started',to:'working'},...['agent.dispatched','agent.completed','human.wait','flow.paused','flow.completed','review.started','review.passed','review.rejected','rework.created'].map(event=>({from:'working',event,to:event==='flow.completed'?'completed':['human.wait','flow.paused'].includes(event)?'waiting':'working'})),{from:'waiting',event:'human.continue',to:'working'}],relations:[]};
+          const nodes=[
+            {id:'shape:e2-material',nodeType:'text',title:'材料',text:'private-e2-material',x:50,y:80},
+            {id:'shape:e2-analysis',nodeType:'agent',title:'分析 Agent',text:'严格执行 shape:e2-ap 两次并交付第二次唯一固定成果。',config:JSON.stringify(specialist(['shape:e2-ap'],'autonomous')),x:350,y:80},
+            {id:'shape:e2-ap',nodeType:'processor',title:'分析处理',config:JSON.stringify({operation:'pass'}),x:350,y:650},
+            {id:'shape:e2-org',nodeType:'agent',title:'协作整理 Agent',text:'普通任务严格执行 shape:e2-orgp 两次并观察真实回执，两次后 wait_for_human。humanAccepted=true 后提交人工 selectedOutputs 或第二次回执 outputRefs，不再执行。若输入有 rework 则严格执行 shape:e2-repair 两次，两次后 wait_for_human，humanAccepted=true 后交付。',config:JSON.stringify(specialist(['shape:e2-orgp','shape:e2-repair'],'collaborative')),x:650,y:80},
+            {id:'shape:e2-orgp',nodeType:'processor',title:'整理',config:JSON.stringify({operation:'template',field:'',template:'整理：{{value}}'}),x:650,y:650},
+            {id:'shape:e2-repair',nodeType:'processor',title:'修订',config:JSON.stringify({operation:'template',field:'',template:'交付：{{value}}'}),x:950,y:650},
+            {id:'shape:e2-review',nodeType:'ai-review',title:'审核',text:'只检查是否以交付：开头：以交付：开头必须通过，否则必须拒绝。不要检查其他条件。',config:JSON.stringify({schemaVersion:1,modelDefinitionId:'agent-test-model',rulesVersion:'rules-1',rejectPolicy:'rework',maxReworks:1,responsibleNodeId:'shape:e2-org',subjectSources:[{nodeId:'shape:e2-org',portId:'out-text'}],gatedNodeIds:['shape:e2-down'],relations:[]}),x:950,y:80},
+            {id:'shape:e2-down',nodeType:'agent',title:'最终资产 Agent',text:'严格执行 shape:e2-downp 两次并交付第二次唯一固定成果。',config:JSON.stringify(specialist(['shape:e2-downp'],'autonomous')),x:1250,y:80},
+            {id:'shape:e2-downp',nodeType:'processor',title:'最终处理',config:JSON.stringify({operation:'pass'}),x:1250,y:650},
+            {id:'shape:e2-main',nodeType:'agent',title:'主 Agent',text:'按声明式图路由：分析→协作整理→审核→通过后最终资产。',config:JSON.stringify(rootConfig),x:50,y:400},
+            {id:'shape:e2-state',nodeType:'state-machine',title:'Flow 阶段',config:JSON.stringify(stateConfig),x:50,y:700}
+          ];
+          nodes.forEach(({id,x,y,...props})=>editor.createShape({id,type:'node-card',x,y,props}));
+          const {createEdge}=await import('/src/canvas/graph.ts');
+          for(const [from,to,port] of [['shape:e2-material','shape:e2-analysis','in-text'],['shape:e2-material','shape:e2-ap','in-value'],['shape:e2-analysis','shape:e2-org','in-text'],['shape:e2-material','shape:e2-orgp','in-value'],['shape:e2-material','shape:e2-repair','in-value'],['shape:e2-org','shape:e2-review','in-text'],['shape:e2-org','shape:e2-down','in-text'],['shape:e2-org','shape:e2-downp','in-value']])if(!createEdge(editor,{shapeId:from,portId:'out-text'},{shapeId:to,portId:port}))throw new Error('E2_EDGE_MISSING');
+          await ensureCanvasSaved();await delay();
+          const button=document.querySelector('[data-node-id="shape:e2-main"] .node-standard-primary');if(!button||button.disabled)throw new Error('E2_ROOT_BUTTON_UNAVAILABLE');button.click();
+          const collaborate=async(action,text,accepted)=>{const task=await inspectNode('shape:e2-org');const view=value(await window.api.flowAgentCollaboration({projectId,nodeId:'shape:e2-org'}));return value(await window.api.cooperateFlowAgent({projectId,nodeId:'shape:e2-org',taskId:task.taskId,waitRevision:task.waitRevision,revision:view.revision,eventId:'e2-'+action+'-'+view.revision,text,action,...(accepted!==undefined?{accepted}:{})}));};
+          let root=await inspectNode('shape:e2-main');let rounds=0;let discussed=false;
+          for(let i=0;i<120&&root?.state!=='completed';i++){
+            if(root&&['blocked','failed'].includes(root.state))throw new Error(root.code||'E2_ROOT_FAILED');
+            const org=await inspectNode('shape:e2-org');
+            if(org?.state==='waiting'){
+              rounds++;
+              if(!discussed){await collaborate('note','private-e2-note');await collaborate('discuss','private-e2-discuss');discussed=true;}
+              await collaborate('submit','明确接受整理成果',true);
+              await publicRun('shape:e2-org');
+              root=await publicRun('shape:e2-main');
+            } else if(org?.state==='ready'&&org?.prepared){
+              await publicRun('shape:e2-org');
+              for(let j=0;j<600;j++){const t=await inspectNode('shape:e2-org');if(t?.state==='waiting')break;if(t&&['blocked','failed'].includes(t.state))throw new Error(t.code||'E2_REWORK_FAILED');await delay();}
+              root=await inspectNode('shape:e2-main');
+            } else {await delay();root=await inspectNode('shape:e2-main');}
+          }
+          if(root?.state!=='completed')throw new Error('E2_ROOT_TIMEOUT');
+          await ensureCanvasSaved();
+          const decision=JSON.parse(editor.getShape('shape:e2-review').meta.nodeResult);
+          if(!decision.passed||decision.reviewRevision!==1)throw new Error('E2_REVIEW_REWORK_INVALID');
+          const downRun=editor.getShape('shape:e2-downp').meta.nodeRun;
+          if(downRun?.status!=='success')throw new Error('E2_DOWNSTREAM_NOT_EXECUTED');
+          const history=value(await window.api.flowAgentCollaboration({projectId,nodeId:'shape:e2-org'}));
+          const actions=history.messages.map(m=>m.kind);
+          if(!actions.includes('note')||!actions.includes('discuss')||!actions.includes('submit'))throw new Error('E2_COLLABORATION_HISTORY_MISSING');
+          const outputs=(await import('/src/nodes/nodeValues.ts')).projectNodeOutputs(editor.getShape('shape:e2-main'));
+          if(outputs['out-text']?.text!=='交付：private-e2-material')throw new Error('E2_FINAL_OUTPUT_INVALID');
+          return {status:'pass',projectId,rootTaskId:root.taskId,collaborationRounds:rounds,reviewRevision:decision.reviewRevision,finalOutput:outputs['out-text'].text,checks:['material→analysis→collaborative org→review→bounded rework→final asset in one graph','collaborative org waits twice (original + rework), note/discuss/submit persisted','review rejects then passes fixed rework version (reviewRevision=1)','downstream gated until approval; final committed asset delivered']};
+        })()`)
+      } else if (mediaReviewGraph) {
+        const { acceptGraphMediaReview } = await import('./graph-media-review-acceptance')
+        report = await acceptGraphMediaReview({ window: active, projectId })
       } else if (coordination) {
         if (recovery && phase === 'reopen') {
           const row = getDb()

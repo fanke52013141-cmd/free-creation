@@ -40,11 +40,22 @@ export function assertCoordinatorReviewOutput(
 ): void {
   const config = ReviewNodeConfigSchema.parse(JSON.parse(saved(file, nodeId).props.config))
   if (
-    config.reviewMode === 'sampled-video' &&
+    MEDIA_REVIEW_SOURCE[config.reviewMode ?? 'text-json'] &&
     (decision.subjects.length !== 1 ||
       !outputs.some((ref) => canonicalFlowJson(ref) === canonicalFlowJson(decision.subjects[0])))
   )
     throw new AgentRuntimeError('FLOW_REVIEW_NOT_READY', 'review-control')
+}
+
+/** 媒体审核的受控源契约：负责 Agent  owning 一个可执行生成节点，审核只读其固定媒体产物。 */
+const MEDIA_REVIEW_SOURCE: Record<
+  string,
+  { portId: string; nodeType: string; contractVersion: number }
+> = {
+  'sampled-video': { portId: 'out-video', nodeType: 'video', contractVersion: 7 },
+  image: { portId: 'out-image', nodeType: 'image-gen', contractVersion: 3 },
+  audio: { portId: 'out-audio', nodeType: 'speech', contractVersion: 4 },
+  'audio-video': { portId: 'out-video', nodeType: 'video', contractVersion: 7 }
 }
 
 export function bindCoordinatorReviews(
@@ -57,7 +68,7 @@ export function bindCoordinatorReviews(
   const responsible = new Set<string>()
   return reviewIds.map((nodeId) => {
     const config = ReviewNodeConfigSchema.parse(JSON.parse(saved(file, nodeId).props.config))
-    const video = config.reviewMode === 'sampled-video'
+    const mediaSource = MEDIA_REVIEW_SOURCE[config.reviewMode ?? 'text-json']
     const owner = config.responsibleNodeId
     // A terminal review may have no downstream child to gate. The coordinator still
     // requires every bound review to pass before it accepts finish outputs.
@@ -65,7 +76,7 @@ export function bindCoordinatorReviews(
       !owner ||
       !config.modelDefinitionId ||
       !config.subjectSources.length ||
-      (!video && config.subjectSources.some((source) => source.nodeId !== owner)) ||
+      (!mediaSource && config.subjectSources.some((source) => source.nodeId !== owner)) ||
       responsible.has(owner) ||
       config.gatedNodeIds.some((id) => !controls.has(id) || id === owner || id === nodeId)
     )
@@ -73,7 +84,7 @@ export function bindCoordinatorReviews(
     const type = saved(file, owner).props.nodeType
     if (type === 'agent' ? !childIds.includes(owner) : !['text', 'json'].includes(type))
       throw new AgentRuntimeError('FLOW_REWORK_TARGET_UNSUPPORTED', 'review-scope')
-    if (video) {
+    if (mediaSource) {
       const specialist =
         type === 'agent'
           ? AgentNodeConfigSchema.parse(JSON.parse(saved(file, owner).props.config))
@@ -84,10 +95,10 @@ export function bindCoordinatorReviews(
         !specialist ||
         specialist.role !== 'specialist' ||
         config.subjectSources.length !== 1 ||
-        source.portId !== 'out-video' ||
-        target?.type !== 'video' ||
-        target.contractVersion !== 7 ||
-        saved(file, source.nodeId).props.nodeType !== 'video' ||
+        source.portId !== mediaSource.portId ||
+        target?.type !== mediaSource.nodeType ||
+        target.contractVersion !== mediaSource.contractVersion ||
+        saved(file, source.nodeId).props.nodeType !== mediaSource.nodeType ||
         !specialist.allowedNodeIds.includes(source.nodeId) ||
         !controls.has(source.nodeId) ||
         config.gatedNodeIds.includes(source.nodeId)
@@ -346,7 +357,7 @@ export class CoordinatorReviews {
       if (cycle.state === 'pending')
         throw new AgentRuntimeError('FLOW_REVIEW_OUTCOME_UNKNOWN', 'review-control')
       if (saved(file, owner).props.nodeType === 'agent' && child?.state !== 'completed') continue
-      if (config.reviewMode === 'sampled-video') {
+      if (MEDIA_REVIEW_SOURCE[config.reviewMode ?? 'text-json']) {
         const source = config.subjectSources[0]
         if (
           !child?.outputs.some(

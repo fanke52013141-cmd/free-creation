@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "Graph review gate/rework (admission allows review kind, graphFacts delivers passed reviews, graphStep skips review dispatch and handles review exits) plus capability minimal-input ContextManifest selection. No new external op; internal execution semantics only.",
+  "reason": "Graph-mode deepening: collaborative agent discussion/continue in graph, end-to-end vertical graph acceptance, and media review binding generalized from sampled-video to image/audio/video controlled generation sources",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -57,10 +57,11 @@
     "src/main/agent-flow/commands-electron.ts": "d44a8868e0440c01e832dcc918fd1a2bf51dd684357a168a513a5b906e83c7f4",
     "src/main/agent-flow/coordination-store.ts": "92b15b8eb95fa5f8aee20f7d6fe3f937970425eb0933b0fc5f41688a650c1053",
     "src/main/agent-flow/coordinator-host.ts": "ed139978cb1b826ae19fbfe4a87cd09eb37121dfb4be1051c9d44224444529fa",
-    "src/main/agent-flow/coordinator-reviews.ts": "10aca117dd2b661cabea7e1299a7dec2e5e8ad177720df2e70c844af29f7af5d",
+    "src/main/agent-flow/coordinator-reviews.ts": "e89a3d93a20bd7853cb907c03346c0dfee55fc9a9e86cb842208d940399df7a8",
     "src/main/agent-flow/definition-store.ts": "1b697b101cafb6e863ed412a426e40585c6fe0f7b38d09ff7987938d0e89da27",
-    "src/main/agent-flow/desktop-electron.ts": "5c0003845147a97f79b5e7ba1a61d2147aaa2e6271a95a13b18e3e6be0f28394",
+    "src/main/agent-flow/desktop-electron.ts": "4ef130dab3dab434841ca404ace2fc75248155013bbbb01a7935c9cd118ea6f0",
     "src/main/agent-flow/desktop-host.ts": "d5941102bda3a225b3acbd9b15b6998f7114d2e30da5f0240874a792d6cf5b26",
+    "src/main/agent-flow/graph-media-review-acceptance.ts": "121988d482d7fad973dc21b5ccba7105afa23d878f5c46b723371d7b6cf63864",
     "src/main/agent-flow/image-assets.ts": "a31ed9411d136d0510d5cc863936304f33ac1ce4df143de78f8d1d11c4151bfb",
     "src/main/agent-flow/ledger-tool.ts": "65fc4a21aefa10e02a79b37a70f907ef2c7e7f17814b71168f421e4a21f53524",
     "src/main/agent-flow/media-review-acceptance.ts": "9b1026e2af3ca8054506ad18a64cde949443c03078e25d90aee1d8320ca49462",
