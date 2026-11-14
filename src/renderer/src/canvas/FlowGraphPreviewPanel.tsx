@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
 import type { Editor } from 'tldraw'
 import type { FlowGraphPreview } from '@shared/agent-flow/flow-graph-compiler'
 import { commitFlowGraph } from './flow-build-actions'
@@ -16,20 +16,33 @@ export function FlowGraphPreviewPanel({
 }: {
   editor: Editor
   projectId: string
-}) {
+}): JSX.Element | null {
   const [previews, setPreviews] = useState<FlowGraphPreview[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const previewsRef = useRef(previews)
-  previewsRef.current = previews
+  useEffect(() => {
+    previewsRef.current = previews
+  }, [previews])
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<void> => {
     const reply = await window.api.graphFlowAgent({ action: 'list', projectId })
     if (!reply.ok) return
     const list = ((reply.data as FlowGraphPreview[] | null) ?? []).filter(
       (preview) => preview.projectId === projectId
     )
-    setPreviews(list)
+    // 无变化时保持同一引用，避免空轮询触发无谓重渲染（干扰画布键盘焦点时序）。
+    setPreviews((prev) =>
+      prev.length === list.length &&
+      prev.every(
+        (preview, index) =>
+          preview.buildId === list[index].buildId &&
+          preview.state === list[index].state &&
+          preview.semanticRevision === list[index].semanticRevision
+      )
+        ? prev
+        : list
+    )
     for (const preview of list) {
       if (preview.state === 'preview') setFlowGraphPreview(projectId, preview)
       else clearFlowGraphPreview(projectId, preview.nodeId)
@@ -39,7 +52,7 @@ export function FlowGraphPreviewPanel({
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
     let stopped = false
-    const tick = async () => {
+    const tick = async (): Promise<void> => {
       if (stopped) return
       if (!document.hidden) await refresh()
       if (stopped) return
@@ -53,7 +66,7 @@ export function FlowGraphPreviewPanel({
     }
   }, [refresh])
 
-  const confirm = async (preview: FlowGraphPreview) => {
+  const confirm = async (preview: FlowGraphPreview): Promise<void> => {
     setBusy(preview.buildId)
     setError(null)
     try {
@@ -66,7 +79,7 @@ export function FlowGraphPreviewPanel({
       setBusy(null)
     }
   }
-  const discard = async (preview: FlowGraphPreview) => {
+  const discard = async (preview: FlowGraphPreview): Promise<void> => {
     setBusy(preview.buildId)
     setError(null)
     try {

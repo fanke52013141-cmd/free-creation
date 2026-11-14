@@ -381,7 +381,8 @@ describe('C4 independent process recovery contention', () => {
         ALTER TABLE history_snapshots DROP COLUMN graph_json;
         ALTER TABLE flow_commands DROP COLUMN principal;
         ALTER TABLE model_connections DROP COLUMN agent_tool_calling_revision;
-        ALTER TABLE model_definitions DROP COLUMN agent_tool_calling_revision;`)
+        ALTER TABLE model_definitions DROP COLUMN agent_tool_calling_revision;
+        ALTER TABLE flow_builds DROP COLUMN source;`)
       db.pragma('user_version=16')
     })
     const a = start(directory, 'migrate', 'a'),

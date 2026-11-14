@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "P5.3 fix: compiler remaps FlowGraph nodeIds to tldraw-legal shape: ids (nodes/edges/coordinator graph/state machine consistent) so committed flows actually apply to canvas; no registry contract change (flowId already permits shape: prefix)",
+  "reason": "P5 lint fixes: explicit return types on graphPort and FlowGraphPreviewPanel handlers; move preview ref update into effect (react-hooks/refs). No contract change.",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -12,7 +12,7 @@
     "src/main/agent-access/diagnostics-ops.ts": "bf6ec45da287db9faae352b4ae57e6c5d1f4f7c95ae0dd4fb28ae9099597cdef",
     "src/main/agent-access/flow-agent-build-ops.ts": "d864e2c81e4b48b54af4aaec14df1021c653919463544d3fd5279b32e946d6aa",
     "src/main/agent-access/flow-agent-run-ops.ts": "c0860217de0bc290d3fefb536984bf42e44a9402e26c74dcaf1a65e596f46d83",
-    "src/main/agent-access/flow-agents-ops.ts": "6df5e68947a48dea707f299fb5ec5bfe4bade2df4b4c6d821d44b54c6e90e655",
+    "src/main/agent-access/flow-agents-ops.ts": "15b6c139e7b248e3c4d7f7ac0843e2106b56b059027cb8fdc95c92f56e26e47a",
     "src/main/agent-access/flow-assets-ops.ts": "8240ee3017f10e31222c44a36e0a564534b19f51041adad52e45a989a58c5e3b",
     "src/main/agent-access/flow-bridge.ts": "06cf457e22dfd968661caffa2ac3b6af74e8d049e306784bbc661d7f978b43ea",
     "src/main/agent-access/flow-command-bridge.ts": "3ecb4ddeb24461b4fc51d5ab153a63fcf3b34d0e314781dbcf89b17653655afe",

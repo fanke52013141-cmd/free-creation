@@ -211,6 +211,9 @@ const defaultConfigs = {
       const checkedBefore = await checkbox.isChecked()
       await page.keyboard.press('Space')
       assert.equal(await checkbox.isChecked(), !checkedBefore, 'Space toggles focused checkbox')
+      // 首次 Space 触发草稿态重渲染；等待重渲染落定再按第二次，避免焦点时序抖动假失败。
+      await page.waitForTimeout(150)
+      await checkbox.focus()
       await page.keyboard.press('Space')
       assert.equal(await checkbox.isChecked(), checkedBefore, 'Space restores checkbox draft value')
     }

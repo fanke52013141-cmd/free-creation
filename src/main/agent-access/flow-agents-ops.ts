@@ -14,7 +14,7 @@ import type Database from 'better-sqlite3'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 import type { FlowAgentView } from '../../shared/agent-flow/desktop-tasks'
 import { FlowAgentCollaborationSchema } from '../../shared/agent-flow/desktop-tasks'
-import { flowAgentAccessPort } from './flow-bridge'
+import { flowAgentAccessPort, type FlowAgentAccessPort } from './flow-bridge'
 import type { AccessOperationId } from '../../shared/agent-access/registry'
 import { supportsSampledVideoReview } from '../../shared/agent-flow/video-review'
 import { supportsReviewAudioInput } from '../../shared/agent-flow/media-review'
@@ -605,7 +605,7 @@ function graphPreviewDto(preview: FlowGraphPreview): Record<string, unknown> {
     edges: preview.edges.slice(0, 256).map((edge) => ({ from: edge.from, to: edge.to }))
   }
 }
-function graphPort() {
+function graphPort(): FlowAgentAccessPort {
   const port = flowAgentAccessPort()
   if (!port) refuse('FLOW_AGENTS_UNAVAILABLE', 'flow agent host is not running in this instance')
   return port
