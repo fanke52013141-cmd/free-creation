@@ -70,6 +70,8 @@ export const FlowNodeSchema = z
       })
       .strict()
       .optional(),
+    /** 汇合策略：多入边节点等待所有/任一入边交付（缺省 all）。条件分支汇合常用 any。 */
+    joinPolicy: z.enum(['all', 'any']).optional(),
     /** 编译后承载的真实画布节点（编译器填，外部生成时缺省）。 */
     carrierNodeId: id.optional()
   })
@@ -99,9 +101,7 @@ export const FlowEdgeSchema = z
     to: z.object({ nodeId: id, portId: id }).strict(),
     kind: z.enum(['data', 'control']).default('data'),
     /** 条件边：全部满足才流转（复用 evaluateStageEntry 口径）。 */
-    condition: z.array(StageConditionSchema).max(16).optional(),
-    /** 汇合策略：多入边节点等待所有/任一入边交付。 */
-    joinPolicy: z.enum(['all', 'any']).optional()
+    condition: z.array(StageConditionSchema).max(16).optional()
   })
   .strict()
 export type FlowEdge = z.infer<typeof FlowEdgeSchema>
