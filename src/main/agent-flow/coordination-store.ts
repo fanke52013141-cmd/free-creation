@@ -63,6 +63,8 @@ export interface CoordinationRun {
   reworkRound?: number
   /** AF-05：返工保留的旧交付历史（只读事实）。 */
   reworkHistory?: import('../../shared/agent-flow/stage-contracts').StageDeliveryRecord[]
+  /** O4-P4：图模式循环节点迭代计数（nodeId → 已分派次数）。 */
+  loopIterations?: Record<string, number>
 }
 
 /** A public review executor may join an occupied scope only for the persisted pending request. */

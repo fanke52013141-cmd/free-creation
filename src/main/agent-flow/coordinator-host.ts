@@ -28,7 +28,11 @@ import {
   type StageDeliveryFact,
   type StageEntryFacts
 } from '../../shared/agent-flow/stage-contracts'
-import { nextReadyNodes, isFlowComplete } from '../../shared/agent-flow/flow-graph-router'
+import {
+  nextReadyNodes,
+  isFlowComplete,
+  loopNeedsAnotherIteration
+} from '../../shared/agent-flow/flow-graph-router'
 import {
   buildContextManifest,
   contextManifestBlocking
@@ -710,7 +714,14 @@ export class FlowCoordinatorHost {
     const firstWaveIds = new Set(waves[0]?.map((assignment) => assignment.nodeId) ?? [])
     const children = assignments.map((assignment) => ({
       nodeId: assignment.nodeId,
-      taskId: hash([run.taskId, assignment.nodeId, ...(run.reworkRound ? [run.reworkRound] : [])]),
+      taskId: hash([
+        run.taskId,
+        assignment.nodeId,
+        ...(run.reworkRound ? [run.reworkRound] : []),
+        ...(run.loopIterations?.[assignment.nodeId]
+          ? [`loop:${run.loopIterations[assignment.nodeId]}`]
+          : [])
+      ]),
       goal: assignment.goal,
       completion: assignment.completion,
       inputs: assignment.inputs,
@@ -959,16 +970,19 @@ export class FlowCoordinatorHost {
   ): Promise<boolean> {
     const graph = run.config.graph!
     const facts = this.graphFacts(run)
+    const loopIterations = { ...(run.loopIterations ?? {}) }
     const delivered = new Set(
       run.children
         .filter((child) => child.state === 'completed' && child.outputs.length)
         .map((child) => child.nodeId)
     )
-    if (isFlowComplete(graph, delivered)) {
-      const exitChild = run.children.find(
-        (child) =>
-          graph.exits.includes(child.nodeId) && child.state === 'completed' && child.outputs.length
-      )!
+    if (isFlowComplete(graph, facts, delivered, loopIterations)) {
+      const exitChild = [...run.children]
+        .reverse()
+        .find(
+          (child) =>
+            graph.exits.includes(child.nodeId) && child.state === 'completed' && child.outputs.length
+        )!
       this.assets.resolveInputs(run.projectId, exitChild.outputs)
       run.outputs = exitChild.outputs
       this.emitTrustedEvent(
@@ -981,9 +995,14 @@ export class FlowCoordinatorHost {
       this.store.save(run)
       return false
     }
-    const { ready } = nextReadyNodes(graph, facts, delivered)
+    const { ready } = nextReadyNodes(graph, facts, delivered, loopIterations)
     const dispatched = new Set(run.children.map((child) => child.nodeId))
-    const next = graph.nodes.find((node) => ready.includes(node.nodeId) && !dispatched.has(node.nodeId))
+    const next = graph.nodes.find(
+      (node) =>
+        ready.includes(node.nodeId) &&
+        (!dispatched.has(node.nodeId) ||
+          loopNeedsAnotherIteration(node, facts, delivered, loopIterations))
+    )
     if (!next) {
       // 无就绪未分派节点：等待人工/审核或阻塞，不静默放行。
       return this.wait(run, 'human.wait')
@@ -999,12 +1018,22 @@ export class FlowCoordinatorHost {
           'graph-context'
         )
     }
+    // O4-P4：循环节点重复分派——递增迭代计数（taskId/requestId 含迭代，区别于上一轮）。
+    if (next.loop) {
+      loopIterations[next.nodeId] = (loopIterations[next.nodeId] ?? 0) + 1
+      run.loopIterations = loopIterations
+    }
     const candidate = this.specialists.describeAssignment(
       {
         ...input,
         nodeId: next.nodeId,
         action: 'start',
-        requestId: hash([run.taskId, next.nodeId, ...(run.reworkRound ? [run.reworkRound] : [])])
+        requestId: hash([
+          run.taskId,
+          next.nodeId,
+          ...(run.reworkRound ? [run.reworkRound] : []),
+          ...(loopIterations[next.nodeId] ? [`loop:${loopIterations[next.nodeId]}`] : [])
+        ])
       },
       true
     )
@@ -1043,11 +1072,15 @@ export class FlowCoordinatorHost {
     )
   }
 
-  /** O4-P3：图模式交付事实——stageKey 即节点 id（路由条件按节点 id 引用）。只读权威资产与续接记录。 */
+  /** O4-P3/P4：图模式交付事实——stageKey 即节点 id；循环节点取最近一次迭代交付。只读权威资产与续接记录。 */
   private graphFacts(run: CoordinationRun): StageEntryFacts {
-    const deliveries: StageDeliveryFact[] = []
+    const latestByNode = new Map<string, (typeof run.children)[number]>()
     for (const child of run.children) {
       if (child.state !== 'completed') continue
+      latestByNode.set(child.nodeId, child)
+    }
+    const deliveries: StageDeliveryFact[] = []
+    for (const child of latestByNode.values()) {
       const versions = this.assets.resolveInputs(run.projectId, child.outputs)
       deliveries.push({
         stageKey: child.nodeId,

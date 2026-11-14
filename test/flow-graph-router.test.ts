@@ -45,8 +45,8 @@ describe('O4-P3 顺序路由', () => {
   })
   it('b 交付后 c 就绪；c 交付后流程完成', () => {
     expect(nextReadyNodes(g, facts([delivery('a', 'x'), delivery('b', 'y')]), new Set(['a', 'b'])).ready).toEqual(['c'])
-    expect(isFlowComplete(g, new Set(['a', 'b', 'c']))).toBe(true)
-    expect(isFlowComplete(g, new Set(['a', 'b']))).toBe(false)
+    expect(isFlowComplete(g, facts([]), new Set(['a', 'b', 'c']))).toBe(true)
+    expect(isFlowComplete(g, facts([]), new Set(['a', 'b']))).toBe(false)
   })
 })
 
@@ -88,5 +88,47 @@ describe('O4-P3 汇合路由', () => {
     expect(partial.ready).not.toContain('d')
     const full = nextReadyNodes(g, facts([delivery('a', 'x'), delivery('b', 'y'), delivery('c', 'z')]), new Set(['a', 'b', 'c']))
     expect(full.ready).toContain('d')
+  })
+})
+
+describe('O4-P4 循环路由（retry/until，迭代计数由宿主传入）', () => {
+  const loopGraph = (maxIterations: number) =>
+    graph(
+      [
+        node('a'),
+        node('b', {
+          loop: {
+            maxIterations,
+            exitCondition: [{ kind: 'output-field', stageKey: 'b', path: 'text', op: 'equals', value: 'done' }]
+          }
+        }),
+        node('c')
+      ],
+      [dataEdge('a', 'b'), dataEdge('b', 'c')],
+      'a',
+      ['c']
+    )
+
+  it('循环未达退出条件：重复分派 b，下游 c 阻塞', () => {
+    const g = loopGraph(3)
+    const result = nextReadyNodes(g, facts([delivery('a', 'x'), delivery('b', 'working')]), new Set(['a', 'b']), { b: 1 })
+    expect(result.ready).toContain('b')
+    expect(result.ready).not.toContain('c')
+    expect(isFlowComplete(g, facts([delivery('b', 'working')]), new Set(['a', 'b']), { b: 1 })).toBe(false)
+  })
+
+  it('退出条件满足：b settled，下游 c 就绪', () => {
+    const g = loopGraph(3)
+    const result = nextReadyNodes(g, facts([delivery('a', 'x'), delivery('b', 'done')]), new Set(['a', 'b']), { b: 1 })
+    expect(result.ready).not.toContain('b')
+    expect(result.ready).toContain('c')
+  })
+
+  it('达到 maxIterations：强制退出，b settled，c 就绪', () => {
+    const g = loopGraph(3)
+    const result = nextReadyNodes(g, facts([delivery('a', 'x'), delivery('b', 'working')]), new Set(['a', 'b']), { b: 3 })
+    expect(result.ready).not.toContain('b')
+    expect(result.ready).toContain('c')
+    expect(isFlowComplete(g, facts([delivery('b', 'working')]), new Set(['a', 'b', 'c']), { b: 3 })).toBe(true)
   })
 })

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "O4-P3 graph execution mode: add executionMode 'graph' plus optional graph field (FlowGraph) to AgentNodeConfig; coordinator graphStep routes by declared graph and delivery facts only (no coordinator decision model, model text cannot change routing). Backward compatible: new optional enum value and optional field; existing model and fixed-order modes unchanged; graph mode is opt-in and currently supports agent nodes only.",
+  "reason": "O4-P4 loop execution: router settledNodes/loopNeedsAnotherIteration (exitCondition or maxIterations), graphStep re-dispatches loop nodes with iteration-specific task ids, run.loopIterations state, graphFacts uses latest iteration delivery. Backward compatible: non-graph modes unaffected (loopIterations unset); graph mode opt-in.",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -55,8 +55,8 @@
     "src/main/agent-flow/command-intent.ts": "6e5d66951d3885f43da1ef018cae76802bc7ea3d99556d48e046597eed0a3280",
     "src/main/agent-flow/command-ledger.ts": "4742719adb46cd60f629a3ac862e554ff25b4b68f98d24310300ef9f581c3e57",
     "src/main/agent-flow/commands-electron.ts": "d44a8868e0440c01e832dcc918fd1a2bf51dd684357a168a513a5b906e83c7f4",
-    "src/main/agent-flow/coordination-store.ts": "27aa59b6d7939ddc454b8eec7d3596a90c1081894f493a68caac198d9549f140",
-    "src/main/agent-flow/coordinator-host.ts": "bf13abf2c3149b97b236d7da5751a4d84c8a1b069eb54fc1a8cbe3d6a8757dea",
+    "src/main/agent-flow/coordination-store.ts": "92b15b8eb95fa5f8aee20f7d6fe3f937970425eb0933b0fc5f41688a650c1053",
+    "src/main/agent-flow/coordinator-host.ts": "a77220a47e1909fc079ea9228e1774f46b2e1857d3b40047412124fa70b43268",
     "src/main/agent-flow/coordinator-reviews.ts": "10aca117dd2b661cabea7e1299a7dec2e5e8ad177720df2e70c844af29f7af5d",
     "src/main/agent-flow/definition-store.ts": "7dd795982f57b98af2842976892c3e21a03e16aeba365d1bc06b68be6e1a399f",
     "src/main/agent-flow/desktop-electron.ts": "b69c004d4bcdd44adde0e75a06832e02e69f23e373b86860ab7ac5301fe7e447",

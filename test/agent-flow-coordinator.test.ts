@@ -1899,4 +1899,38 @@ describe('O4-P3 graph mode execution（声明式图路由，mock 模型）', () 
     const f = fixture({ graph: badGraph })
     await expect(f.host.run(input)).rejects.toMatchObject({ code: 'FLOW_GRAPH_NODE_KIND_UNSUPPORTED' })
   })
+
+  it('循环节点达 maxIterations 强制退出并完成（迭代各自独立任务）', async () => {
+    const loopGraph = FlowGraphSchema.parse({
+      schemaVersion: 1,
+      graphId: 'g',
+      name: '循环图',
+      goal: '重复整理直到达标或达上限',
+      nodes: [
+        graphNode('first'),
+        {
+          ...graphNode('second'),
+          loop: {
+            maxIterations: 2,
+            exitCondition: [
+              { kind: 'output-field', stageKey: 'second', path: 'text', op: 'equals', value: 'done' }
+            ]
+          }
+        }
+      ],
+      edges: [
+        { from: { nodeId: 'first', portId: 'out-text' }, to: { nodeId: 'second', portId: 'in-text' }, kind: 'data' }
+      ],
+      entry: 'first',
+      exits: ['second']
+    })
+    const f = fixture({ graph: loopGraph })
+    const done = await f.host.run(input)
+    expect(done.task.state).toBe('completed')
+    expect(f.count().modelCalls).toBe(0)
+    // first 一次任务（2 次执行）+ second 两轮迭代（各 2 次执行）= 6
+    expect(f.count().executions).toBe(6)
+    const run = f.coordinator.store.latest('p', 'main')!
+    expect(run.loopIterations?.second).toBe(2)
+  })
 })
