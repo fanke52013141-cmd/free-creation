@@ -27,7 +27,7 @@ const fs=require('node:fs')
  }
  }
  await page.evaluate(async()=>{(await import('/src/stores/nodePanel.ts')).useNodePanelStore.getState().close();const editor=window.qaEditor;editor.selectNone();editor.setCamera({x:0,y:0,z:1},{immediate:true});editor.updateShape({id:'shape:qa-video-asset',type:'node-card',x:280,y:130})})
- for(const name of ['打开资产管理','打开节点库','打开历史记录','打开运行中心']){
+ for(const name of ['打开资产管理','打开节点流','打开历史记录','打开运行中心']){
  await page.getByRole('button',{name,exact:true}).click()
  const head=page.locator('.side-panel-head');await head.waitFor()
  const centers=await head.evaluate(el=>['.side-panel-icon','.side-panel-title','.side-panel-close'].map(selector=>{const r=el.querySelector(selector).getBoundingClientRect();return r.y+r.height/2}))

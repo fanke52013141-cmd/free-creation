@@ -103,7 +103,7 @@ function contrast(a, b) {
     }
     await page.mouse.move(2600, 1800)
     await page.evaluate(async () => (await import('/src/stores/search.ts')).useSearchStore.getState().toggle())
-    await page.getByRole('textbox', { name: '搜索画布节点或节点库' }).fill('音频')
+    await page.getByRole('textbox', { name: '搜索画布节点或节点流' }).fill('音频')
     await page.waitForSelector('.search-hit')
     const searchColors = await page.locator('.search-hit').evaluateAll((buttons) => buttons.map((el) => ({ label: el.getAttribute('aria-label').split('：')[1], color: getComputedStyle(el.querySelector('.search-hit-icon')).color })))
     assert.ok(searchColors.length > 0)

@@ -59,7 +59,7 @@ const path = require('node:path')
       })))
       await page.screenshot({ path:path.join(output,`${family}-initial.png`), animations:'disabled' })
     }
-    assert.equal(measurements.length,32)
+    assert.equal(measurements.length,33)
     for(const row of measurements) {
       assert.ok(Math.max(...row.alignment)-Math.min(...row.alignment)<.6,`${row.type}: header alignment`)
       assert.ok(row.ports.every(distance=>Math.abs(distance-18)<.6),`${row.type}: detached ports ${row.ports}`)

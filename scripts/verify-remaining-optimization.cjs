@@ -154,9 +154,9 @@ const path = require('node:path')
         project
       )
       await page.waitForSelector('.palette-category-item')
-      assert.equal(await page.evaluate(() => window.__canvasMountListeners()), 5)
+      assert.equal(await page.evaluate(() => window.__canvasMountListeners()), 8)
     }
-    checks.push('五次画布卸载无残留 wheel 或五项挂载监听')
+    checks.push('五次画布卸载无残留 wheel 或八项挂载监听')
     await page.evaluate(async () =>
       (await import('/src/stores/app.ts')).useAppStore.getState().setHome()
     )
