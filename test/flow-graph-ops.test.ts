@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { runFlowAgentOperation } from '../src/main/agent-access/flow-agents-ops'
 import { FlowGraphSchema, type FlowNode } from '../src/shared/agent-flow/flow-graph'
+import { canvasNodeId } from '../src/shared/agent-flow/flow-graph-compiler'
 
 const context = {
   activeProjectId: () => null,
@@ -71,7 +72,7 @@ describe('O4-P5 flowGraph.compile', () => {
     }
     expect(result.ok).toBe(true)
     expect(result.compiled.nodes.map((n) => n.id)).toEqual(
-      expect.arrayContaining(['a', 'b', result.compiled.coordinatorNodeId, result.compiled.stateNodeId])
+      expect.arrayContaining([canvasNodeId('a'), canvasNodeId('b'), result.compiled.coordinatorNodeId, result.compiled.stateNodeId])
     )
   })
   it('非法图 ok=false 且 compiled=null', async () => {

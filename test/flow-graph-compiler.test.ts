@@ -3,7 +3,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   compileFlowGraph,
-  FlowGraphCompileError
+  FlowGraphCompileError,
+  canvasNodeId
 } from '../src/shared/agent-flow/flow-graph-compiler'
 import { FlowGraphSchema, type FlowNode, type FlowGraph } from '../src/shared/agent-flow/flow-graph'
 import {
@@ -42,23 +43,23 @@ describe('O4-P2 编译器', () => {
   it('顺序图编译为协调器 + 专业节点 + 状态机 + 数据边', () => {
     const compiled = compileFlowGraph(graph([node('a'), node('b')], [dataEdge('a', 'b')], 'a', ['b']))
     const ids = compiled.nodes.map((n) => n.id)
-    expect(ids).toEqual(expect.arrayContaining(['a', 'b', compiled.coordinatorNodeId, compiled.stateNodeId]))
+    expect(ids).toEqual(expect.arrayContaining([canvasNodeId('a'), canvasNodeId('b'), compiled.coordinatorNodeId, compiled.stateNodeId]))
 
     const coord = compiled.nodes.find((n) => n.id === compiled.coordinatorNodeId)!
     const coordConfig = AgentNodeConfigSchema.parse(JSON.parse(coord.config))
     expect(coordConfig.role).toBe('coordinator')
-    expect(coordConfig.allowedNodeIds).toEqual(expect.arrayContaining(['a', 'b']))
+    expect(coordConfig.allowedNodeIds).toEqual(expect.arrayContaining([canvasNodeId('a'), canvasNodeId('b')]))
     expect(coordConfig.relations.some((r) => r.kind === 'observes' && r.targetNodeId === compiled.stateNodeId)).toBe(true)
 
-    const a = compiled.nodes.find((n) => n.id === 'a')!
+    const a = compiled.nodes.find((n) => n.id === canvasNodeId('a'))!
     expect(AgentNodeConfigSchema.parse(JSON.parse(a.config)).role).toBe('specialist')
 
     const sm = compiled.nodes.find((n) => n.id === compiled.stateNodeId)!
     const smConfig = StateMachineNodeConfigSchema.parse(JSON.parse(sm.config))
-    expect(smConfig.states).toEqual(expect.arrayContaining(['idle', 'a', 'b', 'completed']))
+    expect(smConfig.states).toEqual(expect.arrayContaining(['idle', canvasNodeId('a'), canvasNodeId('b'), 'completed']))
 
     expect(compiled.edges).toEqual([
-      { from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'b', portId: 'in-text' } }
+      { from: { nodeId: canvasNodeId('a'), portId: 'out-text' }, to: { nodeId: canvasNodeId('b'), portId: 'in-text' } }
     ])
   })
 
@@ -80,7 +81,7 @@ describe('O4-P2 编译器', () => {
       if (n.type === 'state-machine') expect(() => StateMachineNodeConfigSchema.parse(JSON.parse(n.config))).not.toThrow()
       if (n.type === 'human-task') expect(() => HumanTaskNodeConfigSchema.parse(JSON.parse(n.config))).not.toThrow()
     }
-    const b = compiled.nodes.find((n) => n.id === 'b')!
+    const b = compiled.nodes.find((n) => n.id === canvasNodeId('b'))!
     expect(AgentNodeConfigSchema.parse(JSON.parse(b.config)).interactionMode).toBe('collaborative')
   })
 
@@ -93,7 +94,7 @@ describe('O4-P2 编译器', () => {
     const compiled = compileFlowGraph(
       graph([node('a', { kind: 'capability', capability: 'text-pass@1' }), node('b')], [dataEdge('a', 'b')], 'a', ['b'])
     )
-    const a = compiled.nodes.find((n) => n.id === 'a')!
+    const a = compiled.nodes.find((n) => n.id === canvasNodeId('a'))!
     expect(a.type).toBe('processor')
     expect(JSON.parse(a.config).operation).toBe('pass')
   })
@@ -102,7 +103,7 @@ describe('O4-P2 编译器', () => {
     const compiled = compileFlowGraph(
       graph([node('a'), node('b', { participation: 'human', kind: 'human-task' })], [dataEdge('a', 'b')], 'a', ['b'])
     )
-    const b = compiled.nodes.find((n) => n.id === 'b')!
+    const b = compiled.nodes.find((n) => n.id === canvasNodeId('b'))!
     expect(b.type).toBe('human-task')
     expect(HumanTaskNodeConfigSchema.parse(JSON.parse(b.config)).outputType).toBe('text')
   })
@@ -116,7 +117,7 @@ describe('O4-P2 编译器', () => {
         ['b']
       )
     )
-    const b = compiled.nodes.find((n) => n.id === 'b')!
+    const b = compiled.nodes.find((n) => n.id === canvasNodeId('b'))!
     expect(b.type).toBe('ai-review')
     expect(ReviewNodeConfigSchema.parse(JSON.parse(b.config)).maxReworks).toBe(2)
     expect(b.text).toBe('审核标准')
@@ -134,7 +135,7 @@ describe('O4-P2 编译器', () => {
         ['b']
       )
     )
-    expect(compiled.nodes.map((n) => n.id)).toEqual(expect.arrayContaining(['a', 'b']))
+    expect(compiled.nodes.map((n) => n.id)).toEqual(expect.arrayContaining([canvasNodeId('a'), canvasNodeId('b')]))
   })
 })
 
@@ -147,7 +148,18 @@ describe('P5 编译器补全（落画布后走图路由 + 预览布局）', () =
     expect(coordConfig.executionMode).toBe('graph')
     expect(coordConfig.graph).toBeTruthy()
     expect(coordConfig.graph!.graphId).toBe('g')
-    expect(coordConfig.graph!.nodes.map((n) => n.nodeId)).toEqual(['a', 'b'])
+    expect(coordConfig.graph!.nodes.map((n) => n.nodeId)).toEqual([canvasNodeId('a'), canvasNodeId('b')])
+  })
+
+  it('编译产物节点 id 均为 tldraw 合法 shape id（shape: 前缀，可直接落画布）', () => {
+    const compiled = compileFlowGraph(graph([node('a'), node('b')], [dataEdge('a', 'b')], 'a', ['b']))
+    for (const n of compiled.nodes) expect(n.id.startsWith('shape:')).toBe(true)
+    expect(compiled.coordinatorNodeId.startsWith('shape:')).toBe(true)
+    expect(compiled.stateNodeId.startsWith('shape:')).toBe(true)
+    for (const e of compiled.edges) {
+      expect(e.from.nodeId.startsWith('shape:')).toBe(true)
+      expect(e.to.nodeId.startsWith('shape:')).toBe(true)
+    }
   })
 
   it('所有编译产物节点带有限布局坐标，且不全重叠在原点', () => {

@@ -306,6 +306,12 @@ export const FLOW_AGENTS_OPERATIONS = {
     description: 'P5：取消外部建图预览（置 discarded）；已 committed 的预览幂等返回 committed，不可取消',
     input: project.extend({ buildId: flowId }).strict()
   },
+  'flowGraph.confirm': {
+    effect: 'write',
+    description:
+      'P5.3：确认外部建图预览落画布——经渲染器权威 commitFlowGraph（authorize/CAS/单撤销步/保存屏障/confirm），与 GUI 预览面板同一动作；main 按 buildId 触发并核对落盘 committed 与节点真实存在；外部不能绕渲染器自确认',
+    input: project.extend({ buildId: flowId }).strict()
+  },
   'flowAgent.catalog': {
     effect: 'read',
     description:
@@ -660,6 +666,14 @@ export const FLOW_AGENTS_OUTPUTS = {
     .strict(),
   'flowGraph.discard': z
     .object({ projectId: identifier, preview: graphPreviewView })
+    .strict(),
+  'flowGraph.confirm': z
+    .object({
+      projectId: identifier,
+      graphVersion: z.number().int().nonnegative(),
+      preview: graphPreviewView,
+      committedNodeIds: z.array(flowId).max(128)
+    })
     .strict(),
   'flowAgent.catalog': z
     .object({

@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "generatedFrom": {
-    "ipcChannels": 199,
+    "ipcChannels": 200,
     "canvasActions": 50,
-    "externalOperations": 184
+    "externalOperations": 185
   },
   "totals": {
-    "actions": 249,
+    "actions": 250,
     "byPhase": {
-      "external": 204,
+      "external": 205,
       "excluded": 37,
       "F9": 8
     }
@@ -63,6 +63,19 @@
         "flowAgent.build.commit"
       ],
       "note": "F8 收官：inspect/propose 只经同一 FlowBuilderHost（与 IPC 同一入口）；propose 先走模型工具调用预检（失败零模型请求，需已验证模型，付费路径未实测）；commit 只按 buildId 经新桌面握手 flow-build 触发渲染器 commitFlowBuild（authorize/confirm + 单撤销步 + 保存屏障），main 再以持久化 committed 状态与已保存节点核对，外部不能自带图内容"
+    },
+    "ipc.flowAgents.graph": {
+      "label": "外部 FlowGraph 建图预览",
+      "channel": "flow-agents:graph",
+      "gui": "项目级外部建图预览面板（确认落画布/取消）",
+      "phase": "external",
+      "external": [
+        "flowGraph.preview",
+        "flowGraph.list",
+        "flowGraph.discard",
+        "flowGraph.confirm"
+      ],
+      "note": "P5：外部上帝 Agent 经 flowGraph.propose 产预览（外部专用，GUI 无提案按钮，见 EXTERNAL_ONLY）；GUI 项目级预览面板列出待确认预览并经渲染器权威 commitFlowGraph 落画布（authorize/CAS/单撤销步/保存屏障/confirm，与 builder 同一内核）；preview/list/discard/confirm 外部 op 与 GUI 同一 FlowBuilderHost（source=graph）；confirm 经桌面握手 flow-graph 触发渲染器，main 核对落盘 committed 与节点真实存在，外部不能绕渲染器自确认。真实模型落画布执行未实测"
     },
     "ipc.flowAgents.pause": {
       "label": "Flow 暂停",

@@ -189,19 +189,7 @@ const EXTERNAL_ONLY_OPERATIONS = new Map([
   ],
   [
     'flowGraph.propose',
-    'P5 外部上帝 Agent 动态建 flow 提案：接收外部已生成 FlowGraph，校验+编译+持久化预览（flow_builds source=graph），不调模型不写画布；生成方是外部 Agent，GUI 无"提案"按钮（GUI 只在 P5.2/P5.3 预览面板人工确认落画布），属外部专用建图入口'
-  ],
-  [
-    'flowGraph.preview',
-    'P5 外部建图预览读取：只读已持久化预览（最近一次或指定 buildId），已保存图含预览节点时 promote committed；GUI 预览面板（P5.2）经 IPC 读同一宿主，外部 preview 为 CLI/MCP 观察入口'
-  ],
-  [
-    'flowGraph.list',
-    'P5 外部建图预览列表：只读列出本项目 graph 预览；GUI 项目级预览面板（P5.2）经 IPC 读同一 listGraphPreviews，外部 list 为 CLI/MCP 观察入口'
-  ],
-  [
-    'flowGraph.discard',
-    'P5 外部建图预览取消：置 discarded（已 committed 幂等返回）；GUI 预览面板（P5.2）取消按钮经 IPC 调同一 discardGraph，外部 discard 为 CLI/MCP 入口'
+    'P5 外部上帝 Agent 动态建 flow 提案：接收外部已生成 FlowGraph，校验+编译+持久化预览（flow_builds source=graph），不调模型不写画布；生成方是外部 Agent，GUI 无"提案"按钮（GUI 只在项目级预览面板人工确认落画布），属外部专用建图入口'
   ],
   [
     'node.library.update',

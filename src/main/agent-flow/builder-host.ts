@@ -326,6 +326,36 @@ export class FlowBuilderHost {
     this.saveGraph(preview)
     return preview
   }
+  /** P5.3：落画布前的 CAS 闸门（与 builder authorize 同语义）；已 committed 幂等返回。 */
+  async authorizeGraph(input: { projectId: string; buildId: string }): Promise<FlowGraphPreview> {
+    const file = this.activeFile(input.projectId)
+    const preview = this.readGraph(input.projectId, input.buildId)
+    if (!preview) throw new AgentRuntimeError('FLOW_BUILD_MISSING', 'builder')
+    if (this.committed(preview, file)) {
+      preview.state = 'committed'
+      this.saveGraph(preview)
+      return preview
+    }
+    if (preview.state !== 'preview') return preview
+    const revisionFile = file.tldrawSnapshot ? file : { ...file, tldrawSnapshot: { store: {} } }
+    if (projectSemanticRevision(revisionFile) !== preview.semanticRevision)
+      throw new AgentRuntimeError('FLOW_REVISION_CONFLICT', 'builder')
+    const store = (file.tldrawSnapshot as { store?: Record<string, unknown> } | undefined)?.store ?? {}
+    if (preview.nodes.some((node) => store[node.id]))
+      throw new AgentRuntimeError('FLOW_BUILD_CONFLICT', 'builder')
+    return preview
+  }
+  /** P5.3：核对已保存图含预览节点（committed）才置 committed；不把渲染器回执当成功。 */
+  async confirmGraph(input: { projectId: string; buildId: string }): Promise<FlowGraphPreview> {
+    const file = this.activeFile(input.projectId)
+    const preview = this.readGraph(input.projectId, input.buildId)
+    if (!preview) throw new AgentRuntimeError('FLOW_BUILD_MISSING', 'builder')
+    if (!this.committed(preview, file))
+      throw new AgentRuntimeError('FLOW_BUILD_UNCONFIRMED', 'builder')
+    preview.state = 'committed'
+    this.saveGraph(preview)
+    return preview
+  }
   async handle(raw: BuildRequest): Promise<BuildPreview | null> {
     const input = BuildRequestSchema.parse(raw),
       { file, shape } = this.saved(input)

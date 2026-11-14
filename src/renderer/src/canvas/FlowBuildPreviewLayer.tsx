@@ -1,11 +1,11 @@
 import { useEffect, useId, useState, useSyncExternalStore, type RefObject } from 'react'
 import type { Editor, TLShapeId } from 'tldraw'
-import type { BuildPreview } from '@shared/agent-flow/builder'
 import { getNodeType } from '../nodes/registry'
 import {
   getFlowBuildPreviewRevision,
   getFlowBuildPreviews,
-  subscribeFlowBuildPreviews
+  subscribeFlowBuildPreviews,
+  type FlowBuildPreviewLike
 } from './flow-build-preview-store'
 import './flow-build-preview.css'
 
@@ -25,7 +25,7 @@ function edgePath(from: Rect, to: Rect): string {
   return `M ${startX} ${startY} C ${controlA} ${startY}, ${controlB} ${endY}, ${endX} ${endY}`
 }
 
-function previewRelations(preview: BuildPreview): Array<{
+function previewRelations(preview: FlowBuildPreviewLike): Array<{
   id: string
   from: string
   to: string
@@ -122,7 +122,7 @@ export function FlowBuildPreviewLayer({
   if (!host || !previews.length) return null
   const hostBounds = host.getBoundingClientRect(),
     zoom = editor.getCamera().z
-  const rectForPlanned = (node: BuildPreview['nodes'][number]): Rect => {
+  const rectForPlanned = (node: FlowBuildPreviewLike['nodes'][number]): Rect => {
     const topLeft = editor.pageToScreen({ x: node.x, y: node.y })
     return {
       x: topLeft.x - hostBounds.left,

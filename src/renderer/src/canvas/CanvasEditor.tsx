@@ -4,7 +4,7 @@ import { requestWorkflowInput, requestWorkflowInputs } from '../stores/workflowI
 import { reportCanvasFailure } from './canvas-diagnostics'
 import { ensureCanvasSaved } from './flow-asset-actions'
 import { readNodeRunHistory, readNodeRunRecord } from '../engine/runRecord'
-import { commitFlowBuild } from './flow-build-actions'
+import { commitFlowBuild, commitFlowGraph } from './flow-build-actions'
 import { applyFlowLayout } from './flow-layout-apply'
 import { useAppStore } from '../stores/app'
 import { nodeTextField } from './node-pointer-policy'
@@ -44,6 +44,7 @@ import { NodeSelectionForeground } from './NodeSelectionForeground'
 import { DataEdgeLayer } from './DataEdgeLayer'
 import { AgentFlowRelationLayer } from './AgentFlowRelationLayer'
 import { FlowBuildPreviewLayer } from './FlowBuildPreviewLayer'
+import { FlowGraphPreviewPanel } from './FlowGraphPreviewPanel'
 import { useDockMagnify } from './useDockMagnify'
 import { useDragGhostStore } from './drag-to-canvas'
 import {
@@ -93,6 +94,7 @@ import type { ConnectionFrom } from '../stores/connection'
 import { useGatewayStore } from '../stores/gateway'
 import { flowInitialConfig } from '@shared/agent-flow/model-defaults'
 import type { BuildPreview } from '@shared/agent-flow/builder'
+import type { FlowGraphPreview } from '@shared/agent-flow/flow-graph-compiler'
 import { useEngineStore } from '../engine/store'
 import {
   runWorkflow,
@@ -1798,6 +1800,79 @@ export function CanvasEditor({
               })
               return
             }
+            // ── P5.3：外部 FlowGraph 建图预览经渲染器权威 commitFlowGraph 落画布 ──
+            // 与 GUI 预览面板同一 commitFlowGraph（authorize → CAS → 单撤销步 → 保存屏障
+            // → confirm）。main 只给 buildId，预览内容来自同一宿主；外部不能自确认。
+            if (request.action === 'flow-graph') {
+              const replyFail = (validated: boolean, code: string, detail?: string): void => {
+                window.api.replyLocalAgentDesktop({
+                  requestId: request.requestId,
+                  projectId: project.id,
+                  ok: false,
+                  validated,
+                  errorCode: code,
+                  ...(detail ? { errorDetail: detail.slice(0, 300) } : {})
+                })
+              }
+              const buildId = request.buildId ?? ''
+              if (!buildId) {
+                replyFail(true, 'INVALID_INPUT', 'buildId missing')
+                return
+              }
+              const inspected = await window.api.graphFlowAgent({
+                projectId: project.id,
+                buildId,
+                action: 'preview'
+              })
+              if (!inspected.ok) {
+                replyFail(true, inspected.error.code, 'graph preview read failed')
+                return
+              }
+              const preview = inspected.data as FlowGraphPreview | null
+              if (!preview) {
+                replyFail(true, 'FLOW_BUILD_MISSING', 'no persisted graph preview for this buildId')
+                return
+              }
+              if (preview.state === 'committed') {
+                window.api.replyLocalAgentDesktop({
+                  requestId: request.requestId,
+                  projectId: project.id,
+                  ok: true,
+                  graphVersion: graphVersionRef.current,
+                  result: { buildId, state: 'committed', nodeIds: preview.nodes.map((node) => node.id) }
+                })
+                return
+              }
+              if (preview.state !== 'preview') {
+                replyFail(true, 'FLOW_BUILD_UNCONFIRMED', `graph preview state is ${preview.state}`)
+                return
+              }
+              let committed: FlowGraphPreview
+              try {
+                committed = await commitFlowGraph(editor, preview)
+              } catch (error) {
+                const detail = error instanceof Error ? error.message : '外部建图提交失败'
+                const applied = preview.nodes.some((node) => editor.getShape(node.id as TLShapeId))
+                replyFail(
+                  !applied,
+                  applied ? 'FLOW_BUILD_COMMIT_FAILED' : 'FLOW_BUILD_COMMIT_REJECTED',
+                  detail
+                )
+                return
+              }
+              window.api.replyLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                ok: true,
+                graphVersion: graphVersionRef.current,
+                result: {
+                  buildId,
+                  state: committed.state,
+                  nodeIds: committed.nodes.map((node) => node.id)
+                }
+              })
+              return
+            }
             // ── F3 execute-nodes：受理回执立即返回；终态经任务报告通道异步回填 ──
             if (request.action === 'execute-nodes') {
               const replyFail = (code: string, detail?: string): void => {
@@ -3402,6 +3477,7 @@ export function CanvasEditor({
       {editorInstance && (
         <FlowBuildPreviewLayer editor={editorInstance} hostRef={wrapRef} projectId={project.id} />
       )}
+      {editorInstance && <FlowGraphPreviewPanel editor={editorInstance} projectId={project.id} />}
       {/* 左侧节点面板：一级分类保持鱼眼 Dock，二级节点在右侧抽屉中展开。 */}
       <div className="node-palette">
         <div

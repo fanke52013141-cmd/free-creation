@@ -457,6 +457,54 @@ export function registerFlowAgentsIpc(
       }
     })
   }
+  // P5：外部 FlowGraph 建图预览（list/preview/authorize/confirm/discard）。与外部 op
+  // 同一 FlowBuilderHost 实例（source=graph）；落画布 authorize/confirm 走渲染器权威。
+  ipcMain.handle(IPC.flowAgents.graph, async (event, raw): Promise<IpcEnvelope<unknown>> => {
+    const context = { traceId: newTraceId(), spanId: newSpanId() }
+    const input = (raw ?? {}) as { action?: unknown; projectId?: unknown; buildId?: unknown }
+    const action = typeof input.action === 'string' ? input.action : ''
+    const projectId = typeof input.projectId === 'string' ? input.projectId : ''
+    if (projectId) Object.assign(context, { projectId })
+    const log = action !== 'list' && action !== 'preview'
+    if (log)
+      emitGatewayEvent('agent.desktop.started', '外部建图预览操作开始', context, {
+        attributes: { phase: 'graph', action }
+      })
+    try {
+      const active = window()
+      if (
+        !active ||
+        active.isDestroyed() ||
+        event.sender !== active.webContents ||
+        event.senderFrame !== event.sender.mainFrame
+      )
+        throw new AgentRuntimeError('FLOW_SENDER_REJECTED', 'authorize')
+      if (!projectId) throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
+      const buildId = typeof input.buildId === 'string' ? input.buildId : ''
+      let data: unknown
+      if (action === 'list') data = builder.listGraphPreviews(projectId)
+      else if (action === 'preview')
+        data = await builder.previewGraph({ projectId, ...(buildId ? { buildId } : {}) })
+      else if (action === 'authorize') data = await builder.authorizeGraph({ projectId, buildId })
+      else if (action === 'confirm') data = await builder.confirmGraph({ projectId, buildId })
+      else if (action === 'discard') data = await builder.discardGraph({ projectId, buildId })
+      else throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
+      if (log)
+        emitGatewayEvent('agent.desktop.completed', '外部建图预览操作完成', context, {
+          status: 'success',
+          attributes: { phase: 'graph', action }
+        })
+      return { ok: true, data }
+    } catch (error) {
+      const code = error instanceof AgentRuntimeError ? error.code : 'AGENT_DESKTOP_FAILED'
+      if (log)
+        emitGatewayEvent('agent.desktop.failed', '外部建图预览操作失败', context, {
+          status: 'failed',
+          attributes: { phase: 'graph', code, action }
+        })
+      return { ok: false, error: { code, message: flowAgentFailureMessage(code) } }
+    }
+  })
   // AF-06：流程定义版本（与运行分离）。读已保存配置/定义快照，不经运行宿主；
   // 与外部 flowDefinition.* 同一 FlowDefinitionStore 实现。
   const definitionStore = new FlowDefinitionStore(getDb(), openProject)

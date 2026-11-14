@@ -68,7 +68,9 @@ export const IPC = {
     definitionPublish: 'flow-agents:definition-publish',
     definitionList: 'flow-agents:definition-list',
     definitionGet: 'flow-agents:definition-get',
-    definitionDiff: 'flow-agents:definition-diff'
+    definitionDiff: 'flow-agents:definition-diff',
+    // P5：外部 FlowGraph 建图预览（list/preview/authorize/confirm/discard），与外部 op 同一宿主。
+    graph: 'flow-agents:graph'
   },
   flowCommands: {
     attach: 'flow-commands:attach',

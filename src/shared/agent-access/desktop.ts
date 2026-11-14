@@ -38,6 +38,8 @@ export const DesktopRequestSchema = z
       // F8 收官：把已持久化的 Flow 建图预览交给渲染器权威动作提交到画布
       // （commitFlowBuild：authorize/confirm + 单撤销步 + 保存屏障）。
       'flow-build',
+      // P5.3：外部 FlowGraph 建图预览经渲染器权威 commitFlowGraph 落画布（同一内核）。
+      'flow-graph',
       // F2：历史撤销/重做与关闭项目。
       // 撤销重做必须由权威宿主执行——历史栈在 editor 里，main 自己维护一份必然与 GUI 分叉；
       // 关闭项目需要 renderer 先保存再回到项目列表（否则关掉画布会丢未保存编辑）。

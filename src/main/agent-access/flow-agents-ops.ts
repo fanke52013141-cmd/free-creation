@@ -34,7 +34,7 @@ import type { StageDeliveryFact } from '../../shared/agent-flow/stage-contracts'
 import { getDb } from '../store/db'
 import { openProject } from '../store/projects.repo'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
-import { DesktopAccessError } from './desktop'
+import { DesktopAccessError, type AccessDesktop } from './desktop'
 
 /** 本族已开放的操作；service.ts 只按这个集合做一次分组委托。 */
 export const FLOW_AGENT_OPERATION_IDS: ReadonlySet<AccessOperationId> = new Set([
@@ -54,13 +54,16 @@ export const FLOW_AGENT_OPERATION_IDS: ReadonlySet<AccessOperationId> = new Set(
   'flowGraph.propose',
   'flowGraph.preview',
   'flowGraph.list',
-  'flowGraph.discard'
+  'flowGraph.discard',
+  'flowGraph.confirm'
 ] as AccessOperationId[])
 
 export interface FlowAgentOperationContext {
   activeProjectId: () => string | null
   /** agent.access 的 trace/span，供 dispatch 生命周期事件与后续核对关联。 */
   diagnostics: { traceId: string; spanId: string }
+  /** P5.3：confirm 落画布经渲染器权威动作需要 desktop 通道（service 已注入）。 */
+  desktop?: AccessDesktop | null
 }
 
 type HostDesktop = ConstructorParameters<typeof FlowAgentDesktopHost>[2]
@@ -669,6 +672,71 @@ async function discardGraphOp(
   const preview = await graphPort().discardGraph({ projectId, buildId: input.buildId as string })
   return { projectId, preview: graphPreviewDto(preview as FlowGraphPreview) }
 }
+/**
+ * P5.3：外部确认落画布。与 GUI 预览面板同一渲染器权威 commitFlowGraph（经 desktop-request
+ * 'flow-graph'）；main 只按 buildId 触发，不接收外部图内容；提交后从持久化预览 + 已保存图
+ * 核对 committed 与节点真实存在，不把渲染器回执当成功。外部不能绕渲染器自确认。
+ */
+async function confirmGraphOp(
+  input: Record<string, unknown>,
+  context: FlowAgentOperationContext
+): Promise<unknown> {
+  const projectId = input.projectId as string
+  const buildId = input.buildId as string
+  assertActive(projectId, context, 'flowGraph.confirm')
+  if (!context.desktop) refuse('DESKTOP_UNAVAILABLE', 'desktop host is not available')
+  const port = graphPort()
+  const graphVersion = (): number => openProject(projectId)?.meta.graphVersion ?? 0
+  let before: unknown
+  try {
+    before = await port.previewGraph({ projectId, buildId })
+  } catch (error) {
+    fail(error)
+  }
+  if (!before) refuse('FLOW_BUILD_MISSING', 'no persisted graph preview for this buildId')
+  const preview = before as FlowGraphPreview
+  if (preview.state === 'committed') {
+    const file = openProject(projectId)
+    const missing = preview.nodes.filter((node) => !file?.nodes.some((item) => item.id === node.id))
+    if (missing.length > 0) refuse('STORAGE_INCONSISTENT', missing[0].id)
+    return {
+      projectId,
+      graphVersion: graphVersion(),
+      preview: graphPreviewDto(preview),
+      committedNodeIds: preview.nodes.map((node) => node.id)
+    }
+  }
+  if (preview.state !== 'preview')
+    refuse('FLOW_BUILD_UNCONFIRMED', `graph preview state is ${preview.state}`)
+  let reply: { graphVersion: number; result?: unknown }
+  try {
+    reply = await context.desktop.run({ action: 'flow-graph', projectId, buildId }, undefined, 30000)
+  } catch (error) {
+    if (error instanceof DesktopAccessError && !error.unknownOutcome) throw error
+    throw error
+  }
+  const payload = (reply.result ?? {}) as { buildId?: unknown }
+  if (payload.buildId !== undefined && payload.buildId !== buildId)
+    refuse('STORAGE_INCONSISTENT', 'desktop committed a different graph build')
+  let after: unknown
+  try {
+    after = await port.previewGraph({ projectId, buildId })
+  } catch (error) {
+    fail(error)
+  }
+  const committed = after as FlowGraphPreview | null
+  if (!committed || committed.state !== 'committed')
+    refuse('STORAGE_INCONSISTENT', 'graph preview was not marked committed in the persisted preview')
+  const file = openProject(projectId)
+  const missing = committed.nodes.filter((node) => !file?.nodes.some((item) => item.id === node.id))
+  if (missing.length > 0) refuse('STORAGE_INCONSISTENT', missing[0].id)
+  return {
+    projectId,
+    graphVersion: graphVersion(),
+    preview: graphPreviewDto(committed),
+    committedNodeIds: committed.nodes.map((node) => node.id)
+  }
+}
 
 /** dispatch 的分组委托入口：只分发本族操作，其余明确拒绝（防误接）。 */
 export async function runFlowAgentOperation(
@@ -712,6 +780,8 @@ export async function runFlowAgentOperation(
         return await listGraphOp(input, context)
       case 'flowGraph.discard':
         return await discardGraphOp(input, context)
+      case 'flowGraph.confirm':
+        return await confirmGraphOp(input, context)
       default:
         refuse('UNSUPPORTED_OPERATION', 'flow-agents-dispatch')
     }

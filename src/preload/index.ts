@@ -184,6 +184,19 @@ const api = {
     input: import('../shared/agent-flow/builder').BuildRequest
   ): Promise<IpcEnvelope<import('../shared/agent-flow/builder').BuildPreview | null>> =>
     ipcRenderer.invoke(IPC.flowAgents.build, input),
+  graphFlowAgent: (
+    input: {
+      action: 'list' | 'preview' | 'authorize' | 'confirm' | 'discard'
+      projectId: string
+      buildId?: string
+    }
+  ): Promise<
+    IpcEnvelope<
+      | import('../shared/agent-flow/flow-graph-compiler').FlowGraphPreview
+      | import('../shared/agent-flow/flow-graph-compiler').FlowGraphPreview[]
+      | null
+    >
+  > => ipcRenderer.invoke(IPC.flowAgents.graph, input),
   runFlowAgent: (
     input: import('../shared/agent-flow/desktop-tasks').FlowAgentRun
   ): Promise<IpcEnvelope<import('../shared/agent-flow/desktop-tasks').FlowAgentReply>> =>

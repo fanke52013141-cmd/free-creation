@@ -1,8 +1,30 @@
 import type { BuildPreview } from '@shared/agent-flow/builder'
+import type { FlowGraphPreview } from '@shared/agent-flow/flow-graph-compiler'
 
 type Listener = () => void
 
-const previews = new Map<string, BuildPreview>()
+/**
+ * 幽灵预览层消费的最小结构（builder 预览与外部 FlowGraph 预览同构，均不含 plan 依赖）。
+ * 复用同一预览 store / 渲染层，不另建第二套幽灵预览。
+ */
+export type FlowBuildPreviewLike = Pick<
+  BuildPreview,
+  'buildId' | 'projectId' | 'nodeId' | 'semanticRevision' | 'state'
+> & {
+  nodes: ReadonlyArray<{
+    id: string
+    type: string
+    title: string
+    text: string
+    config: string
+    contractVersion: number
+    x: number
+    y: number
+  }>
+  edges: ReadonlyArray<{ from: { nodeId: string; portId: string }; to: { nodeId: string; portId: string } }>
+}
+
+const previews = new Map<string, FlowBuildPreviewLike>()
 const listeners = new Set<Listener>()
 let revision = 0
 
@@ -18,7 +40,7 @@ function publish(): void {
 export function setFlowBuildPreview(
   projectId: string,
   nodeId: string,
-  preview: BuildPreview | null
+  preview: FlowBuildPreviewLike | null
 ): void {
   const id = key(projectId, nodeId)
   const current = previews.get(id)
@@ -43,8 +65,16 @@ export function getFlowBuildPreviewRevision(): number {
   return revision
 }
 
-export function getFlowBuildPreviews(projectId: string): BuildPreview[] {
+export function getFlowBuildPreviews(projectId: string): FlowBuildPreviewLike[] {
   return [...previews.values()].filter(
     (preview) => preview.projectId === projectId && preview.state === 'preview'
   )
+}
+
+/** P5：把外部 FlowGraph 预览喂入同一幽灵预览 store（锚点=coordinator id）。 */
+export function setFlowGraphPreview(projectId: string, preview: FlowGraphPreview): void {
+  setFlowBuildPreview(projectId, preview.nodeId, preview)
+}
+export function clearFlowGraphPreview(projectId: string, nodeId: string): void {
+  setFlowBuildPreview(projectId, nodeId, null)
 }

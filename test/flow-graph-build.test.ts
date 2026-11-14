@@ -7,7 +7,7 @@ import { FlowBuilderHost } from '../src/main/agent-flow/builder-host'
 import type { ProjectFile } from '../src/shared/types'
 import type { AgentModelPort } from '../src/main/agent-flow/runtime'
 import { FlowGraphSchema } from '../src/shared/agent-flow/flow-graph'
-import { FlowGraphCompileError } from '../src/shared/agent-flow/flow-graph-compiler'
+import { FlowGraphCompileError, canvasNodeId } from '../src/shared/agent-flow/flow-graph-compiler'
 import { AgentNodeConfigSchema } from '../src/shared/agent-flow/node-contracts'
 import { AgentRuntimeError } from '../src/shared/agent-flow/runtime-contracts'
 
@@ -79,7 +79,7 @@ describe('P5 flowGraph.propose（外部建图提案）', () => {
     expect(preview.source).toBe('graph')
     expect(preview.state).toBe('preview')
     expect(preview.nodeId).toBe(preview.coordinatorNodeId)
-    expect(preview.nodes.map((n) => n.id)).toEqual(expect.arrayContaining(['a', 'b', preview.coordinatorNodeId, preview.stateNodeId]))
+    expect(preview.nodes.map((n) => n.id)).toEqual(expect.arrayContaining([canvasNodeId('a'), canvasNodeId('b'), preview.coordinatorNodeId, preview.stateNodeId]))
     for (const n of preview.nodes) {
       expect(Number.isFinite(n.x)).toBe(true)
       expect(Number.isFinite(n.y)).toBe(true)
@@ -110,7 +110,7 @@ describe('P5 flowGraph.propose（外部建图提案）', () => {
   })
 
   it('预览节点已存在于画布 → FLOW_BUILD_CONFLICT', async () => {
-    const f = fixture(['a'])
+    const f = fixture([canvasNodeId('a')])
     await expect(f.host.proposeGraph({ projectId: 'p', graph: seqGraph, requestId: 'r1' })).rejects.toMatchObject({ code: 'FLOW_BUILD_CONFLICT' })
   })
 
@@ -166,5 +166,39 @@ describe('P5 flowGraph.preview / list / discard', () => {
     const list = f.host.listGraphPreviews('p')
     expect(list).toHaveLength(1)
     expect(list[0].source).toBe('graph')
+  })
+})
+
+describe('P5.3 flowGraph.authorize / confirm（落画布 CAS 与核对）', () => {
+  it('authorize 返回预览（CAS 一致）；未知 buildId → FLOW_BUILD_MISSING', async () => {
+    const f = fixture()
+    const proposed = await f.host.proposeGraph({ projectId: 'p', graph: seqGraph, requestId: 'r1' })
+    const authorized = await f.host.authorizeGraph({ projectId: 'p', buildId: proposed.buildId })
+    expect(authorized.buildId).toBe(proposed.buildId)
+    expect(authorized.state).toBe('preview')
+    await expect(f.host.authorizeGraph({ projectId: 'p', buildId: 'graph-nope' })).rejects.toMatchObject({ code: 'FLOW_BUILD_MISSING' })
+  })
+
+  it('画布未含预览节点时 confirm → FLOW_BUILD_UNCONFIRMED（不把回执当成功）', async () => {
+    const f = fixture()
+    const proposed = await f.host.proposeGraph({ projectId: 'p', graph: seqGraph, requestId: 'r1' })
+    await expect(f.host.confirmGraph({ projectId: 'p', buildId: proposed.buildId })).rejects.toMatchObject({ code: 'FLOW_BUILD_UNCONFIRMED' })
+  })
+
+  it('画布已含预览节点（meta.flowBuildId 匹配）时 confirm → committed', async () => {
+    const f = fixture()
+    const proposed = await f.host.proposeGraph({ projectId: 'p', graph: seqGraph, requestId: 'r1' })
+    // 模拟渲染器 commitFlowGraph 已落画布并保存：每个预览节点带 meta.flowBuildId + file.nodes 条目。
+    const store = f.file.tldrawSnapshot.store as Record<string, unknown>
+    for (const node of proposed.nodes) {
+      store[node.id] = { id: node.id, type: 'node-card', props: { nodeType: node.type, config: node.config, text: node.text, title: node.title }, meta: { flowBuildId: proposed.buildId } }
+    }
+    f.file.nodes = proposed.nodes.map((node) => ({ id: node.id, type: node.type, contractVersion: node.contractVersion, ports: [], params: { config: node.config }, content: { kind: 'text', text: node.text } })) as ProjectFile['nodes']
+    f.file.edges = proposed.edges.map((edge) => ({ from: edge.from, to: edge.to })) as ProjectFile['edges']
+    const confirmed = await f.host.confirmGraph({ projectId: 'p', buildId: proposed.buildId })
+    expect(confirmed.state).toBe('committed')
+    // 幂等：再次 confirm 仍 committed。
+    const again = await f.host.confirmGraph({ projectId: 'p', buildId: proposed.buildId })
+    expect(again.state).toBe('committed')
   })
 })

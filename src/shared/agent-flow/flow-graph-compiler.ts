@@ -197,16 +197,58 @@ function deriveStateMachine(graph: FlowGraph): { states: string[]; transitions: 
 }
 
 /**
+ * P5.3：把 FlowGraph 的语义 nodeId 重映射为 tldraw 合法画布 shape id（必须 'shape:' 前缀）。
+ * 节点/边/entry/exits/循环 exitCondition.stageKey 全部一致重映射，保证编译产物落画布后
+ * 协调器 allowedNodeIds、图路由 graph.nodes 与真实画布节点 id 一一对应。
+ */
+export function canvasNodeId(id: string): string {
+  return `shape:${id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+}
+function toCanvasGraph(graph: FlowGraph): FlowGraph {
+  return {
+    ...graph,
+    nodes: graph.nodes.map((node) => ({
+      ...node,
+      nodeId: canvasNodeId(node.nodeId),
+      ...(node.loop
+        ? {
+            loop: {
+              ...node.loop,
+              exitCondition: node.loop.exitCondition.map((condition) => {
+                if ('stageKey' in condition)
+                  return { ...condition, stageKey: canvasNodeId(condition.stageKey) }
+                if ('reviewNodeId' in condition)
+                  return { ...condition, reviewNodeId: canvasNodeId(condition.reviewNodeId) }
+                return condition
+              })
+            }
+          }
+        : {})
+    })),
+    edges: graph.edges.map((edge) => ({
+      ...edge,
+      from: { ...edge.from, nodeId: canvasNodeId(edge.from.nodeId) },
+      to: { ...edge.to, nodeId: canvasNodeId(edge.to.nodeId) }
+    })),
+    entry: canvasNodeId(graph.entry),
+    exits: graph.exits.map(canvasNodeId)
+  }
+}
+
+/**
  * 编译入口（纯函数）。先静态校验，非法图抛 FlowGraphCompileError（稳定错误码）。
  * 产物：各专业节点 + 一个 coordinator 主控 + 一个派生状态机；数据边 + 控制边。
+ * 节点 id 为 tldraw 合法 shape id（'shape:' 前缀），可直接落画布。
  */
 export function compileFlowGraph(graph: FlowGraph): CompiledGraph {
   const validation = validateFlowGraph(graph)
   if (!validation.ok) throw new FlowGraphCompileError(validation.errors)
 
-  const coordinatorNodeId = `coordinator:${graph.graphId}`
-  const stateNodeId = `state:${graph.graphId}`
-  const compiledNodes = graph.nodes.map((node) => compileNode(node, graph))
+  const mapped = toCanvasGraph(graph)
+  const graphIdSlug = graph.graphId.replace(/[^a-zA-Z0-9_-]/g, '-')
+  const coordinatorNodeId = `shape:coordinator-${graphIdSlug}`
+  const stateNodeId = `shape:state-${graphIdSlug}`
+  const compiledNodes = mapped.nodes.map((node) => compileNode(node, mapped))
   const specialistIds = compiledNodes.map((node) => node.id)
 
   const coordinatorConfig = AgentNodeConfigSchema.parse({
@@ -220,7 +262,7 @@ export function compileFlowGraph(graph: FlowGraph): CompiledGraph {
     // P5：落画布后必须走声明式图路由（graphStep，P3/P4），而非退回模型驱动分派。
     // graph 节点承载须与 allowedNodeIds 一一对应（AgentNodeConfigSchema superRefine）。
     executionMode: 'graph',
-    graph,
+    graph: mapped,
     relations: [
       { relationId: `${graph.graphId}-observes`, kind: 'observes', sourceNodeId: coordinatorNodeId, targetNodeId: stateNodeId },
       ...specialistIds.map((id) => ({
@@ -231,7 +273,7 @@ export function compileFlowGraph(graph: FlowGraph): CompiledGraph {
       }))
     ]
   })
-  const sm = deriveStateMachine(graph)
+  const sm = deriveStateMachine(mapped)
   const stateConfig = StateMachineNodeConfigSchema.parse({
     schemaVersion: 1,
     initialState: 'idle',
@@ -264,7 +306,7 @@ export function compileFlowGraph(graph: FlowGraph): CompiledGraph {
     }
   ]
 
-  const edges: CompiledEdge[] = graph.edges
+  const edges: CompiledEdge[] = mapped.edges
     .filter((edge) => edge.kind === 'data')
     .map((edge) => ({ from: edge.from, to: edge.to }))
 

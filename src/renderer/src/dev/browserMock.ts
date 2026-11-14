@@ -146,6 +146,8 @@ export function installBrowserMock(): void {
     commitLocalAgentDesktop: async () => ({ ok: false }),
     reportLocalAgentTask: () => {},
     buildFlowAgent: async () => notImplementedInDemo('画布建图'),
+    graphFlowAgent: async (input) =>
+      input.action === 'list' ? { ok: true, data: [] } : notImplementedInDemo('外部建图预览'),
     reviewFlowAssets: async () => notImplementedInDemo('资产审核'),
     runFlowAgent: async () => notImplementedInDemo('画布 Agent 执行'),
     inspectFlowAgent: async () => ({ ok: true, data: null }),
