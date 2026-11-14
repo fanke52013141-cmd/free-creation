@@ -70,6 +70,7 @@ const coordination = process.argv.includes('--coordination')
 const capabilityGraph = process.argv.includes('--capability-graph')
 const humanTaskGraph = process.argv.includes('--human-task-graph')
 const parallelGraph = process.argv.includes('--parallel-graph')
+const reviewGraph = process.argv.includes('--review-graph')
 const agentHum07Pause = process.argv.includes('--agent-hum07-pause')
 const recovery = process.argv.includes('--recovery')
 const builderParallelMode = process.argv.includes('--builder-parallel')
@@ -2504,6 +2505,45 @@ if (
           const childB=root.children.find(c=>c.nodeId==='shape:pg-b');
           if(!childA||childA.state!=='completed'||!childB||childB.state!=='completed')throw new Error('PG_BRANCH_CHILD_NOT_COMPLETED');
           return {status:'pass',projectId,rootTaskId:root.taskId,branchA:paRun.status,branchB:pbRun.status,checks:['graph fan-out dispatches multiple ready agent nodes concurrently (dispatch-many)','both parallel branches execute via assignmentWaves','graph routing joins branch deliveries and completes']};
+        })()`)
+      } else if (reviewGraph) {
+        report = await active.webContents.executeJavaScript(`(async()=>{
+          const projectId=${JSON.stringify(projectId)};
+          const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;
+          const {ensureCanvasSaved}=await import('/src/canvas/flow-asset-actions.ts');
+          const value=(reply)=>{if(!reply.ok)throw new Error(reply.error.code);return reply.data};
+          const delay=()=>new Promise(r=>setTimeout(r,150));
+          const graph={schemaVersion:1,graphId:'rvg',name:'审核图',goal:'分析后审核，通过才下游',nodes:[{nodeId:'shape:rv-first',title:'分析',participation:'autonomous',kind:'agent',goal:'执行处理并交付',completion:'交付处理结果'},{nodeId:'shape:rv-review',title:'审核',participation:'autonomous',kind:'review',goal:'审核交付',completion:'审核通过',review:{criteria:'必须以交付：开头',rejectPolicy:'rework',maxReworks:1}},{nodeId:'shape:rv-second',title:'下游',participation:'autonomous',kind:'agent',goal:'执行处理并交付',completion:'交付处理结果'}],edges:[{from:{nodeId:'shape:rv-first',portId:'out-text'},to:{nodeId:'shape:rv-review',portId:'in-text'},kind:'data'},{from:{nodeId:'shape:rv-review',portId:'out-text'},to:{nodeId:'shape:rv-second',portId:'in-text'},kind:'data'}],entry:'shape:rv-first',exits:['shape:rv-second']};
+          const specialist=(targets)=>({schemaVersion:1,role:'specialist',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'node.execute',version:'1'}],allowedNodeIds:targets,maxSteps:12,relations:[]});
+          const rootConfig={schemaVersion:1,role:'coordinator',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'agent.dispatch',version:'1'},{id:'review.execute',version:'1'}],allowedNodeIds:['shape:rv-first','shape:rv-second','shape:rv-review'],maxSteps:24,executionMode:'graph',graph,relations:[{relationId:'state',kind:'observes',sourceNodeId:'shape:rv-main',targetNodeId:'shape:rv-state'}]};
+          const stateConfig={schemaVersion:1,initialState:'draft',states:['draft','working','waiting','completed'],transitions:[{from:'draft',event:'flow.started',to:'working'},...['agent.dispatched','agent.completed','human.wait','flow.paused','flow.completed','review.started','review.passed','review.rejected','rework.created'].map(event=>({from:'working',event,to:event==='flow.completed'?'completed':['human.wait','flow.paused'].includes(event)?'waiting':'working'})),{from:'waiting',event:'human.continue',to:'working'}],relations:[]};
+          const nodes=[
+            {id:'shape:rv-material',nodeType:'text',title:'材料',text:'private-rv-material',x:50,y:80},
+            {id:'shape:rv-first',nodeType:'agent',title:'负责修订 Agent',text:'普通任务严格执行 shape:rv-pass 两次并交付第二次唯一固定成果。若输入有 rework 则严格执行 shape:rv-repair 两次并交付第二次唯一固定成果。',config:JSON.stringify(specialist(['shape:rv-pass','shape:rv-repair'])),x:450,y:80},
+            {id:'shape:rv-pass',nodeType:'processor',title:'整理',config:JSON.stringify({operation:'template',field:'',template:'整理：{{value}}'}),x:450,y:650},
+            {id:'shape:rv-repair',nodeType:'processor',title:'修订',config:JSON.stringify({operation:'template',field:'',template:'交付：{{value}}'}),x:850,y:650},
+            {id:'shape:rv-review',nodeType:'ai-review',title:'审核',text:'只检查是否以交付：开头：以交付：开头必须通过，否则必须拒绝。不要检查其他条件。',config:JSON.stringify({schemaVersion:1,modelDefinitionId:'agent-test-model',rulesVersion:'rules-1',rejectPolicy:'rework',maxReworks:1,responsibleNodeId:'shape:rv-first',subjectSources:[{nodeId:'shape:rv-first',portId:'out-text'}],gatedNodeIds:['shape:rv-second'],relations:[]}),x:850,y:80},
+            {id:'shape:rv-second',nodeType:'agent',title:'下游 Agent',text:'严格执行 shape:rv-down 两次并交付第二次唯一固定成果。',config:JSON.stringify(specialist(['shape:rv-down'])),x:1250,y:80},
+            {id:'shape:rv-down',nodeType:'processor',title:'下游处理',config:JSON.stringify({operation:'pass'}),x:1250,y:650},
+            {id:'shape:rv-main',nodeType:'agent',title:'主 Agent',text:'按声明式图路由：分析→审核→通过后下游。',config:JSON.stringify(rootConfig),x:50,y:400},
+            {id:'shape:rv-state',nodeType:'state-machine',title:'Flow 阶段',config:JSON.stringify(stateConfig),x:50,y:700}
+          ];
+          nodes.forEach(({id,x,y,...props})=>editor.createShape({id,type:'node-card',x,y,props}));
+          const {createEdge}=await import('/src/canvas/graph.ts');
+          for(const [from,to,port] of [['shape:rv-material','shape:rv-first','in-text'],['shape:rv-material','shape:rv-pass','in-value'],['shape:rv-material','shape:rv-repair','in-value'],['shape:rv-first','shape:rv-review','in-text'],['shape:rv-first','shape:rv-second','in-text'],['shape:rv-first','shape:rv-down','in-value']])if(!createEdge(editor,{shapeId:from,portId:'out-text'},{shapeId:to,portId:port}))throw new Error('RV_EDGE_MISSING');
+          await ensureCanvasSaved();await delay();
+          const button=document.querySelector('[data-node-id="shape:rv-main"] .node-standard-primary');if(!button||button.disabled)throw new Error('RV_ROOT_BUTTON_UNAVAILABLE');button.click();
+          const inspectRoot=()=>window.api.inspectFlowAgent({projectId,nodeId:'shape:rv-main'}).then(value);
+          let root;for(let i=0;i<2400;i++){root=await inspectRoot();if(root?.state==='completed')break;if(root&&['blocked','failed'].includes(root.state))throw new Error(root.code||'RV_ROOT_FAILED');await delay();}
+          if(root?.state!=='completed')throw new Error('RV_ROOT_TIMEOUT');
+          await ensureCanvasSaved();
+          const decision=JSON.parse(editor.getShape('shape:rv-review').meta.nodeResult);
+          if(!decision.passed||decision.reviewRevision!==1)throw new Error('RV_REVIEW_REWORK_INVALID');
+          const downRun=editor.getShape('shape:rv-down').meta.nodeRun;
+          if(downRun?.status!=='success')throw new Error('RV_DOWNSTREAM_NOT_EXECUTED');
+          const secondChild=root.children.find(c=>c.nodeId==='shape:rv-second');
+          if(!secondChild||secondChild.state!=='completed')throw new Error('RV_SECOND_NOT_COMPLETED');
+          return {status:'pass',projectId,rootTaskId:root.taskId,reviewPassed:decision.passed,reviewRevision:decision.reviewRevision,checks:['graph review gate blocks downstream until review passes','reject triggers bounded rework of responsible agent','rework output passes review and downstream proceeds','coordinator completes with reviewed final output']};
         })()`)
       } else if (coordination) {
         if (recovery && phase === 'reopen') {

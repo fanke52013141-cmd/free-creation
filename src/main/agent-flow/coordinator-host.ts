@@ -324,18 +324,28 @@ export class FlowCoordinatorHost {
           throw new AgentRuntimeError('FLOW_STAGE_HUMAN_MODE_REQUIRED', 'scope')
       }
     }
-    // O4-P3/②：图模式支持 agent + capability + human-task 节点路由（review 门禁返工属后续）；
-    // 图节点承载必须与子节点一一对应；路由只认交付事实（见 graphStep）。
+    // O4-P3/②/⑥：图模式支持 agent + capability + human-task + review 节点路由；
+    // 图节点承载必须与子节点+审核节点一一对应；路由只认交付事实（见 graphStep）。
     if (graphMode) {
       const graph = config.graph!
       if (
         graph.nodes.some(
-          (node) => node.kind !== 'agent' && node.kind !== 'capability' && node.kind !== 'human-task'
+          (node) =>
+            node.kind !== 'agent' &&
+            node.kind !== 'capability' &&
+            node.kind !== 'human-task' &&
+            node.kind !== 'review'
         )
       )
         throw new AgentRuntimeError('FLOW_GRAPH_NODE_KIND_UNSUPPORTED', 'scope')
       const graphNodeIds = new Set(graph.nodes.map((node) => node.nodeId))
-      if (graphNodeIds.size !== childIds.length || childIds.some((id) => !graphNodeIds.has(id)))
+      const scopeIds = [...childIds, ...reviewIds]
+      if (graphNodeIds.size !== scopeIds.length || scopeIds.some((id) => !graphNodeIds.has(id)))
+        throw new AgentRuntimeError('FLOW_GRAPH_SCOPE_INVALID', 'scope')
+      const reviewGraphNodeIds = new Set(
+        graph.nodes.filter((node) => node.kind === 'review').map((node) => node.nodeId)
+      )
+      if (reviewIds.some((id) => !reviewGraphNodeIds.has(id)))
         throw new AgentRuntimeError('FLOW_GRAPH_SCOPE_INVALID', 'scope')
     }
     const states = config.relations.filter(
@@ -997,15 +1007,25 @@ export class FlowCoordinatorHost {
         .filter((child) => child.state === 'completed' && child.outputs.length)
         .map((child) => child.nodeId)
     )
+    // ⑥审核门禁：通过的审核节点视为已交付（下游受控节点据此放行）。
+    for (const review of run.reviews ?? []) {
+      if (review.state === 'passed') delivered.add(review.nodeId)
+    }
     if (isFlowComplete(graph, facts, delivered, loopIterations)) {
+      // 出口可能是审核节点（交付物=被审核通过的固定版本）或普通子节点。
+      const exitReview = (run.reviews ?? []).find(
+        (review) => graph.exits.includes(review.nodeId) && review.state === 'passed' && review.decision
+      )
       const exitChild = [...run.children]
         .reverse()
         .find(
           (child) =>
             graph.exits.includes(child.nodeId) && child.state === 'completed' && child.outputs.length
-        )!
-      this.assets.resolveInputs(run.projectId, exitChild.outputs)
-      run.outputs = exitChild.outputs
+        )
+      const exitOutputs = exitReview?.decision?.subjects ?? exitChild?.outputs
+      if (!exitOutputs) throw new AgentRuntimeError('FLOW_CHILD_BLOCKED', 'graph-complete')
+      this.assets.resolveInputs(run.projectId, exitOutputs)
+      run.outputs = exitOutputs
       this.emitTrustedEvent(
         run,
         `${run.taskId}:completed${run.reworkRound ? `:${run.reworkRound}` : ''}`,
@@ -1020,6 +1040,8 @@ export class FlowCoordinatorHost {
     const dispatched = new Set(run.children.map((child) => child.nodeId))
     const next = graph.nodes.find(
       (node) =>
+        // ⑥：review 节点由 reviews.step 控制环驱动，不经图分派。
+        node.kind !== 'review' &&
         ready.includes(node.nodeId) &&
         (!dispatched.has(node.nodeId) ||
           loopNeedsAnotherIteration(node, facts, delivered, loopIterations) ||
@@ -1111,7 +1133,7 @@ export class FlowCoordinatorHost {
     }
     // ②：capability 图节点直接执行（复用 node.execute 账本端口），不经 agent 分派。
     if (next.kind === 'capability') {
-      return this.dispatchCapability(run, next, graph, loopIterations, signal)
+      return this.dispatchCapability(run, next, graph, facts, loopIterations, signal)
     }
     // ②：human-task 图节点停等人工提交（C4 执行器），提交后续跑重新分派应用。
     if (next.kind === 'human-task') {
@@ -1184,11 +1206,14 @@ export class FlowCoordinatorHost {
    * ②：capability 图节点直接执行。按图数据边从已交付子节点输出编制固定输入，经
    * node.execute 同一账本端口执行（复用 renderer 执行器），回执 committed 才记交付。
    * 路由只认交付事实；不经 agent 分派、不调模型。
+   * ⑥最小必要输入：声明 inputs 时按 ContextManifest 选择器裁剪——只喂选择器引用的上游源，
+   * 校验预算/必需缺项（阻断不静默放行），manifest 记入子任务供追溯（与 agent 节点同口径）。
    */
   private async dispatchCapability(
     run: CoordinationRun,
     next: FlowNode,
     graph: FlowGraph,
+    facts: StageEntryFacts,
     loopIterations: Record<string, number>,
     signal: AbortSignal
   ): Promise<boolean> {
@@ -1202,9 +1227,24 @@ export class FlowCoordinatorHost {
       ...(loopIterations[next.nodeId] ? [`loop:${loopIterations[next.nodeId]}`] : [])
     ])
     const commandId = `graph:${hash([run.taskId, next.nodeId, 'capability', loopIterations[next.nodeId] ?? 0])}`
+    // ⑥最小必要输入：声明 inputs 时编制 manifest，校验预算/必需缺项，并据选择器筛选上游源。
+    let contextManifest: ContextManifest | undefined
+    let selectedSources: Set<string> | undefined
+    if (next.inputs) {
+      contextManifest = buildContextManifest(next.nodeId, next.inputs, facts.deliveries)
+      if (contextManifestBlocking(contextManifest))
+        throw new AgentRuntimeError(
+          contextManifest.budget.exceeded ? 'FLOW_CONTEXT_OVER_BUDGET' : 'FLOW_CONTEXT_REQUIRED_MISSING',
+          'graph-context'
+        )
+      selectedSources = new Set(next.inputs.selectors.map((selector) => selector.sourceStageKey))
+    }
     const inputPorts = node.ports.filter((port) => port.dir === 'in')
     const incoming = graph.edges.filter(
-      (edge) => edge.to.nodeId === next.nodeId && edge.kind === 'data'
+      (edge) =>
+        edge.to.nodeId === next.nodeId &&
+        edge.kind === 'data' &&
+        (!selectedSources || selectedSources.has(edge.from.nodeId))
     )
     const inputs = incoming.map((edge, index) => {
       const upstream = run.children
@@ -1233,7 +1273,8 @@ export class FlowCoordinatorHost {
       completion: next.completion,
       inputs: [],
       state: 'ready',
-      outputs: []
+      outputs: [],
+      ...(contextManifest ? { contextManifest } : {})
     }
     run.children.push(child)
     run.decisions++
@@ -1419,6 +1460,18 @@ export class FlowCoordinatorHost {
               child.taskId
             )
           : false
+      })
+    }
+    // ⑥审核门禁：审核通过即视为该审核节点"已交付"（交付物=被审核通过的固定版本资产），
+    // 下游受控节点据此放行；驳回/待审不交付，下游边不触发。返工由 reviews.step 控制。
+    for (const review of run.reviews ?? []) {
+      if (review.state !== 'passed' || !review.decision) continue
+      const versions = this.assets.resolveInputs(run.projectId, review.decision.subjects)
+      deliveries.push({
+        stageKey: review.nodeId,
+        nodeId: review.nodeId,
+        outputs: versions.map((version) => version.value),
+        humanDecided: false
       })
     }
     return {

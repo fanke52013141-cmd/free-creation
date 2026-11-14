@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "Parallel fork: graph mode dispatches multiple ready agent nodes (2-4, no loops, no capability/human-task mixed) concurrently via dispatch-many + assignmentWaves (maxParallelTasks), instead of serial single-node dispatch. No new external op; internal execution semantics only.",
+  "reason": "Graph review gate/rework (admission allows review kind, graphFacts delivers passed reviews, graphStep skips review dispatch and handles review exits) plus capability minimal-input ContextManifest selection. No new external op; internal execution semantics only.",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -56,10 +56,10 @@
     "src/main/agent-flow/command-ledger.ts": "4742719adb46cd60f629a3ac862e554ff25b4b68f98d24310300ef9f581c3e57",
     "src/main/agent-flow/commands-electron.ts": "d44a8868e0440c01e832dcc918fd1a2bf51dd684357a168a513a5b906e83c7f4",
     "src/main/agent-flow/coordination-store.ts": "92b15b8eb95fa5f8aee20f7d6fe3f937970425eb0933b0fc5f41688a650c1053",
-    "src/main/agent-flow/coordinator-host.ts": "e29a019026d8ac38ad33565c6905f36738108a122ea8be36dbdb3e8075a01282",
+    "src/main/agent-flow/coordinator-host.ts": "ed139978cb1b826ae19fbfe4a87cd09eb37121dfb4be1051c9d44224444529fa",
     "src/main/agent-flow/coordinator-reviews.ts": "10aca117dd2b661cabea7e1299a7dec2e5e8ad177720df2e70c844af29f7af5d",
     "src/main/agent-flow/definition-store.ts": "1b697b101cafb6e863ed412a426e40585c6fe0f7b38d09ff7987938d0e89da27",
-    "src/main/agent-flow/desktop-electron.ts": "c4034930c8be44d1cbacac7b3404269a2a712ba8d8e4449ab82119f57f2864f7",
+    "src/main/agent-flow/desktop-electron.ts": "5c0003845147a97f79b5e7ba1a61d2147aaa2e6271a95a13b18e3e6be0f28394",
     "src/main/agent-flow/desktop-host.ts": "d5941102bda3a225b3acbd9b15b6998f7114d2e30da5f0240874a792d6cf5b26",
     "src/main/agent-flow/image-assets.ts": "a31ed9411d136d0510d5cc863936304f33ac1ce4df143de78f8d1d11c4151bfb",
     "src/main/agent-flow/ledger-tool.ts": "65fc4a21aefa10e02a79b37a70f907ef2c7e7f17814b71168f421e4a21f53524",
