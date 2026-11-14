@@ -9,6 +9,7 @@
 //   因此该状态只返回账本事实并标记 `ownership: 'ledger-only'`，绝不改写任务状态。
 // - 依赖边界：本族需要"项目已在桌面画布打开"（与 GUI 同一前置条件）。模型端口与命令
 //   交付通道属于桌面执行宿主，本模块不伪造：未登记的操作在需要它们时就不会走到这里。
+import { randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 import type { FlowAgentView } from '../../shared/agent-flow/desktop-tasks'
@@ -21,7 +22,7 @@ import { FlowAgentDesktopHost } from '../agent-flow/desktop-host'
 import { FlowCommandLedger } from '../agent-flow/command-ledger'
 import { CoordinationStore } from '../agent-flow/coordination-store'
 import { FlowGraphSchema, validateFlowGraph } from '../../shared/agent-flow/flow-graph'
-import { compileFlowGraph, FlowGraphCompileError } from '../../shared/agent-flow/flow-graph-compiler'
+import { compileFlowGraph, FlowGraphCompileError, type FlowGraphPreview } from '../../shared/agent-flow/flow-graph-compiler'
 import { FlowAssetStore } from '../agent-flow/asset-store'
 import { FlowTaskStore, agentThread } from '../agent-flow/task-store'
 import { FlowDefinitionStore } from '../agent-flow/definition-store'
@@ -49,7 +50,11 @@ export const FLOW_AGENT_OPERATION_IDS: ReadonlySet<AccessOperationId> = new Set(
   'flowDefinition.diff',
   'flowRun.overview',
   'flowGraph.validate',
-  'flowGraph.compile'
+  'flowGraph.compile',
+  'flowGraph.propose',
+  'flowGraph.preview',
+  'flowGraph.list',
+  'flowGraph.discard'
 ] as AccessOperationId[])
 
 export interface FlowAgentOperationContext {
@@ -575,6 +580,96 @@ function compileFlowGraphOp(input: Record<string, unknown>): unknown {
   }
 }
 
+/** P5：外部建图预览 DTO（不含节点正文/配置；与 registry graphPreviewView 同口径）。 */
+function graphPreviewDto(preview: FlowGraphPreview): Record<string, unknown> {
+  return {
+    buildId: preview.buildId,
+    projectId: preview.projectId,
+    nodeId: preview.nodeId,
+    semanticRevision: preview.semanticRevision,
+    state: preview.state,
+    coordinatorNodeId: preview.coordinatorNodeId,
+    stateNodeId: preview.stateNodeId,
+    graph: { graphId: preview.graph.graphId, name: preview.graph.name },
+    nodes: preview.nodes.slice(0, 128).map((node) => ({
+      nodeId: node.id,
+      type: node.type,
+      title: node.title,
+      contractVersion: node.contractVersion,
+      x: node.x,
+      y: node.y
+    })),
+    edges: preview.edges.slice(0, 256).map((edge) => ({ from: edge.from, to: edge.to }))
+  }
+}
+function graphPort() {
+  const port = flowAgentAccessPort()
+  if (!port) refuse('FLOW_AGENTS_UNAVAILABLE', 'flow agent host is not running in this instance')
+  return port
+}
+/** P5：外部 FlowGraph 建图提案——校验+编译+持久化预览；不调模型、不写画布。 */
+async function proposeGraphOp(
+  input: Record<string, unknown>,
+  context: FlowAgentOperationContext
+): Promise<unknown> {
+  const projectId = input.projectId as string
+  assertActive(projectId, context, 'flowGraph.propose')
+  const parsed = FlowGraphSchema.safeParse(input.graph)
+  if (!parsed.success)
+    return {
+      ok: false,
+      preview: null,
+      errors: [
+        {
+          code: 'FLOW_GRAPH_SCHEMA_INVALID',
+          message: (parsed.error.issues[0]?.message ?? 'invalid graph').slice(0, 512)
+        }
+      ]
+    }
+  // 幂等键：外部 requestId 优先，否则 main 生成（外部不能自造 trace/span 运行身份）。
+  const requestId =
+    typeof input.requestId === 'string' && input.requestId.trim() ? input.requestId : randomUUID()
+  let preview: unknown
+  try {
+    preview = await graphPort().proposeGraph({ projectId, graph: parsed.data, requestId })
+  } catch (error) {
+    if (error instanceof FlowGraphCompileError)
+      return { ok: false, preview: null, errors: error.errors }
+    fail(error)
+  }
+  return { ok: true, preview: graphPreviewDto(preview as FlowGraphPreview), errors: [] }
+}
+async function previewGraphOp(
+  input: Record<string, unknown>,
+  context: FlowAgentOperationContext
+): Promise<unknown> {
+  const projectId = input.projectId as string
+  assertActive(projectId, context, 'flowGraph.preview')
+  const preview = await graphPort().previewGraph({
+    projectId,
+    ...(typeof input.buildId === 'string' ? { buildId: input.buildId } : {})
+  })
+  return { projectId, preview: preview ? graphPreviewDto(preview as FlowGraphPreview) : null }
+}
+async function listGraphOp(
+  input: Record<string, unknown>,
+  context: FlowAgentOperationContext
+): Promise<unknown> {
+  const projectId = input.projectId as string
+  assertActive(projectId, context, 'flowGraph.list')
+  const previews = graphPort().listGraphPreviews(projectId) as FlowGraphPreview[]
+  return { projectId, previews: previews.slice(0, 64).map(graphPreviewDto) }
+}
+async function discardGraphOp(
+  input: Record<string, unknown>,
+  context: FlowAgentOperationContext
+): Promise<unknown> {
+  const projectId = input.projectId as string
+  assertActive(projectId, context, 'flowGraph.discard')
+  const preview = await graphPort().discardGraph({ projectId, buildId: input.buildId as string })
+  return { projectId, preview: graphPreviewDto(preview as FlowGraphPreview) }
+}
+
 /** dispatch 的分组委托入口：只分发本族操作，其余明确拒绝（防误接）。 */
 export async function runFlowAgentOperation(
   operationId: AccessOperationId,
@@ -609,6 +704,14 @@ export async function runFlowAgentOperation(
         return validateFlowGraphOp(input)
       case 'flowGraph.compile':
         return compileFlowGraphOp(input)
+      case 'flowGraph.propose':
+        return await proposeGraphOp(input, context)
+      case 'flowGraph.preview':
+        return await previewGraphOp(input, context)
+      case 'flowGraph.list':
+        return await listGraphOp(input, context)
+      case 'flowGraph.discard':
+        return await discardGraphOp(input, context)
       default:
         refuse('UNSUPPORTED_OPERATION', 'flow-agents-dispatch')
     }

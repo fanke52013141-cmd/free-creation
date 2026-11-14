@@ -137,3 +137,26 @@ describe('O4-P2 编译器', () => {
     expect(compiled.nodes.map((n) => n.id)).toEqual(expect.arrayContaining(['a', 'b']))
   })
 })
+
+describe('P5 编译器补全（落画布后走图路由 + 预览布局）', () => {
+  it('coordinator 配置带 executionMode:graph + graph（落画布后走 graphStep，不退回模型分派）', () => {
+    const g = graph([node('a'), node('b')], [dataEdge('a', 'b')], 'a', ['b'])
+    const compiled = compileFlowGraph(g)
+    const coord = compiled.nodes.find((n) => n.id === compiled.coordinatorNodeId)!
+    const coordConfig = AgentNodeConfigSchema.parse(JSON.parse(coord.config))
+    expect(coordConfig.executionMode).toBe('graph')
+    expect(coordConfig.graph).toBeTruthy()
+    expect(coordConfig.graph!.graphId).toBe('g')
+    expect(coordConfig.graph!.nodes.map((n) => n.nodeId)).toEqual(['a', 'b'])
+  })
+
+  it('所有编译产物节点带有限布局坐标，且不全重叠在原点', () => {
+    const compiled = compileFlowGraph(graph([node('a'), node('b'), node('c')], [dataEdge('a', 'b'), dataEdge('b', 'c')], 'a', ['c']))
+    for (const n of compiled.nodes) {
+      expect(Number.isFinite(n.x)).toBe(true)
+      expect(Number.isFinite(n.y)).toBe(true)
+    }
+    const distinct = new Set(compiled.nodes.map((n) => `${n.x},${n.y}`))
+    expect(distinct.size).toBeGreaterThan(1)
+  })
+})

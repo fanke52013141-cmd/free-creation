@@ -526,7 +526,16 @@ export function registerFlowAgentsIpc(
     cooperate: (raw) => host.cooperate(raw),
     collaboration: (query) => host.collaboration(query),
     reworkStage: (query) =>
-      host.reworkStage({ projectId: query.projectId, nodeId: query.nodeId }, query.stageKey)
+      host.reworkStage({ projectId: query.projectId, nodeId: query.nodeId }, query.stageKey),
+    proposeGraph: (raw) =>
+      builder.proposeGraph({
+        projectId: raw.projectId,
+        graph: raw.graph as Parameters<typeof builder.proposeGraph>[0]['graph'],
+        requestId: raw.requestId
+      }),
+    previewGraph: (query) => builder.previewGraph(query),
+    discardGraph: (query) => builder.discardGraph(query),
+    listGraphPreviews: (projectId) => builder.listGraphPreviews(projectId)
   })
   return host
 }

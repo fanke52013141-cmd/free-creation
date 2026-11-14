@@ -5,6 +5,7 @@ import {
   StateMachineNodeConfigSchema
 } from './node-contracts'
 import { validateFlowGraph, type FlowGraph, type FlowNode, type FlowGraphError } from './flow-graph'
+import { layoutGraph } from '../flow-layout'
 
 /**
  * O4-P2 FlowGraph 纯编译器：把已校验的 FlowGraph IR 编译为画布语义图（节点配置 + 边 +
@@ -21,12 +22,34 @@ export interface CompiledNode {
   text: string
   config: string
   contractVersion: number
+  x: number
+  y: number
 }
 export interface CompiledEdge {
   from: { nodeId: string; portId: string }
   to: { nodeId: string; portId: string }
 }
 export interface CompiledGraph {
+  nodes: CompiledNode[]
+  edges: CompiledEdge[]
+  coordinatorNodeId: string
+  stateNodeId: string
+}
+
+/**
+ * P5：外部 FlowGraph 建图预览（持久化到 flow_builds，source='graph'）。与 BuildPreview
+ * 同构（buildId/projectId/nodeId/semanticRevision/state/nodes/edges），但以 graph 取代
+ * builder 的 plan，节点含 human-task 等编译产物类型。nodeId 锚点=编译 coordinator id。
+ * 落画布复用渲染器权威 commitFlowBuild（只消费 nodes/edges/buildId/semanticRevision）。
+ */
+export interface FlowGraphPreview {
+  source: 'graph'
+  buildId: string
+  projectId: string
+  nodeId: string
+  semanticRevision: string
+  state: 'preview' | 'committed' | 'discarded'
+  graph: FlowGraph
   nodes: CompiledNode[]
   edges: CompiledEdge[]
   coordinatorNodeId: string
@@ -105,7 +128,7 @@ const CAPABILITY_COMPILE: Record<
 }
 
 function compileNode(node: FlowNode, graph: FlowGraph): CompiledNode {
-  const base = { id: node.nodeId, title: node.title, text: node.goal }
+  const base = { id: node.nodeId, title: node.title, text: node.goal, x: 0, y: 0 }
   if (node.kind === 'agent') {
     const config = AgentNodeConfigSchema.parse({
       schemaVersion: 1,
@@ -194,6 +217,10 @@ export function compileFlowGraph(graph: FlowGraph): CompiledGraph {
     tools: [{ id: 'agent.dispatch', version: '1' }],
     allowedNodeIds: specialistIds,
     maxSteps: graph.budgets.maxSteps,
+    // P5：落画布后必须走声明式图路由（graphStep，P3/P4），而非退回模型驱动分派。
+    // graph 节点承载须与 allowedNodeIds 一一对应（AgentNodeConfigSchema superRefine）。
+    executionMode: 'graph',
+    graph,
     relations: [
       { relationId: `${graph.graphId}-observes`, kind: 'observes', sourceNodeId: coordinatorNodeId, targetNodeId: stateNodeId },
       ...specialistIds.map((id) => ({
@@ -220,7 +247,9 @@ export function compileFlowGraph(graph: FlowGraph): CompiledGraph {
       title: graph.name,
       text: graph.goal,
       config: JSON.stringify(coordinatorConfig),
-      contractVersion: 1
+      contractVersion: 1,
+      x: 0,
+      y: 0
     },
     ...compiledNodes,
     {
@@ -229,13 +258,57 @@ export function compileFlowGraph(graph: FlowGraph): CompiledGraph {
       title: '流程状态',
       text: '',
       config: JSON.stringify(stateConfig),
-      contractVersion: 1
+      contractVersion: 1,
+      x: 0,
+      y: 0
     }
   ]
 
   const edges: CompiledEdge[] = graph.edges
     .filter((edge) => edge.kind === 'data')
     .map((edge) => ({ from: edge.from, to: edge.to }))
+
+  // P5：编译产物直接带布局坐标（与建图预览同构，落画布无需再排版）。复用共享 layoutGraph
+  // （lanes）——与 GUI 智能整理/graph.layout/builder 同一算法（三入口 parity）。尺寸与
+  // NODE_UI.width/height.default 一致（340×300；main 不跨包 import renderer 令牌）。
+  const width = 340,
+    height = 300
+  const layoutNodes = nodes.map((node) => {
+    let role: 'coordinator' | 'specialist' | undefined
+    let controls: string[] | undefined
+    try {
+      const config = JSON.parse(node.config) as { role?: unknown; allowedNodeIds?: unknown; gatedNodeIds?: unknown }
+      if (config.role === 'coordinator' || config.role === 'specialist') role = config.role
+      const targets = node.type === 'agent' ? config.allowedNodeIds : config.gatedNodeIds
+      if (Array.isArray(targets)) controls = targets.filter((id): id is string => typeof id === 'string')
+    } catch {
+      // 配置损坏按无角色处理，布局不报错。
+    }
+    return {
+      id: node.id,
+      type: node.type,
+      x: 0,
+      y: 0,
+      w: width,
+      h: height,
+      title: node.title,
+      ...(role ? { role } : {}),
+      ...(controls ? { controls } : {})
+    }
+  })
+  const layoutEdges = edges.map((edge) => ({ from: edge.from.nodeId, to: edge.to.nodeId }))
+  const layout = layoutGraph(layoutNodes, layoutEdges, 'lanes', {
+    origin: { x: 0, y: 0 },
+    columnGap: 100,
+    rowGap: 100
+  })
+  const positionById = new Map(layout.positions.map((pos) => [pos.id, pos]))
+  for (const node of nodes) {
+    const pos = positionById.get(node.id)
+    if (!pos) throw new FlowGraphCompileError([{ code: 'UNREACHABLE_NODE', nodeId: node.id, message: 'layout position missing' }])
+    node.x = pos.x
+    node.y = pos.y
+  }
 
   return { nodes, edges, coordinatorNodeId, stateNodeId }
 }

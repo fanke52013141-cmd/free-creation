@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 34
+export const DB_SCHEMA_VERSION = 35
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -651,6 +651,13 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
     database.exec(`
       ALTER TABLE composite_runs ADD COLUMN step_outputs TEXT;
+    `)
+  },
+  // M35: P5 外部 FlowGraph 建图——flow_builds 复用为预览持久化，加 source 区分
+  // builder（模型生成建图）与 graph（外部 FlowGraph 编译预览）。存量行默认 builder。
+  (database) => {
+    database.exec(`
+      ALTER TABLE flow_builds ADD COLUMN source TEXT NOT NULL DEFAULT 'builder';
     `)
   }
 ]

@@ -13,6 +13,8 @@ import {
   AgentNodeConfigSchema,
   ReviewNodeConfigSchema
 } from '../../shared/agent-flow/node-contracts'
+import { compileFlowGraph, type FlowGraphPreview } from '../../shared/agent-flow/flow-graph-compiler'
+import { FlowGraphSchema, type FlowGraph } from '../../shared/agent-flow/flow-graph'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 import { layoutGraph } from '../../shared/flow-layout'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
@@ -188,8 +190,15 @@ export class FlowBuilderHost {
       )
       .run(preview.projectId, preview.nodeId, preview.buildId, JSON.stringify(preview))
   }
-  private committed(preview: BuildPreview, file: ProjectFile): boolean {
-    const store = (file.tldrawSnapshot as { store: Record<string, Shape> }).store
+  private committed(
+    preview: {
+      buildId: string
+      nodes: ReadonlyArray<{ id: string; type: string; config: string; text: string; title: string; contractVersion: number }>
+      edges: ReadonlyArray<{ from: { nodeId: string; portId: string }; to: { nodeId: string; portId: string } }>
+    },
+    file: ProjectFile
+  ): boolean {
+    const store = (file.tldrawSnapshot as { store?: Record<string, Shape> } | undefined)?.store ?? {}
     return (
       preview.nodes.every((n) => {
         const shape = store[n.id]
@@ -211,6 +220,111 @@ export class FlowBuilderHost {
         )
       )
     )
+  }
+  // ── P5：外部 FlowGraph 建图预览（source='graph'，复用 flow_builds/committed/CAS）──────
+  // 与 builder 的本质区别：接收外部已生成的 FlowGraph，无 builder 节点、不调模型，
+  // 纯校验+编译+持久化预览（不写画布）。锚点 nodeId=编译 coordinator id（D2）。
+  private saveGraph(preview: FlowGraphPreview): void {
+    this.db
+      .prepare(
+        'INSERT INTO flow_builds(project_id,node_id,build_id,body_json,source) VALUES (?,?,?,?,?) ON CONFLICT(project_id,build_id) DO UPDATE SET body_json=excluded.body_json, source=excluded.source'
+      )
+      .run(preview.projectId, preview.nodeId, preview.buildId, JSON.stringify(preview), 'graph')
+  }
+  private readGraph(projectId: string, buildId?: string): FlowGraphPreview | null {
+    const row = buildId
+      ? this.db
+          .prepare('SELECT body_json FROM flow_builds WHERE project_id=? AND build_id=? AND source=?')
+          .get(projectId, buildId, 'graph')
+      : this.db
+          .prepare('SELECT body_json FROM flow_builds WHERE project_id=? AND source=? ORDER BY rowid DESC LIMIT 1')
+          .get(projectId, 'graph')
+    if (!row) return null
+    return JSON.parse((row as { body_json: string }).body_json) as FlowGraphPreview
+  }
+  listGraphPreviews(projectId: string): FlowGraphPreview[] {
+    const rows = this.db
+      .prepare('SELECT body_json FROM flow_builds WHERE project_id=? AND source=? ORDER BY rowid DESC')
+      .all(projectId, 'graph') as Array<{ body_json: string }>
+    return rows.map((row) => JSON.parse(row.body_json) as FlowGraphPreview)
+  }
+  private activeFile(projectId: string): ProjectFile {
+    const file = this.open(projectId)
+    if (!file || !this.isActive(projectId)) throw new AgentRuntimeError('FLOW_PROJECT_INACTIVE', 'builder')
+    return file
+  }
+  async proposeGraph(input: {
+    projectId: string
+    graph: FlowGraph
+    requestId: string
+  }): Promise<FlowGraphPreview> {
+    const file = this.activeFile(input.projectId)
+    const graph = FlowGraphSchema.parse(input.graph)
+    // 校验+编译（非法图抛 FlowGraphCompileError，由 op 层转结构化错误）；不调模型。
+    const compiled = compileFlowGraph(graph)
+    const anchor = compiled.coordinatorNodeId
+    const buildId = `graph-${createHash('sha256')
+      .update(JSON.stringify([input.projectId, anchor, input.requestId]))
+      .digest('hex')
+      .slice(0, 24)}`
+    const replay = this.readGraph(input.projectId, buildId)
+    if (replay) return replay
+    // 占用：编译产物节点不得已在协调占用中（沿用 builder 的 flow_coordination_scope 守卫）。
+    const ids = compiled.nodes.map((node) => node.id)
+    const placeholders = ids.map(() => '?').join(',')
+    if (
+      ids.length &&
+      this.db
+        .prepare(`SELECT 1 FROM flow_coordination_scope WHERE project_id=? AND node_id IN (${placeholders})`)
+        .get(input.projectId, ...ids)
+    )
+      throw new AgentRuntimeError('FLOW_CONTROL_OCCUPIED', 'builder')
+    // 节点 id 冲突：预览节点不得已存在于画布（沿用 builder authorize 守卫）。
+    // 新建项目尚无 tldrawSnapshot（createProject 不写快照），按空 store 处理。
+    const store = (file.tldrawSnapshot as { store?: Record<string, unknown> } | undefined)?.store ?? {}
+    if (compiled.nodes.some((node) => store[node.id]))
+      throw new AgentRuntimeError('FLOW_BUILD_CONFLICT', 'builder')
+    const preview: FlowGraphPreview = {
+      source: 'graph',
+      buildId,
+      projectId: input.projectId,
+      nodeId: anchor,
+      // 新建项目尚无快照：按空 store 计算语义修订（空态指纹），落画布 CAS 仍与渲染器一致。
+      semanticRevision: projectSemanticRevision(
+        file.tldrawSnapshot ? file : { ...file, tldrawSnapshot: { store: {} } }
+      ),
+      state: 'preview',
+      graph,
+      nodes: compiled.nodes,
+      edges: compiled.edges,
+      coordinatorNodeId: compiled.coordinatorNodeId,
+      stateNodeId: compiled.stateNodeId
+    }
+    this.saveGraph(preview)
+    return preview
+  }
+  async previewGraph(input: { projectId: string; buildId?: string }): Promise<FlowGraphPreview | null> {
+    const file = this.activeFile(input.projectId)
+    const preview = this.readGraph(input.projectId, input.buildId)
+    if (preview?.state === 'preview' && this.committed(preview, file)) {
+      preview.state = 'committed'
+      this.saveGraph(preview)
+    }
+    return preview
+  }
+  async discardGraph(input: { projectId: string; buildId: string }): Promise<FlowGraphPreview> {
+    const file = this.activeFile(input.projectId)
+    const preview = this.readGraph(input.projectId, input.buildId)
+    if (!preview) throw new AgentRuntimeError('FLOW_BUILD_MISSING', 'builder')
+    if (this.committed(preview, file)) {
+      preview.state = 'committed'
+      this.saveGraph(preview)
+      return preview
+    }
+    if (preview.state !== 'preview') return preview
+    preview.state = 'discarded'
+    this.saveGraph(preview)
+    return preview
   }
   async handle(raw: BuildRequest): Promise<BuildPreview | null> {
     const input = BuildRequestSchema.parse(raw),

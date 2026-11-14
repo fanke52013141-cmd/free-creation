@@ -43,6 +43,50 @@ const flowAssetRef = z
     sourcePortId: flowId
   })
   .strict()
+/** P5：外部建图预览 DTO（不含节点正文/配置，建图内容是业务正文；与 buildPreviewDto 同口径）。 */
+const graphPreviewView = z
+  .object({
+    buildId: flowId,
+    projectId: identifier,
+    nodeId: flowId,
+    semanticRevision: z.string().max(128),
+    state: z.enum(['preview', 'committed', 'discarded']),
+    coordinatorNodeId: flowId,
+    stateNodeId: flowId,
+    graph: z.object({ graphId: flowId, name: z.string().max(200) }).strict(),
+    nodes: z
+      .array(
+        z
+          .object({
+            nodeId: flowId,
+            type: z.string().max(40),
+            title: z.string().max(200),
+            contractVersion: z.number().int().nonnegative(),
+            x: z.number(),
+            y: z.number()
+          })
+          .strict()
+      )
+      .max(128),
+    edges: z
+      .array(
+        z
+          .object({
+            from: z.object({ nodeId: flowId, portId: flowId }).strict(),
+            to: z.object({ nodeId: flowId, portId: flowId }).strict()
+          })
+          .strict()
+      )
+      .max(256)
+  })
+  .strict()
+const graphError = z
+  .object({
+    code: z.string().max(80),
+    nodeId: flowId.optional(),
+    message: z.string().max(512)
+  })
+  .strict()
 const flowTaskView = z
   .object({
     taskId: flowId,
@@ -239,6 +283,28 @@ export const FLOW_AGENTS_OPERATIONS = {
     description:
       'O4-P5：把 FlowGraph 编译为画布图预览（节点配置+边+派生状态机，与建图预览同构）；只读预览不写画布；非法图返回 ok=false 与错误',
     input: z.object({ graph: FlowGraphSchema }).strict()
+  },
+  'flowGraph.propose': {
+    effect: 'write',
+    description:
+      'P5：外部已生成 FlowGraph 的建图提案——校验+编译+持久化预览（flow_builds source=graph，锚点=编译 coordinator）；不调模型、不写画布；同图同 requestId 幂等返回同 buildId；落画布须人在 GUI 确认（flowGraph.confirm），外部不能自确认',
+    input: project.extend({ graph: FlowGraphSchema, requestId: flowId.optional() }).strict()
+  },
+  'flowGraph.preview': {
+    effect: 'read',
+    description:
+      'P5：读取外部建图预览（最近一次或指定 buildId）；只读，不调模型不改画布；已保存图含预览节点时自动 promote committed',
+    input: project.extend({ buildId: flowId.optional() }).strict()
+  },
+  'flowGraph.list': {
+    effect: 'read',
+    description: 'P5：列出本项目的外部建图预览（含 preview/committed/discarded）；只读',
+    input: project
+  },
+  'flowGraph.discard': {
+    effect: 'write',
+    description: 'P5：取消外部建图预览（置 discarded）；已 committed 的预览幂等返回 committed，不可取消',
+    input: project.extend({ buildId: flowId }).strict()
   },
   'flowAgent.catalog': {
     effect: 'read',
@@ -544,7 +610,9 @@ export const FLOW_AGENTS_OUTPUTS = {
                   title: z.string().max(200),
                   text: z.string().max(65536),
                   config: z.string().max(262144),
-                  contractVersion: z.number().int().nonnegative()
+                  contractVersion: z.number().int().nonnegative(),
+                  x: z.number(),
+                  y: z.number()
                 })
                 .strict()
             )
@@ -576,6 +644,22 @@ export const FLOW_AGENTS_OUTPUTS = {
         )
         .max(64)
     })
+    .strict(),
+  'flowGraph.propose': z
+    .object({
+      ok: z.boolean(),
+      preview: graphPreviewView.nullable(),
+      errors: z.array(graphError).max(64)
+    })
+    .strict(),
+  'flowGraph.preview': z
+    .object({ projectId: identifier, preview: graphPreviewView.nullable() })
+    .strict(),
+  'flowGraph.list': z
+    .object({ projectId: identifier, previews: z.array(graphPreviewView).max(64) })
+    .strict(),
+  'flowGraph.discard': z
+    .object({ projectId: identifier, preview: graphPreviewView })
     .strict(),
   'flowAgent.catalog': z
     .object({

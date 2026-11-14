@@ -51,6 +51,15 @@ export interface FlowAgentAccessPort {
   collaboration(query: { projectId: string; nodeId: string }): unknown
   /** AF-05：局部返工（固定顺序主控），与 GUI 同一宿主 coordinator.reworkStage；不支持返回 null。 */
   reworkStage(query: { projectId: string; nodeId: string; stageKey: string }): unknown
+  /**
+   * P5：外部 FlowGraph 建图（FlowBuilderHost.proposeGraph/previewGraph/discardGraph）。
+   * 与 builder 同一宿主、同一 flow_builds 表（source='graph'）；接收外部已生成图，
+   * 不调模型、不写画布。落画布仍走渲染器权威 commitFlowBuild（P5.3）。
+   */
+  proposeGraph(raw: { projectId: string; graph: unknown; requestId: string }): Promise<unknown>
+  previewGraph(query: { projectId: string; buildId?: string }): Promise<unknown>
+  discardGraph(query: { projectId: string; buildId: string }): Promise<unknown>
+  listGraphPreviews(projectId: string): unknown
 }
 
 let published: FlowAgentAccessPort | null = null
