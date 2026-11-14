@@ -124,7 +124,7 @@ export const FlowGraphSchema = z
         maxLoopIterations: z.number().int().min(1).max(64).default(8)
       })
       .strict()
-      .default({})
+      .default({ maxSteps: 12, maxActiveMs: 600000, maxLoopIterations: 8 })
   })
   .strict()
   .superRefine((graph, context) => {
