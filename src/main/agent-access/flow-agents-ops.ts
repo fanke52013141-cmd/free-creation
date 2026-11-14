@@ -55,7 +55,12 @@ export const FLOW_AGENT_OPERATION_IDS: ReadonlySet<AccessOperationId> = new Set(
   'flowGraph.preview',
   'flowGraph.list',
   'flowGraph.discard',
-  'flowGraph.confirm'
+  'flowGraph.confirm',
+  'flowGraph.proposeFromDefinition',
+  'flowGraphDefinition.publish',
+  'flowGraphDefinition.list',
+  'flowGraphDefinition.get',
+  'flowGraphDefinition.diff'
 ] as AccessOperationId[])
 
 export interface FlowAgentOperationContext {
@@ -533,6 +538,75 @@ function diffDefinitions(
   )
   return { projectId, definitionId: input.definitionId, diff }
 }
+/** ④P6：发布 FlowGraph 定义版本（不可变快照，与运行分离）。 */
+function publishGraphDefinition(
+  input: Record<string, unknown>,
+  context: FlowAgentOperationContext
+): unknown {
+  const projectId = input.projectId as string
+  assertActive(projectId, context, 'flowGraphDefinition.publish')
+  const definition = definitionStore().publishGraph({
+    projectId,
+    definitionId: input.definitionId as string,
+    name: input.name as string,
+    graph: input.graph as Parameters<FlowDefinitionStore['publishGraph']>[0]['graph']
+  })
+  return { projectId, definition }
+}
+function listGraphDefinitions(
+  input: Record<string, unknown>,
+  context: FlowAgentOperationContext
+): unknown {
+  const projectId = input.projectId as string
+  assertActive(projectId, context, 'flowGraphDefinition.list')
+  return { projectId, definitions: definitionStore().listGraph(projectId) }
+}
+function getGraphDefinition(
+  input: Record<string, unknown>,
+  context: FlowAgentOperationContext
+): unknown {
+  const projectId = input.projectId as string
+  assertActive(projectId, context, 'flowGraphDefinition.get')
+  const definition = definitionStore().getGraph(
+    projectId,
+    input.definitionId as string,
+    input.version as number | undefined
+  )
+  return { projectId, definition }
+}
+function diffGraphDefinitions(
+  input: Record<string, unknown>,
+  context: FlowAgentOperationContext
+): unknown {
+  const projectId = input.projectId as string
+  assertActive(projectId, context, 'flowGraphDefinition.diff')
+  const diff = definitionStore().diffGraph(
+    projectId,
+    input.definitionId as string,
+    input.versionA as number,
+    input.versionB as number
+  )
+  return { projectId, definitionId: input.definitionId, diff }
+}
+/** ④P6：从图定义版本创建运行——读定义图→经建图提案管线（校验/编译/持久化预览），
+ *  落画布仍须人工确认（flowGraph.confirm）。不改模板。 */
+async function proposeFromGraphDefinition(
+  input: Record<string, unknown>,
+  context: FlowAgentOperationContext
+): Promise<unknown> {
+  const projectId = input.projectId as string
+  assertActive(projectId, context, 'flowGraph.proposeFromDefinition')
+  const definition = definitionStore().getGraph(
+    projectId,
+    input.definitionId as string,
+    input.version as number | undefined
+  )
+  if (!definition) refuse('FLOW_DEFINITION_MISSING', 'graph definition not found')
+  return proposeGraphOp(
+    { projectId, graph: definition.graph, requestId: input.requestId },
+    context
+  )
+}
 function overviewFlowRun(
   input: Record<string, unknown>,
   context: FlowAgentOperationContext
@@ -782,6 +856,16 @@ export async function runFlowAgentOperation(
         return await discardGraphOp(input, context)
       case 'flowGraph.confirm':
         return await confirmGraphOp(input, context)
+      case 'flowGraph.proposeFromDefinition':
+        return await proposeFromGraphDefinition(input, context)
+      case 'flowGraphDefinition.publish':
+        return publishGraphDefinition(input, context)
+      case 'flowGraphDefinition.list':
+        return listGraphDefinitions(input, context)
+      case 'flowGraphDefinition.get':
+        return getGraphDefinition(input, context)
+      case 'flowGraphDefinition.diff':
+        return diffGraphDefinitions(input, context)
       default:
         refuse('UNSUPPORTED_OPERATION', 'flow-agents-dispatch')
     }

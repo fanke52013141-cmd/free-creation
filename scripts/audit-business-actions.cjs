@@ -192,6 +192,26 @@ const EXTERNAL_ONLY_OPERATIONS = new Map([
     'P5 外部上帝 Agent 动态建 flow 提案：接收外部已生成 FlowGraph，校验+编译+持久化预览（flow_builds source=graph），不调模型不写画布；生成方是外部 Agent，GUI 无"提案"按钮（GUI 只在项目级预览面板人工确认落画布），属外部专用建图入口'
   ],
   [
+    'flowGraph.proposeFromDefinition',
+    '④P6 从图定义版本创建运行：读定义的 FlowGraph→经建图提案管线（校验/编译/持久化预览），落画布仍须人工确认（flowGraph.confirm）；定义管理方是外部 Agent，GUI 无"从定义创建"按钮，属外部专用入口'
+  ],
+  [
+    'flowGraphDefinition.publish',
+    '④P6 发布 FlowGraph 定义版本（不可变快照，与运行分离）：校验图→contentHash→版本递增；定义管理方是外部 Agent，GUI 无独立"发布定义"按钮，属外部专用入口'
+  ],
+  [
+    'flowGraphDefinition.list',
+    '④P6 列出本项目图定义（每个 definitionId 最新版本）：只读；GUI 无独立定义列表面板，属外部专用只读入口'
+  ],
+  [
+    'flowGraphDefinition.get',
+    '④P6 读取图定义（指定版本或最新）：只读；GUI 无独立定义读取入口，属外部专用只读入口'
+  ],
+  [
+    'flowGraphDefinition.diff',
+    '④P6 比较两个图定义版本（名称/目标/节点增删改/数据边增删）：只读纯函数；GUI 无独立定义差异入口，属外部专用只读入口'
+  ],
+  [
     'node.library.update',
     'GUI 节点库面板当前没有重命名入口；外部重命名复用同一 store 写口，待 GUI 补同入口或下线该操作'
   ],

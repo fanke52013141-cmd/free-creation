@@ -87,6 +87,55 @@ const graphError = z
     message: z.string().max(512)
   })
   .strict()
+/** ④P6：图定义版本视图（不可变快照）。 */
+const graphDefinitionView = z
+  .object({
+    schemaVersion: z.literal(1),
+    definitionId: flowId,
+    version: z.number().int().positive(),
+    name: z.string().max(120),
+    graph: FlowGraphSchema,
+    contentHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+    createdAt: z.number().int().nonnegative()
+  })
+  .strict()
+const graphDefinitionDiffView = z
+  .object({
+    nameChanged: z.boolean(),
+    goalChanged: z.boolean(),
+    nodes: z
+      .array(
+        z
+          .object({
+            nodeId: flowId,
+            change: z.enum(['added', 'removed', 'changed']),
+            fields: z.array(z.string().max(40)).max(16).optional()
+          })
+          .strict()
+      )
+      .max(128),
+    edgesAdded: z
+      .array(
+        z
+          .object({
+            from: z.object({ nodeId: flowId, portId: flowId }).strict(),
+            to: z.object({ nodeId: flowId, portId: flowId }).strict()
+          })
+          .strict()
+      )
+      .max(256),
+    edgesRemoved: z
+      .array(
+        z
+          .object({
+            from: z.object({ nodeId: flowId, portId: flowId }).strict(),
+            to: z.object({ nodeId: flowId, portId: flowId }).strict()
+          })
+          .strict()
+      )
+      .max(256)
+  })
+  .strict()
 const flowTaskView = z
   .object({
     taskId: flowId,
@@ -311,6 +360,49 @@ export const FLOW_AGENTS_OPERATIONS = {
     description:
       'P5.3：确认外部建图预览落画布——经渲染器权威 commitFlowGraph（authorize/CAS/单撤销步/保存屏障/confirm），与 GUI 预览面板同一动作；main 按 buildId 触发并核对落盘 committed 与节点真实存在；外部不能绕渲染器自确认',
     input: project.extend({ buildId: flowId }).strict()
+  },
+  'flowGraph.proposeFromDefinition': {
+    effect: 'write',
+    description:
+      '④P6：从图定义版本创建运行——读定义的 FlowGraph→经建图提案管线（校验/编译/持久化预览）；落画布仍须人工确认（flowGraph.confirm），不改模板',
+    input: project
+      .extend({
+        definitionId: flowId,
+        version: z.number().int().positive().optional(),
+        requestId: flowId.optional()
+      })
+      .strict()
+  },
+  'flowGraphDefinition.publish': {
+    effect: 'write',
+    description:
+      '④P6：发布 FlowGraph 定义版本（不可变快照，与运行分离）；校验图→contentHash→版本递增；同内容也允许新版本以便评测',
+    input: project
+      .extend({ definitionId: flowId, name: z.string().min(1).max(120), graph: FlowGraphSchema })
+      .strict()
+  },
+  'flowGraphDefinition.list': {
+    effect: 'read',
+    description: '④P6：列出本项目的图定义（每个 definitionId 的最新版本）；只读',
+    input: project
+  },
+  'flowGraphDefinition.get': {
+    effect: 'read',
+    description: '④P6：读取图定义（指定版本或最新）；只读',
+    input: project
+      .extend({ definitionId: flowId, version: z.number().int().positive().optional() })
+      .strict()
+  },
+  'flowGraphDefinition.diff': {
+    effect: 'read',
+    description: '④P6：比较两个图定义版本的名称/总目标/节点（增删改）/数据边（增删）；只读纯函数',
+    input: project
+      .extend({
+        definitionId: flowId,
+        versionA: z.number().int().positive(),
+        versionB: z.number().int().positive()
+      })
+      .strict()
   },
   'flowAgent.catalog': {
     effect: 'read',
@@ -674,6 +766,25 @@ export const FLOW_AGENTS_OUTPUTS = {
       preview: graphPreviewView,
       committedNodeIds: z.array(flowId).max(128)
     })
+    .strict(),
+  'flowGraph.proposeFromDefinition': z
+    .object({
+      ok: z.boolean(),
+      preview: graphPreviewView.nullable(),
+      errors: z.array(graphError).max(64)
+    })
+    .strict(),
+  'flowGraphDefinition.publish': z
+    .object({ projectId: identifier, definition: graphDefinitionView })
+    .strict(),
+  'flowGraphDefinition.list': z
+    .object({ projectId: identifier, definitions: z.array(graphDefinitionView).max(128) })
+    .strict(),
+  'flowGraphDefinition.get': z
+    .object({ projectId: identifier, definition: graphDefinitionView.nullable() })
+    .strict(),
+  'flowGraphDefinition.diff': z
+    .object({ projectId: identifier, definitionId: flowId, diff: graphDefinitionDiffView })
     .strict(),
   'flowAgent.catalog': z
     .object({

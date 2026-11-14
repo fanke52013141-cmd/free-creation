@@ -7,8 +7,14 @@ import {
   definitionContent,
   diffDefinitions,
   type FlowDefinition,
-  type DefinitionDiff
+  type DefinitionDiff,
+  FlowGraphDefinitionSchema,
+  graphDefinitionContent,
+  diffGraphDefinitions,
+  type FlowGraphDefinition,
+  type GraphDefinitionDiff
 } from '../../shared/agent-flow/flow-definition'
+import { FlowGraphSchema, type FlowGraph } from '../../shared/agent-flow/flow-graph'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 
@@ -127,5 +133,91 @@ export class FlowDefinitionStore {
     const b = this.get(projectId, definitionId, versionB)
     if (!a || !b) throw new AgentRuntimeError('FLOW_DEFINITION_MISSING', 'definition')
     return diffDefinitions(definitionContent(a), definitionContent(b))
+  }
+
+  /** ④P6：发布一个 FlowGraph 定义版本（校验图→contentHash→版本递增；不可变）。 */
+  publishGraph(input: {
+    projectId: string
+    definitionId: string
+    name: string
+    graph: FlowGraph
+  }): FlowGraphDefinition {
+    if (!this.open(input.projectId))
+      throw new AgentRuntimeError('FLOW_PROJECT_INACTIVE', 'definition')
+    const graph = FlowGraphSchema.parse(input.graph)
+    const content = graphDefinitionContent({ name: input.name, graph })
+    const contentHash = sha256(canonicalFlowJson(content))
+    const last = this.db
+      .prepare(
+        'SELECT MAX(version) AS version FROM flow_definitions WHERE project_id=? AND definition_id=?'
+      )
+      .get(input.projectId, input.definitionId) as { version: number | null }
+    const version = (last.version ?? 0) + 1
+    const definition = FlowGraphDefinitionSchema.parse({
+      schemaVersion: 1,
+      definitionId: input.definitionId,
+      version,
+      name: input.name,
+      graph,
+      contentHash,
+      createdAt: Date.now()
+    })
+    this.db
+      .prepare('INSERT INTO flow_definitions VALUES (?,?,?,?,?,?)')
+      .run(
+        input.projectId,
+        input.definitionId,
+        version,
+        JSON.stringify(definition),
+        contentHash,
+        definition.createdAt
+      )
+    return definition
+  }
+
+  getGraph(projectId: string, definitionId: string, version?: number): FlowGraphDefinition | null {
+    const row = (
+      version === undefined
+        ? this.db
+            .prepare(
+              'SELECT * FROM flow_definitions WHERE project_id=? AND definition_id=? ORDER BY version DESC LIMIT 1'
+            )
+            .get(projectId, definitionId)
+        : this.db
+            .prepare(
+              'SELECT * FROM flow_definitions WHERE project_id=? AND definition_id=? AND version=?'
+            )
+            .get(projectId, definitionId, version)
+    ) as DefinitionRow | undefined
+    if (!row) return null
+    const parsed = FlowGraphDefinitionSchema.safeParse(JSON.parse(row.body_json))
+    return parsed.success ? parsed.data : null
+  }
+
+  listGraph(projectId: string): FlowGraphDefinition[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM flow_definitions WHERE project_id=? AND version=(
+           SELECT MAX(version) FROM flow_definitions f2
+           WHERE f2.project_id=flow_definitions.project_id AND f2.definition_id=flow_definitions.definition_id
+         ) ORDER BY definition_id`
+      )
+      .all(projectId) as DefinitionRow[]
+    return rows
+      .map((row) => FlowGraphDefinitionSchema.safeParse(JSON.parse(row.body_json)))
+      .filter((parsed): parsed is { success: true; data: FlowGraphDefinition } => parsed.success)
+      .map((parsed) => parsed.data)
+  }
+
+  diffGraph(
+    projectId: string,
+    definitionId: string,
+    versionA: number,
+    versionB: number
+  ): GraphDefinitionDiff {
+    const a = this.getGraph(projectId, definitionId, versionA)
+    const b = this.getGraph(projectId, definitionId, versionB)
+    if (!a || !b) throw new AgentRuntimeError('FLOW_DEFINITION_MISSING', 'definition')
+    return diffGraphDefinitions(graphDefinitionContent(a), graphDefinitionContent(b))
   }
 }
