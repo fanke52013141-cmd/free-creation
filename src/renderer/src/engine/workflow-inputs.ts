@@ -54,8 +54,26 @@ export function nodeNeedsContentInput(
       return !body.trim() && !hasSource('in-prompt')
     case 'speech':
       return !body.trim() && !hasSource('in-text')
-    case 'chat':
-      return !hasSource('in-text')
+    case 'chat': {
+      if (hasSource('in-text')) return false
+      // 交互式对话：已有待发送的用户消息时，消息本身即本轮输入，无需补充输入端口
+      // （否则聊天发送会卡在"等待补充本次运行的输入"，无法进入生图/对话执行）。
+      try {
+        const data = JSON.parse(body) as {
+          activeConversationId?: string
+          conversations?: Array<{ id?: string; messages?: Array<{ role?: string }> }>
+          messages?: Array<{ role?: string }>
+        }
+        const conversation =
+          data.conversations?.find((item) => item.id === data.activeConversationId) ??
+          data.conversations?.[0]
+        const messages = conversation?.messages ?? data.messages ?? []
+        if (messages.at(-1)?.role === 'user') return false
+      } catch {
+        /* 正文非合法 JSON 时按需要输入处理。 */
+      }
+      return true
+    }
     case 'video':
       return !body.trim() && !hasSource('in-prompt') && !hasSource('in-text')
     case 'voice-design':

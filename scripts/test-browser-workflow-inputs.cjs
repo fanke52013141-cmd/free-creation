@@ -120,7 +120,7 @@ const { launchQaBrowser } = require('./qa-browser.cjs')
     await page.getByRole('textbox', { name: '搜索节点流' }).fill('文案模板')
     await page.getByRole('button', { name: '运行 保存的文案模板' }).click()
     await dialog.getByRole('textbox').fill('只用于模板运行')
-    await dialog.getByRole('button', { name: '开始运行' }).click()
+    await dialog.getByRole('button', { name: '继续运行' }).click()
     await page.getByText('已运行所选流程（1 个节点）', { exact: true }).first().waitFor()
     console.log('Selected workflow: transient text, real graph edges, one final image, no intermediate document card')
   } finally {
