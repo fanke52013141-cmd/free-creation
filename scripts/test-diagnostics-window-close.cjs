@@ -9,8 +9,10 @@ const { spawn } = require('node:child_process')
 const { _electron: electron } = require('playwright')
 const { qaOutputPath } = require('./qa-output.cjs')
 
-// 授权是设备绑定的：把本机已激活的 security 目录复制进隔离数据目录，应用才能
-// 越过授权门禁进入业务窗（不伪造任何签名）。
+// 诊断关窗与授权无关：用文档化的开发 bypass（CANVAS_LICENSE_DEV_BYPASS=1，仅未打包构建
+// 生效，见 src/main/index.ts）跳过授权门禁，避免依赖本机授权是否仍有效——开发根一旦
+// 重新 init-root，旧根签发的授权即作废，门禁会把应用挡在 license.html，业务窗永不加载。
+// 若本机恰有已激活 security 目录则一并复制（best-effort），无则跳过；不伪造任何签名。
 function licensedSecurityDir() {
   const roaming = process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming')
   const candidates = [
@@ -21,7 +23,7 @@ function licensedSecurityDir() {
   for (const candidate of candidates) {
     if (existsSync(path.join(candidate, 'license-current.json'))) return candidate
   }
-  throw new Error('MACHINE_NOT_LICENSED')
+  return null
 }
 
 async function filesUnder(directory) {
@@ -55,7 +57,8 @@ async function filesUnder(directory) {
       const directory = path.join(evidence, mode)
       const data = path.join(directory, 'data')
       await fs.mkdir(data, { recursive: true })
-      await fs.cp(licensedSecurityDir(), path.join(data, 'security'), { recursive: true })
+      const securityDir = licensedSecurityDir()
+      if (securityDir) await fs.cp(securityDir, path.join(data, 'security'), { recursive: true })
       await fs.mkdir(path.join(directory, 'profile'), { recursive: true })
       if (mode === 'prior-unclean') {
         const sessions = path.join(data, 'diagnostics', 'sessions')
@@ -106,7 +109,7 @@ require(${JSON.stringify(path.resolve('out/main/index.js'))});
 `)
       let application
       try {
-        const env = { ...process.env, CANVAS_DATA_DIR: data, ELECTRON_RENDERER_URL: 'http://127.0.0.1:5203' }
+        const env = { ...process.env, CANVAS_DATA_DIR: data, ELECTRON_RENDERER_URL: 'http://127.0.0.1:5203', CANVAS_LICENSE_DEV_BYPASS: '1' }
         delete env.ELECTRON_RUN_AS_NODE
         application = await electron.launch({ executablePath: require('electron'), args: [bootstrap], env, timeout: 30000 })
         const page = await application.firstWindow()
