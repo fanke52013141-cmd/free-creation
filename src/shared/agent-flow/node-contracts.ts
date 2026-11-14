@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { VideoReviewEvidenceSchema } from './video-review'
 import { FlowStagesSchema } from './stage-contracts'
+import { FlowGraphSchema } from './flow-graph'
 import {
   AudioReviewEvidenceSchema,
   AudioVideoTimelineEvidenceSchema,
@@ -46,19 +47,27 @@ export const AgentNodeConfigSchema = z
     /**
      * AF-01：显式任务型执行模式。缺省（undefined）= 旧模型协调语义，存量不迁移。
      * fixed-order = 按声明阶段顺序确定性推进，主控不调用模型补写目标。
+     * graph（O4-P3）= 按声明式 FlowGraph 图路由推进（条件/汇合），只认交付事实。
      */
-    executionMode: z.enum(['model', 'fixed-order']).optional(),
+    executionMode: z.enum(['model', 'fixed-order', 'graph']).optional(),
     /** fixed-order 模式的阶段声明；顺序即执行顺序。 */
     stages: FlowStagesSchema.optional(),
+    /** graph 模式的流程图声明（O4-P3）；节点承载专业子节点，路由只认交付事实。 */
+    graph: FlowGraphSchema.optional(),
     relations: z.array(AgentFlowRelationSchema).max(256)
   })
   .strict()
   .superRefine((config, context) => {
     const fixedOrder = config.executionMode === 'fixed-order'
+    const graphMode = config.executionMode === 'graph'
     if (fixedOrder && !config.stages)
       context.addIssue({ code: 'custom', message: 'fixed-order requires stages' })
     if (!fixedOrder && config.stages)
       context.addIssue({ code: 'custom', message: 'stages require fixed-order executionMode' })
+    if (graphMode && !config.graph)
+      context.addIssue({ code: 'custom', message: 'graph requires a graph declaration' })
+    if (!graphMode && config.graph)
+      context.addIssue({ code: 'custom', message: 'graph requires graph executionMode' })
     if (fixedOrder && config.stages) {
       if ((config.maxParallelTasks ?? 1) !== 1)
         context.addIssue({ code: 'custom', message: 'fixed-order runs stages sequentially' })
@@ -68,6 +77,15 @@ export const AgentNodeConfigSchema = z
           context.addIssue({
             code: 'custom',
             message: 'Stage carrier must be an allowed child node'
+          })
+    }
+    if (graphMode && config.graph) {
+      const allowed = new Set(config.allowedNodeIds)
+      for (const node of config.graph.nodes)
+        if (!allowed.has(node.nodeId))
+          context.addIssue({
+            code: 'custom',
+            message: 'Graph node carrier must be an allowed child node'
           })
     }
   })

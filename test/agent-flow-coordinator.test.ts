@@ -21,6 +21,7 @@ import { FlowReviewHost } from '../src/main/agent-flow/review-host'
 import { FlowReviewStore } from '../src/main/agent-flow/review-store'
 import { projectSemanticRevision } from '../src/main/agent-flow/command-intent'
 import { CoordinatorReviews } from '../src/main/agent-flow/coordinator-reviews'
+import { FlowGraphSchema } from '../src/shared/agent-flow/flow-graph'
 
 const dbs: Database.Database[] = []
 afterEach(() => {
@@ -55,6 +56,7 @@ function fixture(
       during?: () => Promise<void>
       reportOnly?: boolean
     }
+    graph?: import('../src/shared/agent-flow/flow-graph').FlowGraph
   } = {}
 ) {
   const db = new Database(':memory:')
@@ -94,7 +96,8 @@ function fixture(
   })
   const mainConfig = {
     ...cfg('coordinator', ['first', 'second']),
-    ...(options.parallel ? { maxParallelTasks: 2 } : {})
+    ...(options.parallel ? { maxParallelTasks: 2 } : {}),
+    ...(options.graph ? { executionMode: 'graph', graph: options.graph } : {})
   }
   mainConfig.relations = [
     { relationId: 'state', kind: 'observes', sourceNodeId: 'main', targetNodeId: 'state' }
@@ -1843,4 +1846,57 @@ it('restores both completed parallel projections without running another tool or
   })
   expect(completed.task.state).toBe('completed')
   expect(f.count().executions).toBe(4)
+})
+
+describe('O4-P3 graph mode execution（声明式图路由，mock 模型）', () => {
+  const graphNode = (nodeId: string) => ({
+    nodeId,
+    title: nodeId,
+    participation: 'autonomous' as const,
+    kind: 'agent' as const,
+    goal: '处理并交付',
+    completion: '交付固定成果'
+  })
+  const seqGraph = FlowGraphSchema.parse({
+    schemaVersion: 1,
+    graphId: 'g',
+    name: '顺序图',
+    goal: '先处理再整理',
+    nodes: [graphNode('first'), graphNode('second')],
+    edges: [
+      { from: { nodeId: 'first', portId: 'out-text' }, to: { nodeId: 'second', portId: 'in-text' }, kind: 'data' }
+    ],
+    entry: 'first',
+    exits: ['second']
+  })
+
+  it('顺序图路由端到端完成，且不调用主控决策模型', async () => {
+    const f = fixture({ graph: seqGraph })
+    const done = await f.host.run(input)
+    expect(done.task.state).toBe('completed')
+    expect(f.count().modelCalls).toBe(0)
+    expect(f.count().executions).toBe(4)
+    expect(f.byId.first.meta.nodeResult).toBeTruthy()
+    expect(f.byId.second.meta.nodeResult).toBeTruthy()
+  })
+
+  it('图模式拒绝非 agent 节点（首期范围）', async () => {
+    const badGraph = FlowGraphSchema.parse({
+      schemaVersion: 1,
+      graphId: 'g',
+      name: '含能力节点',
+      goal: 'x',
+      nodes: [
+        graphNode('first'),
+        { nodeId: 'second', title: 'second', participation: 'autonomous', kind: 'capability', capability: 'text-pass@1', goal: 'x', completion: 'x' }
+      ],
+      edges: [
+        { from: { nodeId: 'first', portId: 'out-text' }, to: { nodeId: 'second', portId: 'in-text' }, kind: 'data' }
+      ],
+      entry: 'first',
+      exits: ['second']
+    })
+    const f = fixture({ graph: badGraph })
+    await expect(f.host.run(input)).rejects.toMatchObject({ code: 'FLOW_GRAPH_NODE_KIND_UNSUPPORTED' })
+  })
 })

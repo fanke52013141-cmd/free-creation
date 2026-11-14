@@ -28,6 +28,7 @@ import {
   type StageDeliveryFact,
   type StageEntryFacts
 } from '../../shared/agent-flow/stage-contracts'
+import { nextReadyNodes, isFlowComplete } from '../../shared/agent-flow/flow-graph-router'
 import {
   buildContextManifest,
   contextManifestBlocking
@@ -240,12 +241,13 @@ export class FlowCoordinatorHost {
       root = shape(file, input.nodeId)
     const config = AgentNodeConfigSchema.parse(JSON.parse(root.props.config))
     const fixedOrder = config.executionMode === 'fixed-order'
+    const graphMode = config.executionMode === 'graph'
     if (
       root.props.nodeType !== 'agent' ||
       config.role !== 'coordinator' ||
       !root.props.text.trim() ||
-      // AF-01：固定顺序模式由规则推进，主控不需要决策模型；旧模式仍要求模型。
-      (!fixedOrder && !config.modelDefinitionId)
+      // AF-01/O4-P3：固定顺序与图模式由规则推进，主控不需要决策模型；旧模式仍要求模型。
+      (!fixedOrder && !graphMode && !config.modelDefinitionId)
     )
       throw new AgentRuntimeError('FLOW_COORDINATOR_CONFIG_INVALID', 'admission')
     if (
@@ -303,6 +305,16 @@ export class FlowCoordinatorHost {
         if (childConfig.interactionMode !== 'collaborative')
           throw new AgentRuntimeError('FLOW_STAGE_HUMAN_MODE_REQUIRED', 'scope')
       }
+    }
+    // O4-P3：图模式首期支持 agent 节点（专业子节点）路由；能力/人工/审核节点执行属后续。
+    // 图节点承载必须与专业子节点一一对应；路由只认交付事实（见 graphStep）。
+    if (graphMode) {
+      const graph = config.graph!
+      if (graph.nodes.some((node) => node.kind !== 'agent'))
+        throw new AgentRuntimeError('FLOW_GRAPH_NODE_KIND_UNSUPPORTED', 'scope')
+      const graphNodeIds = new Set(graph.nodes.map((node) => node.nodeId))
+      if (graphNodeIds.size !== childIds.length || childIds.some((id) => !graphNodeIds.has(id)))
+        throw new AgentRuntimeError('FLOW_GRAPH_SCOPE_INVALID', 'scope')
     }
     const states = config.relations.filter(
       (r) =>
@@ -400,12 +412,13 @@ export class FlowCoordinatorHost {
       fixed.traceId = input.traceId
       fixed.spanId = input.spanId
       this.store.save(fixed, false)
-      // AF-01：固定顺序模式不调用主控模型；旧模式保持原有模型协调语义。
-      const fixedOrder = fixed.config.executionMode === 'fixed-order'
-      const model = fixedOrder
+      // AF-01/O4-P3：固定顺序与图模式不调用主控模型；旧模式保持原有模型协调语义。
+      const ruleDriven =
+        fixed.config.executionMode === 'fixed-order' || fixed.config.executionMode === 'graph'
+      const model = ruleDriven
         ? null
         : await this.model({ ...fixed, agentNodeId: fixed.nodeId }, controller.signal)
-      if (!fixedOrder && !model!.coordinate)
+      if (!ruleDriven && !model!.coordinate)
         throw new AgentRuntimeError('AGENT_TOOL_UNSUPPORTED', 'coordination')
       const Graph = Annotation.Root({
         again: Annotation<boolean>({ reducer: (_, value) => value, default: () => true })
@@ -571,6 +584,8 @@ export class FlowCoordinatorHost {
     }
     // AF-01：固定顺序模式——由声明阶段与进入条件确定性推进，不调用主控模型。
     if (run.config.executionMode === 'fixed-order') return this.fixedOrderStep(run, input, signal)
+    // O4-P3：图模式——由声明式图路由确定性推进，只认交付事实，不调用主控模型。
+    if (run.config.executionMode === 'graph') return this.graphStep(run, input, signal)
     if (run.decisions + (run.controlSteps ?? 0) >= run.config.maxSteps)
       throw new AgentRuntimeError('AGENT_BUDGET_EXHAUSTED', 'coordination')
     const available = [] as Array<{ nodeId: string; goal: string; inputs: FlowAgentReply['refs'] }>
@@ -930,6 +945,125 @@ export class FlowCoordinatorHost {
       contextManifest ? new Map([[next.nodeId, contextManifest]]) : undefined,
       envelope ? new Map([[next.nodeId, envelope]]) : undefined
     )
+  }
+
+  /**
+   * O4-P3：图模式单步——声明式图路由（nextReadyNodes）决定下一可分派节点。
+   * 只认已交付事实 + 声明式条件，不调用主控模型、不接受模型文字改路由。
+   * 每步分派一个就绪节点（与 fixed-order 同构），完成后再评估；条件分支/汇合由路由决定。
+   */
+  private async graphStep(
+    run: CoordinationRun,
+    input: FlowAgentRun,
+    signal: AbortSignal
+  ): Promise<boolean> {
+    const graph = run.config.graph!
+    const facts = this.graphFacts(run)
+    const delivered = new Set(
+      run.children
+        .filter((child) => child.state === 'completed' && child.outputs.length)
+        .map((child) => child.nodeId)
+    )
+    if (isFlowComplete(graph, delivered)) {
+      const exitChild = run.children.find(
+        (child) =>
+          graph.exits.includes(child.nodeId) && child.state === 'completed' && child.outputs.length
+      )!
+      this.assets.resolveInputs(run.projectId, exitChild.outputs)
+      run.outputs = exitChild.outputs
+      this.emitTrustedEvent(
+        run,
+        `${run.taskId}:completed${run.reworkRound ? `:${run.reworkRound}` : ''}`,
+        'flow.completed',
+        run.revision
+      )
+      run.state = 'completed'
+      this.store.save(run)
+      return false
+    }
+    const { ready } = nextReadyNodes(graph, facts, delivered)
+    const dispatched = new Set(run.children.map((child) => child.nodeId))
+    const next = graph.nodes.find((node) => ready.includes(node.nodeId) && !dispatched.has(node.nodeId))
+    if (!next) {
+      // 无就绪未分派节点：等待人工/审核或阻塞，不静默放行。
+      return this.wait(run, 'human.wait')
+    }
+    if (run.decisions + (run.controlSteps ?? 0) >= run.config.maxSteps)
+      throw new AgentRuntimeError('AGENT_BUDGET_EXHAUSTED', 'coordination')
+    let contextManifest: ContextManifest | undefined
+    if (next.inputs) {
+      contextManifest = buildContextManifest(next.nodeId, next.inputs, facts.deliveries)
+      if (contextManifestBlocking(contextManifest))
+        throw new AgentRuntimeError(
+          contextManifest.budget.exceeded ? 'FLOW_CONTEXT_OVER_BUDGET' : 'FLOW_CONTEXT_REQUIRED_MISSING',
+          'graph-context'
+        )
+    }
+    const candidate = this.specialists.describeAssignment(
+      {
+        ...input,
+        nodeId: next.nodeId,
+        action: 'start',
+        requestId: hash([run.taskId, next.nodeId, ...(run.reworkRound ? [run.reworkRound] : [])])
+      },
+      true
+    )
+    const candidates = new Map<string, AgentTaskSnapshot>([[next.nodeId, candidate]])
+    run.decisions++
+    this.store.save(run)
+    emitGatewayEvent(
+      'agent.coordination.graph_dispatched',
+      '按声明式图路由分派节点',
+      {
+        projectId: run.projectId,
+        nodeId: run.nodeId,
+        taskId: run.taskId,
+        traceId: run.traceId,
+        spanId: run.spanId
+      },
+      { attributes: { carrierNodeId: next.nodeId, inputCount: candidate.directInputs.length } }
+    )
+    const envelope = composeExecutionEnvelope({
+      stageGoal: next.goal,
+      outputRequirements: next.completion
+    })
+    return this.dispatchDecision(
+      run,
+      {
+        kind: 'dispatch',
+        nodeId: next.nodeId,
+        goal: next.goal,
+        completion: next.completion,
+        inputs: candidate.directInputs
+      },
+      candidates,
+      signal,
+      contextManifest ? new Map([[next.nodeId, contextManifest]]) : undefined,
+      envelope ? new Map([[next.nodeId, envelope]]) : undefined
+    )
+  }
+
+  /** O4-P3：图模式交付事实——stageKey 即节点 id（路由条件按节点 id 引用）。只读权威资产与续接记录。 */
+  private graphFacts(run: CoordinationRun): StageEntryFacts {
+    const deliveries: StageDeliveryFact[] = []
+    for (const child of run.children) {
+      if (child.state !== 'completed') continue
+      const versions = this.assets.resolveInputs(run.projectId, child.outputs)
+      deliveries.push({
+        stageKey: child.nodeId,
+        nodeId: child.nodeId,
+        outputs: versions.map((version) => version.value),
+        humanDecided: this.specialists.humanDecision(
+          { projectId: run.projectId, nodeId: child.nodeId },
+          run.taskId,
+          child.taskId
+        )
+      })
+    }
+    return {
+      deliveries,
+      reviews: (run.reviews ?? []).map((review) => ({ nodeId: review.nodeId, state: review.state }))
+    }
   }
 
   /** 由权威资产与续接记录构造阶段交付事实（不接受调用方正文）。 */
