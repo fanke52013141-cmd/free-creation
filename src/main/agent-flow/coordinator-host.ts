@@ -1033,6 +1033,82 @@ export class FlowCoordinatorHost {
     }
     if (run.decisions + (run.controlSteps ?? 0) >= run.config.maxSteps)
       throw new AgentRuntimeError('AGENT_BUDGET_EXHAUSTED', 'coordination')
+    // ③：并行 fork——多个就绪 agent 节点（无循环、无 capability/human-task 混入）一次性
+    // 并发分派（dispatch-many → assignmentWaves 按 maxParallelTasks 真并发），而非逐个串行。
+    const readyDispatchable = graph.nodes.filter(
+      (node) =>
+        ready.includes(node.nodeId) &&
+        (!dispatched.has(node.nodeId) ||
+          loopNeedsAnotherIteration(node, facts, delivered, loopIterations))
+    )
+    const readyAgents = readyDispatchable.filter((node) => node.kind === 'agent' && !node.loop)
+    if (
+      readyAgents.length >= 2 &&
+      readyAgents.length <= 4 &&
+      readyAgents.length === readyDispatchable.length
+    ) {
+      const candidates = new Map<string, AgentTaskSnapshot>()
+      const contextManifests = new Map<string, ContextManifest>()
+      const envelopes = new Map<string, ExecutionEnvelope>()
+      const assignments = readyAgents.map((node) => {
+        if (node.inputs) {
+          const manifest = buildContextManifest(node.nodeId, node.inputs, facts.deliveries)
+          if (contextManifestBlocking(manifest))
+            throw new AgentRuntimeError(
+              manifest.budget.exceeded ? 'FLOW_CONTEXT_OVER_BUDGET' : 'FLOW_CONTEXT_REQUIRED_MISSING',
+              'graph-context'
+            )
+          contextManifests.set(node.nodeId, manifest)
+        }
+        const candidate = this.specialists.describeAssignment(
+          {
+            ...input,
+            nodeId: node.nodeId,
+            action: 'start',
+            requestId: hash([
+              run.taskId,
+              node.nodeId,
+              ...(run.reworkRound ? [run.reworkRound] : [])
+            ])
+          },
+          true
+        )
+        candidates.set(node.nodeId, candidate)
+        const envelope = composeExecutionEnvelope({
+          stageGoal: node.goal,
+          outputRequirements: node.completion
+        })
+        if (envelope) envelopes.set(node.nodeId, envelope)
+        return {
+          nodeId: node.nodeId,
+          goal: node.goal,
+          completion: node.completion,
+          inputs: candidate.directInputs
+        }
+      })
+      run.decisions++
+      this.store.save(run)
+      emitGatewayEvent(
+        'agent.coordination.graph_dispatched',
+        '按声明式图路由并发分派节点',
+        {
+          projectId: run.projectId,
+          nodeId: run.nodeId,
+          taskId: run.taskId,
+          traceId: run.traceId,
+          spanId: run.spanId
+        },
+        { attributes: { kind: 'parallel-fork', carrierNodeIds: readyAgents.map((n) => n.nodeId).join(',') } }
+      )
+      return this.dispatchDecision(
+        run,
+        { kind: 'dispatch-many', assignments },
+        candidates,
+        signal,
+        contextManifests,
+        envelopes
+      )
+    }
     // ②：capability 图节点直接执行（复用 node.execute 账本端口），不经 agent 分派。
     if (next.kind === 'capability') {
       return this.dispatchCapability(run, next, graph, loopIterations, signal)

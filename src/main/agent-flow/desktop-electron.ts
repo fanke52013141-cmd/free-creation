@@ -69,6 +69,7 @@ const collaboration = process.argv.includes('--collaboration')
 const coordination = process.argv.includes('--coordination')
 const capabilityGraph = process.argv.includes('--capability-graph')
 const humanTaskGraph = process.argv.includes('--human-task-graph')
+const parallelGraph = process.argv.includes('--parallel-graph')
 const agentHum07Pause = process.argv.includes('--agent-hum07-pause')
 const recovery = process.argv.includes('--recovery')
 const builderParallelMode = process.argv.includes('--builder-parallel')
@@ -2463,6 +2464,45 @@ if (
           const htChild=root.children.find(c=>c.nodeId==='shape:ht-task');
           if(!htChild||htChild.state!=='completed')throw new Error('HT_CHILD_NOT_COMPLETED');
           return {status:'pass',projectId,rootTaskId:root.taskId,htRunStatus:htRun.status,htChildState:htChild.state,checks:['human-task graph node waits for human submission (no fake success)','human submission applies via C4 executor on continue','graph routing adopts human delivery as final output','coordinator completes after human resume']};
+        })()`)
+      } else if (parallelGraph) {
+        report = await active.webContents.executeJavaScript(`(async()=>{
+          const projectId=${JSON.stringify(projectId)};
+          const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;
+          const {ensureCanvasSaved}=await import('/src/canvas/flow-asset-actions.ts');
+          const value=(reply)=>{if(!reply.ok)throw new Error(reply.error.code);return reply.data};
+          const delay=()=>new Promise(r=>setTimeout(r,150));
+          const graph={schemaVersion:1,graphId:'pg',name:'并行图',goal:'种子后两分支并发',nodes:[{nodeId:'shape:pg-seed',title:'种子',participation:'autonomous',kind:'agent',goal:'执行处理并交付',completion:'交付处理结果'},{nodeId:'shape:pg-a',title:'分支A',participation:'autonomous',kind:'agent',goal:'执行处理并交付',completion:'交付处理结果'},{nodeId:'shape:pg-b',title:'分支B',participation:'autonomous',kind:'agent',goal:'执行处理并交付',completion:'交付处理结果'}],edges:[{from:{nodeId:'shape:pg-seed',portId:'out-text'},to:{nodeId:'shape:pg-a',portId:'in-text'},kind:'data'},{from:{nodeId:'shape:pg-seed',portId:'out-text'},to:{nodeId:'shape:pg-b',portId:'in-text'},kind:'data'}],entry:'shape:pg-seed',exits:['shape:pg-a','shape:pg-b']};
+          const specialist=(target)=>({schemaVersion:1,role:'specialist',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'node.execute',version:'1'}],allowedNodeIds:[target],maxSteps:8,relations:[]});
+          const rootConfig={schemaVersion:1,role:'coordinator',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'agent.dispatch',version:'1'}],allowedNodeIds:['shape:pg-seed','shape:pg-a','shape:pg-b'],maxSteps:12,maxParallelTasks:2,executionMode:'graph',graph,relations:[{relationId:'state',kind:'observes',sourceNodeId:'shape:pg-root',targetNodeId:'shape:pg-state'}]};
+          const stateConfig={schemaVersion:1,initialState:'draft',states:['draft','working','waiting','completed'],transitions:[{from:'draft',event:'flow.started',to:'working'},...['agent.dispatched','agent.completed','human.wait','flow.paused','flow.completed'].map(event=>({from:'working',event,to:event==='flow.completed'?'completed':['human.wait','flow.paused'].includes(event)?'waiting':'working'})),{from:'waiting',event:'human.continue',to:'working'}],relations:[]};
+          const nodes=[
+            {id:'shape:pg-source',nodeType:'text',title:'材料',text:'private-pg-material',x:50,y:80},
+            {id:'shape:pg-seed',nodeType:'agent',title:'种子 Agent',text:'执行 shape:pg-pseed 两次并观察真实回执，用第二次 committed 回执的 outputRefs 完成。',config:JSON.stringify(specialist('shape:pg-pseed')),x:450,y:80},
+            {id:'shape:pg-a',nodeType:'agent',title:'分支A Agent',text:'执行 shape:pg-pa 两次并观察真实回执，用第二次 committed 回执的 outputRefs 完成。',config:JSON.stringify(specialist('shape:pg-pa')),x:850,y:80},
+            {id:'shape:pg-b',nodeType:'agent',title:'分支B Agent',text:'执行 shape:pg-pb 两次并观察真实回执，用第二次 committed 回执的 outputRefs 完成。',config:JSON.stringify(specialist('shape:pg-pb')),x:850,y:400},
+            {id:'shape:pg-pseed',nodeType:'processor',title:'种子处理',config:JSON.stringify({operation:'pass'}),x:450,y:650},
+            {id:'shape:pg-pa',nodeType:'processor',title:'分支A处理',config:JSON.stringify({operation:'pass'}),x:1250,y:80},
+            {id:'shape:pg-pb',nodeType:'processor',title:'分支B处理',config:JSON.stringify({operation:'pass'}),x:1250,y:400},
+            {id:'shape:pg-root',nodeType:'agent',title:'主 Agent',text:'按声明式图路由：种子完成后两分支并发执行。',config:JSON.stringify(rootConfig),x:50,y:400},
+            {id:'shape:pg-state',nodeType:'state-machine',title:'Flow 阶段',config:JSON.stringify(stateConfig),x:50,y:700}
+          ];
+          nodes.forEach(({id,x,y,...props})=>editor.createShape({id,type:'node-card',x,y,props}));
+          const {createEdge}=await import('/src/canvas/graph.ts');
+          for(const [from,port,to,target] of [['shape:pg-source','out-text','shape:pg-seed','in-text'],['shape:pg-source','out-text','shape:pg-pseed','in-value'],['shape:pg-seed','out-text','shape:pg-a','in-text'],['shape:pg-seed','out-text','shape:pg-b','in-text'],['shape:pg-source','out-text','shape:pg-pa','in-value'],['shape:pg-source','out-text','shape:pg-pb','in-value']])if(!createEdge(editor,{shapeId:from,portId:port},{shapeId:to,portId:target}))throw new Error('PG_EDGE_MISSING');
+          await ensureCanvasSaved();await delay();
+          const button=document.querySelector('[data-node-id="shape:pg-root"] .node-standard-primary');if(!button||button.disabled)throw new Error('PG_ROOT_BUTTON_UNAVAILABLE');button.click();
+          const inspectRoot=()=>window.api.inspectFlowAgent({projectId,nodeId:'shape:pg-root'}).then(value);
+          let root;for(let i=0;i<1800;i++){root=await inspectRoot();if(root?.state==='completed')break;if(root&&['blocked','failed'].includes(root.state))throw new Error(root.code||'PG_ROOT_FAILED');await delay();}
+          if(root?.state!=='completed')throw new Error('PG_ROOT_TIMEOUT');
+          await ensureCanvasSaved();
+          const paRun=editor.getShape('shape:pg-pa').meta.nodeRun;
+          const pbRun=editor.getShape('shape:pg-pb').meta.nodeRun;
+          if(paRun?.status!=='success'||pbRun?.status!=='success')throw new Error('PG_BRANCH_NOT_EXECUTED');
+          const childA=root.children.find(c=>c.nodeId==='shape:pg-a');
+          const childB=root.children.find(c=>c.nodeId==='shape:pg-b');
+          if(!childA||childA.state!=='completed'||!childB||childB.state!=='completed')throw new Error('PG_BRANCH_CHILD_NOT_COMPLETED');
+          return {status:'pass',projectId,rootTaskId:root.taskId,branchA:paRun.status,branchB:pbRun.status,checks:['graph fan-out dispatches multiple ready agent nodes concurrently (dispatch-many)','both parallel branches execute via assignmentWaves','graph routing joins branch deliveries and completes']};
         })()`)
       } else if (coordination) {
         if (recovery && phase === 'reopen') {
