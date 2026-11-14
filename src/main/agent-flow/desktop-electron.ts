@@ -68,6 +68,7 @@ if (video || videoReview || mediaReview || parallelMedia)
 const collaboration = process.argv.includes('--collaboration')
 const coordination = process.argv.includes('--coordination')
 const capabilityGraph = process.argv.includes('--capability-graph')
+const humanTaskGraph = process.argv.includes('--human-task-graph')
 const agentHum07Pause = process.argv.includes('--agent-hum07-pause')
 const recovery = process.argv.includes('--recovery')
 const builderParallelMode = process.argv.includes('--builder-parallel')
@@ -2420,6 +2421,48 @@ if (
           if(!capChild||capChild.state!=='completed')throw new Error('CG_CAP_CHILD_NOT_COMPLETED');
           if(!capShape.meta.nodeResult)throw new Error('CG_CAP_NO_OUTPUT');
           return {status:'pass',projectId,rootTaskId:root.taskId,capRunStatus:capRun.status,capChildState:capChild.state,checks:['capability graph node executes via the shared node.execute ledger port','graph routing adopts the capability delivery as final output','coordinator completes in graph mode']};
+        })()`)
+      } else if (humanTaskGraph) {
+        report = await active.webContents.executeJavaScript(`(async()=>{
+          const projectId=${JSON.stringify(projectId)};
+          const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;
+          const {ensureCanvasSaved}=await import('/src/canvas/flow-asset-actions.ts');
+          const value=(reply)=>{if(!reply.ok)throw new Error(reply.error.code);return reply.data};
+          const delay=()=>new Promise(r=>setTimeout(r,150));
+          const graph={schemaVersion:1,graphId:'htg',name:'人工图',goal:'先分析再人工交付',nodes:[{nodeId:'shape:ht-first',title:'分析',participation:'autonomous',kind:'agent',goal:'执行处理并交付',completion:'交付处理结果'},{nodeId:'shape:ht-task',title:'人工交付',participation:'human',kind:'human-task',goal:'人工确认并交付',completion:'人工提交结果'}],edges:[{from:{nodeId:'shape:ht-first',portId:'out-text'},to:{nodeId:'shape:ht-task',portId:'in-text'},kind:'data'}],entry:'shape:ht-first',exits:['shape:ht-task']};
+          const specialist={schemaVersion:1,role:'specialist',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'node.execute',version:'1'}],allowedNodeIds:['shape:ht-p1'],maxSteps:8,relations:[]};
+          const rootConfig={schemaVersion:1,role:'coordinator',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'agent.dispatch',version:'1'}],allowedNodeIds:['shape:ht-first','shape:ht-task'],maxSteps:8,executionMode:'graph',graph,relations:[{relationId:'state',kind:'observes',sourceNodeId:'shape:ht-root',targetNodeId:'shape:ht-state'}]};
+          const stateConfig={schemaVersion:1,initialState:'draft',states:['draft','working','waiting','completed'],transitions:[{from:'draft',event:'flow.started',to:'working'},...['agent.dispatched','agent.completed','human.wait','flow.paused','flow.completed'].map(event=>({from:'working',event,to:event==='flow.completed'?'completed':['human.wait','flow.paused'].includes(event)?'waiting':'working'})),{from:'waiting',event:'human.continue',to:'working'}],relations:[]};
+          const nodes=[
+            {id:'shape:ht-source',nodeType:'text',title:'材料',text:'private-ht-material',x:50,y:80},
+            {id:'shape:ht-first',nodeType:'agent',title:'分析 Agent',text:'执行 shape:ht-p1 两次并观察真实回执，用第二次 committed 回执的 outputRefs 完成，不等待人。',config:JSON.stringify(specialist),x:450,y:80},
+            {id:'shape:ht-p1',nodeType:'processor',title:'分析处理',config:JSON.stringify({operation:'pass'}),x:450,y:650},
+            {id:'shape:ht-task',nodeType:'human-task',title:'人工交付',text:'请人工确认并交付结果。',config:JSON.stringify({schemaVersion:1,outputType:'text',instructions:'人工确认并交付'}),x:850,y:650},
+            {id:'shape:ht-root',nodeType:'agent',title:'主 Agent',text:'按声明式图路由：先分析 Agent，再人工交付节点。',config:JSON.stringify(rootConfig),x:50,y:400},
+            {id:'shape:ht-state',nodeType:'state-machine',title:'Flow 阶段',config:JSON.stringify(stateConfig),x:1250,y:80}
+          ];
+          nodes.forEach(({id,x,y,...props})=>editor.createShape({id,type:'node-card',x,y,props}));
+          const {createEdge}=await import('/src/canvas/graph.ts');
+          for(const [from,port,to,target] of [['shape:ht-source','out-text','shape:ht-first','in-text'],['shape:ht-source','out-text','shape:ht-p1','in-value'],['shape:ht-first','out-text','shape:ht-task','in-text']])if(!createEdge(editor,{shapeId:from,portId:port},{shapeId:to,portId:target}))throw new Error('HT_EDGE_MISSING');
+          await ensureCanvasSaved();await delay();
+          const button=document.querySelector('[data-node-id="shape:ht-root"] .node-standard-primary');if(!button||button.disabled)throw new Error('HT_ROOT_BUTTON_UNAVAILABLE');button.click();
+          const inspectRoot=()=>window.api.inspectFlowAgent({projectId,nodeId:'shape:ht-root'}).then(value);
+          let root;for(let i=0;i<1800;i++){root=await inspectRoot();if(root?.state==='waiting')break;if(root&&['blocked','failed'].includes(root.state))throw new Error(root.code||'HT_ROOT_FAILED');if(root?.state==='completed')throw new Error('HT_COMPLETED_BEFORE_HUMAN');await delay();}
+          if(root?.state!=='waiting')throw new Error('HT_ROOT_NOT_WAITING');
+          const htShape=editor.getShape('shape:ht-task');
+          const instance=JSON.parse(String(htShape.meta.humanTask||'{"revision":1}'));
+          editor.updateShape({id:'shape:ht-task',type:'node-card',meta:{humanTaskPending:JSON.stringify({submissionId:'ht-submission-1',expectedRevision:instance.revision,value:{kind:'text',text:'人工交付结果'}})}});
+          await ensureCanvasSaved();await delay();
+          let resumeButton;for(let i=0;i<40;i++){resumeButton=[...document.querySelectorAll('[data-node-id="shape:ht-root"] button')].find(b=>b.textContent.trim()==='确认并继续');if(resumeButton)break;await delay();}
+          if(!resumeButton)throw new Error('HT_RESUME_BUTTON_MISSING');resumeButton.click();
+          for(let i=0;i<1800;i++){root=await inspectRoot();if(root?.state==='completed')break;if(root&&['blocked','failed'].includes(root.state))throw new Error(root.code||'HT_ROOT_FAILED_AFTER_HUMAN');await delay();}
+          if(root?.state!=='completed')throw new Error('HT_ROOT_TIMEOUT');
+          await ensureCanvasSaved();
+          const htRun=editor.getShape('shape:ht-task').meta.nodeRun;
+          if(htRun?.status!=='success')throw new Error('HT_TASK_NOT_EXECUTED');
+          const htChild=root.children.find(c=>c.nodeId==='shape:ht-task');
+          if(!htChild||htChild.state!=='completed')throw new Error('HT_CHILD_NOT_COMPLETED');
+          return {status:'pass',projectId,rootTaskId:root.taskId,htRunStatus:htRun.status,htChildState:htChild.state,checks:['human-task graph node waits for human submission (no fake success)','human submission applies via C4 executor on continue','graph routing adopts human delivery as final output','coordinator completes after human resume']};
         })()`)
       } else if (coordination) {
         if (recovery && phase === 'reopen') {

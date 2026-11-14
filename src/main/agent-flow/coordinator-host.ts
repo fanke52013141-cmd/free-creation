@@ -289,8 +289,8 @@ export class FlowCoordinatorHost {
     for (const id of childIds) {
       const child = shape(file, id)
       const graphNode = graphMode ? config.graph!.nodes.find((node) => node.nodeId === id) : undefined
-      // ②：capability 子节点是处理器节点（直接执行），不是 agent specialist，跳过 agent 契约校验。
-      if (graphNode?.kind === 'capability') {
+      // ②：capability/human-task 子节点非 agent specialist（处理器/纯人工），跳过 agent 契约校验。
+      if (graphNode?.kind === 'capability' || graphNode?.kind === 'human-task') {
         if (child.props.nodeType === 'agent' || id === input.nodeId)
           throw new AgentRuntimeError('FLOW_COORDINATOR_SCOPE_INVALID', 'scope')
         controls.add(id)
@@ -324,11 +324,15 @@ export class FlowCoordinatorHost {
           throw new AgentRuntimeError('FLOW_STAGE_HUMAN_MODE_REQUIRED', 'scope')
       }
     }
-    // O4-P3/②：图模式支持 agent + capability 节点路由（human-task 随后阶段）；
+    // O4-P3/②：图模式支持 agent + capability + human-task 节点路由（review 门禁返工属后续）；
     // 图节点承载必须与子节点一一对应；路由只认交付事实（见 graphStep）。
     if (graphMode) {
       const graph = config.graph!
-      if (graph.nodes.some((node) => node.kind !== 'agent' && node.kind !== 'capability'))
+      if (
+        graph.nodes.some(
+          (node) => node.kind !== 'agent' && node.kind !== 'capability' && node.kind !== 'human-task'
+        )
+      )
         throw new AgentRuntimeError('FLOW_GRAPH_NODE_KIND_UNSUPPORTED', 'scope')
       const graphNodeIds = new Set(graph.nodes.map((node) => node.nodeId))
       if (graphNodeIds.size !== childIds.length || childIds.some((id) => !graphNodeIds.has(id)))
@@ -489,7 +493,10 @@ export class FlowCoordinatorHost {
         c.state === 'waiting' &&
         !run.reviews?.some(
           (review) => review.responsibleNodeId === c.nodeId && review.state === 'human-wait'
-        )
+        ) &&
+        // ②：capability/human-task 图节点由 graphStep 直接执行/停等，不走 agent 停等续跑。
+        (run.config.graph?.nodes.find((node) => node.nodeId === c.nodeId)?.kind ?? 'agent') ===
+          'agent'
     )
     let pendingWait = false
     let pendingProgress = false
@@ -1015,7 +1022,10 @@ export class FlowCoordinatorHost {
       (node) =>
         ready.includes(node.nodeId) &&
         (!dispatched.has(node.nodeId) ||
-          loopNeedsAnotherIteration(node, facts, delivered, loopIterations))
+          loopNeedsAnotherIteration(node, facts, delivered, loopIterations) ||
+          // ②：human-task 停等后人工已提交（续跑）→ 重新分派以应用提交并投影交付。
+          (node.kind === 'human-task' &&
+            run.children.some((child) => child.nodeId === node.nodeId && child.state === 'waiting')))
     )
     if (!next) {
       // 无就绪未分派节点：等待人工/审核或阻塞，不静默放行。
@@ -1026,6 +1036,10 @@ export class FlowCoordinatorHost {
     // ②：capability 图节点直接执行（复用 node.execute 账本端口），不经 agent 分派。
     if (next.kind === 'capability') {
       return this.dispatchCapability(run, next, graph, loopIterations, signal)
+    }
+    // ②：human-task 图节点停等人工提交（C4 执行器），提交后续跑重新分派应用。
+    if (next.kind === 'human-task') {
+      return this.dispatchHumanTask(run, next, graph, signal)
     }
     let contextManifest: ContextManifest | undefined
     if (next.inputs) {
@@ -1190,6 +1204,119 @@ export class FlowCoordinatorHost {
     this.store.save(run)
     this.emitTrustedEvent(run, `${taskId}:completed`, 'agent.completed', run.revision)
     return true
+  }
+
+  /**
+   * ②：human-task 图节点停等人工提交。经 node.execute 同一账本端口触发 C4 执行器：
+   * 无待提交→skipped（停等，不伪造成功）；人工经 humanTask.submit 写 pending 后续跑重新
+   * 分派（新 commandId）→执行器应用提交→committed 投影交付。路由只认交付事实。
+   */
+  private async dispatchHumanTask(
+    run: CoordinationRun,
+    next: FlowNode,
+    graph: FlowGraph,
+    signal: AbortSignal
+  ): Promise<boolean> {
+    const file = this.check(run)
+    const node = file.nodes.find((item) => item.id === next.nodeId)
+    if (!node) throw new AgentRuntimeError('FLOW_GRAPH_SCOPE_INVALID', 'graph-human-task')
+    const taskId = hash([
+      run.taskId,
+      next.nodeId,
+      ...(run.reworkRound ? [run.reworkRound] : [])
+    ])
+    // 每次分派用新 commandId：上一轮 skipped 已终态释放占用，续跑重新交付执行以应用人工提交。
+    const commandId = `graph:${hash([run.taskId, next.nodeId, 'human', run.decisions])}`
+    const inputPorts = node.ports.filter((port) => port.dir === 'in')
+    const incoming = graph.edges.filter(
+      (edge) => edge.to.nodeId === next.nodeId && edge.kind === 'data'
+    )
+    const inputs = incoming.map((edge, index) => {
+      const upstream = run.children
+        .filter((child) => child.nodeId === edge.from.nodeId && child.state === 'completed')
+        .at(-1)
+      if (!upstream) throw new AgentRuntimeError('FLOW_HANDOFF_INPUT_REJECTED', 'graph-human-task')
+      const port = inputPorts[index] ?? inputPorts[0]
+      if (!port) throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'graph-human-task')
+      const { ref } = this.assets.submit({
+        projectId: run.projectId,
+        nodeId: edge.from.nodeId,
+        portId: edge.from.portId,
+        submissionId: `${taskId}:human-input:${index}:${run.decisions}`,
+        expectedGraphVersion: file.meta.graphVersion,
+        traceId: run.traceId,
+        spanId: run.spanId
+      })
+      return { targetPortId: port.id, assets: [ref] }
+    })
+    let child = run.children.find((item) => item.nodeId === next.nodeId)
+    if (!child) {
+      child = {
+        nodeId: next.nodeId,
+        taskId,
+        goal: next.goal,
+        completion: next.completion,
+        inputs: [],
+        state: 'ready',
+        outputs: []
+      }
+      run.children.push(child)
+    }
+    run.decisions++
+    this.store.save(run)
+    this.emitTrustedEvent(run, `${taskId}:dispatch:${run.decisions}`, 'agent.dispatched', run.revision)
+    emitGatewayEvent(
+      'agent.coordination.graph_dispatched',
+      '按声明式图路由分派节点',
+      {
+        projectId: run.projectId,
+        nodeId: run.nodeId,
+        taskId: run.taskId,
+        traceId: run.traceId,
+        spanId: run.spanId
+      },
+      { attributes: { carrierNodeId: next.nodeId, kind: 'human-task', inputCount: inputs.length } }
+    )
+    let receipt
+    try {
+      receipt = await this.specialists.executeNodeCommand(
+        {
+          schemaVersion: 1,
+          kind: 'node.execute',
+          commandId,
+          projectId: run.projectId,
+          taskId,
+          agentNodeId: run.nodeId,
+          targetNodeId: next.nodeId,
+          contractVersion: node.contractVersion,
+          inputs,
+          expectedSemanticRevision: projectSemanticRevision(file),
+          traceId: run.traceId,
+          spanId: run.spanId
+        },
+        signal
+      )
+    } catch (error) {
+      child.state = 'blocked'
+      this.store.save(run)
+      throw new AgentRuntimeError(
+        error instanceof Error ? error.message : 'FLOW_CHILD_BLOCKED',
+        'graph-human-task'
+      )
+    }
+    if (signal.aborted || this.store.latest(run.projectId, run.nodeId)!.state === 'cancelled')
+      return false
+    if (receipt.state === 'committed') {
+      child.state = 'completed'
+      child.outputs = receipt.outputRefs
+      this.store.save(run)
+      this.emitTrustedEvent(run, `${taskId}:completed`, 'agent.completed', run.revision)
+      return true
+    }
+    // skipped/pending：停等人工提交，不伪造成功；续跑后重新分派应用提交。
+    child.state = 'waiting'
+    this.store.save(run)
+    return this.wait(run, 'human.wait')
   }
 
   /** O4-P3/P4：图模式交付事实——stageKey 即节点 id；循环节点取最近一次迭代交付。只读权威资产与续接记录。 */

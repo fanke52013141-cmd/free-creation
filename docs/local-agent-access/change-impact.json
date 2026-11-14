@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "Three-form nodes phase 1: graph mode executes capability nodes directly via the shared node.execute ledger port (admission allows capability, dispatchCapability uses assets.submit for edge-consistent input refs, graphFacts/view skip agent-only queries for capability children); compiler remaps capability edge ports. No new external op; internal execution semantics only.",
+  "reason": "Three-form nodes phase 2: graph mode executes human-task nodes via C4 stop-wait (dispatchHumanTask: node.execute ledger port, skipped=waiting no fake success, human submission applies on continue re-dispatch with fresh commandId/submissionId/eventId); step pending-children loop and graphFacts/view skip agent-only queries for non-agent graph children. No new external op.",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -56,10 +56,10 @@
     "src/main/agent-flow/command-ledger.ts": "4742719adb46cd60f629a3ac862e554ff25b4b68f98d24310300ef9f581c3e57",
     "src/main/agent-flow/commands-electron.ts": "d44a8868e0440c01e832dcc918fd1a2bf51dd684357a168a513a5b906e83c7f4",
     "src/main/agent-flow/coordination-store.ts": "92b15b8eb95fa5f8aee20f7d6fe3f937970425eb0933b0fc5f41688a650c1053",
-    "src/main/agent-flow/coordinator-host.ts": "0c34616abaf706ada0df21a4889d2a354832312fb85b0129c3bc3e0c850a3fbf",
+    "src/main/agent-flow/coordinator-host.ts": "b22c13014ac22f5ec5fa6909fc096a127d86a947138236290bfd6f225e3f2aeb",
     "src/main/agent-flow/coordinator-reviews.ts": "10aca117dd2b661cabea7e1299a7dec2e5e8ad177720df2e70c844af29f7af5d",
     "src/main/agent-flow/definition-store.ts": "7dd795982f57b98af2842976892c3e21a03e16aeba365d1bc06b68be6e1a399f",
-    "src/main/agent-flow/desktop-electron.ts": "55fb268fe0aee8e6c1a5bdb728b759e76391ba6343fb872ce415c1d44f936bbb",
+    "src/main/agent-flow/desktop-electron.ts": "a80fba69c1ebaed0bd853f20ba8d1146b566139b7e5ce51def10f2a9362b1717",
     "src/main/agent-flow/desktop-host.ts": "d5941102bda3a225b3acbd9b15b6998f7114d2e30da5f0240874a792d6cf5b26",
     "src/main/agent-flow/image-assets.ts": "a31ed9411d136d0510d5cc863936304f33ac1ce4df143de78f8d1d11c4151bfb",
     "src/main/agent-flow/ledger-tool.ts": "65fc4a21aefa10e02a79b37a70f907ef2c7e7f17814b71168f421e4a21f53524",
