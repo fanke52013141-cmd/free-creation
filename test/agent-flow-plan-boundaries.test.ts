@@ -49,8 +49,8 @@ const step = { title: 'isolated', goal: 'format input', mode: 'autonomous', temp
 describe('BLD-04 bounded topology admission', () => {
   it.each([
     [1, true],
-    [4, true],
-    [5, false]
+    [8, true],
+    [9, false]
   ])('sequential steps=%i accepted=%s', (count, accepted) => {
     expect(
       BuildPlanSchema.safeParse({
@@ -63,9 +63,8 @@ describe('BLD-04 bounded topology admission', () => {
   it.each([
     [1, false],
     [2, true],
-    [3, true],
-    [4, true],
-    [5, false]
+    [8, true],
+    [9, false]
   ])('parallel branches=%i accepted=%s', (count, accepted) => {
     expect(
       BuildPlanSchema.safeParse({

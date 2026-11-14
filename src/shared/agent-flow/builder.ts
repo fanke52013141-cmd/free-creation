@@ -3,6 +3,7 @@ import { z } from 'zod'
 /** Closed set of buildable capabilities; the host owns every node/port/config mapping. */
 export const FLOW_BUILDER_CAPABILITY_CATALOG = [
   { id: 'text-template@1', input: 'text', output: 'text' },
+  { id: 'text-pass@1', input: 'text', output: 'text' },
   { id: 'image-gen@3', input: 'text', output: 'image' },
   { id: 'image-edit@2', input: 'image', output: 'image' },
   { id: 'video@7', input: 'text', output: 'video' },
@@ -44,6 +45,8 @@ const buildStep = z
       })
     if (step.capability !== 'text-template@1' && step.template !== undefined)
       context.addIssue({ code: 'custom', message: 'Only text-template accepts template' })
+    if (step.capability === 'text-pass@1' && step.instruction !== undefined)
+      context.addIssue({ code: 'custom', message: 'text-pass does not accept an instruction' })
     if (step.review && !['text-template@1', 'video@7'].includes(step.capability))
       context.addIssue({
         code: 'custom',
@@ -55,7 +58,7 @@ export const BuildPlanSchema = z
   .object({
     title: z.string().trim().min(1).max(120),
     topology: z.enum(['sequential', 'parallel-fork']).default('sequential'),
-    steps: z.array(buildStep).min(1).max(4)
+    steps: z.array(buildStep).min(1).max(8)
   })
   .strict()
   .superRefine((plan, context) => {
@@ -77,7 +80,11 @@ export const BuildPlanSchema = z
       }
     } else {
       for (const [index, step] of plan.steps.entries())
-        if (!['text-template@1', 'image-gen@3', 'video@7', 'speech@4'].includes(step.capability))
+        if (
+          !['text-template@1', 'text-pass@1', 'image-gen@3', 'video@7', 'speech@4'].includes(
+            step.capability
+          )
+        )
           context.addIssue({
             code: 'custom',
             path: ['steps', index, 'capability'],

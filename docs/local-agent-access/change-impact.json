@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "O3 unified flow-run overview: add read-only flowRun.overview op (CoordinationStore.overview aggregates run state/phase/revision/children + replayable event timeline with user/agent source attribution). Read-only projection; authority remains command ledger and run instance; no write side effect; backward compatible (new op only).",
+  "reason": "O4 builder expressiveness increment: add text-pass@1 capability (processor pass-through, text to text), relax BuildPlan steps max 4 to 8, add text-pass instruction rejection. Backward compatible: new capability is additive and existing valid plans remain valid; relaxed limit only admits longer plans; host budget check (boundedWork vs maxSteps) still guards execution.",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -43,7 +43,7 @@
     "src/main/agent-flow/agent-output-set-acceptance.ts": "4877ac363a2879d36e56593070f6b41ea5f49cf941e07f835535590c7bce71a4",
     "src/main/agent-flow/asset-store.ts": "1102677efec80d9cbe79427fceda3ccada7c4871639a45ffeea9bcce6ecc56d7",
     "src/main/agent-flow/assets-electron.ts": "ce551489bc925258e4f3155e28dd86f564ea53cda8d6d196752375ae55bf5c4e",
-    "src/main/agent-flow/builder-host.ts": "335e0d127bc344712cdc27922ed8d72de0b8a134118e2c5b758c5717e1cc351c",
+    "src/main/agent-flow/builder-host.ts": "617f2a07fb64f36e90d47f917b79317a93c463290c5c84a2184e74638de79ff7",
     "src/main/agent-flow/c0-electron.ts": "0aa2ac5adf9a89b714b887013a4bfbcb22c49bded0028f55d94fa2a2c25aab01",
     "src/main/agent-flow/c0/checkpoint.ts": "70ac4776b101163f35c34ddf1ad88e09f73ca575c9fb0e5435d42fbb7a2265e8",
     "src/main/agent-flow/c0/command-ledger.ts": "c0e07476aaf10a6a426ebfc63957e0554d6ba24b623a75dd92befec8c6284bb1",

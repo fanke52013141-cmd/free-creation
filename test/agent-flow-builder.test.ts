@@ -87,6 +87,7 @@ function fixture() {
       expect(JSON.stringify(context)).not.toContain('private-builder-material')
       expect(context.capabilityCatalog.map((item) => item.id)).toEqual([
         'text-template@1',
+        'text-pass@1',
         'image-gen@3',
         'image-edit@2',
         'video@7',
@@ -393,7 +394,7 @@ describe('trusted graph builder', () => {
     expect(
       BuildPlanSchema.safeParse({
         title: 'bad',
-        steps: Array(5).fill({
+        steps: Array(9).fill({
           title: 'step',
           goal: 'goal',
           mode: 'autonomous',
@@ -611,7 +612,7 @@ describe('trusted graph builder', () => {
       BuildPlanSchema.safeParse({
         title: 'bad parallel',
         topology: 'parallel-fork',
-        steps: Array(5).fill({
+        steps: Array(9).fill({
           title: 'branch',
           goal: 'goal',
           mode: 'autonomous',

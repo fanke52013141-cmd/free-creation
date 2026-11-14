@@ -47,6 +47,14 @@ const TARGETS: Record<
       JSON.stringify({ operation: 'template', field: '', template: step.template ?? '{{value}}' }),
     text: () => ''
   },
+  'text-pass@1': {
+    type: 'processor',
+    contractVersion: 1,
+    inputPort: 'in-value',
+    outputPort: 'out-value',
+    config: () => JSON.stringify({ operation: 'pass', field: '' }),
+    text: () => ''
+  },
   'image-gen@3': {
     type: 'image-gen',
     contractVersion: 3,
