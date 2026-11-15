@@ -206,6 +206,15 @@ const api = {
     nodeId: string
   }): Promise<IpcEnvelope<import('../shared/agent-flow/desktop-tasks').FlowAgentView | null>> =>
     ipcRenderer.invoke(IPC.flowAgents.inspect, input),
+  flowRunOverview: (input: {
+    projectId: string
+    nodeId: string
+  }): Promise<
+    IpcEnvelope<{
+      projectId: string
+      overview: import('../shared/agent-flow/run-overview').FlowRunOverview | null
+    }>
+  > => ipcRenderer.invoke(IPC.flowAgents.overview, input),
   stopFlowAgent: (input: {
     projectId: string
     nodeId: string

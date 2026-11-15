@@ -3634,6 +3634,18 @@ export function CanvasEditor({
               <span className="palette-label">待办</span>
             </button>
           </Tooltip>
+          <Tooltip label="打开流程总览：实时进度 / 审核门禁 / 待你处理">
+            <button
+              className="palette-item"
+              aria-label="打开流程总览"
+              onClick={() => setPanelTab('flow')}
+            >
+              <span className="palette-icon">
+                <Icon name="state-machine" size={20} />
+              </span>
+              <span className="palette-label">流程</span>
+            </button>
+          </Tooltip>
         </div>
       </div>
       <CanvasBottomDock editor={editorInstance} />

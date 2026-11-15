@@ -151,6 +151,7 @@ export function installBrowserMock(): void {
     reviewFlowAssets: async () => notImplementedInDemo('资产审核'),
     runFlowAgent: async () => notImplementedInDemo('画布 Agent 执行'),
     inspectFlowAgent: async () => ({ ok: true, data: null }),
+    flowRunOverview: async () => ({ ok: true, data: { projectId: '', overview: null } }),
     pauseFlowAgent: async () => ({ ok: true, data: null }),
     onFlowAgentPublication: () => () => undefined,
     onFlowAgentStateProjection: () => () => undefined,

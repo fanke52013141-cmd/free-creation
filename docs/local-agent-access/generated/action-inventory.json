@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "generatedFrom": {
-    "ipcChannels": 200,
+    "ipcChannels": 201,
     "canvasActions": 50,
     "externalOperations": 190
   },
   "totals": {
-    "actions": 250,
+    "actions": 251,
     "byPhase": {
-      "external": 205,
+      "external": 206,
       "excluded": 37,
       "F9": 8
     }
@@ -120,6 +120,16 @@
         "flowAgent.inspect"
       ],
       "note": "F8 新增：读取持久化任务观察视图（状态/等待/决策与工具计数/审核反馈），与 GUI 宿主同一 inspect 方法；运行中/待启动任务只回账本事实并标记 ownership=ledger-only，不判定 AGENT_SESSION_LOST、不改写任务状态；run.get 仍只覆盖基础状态子集"
+    },
+    "ipc.flowAgents.overview": {
+      "label": "Flow 运行总览",
+      "channel": "flow-agents:overview",
+      "gui": "流程总览面板",
+      "phase": "external",
+      "external": [
+        "flowRun.overview"
+      ],
+      "note": "流程总览面板：与外部 flowRun.overview 同一 CoordinationStore.overview 只读投影（运行状态/阶段/修订 + 子任务 + 声明式图拓扑 + 审核门禁 + 可回放事件时间线）。补齐该 op 的 GUI 入口；不写任何状态，权威仍是命令账本与运行实例"
     },
     "ipc.flowAgents.stop": {
       "label": "Flow 停止",

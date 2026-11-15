@@ -59,6 +59,8 @@ export const IPC = {
     stateProjection: 'flowAgents:stateProjection',
     run: 'flow-agents:run',
     inspect: 'flow-agents:inspect',
+    // 流程总览（只读投影）：与外部 flowRun.overview 同一 CoordinationStore.overview 实现。
+    overview: 'flow-agents:overview',
     stop: 'flow-agents:stop',
     catalog: 'flow-agents:catalog',
     collaboration: 'flow-agents:collaboration',

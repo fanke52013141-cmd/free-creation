@@ -25,6 +25,7 @@ import { FlowDefinitionStore } from '../agent-flow/definition-store'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import { newTraceId, newSpanId } from '../../shared/observability'
 import { FlowCoordinatorHost } from '../agent-flow/coordinator-host'
+import { CoordinationStore } from '../agent-flow/coordination-store'
 import type { ModelIdentity } from '../../shared/agent-flow/coordination'
 import type { AgentModelPort } from '../agent-flow/runtime'
 import { FlowBuilderHost } from '../agent-flow/builder-host'
@@ -560,6 +561,17 @@ export function registerFlowAgentsIpc(
       Number(raw.versionB)
     )
   }))
+  // 流程总览（只读投影）：GUI 入口，与外部 flowRun.overview 同一 CoordinationStore.overview。
+  // 不写任何状态；诊断走 definitionHandle 的发送者校验，读取本身不重复记业务终态。
+  definitionHandle(IPC.flowAgents.overview, (raw) => {
+    const projectId = String(raw.projectId ?? '')
+    const nodeId = String(raw.nodeId ?? '')
+    if (!projectId || !nodeId) throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
+    return {
+      projectId,
+      overview: new CoordinationStore(getDb()).overview(projectId, nodeId)
+    }
+  })
   // F8：把**同一个**宿主实例以窄接口发布给本地外部接入（CLI/MCP）。
   // 外部 run/pause/stop/build/review 一律经由它调用；另建实例会出现两个权威并互相覆盖事实。
   publishFlowAgentAccessPort({

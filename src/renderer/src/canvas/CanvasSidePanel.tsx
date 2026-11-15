@@ -38,10 +38,11 @@ import { getNodeType } from '../nodes/registry'
 import { LibraryCardCover } from '../library/LibraryCardCover'
 import { AppSelect } from '../components/AppSelect'
 import { AssetsPanel } from './side-panel/AssetsPanel'
+import { FlowOverviewPanel } from './FlowOverviewPanel'
 import { useDragToCanvas } from './drag-to-canvas'
 import { deriveHumanInbox, type HumanInboxItem } from '@shared/agent-flow/human-inbox'
 
-export type SidePanelTab = 'assets' | 'workflow' | 'history' | 'runs' | 'tasks'
+export type SidePanelTab = 'assets' | 'workflow' | 'history' | 'runs' | 'tasks' | 'flow'
 
 interface CanvasSidePanelProps {
   tab: SidePanelTab | null
@@ -57,7 +58,8 @@ const TAB_META: Record<SidePanelTab, { title: string; icon: IconName }> = {
   workflow: { title: '节点流', icon: 'node-library' },
   history: { title: '历史记录', icon: 'history' },
   runs: { title: '运行中心', icon: 'play' },
-  tasks: { title: '待你处理', icon: 'edit' }
+  tasks: { title: '待你处理', icon: 'edit' },
+  flow: { title: '流程总览', icon: 'state-machine' }
 }
 
 const RUN_CENTER_FILTERS: { key: RunStatusFilter; label: string }[] = [
@@ -1028,6 +1030,7 @@ export function CanvasSidePanel({
         />
       )}
       {tab === 'tasks' && <TasksPanel editor={editor} items={humanInbox} />}
+      {tab === 'flow' && <FlowOverviewPanel editor={editor} projectId={projectId} onClose={onClose} />}
     </div>
   )
 }

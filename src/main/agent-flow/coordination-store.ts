@@ -8,6 +8,7 @@ import type { FlowAgentReply, FlowAgentView } from '../../shared/agent-flow/desk
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import type { ReviewDecision } from '../../shared/agent-flow/node-contracts'
+import type { FlowRunOverview } from '../../shared/agent-flow/run-overview'
 
 export interface CoordinationReview {
   nodeId: string
@@ -230,6 +231,45 @@ export class CoordinationStore {
         source: (event.startsWith('human.') ? 'user' : 'agent') as 'user' | 'agent'
       }
     })
+    // 流程总览面板：附带声明式图拓扑（节点身份/类型/参与方式 + 边 + 入口/出口）与审核门禁
+    // 状态，使 GUI 能把"运行事实"映射回"用户可见的流程结构"。只读投影，不改权威。
+    const graph = run.config.graph
+    const graphView = graph
+      ? {
+          name: graph.name,
+          entry: graph.entry,
+          exits: graph.exits,
+          nodes: graph.nodes.map((node) => ({
+            nodeId: node.nodeId,
+            title: node.title,
+            kind: node.kind,
+            participation: node.participation,
+            ...(node.review
+              ? {
+                  review: {
+                    criteria: node.review.criteria,
+                    rejectPolicy: node.review.rejectPolicy,
+                    maxReworks: node.review.maxReworks
+                  }
+                }
+              : {})
+          })),
+          edges: graph.edges.map((edge) => ({
+            from: edge.from.nodeId,
+            to: edge.to.nodeId,
+            kind: edge.kind ?? 'data'
+          }))
+        }
+      : undefined
+    const reviews = (run.reviews ?? []).map((review) => ({
+      nodeId: review.nodeId,
+      state: review.state,
+      round: review.round,
+      ...(review.responsibleNodeId ? { responsibleNodeId: review.responsibleNodeId } : {}),
+      ...(review.decision
+        ? { passed: review.decision.passed, feedback: review.decision.feedback }
+        : {})
+    }))
     return {
       projectId,
       nodeId: run.nodeId,
@@ -240,33 +280,19 @@ export class CoordinationStore {
       goal: run.goal,
       paused: run.paused,
       ...(run.code ? { code: run.code } : {}),
+      executionMode: (run.config.executionMode ?? 'model') as 'model' | 'fixed-order' | 'graph',
+      ...(graphView ? { graph: graphView } : {}),
       children: run.children.map((child) => ({
         nodeId: child.nodeId,
         taskId: child.taskId,
-        state: child.state
+        state: child.state,
+        goal: child.goal
       })),
+      reviews,
       events
     }
   }
 }
 
-/** O3：流程运行统一总览（只读投影，非权威实体）。 */
-export interface FlowRunOverview {
-  projectId: string
-  nodeId: string
-  taskId: string
-  state: FlowAgentView['state']
-  phase: string
-  revision: number
-  goal: string
-  paused: boolean
-  code?: string
-  children: Array<{ nodeId: string; taskId: string; state: string }>
-  events: Array<{
-    eventId: string
-    revision: number
-    event: string
-    state: string
-    source: 'user' | 'agent'
-  }>
-}
+/** O3：流程运行统一总览（只读投影，非权威实体）。形状定义在 shared，三入口共用。 */
+export type { FlowRunOverview } from '../../shared/agent-flow/run-overview'
