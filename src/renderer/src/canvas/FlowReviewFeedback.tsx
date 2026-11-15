@@ -65,7 +65,7 @@ export function FlowReviewFeedback({ shape }: { shape: NodeCardShape }): React.J
         spanId: newSpanId()
       })
       if (!result.ok) throw new Error('FLOW_SUBMISSION_FAILED')
-      setError('新版本已提交，请在主 Agent 明确继续复审。')
+      setError('新版本已提交，请在主 Agent 继续复审。')
     } catch {
       setError('新版本未确认，请检查内容和保存状态。')
       reportCanvasFailure(projectId, 'review-rework-submit')

@@ -151,7 +151,7 @@ export async function acceptParallelReview(input: {
     if(editor.getShape(id('process')).meta.nodeRun?.status!=='success')throw new Error('PARALLEL_REVIEW_DOWNSTREAM_MISSING');
     const fixed=editor.getCurrentPageShapes().filter(s=>s.props?.nodeType==='video-asset'&&s.meta?.pinnedOutput);if(fixed.length!==4)throw new Error('PARALLEL_REVIEW_FIXED_HISTORY_MISSING');
     editor.centerOnPoint(editor.getShapePageBounds(id('main')).center,{animation:{duration:0}});await ensureCanvasSaved();
-    let displayed=false;for(let i=0;i<100;i++){const element=document.querySelector('[data-node-id="'+id('main')+'"]');if(element?.textContent.includes('资产已完成')&&element.textContent.includes('阶段：completed')){displayed=true;break;}await new Promise(done=>setTimeout(done,50));}if(!displayed)throw new Error('PARALLEL_REVIEW_COMPLETED_UI_NOT_SETTLED');
+    let displayed=false;for(let i=0;i<100;i++){const element=document.querySelector('[data-node-id="'+id('main')+'"]');if(element?.textContent.includes('已完成')){displayed=true;break;}await new Promise(done=>setTimeout(done,50));}if(!displayed)throw new Error('PARALLEL_REVIEW_COMPLETED_UI_NOT_SETTLED');
     return {projectId,taskId:root.taskId,checks:['reopen resumes the original unknown task without POST replay','both same-version approvals release actual downstream execution','two rejected and two approved immutable video assets remain']};
   })()`)
   const db = getDb()

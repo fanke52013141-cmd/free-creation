@@ -155,35 +155,19 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
             {
               ready: task.prepared
                 ? task.reviewFeedback
-                  ? '返工待明确启动'
-                  : '新修订待启动'
+                  ? '返工待启动'
+                  : '新版本待启动'
                 : '准备中',
               running: '处理中',
               waiting: task.waitKind === 'human' ? '等待人工确认' : '等待执行核对',
-              blocked: '任务已阻断，请核对或停止',
-              completed: '资产已完成',
+              blocked: '任务已阻断',
+              completed: '已完成',
               failed: '任务失败',
               cancelled: '已停止'
             }[task.state]
-          }{' '}
-          · {task.decisions} 次决策
+          }
         </p>
       )}
-      {role === 'coordinator' && task?.phase && (
-        <p className="agent-flow-pending">阶段：{task.phase}</p>
-      )}
-      {task?.children?.map((child) => (
-        <p className="agent-flow-pending" key={child.nodeId}>
-          {editor.getShape<NodeBodyProps['shape']>(child.nodeId as NodeBodyProps['shape']['id'])
-            ?.props.title || '专业 Agent'}{' '}
-          ·{' '}
-          {child.state === 'completed'
-            ? '已完成'
-            : child.state === 'waiting'
-              ? '等待人工处理'
-              : '处理中'}
-        </p>
-      ))}
       {Object.values(outputs).map((value, index) => (
         <pre className="agent-flow-output" data-node-selectable-text="true" key={index}>
           {value?.kind === 'json'

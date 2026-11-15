@@ -114,15 +114,15 @@ function HumanTaskBody({ shape }: NodeBodyProps): React.JSX.Element {
         {config.instructions ? (
           <p className="agent-flow-pending">{config.instructions}</p>
         ) : (
-          <p className="agent-flow-pending">人工任务：填写结果并提交，运行后正式交付。</p>
+          <p className="agent-flow-pending">填写结果并提交，运行后交付。</p>
         )}
         {completed ? (
           <p className="agent-flow-pending" role="status">
-            已完成（修订 {revision}）：结果已交付，可重新提交覆盖。
+            已完成，可重新提交覆盖。
           </p>
         ) : (
           <p className="agent-flow-pending" role="status">
-            等待人工提交（修订 {revision}）。
+            等待人工提交。
           </p>
         )}
       </NodeIdentity>

@@ -168,8 +168,8 @@ export function deriveNow(overview: FlowRunOverview, steps: FlowStep[]): FlowNow
   if (human) {
     return {
       nodeId: human.nodeId,
-      title: `${human.title} · ${human.state === 'waiting-human' ? '等待人工确认' : '需要你处理'}`,
-      detail: human.detail ?? '主控已暂停派发，等待你的裁定后继续。',
+      title: `${human.title} · ${human.state === 'waiting-human' ? '等待人工' : '需要你处理'}`,
+      detail: human.detail ?? '等待你的确认后继续。',
       tone: 'human',
       action: human.kind === 'agent' ? 'collaborate' : 'locate'
     }
@@ -178,8 +178,8 @@ export function deriveNow(overview: FlowRunOverview, steps: FlowStep[]): FlowNow
   if (rejected) {
     return {
       nodeId: rejected.nodeId,
-      title: `${rejected.title} · 审核驳回，返工进行中`,
-      detail: rejected.detail ?? '审核未通过，已触发有界返工。',
+      title: `${rejected.title} · 审核驳回，返工中`,
+      detail: rejected.detail ?? '审核未通过，等待返工。',
       tone: 'review',
       action: 'locate'
     }
@@ -189,16 +189,16 @@ export function deriveNow(overview: FlowRunOverview, steps: FlowStep[]): FlowNow
     return {
       nodeId: running.nodeId,
       title: `${running.title} · ${STATE_META[running.state].label}`,
-      detail: '流程正在推进，无需人工干预。',
+      detail: '',
       tone: 'running',
       action: 'locate'
     }
   }
   if (overview.state === 'completed') {
-    return { nodeId: null, title: '流程已完成', detail: '全部节点交付固定成果。', tone: 'done', action: null }
+    return { nodeId: null, title: '流程已完成', detail: '', tone: 'done', action: null }
   }
   if (overview.state === 'failed' || overview.state === 'blocked') {
-    return { nodeId: overview.nodeId, title: '流程已阻断', detail: overview.code ?? '请核对运行事实后重试。', tone: 'failed', action: 'locate' }
+    return { nodeId: overview.nodeId, title: '流程已阻断', detail: overview.code ?? '请核对后重试。', tone: 'failed', action: 'locate' }
   }
   return { nodeId: overview.nodeId, title: overview.paused ? '派发已暂停' : '等待启动', detail: overview.goal, tone: 'idle', action: 'locate' }
 }

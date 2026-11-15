@@ -125,13 +125,13 @@ function StepCard({
         {step.review && step.kind === 'review' && (
           <div className={`fo-rework ${step.state === 'rejected' ? 'is-fail' : ''}`}>
             <span className="fo-rework-label">
-              {step.state === 'rejected' ? '返工闭环进行中' : '审核门禁'} · 轮次 {step.review.round}/{step.review.maxReworks}
+              {step.state === 'rejected' ? '返工中' : '审核门禁'} · 轮次 {step.review.round}/{step.review.maxReworks}
             </span>
             {step.review.feedback && <span className="fo-rework-reason">{step.review.feedback}</span>}
           </div>
         )}
         {step.state === 'gated' && step.gatedBy && (
-          <div className="fo-gated-note">🔒 被「{step.gatedBy}」拦截，审核通过后放行</div>
+          <div className="fo-gated-note">🔒 被「{step.gatedBy}」拦截</div>
         )}
         {step.detail && step.kind !== 'review' && step.state !== 'gated' && (
           <div className="fo-step-detail">{step.detail}</div>
@@ -243,8 +243,8 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
     return (
       <div className="flow-overview fo-empty">
         <Icon name="agent" size={30} />
-        <p>画布上还没有可总览的主 Agent。</p>
-        <span>创建一个 Agent 节点并设为主控，运行后这里会实时呈现流程进度、审核门禁与待你处理的事项。</span>
+        <p>画布上还没有主控 Agent。</p>
+        <span>将 Agent 节点设为主控并运行，即可在此跟踪进度与待办。</span>
       </div>
     )
   }
@@ -296,10 +296,10 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
           </div>
           <div className="fo-now-text">
             <div className="fo-now-title-row">
-              <span className="fo-now-tag">{now.tone === 'human' ? 'NOW / 需要你' : '当前'}</span>
+              <span className="fo-now-tag">{now.tone === 'human' ? '需要你' : '当前'}</span>
               <span className="fo-now-title">{now.title}</span>
             </div>
-            <p className="fo-now-detail">{now.detail}</p>
+            {now.detail && <p className="fo-now-detail">{now.detail}</p>}
           </div>
           {now.action && now.nodeId && (
             <button
@@ -320,9 +320,7 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
             <span className="fo-section-title">
               <Icon name="state-machine" size={13} /> 流执行图谱
             </span>
-            <span className="fo-section-meta">
-              {overview.executionMode === 'graph' ? '声明式图' : '顺序编排'} · {steps.length} 节点
-            </span>
+            <span className="fo-section-meta">{steps.length} 节点</span>
           </div>
           <div className="fo-map">
             <div className="fo-map-spine" />
@@ -332,7 +330,7 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
                 {step.kind === 'review' && index < steps.length - 1 && (
                   <div className={`fo-gate ${step.state === 'review-passed' ? 'is-open' : ''}`}>
                     <Icon name="ai-review" size={11} />
-                    <span>审核放行门禁 · {step.state === 'review-passed' ? '已放行' : '拦截中'}</span>
+                    <span>门禁 · {step.state === 'review-passed' ? '已放行' : '拦截中'}</span>
                     <span className="fo-gate-line" />
                   </div>
                 )}
@@ -355,7 +353,6 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
             <span className="fo-section-title">
               <Icon name="history" size={13} /> 事件时间线
             </span>
-            <span className="fo-section-meta">最新优先</span>
           </div>
           <div className="fo-timeline">
             {events.length === 0 && <div className="fo-timeline-empty">暂无协调事件</div>}
@@ -370,8 +367,6 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
                         {tone === 'human' ? '人工' : tone === 'review' ? '审核' : 'Agent'}
                       </span>
                       <span className="fo-event-label">{eventLabel(event.event)}</span>
-                      <span className="fo-spacer" />
-                      <span className="fo-event-rev">r{event.revision}</span>
                     </div>
                   </div>
                 </div>
@@ -393,7 +388,7 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
         </div>
         <div className="fo-footer-meta">
           <span className="fo-dot is-live" />
-          修订 {overview.revision} · 阶段 {overview.phase}
+          实时同步
         </div>
       </footer>
     </div>

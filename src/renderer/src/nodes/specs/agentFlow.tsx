@@ -95,7 +95,7 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
       <div className="agent-flow-body">
         <NodeIdentity>
           <p className="agent-flow-pending" role="alert">
-            节点配置无效，执行已阻止。请打开设置修复配置。
+            节点配置无效，请修复后运行。
           </p>
         </NodeIdentity>
         <NodePrimaryButton
@@ -125,24 +125,16 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
     return (
       <div className="agent-flow-body">
         <NodeIdentity>
-          {instance && (
-            <div className="agent-flow-summary">
-              当前阶段：{currentState}
-              {instance ? `（修订 ${instance.revision}）` : '（未启动）'}
-            </div>
-          )}
+          {instance && <div className="agent-flow-summary">当前阶段：{currentState}</div>}
           {pendingSubmission ? (
             <p className="agent-flow-pending" role="status">
-              已提交事件「{pendingSubmission.event}」（基于修订 {pendingSubmission.expectedRevision}
-              ），运行节点后生效
+              已提交事件「{pendingSubmission.event}」，运行后生效
             </p>
           ) : instance ? (
             <p className="agent-flow-pending">
-              {instance
-                ? legalEvents.length > 0
-                  ? `可提交事件：${legalEvents.map((item) => item.event).join('、')}`
-                  : '当前阶段没有声明的出边事件，可在设置中添加转换'
-                : '运行节点即按初始阶段启动状态机任务'}
+              {legalEvents.length > 0
+                ? `可提交事件：${legalEvents.map((item) => item.event).join('、')}`
+                : '当前阶段没有可提交的事件，可在设置中添加转换'}
             </p>
           ) : null}
           {instance && issue && (
@@ -1165,27 +1157,23 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
           </label>
           {draft.reviewMode === 'sampled-video' && (
             <p className="contract-settings-hint">
-              只接一路固定 MP4（0.1–60 秒、至少 4 帧、最多 20 MiB），审核 4
-              张抽样画面。请选择声明支持图片、文本操作验证通过且支持工具调用的模型。自动返工时，负责人须为控制该视频生成节点的专业
-              Agent；主 Agent 须启用审核工具并配置范围和预算。
+              仅支持一路固定 MP4（0.1–60 秒、≤20 MiB），审核 4 张抽样画面。模型需已验证图片输入与工具调用；返工负责人须为控制该视频节点的专业
+              Agent。
             </p>
           )}
           {draft.reviewMode === 'image' && (
             <p className="contract-settings-hint">
-              只接一路固定 PNG、JPEG 或 WebP（最多 20
-              MiB），把完整图像字节提交给审核模型。所选文本模型必须声明图片输入，且图片识别探测与结构化工具验证均通过。
+              仅支持一路固定 PNG/JPEG/WebP（≤20 MiB）。模型需已验证图片输入与工具调用。
             </p>
           )}
           {draft.reviewMode === 'audio' && (
             <p className="contract-settings-hint">
-              只接一路固定音频（最多 20 MiB、60 秒），宿主完整解码为 16 kHz 单声道 WAV
-              后发送。所选文本模型必须声明音频输入，并通过测试音调探测和结构化工具验证。
+              仅支持一路固定音频（≤20 MiB、60 秒）。模型需已验证音频输入与工具调用。
             </p>
           )}
           {draft.reviewMode === 'audio-video' && (
             <p className="contract-settings-hint">
-              只接一路含一个视频流和一个音频流的固定 MP4（0.1–60 秒、最多 20
-              MiB）。审核完整音轨和全帧时间戳摘要，画面仅提交四张时间锚点，不代表逐帧视觉判断；所选模型须验证图片与音频输入。
+              仅支持一路固定 MP4（0.1–60 秒、≤20 MiB）。审核完整音轨，画面仅 4 张抽样；模型需已验证图片与音频输入。
             </p>
           )}
           {catalog && (
@@ -1350,7 +1338,6 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
             </div>
           ))}
       {type !== 'state-machine' && textField('模型定义 ID', 'modelDefinitionId')}
-      <p className="contract-settings-hint">当前仅保存配置；配置工具不会授予额外执行能力。</p>
       {error && <p role="alert">{error}</p>}
       {(() => {
         const declaration = resolveFlowDeclaration(

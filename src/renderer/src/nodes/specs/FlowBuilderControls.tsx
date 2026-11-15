@@ -108,10 +108,7 @@ export function FlowBuilderControls({ shape }: Pick<NodeBodyProps, 'shape'>): Re
   return (
     <>
       <NodeIdentity>
-        <p className="agent-flow-pending">
-          封闭能力目录：文本、生图、改图、视频、语音合成、音色克隆；支持顺序流程、2–4 路并行和有界审核返工。
-          预览只提出图变更，提交后由主 Agent 启动。
-        </p>
+        <p className="agent-flow-pending">预览只提出图变更，提交后由主 Agent 启动。</p>
         {preview && (
           <>
             <p className="agent-flow-pending">
@@ -143,8 +140,7 @@ export function FlowBuilderControls({ shape }: Pick<NodeBodyProps, 'shape'>): Re
               </div>
             ))}
             <p className="agent-flow-pending">
-              {preview.nodes.length} 个节点 · {preview.edges.length} 条数据边 ·
-              控制和状态关系单独保存
+              {preview.nodes.length} 个节点 · {preview.edges.length} 条数据边
             </p>
           </>
         )}
