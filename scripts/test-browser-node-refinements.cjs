@@ -60,6 +60,8 @@ const assert = require('node:assert/strict')
       const { useNodePanelStore } = await import('/src/stores/nodePanel.ts')
       useNodePanelStore.getState().close()
     })
+    // §24 通透化：素材卡操作默认隐藏，先悬浮显现再点击。
+    await image.hover()
     await image.getByRole('button',{name:'创建裁剪节点并连接当前图片',exact:true}).click()
     const geometry=await page.evaluate(async()=>{
       const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor
