@@ -8,6 +8,7 @@ import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import { getNodeType } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { NODE_UI } from './node-ui-tokens'
+import { collapseGroup } from './stack-collapse'
 
 /** 泳道起点相对循环节点右侧的水平偏移。 */
 export const ITERATION_LANE_OFFSET_X = 120
@@ -320,7 +321,73 @@ export function liftIterationBodyDefinition(
   if (updates.length > 0) editor.run(() => editor.updateShapes(updates), { history: 'ignore' })
 }
 
-/** 重跑前清掉该循环上一轮的泳道投影与溯源箭头（媒体本体保留在素材库）。 */
+/** 循环体模板组合框：把循环体定义节点收拢成「循环体 · 模板」组合，置于循环节点上方，
+ *  虚线关联循环（本体一份紧凑模具，过程项实例链从循环右侧扇出）。复用组合折叠设施，
+ *  展开即编辑真实定义节点；纯呈现，不改图模型与执行契约。 */
+export function setupIterationTemplateGroup(
+  editor: Editor,
+  loop: NodeCardShape,
+  bodyNodeIds: string[],
+  anchor?: { x: number; y: number; w: number; h: number }
+): void {
+  const cards = bodyNodeIds
+    .map((id) => editor.getShape<NodeCardShape>(id as TLShapeId))
+    .filter((shape): shape is NodeCardShape => shape !== undefined && shape.type === 'node-card')
+  if (cards.length === 0) return
+  const base = anchor ?? { x: loop.x, y: loop.y, w: loop.props.w, h: loop.props.h }
+  let group = editor
+    .getCurrentPageShapes()
+    .find(
+      (shape) =>
+        shape.type === 'group' &&
+        (shape.meta as Record<string, unknown>)?.iterationTemplateLoopId === loop.id
+    )
+  if (
+    !group &&
+    cards.length >= 2 &&
+    typeof editor.groupShapes === 'function' &&
+    typeof editor.getShapePageBounds === 'function'
+  ) {
+    editor.groupShapes(cards.map((card) => card.id))
+    const groupId = editor.getShape<NodeCardShape>(cards[0].id)?.parentId as TLShapeId
+    if (groupId && editor.getShape(groupId)?.type === 'group') {
+      collapseGroup(editor, groupId, '循环体 · 模板')
+      const g = editor.getShape(groupId)
+      editor.updateShape({
+        id: groupId,
+        type: 'group',
+        meta: { ...(g?.meta ?? {}), iterationTemplateLoopId: loop.id }
+      })
+      group = editor.getShape(groupId)
+    }
+  }
+  if (group) {
+    const bounds = editor.getShapePageBounds(group.id)
+    if (bounds) {
+      const dx = base.x + base.w / 2 - (bounds.x + bounds.width / 2)
+      const dy = base.y - 48 - bounds.maxY
+      editor.updateShape({
+        id: group.id,
+        type: 'group',
+        x: (group.x ?? 0) + dx,
+        y: (group.y ?? 0) + dy
+      })
+    }
+  } else {
+    const maxH = Math.max(...cards.map((card) => card.props.h))
+    const targetY = base.y - maxH - 48
+    editor.run(
+      () =>
+        editor.updateShapes(
+          cards
+            .filter((card) => card.y > targetY)
+            .map((card) => ({ id: card.id, type: 'node-card' as const, y: targetY }))
+        ),
+      { history: 'ignore' }
+    )
+  }
+}
+
 export function clearIterationLanes(editor: Editor, loopId: string): void {
   const stale = editor
     .getCurrentPageShapes()

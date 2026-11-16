@@ -835,7 +835,7 @@ focus-visible 与深浅主题取同一套值。材质只在 `ui-surfaces.css` �
 1. **预铺骨架**：运行启动即按完整 N 一次性铺好所有分支骨架（`prelayoutIterationLanes`，待处理态），对称布局整轮固定；并发逐项复用各自骨架（`ctx.iterationLanesByIndex`），不懒创建、不漂移。
 2. **每项状态徽标**：分支头卡与生图快照卡带 `meta.iterationLaneStatus`（pending/running/done/failed/skipped），呈现层显示「待处理/生成中/已完成/失败/已跳过」彩色小标（`IterationSnapshotBody`）。
 3. **可控并发**：循环节点「并行」配置（1–4，缺省 2）经 shared 迭代器有界池生效；宿主声明 `parallelItems=true`。并发正确性靠**按项影子隔离**：`createShadowEditor` 代理把循环体定义卡的 live 运行态（exec/nodeRun/nodeResult/媒体）路由到本项影子层，输出用本项独立 Map，资源占用键加 `itemRunId` 维度；定义卡只保留用户静态输入。运行历史（`nodeRunHistory`，按项 runId 去重、追加安全）仍写真实卡供资产回溯。顺序执行（concurrency=1）行为不变。GUI/CLI/MCP 同一宿主路径，三入口一致。
-4. **模板标识与 resting 态**：被 `iterate.out-item` 驱动的定义节点显示「循环体模板」徽标（`iterationBodyNodeIds` 判定，卡片右上角）；首项落位前清掉定义卡旧运行态/媒体引用，运行内容承载在分支实例上，模板不被填充。
+4. **本体模板组合框（匹配示意图，当前权威）**：循环体定义节点（≥2）自动归组并折叠成「循环体 · 模板」组合框（复用 `stack-collapse` 折叠设施，`group.meta.iterationTemplateLoopId` 标记），置于循环节点正上方；`DataEdgeLayer` 按 group meta 直接渲染组合框→循环的竖向虚线关联（非数据边）。本体一份紧凑模具，过程项实例链从循环右侧扇出，全部可见。展开组合框即编辑真实定义节点。首项落位前清掉定义卡旧运行态/媒体引用，运行内容承载在分支实例上，模板不被填充。编辑器不支持 `groupShapes` 时（如测试桩）回退为抬升布局，保证执行与输出不受影响。单节点循环体不成组，抬到循环上方当模板行。
 5. **恢复控制**：循环卡显式按钮「继续生成」（runMode=resume，已完成不重复付费）/「重试失败项」（failed）/「全部重跑」（all），复用既有 runMode 契约（CLI/MCP 已支持），按上轮结果含失败/未完成项智能显隐。顶栏暂停/继续/停止保留。
 6. **推理模型空正文回退（R-22）**：`waitForChat` 正文为空但有思考内容时回退取思考通道，避免推理模型被误判「模型返回为空」连锁报错；网关 `model.request.completed` 增记 `reasoningChars` 诊断属性。
 7. 守护单测：`test/shadow-editor.test.ts`（影子隔离三项）、`test/iterate.test.ts`（并发缺省 2/钳制）、`test/manual-run.test.ts`（按项运行历史持久化）；节点 UI 浏览器门禁（standard/visual-system/flexible/refinements/colors/pointer）全过。

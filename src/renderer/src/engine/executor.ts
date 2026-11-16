@@ -60,11 +60,10 @@ import {
 import {
   clearIterationLanes,
   createIterationLane,
-  iterationFanoutLayout,
   iterationLaneArtifactPosition,
-  liftIterationBodyDefinition,
   prelayoutIterationLanes,
   setIterationLaneStatus,
+  setupIterationTemplateGroup,
   updateIterationLaneGen,
   updateIterationLanePrompt
 } from '../canvas/iteration-lanes'
@@ -1952,7 +1951,8 @@ async function runSubflowForIterate(
     itemCtx.editor = createShadowEditor(ctx.editor, new Map(), new Set(nodeIds))
     itemCtx.outputs = new Map(ctx.outputs)
   }
-  // 首项落位前把循环体定义链抬到扇出上方当模板行，让出中心行给分支（奇数项中间分支对齐循环）。
+  // 首项落位前把循环体定义节点收拢成「循环体 · 模板」组合框置于循环上方（虚线关联），
+  // 本体一份紧凑模具，过程项实例链从循环右侧扇出，让出中心行（奇数项中间分支对齐循环）。
   if (
     !ctx.command &&
     request.iterationNodeId &&
@@ -1961,12 +1961,7 @@ async function runSubflowForIterate(
   ) {
     const loopShape = ctx.editor.getShape<NodeCardShape>(request.iterationNodeId as TLShapeId)
     if (loopShape) {
-      const layout = iterationFanoutLayout(
-        loopShape,
-        request.itemCount ?? 1,
-        ctx.iterationLaneAnchor
-      )
-      liftIterationBodyDefinition(ctx.editor, nodeIds, layout.fanTop)
+      setupIterationTemplateGroup(ctx.editor, loopShape, nodeIds, ctx.iterationLaneAnchor)
     }
   }
   // 循环项资源按项隔离（itemRunId 维度），不互相判占；手动测试占用仍须避让。

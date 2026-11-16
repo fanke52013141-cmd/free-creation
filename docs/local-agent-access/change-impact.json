@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "Loop concurrency and reasoning-model fix: (1) waitForChat falls back to reasoning channel when content empty (R-22), gateway logs reasoningChars; shared by GUI/CLI/MCP, no contract schema change. (2) Per-item shadow-editor isolation of loop-body run state/outputs/resource keys enables bounded parallel items (parallelItems=true, default concurrency 2 within existing 1-4 clamp); run history still appended to real card for asset traceability; CLI/MCP node.execute uses the same renderer host so all entries gain concurrency consistently. (3) Pre-layout N lane skeletons + per-item status badges + loop-body template badge + recovery buttons (resume/failed/all) reuse existing runMode config already exposed to CLI/MCP. No new external operation, no input/output schema change; backward compatible.",
+  "reason": "Loop body template combo group: auto-group loop-body definition nodes into a collapsed '循环体 · 模板' combo frame positioned above the loop with a dashed association edge rendered by DataEdgeLayer from group meta (presentation only, reuses stack-collapse infra; degrades to lift layout when editor lacks groupShapes). No execution contract or external operation change; GUI/CLI/MCP share the same host path. Backward compatible.",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -105,7 +105,7 @@
     "src/main/index.ts": "5fc6bd50932ce4c984686235f340c79637124fc138d8e2f64c2f05fc6a1ccde4",
     "src/main/ipc/flow-agents.ipc.ts": "76a4d9dfcdb2d4d7636718852fd0aebdad4131eab42e3fca65067a3d8f1fd59f",
     "src/main/ipc/gateway.ipc.ts": "f96bf1d9583a6e6e4f38235ea0c61ca3fc601294e16ef3f225f77bf4d7aff6c6",
-    "src/main/ipc/media.ipc.ts": "72c368af67a94d3fb89b87de859dd7d186b0221974ecafa18bc102bebaa1350c",
+    "src/main/ipc/media.ipc.ts": "b9a4dd58667a2f08527af0f1503e1f9cb4e999e2f2c2b5297e3bb19076c141d8",
     "src/main/ipc/project-watcher.ts": "86c9de89316d0ae7606a64a93fae5d134b142a4bc14162902f0d5d69134155d1",
     "src/main/ipc/project.ipc.ts": "13ecb10bb9df24b265d086568bbcef45a0842d4b94318c66acaf1d0265d7d102",
     "src/main/ipc/skill-library.ipc.ts": "8654c43b0b94980843236b6aee18f287c9930242ab90195492f320b1cce7faca",
@@ -138,7 +138,7 @@
     "src/renderer/src/canvas/RunTimeline.tsx": "c29fef7a5460a75a6f1d0dfb0f02afbd87d419014b6d0d7122949d5cfd4924a6",
     "src/renderer/src/canvas/flow-asset-actions.ts": "0dd4e5a53510d9566771618052954004bfdc17b31f8f94afe08c0d624554a94f",
     "src/renderer/src/canvas/snapshot-restore.ts": "b5acba9d82fc106e75afb88f59d080b92554ea6954460171fceaed47318592c6",
-    "src/renderer/src/engine/executor.ts": "593eea7445b92f93c83a1a48aeaaed4ef5c7509fa1f2f704386af47f1154c538",
+    "src/renderer/src/engine/executor.ts": "868b36da518ac1264c8d17ee8beff6ae3f7502334ccf2afda5fc35a4cd8b7281",
     "src/renderer/src/nodes/chatData.ts": "0fc89aaa9c5cdc678a3644f21422671047d0d5e6f1843dde4de069cc184bdd2f",
     "src/renderer/src/nodes/director-data.ts": "a7aab3c3f5c14187dd683b696f0690770f95c9416cfecb817c709820b6d3aea2",
     "src/renderer/src/nodes/nodeValues.ts": "e90c0f5a50a6d1eabd0d912fddf26fa4d2afad9d28a22c8ae7c1eab0eb01a33c",

@@ -274,6 +274,29 @@ function collectEdges(editor: Editor, draftFrom: ConnectionFrom | null): PageEdg
       )
     })
   }
+  // 循环体模板组合框 → 循环节点的竖向虚线关联：直接按 group meta 渲染，
+  // 不依赖箭头载体（本体模具关联，非数据边）。
+  for (const shape of editor.getCurrentPageShapes()) {
+    if (shape.type !== 'group') continue
+    const loopId = (shape.meta as Record<string, unknown>)?.iterationTemplateLoopId
+    if (typeof loopId !== 'string') continue
+    const groupBounds = editor.getShapePageBounds(shape.id)
+    const loopBounds = editor.getShapePageBounds(loopId as TLShapeId)
+    if (!groupBounds || !loopBounds) continue
+    const sx = groupBounds.x + groupBounds.width / 2
+    const sy = groupBounds.maxY
+    const tx = loopBounds.x + loopBounds.width / 2
+    const ty = loopBounds.y
+    const midY = (sy + ty) / 2
+    result.push({
+      id: `template-link:${shape.id}` as TLShapeId,
+      color: '#e0a458',
+      sourceId: shape.id,
+      targetId: loopId as TLShapeId,
+      provenance: true,
+      path: `M ${sx} ${sy} C ${sx} ${midY}, ${tx} ${midY}, ${tx} ${ty}`
+    })
+  }
   return result
 }
 
