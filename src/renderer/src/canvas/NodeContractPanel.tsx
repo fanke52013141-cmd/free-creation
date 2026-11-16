@@ -46,6 +46,57 @@ function runSummary(record: NodeRunRecord): string {
   return `${time} · ${record.status}${duration}`
 }
 
+async function copyRunText(text: string, label: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text)
+    toast(`${label}已复制`)
+  } catch {
+    toast('复制失败：剪贴板不可用')
+  }
+}
+
+function formatRunValue(value: unknown): string {
+  if (typeof value === 'string') return value
+  return JSON.stringify(value, null, 2)
+}
+
+/** 运行记录里按端口的完整输入/输出正文，每个端口独立可复制。 */
+function RunValueBlock({
+  title,
+  values,
+  fallback
+}: {
+  title: string
+  values?: Record<string, unknown[]>
+  fallback: string
+}): React.JSX.Element {
+  const entries = Object.entries(values ?? {})
+  return (
+    <div className="contract-run-values">
+      <strong>{title}</strong>
+      {entries.length === 0 ? (
+        <small className="contract-run-values-empty">{fallback}</small>
+      ) : (
+        entries.map(([portId, items]) => (
+          <div className="contract-run-value" key={portId}>
+            <div className="contract-run-value-head">
+              <code>{portId}</code>
+              <button
+                type="button"
+                className="contract-copy-button"
+                onClick={() => void copyRunText(formatRunValue(items), `${title} ${portId} `)}
+              >
+                复制
+              </button>
+            </div>
+            <pre>{items.map((item) => formatRunValue(item)).join('\n')}</pre>
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
+
 function runPhaseLabel(phase: NodeRunPhase): string {
   const labels = {
     input: '输入校验',
@@ -488,6 +539,10 @@ export function NodeContractPanel({
   const ownOutputs = projectNodeOutputs(shape)
   const runRecord = readNodeRunRecord(shape.meta?.nodeRun)
   const runHistory = readNodeRunHistory(shape.meta?.nodeRunHistory)
+  // 运行 tab 的完整历史：最近一次 + 历史去重，最新在前；每条都带可复制的输入输出正文。
+  const runRecords = runRecord
+    ? [runRecord, ...runHistory.filter((record) => record.runId !== runRecord.runId)]
+    : runHistory
   const executionMode = spec.executionMode ?? 'auto'
   for (const [portId, value] of Object.entries(ownOutputs)) {
     const preview = valuePreview(value)
@@ -783,78 +838,96 @@ export function NodeContractPanel({
                   </button>
                 </div>
               </section>
-              {runRecord ? (
+              {runRecords.length > 0 ? (
                 <section className="contract-section">
-                  <h4>最近运行</h4>
-                  <div className="contract-run-info">
-                    <small>运行 ID：{runRecord.runId}</small>
-                    <small>状态：{runRecord.status}</small>
-                    {typeof runRecord.durationMs === 'number' && (
-                      <small>耗时：{runRecord.durationMs} ms</small>
-                    )}
-                    {runRecord.target && (
-                      <small>
-                        执行目标：
-                        {runRecord.target.providerName ||
-                          runRecord.target.providerId ||
-                          '未知服务商'}
-                        {' · '}
-                        {runRecord.target.modelName || runRecord.target.modelId || '未知模型'}
-                        {' · '}
-                        {runRecord.target.operation}
-                      </small>
-                    )}
-                    {runRecord.outputPorts && (
-                      <small>输出端口：{runRecord.outputPorts.join('、') || '无'}</small>
-                    )}
-                    {runRecord.error && (
-                      <small className="contract-run-error">
-                        {runRecord.error.phase}：{runRecord.error.reason}
-                      </small>
-                    )}
-                    {runRecord.trace && runRecord.trace.length > 0 && (
-                      <details className="contract-run-trace">
-                        <summary>查看运行日志（{runRecord.trace.length} 条）</summary>
-                        {runRecord.trace.map((entry, index) => (
-                          <small
-                            key={`${entry.at}-${index}`}
-                            className={entry.level === 'error' ? 'error' : ''}
+                  <h4>运行记录（{runRecords.length}）</h4>
+                  <div className="contract-run-records">
+                    {runRecords.map((record) => (
+                      <details key={record.runId} className={`contract-run-record ${record.status}`}>
+                        <summary>
+                          <strong>{runSummary(record)}</strong>
+                          <button
+                            type="button"
+                            className="contract-copy-button"
+                            onClick={(event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              void copyRunText(
+                                JSON.stringify(record, null, 2),
+                                `运行记录 ${record.runId.slice(0, 8)} `
+                              )
+                            }}
                           >
-                            {new Date(entry.at).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              second: '2-digit'
-                            })}
-                            {' · '}
-                            {runPhaseLabel(entry.phase)} · {entry.message}
-                          </small>
-                        ))}
+                            复制记录
+                          </button>
+                        </summary>
+                        <div className="contract-run-record-body">
+                          <small>运行 ID：{record.runId}</small>
+                          {record.target && (
+                            <small>
+                              执行目标：
+                              {record.target.providerName ||
+                                record.target.providerId ||
+                                '未知服务商'}
+                              {' · '}
+                              {record.target.modelName || record.target.modelId || '未知模型'}
+                              {' · '}
+                              {record.target.operation}
+                            </small>
+                          )}
+                          {record.error && (
+                            <small className="contract-run-error">
+                              {record.error.phase}：{record.error.reason}
+                            </small>
+                          )}
+                          <RunValueBlock
+                            title="输入"
+                            values={record.inputValues}
+                            fallback={
+                              record.inputs && Object.keys(record.inputs).length > 0
+                                ? `旧版记录未保存正文；来源端口：${Object.keys(record.inputs).join('、')}`
+                                : '本次运行无输入'
+                            }
+                          />
+                          <RunValueBlock
+                            title="输出"
+                            values={record.outputValues}
+                            fallback={
+                              record.outputPorts && record.outputPorts.length > 0
+                                ? `旧版记录未保存正文；输出端口：${record.outputPorts.join('、')}`
+                                : '本次运行无输出'
+                            }
+                          />
+                          {record.trace && record.trace.length > 0 && (
+                            <details className="contract-run-trace">
+                              <summary>查看运行日志（{record.trace.length} 条）</summary>
+                              {record.trace.map((entry, index) => (
+                                <small
+                                  key={`${entry.at}-${index}`}
+                                  className={entry.level === 'error' ? 'error' : ''}
+                                >
+                                  {new Date(entry.at).toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit'
+                                  })}
+                                  {' · '}
+                                  {runPhaseLabel(entry.phase)} · {entry.message}
+                                </small>
+                              ))}
+                            </details>
+                          )}
+                        </div>
                       </details>
-                    )}
+                    ))}
                   </div>
                 </section>
               ) : (
                 <div className="contract-run-empty">
                   <Icon name="history" size={16} />
                   <span>尚无运行记录</span>
-                  <small>运行后会在这里保留本节点的结果与耗时。</small>
+                  <small>运行后会在这里保留每次运行的完整输入输出，可复制排查。</small>
                 </div>
-              )}
-              {runHistory.length > 0 && (
-                <section className="contract-section">
-                  <h4>最近 {runHistory.length} 次运行</h4>
-                  <div className="contract-run-history">
-                    {runHistory.map((record) => (
-                      <div
-                        key={record.runId}
-                        className={`contract-run-history-item ${record.status}`}
-                      >
-                        <strong>{runSummary(record)}</strong>
-                        {record.error && <small>{record.error.reason}</small>}
-                      </div>
-                    ))}
-                  </div>
-                </section>
               )}
             </div>
           )}

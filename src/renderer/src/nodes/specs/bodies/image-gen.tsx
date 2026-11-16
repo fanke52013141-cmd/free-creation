@@ -15,7 +15,7 @@ import {
 import { defaultImageProviderId } from '@shared/engine/models'
 import type { NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
-import { gatherUpstreamMediaSources } from '../../../canvas/graph'
+import { gatherUpstreamMediaSources, gatherUpstreamText } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
 import { guiWorkflowInputOptions } from '../../../stores/workflowInput'
@@ -88,6 +88,15 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const orderedRatios = orderedImageRatios(availableRatios)
   const [draft, setDraft] = useState(shape.props.text)
   const [busy, setBusy] = useState(false)
+  // 上游「镜头提示词」等文本输出注入时，提示词框直接显示优化后的真实提示词（只读），
+  // 让用户在生图模块里看到本次实际使用的画面描述；未连接时仍可手动编辑。
+  const connectedPrompt = useValue(
+    'image-gen connected prompt',
+    () => gatherUpstreamText(editor, shape.id, 'in-text'),
+    [editor, shape.id]
+  )
+  const autoPrompt = connectedPrompt.trim()
+  const displayPrompt = autoPrompt || draft
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
   useEffect(() => {
     const prompt = promptRef.current
@@ -97,7 +106,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
     prompt.style.height = '72px'
     prompt.style.height = `${Math.max(72, Math.min(360, prompt.scrollHeight + 2))}px`
     prompt.style.flex = previousFlex
-  }, [draft, shape.props.w, options.length])
+  }, [displayPrompt, shape.props.w, options.length])
   const engineBusy = ['queued', 'running', 'pending'].includes(shape.props.exec)
 
   useEffect(() => {
@@ -312,11 +321,17 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
         className="gen-prompt"
         references={references}
         rows={4}
-        value={draft}
+        value={displayPrompt}
+        readOnly={!!autoPrompt}
+        title={autoPrompt ? '提示词来自上游节点，运行后自动填充' : undefined}
         spellCheck={false}
         placeholder="描述要生成的画面…"
-        onValueChange={setDraft}
+        onValueChange={(text) => {
+          if (!autoPrompt) setDraft(text)
+        }}
         onCommit={(text) => {
+          // 上游注入时提示词框只读，blur 不得把上游正文写回本节点 text（否则下次运行会重复合并）。
+          if (autoPrompt) return
           setDraft(text)
           updateText(text)
         }}

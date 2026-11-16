@@ -51,10 +51,18 @@ import {
   appendNodeRunHistory,
   appendNodeRunTrace,
   inputSources,
+  snapshotRunInputs,
+  snapshotRunOutputs,
   type NodeRunRecord,
   type NodeRunPhase,
   type NodeRunStatus
 } from './runRecord'
+import {
+  clearIterationLanes,
+  createIterationLane,
+  iterationLaneArtifactPosition,
+  updateIterationLanePrompt
+} from '../canvas/iteration-lanes'
 import { redactDiagnosticText } from '@shared/diagnostics'
 import {
   DiagnosticsProducer,
@@ -122,6 +130,10 @@ interface WorkflowContext {
   workflowParentSpanId?: string
   /** 迭代子流程当前批次（runSubflowForIterate 填写），随节点事件携带 batchId/itemId。 */
   batch?: { batchId: string; itemId?: string }
+  /** 当前循环项的画布泳道（runSubflowForIterate 创建）；产物落点与提示词注入读它。 */
+  iterationLane?: { loopId: string; index: number; laneTextNodeId: TLShapeId; prompt?: string }
+  /** 循环节点本轮运行的固定几何锚点：循环卡尺寸随进度变化，泳道等距排布必须用整轮一致的锚点。 */
+  iterationLaneAnchor?: { x: number; y: number; w: number; h: number }
   /** 独立节点任务不写入前台工作流的进度和错误汇总。 */
   isolated?: boolean
   /** W3：所属节点流运行的祖先上下文（递归/深度/预算守卫），顶层画布执行缺省。 */
@@ -946,6 +958,40 @@ async function invokeExecutor(
       // Agent commands publish from their committed fixed version. Adding an
       // artifact before receipt commit would change the admitted semantic graph.
       if (ctx.command) return
+      // 循环项产物落进该项泳道：挂在提示词卡右侧，并注入本次运行提示词正文。
+      const lane = ctx.iterationLane
+      const laneShape = lane
+        ? ctx.editor.getShape<NodeCardShape>(lane.laneTextNodeId)
+        : undefined
+      if (lane && laneShape) {
+        const siblings = ctx.editor
+          .getCurrentPageShapes()
+          .filter(
+            (candidate) =>
+              candidate.type === 'node-card' &&
+              (candidate.meta as Record<string, unknown> | undefined)?.iterationLaneLoopId ===
+                lane.loopId &&
+              (candidate.meta as Record<string, unknown> | undefined)?.iterationLaneIndex ===
+                lane.index &&
+              (candidate.meta as Record<string, unknown> | undefined)?.artifactProducerId ===
+                lane.laneTextNodeId
+          ).length
+        const position = iterationLaneArtifactPosition(laneShape, siblings)
+        ctx.editor.run(() =>
+          materializeArtifact(ctx.editor, current, artifact, ctx.runId, {
+            position,
+            producerId: lane.laneTextNodeId,
+            producerPortId: 'out-text',
+            extraMeta: {
+              iterationLaneLoopId: lane.loopId,
+              iterationLaneIndex: lane.index,
+              artifactOriginNodeId: node.id,
+              artifactOriginPortId: artifact.portId
+            }
+          })
+        )
+        return
+      }
       // 同一次执行中的多个产物需要作为同一个撤销单元落到画布，保持操作可逆。
       ctx.editor.run(() => materializeArtifact(ctx.editor, current, artifact, ctx.runId))
     },
@@ -1187,6 +1233,12 @@ async function executeNodeUnscheduled(
   const shapeId = node.id as TLShapeId
   const shape = editor.getShape<NodeCardShape>(shapeId)
   if (!shape) return { status: 'skipped', reason: '节点已不存在' }
+  // 循环重跑前清掉上一轮泳道投影，避免分支无限堆积（媒体本体保留在素材库）。
+  if (node.type === 'iterate' && !ctx.command) {
+    clearIterationLanes(editor, shapeId)
+    // 固定本轮锚点：循环卡宽高会随进度条变化，若每项各取当前几何，泳道间距会漂移。
+    ctx.iterationLaneAnchor = { x: shape.x, y: shape.y, w: shape.props.w, h: shape.props.h }
+  }
 
   // L01：每次节点调用生成独立执行实例，与根 trace 一起写入运行记录；
   // 同节点重跑与不同迭代项因此不会混淆。
@@ -1337,6 +1389,7 @@ async function executeNodeUnscheduled(
       }
     }
     record.inputs = inputSources(collected.value)
+    record.inputValues = snapshotRunInputs(collected.value)
     record.inputFingerprint = fingerprintNodeInputs(shape, collected.value)
     recordRunTrace(
       ctx,
@@ -1578,6 +1631,7 @@ async function executeNodeUnscheduled(
       recordRunTrace(ctx, node, record, 'output', 'info', '输出契约校验通过', {
         name: 'node.output_validated'
       })
+      record.outputValues = snapshotRunOutputs(projected.value)
       finishRunRecord(ctx, node, shapeId, record, 'success', {
         outputPorts: Object.keys(projected.value)
       })
@@ -1730,6 +1784,23 @@ async function runSubflowForIterate(
       itemId: request.itemId
     }
   }
+  // 画布泳道：每项一条「输入/提示词 → 产物」分支，自上而下等距排布。
+  // Agent 命令执行不建泳道（会改变 admitted 语义图）；headless 隔离画布建了也随运行丢弃。
+  if (!ctx.command && request.iterationNodeId) {
+    const loopShape = ctx.editor.getShape<NodeCardShape>(request.iterationNodeId as TLShapeId)
+    if (loopShape) {
+      const index = request.index ?? 0
+      const laneTextNodeId = createIterationLane(
+        ctx.editor,
+        loopShape,
+        index,
+        request.item,
+        request.itemRunId ?? ctx.runId,
+        ctx.iterationLaneAnchor
+      )
+      itemCtx.iterationLane = { loopId: request.iterationNodeId, index, laneTextNodeId }
+    }
+  }
   const nodeIds = expandIterationBody(ctx.graph, request.nodeIds, request.iterationNodeId)
   if (nodeIds.some((id) => hasNodeTask(ctx.projectId, id) || nodeTests.has(id as TLShapeId))) {
     throw new Error('循环体节点已在运行或排队，不能重置其结果')
@@ -1771,6 +1842,18 @@ async function runSubflowForIterate(
         break
       }
       results[node.id] = projected.value
+      // 循环体第一个文本输出即该项提示词：替换泳道头卡正文，并供产物卡注入。
+      const lane = itemCtx.iterationLane
+      if (lane && !lane.prompt) {
+        const textPacket = Object.values(projected.value).find(
+          (packet) => packet?.value.kind === 'text' || packet?.value.kind === 'markdown'
+        )
+        const textValue = textPacket?.value
+        if (textValue && (textValue.kind === 'text' || textValue.kind === 'markdown')) {
+          lane.prompt = textValue.text
+          updateIterationLanePrompt(itemCtx.editor, lane.laneTextNodeId, textValue.text)
+        }
+      }
     }
   }
   // 取消优先于失败判定：用户意图是停止，该项必须整体作废（resume 时重跑），
@@ -1948,15 +2031,36 @@ function workflowScope(
   targets: readonly string[]
 ): { graph: WorkflowContext['graph']; required: Set<string> } {
   const required = new Set<string>(targets)
-  const pending: string[] = [...targets]
-  while (pending.length > 0) {
-    const nodeId = pending.pop()!
-    for (const edge of fullGraph.edges) {
-      if (edge.to.nodeId === nodeId && !required.has(edge.from.nodeId)) {
-        required.add(edge.from.nodeId)
-        pending.push(edge.from.nodeId)
+  const addUpstream = (seeds: readonly string[]): void => {
+    const pending: string[] = [...seeds]
+    while (pending.length > 0) {
+      const nodeId = pending.pop()!
+      for (const edge of fullGraph.edges) {
+        if (edge.to.nodeId === nodeId && !required.has(edge.from.nodeId)) {
+          required.add(edge.from.nodeId)
+          pending.push(edge.from.nodeId)
+        }
       }
     }
+  }
+  addUpstream(targets)
+  // 循环体在 out-item 下游，不属于上游闭包，但由循环节点逐项驱动、必须随子图执行；
+  // 只取上游闭包会把循环体裁掉，iterate 拿不到 out-item 边而报「未配置循环体」。
+  // 这里沿 out-item 展开循环体并补齐其自身上游依赖，迭代到稳定（支持嵌套循环）。
+  for (;;) {
+    const before = required.size
+    const iterateIds = [...required].filter((id) =>
+      fullGraph.edges.some((edge) => edge.from.nodeId === id && edge.from.portId === 'out-item')
+    )
+    for (const iterationNodeId of iterateIds) {
+      const roots = fullGraph.edges
+        .filter((edge) => edge.from.nodeId === iterationNodeId && edge.from.portId === 'out-item')
+        .map((edge) => edge.to.nodeId)
+      const body = expandIterationBody(fullGraph, roots, iterationNodeId)
+      for (const id of body) required.add(id)
+      addUpstream(body)
+    }
+    if (required.size === before) break
   }
   const graph = {
     nodes: fullGraph.nodes.filter((node) => required.has(node.id)),
@@ -2222,12 +2326,16 @@ export async function runWorkflowForNodes(
     // 返回，不进入 beginRun。全图 runWorkflow 保持原行为不加闸。
     const targetIds = new Set<string>(targets)
     const nodeById = new Map(fullGraph.nodes.map((node) => [node.id, node]))
+    // 本地免费执行器（代码 Worker / 本地透传处理）重跑不产生费用，不应触发付费确认。
+    const freeLocalTypes = new Set(['code', 'processor'])
     const rerunPaidUpstream = [...required].filter((nodeId) => {
       if (targetIds.has(nodeId)) return false
       // 循环体成员由循环节点逐项驱动，不单独计入，避免与循环节点双重计数。
       if (iterationBodies.has(nodeId)) return false
       const node = nodeById.get(nodeId)
-      return node !== undefined && !isDocumentOutputNode(node.type)
+      return (
+        node !== undefined && !isDocumentOutputNode(node.type) && !freeLocalTypes.has(node.type)
+      )
     })
     if (rerunPaidUpstream.length > 0 && !inputOptions?.confirmPaidRerun) {
       // T07（F07）：确认清单带节点名（最多列 6 个，余量计数），不再只给笼统计数。

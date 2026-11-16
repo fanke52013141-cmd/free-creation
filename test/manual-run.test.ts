@@ -15,6 +15,7 @@ import {
 import { useConfirmStore } from '@renderer/stores/confirm'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import { createDirectorProject, createDirectorPublishRecord } from '@renderer/nodes/director-data'
+import { ITERATION_LANE_GAP } from '@renderer/canvas/iteration-lanes'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 
 beforeAll(() => registerAllNodeTypes())
@@ -656,6 +657,14 @@ describe('runWorkflow · 迭代体输入隔离', () => {
       getBindingsFromShape: (id: string) => bindings.get(id) ?? [],
       updateShape,
       updateShapes: (patches: Parameters<typeof updateShape>[0][]) => patches.forEach(updateShape),
+      // 泳道投影需要创建/删除画布形状；桩实现直接落进 shapes map。
+      createShape: (shape: { id: string; type: string; props?: Record<string, unknown>; meta?: Record<string, unknown> }) => {
+        shapes.set(shape.id, { ...shape, props: shape.props ?? {}, meta: shape.meta ?? {} } as unknown as NodeCardShape)
+      },
+      deleteShapes: (ids: string[]) => {
+        ids.forEach((id) => shapes.delete(id))
+      },
+      run: (fn: () => void) => fn(),
       markHistoryStoppingPoint: () => undefined
     } as unknown as Editor
 
@@ -677,6 +686,21 @@ describe('runWorkflow · 迭代体输入隔离', () => {
     expect(promptRuns).toHaveLength(2)
     expect(new Set(promptRuns.map((run) => run.runId)).size).toBe(2)
     expect(promptRuns.every((run) => run.runId.includes(':item:'))).toBe(true)
+    // 泳道投影：N 项必须落 N 条分支头卡，自上而下等距（用户 2026-11-16 裁决）。
+    const lanes = Array.from(shapes.values())
+      .filter(
+        (shape) =>
+          shape.type === 'node-card' &&
+          (shape.meta as Record<string, unknown>)?.iterationLaneLoopId === iterate.id &&
+          (shape.meta as Record<string, unknown>)?.artifactProducerPortId === 'out-item'
+      )
+      .sort(
+        (a, b) =>
+          ((a.meta as Record<string, unknown>).iterationLaneIndex as number) -
+          ((b.meta as Record<string, unknown>).iterationLaneIndex as number)
+      )
+    expect(lanes).toHaveLength(2)
+    expect(lanes[1].y - lanes[0].y).toBe(ITERATION_LANE_GAP)
   })
 })
 
@@ -774,6 +798,107 @@ describe('runWorkflowForNodes · 重跑付费上游前必须确认（R-03）', (
       kind: 'json',
       data: { prompt: '蓝色立方体' }
     })
+  })
+})
+
+describe('runWorkflowForNodes · 子图目标含循环节点时循环体必须入域', () => {
+  // 回归：workflowScope 只取上游闭包曾把 out-item 下游循环体裁掉，
+  // iterate 拿不到循环体边而报「未配置循环体」。复用迭代体隔离测试的确定性 harness。
+  it('只选循环节点运行：循环体逐项执行并汇总两项结果', async () => {
+    const source = node(
+      'shape:scope-list-source',
+      'structured',
+      JSON.stringify([
+        { id: 'shot-1', scene: '第一镜：霓虹雨巷' },
+        { id: 'shot-2', scene: '第二镜：潮湿巷口' }
+      ])
+    )
+    source.props.config = JSON.stringify({ schema: { id: 'list.items', version: 1 } })
+    const iterate = node('shape:scope-iterate', 'iterate', '')
+    const prompt = node(
+      'shape:scope-prompt',
+      'structured',
+      JSON.stringify({ prompt: '{{input[0].scene}}', style: '电影感' })
+    )
+    prompt.props.config = JSON.stringify({ schema: { id: 'prompt.bundle', version: 1 } })
+    const sourceToIterate = {
+      id: 'shape:scope-list-to-iterate',
+      type: 'arrow',
+      meta: { fromPort: 'out-json', toPort: 'in-list' }
+    }
+    const iterateToPrompt = {
+      id: 'shape:scope-iterate-to-prompt',
+      type: 'arrow',
+      meta: { fromPort: 'out-item', toPort: 'in-context' }
+    }
+    const shapes = new Map<string, NodeCardShape | typeof sourceToIterate>([
+      [source.id, source],
+      [iterate.id, iterate],
+      [prompt.id, prompt],
+      [sourceToIterate.id, sourceToIterate],
+      [iterateToPrompt.id, iterateToPrompt]
+    ])
+    const bindings = new Map<string, Array<{ props: { terminal: string }; toId: string }>>([
+      [
+        sourceToIterate.id,
+        [
+          { props: { terminal: 'start' }, toId: source.id },
+          { props: { terminal: 'end' }, toId: iterate.id }
+        ]
+      ],
+      [
+        iterateToPrompt.id,
+        [
+          { props: { terminal: 'start' }, toId: iterate.id },
+          { props: { terminal: 'end' }, toId: prompt.id }
+        ]
+      ]
+    ])
+    const updateShape = (patch: {
+      id: string
+      props?: Record<string, unknown>
+      meta?: Record<string, unknown>
+    }): void => {
+      const current = shapes.get(patch.id)
+      if (!current || current.type !== 'node-card') return
+      if (patch.props) Object.assign(current.props, patch.props)
+      if (patch.meta) Object.assign(current.meta, patch.meta)
+    }
+    const editor = {
+      getCurrentPageShapes: () => Array.from(shapes.values()),
+      getShape: (id: string) => shapes.get(id),
+      getBindingsFromShape: (id: string) => bindings.get(id) ?? [],
+      updateShape,
+      updateShapes: (patches: Parameters<typeof updateShape>[0][]) => patches.forEach(updateShape),
+      createShape: (shape: { id: string; type: string; props?: Record<string, unknown>; meta?: Record<string, unknown> }) => {
+        shapes.set(shape.id, { ...shape, props: shape.props ?? {}, meta: shape.meta ?? {} } as unknown as NodeCardShape)
+      },
+      deleteShapes: (ids: string[]) => {
+        ids.forEach((id) => shapes.delete(id))
+      },
+      run: (fn: () => void) => fn(),
+      markHistoryStoppingPoint: () => undefined
+    } as unknown as Editor
+
+    // 子图重跑会带上运行型上游（structured），确认桩直接放行，避免 jsdom 里等 UI。
+    const originalConfirm = useConfirmStore.getState().confirm
+    useConfirmStore.setState({ confirm: async () => true })
+    try {
+      await runWorkflowForNodes(editor, 'project-1', [], [iterate.id])
+    } finally {
+      useConfirmStore.setState({ confirm: originalConfirm })
+    }
+
+    // 循环体真实入域并逐项执行（旧缺陷下 prompt 保持 idle、iterate 报未配置循环体）。
+    expect(prompt.props.exec).toBe('success')
+    expect(iterate.props.exec).toBe('success')
+    const result = JSON.parse(String(iterate.meta.nodeResult))
+    expect(
+      result.items.map((item: { outputs: Record<string, Record<string, unknown>> }) => {
+        const output = item.outputs[prompt.id]!['out-json'] as { data: { prompt: string } }
+        return output.data.prompt
+      })
+    ).toEqual(['第一镜：霓虹雨巷', '第二镜：潮湿巷口'])
   })
 })
 

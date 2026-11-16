@@ -1,6 +1,9 @@
-// 节点运行记录：只保存运行可观测性信息，不保存 API Key 或完整输入正文。
+// 节点运行记录：保存运行可观测性信息，不保存 API Key。
+// 2026-11-16 用户裁决：运行 tab 必须能查看并复制每次运行的完整输入输出正文，
+// 因此 inputValues/outputValues 保存值快照（媒体只存引用，不存二进制）。
 import type { ContractInputMap } from './contracts'
 import type { NodeExecutionPhase, NodeExecutionTarget } from '@shared/engine/executor-types'
+import type { NodeValue } from '@shared/engine/values'
 import { redactDiagnosticText } from '@shared/diagnostics'
 import type { GenerationTimingFeatures } from '@shared/contracts'
 import { readStoredNodeRunStatus } from '@shared/engine/run-status'
@@ -25,7 +28,7 @@ export interface NodeRunSource {
 
 /**
  * 最近一次节点执行的紧凑审计记录，持久化到 shape.meta.nodeRun。
- * 输入只记来源端口，不复制可能很大的文本、JSON 或媒体二进制。
+ * 输入来源记端口；输入/输出正文以值快照保存（媒体只存引用），供运行 tab 查看与复制。
  */
 export interface NodeRunRecord {
   runId: string
@@ -37,6 +40,10 @@ export interface NodeRunRecord {
   finishedAt?: number
   durationMs?: number
   inputs: Record<string, NodeRunSource[]>
+  /** 本次运行实际收集到的输入值快照（按端口）；旧记录缺省，UI 显示「未保存正文」。 */
+  inputValues?: Record<string, unknown[]>
+  /** 本次运行通过契约校验的输出值快照（按端口）；失败/跳过记录缺省。 */
+  outputValues?: Record<string, unknown[]>
   outputPorts?: string[]
   error?: {
     phase: NodeRunPhase
@@ -110,4 +117,58 @@ export function appendNodeRunHistory(value: unknown, record: NodeRunRecord): Nod
     0,
     NODE_RUN_HISTORY_LIMIT
   )
+}
+
+/** 单个值快照的正文上限：超出截断并显式标记，避免画布快照被超大正文撑爆。 */
+export const RUN_VALUE_TEXT_LIMIT = 40_000
+
+/** 把端口值转成可持久化、可复制的快照：媒体只留引用，文本/JSON 留正文（超限截断）。 */
+export function snapshotRunValue(value: NodeValue): unknown {
+  if (value.kind === 'text' || value.kind === 'markdown') {
+    return value.text.length > RUN_VALUE_TEXT_LIMIT
+      ? {
+          kind: value.kind,
+          truncated: true,
+          text: `${value.text.slice(0, RUN_VALUE_TEXT_LIMIT)}\n…（正文超过 ${RUN_VALUE_TEXT_LIMIT} 字符已截断）`
+        }
+      : { kind: value.kind, text: value.text }
+  }
+  if (value.kind === 'json' || value.kind === 'camera') {
+    const serialized = JSON.stringify(value.data, null, 2)
+    return serialized.length > RUN_VALUE_TEXT_LIMIT
+      ? {
+          kind: value.kind,
+          truncated: true,
+          text: `${serialized.slice(0, RUN_VALUE_TEXT_LIMIT)}\n…（正文超过 ${RUN_VALUE_TEXT_LIMIT} 字符已截断）`
+        }
+      : { kind: value.kind, data: value.data }
+  }
+  return {
+    kind: value.kind,
+    mediaId: value.mediaId,
+    mediaPath: value.mediaPath,
+    mime: value.mime,
+    ...(value.name ? { name: value.name } : {})
+  }
+}
+
+/** 输入数据包 map → 按端口的值快照数组。 */
+export function snapshotRunInputs(inputs: ContractInputMap): Record<string, unknown[]> {
+  return Object.fromEntries(
+    Array.from(inputs.entries()).map(([portId, packets]) => [
+      portId,
+      packets.map((packet) => snapshotRunValue(packet.value))
+    ])
+  )
+}
+
+/** 契约输出 map → 按端口的值快照数组。 */
+export function snapshotRunOutputs(
+  outputs: Record<string, { value?: NodeValue } | undefined>
+): Record<string, unknown[]> {
+  const result: Record<string, unknown[]> = {}
+  for (const [portId, packet] of Object.entries(outputs)) {
+    if (packet?.value) result[portId] = [snapshotRunValue(packet.value)]
+  }
+  return result
 }

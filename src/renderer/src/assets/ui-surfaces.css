@@ -323,8 +323,7 @@
 }
 
 .contract-overview-grid > span,
-.contract-run-info,
-.contract-run-history-item {
+.contract-run-record {
   border-color: rgba(231, 238, 247, 0.1);
   border-radius: 9px;
   background: rgba(8, 12, 16, 0.22);
@@ -1878,8 +1877,7 @@ button {
 
 .canvas-theme-light .contract-port,
 .canvas-theme-light .contract-overview-grid > span,
-.canvas-theme-light .contract-run-info,
-.canvas-theme-light .contract-run-history-item {
+.canvas-theme-light .contract-run-record {
   border-color: rgba(54, 69, 82, 0.13);
   background: rgba(255, 255, 255, 0.6);
 }
@@ -2904,9 +2902,7 @@ button {
   :is(
     .contract-port,
     .contract-test-input,
-    .contract-overview-grid > span,
-    .contract-run-info,
-    .contract-run-history-item
+    .contract-overview-grid > span
   ) {
   background: #fafbfc;
   border: 1px solid #e5e8ed;
@@ -2925,6 +2921,18 @@ button {
   box-shadow: none;
   font-size: 14px;
   line-height: 1.6;
+}
+
+.canvas-theme-light .node-contract-panel .contract-run-record {
+  background: #fafbfc;
+  border: 1px solid #e5e8ed;
+  border-radius: 12px;
+}
+
+.canvas-theme-light .node-contract-panel .contract-run-value pre {
+  background: #fff;
+  border-color: #e5e8ed;
+  color: #18212d;
 }
 
 .canvas-theme-light .node-contract-panel :is(input, textarea, select):focus {
@@ -2959,12 +2967,11 @@ button {
 .canvas-theme-light .node-contract-panel .contract-test-result {
   background: #fafbfc;
   border: 1px solid #e5e8ed;
-  border-left: 3px solid #298458;
   color: #18212d;
 }
 
 .canvas-theme-light .node-contract-panel .contract-test-result.failed {
-  border-left-color: #c23c3c;
+  border-color: #e5e8ed;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -4367,8 +4374,7 @@ button {
 
 .node-card:is(.type-image-gen, .type-image-edit, .type-video) .gen-capability-note {
   padding: 6px 8px;
-  border-left: 2px solid var(--node-edge-strong);
-  border-radius: 0 6px 6px 0;
+  border-radius: 6px;
   background: transparent;
   line-height: 1.45;
 }

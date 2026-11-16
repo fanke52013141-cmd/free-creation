@@ -59,7 +59,15 @@ export function materializeArtifact(
   editor: Editor,
   producer: NodeCardShape,
   artifact: ProducedArtifact,
-  runId?: string
+  runId?: string,
+  options?: {
+    /** 覆盖落点（循环泳道等运行投影排布）。 */
+    position?: { x: number; y: number }
+    /** 覆盖溯源父节点（泳道内产物挂在提示词卡下，真实生产节点另存 extraMeta）。 */
+    producerId?: string
+    producerPortId?: string
+    extraMeta?: Record<string, unknown>
+  }
 ): void {
   const assetNodeType = assetNodeTypeFor(artifact.kind)
   const spec = getNodeType(assetNodeType)
@@ -83,11 +91,15 @@ export function materializeArtifact(
   // 悬浮标题向上伸出 34px，行间距预留足够空间（80px）确保上一张卡片底部与下一张卡片顶部标题不拥挤
   const gapY = 80
   const id = createShapeId()
+  const position = options?.position ?? {
+    x: producer.x + producer.props.w + 100 + column * (spec.defaultSize.w + gapX),
+    y: producer.y + row * (spec.defaultSize.h + gapY)
+  }
   editor.createShape({
     id,
     type: 'node-card',
-    x: producer.x + producer.props.w + 100 + column * (spec.defaultSize.w + gapX),
-    y: producer.y + row * (spec.defaultSize.h + gapY),
+    x: position.x,
+    y: position.y,
     props: {
       nodeType: assetNodeType,
       title: artifact.title || `${producer.props.title || '运行'}的产物`,
@@ -98,11 +110,12 @@ export function materializeArtifact(
       h: spec.defaultSize.h
     } satisfies Partial<NodeCardProps>,
     meta: {
-      artifactProducerId: producer.id,
-      artifactProducerPortId: artifact.portId,
+      artifactProducerId: options?.producerId ?? producer.id,
+      artifactProducerPortId: options?.producerPortId ?? artifact.portId,
       artifactRunId: runId,
       runGroupId: runId,
-      artifactCreatedAt: Date.now()
+      artifactCreatedAt: Date.now(),
+      ...(options?.extraMeta ?? {})
     }
   })
 }

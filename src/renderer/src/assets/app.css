@@ -5327,8 +5327,7 @@ select:focus-visible {
   color: #67e8f9;
 }
 .contract-port .contract-preview {
-  padding-left: 6px;
-  border-left: 2px solid rgba(167, 139, 250, 0.45);
+  padding-left: 0;
   color: color-mix(in srgb, var(--txt) 78%, transparent);
 }
 .contract-port em {
@@ -5336,15 +5335,6 @@ select:focus-visible {
   font-size: 10px;
   font-style: normal;
   white-space: nowrap;
-}
-
-.contract-run-info {
-  display: grid;
-  gap: 5px;
-  padding: 8px;
-  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--panel) 84%, #000 16%);
 }
 
 .contract-run-actions {
@@ -5399,53 +5389,123 @@ select:focus-visible {
   line-height: 1.45;
 }
 
-.contract-run-history {
+/* 运行记录：完整输入输出可复制。2026-11-16 用户裁决：严禁左侧彩色边框标注，
+   状态只通过文字与整体边框表达。 */
+.contract-run-records {
   display: grid;
-  gap: 5px;
+  gap: 6px;
 }
 
-.contract-run-history-item {
-  display: grid;
-  gap: 2px;
-  padding: 7px 8px;
-  border-left: 2px solid var(--muted);
-  border-radius: 0 7px 7px 0;
+.contract-run-record {
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: 8px;
   background: color-mix(in srgb, var(--panel) 84%, #000 16%);
+  overflow: hidden;
 }
 
-.contract-run-history-item.success {
-  border-left-color: #34d399;
+.contract-run-record > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 8px;
+  cursor: pointer;
+  list-style: none;
 }
-.contract-run-history-item.failed {
-  border-left-color: #ff6b6b;
+
+.contract-run-record > summary::-webkit-details-marker {
+  display: none;
 }
-.contract-run-history-item.cancelled {
-  border-left-color: #94a3b8;
-}
-.contract-run-history-item.skipped {
-  border-left-color: #fbbf24;
-}
-.contract-run-history-item strong {
+
+.contract-run-record > summary strong {
   color: var(--txt);
   font-size: 10px;
   font-weight: 600;
 }
-.contract-run-history-item small {
+
+.contract-run-record.failed > summary strong {
+  color: #ff8f8f;
+}
+
+.contract-run-record-body {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.contract-run-record-body > small {
   color: var(--muted);
   font-size: 9px;
-  line-height: 1.35;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
-.contract-run-info small {
-  overflow: hidden;
+.contract-run-values {
+  display: grid;
+  gap: 4px;
+}
+
+.contract-run-values > strong {
   color: var(--muted);
   font-size: 10px;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 600;
 }
 
-.contract-run-info .contract-run-error {
+.contract-run-values-empty {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.contract-run-value {
+  display: grid;
+  gap: 3px;
+}
+
+.contract-run-value-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.contract-run-value-head code {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.contract-run-value pre {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 7px 8px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel) 70%, #000 30%);
+  color: var(--txt);
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.contract-copy-button {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.contract-copy-button:hover {
+  color: var(--txt);
+  border-color: var(--muted);
+}
+
+.contract-run-record-body .contract-run-error {
   color: #fca5a5;
 }
 
@@ -8868,8 +8928,10 @@ select:focus-visible {
 }
 
 .csp-markdown blockquote {
-  border-left: 3px solid rgba(9, 202, 245, 0.5);
-  padding: 3px 0 3px 9px;
+  margin: 4px 0;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel) 70%, #000 30%);
   color: var(--muted);
 }
 
