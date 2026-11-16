@@ -40,7 +40,12 @@ const minimaxSpeechProvider = (): ProviderSummary =>
     ...provider('audio'),
     specId: 'minimax',
     models: [
-      { id: 'speech-2.8-turbo', name: 'Speech 2.8 Turbo', modality: 'audio', providerId: 'provider-1' }
+      {
+        id: 'speech-2.8-turbo',
+        name: 'Speech 2.8 Turbo',
+        modality: 'audio',
+        providerId: 'provider-1'
+      }
     ]
   }) as ProviderSummary
 
@@ -192,6 +197,47 @@ describe('异步网关等待器', () => {
     expect(off).toHaveBeenCalledOnce()
   })
 
+  it('waitForChat 正文为空但有思考内容时回退取思考内容（R-22 推理模型）', async () => {
+    let eventListener: ((event: Record<string, string>) => void) | undefined
+    installGateway({
+      chatStart: vi.fn().mockResolvedValue({ ok: true, data: { taskId: 'chat-r' } }),
+      chatCancel: vi.fn(),
+      onEvent: vi.fn((listener) => {
+        eventListener = listener
+        return vi.fn()
+      })
+    })
+    const reply = waitForChat(
+      { providerId: 'p', modelId: 'glm', messages: [{ role: 'user', content: 'hi' }] },
+      { cancelled: false }
+    )
+    await vi.runAllTicks()
+    eventListener?.({ kind: 'chat-reasoning', taskId: 'chat-r', text: '思考通道里的完整答案' })
+    eventListener?.({ kind: 'chat-done', taskId: 'chat-r' })
+    await expect(reply).resolves.toBe('思考通道里的完整答案')
+  })
+
+  it('waitForChat 正文非空时优先用正文，思考只是过程（R-22）', async () => {
+    let eventListener: ((event: Record<string, string>) => void) | undefined
+    installGateway({
+      chatStart: vi.fn().mockResolvedValue({ ok: true, data: { taskId: 'chat-t' } }),
+      chatCancel: vi.fn(),
+      onEvent: vi.fn((listener) => {
+        eventListener = listener
+        return vi.fn()
+      })
+    })
+    const reply = waitForChat(
+      { providerId: 'p', modelId: 'glm', messages: [{ role: 'user', content: 'hi' }] },
+      { cancelled: false }
+    )
+    await vi.runAllTicks()
+    eventListener?.({ kind: 'chat-reasoning', taskId: 'chat-t', text: '思考过程' })
+    eventListener?.({ kind: 'chat-delta', taskId: 'chat-t', text: '最终正文' })
+    eventListener?.({ kind: 'chat-done', taskId: 'chat-t' })
+    await expect(reply).resolves.toBe('最终正文')
+  })
+
   it('waitForVideo resolves only after the gateway publishes a media path', async () => {
     const videoTask = vi.fn().mockResolvedValue({
       ok: true,
@@ -222,7 +268,10 @@ describe('异步网关等待器', () => {
 
   it('waitForVideo 31 分钟兜底超时（大于网关 30 分钟上限）放弃等待前先补偿取消远端任务（R-01）', async () => {
     const videoCancel = vi.fn().mockResolvedValue({ ok: true })
-    installGateway({ videoTask: vi.fn().mockResolvedValue({ ok: true, data: { status: 'running' } }), videoCancel })
+    installGateway({
+      videoTask: vi.fn().mockResolvedValue({ ok: true, data: { status: 'running' } }),
+      videoCancel
+    })
     const pending = waitForVideo('task-timeout', { cancelled: false })
     const rejected = expect(pending).rejects.toThrow('视频生成等待超时（31 分钟仍无结果）')
     await vi.advanceTimersByTimeAsync(31 * 60 * 1000)
@@ -562,7 +611,9 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     )
 
     await expect(ttsExecutor(ctx)).resolves.toEqual({ status: 'done' })
-    expect(ttsGenerate).toHaveBeenCalledWith(expect.objectContaining({ referenceAudioId: 'reference-audio' }))
+    expect(ttsGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({ referenceAudioId: 'reference-audio' })
+    )
     expect(artifacts).toHaveLength(0)
     expect(JSON.parse(String(meta.nodeExtra))['out-json'].voice_id).toBe('CanvasVoice_2026')
   })

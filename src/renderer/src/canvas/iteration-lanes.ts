@@ -22,6 +22,9 @@ export const ITERATION_LANE_BRANCH_H = NODE_UI.height.default
 /** 快照卡身份角色：呈现层据此覆盖图标/身份色/标题语义。 */
 export type IterationSnapshotRole = 'ai-process' | 'image-gen'
 
+/** 分支项运行状态（预铺骨架→逐项填充→终态），呈现层据此显示状态徽标。 */
+export type IterationLaneStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped'
+
 export interface IterationFanoutLayout {
   originX: number
   centerY: number
@@ -84,6 +87,7 @@ function laneMeta(
     iterationLaneLoopId: loop.id,
     iterationLaneIndex: index,
     iterationLaneRole: role,
+    iterationLaneStatus: 'pending' as IterationLaneStatus,
     artifactCreatedAt: Date.now()
   }
 }
@@ -186,7 +190,7 @@ export function createIterationLane(
     props: {
       nodeType: 'text',
       title: `AI 处理 · 镜头 ${index + 1}`,
-      text: JSON.stringify(item, null, 2),
+      text: Object.keys(item).length > 0 ? JSON.stringify(item, null, 2) : '待处理…',
       w: ITERATION_LANE_BRANCH_W,
       h: ITERATION_LANE_BRANCH_H
     },
@@ -210,6 +214,40 @@ export function createIterationLane(
   const aiShape = editor.getShape<NodeCardShape>(aiCardId)
   if (aiShape) createLaneArrow(editor, aiShape, genCardId, loop.id, index)
   return { aiCardId, genCardId }
+}
+
+/** 运行启动即按完整 N 预铺所有分支骨架（待处理态），让用户立刻看到总量与对称布局；
+ *  并发逐项填充时复用各自骨架，布局整轮固定不漂移。返回 index → 卡片 id 映射。 */
+export function prelayoutIterationLanes(
+  editor: Editor,
+  loop: NodeCardShape,
+  count: number,
+  runId: string,
+  anchor?: { x: number; y: number; w: number; h: number }
+): Map<number, IterationLaneCards> {
+  const map = new Map<number, IterationLaneCards>()
+  const n = Math.max(1, Math.floor(count))
+  for (let index = 0; index < n; index += 1) {
+    map.set(index, createIterationLane(editor, loop, index, {}, runId, n, anchor))
+  }
+  return map
+}
+
+/** 更新分支头卡（AI 处理快照）的运行状态徽标。 */
+export function setIterationLaneStatus(
+  editor: Editor,
+  aiCardId: TLShapeId,
+  status: IterationLaneStatus
+): void {
+  const current = editor.getShape<NodeCardShape>(aiCardId)
+  if (!current) return
+  const meta = current.meta as Record<string, unknown>
+  if (meta.iterationLaneStatus === status) return
+  editor.updateShape({
+    id: aiCardId,
+    type: 'node-card',
+    meta: { ...meta, iterationLaneStatus: status }
+  })
 }
 
 /** 循环体产出文本（提示词）后，把 AI 处理快照卡正文替换为该轮提示词。 */

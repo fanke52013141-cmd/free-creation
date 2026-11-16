@@ -63,6 +63,8 @@ import {
   iterationFanoutLayout,
   iterationLaneArtifactPosition,
   liftIterationBodyDefinition,
+  prelayoutIterationLanes,
+  setIterationLaneStatus,
   updateIterationLaneGen,
   updateIterationLanePrompt
 } from '../canvas/iteration-lanes'
@@ -133,6 +135,10 @@ interface WorkflowContext {
   workflowParentSpanId?: string
   /** 迭代子流程当前批次（runSubflowForIterate 填写），随节点事件携带 batchId/itemId。 */
   batch?: { batchId: string; itemId?: string }
+  /** 当前循环项的独立 runId：并发隔离时资源占用/排队键加此维度，避免各项互踩。 */
+  itemRunId?: string
+  /** 影子隔离时的真实编辑器引用：运行历史（按项 runId 去重、追加安全）仍写真实卡供资产回溯。 */
+  realEditor?: Editor
   /** 当前循环项的画布泳道（runSubflowForIterate 创建）；产物落点与提示词注入读它。 */
   iterationLane?: {
     loopId: string
@@ -143,6 +149,10 @@ interface WorkflowContext {
   }
   /** 循环节点本轮运行的固定几何锚点：循环卡尺寸随进度变化，泳道等距排布必须用整轮一致的锚点。 */
   iterationLaneAnchor?: { x: number; y: number; w: number; h: number }
+  /** 运行启动预铺的全部 N 条分支骨架（index → 卡片 id），并发逐项复用，布局整轮固定。 */
+  iterationLanesByIndex?: Map<number, { aiCardId: TLShapeId; genCardId: TLShapeId }>
+  /** 本轮是否已预铺骨架（首个进入的迭代项触发，同步置位避免并发重复预铺）。 */
+  iterationLanesPrelaid?: boolean
   /** 独立节点任务不写入前台工作流的进度和错误汇总。 */
   isolated?: boolean
   /** W3：所属节点流运行的祖先上下文（递归/深度/预算守卫），顶层画布执行缺省。 */
@@ -607,6 +617,76 @@ export function mergeShapeMeta(
   return next as NodeCardShape['meta']
 }
 
+/** 按项影子编辑器：并发循环项复用同一套循环体定义卡，运行态（exec/nodeRun/nodeResult/媒体）
+ *  若直接写活卡会互相覆盖（静默窃取/静音对方输出）。此代理把「循环体节点」的读写路由到
+ *  本项独立的影子层，定义卡只保留用户静态输入；产物/泳道等非循环体形状仍走真实画布。
+ *  顺序执行（无影子）时行为与真实编辑器完全一致，守功能零变更。 */
+interface ShadowState {
+  props: Partial<NodeCardProps>
+  meta: Record<string, unknown>
+}
+export function createShadowEditor(
+  real: Editor,
+  shadow: Map<string, ShadowState>,
+  bodyIds: Set<string>
+): Editor {
+  const overlay = (id: TLShapeId): unknown => {
+    const base = real.getShape(id)
+    const entry = shadow.get(id)
+    if (!base || !entry) return base
+    const shape = base as NodeCardShape
+    return {
+      ...shape,
+      props: { ...shape.props, ...entry.props },
+      meta: { ...shape.meta, ...entry.meta }
+    }
+  }
+  const writeShadow = (patch: {
+    id: TLShapeId
+    props?: Partial<NodeCardProps>
+    meta?: Record<string, unknown>
+  }): void => {
+    const entry = shadow.get(patch.id) ?? { props: {}, meta: {} }
+    if (patch.props) entry.props = { ...entry.props, ...patch.props }
+    if (patch.meta) entry.meta = { ...entry.meta, ...patch.meta }
+    shadow.set(patch.id, entry)
+  }
+  return new Proxy(real, {
+    get(target, prop, receiver) {
+      if (prop === 'getShape') return (id: TLShapeId) => overlay(id)
+      if (prop === 'updateShape')
+        return (patch: {
+          id: TLShapeId
+          props?: Partial<NodeCardProps>
+          meta?: Record<string, unknown>
+        }) => {
+          if (bodyIds.has(patch.id)) writeShadow(patch)
+          else target.updateShape(patch as Parameters<Editor['updateShape']>[0])
+        }
+      if (prop === 'updateShapes')
+        return (
+          patches: Array<{
+            id: TLShapeId
+            props?: Partial<NodeCardProps>
+            meta?: Record<string, unknown>
+          }>
+        ) => {
+          const realPatches = patches.filter((patch) => {
+            if (bodyIds.has(patch.id)) {
+              writeShadow(patch)
+              return false
+            }
+            return true
+          })
+          if (realPatches.length > 0)
+            target.updateShapes(realPatches as Parameters<Editor['updateShapes']>[0])
+        }
+      const value = Reflect.get(target, prop, receiver)
+      return typeof value === 'function' ? value.bind(target) : value
+    }
+  }) as Editor
+}
+
 function writeRunRecord(editor: Editor, id: TLShapeId, record: NodeRunRecord): void {
   const current = editor.getShape<NodeCardShape>(id)
   editor.updateShape({
@@ -683,11 +763,21 @@ function finishRunRecord(
     type: 'node-card',
     meta: {
       ...(current?.meta ?? {}),
-      nodeRun: JSON.parse(JSON.stringify(finalRecord)),
-      nodeRunHistory: JSON.parse(
-        JSON.stringify(appendNodeRunHistory(current?.meta?.nodeRunHistory, finalRecord))
-      )
+      nodeRun: JSON.parse(JSON.stringify(finalRecord))
     }
+  })
+  // 运行历史按项 runId 去重、追加安全：并发影子隔离 live 运行态，但审计历史仍写真实卡，
+  // 供资产中心按镜头精确回溯（同步读改写，单线程下并发各项不互覆盖）。
+  const historyEditor = ctx.realEditor ?? ctx.editor
+  const realCurrent = historyEditor.getShape<NodeCardShape>(id)
+  historyEditor.updateShape({
+    id,
+    type: 'node-card',
+    meta: mergeShapeMeta(realCurrent?.meta, {
+      nodeRunHistory: JSON.parse(
+        JSON.stringify(appendNodeRunHistory(realCurrent?.meta?.nodeRunHistory, finalRecord))
+      )
+    })
   })
   // L01：唯一终态结构化事件由公共执行器拥有；各功能执行器不重复发终态。
   const terminalEvent =
@@ -904,6 +994,9 @@ async function invokeExecutor(
     }),
     runCode: (source, args) => runCodeTransform(source, args),
     waitForResume: () => waitForResume(ctx.token),
+    // 宿主已按 itemRunId 影子隔离循环体运行态/输出/资源，声明支持并行循环项；
+    // 实际并发数由循环节点 concurrency 配置（1–4）经 shared 迭代器有界池控制。
+    parallelItems: true,
     outgoing,
     updateProps: (patch) => {
       if (temporaryText !== undefined && Object.keys(patch).every((key) => key === 'text')) return
@@ -1159,9 +1252,11 @@ async function executeNodeOnce(
 ): Promise<NodeExecutionResult> {
   if (ctx.token.cancelled) return { status: 'skipped', reason: '任务已取消' }
   if (nodeTests.has(node.id as TLShapeId)) return { status: 'skipped', reason: '当前节点正在测试' }
+  // 循环项资源键加 itemRunId 维度：各项复用同一套定义卡但彼此隔离，可并发不互判占。
+  const resourceNodeId = ctx.itemRunId ? `${node.id}::${ctx.itemRunId}` : node.id
   const pending = acquireNodeResource({
     projectId: ctx.projectId,
-    nodeId: node.id,
+    nodeId: resourceNodeId,
     label: node.title || node.type,
     resource: nodeResource(node),
     cancel: () => {
@@ -1174,7 +1269,7 @@ async function executeNodeOnce(
     }
   })
   if (!pending) return { status: 'skipped', reason: '当前节点已在运行或排队' }
-  const taskKey = `${ctx.projectId}/${node.id}`
+  const taskKey = `${ctx.projectId}/${resourceNodeId}`
   queuedControls.set(taskKey, ctx.token)
   emitWorkflowEvent('workflow.task_queued', '节点进入资源调度', ctx)
   setExec(ctx.editor, node.id as TLShapeId, 'queued')
@@ -1194,6 +1289,7 @@ async function executeNodeOnce(
     emitWorkflowEvent('workflow.task_admitted', '节点取得资源额度', ctx)
     if (
       !ctx.command &&
+      !ctx.itemRunId &&
       !ctx.compositeRunContext?.headless &&
       window.api?.checkFlowNodeAvailability
     ) {
@@ -1785,7 +1881,7 @@ async function runSubflowForIterate(
   // L01：批次关联用稳定 batchId + itemId（有则用），不用数组位置冒充身份。
   const itemCtx: WorkflowContext = {
     ...ctx,
-    ...(request.itemRunId ? { runId: request.itemRunId } : {}),
+    ...(request.itemRunId ? { runId: request.itemRunId, itemRunId: request.itemRunId } : {}),
     batch: {
       batchId: `iter-${request.iterationNodeId ?? 'iterate'}-${ctx.runId}`,
       itemId: request.itemId
@@ -1798,24 +1894,64 @@ async function runSubflowForIterate(
     if (loopShape) {
       const index = request.index ?? 0
       const count = request.itemCount ?? 1
-      const cards = createIterationLane(
-        ctx.editor,
-        loopShape,
-        index,
-        request.item,
-        request.itemRunId ?? ctx.runId,
-        count,
-        ctx.iterationLaneAnchor
-      )
+      // 预铺：首个进入的迭代项一次性铺满全部 N 条骨架（同步置位，并发不重复预铺）。
+      if (!ctx.iterationLanesPrelaid) {
+        ctx.iterationLanesPrelaid = true
+        ctx.iterationLanesByIndex = prelayoutIterationLanes(
+          ctx.editor,
+          loopShape,
+          count,
+          request.itemRunId ?? ctx.runId,
+          ctx.iterationLaneAnchor
+        )
+      }
+      // 复用本项预铺骨架；缺失时（如旧路径）兜底单项创建。
+      const cards =
+        ctx.iterationLanesByIndex?.get(index) ??
+        createIterationLane(
+          ctx.editor,
+          loopShape,
+          index,
+          request.item,
+          request.itemRunId ?? ctx.runId,
+          count,
+          ctx.iterationLaneAnchor
+        )
       itemCtx.iterationLane = {
         loopId: request.iterationNodeId,
         index,
         laneTextNodeId: cards.aiCardId,
         genCardId: cards.genCardId
       }
+      setIterationLaneStatus(ctx.editor, cards.aiCardId, 'running')
+      setIterationLaneStatus(ctx.editor, cards.genCardId, 'running')
     }
   }
   const nodeIds = expandIterationBody(ctx.graph, request.nodeIds, request.iterationNodeId)
+  // 模板 resting 态：首项落位前清掉循环体定义卡的旧运行态/媒体引用（真实画布），
+  // 定义卡只保留用户静态输入；本轮运行态写影子层、内容承载在分支实例上。保留运行历史。
+  if (!ctx.command && (request.index ?? 0) === 0) {
+    const templateUpdates = nodeIds.flatMap((bodyId) => {
+      const bodyShape = ctx.editor.getShape<NodeCardShape>(bodyId as TLShapeId)
+      if (!bodyShape) return []
+      return [
+        {
+          id: bodyId as TLShapeId,
+          type: 'node-card' as const,
+          props: { mediaId: '', mediaPath: '', mediaMime: '' },
+          meta: mergeShapeMeta(bodyShape.meta, { nodeRun: undefined, nodeResult: undefined })
+        }
+      ]
+    })
+    if (templateUpdates.length > 0) ctx.editor.updateShapes(templateUpdates)
+  }
+  // 并发隔离：循环项复用同一套定义卡，运行态写本项影子层、输出用本项独立 Map，
+  // 定义卡只保留用户静态输入（模板 resting 态不被运行内容填充）。顺序执行行为不变。
+  if (itemCtx.itemRunId) {
+    itemCtx.realEditor = ctx.editor
+    itemCtx.editor = createShadowEditor(ctx.editor, new Map(), new Set(nodeIds))
+    itemCtx.outputs = new Map(ctx.outputs)
+  }
   // 首项落位前把循环体定义链抬到扇出上方当模板行，让出中心行给分支（奇数项中间分支对齐循环）。
   if (
     !ctx.command &&
@@ -1833,7 +1969,11 @@ async function runSubflowForIterate(
       liftIterationBodyDefinition(ctx.editor, nodeIds, layout.fanTop)
     }
   }
-  if (nodeIds.some((id) => hasNodeTask(ctx.projectId, id) || nodeTests.has(id as TLShapeId))) {
+  // 循环项资源按项隔离（itemRunId 维度），不互相判占；手动测试占用仍须避让。
+  const occupied = nodeIds.some(
+    (id) => nodeTests.has(id as TLShapeId) || (!itemCtx.itemRunId && hasNodeTask(ctx.projectId, id))
+  )
+  if (occupied) {
     throw new Error('循环体节点已在运行或排队，不能重置其结果')
   }
   // 每个 item 执行迭代体前重置迭代体节点的上次运行产物，强制每项独立产出
@@ -1912,8 +2052,21 @@ async function runSubflowForIterate(
   }
   // 取消优先于失败判定：用户意图是停止，该项必须整体作废（resume 时重跑），
   // 绝不能把部分输出当成功结果交回（F08）。
-  if (itemCtx.token.cancelled) throw new Error('迭代体执行已取消')
-  if (failureReason) throw new Error(failureReason)
+  const laneCardId = itemCtx.iterationLane?.laneTextNodeId
+  const laneGenCardId = itemCtx.iterationLane?.genCardId
+  const markLane = (status: 'done' | 'failed' | 'skipped'): void => {
+    if (laneCardId) setIterationLaneStatus(itemCtx.editor, laneCardId, status)
+    if (laneGenCardId) setIterationLaneStatus(itemCtx.editor, laneGenCardId, status)
+  }
+  if (itemCtx.token.cancelled) {
+    markLane('skipped')
+    throw new Error('迭代体执行已取消')
+  }
+  if (failureReason) {
+    markLane('failed')
+    throw new Error(failureReason)
+  }
+  markLane('done')
   return results
 }
 

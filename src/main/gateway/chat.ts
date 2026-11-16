@@ -90,6 +90,7 @@ export function startChat(send: Send, input: ChatStartInput): string {
   void (async () => {
     let firstChunkAt: number | null = null
     let outputChars = 0
+    let reasoningChars = 0
     let generatedImages = 0
     try {
       const result = streamText({
@@ -153,6 +154,7 @@ export function startChat(send: Send, input: ChatStartInput): string {
           }
           send({ kind: 'chat-delta', taskId, text: part.text })
         } else if (part.type === 'reasoning-delta') {
+          reasoningChars += part.text.length
           send({ kind: 'chat-reasoning', taskId, text: part.text })
         } else if (part.type === 'error') {
           // 上游/网络错误以 error 分片出现在流中。此前直接忽略，真实原因被吞掉，
@@ -184,7 +186,8 @@ export function startChat(send: Send, input: ChatStartInput): string {
             operation: 'chat.generate',
             providerId: input.providerId,
             modelId: input.modelId,
-            outputChars
+            outputChars,
+            reasoningChars
           }
         }
       )

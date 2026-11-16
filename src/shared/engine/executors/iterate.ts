@@ -80,7 +80,7 @@ export interface IterateResult {
 
 export function parseIterate(text: string): IterateConfig {
   if (!text) {
-    return { onFailure: 'skip', maxRetries: 0, limit: 0, runMode: 'all', concurrency: 1 }
+    return { onFailure: 'skip', maxRetries: 0, limit: 0, runMode: 'all', concurrency: 2 }
   }
   try {
     const value = JSON.parse(text) as Record<string, unknown>
@@ -94,14 +94,14 @@ export function parseIterate(text: string): IterateConfig {
         value.runMode === 'resume' || value.runMode === 'failed' || value.runMode === 'changed'
           ? value.runMode
           : 'all',
-      // W2：并行数钳制 1–4；缺省 / 非法值回退 1（与历史行为一致）。
+      // W2：并行数钳制 1–4；缺省 / 非法值回退 2（用户裁决 D2：默认并发 2，宿主已按项隔离）。
       concurrency:
         typeof value.concurrency === 'number' && Number.isFinite(value.concurrency)
           ? Math.min(4, Math.max(1, Math.round(value.concurrency)))
-          : 1
+          : 2
     }
   } catch {
-    return { onFailure: 'skip', maxRetries: 0, limit: 0, runMode: 'all', concurrency: 1 }
+    return { onFailure: 'skip', maxRetries: 0, limit: 0, runMode: 'all', concurrency: 2 }
   }
 }
 

@@ -14,7 +14,7 @@ import { useConnectionStore } from '../stores/connection'
 import { useNodePanelStore } from '../stores/nodePanel'
 import { beginConnectionDrag } from './connection-drag'
 import { batchConnectionFromSelection } from './batch-connection'
-import { dynamicPortIdsForShape, portPairCompatible } from './graph'
+import { dynamicPortIdsForShape, portPairCompatible, deriveGraph } from './graph'
 import { processorConfigurationIssue } from './processor-readiness'
 import { markUndoPoint } from './history'
 import type { NodeCardShape } from './NodeCardShape'
@@ -25,7 +25,7 @@ import { currentNodeFingerprint, successfulInputFingerprint } from '../engine/re
 import { projectNodeOutputs } from '../nodes/nodeValues'
 import { deriveNodeReadiness } from './node-readiness'
 import { readCompositeInstanceManifest } from '@shared/composite/outputs'
-import { runNodeManually } from '../engine/executor'
+import { runNodeManually, iterationBodyNodeIds } from '../engine/executor'
 import { guiWorkflowInputOptions } from '../stores/workflowInput'
 import { useAppStore } from '../stores/app'
 import { useGatewayStore } from '../stores/gateway'
@@ -274,6 +274,14 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     'node selected',
     () => editor.getSelectedShapeIds().includes(shape.id),
     [editor, shape.id]
+  )
+
+  // 循环体模板标识：被 iterate.out-item 驱动的定义节点是「循环体模板」（本体），
+  // 运行态由影子层隔离不填充活卡，内容承载在分支实例上。快照卡无数据边不在集合内。
+  const isLoopBodyTemplate = useValue(
+    'loop body template membership',
+    () => !iterationSnapshot && iterationBodyNodeIds(deriveGraph(editor)).has(shape.id),
+    [editor, shape.id, iterationSnapshot]
   )
 
   // 行首 info 图标统一打开节点契约详情；聊天工作区仍由聊天节点选中/工作区入口打开。
@@ -1388,6 +1396,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             className="node-color-bar"
             style={{ ['--node-accent' as string]: identitySpec?.color ?? '#42b9f5' }}
           />
+          {isLoopBodyTemplate && (
+            <span className="loop-body-template-badge" title="循环体模板：运行内容承载在分支实例上">
+              循环体模板
+            </span>
+          )}
           {spec && (
             <NodeCardShell
               spec={spec}

@@ -827,3 +827,15 @@ focus-visible 与深浅主题取同一套值。材质只在 `ui-surfaces.css` �
    - 快照卡 `meta.artifactLinkHidden: true`——`artifactProducerId` 仅保留追溯查询用途，`DataEdgeLayer` 与端口布局不得据此再画「循环 → 快照」的自动溯源线（否则与显式箭头重复、且语义错误地指向循环）。
    - 分支内显式箭头两条：循环→AI 处理、AI 处理→生图（`createLaneArrow`，同样无端口 meta）；生图→预览一段由产物落位的溯源关系呈现（`producerId=生图快照卡`），其颜色按快照身份（生图绿）取，不得用内核文本节点色。本应用 tldraw 箭头本体是隐藏载体（`ui-surfaces.css` `opacity:0`），泳道箭头的可见线由 `DataEdgeLayer` 按 `meta.iterationProvenance` 绘制——只建 tldraw 箭头不接 DataEdgeLayer 会导致连线不可见。
    - 守护单测：`test/iteration-lanes.test.ts`「循环分支串行连线」断言快照卡隐藏自动溯源线、每分支恰两条箭头且无循环→生图直连。
+
+### 2026-11-17 循环可控并发 · 预铺骨架 · 模板标识 · 恢复控制（当前权威）
+
+用户裁决：循环要真并发且并发数可在循环节点设置（防过大报错）；大 N 运行先预铺全部骨架再逐项填充；报错/异常停止须有显式继续/重试控制；循环本体（模板）与过程项（实例）分离，模板不填充运行内容。
+
+1. **预铺骨架**：运行启动即按完整 N 一次性铺好所有分支骨架（`prelayoutIterationLanes`，待处理态），对称布局整轮固定；并发逐项复用各自骨架（`ctx.iterationLanesByIndex`），不懒创建、不漂移。
+2. **每项状态徽标**：分支头卡与生图快照卡带 `meta.iterationLaneStatus`（pending/running/done/failed/skipped），呈现层显示「待处理/生成中/已完成/失败/已跳过」彩色小标（`IterationSnapshotBody`）。
+3. **可控并发**：循环节点「并行」配置（1–4，缺省 2）经 shared 迭代器有界池生效；宿主声明 `parallelItems=true`。并发正确性靠**按项影子隔离**：`createShadowEditor` 代理把循环体定义卡的 live 运行态（exec/nodeRun/nodeResult/媒体）路由到本项影子层，输出用本项独立 Map，资源占用键加 `itemRunId` 维度；定义卡只保留用户静态输入。运行历史（`nodeRunHistory`，按项 runId 去重、追加安全）仍写真实卡供资产回溯。顺序执行（concurrency=1）行为不变。GUI/CLI/MCP 同一宿主路径，三入口一致。
+4. **模板标识与 resting 态**：被 `iterate.out-item` 驱动的定义节点显示「循环体模板」徽标（`iterationBodyNodeIds` 判定，卡片右上角）；首项落位前清掉定义卡旧运行态/媒体引用，运行内容承载在分支实例上，模板不被填充。
+5. **恢复控制**：循环卡显式按钮「继续生成」（runMode=resume，已完成不重复付费）/「重试失败项」（failed）/「全部重跑」（all），复用既有 runMode 契约（CLI/MCP 已支持），按上轮结果含失败/未完成项智能显隐。顶栏暂停/继续/停止保留。
+6. **推理模型空正文回退（R-22）**：`waitForChat` 正文为空但有思考内容时回退取思考通道，避免推理模型被误判「模型返回为空」连锁报错；网关 `model.request.completed` 增记 `reasoningChars` 诊断属性。
+7. 守护单测：`test/shadow-editor.test.ts`（影子隔离三项）、`test/iterate.test.ts`（并发缺省 2/钳制）、`test/manual-run.test.ts`（按项运行历史持久化）；节点 UI 浏览器门禁（standard/visual-system/flexible/refinements/colors/pointer）全过。

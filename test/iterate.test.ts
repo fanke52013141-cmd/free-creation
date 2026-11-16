@@ -140,7 +140,7 @@ describe('parseIterate · 配置解析', () => {
       maxRetries: 3,
       limit: 10,
       runMode: 'all',
-      concurrency: 1
+      concurrency: 2
     })
   })
 
@@ -150,14 +150,14 @@ describe('parseIterate · 配置解析', () => {
       maxRetries: 0,
       limit: 0,
       runMode: 'all',
-      concurrency: 1
+      concurrency: 2
     })
     expect(parseIterate('{bad')).toEqual({
       onFailure: 'skip',
       maxRetries: 0,
       limit: 0,
       runMode: 'all',
-      concurrency: 1
+      concurrency: 2
     })
   })
 })
@@ -852,11 +852,12 @@ describe('T13 分镜局部续跑', () => {
 })
 
 describe('parseIterate · W2 并发数解析', () => {
-  it('concurrency 钳制 1–4，缺省 1', () => {
+  it('concurrency 钳制 1–4，缺省 2（D2 默认并发）', () => {
     expect(parseIterate(JSON.stringify({ concurrency: 99 })).concurrency).toBe(4)
     expect(parseIterate(JSON.stringify({ concurrency: 0 })).concurrency).toBe(1)
     expect(parseIterate(JSON.stringify({ concurrency: 2.7 })).concurrency).toBe(3)
-    expect(parseIterate(JSON.stringify({})).concurrency).toBe(1)
+    expect(parseIterate(JSON.stringify({})).concurrency).toBe(2)
+    expect(parseIterate('').concurrency).toBe(2)
   })
 })
 
@@ -878,7 +879,16 @@ describe('iterate 执行器 · W2 并发', () => {
       maxInflight = Math.max(maxInflight, inflight)
       await new Promise((r) => setTimeout(r, 30))
       inflight -= 1
-      return { body: { 'out-text': { value: String(item.id), type: 'text', source: { nodeId: 'b', portId: 'p', runId: 'r' }, createdAt: 0 } } } as SubflowOutput
+      return {
+        body: {
+          'out-text': {
+            value: String(item.id),
+            type: 'text',
+            source: { nodeId: 'b', portId: 'p', runId: 'r' },
+            createdAt: 0
+          }
+        }
+      } as SubflowOutput
     })
     const { result } = await runParallelCase({ concurrency: 3, parallelItems: false, run })
     expect(maxInflight).toBe(1)
@@ -895,7 +905,16 @@ describe('iterate 执行器 · W2 并发', () => {
       maxInflight = Math.max(maxInflight, inflight)
       await new Promise((r) => setTimeout(r, delayFor(String(item.id))))
       inflight -= 1
-      return { body: { 'out-text': { value: String(item.id), type: 'text', source: { nodeId: 'b', portId: 'p', runId: 'r' }, createdAt: 0 } } } as SubflowOutput
+      return {
+        body: {
+          'out-text': {
+            value: String(item.id),
+            type: 'text',
+            source: { nodeId: 'b', portId: 'p', runId: 'r' },
+            createdAt: 0
+          }
+        }
+      } as SubflowOutput
     })
     const { result } = await runParallelCase({ concurrency: 3, parallelItems: true, run })
     expect(maxInflight).toBeGreaterThanOrEqual(2)
@@ -909,11 +928,23 @@ describe('iterate 执行器 · W2 并发', () => {
         return {} as SubflowOutput // 空输出 → 该项失败
       }
       await new Promise((r) => setTimeout(r, 40))
-      return { body: { 'out-text': { value: String(item.id), type: 'text', source: { nodeId: 'b', portId: 'p', runId: 'r' }, createdAt: 0 } } } as SubflowOutput
+      return {
+        body: {
+          'out-text': {
+            value: String(item.id),
+            type: 'text',
+            source: { nodeId: 'b', portId: 'p', runId: 'r' },
+            createdAt: 0
+          }
+        }
+      } as SubflowOutput
     })
-    const { result } = await runParallelCase(
-      { concurrency: 3, parallelItems: true, run, onFailure: 'fail' }
-    )
+    const { result } = await runParallelCase({
+      concurrency: 3,
+      parallelItems: true,
+      run,
+      onFailure: 'fail'
+    })
     const parsed = JSON.parse(result.value as string)
     expect(parsed.items[0].status).toBe('failed')
     // b / c 与 a 同时在途，结果不受 fail 策略影响；关键是不出现未定义项
@@ -925,14 +956,21 @@ describe('iterate 执行器 · W2 并发', () => {
     const run = vi.fn(async ({ item }: { item: Record<string, unknown> }) => {
       if (item.id === 'a') {
         await new Promise((r) => setTimeout(r, 20))
-        return { body: { 'out-text': { value: 'a', type: 'text', source: { nodeId: 'b', portId: 'p', runId: 'r' }, createdAt: 0 } } } as SubflowOutput
+        return {
+          body: {
+            'out-text': {
+              value: 'a',
+              type: 'text',
+              source: { nodeId: 'b', portId: 'p', runId: 'r' },
+              createdAt: 0
+            }
+          }
+        } as SubflowOutput
       }
       signal.cancelled = true
       throw new Error('aborted by test')
     })
-    const { result } = await runParallelCase(
-      { concurrency: 3, parallelItems: true, run, signal }
-    )
+    const { result } = await runParallelCase({ concurrency: 3, parallelItems: true, run, signal })
     const parsed = JSON.parse(result.value as string)
     expect(parsed.items[0].status).toBe('done')
     const rest = parsed.items.slice(1).map((entry: { status: string }) => entry.status)
@@ -967,9 +1005,7 @@ describe('iterate 执行器 · W2 并发', () => {
     return parsed.items
       .filter((entry: { status: string }) => entry.status === 'done')
       .map((entry: { outputs: Record<string, Record<string, unknown>> }) => {
-        const ports = Object.values(entry.outputs ?? {})[0] as
-          | Record<string, unknown>
-          | undefined
+        const ports = Object.values(entry.outputs ?? {})[0] as Record<string, unknown> | undefined
         return ports?.['out-text']
       })
   }

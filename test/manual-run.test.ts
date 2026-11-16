@@ -911,8 +911,11 @@ describe('runWorkflowForNodes · 子图目标含循环节点时循环体必须�
       useConfirmStore.setState({ confirm: originalConfirm })
     }
 
-    // 循环体真实入域并逐项执行（旧缺陷下 prompt 保持 idle、iterate 报未配置循环体）。
-    expect(prompt.props.exec).toBe('success')
+    // 循环体真实入域并逐项执行（旧缺陷下循环体被跳过、iterate 报未配置循环体）。
+    // 并发影子隔离后定义卡 live exec 不填充（模板 resting 态），逐项执行以按项运行历史为证。
+    const scopeRuns = (prompt.meta.nodeRunHistory as Array<{ runId: string }> | undefined) ?? []
+    expect(scopeRuns).toHaveLength(2)
+    expect(scopeRuns.every((run) => run.runId.includes(':item:'))).toBe(true)
     expect(iterate.props.exec).toBe('success')
     const result = JSON.parse(String(iterate.meta.nodeResult))
     expect(

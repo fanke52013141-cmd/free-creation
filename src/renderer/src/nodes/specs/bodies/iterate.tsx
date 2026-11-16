@@ -123,6 +123,17 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
       setBusy(false)
     }
   }
+  // 显式恢复控制（复用已有 runMode）：继续生成=续跑未完成（已完成不重复付费），
+  // 重试失败项=只重跑上轮失败项，全部重跑=全部重新运行。
+  const runWithMode = async (mode: IterateConfig['runMode']): Promise<void> => {
+    updateConfig({ ...data, runMode: mode })
+    await run()
+  }
+  const resultItems = result?.items ?? []
+  const hasFailed = resultItems.some((item) => item?.status === 'failed')
+  const hasUnfinished = resultItems.some(
+    (item) => item && item.status !== 'done' && item.status !== 'reused'
+  )
 
   return (
     <div className="iterate-body" ref={scrollRef}>
@@ -247,6 +258,38 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
       <NodePrimaryButton disabled={busy} onClick={() => void run()}>
         {busy ? '运行中…' : '运行循环'}
       </NodePrimaryButton>
+      {result && !busy && (hasFailed || hasUnfinished) && (
+        <div className="iterate-recovery">
+          {hasUnfinished && (
+            <button
+              type="button"
+              className="iterate-recovery-btn"
+              title="续跑未完成项，已完成项不重复付费"
+              onClick={() => void runWithMode('resume')}
+            >
+              继续生成
+            </button>
+          )}
+          {hasFailed && (
+            <button
+              type="button"
+              className="iterate-recovery-btn is-failed"
+              title="只重跑上一轮失败的项"
+              onClick={() => void runWithMode('failed')}
+            >
+              重试失败项
+            </button>
+          )}
+          <button
+            type="button"
+            className="iterate-recovery-btn"
+            title="全部重新运行（可能重复付费）"
+            onClick={() => void runWithMode('all')}
+          >
+            全部重跑
+          </button>
+        </div>
+      )}
     </div>
   )
 }
