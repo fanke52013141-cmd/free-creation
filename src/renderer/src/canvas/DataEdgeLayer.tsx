@@ -20,6 +20,7 @@ import { buildDataEdgePath, isBackwardEdge, NODE_PORT_OUTSET } from './edge-geom
 import { useConnectionStore, type ConnectionFrom } from '../stores/connection'
 import { dynamicPortIdsForShape, portPairCompatible } from './graph'
 import { collectNodePortConnections, createNodePortLayout } from './node-port-layout'
+import { readIterationSnapshot } from './iteration-lanes'
 import { edgeMaskExtents, type EdgePageRect } from './edge-visual-extents'
 import { markUndoPoint } from './history'
 import { toast } from '../stores/toast'
@@ -104,6 +105,38 @@ function collectEdges(editor: Editor, draftFrom: ConnectionFrom | null): PageEdg
     const bindings = editor.getBindingsFromShape(arrow.id, 'arrow')
     const start = bindings.find((binding) => binding.props.terminal === 'start')
     const end = bindings.find((binding) => binding.props.terminal === 'end')
+    // 循环泳道串行箭头（循环→AI处理→生图）：tldraw 箭头本体是隐藏载体，
+    // 可见业务线统一由本层绘制；无端口 meta，按节点边缘中点收口，只作视觉溯源。
+    if (typeof arrow.meta?.iterationProvenance === 'string' && start && end) {
+      const source = editor.getShape<NodeCardShape>(start.toId)
+      const target = editor.getShape<NodeCardShape>(end.toId)
+      if (source?.type !== 'node-card' || target?.type !== 'node-card') continue
+      const sourceBounds = editor.getShapePageBounds(source.id)
+      const targetBounds = editor.getShapePageBounds(target.id)
+      if (!sourceBounds || !targetBounds) continue
+      const sourceSnapshot = readIterationSnapshot(source)
+      const sourceSpec = sourceSnapshot
+        ? getNodeType(sourceSnapshot.role)
+        : getNodeType(source.props.nodeType)
+      result.push({
+        id: arrow.id,
+        color: sourceSpec?.color ?? '#94a3b8',
+        sourceId: source.id,
+        targetId: target.id,
+        provenance: true,
+        path: buildDataEdgePath(
+          { x: sourceBounds.maxX + NODE_PORT_OUTSET, y: sourceBounds.y + sourceBounds.height / 2 },
+          { x: targetBounds.x - NODE_PORT_OUTSET, y: targetBounds.y + targetBounds.height / 2 },
+          {
+            backward: isBackwardEdge(
+              sourceBounds.x + sourceBounds.width / 2,
+              targetBounds.x + targetBounds.width / 2
+            )
+          }
+        )
+      })
+      continue
+    }
     if (
       !start ||
       !end ||
@@ -211,11 +244,16 @@ function collectEdges(editor: Editor, draftFrom: ConnectionFrom | null): PageEdg
 
     const outPort = outIdx >= 0 ? producerPorts.out[outIdx] : undefined
     // 追溯线同样从生产节点出发，颜色必须跟随该节点的输出色。
+    // 循环分支快照卡内核是文本节点，颜色按呈现层身份（AI 处理/生图）取，与卡片一致。
+    const producerSnapshot = readIterationSnapshot(producer)
+    const producerSpec = producerSnapshot
+      ? getNodeType(producerSnapshot.role)
+      : getNodeType(producer.props.nodeType)
     const assetOutType = assetPorts.out[0]?.type
     result.push({
       id: `artifact:${asset.id}` as TLShapeId,
       color:
-        getNodeType(producer.props.nodeType)?.color ??
+        producerSpec?.color ??
         (assetOutType
           ? (PORT_COLORS[assetOutType] ?? '#94a3b8')
           : outPort
@@ -608,7 +646,11 @@ export function DataEdgeLayer({
                   if (edge.provenance) {
                     // 追溯线只在节点之外可见，但沿用普通连线的颜色和流动层级。
                     return (
-                      <g key={edge.id} data-edge-id={edge.id} className={isDimmed(edge) ? 'is-dimmed' : undefined}>
+                      <g
+                        key={edge.id}
+                        data-edge-id={edge.id}
+                        className={isDimmed(edge) ? 'is-dimmed' : undefined}
+                      >
                         <path
                           className="data-edge-glow artifact-provenance-glow"
                           d={edge.path}

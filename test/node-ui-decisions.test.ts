@@ -1362,11 +1362,27 @@ describe('循环扇出对称分支与只读运行快照', () => {
   })
 
   it('循环→分支溯源箭头只有绑定没有端口 meta，不进语义图且可随项目保存', () => {
-    expect(lanes).toContain('iterationProvenance: loop.id')
+    expect(lanes).toContain('iterationProvenance: loopId')
     expect(lanes).not.toContain('fromPort:')
     expect(graph).toContain("if (typeof shape.meta?.iterationProvenance === 'string') continue")
     expect(canvasEditor).toContain(
       "if (shape.type === 'arrow' && typeof shape.meta?.iterationProvenance === 'string') return true"
+    )
+  })
+
+  it('分支连线是串行链：快照卡隐藏自动溯源线，循环→AI处理→生图，生图→预览走产物溯源', () => {
+    // 快照卡不得再触发「循环→快照」的自动溯源线（重复且语义错误）
+    expect(lanes).toContain('artifactLinkHidden: true')
+    // 每分支两条显式箭头：循环→AI 处理、AI 处理→生图
+    expect(lanes).toContain('createLaneArrow(editor, loop, aiCardId, loop.id, index)')
+    expect(lanes).toContain('createLaneArrow(editor, aiShape, genCardId, loop.id, index)')
+    // 生图→预览的溯源线颜色按快照身份取，不用内核文本节点色
+    const edgeLayer = read('src/renderer/src/canvas/DataEdgeLayer.tsx')
+    expect(edgeLayer).toContain('const producerSnapshot = readIterationSnapshot(producer)')
+    expect(edgeLayer).toContain('? getNodeType(producerSnapshot.role)')
+    // tldraw 箭头本体是隐藏载体：泳道箭头必须由 DataEdgeLayer 绘制才可见
+    expect(edgeLayer).toContain(
+      "typeof arrow.meta?.iterationProvenance === 'string' && start && end"
     )
   })
 

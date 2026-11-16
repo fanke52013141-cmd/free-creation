@@ -823,3 +823,7 @@ focus-visible 与深浅主题取同一套值。材质只在 `ui-surfaces.css` �
 4. **循环体定义链让位**：运行时把循环体定义节点（AI 处理/生图模板）抬到扇出上方当模板行（`liftIterationBodyDefinition`），让出中心行给分支；保留各节点横向位置。定义链仍是改模型/提示词规则的入口。
 5. **视觉溯源箭头不是数据边**：循环 → 各分支头卡用轻量箭头表达分发关系，只有 tldraw 绑定、没有端口 meta（`meta.iterationProvenance`），因此不进语义图、不参与排序与执行、不会被当成循环体；随项目保存（`isWorkflowCanvasShape` 放行），重跑前与快照卡一并清理（`clearIterationLanes`）。
 6. 身份色复用产出节点既有分类色板（`NODE_ACCENTS`），不新增配色；纯呈现改造，无新增日志事件、无新增网络路径。
+7. **分支连线必须是串行链（2026-11-16 用户纠正，当前权威）**：每条分支的可见连线恰为「循环 → AI 处理快照 → 生图快照 → 预览图」，N 项就是 N 条这样的主线，不允许循环直接连到生图/预览。实现约束：
+   - 快照卡 `meta.artifactLinkHidden: true`——`artifactProducerId` 仅保留追溯查询用途，`DataEdgeLayer` 与端口布局不得据此再画「循环 → 快照」的自动溯源线（否则与显式箭头重复、且语义错误地指向循环）。
+   - 分支内显式箭头两条：循环→AI 处理、AI 处理→生图（`createLaneArrow`，同样无端口 meta）；生图→预览一段由产物落位的溯源关系呈现（`producerId=生图快照卡`），其颜色按快照身份（生图绿）取，不得用内核文本节点色。本应用 tldraw 箭头本体是隐藏载体（`ui-surfaces.css` `opacity:0`），泳道箭头的可见线由 `DataEdgeLayer` 按 `meta.iterationProvenance` 绘制——只建 tldraw 箭头不接 DataEdgeLayer 会导致连线不可见。
+   - 守护单测：`test/iteration-lanes.test.ts`「循环分支串行连线」断言快照卡隐藏自动溯源线、每分支恰两条箭头且无循环→生图直连。

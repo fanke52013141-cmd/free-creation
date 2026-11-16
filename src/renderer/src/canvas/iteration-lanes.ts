@@ -75,6 +75,10 @@ function laneMeta(
   return {
     artifactProducerId: loop.id,
     artifactProducerPortId: 'out-item',
+    // 快照卡的溯源关系只供追溯查询，不画「循环→快照」的自动溯源线：
+    // 分支连线统一由显式泳道箭头表达（循环→AI处理→生图→预览），
+    // 否则 DataEdgeLayer 会按 artifactProducerId 再画一遍，出现重复且语义错误的线。
+    artifactLinkHidden: true,
     artifactRunId: runId,
     runGroupId: runId,
     iterationLaneLoopId: loop.id,
@@ -84,15 +88,18 @@ function laneMeta(
   }
 }
 
-/** 循环 → 分支头卡的视觉溯源箭头：只有绑定、没有端口 meta，因此不是数据边。 */
-function createProvenanceArrow(
+/** 泳道视觉箭头：只有绑定、没有端口 meta，因此不是数据边、不参与执行。
+ *  本应用 tldraw 箭头本体是隐藏载体（ui-surfaces.css opacity:0），可见线由
+ *  DataEdgeLayer 按 meta.iterationProvenance 统一绘制。 */
+function createLaneArrow(
   editor: Editor,
-  loop: NodeCardShape,
+  source: NodeCardShape,
   targetId: TLShapeId,
+  loopId: string,
   index: number
 ): void {
   const arrowId = createShapeId()
-  const start = { x: loop.x + loop.props.w, y: loop.y + loop.props.h / 2 }
+  const start = { x: source.x + source.props.w, y: source.y + source.props.h / 2 }
   const target = editor.getShape<NodeCardShape>(targetId)
   const end = target
     ? { x: target.x, y: target.y + target.props.h / 2 }
@@ -118,15 +125,15 @@ function createProvenanceArrow(
       scale: 1
     },
     meta: {
-      iterationProvenance: loop.id,
-      iterationLaneLoopId: loop.id,
+      iterationProvenance: loopId,
+      iterationLaneLoopId: loopId,
       iterationLaneIndex: index
     }
   })
   editor.createBinding({
     type: 'arrow',
     fromId: arrowId,
-    toId: loop.id,
+    toId: source.id,
     props: {
       terminal: 'start',
       normalizedAnchor: { x: 1, y: 0.5 },
@@ -154,7 +161,9 @@ export interface IterationLaneCards {
   genCardId: TLShapeId
 }
 
-/** 创建第 index 项分支：AI 处理快照头卡 + 生图快照卡 + 循环溯源箭头。 */
+/** 创建第 index 项分支：AI 处理快照头卡 + 生图快照卡 + 串行视觉箭头。
+ *  连线语义（用户 2026-11-16）：循环 → AI 处理 → 生图 → 预览，一条分支一条串行链；
+ *  生图 → 预览一段由产物落位时的溯源关系呈现（producerId=生图快照卡）。 */
 export function createIterationLane(
   editor: Editor,
   loop: NodeCardShape,
@@ -197,7 +206,9 @@ export function createIterationLane(
     },
     meta: { ...laneMeta(loop, index, runId, 'image-gen'), nodeHeightMode: 'manual' }
   })
-  createProvenanceArrow(editor, loop, aiCardId, index)
+  createLaneArrow(editor, loop, aiCardId, loop.id, index)
+  const aiShape = editor.getShape<NodeCardShape>(aiCardId)
+  if (aiShape) createLaneArrow(editor, aiShape, genCardId, loop.id, index)
   return { aiCardId, genCardId }
 }
 
