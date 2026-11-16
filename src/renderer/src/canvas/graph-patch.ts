@@ -21,6 +21,7 @@ import { getNodeType, getNodePorts, type NodeTypeSpec } from '../nodes/registry'
 import { createEdge, portPairCompatible } from './graph'
 import type { NodeCardShape } from './NodeCardShape'
 import { parseMediaResultCollection } from '@shared/engine/values'
+import { codePortConfigErrors } from '@shared/engine/executors/code'
 import { selectMediaResult } from '../nodes/specs/bodies/shared'
 import { arrangeBackdrop, createBackdrop, moveBackdrop } from './backdrop-layout'
 
@@ -240,6 +241,13 @@ export function planGraphPatch(
         : initialConfigString(spec, op.config, modelBindings)
       if (configByteLength(config) > GRAPH_NODE_CONFIG_MAX_BYTES)
         return fail(index, 'CONFIG_TOO_LARGE')
+      // 代码节点非法 config 会让动态端口静默隐藏（外部 Agent 建链后才发现没端口）。
+      // 在计划阶段就显式拒绝，错误信息带上具体配置问题。
+      if (op.nodeType === 'code') {
+        const configErrors = codePortConfigErrors(config)
+        if (configErrors.length > 0)
+          return fail(index, 'CONFIG_INVALID', configErrors.join('；'))
+      }
       const media = op.media ? resolutionOf(op.media.mediaId) : undefined
       if (op.media && !media) return fail(index, 'MEDIA_NOT_RESOLVED', op.media.mediaId)
       const id = createShapeId()
@@ -299,6 +307,11 @@ export function planGraphPatch(
       if (op.config || updateResolution) {
         if (configByteLength(nextConfig) > GRAPH_NODE_CONFIG_MAX_BYTES)
           return fail(index, 'CONFIG_TOO_LARGE')
+        if (node.nodeType === 'code') {
+          const configErrors = codePortConfigErrors(nextConfig)
+          if (configErrors.length > 0)
+            return fail(index, 'CONFIG_INVALID', configErrors.join('；'))
+        }
       }
       const afterH = op.h ?? 260
       const afterPorts = livePorts(node.nodeType, nextConfig, afterH, updateResolution?.manifest ?? node.compositeManifest)

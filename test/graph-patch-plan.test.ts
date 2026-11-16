@@ -268,7 +268,7 @@ describe('graph.patch 规划器校验矩阵', () => {
   })
 
   it('更新配置使连线引用的动态端口消失时整批拒绝', () => {
-    const config = JSON.stringify({ params: [], outputs: [{ name: 'result', type: 'text' }] })
+    const config = JSON.stringify({ params: [], outputs: [{ name: 'result', type: 'string' }] })
     const editor = editorWith(
       [card('c', 'code', config), card('t', 'text'), arrow('e0', 'shape:c', 'shape:t', 'out-result', 'in-text')],
       [['e0', { from: 'c', to: 't' }]]
@@ -279,7 +279,7 @@ describe('graph.patch 规划器校验矩阵', () => {
         {
           action: 'node.update',
           nodeId: 'shape:c',
-          config: { outputs: [{ name: 'other', type: 'text' }] }
+          config: { outputs: [{ name: 'other', type: 'string' }] }
         }
       ],
       []
@@ -470,5 +470,48 @@ describe('graph.patch 规划器校验矩阵', () => {
       { 'node:shape:inst': { manifest: breakingManifest as never, contentHash } }
     )
     expect(badPlan).toMatchObject({ ok: false, issue: { code: 'EDGE_PORT_INVALID' } })
+  })
+
+  it('代码节点非法 outputType 在计划阶段显式拒绝（不再静默隐藏端口）', () => {
+    const bad = planGraphPatch(
+      mockEditor([]),
+      [
+        {
+          action: 'node.create',
+          nodeType: 'code',
+          x: 0,
+          y: 0,
+          config: { source: 'return input.json[0].shots', outputType: 'json' }
+        }
+      ],
+      []
+    )
+    expect(bad).toMatchObject({ ok: false, issue: { code: 'CONFIG_INVALID' } })
+    if (!bad.ok) expect(bad.issue.detail).toContain('类型无效')
+
+    const ok = planGraphPatch(
+      mockEditor([]),
+      [
+        {
+          action: 'node.create',
+          nodeType: 'code',
+          x: 0,
+          y: 0,
+          config: { source: 'return input.json[0].shots', outputType: 'array' }
+        }
+      ],
+      []
+    )
+    expect(ok.ok).toBe(true)
+  })
+
+  it('代码节点 update 把合法类型改非法时同样拒绝', () => {
+    const editor = editorWith([card('c', 'code', JSON.stringify({ source: 'return 1', outputType: 'number' }))], [])
+    const bad = planGraphPatch(
+      editor,
+      [{ action: 'node.update', nodeId: 'shape:c', config: { outputType: 'json' } }],
+      []
+    )
+    expect(bad).toMatchObject({ ok: false, issue: { code: 'CONFIG_INVALID' } })
   })
 })
