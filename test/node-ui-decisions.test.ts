@@ -40,7 +40,6 @@ const videoBody = read('src/renderer/src/nodes/specs/bodies/video.tsx')
 const fileBody = read('src/renderer/src/nodes/specs/bodies/file.tsx')
 const nodeUiTokens = read('src/renderer/src/canvas/node-ui-tokens.ts')
 const imageGenAdaptive = read('src/renderer/src/canvas/image-gen-adaptive.css')
-const visualSystem = read('src/renderer/src/canvas/node-visual-system.css')
 
 describe('节点与画布滚轮路由', () => {
   it('画布捕获滚轮并交给统一路由，节点正文不自行注册竞争监听器', () => {
@@ -235,48 +234,6 @@ describe('v1.2 §16.5 媒体后续动作按钮只放文字', () => {
     expect(surfaces).toContain('.node-card .node-media-next-actions.media-action-toolbar')
     expect(surfaces).toContain('.node-card .media-action-toolbar .media-action-button')
     expect(surfaces).not.toContain('image-node-action-toolbar')
-  })
-})
-
-describe('2026-11-16 §24 素材节点通透化：操作悬浮/选中显隐', () => {
-  it('显隐规则唯一落在公共视觉层，作用域精确限定有媒体的素材卡', () => {
-    // 只在精确指针设备启用隐藏；触屏兜底常驻。
-    expect(visualSystem).toContain('@media (hover: hover) and (pointer: fine)')
-    // 作用域用 :has 限定「有媒体」的图片 / 视频素材 / 视频结果卡，空态与生成表单不受影响。
-    expect(visualSystem).toContain('.node-card-wrap:has(.node-card.type-image .node-media-wrap)')
-    expect(visualSystem).toContain(
-      '.node-card-wrap:has(.node-card:is(.type-video-asset, .type-video) .video-thumbnail-wrap)'
-    )
-    // 隐藏底部操作条与标题行操作，但保留序号/图标/标题/状态灯（不在目标集合内）。
-    expect(visualSystem).toContain('.node-standard-action-bar')
-    expect(visualSystem).toContain('.node-header-file-actions')
-    expect(visualSystem).toContain('.node-header .node-info-btn')
-    expect(visualSystem).toContain('.node-header .node-action-float')
-  })
-
-  it('隐藏用 opacity + pointer-events，显现含悬浮/聚焦/选中三态，按钮不被移出 DOM', () => {
-    expect(visualSystem).toMatch(/opacity:\s*0;\s*pointer-events:\s*none;/)
-    expect(visualSystem).toMatch(/opacity:\s*1;\s*pointer-events:\s*auto;/)
-    // D2：选中常驻；键盘聚焦可达；悬浮显现。
-    expect(visualSystem).toContain(':is(:hover, :focus-within, .is-selected)')
-    // 不得用 display:none / visibility:hidden 把按钮移出可达性（读屏与 Tab 仍可达）。
-    const revealBlock = visualSystem.match(/2026-11-16 素材节点通透化[\s\S]*$/)?.[0] ?? ''
-    expect(revealBlock).not.toBe('')
-    expect(revealBlock).not.toMatch(/display:\s*none/)
-    expect(revealBlock).not.toMatch(/visibility:\s*hidden/)
-    // 减少动态效果时去掉过渡。
-    expect(visualSystem).toContain('prefers-reduced-motion: no-preference')
-  })
-
-  it('素材 Body 与外壳零改动：回调、按钮与几何落位保持原样', () => {
-    // 显隐是纯 CSS，TSX 不得为显隐新增 state/类名/内联样式。
-    expect(imageBody).not.toContain('is-hovered')
-    expect(videoBody).not.toContain('is-hovered')
-    expect(nodeCardView).not.toContain('asset-actions-hidden')
-    // 六快捷与视频三操作仍在原 Body 中（回调不变）。
-    expect(sharedBodies).toContain("label: 'P图'")
-    expect(videoBody).toContain('视频截取')
-    expect(videoBody).toContain('抽帧')
   })
 })
 

@@ -69,14 +69,9 @@ async function main() {
       const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
       editor.deleteShapes(['shape:video-layout-wide', 'shape:video-layout-tall'])
     })
-    // §24 通透化：素材卡标题/底部操作默认隐藏，先悬浮显现再点击；定位居中会动画移动画布，点击后重新悬浮。
-    const videoNode = page.locator('[data-node-id="shape:video-operation-test"]')
-    await videoNode.hover()
     const center = page.getByRole('button', { name: '在画布中定位居中', exact: true })
     assert.equal(await center.evaluate((element) => Boolean(element.closest('.node-header'))), true)
     await center.click()
-    await page.waitForTimeout(300)
-    await videoNode.hover()
     await page.getByRole('button', { name: '视频截取', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '视频操作工作台' })
     await dialog.waitFor()

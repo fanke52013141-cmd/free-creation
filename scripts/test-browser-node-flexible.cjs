@@ -118,8 +118,6 @@ const fs = require('node:fs')
     const image = page.locator('[data-node-type="image"]')
     for (const label of ['裁剪', '拆分', '生图', 'P图', '生视频', '替换'])
       assert.ok((await image.textContent()).includes(label))
-    // §24 通透化：素材卡操作默认隐藏，先悬浮显现再点击（回调与连线不变）。
-    await image.hover()
     await image.getByRole('button', { name: '创建图片拆分节点并连接当前图片', exact: true }).click()
     assert.equal(await page.locator('[data-node-type="image-split"]').count(), 2)
     await page.evaluate(async () => {
