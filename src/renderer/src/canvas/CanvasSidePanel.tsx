@@ -93,22 +93,22 @@ function nextVersionLabel(version: string | null): string {
 
 function WorkflowPanel({
   editor,
-  projectId
+  projectId,
+  refreshKey,
+  onEditNodes,
+  onEditInfo
 }: {
   editor: Editor | null
   projectId: string
+  refreshKey: number
+  onEditNodes: (capability: CompositeCapabilitySummary) => void
+  onEditInfo: (capability: CompositeCapabilitySummary) => void
 }): React.JSX.Element {
   const templates = useWorkflowStore((s) => s.templates)
   const wfLoad = useWorkflowStore((s) => s.load)
   const wfRemove = useWorkflowStore((s) => s.remove)
   const [query, setQuery] = useState('')
   const [composites, setComposites] = useState<CompositeCapabilitySummary[]>([])
-  const [settingsDialog, setSettingsDialog] = useState<CompositeCapabilitySummary | null>(null)
-  const [canvasEdit, setCanvasEdit] = useState<{
-    capability: CompositeCapabilitySummary
-    manifest: import('@shared/composite/manifest').CompositeManifest
-    draftRevision: number | null
-  } | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const needle = query.trim().toLocaleLowerCase()
   const visibleTemplates = templates.filter((template) =>
@@ -130,7 +130,7 @@ function WorkflowPanel({
     void window.api.composite.search({}).then((result) => {
       if (result.ok) setComposites(result.data)
     })
-  }, [])
+  }, [refreshKey])
 
   const refreshComposites = (): void => {
     void window.api.composite.search({}).then((result) => {
@@ -230,28 +230,39 @@ function WorkflowPanel({
     toast(`已添加节点流「${capability.name} v${versionLabel(version)}」`)
   }
 
-  // 编辑节点：优先恢复未发布草稿；没有草稿时以最新发布版本为基准铺开画布。
-  const openCanvasEdit = async (capability: CompositeCapabilitySummary): Promise<void> => {
-    const latest = capability.latestVersion
-    if (!latest) return toast('该节点流还没有已发布版本')
-    const draft = await window.api.composite.draftGet(capability.id)
-    if (!draft.ok) return toast('读取节点流草稿失败')
-    if (draft.data) {
-      const manifest = structuredClone(draft.data.manifest)
-      manifest.version = nextVersionLabel(latest)
-      setCanvasEdit({ capability, manifest, draftRevision: draft.data.revision })
-      toast('已恢复上次保存的内容')
-      return
-    }
-    const result = await window.api.composite.versionGet({
-      capabilityId: capability.id,
-      version: latest
-    })
+  // 复制节点流：以最新发布版本为基准登记一个新组合，名称加「副本」，不改动原流。
+  const duplicateComposite = async (capability: CompositeCapabilitySummary): Promise<void> => {
+    const version = capability.latestVersion
+    if (!version) return toast('该节点流还没有已发布版本')
+    const result = await window.api.composite.versionGet({ capabilityId: capability.id, version })
     if (!result.ok || !result.data) return toast('读取节点流版本失败')
-    const manifest = structuredClone(result.data.manifest)
-    // 已发布版本不可变：全屏编辑默认准备下一个主版本，保存/另存为新版本分离。
-    manifest.version = nextVersionLabel(latest)
-    setCanvasEdit({ capability, manifest, draftRevision: null })
+    const baseId =
+      capability.id
+        .replace(/[^a-zA-Z0-9._-]/g, '-')
+        .replace(/^[^a-zA-Z0-9]+/, '')
+        .slice(0, 60) || 'composite'
+    const manifest = {
+      ...result.data.manifest,
+      capabilityId: `${baseId}-copy-${crypto.randomUUID().slice(0, 8)}`,
+      name: `${capability.name.slice(0, 116)}副本`,
+      version: '1.0'
+    }
+    const validated = await window.api.composite.validate({ manifest })
+    if (!validated.ok) return toast(validated.error.message)
+    if (!validated.data.ok) {
+      return toast(
+        validated.data.issues.map((issue) => `[${issue.code}] ${issue.path}: ${issue.message}`).join('；')
+      )
+    }
+    const draft = await window.api.composite.draftSave({ manifest })
+    if (!draft.ok) return toast(draft.error.message)
+    const published = await window.api.composite.publish({
+      manifest,
+      expectedRevision: draft.data.revision
+    })
+    if (!published.ok) return toast(published.error.message)
+    refreshComposites()
+    toast(`已复制节点流「${manifest.name}」`)
   }
 
   const handleRun = async (template: WorkflowTemplate): Promise<void> => {
@@ -305,8 +316,9 @@ function WorkflowPanel({
                 key={`composite-${capability.id}`}
                 capability={capability}
                 onInsert={(dropScreen) => void insertComposite(capability, dropScreen)}
-                onEditNodes={() => void openCanvasEdit(capability)}
-                onEditInfo={() => setSettingsDialog(capability)}
+                onEditNodes={() => onEditNodes(capability)}
+                onEditInfo={() => onEditInfo(capability)}
+                onDuplicate={() => void duplicateComposite(capability)}
                 onDelete={() => void handleDeleteComposite(capability)}
               />
             ))}
@@ -322,23 +334,6 @@ function WorkflowPanel({
           </div>
         )}
       </div>
-      {canvasEdit && (
-        <CompositeCanvasEditor
-          capability={canvasEdit.capability}
-          manifest={canvasEdit.manifest}
-          projectId={projectId}
-          draftRevision={canvasEdit.draftRevision}
-          onClose={() => setCanvasEdit(null)}
-          onSaved={refreshComposites}
-        />
-      )}
-      {settingsDialog && (
-        <CompositeVersionDialog
-          capability={settingsDialog}
-          onClose={() => setSettingsDialog(null)}
-          onPublished={refreshComposites}
-        />
-      )}
     </>
   )
 }
@@ -349,12 +344,14 @@ function CompositeCard({
   onInsert,
   onEditNodes,
   onEditInfo,
+  onDuplicate,
   onDelete
 }: {
   capability: CompositeCapabilitySummary
   onInsert: (dropScreen?: { x: number; y: number }) => void
   onEditNodes: () => void
   onEditInfo: () => void
+  onDuplicate: () => void
   onDelete: () => void
 }): React.JSX.Element {
   const { startDrag, handleClick } = useDragToCanvas()
@@ -384,8 +381,8 @@ function CompositeCard({
       <button
         type="button"
         className="composite-card-settings"
-        title="编辑名称与说明（与创建时同一弹窗，不产生新版本）"
-        aria-label={`编辑信息 ${capability.name}`}
+        title="编辑名称"
+        aria-label={`编辑名称 ${capability.name}`}
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation()
@@ -393,6 +390,19 @@ function CompositeCard({
         }}
       >
         <Icon name="settings" size={12} />
+      </button>
+      <button
+        type="button"
+        className="composite-card-copy"
+        title="复制节点流（名称后加「副本」）"
+        aria-label={`复制 ${capability.name}`}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation()
+          onDuplicate()
+        }}
+      >
+        <Icon name="copy" size={12} />
       </button>
       <div className="asset-info">
         <span className="asset-name" title={capability.name}>
@@ -955,6 +965,39 @@ export function CanvasSidePanel({
 }: CanvasSidePanelProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [runFocus, setRunFocus] = useState<RunFocus>(null)
+  // 全屏节点流编辑与名称弹窗的状态放在不随侧栏开关卸载的外层：
+  // 打开契约面板等动作会收起侧栏（tab=null），编辑器必须继续存在。
+  const [canvasEdit, setCanvasEdit] = useState<{
+    capability: CompositeCapabilitySummary
+    manifest: import('@shared/composite/manifest').CompositeManifest
+    draftRevision: number | null
+  } | null>(null)
+  const [settingsDialog, setSettingsDialog] = useState<CompositeCapabilitySummary | null>(null)
+  const [libraryRefreshKey, setLibraryRefreshKey] = useState(0)
+
+  // 编辑节点：优先恢复未发布草稿；没有草稿时以最新发布版本为基准铺开画布。
+  const openCanvasEdit = async (capability: CompositeCapabilitySummary): Promise<void> => {
+    const latest = capability.latestVersion
+    if (!latest) return toast('该节点流还没有已发布版本')
+    const draft = await window.api.composite.draftGet(capability.id)
+    if (!draft.ok) return toast('读取节点流草稿失败')
+    if (draft.data) {
+      const manifest = structuredClone(draft.data.manifest)
+      manifest.version = nextVersionLabel(latest)
+      setCanvasEdit({ capability, manifest, draftRevision: draft.data.revision })
+      toast('已恢复上次保存的内容')
+      return
+    }
+    const result = await window.api.composite.versionGet({
+      capabilityId: capability.id,
+      version: latest
+    })
+    if (!result.ok || !result.data) return toast('读取节点流版本失败')
+    const manifest = structuredClone(result.data.manifest)
+    // 已发布版本不可变：全屏编辑默认准备下一个主版本，保存/另存为新版本分离。
+    manifest.version = nextVersionLabel(latest)
+    setCanvasEdit({ capability, manifest, draftRevision: null })
+  }
   const runEntries = useValue(
     'run center entries',
     () =>
@@ -983,54 +1026,84 @@ export function CanvasSidePanel({
   useEffect(() => {
     if (!tab) return
     const onKey = (e: KeyboardEvent): void => {
+      // 全屏编辑期间 Escape 属于编辑器（取消选中/退出编辑态），不连带收起侧栏。
+      if (canvasEdit) return
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => {
       window.removeEventListener('keydown', onKey)
     }
-  }, [tab, onClose])
+  }, [tab, onClose, canvasEdit])
 
-  if (!tab) return <></>
-  const meta = TAB_META[tab]
+  const meta = tab ? TAB_META[tab] : null
 
   return (
-    <div className={`side-panel side-panel--${tab}`} ref={ref}>
-      <div className="side-panel-head">
-        <span className="side-panel-icon">
-          <Icon name={meta.icon} size={17} />
-        </span>
-        <strong className="side-panel-title">
-          {meta.title}
-          {tab === 'runs' && <span className="side-panel-count">（{runEntries.length} 条）</span>}
-          {tab === 'tasks' && <span className="side-panel-count">（{humanInbox.length} 项）</span>}
-        </strong>
-        <button className="side-panel-close" aria-label="关闭面板" onClick={onClose}>
-          <Icon name="close" size={15} />
-        </button>
-      </div>
-      {tab === 'assets' && (
-        <AssetsPanel
-          key={projectId}
+    <>
+      {tab && meta && (
+        <div className={`side-panel side-panel--${tab}`} ref={ref}>
+          <div className="side-panel-head">
+            <span className="side-panel-icon">
+              <Icon name={meta.icon} size={17} />
+            </span>
+            <strong className="side-panel-title">
+              {meta.title}
+              {tab === 'runs' && <span className="side-panel-count">（{runEntries.length} 条）</span>}
+              {tab === 'tasks' && <span className="side-panel-count">（{humanInbox.length} 项）</span>}
+            </strong>
+            <button className="side-panel-close" aria-label="关闭面板" onClick={onClose}>
+              <Icon name="close" size={15} />
+            </button>
+          </div>
+          {tab === 'assets' && (
+            <AssetsPanel
+              key={projectId}
+              projectId={projectId}
+              editor={editor}
+              onImport={onImport}
+              onDropMedia={onDropMedia}
+            />
+          )}
+          {tab === 'workflow' && (
+            <WorkflowPanel
+              editor={editor}
+              projectId={projectId}
+              refreshKey={libraryRefreshKey}
+              onEditNodes={(capability) => void openCanvasEdit(capability)}
+              onEditInfo={(capability) => setSettingsDialog(capability)}
+            />
+          )}
+          {tab === 'history' && <HistoryPanel projectId={projectId} editor={editor} />}
+          {tab === 'runs' && (
+            <RunsPanel
+              editor={editor}
+              projectId={projectId}
+              entries={runEntries}
+              focus={runFocus}
+              onClearFocus={() => setRunFocus(null)}
+            />
+          )}
+          {tab === 'tasks' && <TasksPanel editor={editor} items={humanInbox} />}
+          {tab === 'flow' && <FlowOverviewPanel editor={editor} projectId={projectId} onClose={onClose} />}
+        </div>
+      )}
+      {canvasEdit && (
+        <CompositeCanvasEditor
+          capability={canvasEdit.capability}
+          manifest={canvasEdit.manifest}
           projectId={projectId}
-          editor={editor}
-          onImport={onImport}
-          onDropMedia={onDropMedia}
+          draftRevision={canvasEdit.draftRevision}
+          onClose={() => setCanvasEdit(null)}
+          onSaved={() => setLibraryRefreshKey((key) => key + 1)}
         />
       )}
-      {tab === 'workflow' && <WorkflowPanel editor={editor} projectId={projectId} />}
-      {tab === 'history' && <HistoryPanel projectId={projectId} editor={editor} />}
-      {tab === 'runs' && (
-        <RunsPanel
-          editor={editor}
-          projectId={projectId}
-          entries={runEntries}
-          focus={runFocus}
-          onClearFocus={() => setRunFocus(null)}
+      {settingsDialog && (
+        <CompositeVersionDialog
+          capability={settingsDialog}
+          onClose={() => setSettingsDialog(null)}
+          onPublished={() => setLibraryRefreshKey((key) => key + 1)}
         />
       )}
-      {tab === 'tasks' && <TasksPanel editor={editor} items={humanInbox} />}
-      {tab === 'flow' && <FlowOverviewPanel editor={editor} projectId={projectId} onClose={onClose} />}
-    </div>
+    </>
   )
 }

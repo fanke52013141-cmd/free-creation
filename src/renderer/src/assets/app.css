@@ -4005,6 +4005,31 @@ select:focus-visible {
   overflow-wrap: anywhere;
 }
 
+/* ── 全局顶部提示：窗口顶栏区域的操作反馈（保存/发布），层级压过全屏编辑 ── */
+.global-top-notice {
+  position: fixed;
+  top: 9px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #0d0d0d;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 16px;
+  color: var(--txt);
+  font-size: 13px;
+  z-index: 3000;
+  pointer-events: none;
+  max-width: 70vw;
+  overflow-wrap: anywhere;
+}
+.global-top-notice svg {
+  color: #34d399;
+  flex: 0 0 auto;
+}
+
 /* ── 左下角停靠簇：弹出小地图 + 画布整理 + 缩放（LibTV 26-7-7） ── */
 .canvas-dock {
   position: absolute;

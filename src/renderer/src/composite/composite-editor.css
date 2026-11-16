@@ -62,11 +62,12 @@
 }
 .composite-io-row + .composite-io-row { margin-top: 6px; }
 .composite-io-badge { color: #00e5ff; font: 500 10px 'JetBrains Mono', monospace; }
-/* 节点流卡片动作：与资产中心一致，悬浮才显示的纯图标圆钮（编辑节点 / 编辑信息 / 删除）。
-   删除复用 .asset-delete（右上，悬浮红）；编辑节点/编辑信息用同材质圆钮，定位封面左上。
+/* 节点流卡片动作：与资产中心一致，悬浮才显示的纯图标圆钮（编辑节点 / 编辑名称 / 复制 / 删除）。
+   删除复用 .asset-delete（右上，悬浮红）；编辑节点/编辑名称/复制用同材质圆钮，定位封面左上。
    名称留在底部保持可点击（点击卡片=插入实例，拖拽=落点插入）。 */
 .composite-card-edit,
-.composite-card-settings {
+.composite-card-settings,
+.composite-card-copy {
   position: absolute;
   top: 4px;
   width: 22px;
@@ -92,15 +93,21 @@
 .composite-card-settings {
   left: 30px;
 }
+.composite-card-copy {
+  left: 56px;
+}
 .composite-card-edit:hover,
-.composite-card-settings:hover {
+.composite-card-settings:hover,
+.composite-card-copy:hover {
   background: var(--brand);
   border-color: transparent;
 }
 .asset-card:hover .composite-card-edit,
 .asset-card:hover .composite-card-settings,
+.asset-card:hover .composite-card-copy,
 .composite-card-edit:focus-visible,
-.composite-card-settings:focus-visible {
+.composite-card-settings:focus-visible,
+.composite-card-copy:focus-visible {
   opacity: 1;
 }
 .composite-settings-hint {
@@ -138,7 +145,8 @@
   align-items: center;
   padding: 0 16px;
   border-bottom: 1px solid var(--line);
-  background: var(--card);
+  /* 与窗口右上角标题栏覆盖钮同色（#0d0d0d），整条顶栏统一纯黑（用户裁决 2026-11-16）。 */
+  background: var(--canvas-surface, #0d0d0d);
   color: var(--txt);
 }
 .composite-canvas-heading { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }

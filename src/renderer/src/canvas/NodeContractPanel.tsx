@@ -439,9 +439,18 @@ export function NodeContractPanel({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  const shape = useValue(
+    'node contract panel shape',
+    () => (shapeId ? editor.getShape<NodeCardShape>(shapeId) : undefined),
+    [editor, shapeId]
+  )
+
   // 节点详情是临时侧栏而不是固定页面：点击侧栏以外的位置立即收起。使用捕获阶段，
   // 避免画布先处理选择事件而让关闭动作失效；面板内的控件仍完全不受影响。
+  // 同一 store 可能被主画布与全屏节点流编辑同时订阅：只有真正渲染出面板的实例
+  // （shapeId 与 shape 均存在）才响应外部点击，避免空实例误关另一个实例的面板。
   useEffect(() => {
+    if (!shapeId || !shape) return
     const onPointerDown = (event: PointerEvent): void => {
       if (panelRef.current?.contains(event.target as Node)) return
       // AppSelect renders its options in a body portal, outside panelRef. Treat that
@@ -455,13 +464,8 @@ export function NodeContractPanel({
     }
     window.addEventListener('pointerdown', onPointerDown, true)
     return () => window.removeEventListener('pointerdown', onPointerDown, true)
-  }, [onClose])
+  }, [onClose, shapeId, shape])
 
-  const shape = useValue(
-    'node contract panel shape',
-    () => (shapeId ? editor.getShape<NodeCardShape>(shapeId) : undefined),
-    [editor, shapeId]
-  )
   if (!shapeId) return null
   // 对话也有真实的 text → markdown 契约；不能因为它另有聊天工作区就隐藏 I/O 说明。
   if (!shape) return null

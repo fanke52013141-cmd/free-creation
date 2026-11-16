@@ -525,3 +525,42 @@ Sprint 0–4 开发部分全部完成并推送；Sprint 2 媒体体验（视频�
 - API Key、Authorization header、真实供应商 Base URL/配置。
 
 每次交接至少应包含：提交哈希、变更摘要、通过的命令、人工验证路径、已知限制和下一步的唯一推荐项。
+
+## 11. 节点流体验对齐批次（2026-11-16）
+
+### 背景与根因
+
+用户走查节点流（composite）保存/编辑/运行链路，发现一批与主画布不一致的行为，逐项定位根因后修复：
+
+1. **保存即插画布**：`WorkflowSaveDialog` 发布后强制在视口中心插入实例（P2 最小闭环遗留）。用户裁决：保存只登记到节点流库并打开面板，需要时点卡片/拖拽添加。
+2. **产物不摆上画布**：`compositeExecutor` 只把公开输出写回自身 meta，未走 `emitArtifact`；内部生图产物落在隔离临时画布被丢弃。修复：公开媒体输出与单节点同一套 `materializeArtifact` 机制落为独立资产节点（带生产关系溯源），headless 未注入回调时兼容。
+3. **点着点着退出编辑**（深层根因）：全屏编辑器状态挂在 `WorkflowPanel` 内，而打开契约面板等动作会收侧栏（`panelTab=null`），外层 `CanvasSidePanel` 返回空 → 编辑器被卸载。修复：`canvasEdit`/`settingsDialog` 状态提升到不随侧栏开关卸载的外层；侧栏 Escape 在全屏编辑期间不连带收侧栏。
+4. **编辑器交互与主画布不一致**：双击空白插入 tldraw 文本框、右键无创建菜单、单击弹契约面板、端口拉不出线。修复：主画布同款 dblclick 捕获桥接（文本 inline 编辑/标题改名/媒体桥接，其余阻止默认）+ 绘制快捷键屏蔽；右键空白=创建菜单、右键节点=节点操作菜单（portal 事件冒泡需 stopPropagation，否则主画布同时弹菜单）；单击只选中，契约面板由 info 按钮经 `useNodePanelStore` 显式打开（`NodeContractPanel` 外部点击收起只允许真正渲染出面板的实例响应，避免空实例误关）；连线完成回调加覆盖槽 `setConnectionFinishOverride`，编辑器注册自己的落点连接（tryConnect/tryConnectFromInput），拉线到空白弹兼容节点菜单并自动接线，`ConnectionLayer`/`PendingConnectionLayer` 跟手引线。
+5. **卡片动作**：编辑节点 / 编辑名称（弹窗精简为仅名称，说明保留原值）/ 复制（新组合名=原名+「副本」，独立 1.0，内容与原流一致）/ 删除。
+6. **提示与配色**：保存/另存为版本反馈统一为窗口顶部提示条（`topNotice` store + `TopNotice`，发布后回到主画布仍可见）；编辑器顶栏与 Windows 标题栏覆盖钮统一纯黑 `#0d0d0d`。
+7. **生图供应商记忆**：`imageGenPreference`（localStorage）记住上次选择的供应商/模型；主画布 `createNodeAt` 与编辑器 `addNode` 新建生图节点时沿用，目录失效回退默认；不回写已有节点。
+8. **回撤悬停显示**：revert `3137c47c`（资产节点按钮悬停显示优化），按钮恢复常显（用户裁决）。
+
+### 提交链
+
+| 提交 | 内容 |
+| --- | --- |
+| `2f7ed9a8` | 回撤资产节点按钮悬停显示优化，恢复常显（7 文件 -129） |
+| `e706bb2d` | 节点流保存只登记到库 + 公开媒体产物落画布为资产节点（含验收脚本同步与输出轮询竞态修复） |
+| C3（本提交） | 卡片复制/编辑名称、编辑器状态提升与交互对齐、顶部提示与纯黑顶栏、生图供应商记忆（含本 HANDOFF 更新） |
+
+### 验证证据
+
+- `typecheck:node` / `typecheck:web` / eslint / `electron-vite build` 通过。
+- 单测 34 项：composite-executor 7（含媒体落资产节点、headless 兼容）、composite-w3-types 19、composite-w3-upgrade 5、image-gen-preference 3。
+- `nf-user-walkthrough` 20 项全绿：含新增断言——单击只选中、info 开面板、右键建节点、双击无输入框/不退出、端口拉线后 CLI 复核草稿边数、复制副本独立 1.0。
+- `composite-gui-acceptance` 14 项全绿（发布/草稿/升级/嵌套运行无回归）。
+- `headless-execute-acceptance` 7 项全绿（无项目执行链）。
+- `composite-desktop-acceptance` 16 项通过（CLI graph.patch 插 composite 实例 → node.execute → run.wait → output.get；引用形态/升级/守卫）。
+
+### 已知边界
+
+- `composite-desktop-acceptance` 媒体腿在隔离环境失败（「生成来源保存失败」），属隔离验收环境问题，与插入/运行链无关；真实环境（已验证图片模型）待复测。
+- 外部 Agent 全链真实演示未做：外部接入层须应用带 `--local-agent-access` 启动（dev 默认不开）。
+- 生图记忆为单测 + 创建路径代码验证，无真实模型 GUI 实测。
+- 验收脚本坑（已修）：运行台账先记完成、输出后投影画布，轮询读输出必须等待期望内容；走查需复制许可证安全目录；卡片动作前确保节点流面板开着。

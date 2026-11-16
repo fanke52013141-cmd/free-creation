@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect -- 弹窗异步加载草稿后填充表单 */
-// 节点流「编辑」基础信息弹窗：与创建时同一套 library-form 样式。
-// 只编辑名称/说明；保存 = 写入草稿并同步名称展示（不产生新版本）。
+// 节点流「编辑名称」弹窗：与创建时同一套 library-form 样式。
+// 只编辑名称；保存 = 写入草稿并同步名称展示（不产生新版本）。
 // 版本只在「编辑节点」里通过「另存为新版本」产生（用户裁决 2026-11-11）。
 // 公开输入/输出按内部节点规范自动推导，不在此手动挑选。
 import { useEffect, useState } from 'react'
@@ -25,7 +25,6 @@ export function CompositeVersionDialog({
 }: Props): React.JSX.Element {
   const [manifest, setManifest] = useState<CompositeManifest | null>(null)
   const [name, setName] = useState(capability.name)
-  const [description, setDescription] = useState(capability.description)
   const [revision, setRevision] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -48,20 +47,18 @@ export function CompositeVersionDialog({
       const base = draft.ok && draft.data ? draft.data.manifest : current.data.manifest
       setManifest(base)
       setName(base.name)
-      setDescription(base.description ?? '')
       setRevision(draft.ok && draft.data ? draft.data.revision : null)
     })
   }, [capability])
 
-  // 保存：写入草稿（同步名称/说明展示），不产生新版本。
+  // 保存：写入草稿（同步名称展示），不产生新版本；说明保留原值不在此编辑。
   const save = async (): Promise<void> => {
     if (!manifest) return setError('版本尚未加载')
     const title = name.trim()
     if (!title) return setError('请填写名称')
     const edited: CompositeManifest = {
       ...manifest,
-      name: title,
-      description: description.trim() || undefined
+      name: title
     }
     setBusy(true)
     setError('')
@@ -90,7 +87,7 @@ export function CompositeVersionDialog({
         className="library-form-dialog workflow-save-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="编辑节点流"
+        aria-label="编辑名称"
         onKeyDown={(event) => {
           event.stopPropagation()
           if (event.key === 'Escape' && !busy) onClose()
@@ -108,7 +105,7 @@ export function CompositeVersionDialog({
       >
         <header className="library-form-header">
           <div>
-            <h2>编辑节点流</h2>
+            <h2>编辑名称</h2>
           </div>
           <button
             type="button"
@@ -135,18 +132,6 @@ export function CompositeVersionDialog({
                     setError('')
                   }}
                   placeholder="例如：角色设定到分镜"
-                />
-              </label>
-              <label className="library-form-field">
-                <span>说明（可选）</span>
-                <input
-                  maxLength={600}
-                  value={description}
-                  onChange={(event) => {
-                    setDescription(event.target.value)
-                    setError('')
-                  }}
-                  placeholder="这个节点流做什么"
                 />
               </label>
             </>

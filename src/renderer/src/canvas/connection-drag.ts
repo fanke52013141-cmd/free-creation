@@ -11,9 +11,16 @@ export interface ConnectionFinish {
 
 let finishHandler: ((r: ConnectionFinish) => void) | null = null
 let detachListeners: (() => void) | null = null
+// 全屏节点流编辑等覆盖层注册自己的落点处理；存在时优先于主画布回调，
+// 退出覆盖层置 null 即恢复主画布，互不破坏。
+let overrideHandler: ((r: ConnectionFinish) => void) | null = null
 
 export function setConnectionFinishHandler(fn: ((r: ConnectionFinish) => void) | null): void {
   finishHandler = fn
+}
+
+export function setConnectionFinishOverride(fn: ((r: ConnectionFinish) => void) | null): void {
+  overrideHandler = fn
 }
 
 /** 从输出端口开始拖线（由端口 pointerdown 调用，同步挂载监听） */
@@ -32,7 +39,7 @@ export function beginConnectionDrag(from: ConnectionFrom, pt: Pt): void {
     // 原地点击端口（无拖动）不算拉线，静默取消
     const moved = Math.abs(e.clientX - current.startPt.x) + Math.abs(e.clientY - current.startPt.y)
     if (moved < 4) return
-    finishHandler?.({
+    ;(overrideHandler ?? finishHandler)?.({
       from: current.from,
       startPt: current.startPt,
       screenPt: { x: e.clientX, y: e.clientY }

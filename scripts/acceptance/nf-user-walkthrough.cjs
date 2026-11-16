@@ -52,6 +52,9 @@ function ok(res, label) {
 ;(async () => {
   fs.mkdirSync(evidenceDir, { recursive: true })
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'canvas-nf-walk-'))
+  // 与 composite-gui-acceptance 一致：复用本机授权安全目录，隔离数据目录才能过许可门禁。
+  const security = path.join(process.env.APPDATA || '', 'canvas-studio/data/security')
+  await fsp.cp(security, path.join(dir, 'security'), { recursive: true })
   let app, page
   const receipt = { mode: 'playwright-driven-real-electron', checks: [], observations: [], screenshots: [] }
   let shotIndex = 0
@@ -162,30 +165,37 @@ function ok(res, label) {
     const v1 = ok(await cli(dir, ['composite', 'get'], { capabilityId: 'nf-walk', version: '1.0' }), 'GET_10')
     check('多选保存为节点流「角色到分镜」1.0（创建弹窗）')
 
-    // ── 3. 节点流面板：卡片三按钮 ──
+    // ── 3. 节点流面板：卡片四按钮（编辑节点 / 编辑名称 / 复制 / 删除）──
     await page.click('button[aria-label="打开节点流"]')
     await page.waitForSelector('.workflow-panel', { timeout: 10000 })
     const libCard = (name) => page.locator('.workflow-panel .asset-card', { has: page.locator(`.asset-name:text-is("${name}")`) })
     const cardAction = async (name, label) => {
+      // 契约面板等动作会收起侧栏；用卡片动作前确保节点流面板开着。
+      if (!(await page.locator('.workflow-panel').isVisible().catch(() => false))) {
+        await page.click('button[aria-label="打开节点流"]')
+        await page.waitForSelector('.workflow-panel', { timeout: 10000 })
+      }
       const c = libCard(name)
-      const btn = c.locator('button:text-is("' + label + '")')
-      // 悬浮才显示动作（pointer-events:none 默认）。真实悬浮 reveal 已由
-      // nf-debug-hover.cjs 验证（hover 后 opacity=1 且命中按钮）；走查用原生
-      // click 推进业务流程，避免自动化可命中检查与悬浮层竞态。
+      const btn = c.locator(`button[aria-label="${label} ${name}"]`)
+      // 悬浮才显示动作（opacity:0 默认）。真实悬浮 reveal 已由
+      // nf-debug-hover.cjs 验证；走查用原生 click 推进业务流程，
+      // 避免自动化可命中检查与悬浮层竞态。
       await btn.evaluate((el) => el.click())
     }
     const card = libCard('角色到分镜')
     await card.waitFor({ timeout: 10000 })
-    const btnNames = await card.locator('.composite-card-actions button').allInnerTexts()
-    if (JSON.stringify(btnNames.map((s) => s.trim())) !== JSON.stringify(['删除', '编辑节点', '编辑']))
-      throw new Error(`CARD_BUTTONS_WRONG:${JSON.stringify(btnNames)}`)
+    const btnLabels = await card.locator('button[aria-label]').evaluateAll((els) =>
+      els.map((el) => el.getAttribute('aria-label').replace(/\s+角色到分镜$/, ''))
+    )
+    if (JSON.stringify(btnLabels.sort()) !== JSON.stringify(['删除', '复制', '编辑名称', '编辑节点'].sort()))
+      throw new Error(`CARD_BUTTONS_WRONG:${JSON.stringify(btnLabels)}`)
     // 卡片只显示名称：无版本/节点流字样；动作悬浮才可见。
     const cardText = await card.innerText()
     if (cardText.includes('v1.0') || cardText.includes('节点流')) throw new Error(`CARD_META_PRESENT:${cardText}`)
-    const actionsOpacity = await card.locator('.composite-card-actions').evaluate((el) => getComputedStyle(el).opacity)
+    const actionsOpacity = await card.locator('.composite-card-edit').evaluate((el) => getComputedStyle(el).opacity)
     if (actionsOpacity !== '0') throw new Error(`CARD_ACTIONS_NOT_HOVER_ONLY:${actionsOpacity}`)
     await shot('03-library-card')
-    check('卡片动作 = 编辑 / 编辑节点 / 删除（无归档）')
+    check('卡片动作 = 编辑节点 / 编辑名称 / 复制 / 删除（无归档）')
 
     // ── 4. 编辑节点：全屏画布复刻检查 + 加分镜板 + 保存 + 取消 ──
     await cardAction('角色到分镜', '编辑节点')
@@ -199,6 +209,74 @@ function ok(res, label) {
       throw new Error(`TOPBAR_NOT_NAME_ONLY:${topText}`)
     await shot('04-editor-chrome')
     check('全屏编辑器：左侧面板+底部缩放坞+右下动作簇；顶栏仅名称')
+
+    // ── 4b. 编辑器交互与主画布一致 ──
+    const stageCard = (type) =>
+      page.locator(`.composite-canvas-stage .node-card-wrap:has([data-node-type="${type}"])`).first()
+    const stageCount = () => page.locator('.composite-canvas-stage .node-card-wrap').count()
+    // 单击节点 = 只选中，不弹契约面板
+    await stageCard('text').click()
+    await sleep(400)
+    if (await page.locator('.node-contract-panel').isVisible().catch(() => false))
+      throw new Error('EDITOR_CLICK_OPENED_PANEL')
+    // info 按钮显式打开契约面板
+    await stageCard('text').hover()
+    await stageCard('text').locator('button[aria-label="打开节点说明"]').click()
+    await page.locator('.node-contract-panel').waitFor({ timeout: 5000 })
+    await page.keyboard.press('Escape')
+    await sleep(300)
+    check('编辑器单击只选中；info 按钮显式打开契约面板')
+    // 右键空白 = 创建菜单，经分类添加文本节点
+    const stageBox = await page.locator('.composite-canvas-stage').boundingBox()
+    const blankX = stageBox.x + stageBox.width / 2
+    const blankY = stageBox.y + stageBox.height - 140
+    const countBeforeCreate = await stageCount()
+    await page.mouse.click(blankX, blankY, { button: 'right' })
+    await page.locator('.composite-canvas-overlay .node-menu').waitFor({ timeout: 5000 })
+    await page.locator('.composite-canvas-overlay .node-menu-category-item', { hasText: '输入与素材' }).hover()
+    await page.locator('.composite-canvas-overlay .node-menu-submenu .node-menu-label:text-is("文本")').click()
+    await sleep(500)
+    if ((await stageCount()) !== countBeforeCreate + 1) throw new Error('EDITOR_RIGHTCLICK_CREATE_FAILED')
+    check('编辑器右键空白弹创建菜单并可添加节点')
+    // 双击空白不再插入 tldraw 文本输入框
+    await page.mouse.dblclick(blankX + 260, blankY)
+    await sleep(400)
+    if ((await page.locator('.composite-canvas-stage .tl-text-input').count()) > 0)
+      throw new Error('EDITOR_DBLCLICK_CREATED_TEXTBOX')
+    if ((await stageCount()) !== countBeforeCreate + 1) throw new Error('EDITOR_DBLCLICK_CHANGED_NODES')
+    // 双击文本节点 = inline 编辑，不退出编辑器
+    await stageCard('text').dblclick()
+    await sleep(400)
+    if (!(await page.locator('.composite-canvas-overlay').isVisible()))
+      throw new Error('EDITOR_DBLCLICK_NODE_EXITED')
+    await page.keyboard.press('Escape')
+    await sleep(300)
+    check('编辑器双击空白无输入框；双击节点不退出编辑')
+    // 端口拉线：新文本节点 out-text → AI 处理 in-text，保存后 CLI 复核边数
+    const draftBeforeDrag = ok(await cli(dir, ['composite', 'draft', 'get'], { capabilityId: 'nf-walk' }), 'DRAFT_BEFORE_DRAG')
+    const edgesBeforeDrag = draftBeforeDrag ? draftBeforeDrag.manifest.graph.edges.length : 0
+    const newTextCard = page
+      .locator('.composite-canvas-stage .node-card-wrap:has([data-node-type="text"])')
+      .filter({ hasNotText: '赛博朋克' })
+      .first()
+    const aiCard = stageCard('ai-process')
+    const dragOut = newTextCard.locator('.port-dot.out[data-port-id="out-text"]')
+    const dragIn = aiCard.locator('.port-dot.in').first()
+    const dragFrom = await dragOut.boundingBox()
+    const dragTo = await dragIn.boundingBox()
+    if (!dragFrom || !dragTo) throw new Error('EDITOR_PORTS_NOT_VISIBLE')
+    await page.mouse.move(dragFrom.x + dragFrom.width / 2, dragFrom.y + dragFrom.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(dragTo.x + dragTo.width / 2, dragTo.y + dragTo.height / 2, { steps: 18 })
+    await page.mouse.up()
+    await sleep(500)
+    await page.locator('.nf-action-bar').getByRole('button', { name: '保存', exact: true }).click()
+    await sleep(900)
+    const draftAfterDrag = ok(await cli(dir, ['composite', 'draft', 'get'], { capabilityId: 'nf-walk' }), 'DRAFT_AFTER_DRAG')
+    if (draftAfterDrag.manifest.graph.edges.length <= edgesBeforeDrag)
+      throw new Error('EDITOR_PORT_DRAG_NO_EDGE')
+    check('编辑器端口可拉出连接线（草稿边数 CLI 复核）')
+
     const innerCount = async () => page.locator('.composite-canvas-stage .node-card-wrap').count()
     const before = await innerCount()
     for (let attempt = 0; ; attempt++) {
@@ -217,9 +295,11 @@ function ok(res, label) {
     check('编辑节点内用左侧面板添加分镜板（与主画布同规格）')
     await page.locator('.nf-action-bar').getByRole('button', { name: '保存', exact: true }).click()
     await sleep(900)
+    const topNoticeText = await page.locator('.global-top-notice').innerText().catch(() => '')
+    if (!topNoticeText.includes('已保存')) throw new Error(`SAVE_TOP_NOTICE_MISSING:${topNoticeText}`)
     const draft1 = ok(await cli(dir, ['composite', 'draft', 'get'], { capabilityId: 'nf-walk' }), 'DRAFT_1')
     if (!draft1 || draft1.manifest.graph.nodes.length !== before + 1) throw new Error('DRAFT_SAVE_MISSING_NODE')
-    note(`保存 toast：${await toastText()}`)
+    note(`保存顶部提示：${topNoticeText}`)
     await shot('06-editor-saved')
     await page.locator('.nf-action-bar').getByRole('button', { name: '取消', exact: true }).click()
     await page.waitForSelector('.composite-canvas-overlay', { state: 'detached', timeout: 10000 })
@@ -239,6 +319,8 @@ function ok(res, label) {
     await shot('08-publish-preview')
     await preview.locator('button:has-text("确认发布")').click()
     await page.waitForSelector('.composite-canvas-overlay', { state: 'detached', timeout: 30000 })
+    const publishNotice = await page.locator('.global-top-notice').innerText().catch(() => '')
+    if (!publishNotice.includes('已另存为')) throw new Error(`PUBLISH_TOP_NOTICE_MISSING:${publishNotice}`)
     const v2 = ok(await cli(dir, ['composite', 'get'], { capabilityId: 'nf-walk', version: '2.0' }), 'GET_20')
     if (!JSON.stringify(v2.manifest).includes('第二版修改')) throw new Error('PUBLISH_20_CONTENT_MISSING')
     // 公开边界按节点规范自动推导：文本开头 → 文本输入；每个汇节点暴露其主输出，
@@ -291,24 +373,41 @@ function ok(res, label) {
       throw new Error('CANCEL_SHOWED_CONFIRM')
     check('取消立即退出，无二次确认')
 
-    // ── 7. 编辑基础信息：创建同款弹窗，仅 取消/保存；改名不产生新版本 ──
-    await cardAction('角色到分镜', '编辑')
-    const info = page.locator('.workflow-save-dialog[aria-label="编辑节点流"]')
+    // ── 7. 编辑名称：仅名称输入 + 取消/保存；改名不产生新版本 ──
+    await cardAction('角色到分镜', '编辑名称')
+    const info = page.locator('.workflow-save-dialog[aria-label="编辑名称"]')
     await info.waitFor({ timeout: 10000 })
     await info.locator('input').first().waitFor({ timeout: 10000 })
+    if ((await info.locator('input').count()) !== 1) throw new Error('INFO_DIALOG_NOT_NAME_ONLY')
     const infoButtons = await info.locator('.library-form-footer button').allInnerTexts()
     if (JSON.stringify(infoButtons.map((s) => s.trim())) !== JSON.stringify(['取消', '保存']))
       throw new Error(`INFO_FOOTER_WRONG:${JSON.stringify(infoButtons)}`)
     await shot('11-info-dialog')
     await info.locator('input').first().fill('角色到分镜·改')
-    await info.locator('input').nth(1).fill('用户走查：基础信息编辑')
     await info.locator('.library-form-footer').getByRole('button', { name: '保存', exact: true }).click()
     await info.waitFor({ state: 'detached', timeout: 15000 })
     await libCard('角色到分镜·改').waitFor({ timeout: 10000 })
     const versionsAfterRename = ok(await cli(dir, ['composite', 'version', 'list'], { capabilityId: 'nf-walk' }), 'VERSIONS_AFTER_RENAME')
     if (versionsAfterRename.length !== 3) throw new Error(`RENAME_CREATED_VERSION:${versionsAfterRename.length}`)
     await shot('12-info-saved')
-    check('编辑基础信息仅取消/保存；改名即时生效且不产生新版本')
+    check('编辑名称仅名称输入+取消/保存；改名即时生效且不产生新版本')
+
+    // ── 7b. 复制：新组合名称加「副本」，独立 1.0，原流不受影响 ──
+    await cardAction('角色到分镜·改', '复制')
+    await libCard('角色到分镜·改副本').waitFor({ timeout: 15000 })
+    const copies = ok(await cli(dir, ['composite', 'search'], {}), 'SEARCH_COPIES').items
+    const copy = copies.find((c) => c.name === '角色到分镜·改副本')
+    if (!copy) throw new Error('COPY_NOT_REGISTERED')
+    const copyVersions = ok(await cli(dir, ['composite', 'version', 'list'], { capabilityId: copy.id }), 'COPY_VERSIONS')
+    if (copyVersions.length !== 1 || copyVersions[0].version !== '1.0')
+      throw new Error(`COPY_VERSION_WRONG:${JSON.stringify(copyVersions)}`)
+    const copyManifest = ok(await cli(dir, ['composite', 'get'], { capabilityId: copy.id, version: '1.0' }), 'COPY_GET')
+    const originManifest = ok(await cli(dir, ['composite', 'get'], { capabilityId: 'nf-walk', version: '3.0' }), 'ORIGIN_GET')
+    if (JSON.stringify(copyManifest.manifest.graph) !== JSON.stringify(originManifest.manifest.graph))
+      throw new Error('COPY_GRAPH_DRIFT')
+    if (copy.id === 'nf-walk') throw new Error('COPY_REUSED_ID')
+    await shot('12b-copy-created')
+    check('复制生成「原名称+副本」独立节点流（1.0，内容与原流一致，原流不变）')
 
     // ── 8. 卡片点击插入实例（固定最新版本 3.0）──
     await libCard('角色到分镜·改').locator('.asset-name').click()

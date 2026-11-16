@@ -9,16 +9,25 @@ import type { PaletteCategoryId } from '@shared/palette-preferences'
 import { NodeCardUtil, type NodeCardShape } from '../canvas/NodeCardShape'
 import { CarrierArrowUtil } from '../canvas/CarrierArrowUtil'
 import { BackdropShapeUtil } from '../canvas/BackdropShape'
-import { createEdge, deriveGraph } from '../canvas/graph'
+import { createEdge, deriveGraph, tryConnect, tryConnectFromInput } from '../canvas/graph'
 import { NodeContractPanel } from '../canvas/NodeContractPanel'
+import { NodeContextMenu } from '../canvas/NodeContextMenu'
 import { DataEdgeLayer } from '../canvas/DataEdgeLayer'
 import { NodeCreateMenu } from '../canvas/NodeCreateMenu'
 import { CanvasBottomDock } from '../canvas/CanvasMinimap'
+import { ConnectionLayer, PendingConnectionLayer } from '../canvas/ConnectionLayer'
+import { setConnectionFinishOverride, type ConnectionFinish } from '../canvas/connection-drag'
+import { NODE_PORT_OUTSET } from '../canvas/edge-geometry'
+import { nodeTextField } from '../canvas/node-pointer-policy'
 import { PALETTE_CATEGORY_META, nodesForPaletteCategory } from '../canvas/palette-categories'
 import { allNodeTypes, getNodeType, nodeIconColor } from '../nodes/registry'
 import { Icon } from '../components/Icon'
 import { useGatewayStore } from '../stores/gateway'
+import { useNodePanelStore } from '../stores/nodePanel'
+import { imageGenInitialConfig } from '../stores/imageGenPreference'
+import type { ConnectionFrom } from '../stores/connection'
 import { toast } from '../stores/toast'
+import { topNotice } from '../stores/topNotice'
 import { buildCompositeManifestFromEditor } from './editor-manifest'
 import {
   CompositePublishPreview,
@@ -74,13 +83,24 @@ export function CompositeCanvasEditor({
   onSaved
 }: Props): React.JSX.Element {
   const [editor, setEditor] = useState<Editor | null>(null)
-  const [selectedShapeId, setSelectedShapeId] = useState<TLShapeId | null>(null)
   const [busy, setBusy] = useState(false)
   const [issues, setIssues] = useState<string[]>([])
   const [revision, setRevision] = useState<number | null>(draftRevision)
   const [dirty, setDirty] = useState(false)
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  // 空白右键/拉线落空白：创建菜单；source/startPage 记录待连线的源端口。
+  const [menu, setMenu] = useState<{
+    x: number
+    y: number
+    source?: ConnectionFrom
+    startPage?: { x: number; y: number }
+  } | null>(null)
+  // 节点右键：与主画布同一份节点操作菜单。
+  const [nodeMenu, setNodeMenu] = useState<{ x: number; y: number; ids: TLShapeId[] } | null>(null)
   const [showVersions, setShowVersions] = useState(false)
+  // 单击只选中；契约面板由节点 info 按钮显式打开（与主画布 nodePanel store 一致）。
+  const panelKind = useNodePanelStore((s) => s.kind)
+  const panelShapeId = useNodePanelStore((s) => s.shapeId)
+  const overlayRef = useRef<HTMLDivElement | null>(null)
   const [activeCategory, setActiveCategory] = useState<{
     id: PaletteCategoryId
     top: number
@@ -154,32 +174,160 @@ export function CompositeCanvasEditor({
     if (!editor || initialized.current) return
     initialized.current = true
     loadManifestIntoEditor(editor, manifest)
-    const unsubscribe = editor.store.listen(
-      () => {
-        const selected = editor.getSelectedShapeIds()[0]
-        setSelectedShapeId(
-          selected && editor.getShape(selected)?.type === 'node-card' ? selected : null
-        )
-      },
-      { scope: 'session' }
-    )
     // 初始化完成后才监听用户改动，避免把恢复快照本身记为未保存修改。
     const unsubscribeDirty = editor.store.listen(() => setDirty(true), {
       scope: 'document',
       source: 'user'
     })
     return () => {
-      unsubscribe()
       unsubscribeDirty()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在编辑器首次挂载时铺一次初始快照
   }, [editor])
 
-  // 与主画布 createNodeAt 同规格：注册表默认尺寸/标题/初始配置（含模型绑定）。
-  const addNode = (nodeType: string, screenX: number, screenY: number): void => {
+  // 退出编辑时关闭节点面板，避免契约面板状态泄漏回主画布。
+  useEffect(() => () => useNodePanelStore.getState().close(), [])
+
+  // 与主画布一致：捕获阶段接管双击——文本节点 inline 编辑、标题改名、媒体/JSON 桥接，
+  // 其余一律阻止默认行为（tldraw 双击空白建文本框、双击节点误触发退出等都由此屏蔽）。
+  useEffect(() => {
+    const el = overlayRef.current
+    if (!el) return
+    const dispatchNodeDoubleClick = (body: HTMLElement, event: MouseEvent): void => {
+      event.preventDefault()
+      event.stopPropagation()
+      body.dispatchEvent(
+        new MouseEvent('dblclick', {
+          bubbles: true,
+          cancelable: true,
+          detail: 2,
+          clientX: event.clientX,
+          clientY: event.clientY
+        })
+      )
+    }
+    const onNodeDoubleClick = (event: MouseEvent): void => {
+      const target = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null
+      if (!target) return
+      const field = nodeTextField(target)
+      const fieldShapeId = field?.closest<HTMLElement>('.node-card-wrap')?.dataset.nodeId
+      if (field && fieldShapeId) {
+        if (document.activeElement !== field) {
+          editor?.cancel()
+          field.dataset.nodeInlineEditing = 'true'
+          editor?.setEditingShape(fieldShapeId as TLShapeId)
+          field.focus()
+        }
+        return
+      }
+      const jsonBody = target.closest<HTMLElement>(
+        '[data-node-interactive="json-content"], [data-node-interactive="double-click-content"]'
+      )
+      const jsonControl = target.closest('button, input, textarea, select, [role="combobox"]')
+      if (
+        jsonBody &&
+        (!jsonControl || (jsonControl === jsonBody && jsonBody.dataset.nodePointer === 'surface'))
+      ) {
+        dispatchNodeDoubleClick(jsonBody, event)
+        return
+      }
+      const websiteBody = target.closest<HTMLElement>(
+        '[data-node-interactive="website-empty"], [data-node-interactive="website-link"]'
+      )
+      if (websiteBody) {
+        dispatchNodeDoubleClick(websiteBody, event)
+        return
+      }
+      const mediaBody = target.closest<HTMLElement>('[data-node-interactive="media-preview"]')
+      if (mediaBody) {
+        const nestedControl = target.closest<HTMLElement>(
+          'button, input, textarea, select, a, [contenteditable="true"]'
+        )
+        if (
+          nestedControl &&
+          mediaBody.contains(nestedControl) &&
+          nestedControl.dataset.nodePointer !== 'surface'
+        )
+          return
+        dispatchNodeDoubleClick(mediaBody, event)
+        return
+      }
+      const nodeTitle = target.closest<HTMLElement>('[data-node-interactive="node-title"]')
+      if (nodeTitle && nodeTitle.getAttribute('contenteditable') !== 'true') {
+        event.preventDefault()
+        event.stopPropagation()
+        nodeTitle.dispatchEvent(new CustomEvent('canvas:edit-node-title'))
+        return
+      }
+      const textBody = target.closest<HTMLElement>('[data-node-interactive="text-content"]')
+      if (textBody) {
+        event.preventDefault()
+        event.stopPropagation()
+        textBody.dispatchEvent(new CustomEvent('canvas:edit-text-node'))
+      }
+    }
+    const onDblClickCapture = (event: MouseEvent): void => {
+      if (!event.isTrusted) return
+      onNodeDoubleClick(event)
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    el.addEventListener('dblclick', onDblClickCapture, { capture: true })
+    // 与主画布一致：禁用 tldraw 绘制类快捷键，避免误建文本/图形。
+    const blockedTools = new Set(['a', 'd', 'e', 'g', 'h', 'i', 'k', 'l', 'n', 'r', 't'])
+    const onKeyDownCapture = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement
+      const typing =
+        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+      if (typing || event.ctrlKey || event.metaKey || event.altKey) return
+      if (!blockedTools.has(event.key.toLowerCase())) return
+      event.preventDefault()
+      event.stopPropagation()
+      editor?.setCurrentTool('select')
+    }
+    el.addEventListener('keydown', onKeyDownCapture, { capture: true })
+    return () => {
+      el.removeEventListener('dblclick', onDblClickCapture, { capture: true })
+      el.removeEventListener('keydown', onKeyDownCapture, { capture: true })
+    }
+  }, [editor])
+
+  // 端口拉线落点：覆盖主画布回调，在本编辑器内完成连接；落空白则弹兼容节点菜单。
+  useEffect(() => {
     if (!editor) return
+    const finish = (r: ConnectionFinish): void => {
+      const pagePt = editor.screenToPage(r.screenPt)
+      const target = editor.getShapeAtPoint(pagePt, {
+        hitInside: true,
+        margin: NODE_PORT_OUTSET + 8,
+        filter: (s) => s.type === 'node-card' && s.id !== r.from.shapeId && !s.isLocked
+      })
+      if (target) {
+        const error =
+          r.from.direction === 'in'
+            ? tryConnectFromInput(editor, r.from, target.id, pagePt)
+            : tryConnect(editor, r.from, target.id, pagePt)
+        if (error) toast(error)
+        else if ((r.from.memberIds?.length ?? 0) > 1)
+          toast(`已批量连接 ${r.from.memberIds?.length} 个节点`)
+        return
+      }
+      setMenu({
+        x: r.screenPt.x,
+        y: r.screenPt.y,
+        source: r.from,
+        startPage: editor.screenToPage(r.startPt)
+      })
+    }
+    setConnectionFinishOverride(finish)
+    return () => setConnectionFinishOverride(null)
+  }, [editor])
+
+  // 与主画布 createNodeAt 同规格：注册表默认尺寸/标题/初始配置（含模型绑定）。
+  const addNode = (nodeType: string, screenX: number, screenY: number): TLShapeId | null => {
+    if (!editor) return null
     const spec = getNodeType(nodeType)
-    if (!spec) return
+    if (!spec) return null
     const point = editor.screenToPage({ x: screenX, y: screenY })
     const id = createShapeId()
     const internalId = `n-${crypto.randomUUID().slice(0, 8)}`
@@ -203,10 +351,15 @@ export function CompositeCanvasEditor({
                 useGatewayStore.getState().modelBindings
               )
             }
+          : {}),
+        // 生图节点沿用上次选择的供应商/模型（与主画布一致）。
+        ...(spec.type === 'image-gen'
+          ? { config: imageGenInitialConfig(useGatewayStore.getState().providers) ?? '' }
           : {})
       }
     })
     editor.select(id)
+    return id
   }
 
   /** 左侧面板点选节点：落在当前视口中心。 */
@@ -260,7 +413,7 @@ export function CompositeCanvasEditor({
       if (!saved.ok) throw new Error(saved.error.message)
       setRevision(saved.data.revision)
       setDirty(false)
-      toast('已保存，下次编辑会自动恢复')
+      topNotice('已保存，下次编辑会自动恢复')
       return built.manifest
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause)
@@ -331,7 +484,7 @@ export function CompositeCanvasEditor({
       if (!published.ok) throw new Error(published.error.message)
       setDirty(false)
       setPreview(null)
-      toast(`已另存为「${next.name}」v${versionLabel(next.version)}`)
+      topNotice(`已另存为「${next.name}」v${versionLabel(next.version)}`)
       onSaved(next)
       onClose()
     } catch (cause) {
@@ -350,11 +503,36 @@ export function CompositeCanvasEditor({
     onClose()
   }
 
-  // 双击空白画布打开与主画布相同的节点创建菜单；点在节点上时交给节点自身处理。
-  const handleStageDoubleClick = (event: React.MouseEvent): void => {
+  // 与主画布一致：右键空白弹创建菜单，右键节点弹节点操作菜单。
+  const handleContextMenu = (event: React.MouseEvent): void => {
+    const target = event.target as HTMLElement
+    if (
+      target.closest('.node-palette') ||
+      target.closest('.canvas-dock') ||
+      target.closest('.node-contract-panel') ||
+      target.closest('.nf-action-bar')
+    )
+      return
+    if (!target.closest('.tl-canvas')) return
+    event.preventDefault()
+    // portal 事件会沿 React 树冒泡到主画布 wrapper 的 onContextMenu，
+    // 不阻断会在主画布同时弹出一份创建菜单。
+    event.stopPropagation()
     if (!editor || busy) return
-    const page = editor.screenToPage({ x: event.clientX, y: event.clientY })
-    if (editor.getShapeAtPoint(page)) return
+    const hit = editor.getShapeAtPoint(editor.screenToPage({ x: event.clientX, y: event.clientY }), {
+      hitInside: true,
+      margin: 4,
+      filter: (shape) => shape.type === 'node-card'
+    })
+    if (hit?.type === 'node-card') {
+      const selected = editor
+        .getSelectedShapeIds()
+        .filter((id) => editor.getShape(id)?.type === 'node-card')
+      const ids = selected.includes(hit.id) ? selected : [hit.id]
+      if (!selected.includes(hit.id)) editor.select(hit.id)
+      setNodeMenu({ x: event.clientX, y: event.clientY, ids })
+      return
+    }
     setMenu({ x: event.clientX, y: event.clientY })
   }
 
@@ -388,9 +566,11 @@ export function CompositeCanvasEditor({
   return createPortal(
     <div
       className="composite-canvas-overlay"
+      ref={overlayRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="composite-canvas-title"
+      onContextMenu={handleContextMenu}
     >
       <span hidden>{capability.id}</span>
       <header className="composite-canvas-topbar">
@@ -401,7 +581,7 @@ export function CompositeCanvasEditor({
         </div>
       </header>
       <div className="composite-canvas-workspace">
-        <div className="composite-canvas-stage" onDoubleClick={handleStageDoubleClick}>
+        <div className="composite-canvas-stage">
           <Tldraw
             shapeUtils={[NodeCardUtil, CarrierArrowUtil, BackdropShapeUtil]}
             components={EMPTY_COMPONENTS as never}
@@ -413,6 +593,7 @@ export function CompositeCanvasEditor({
             }}
           />
           {editor && <DataEdgeLayer editor={editor} interactive={false} />}
+          <ConnectionLayer />
 
           {/* 左侧节点面板：与主画布同一套 Dock 分类 + 展开列表。 */}
           <div className="node-palette" onMouseLeave={scheduleFlyoutClose}>
@@ -479,9 +660,19 @@ export function CompositeCanvasEditor({
               x={menu.x}
               y={menu.y}
               minimal
+              source={menu.source ?? null}
               onPick={(choice) => {
-                addNode(choice.type, menu.x, menu.y)
+                const source = menu.source
+                const id = addNode(choice.type, menu.x, menu.y)
                 setMenu(null)
+                // 拉线到空白建节点：与主画布一致，建节点后自动接上源端口。
+                if (source && id && editor) {
+                  const error =
+                    source.direction === 'in'
+                      ? tryConnectFromInput(editor, source, id)
+                      : tryConnect(editor, source, id)
+                  if (error) toast(`未连线：${error}`)
+                }
               }}
               onTemplate={() => setMenu(null)}
               onUpload={() => setMenu(null)}
@@ -489,17 +680,30 @@ export function CompositeCanvasEditor({
               onClose={() => setMenu(null)}
             />
           )}
+          {editor && menu?.source && menu.startPage && (
+            <PendingConnectionLayer
+              editor={editor}
+              startPage={menu.startPage}
+              endPt={{ x: menu.x, y: menu.y }}
+              from={menu.source}
+            />
+          )}
         </div>
-        {editor && selectedShapeId && (
+        {editor && panelKind === 'contract' && panelShapeId && editor.getShape(panelShapeId) && (
           <NodeContractPanel
             editor={editor}
             projectId={projectId}
             providers={providers}
-            localShapeId={selectedShapeId}
-            onClose={() => {
-              editor.selectNone()
-              setSelectedShapeId(null)
-            }}
+            onClose={() => useNodePanelStore.getState().close()}
+          />
+        )}
+        {editor && nodeMenu && (
+          <NodeContextMenu
+            editor={editor}
+            ids={nodeMenu.ids}
+            x={nodeMenu.x}
+            y={nodeMenu.y}
+            onClose={() => setNodeMenu(null)}
           />
         )}
         {/* 动作簇与历史弹层挂在 workspace 层：右侧节点面板开合会改变 stage 宽度，

@@ -5,6 +5,7 @@ import { useAppStore } from './stores/app'
 import { ProjectListPage } from './pages/ProjectListPage'
 import { CanvasPage } from './pages/CanvasPage'
 import { Toast } from './components/Toast'
+import { TopNotice } from './components/TopNotice'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { ProviderSettingsPanel } from './gateway/ProviderSettingsPanel'
 import { ModelCatalogPanel } from './gateway/ModelCatalogPanel'
@@ -282,6 +283,7 @@ export default function App(): React.JSX.Element {
     <AppErrorBoundary>
       <Content />
       <Toast />
+      <TopNotice />
       <ConfirmDialog />
       <ProviderSettingsPanel />
       <ModelCatalogPanel />

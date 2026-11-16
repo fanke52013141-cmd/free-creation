@@ -92,6 +92,7 @@ import { toast } from '../stores/toast'
 import { useSaveCoordinator } from '../stores/save-coordinator'
 import type { ConnectionFrom } from '../stores/connection'
 import { useGatewayStore } from '../stores/gateway'
+import { imageGenInitialConfig } from '../stores/imageGenPreference'
 import { flowInitialConfig } from '@shared/agent-flow/model-defaults'
 import type { BuildPreview } from '@shared/agent-flow/builder'
 import type { FlowGraphPreview } from '@shared/agent-flow/flow-graph-compiler'
@@ -2759,6 +2760,10 @@ export function CanvasEditor({
                 useGatewayStore.getState().modelBindings
               )
             }
+          : {}),
+        // 生图节点沿用上次选择的供应商/模型（用户裁决 2026-11-16）。
+        ...(type === 'image-gen'
+          ? { config: imageGenInitialConfig(useGatewayStore.getState().providers) ?? '' }
           : {})
       } satisfies Partial<NodeCardProps>
     })

@@ -20,6 +20,7 @@ import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
 import { guiWorkflowInputOptions } from '../../../stores/workflowInput'
 import { useAppStore } from '../../../stores/app'
+import { rememberImageGenSelection } from '../../../stores/imageGenPreference'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
@@ -131,6 +132,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
       type: 'node-card',
       props: { config: JSON.stringify(nextConfig) }
     })
+    rememberImageGenSelection({ providerKey: providerId, modelKey: first?.key ?? '' })
   }
 
   // 所有图片都使用同一个多值端口，连接顺序就是 @图片 1…N 的顺序；N 的上限来自能力表。
@@ -231,6 +233,10 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
                 id: shape.id,
                 type: 'node-card',
                 props: { config: JSON.stringify(nextConfig) }
+              })
+              rememberImageGenSelection({
+                providerKey: next?.provider.id ?? selectedProviderId ?? '',
+                modelKey: key
               })
             }}
           />
