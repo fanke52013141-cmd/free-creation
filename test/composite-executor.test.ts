@@ -70,6 +70,44 @@ describe('composite executor（P2）', () => {
     expect(String(written)).toContain('projects/a.png')
   })
 
+  it('公开媒体输出经 emitArtifact 落为独立资产节点（画布可见产物）', async () => {
+    const artifacts: Array<Record<string, unknown>> = []
+    const ctx = context({
+      emitArtifact: (artifact) => artifacts.push(artifact as unknown as Record<string, unknown>),
+      runComposite: vi.fn(async () => ({
+        status: 'done' as const,
+        outputs: {
+          portrait: { kind: 'image' as const, mediaId: 'media-1', mediaPath: 'projects/a.png', mime: 'image/png' }
+        },
+        stepCount: 1
+      }))
+    })
+    const result = await compositeExecutor(ctx)
+    expect(result.status).toBe('done')
+    expect(artifacts).toHaveLength(1)
+    expect(artifacts[0]).toMatchObject({
+      kind: 'image',
+      mediaId: 'media-1',
+      mediaPath: 'projects/a.png',
+      portId: 'out-portrait'
+    })
+  })
+
+  it('headless 未注入 emitArtifact 时仍写 nodeResult，不抛错', async () => {
+    const ctx = context({
+      runComposite: vi.fn(async () => ({
+        status: 'done' as const,
+        outputs: {
+          portrait: { kind: 'image' as const, mediaId: 'media-1', mediaPath: 'projects/a.png', mime: 'image/png' }
+        },
+        stepCount: 1
+      }))
+    })
+    const result = await compositeExecutor(ctx)
+    expect(result.status).toBe('done')
+    expect(String(vi.mocked(ctx.updateResult).mock.calls[0]?.[0])).toContain('media-1')
+  })
+
   it('没有注入隔离执行服务时失败而不是伪造成功', async () => {
     const ctx = context({ runComposite: undefined })
     const result = await compositeExecutor(ctx)

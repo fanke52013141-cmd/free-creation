@@ -94,6 +94,14 @@ export const compositeExecutor: NodeExecutor = async (
   const outputs = outcome.outputs ?? {}
   const mediaOutputs: NodeValue[] = []
   const extraOutputs: Record<string, NodeValue> = {}
+  const artifacts: Array<{
+    portId: string
+    title: string
+    kind: 'image' | 'video' | 'audio'
+    mediaId: string
+    mediaPath: string
+    mime: string
+  }> = []
   for (const output of manifest.outputs) {
     const value = outputs[output.id]
     if (!value) continue
@@ -107,6 +115,16 @@ export const compositeExecutor: NodeExecutor = async (
       value.kind === 'file'
     ) {
       mediaOutputs.push(value)
+    }
+    if (value.kind === 'image' || value.kind === 'video' || value.kind === 'audio') {
+      artifacts.push({
+        portId: `out-${output.id}`,
+        title: `${manifest.name} · ${output.label}`,
+        kind: value.kind,
+        mediaId: value.mediaId,
+        mediaPath: value.mediaPath,
+        mime: value.mime
+      })
     }
   }
 
@@ -146,6 +164,13 @@ export const compositeExecutor: NodeExecutor = async (
       )
     }
     if (serialized) ctx.updateResult(serialized)
+  }
+  // 公开媒体产物与单节点同一套落画布机制：materialize 为独立资产节点，
+  // 否则结果只留在组合 meta 里，用户在画布上看不到生成的图片/视频/音频。
+  // headless 宿主可不注入 emitArtifact，nodeResult 仍供输出契约使用。
+  const layoutColumns = artifacts.length <= 4 ? 2 : 3
+  for (const artifact of artifacts) {
+    ctx.emitArtifact?.({ ...artifact, layoutColumns })
   }
   return { status: 'done' }
 }

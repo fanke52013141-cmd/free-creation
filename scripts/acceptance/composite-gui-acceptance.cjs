@@ -194,8 +194,18 @@ function ok(res, label) {
       await dialog.waitFor({ state: 'detached', timeout: 30000 })
     }
     await saveSelectionAsComposite('文案整理', 'gui-copy-polish', text1)
-    await page.waitForSelector('.workflow-panel', { timeout: 10000 })
+    // 发布只进节点流库，不自动落画布；实例从面板点击添加。
+    if ((await compositeCards().count()) !== 0) throw new Error('PUBLISH_AUTO_INSERTED_INSTANCE')
+    const insertFromLibrary = async (name) => {
+      await page.waitForSelector('.workflow-panel', { timeout: 10000 })
+      const card = page.locator('.workflow-panel .asset-card', { has: page.locator(`.asset-name:text-is("${name}")`) })
+      await card.waitFor({ timeout: 10000 })
+      await card.click()
+      await page.locator('.node-card-wrap:has([data-node-type="composite"])', { hasText: name }).first().waitFor({ timeout: 10000 })
+    }
+    await insertFromLibrary('文案整理')
     await shot('published-1.0-library')
+    check('发布只进节点流库（画布无自动实例），点击卡片添加 1.0 实例')
     const inner10 = ok(await cli(dir, ['composite', 'get'], { capabilityId: 'gui-copy-polish', version: '1.0' }), 'GET_10')
     if (inner10.manifest.runtimeVersion !== 2) throw new Error('RUNTIME_VERSION_NOT_2')
     check('GUI 右键保存节点→组合节点→发布「文案整理」1.0（runtimeVersion=2）')
@@ -223,7 +233,7 @@ function ok(res, label) {
       const detail = ok(await cli(dir, ['composite', 'run', 'get'], { runId: failed[0].id }), `${label}_RUN_GET`)
       throw new Error(`${label}_RUN_FAILED:${JSON.stringify({ run: failed[0], steps: detail?.steps }).slice(0, 1200)}`)
     }
-    const readOutputText = async (nodeId, manifest) => {
+    const readOutputText = async (nodeId, manifest, expect) => {
       const start = Date.now()
       let lastRaw = null
       while (Date.now() - start < 30000) {
@@ -235,7 +245,8 @@ function ok(res, label) {
         if (Array.isArray(outputs)) {
           for (const out of manifest.outputs) {
             const hit = outputs.find((o) => o.portId === `out-${out.id}`)
-            if (hit && typeof hit.text === 'string') return hit.text
+            // 台账终态先于画布输出投影：带 expect 时须等到新内容落盘，避免读到上一次运行的旧输出。
+            if (hit && typeof hit.text === 'string' && (!expect || hit.text.includes(expect))) return hit.text
           }
         }
         await sleep(700)
@@ -340,6 +351,7 @@ function ok(res, label) {
     await text2.click()
     await innerInstance().click({ modifiers: ['Shift'] })
     await saveSelectionAsComposite('标题整理', 'gui-title-polish', innerInstance())
+    await insertFromLibrary('标题整理')
     const outer10 = ok(await cli(dir, ['composite', 'get'], { capabilityId: 'gui-title-polish', version: '1.0' }), 'GET_OUTER')
     const nestedDep = (outer10.manifest.dependencies || []).find((d) => d.kind === 'capability' && d.id === 'gui-copy-polish')
     if (!nestedDep || nestedDep.version !== '1.0') throw new Error(`NESTED_DEP_NOT_FIXED:${JSON.stringify(nestedDep)}`)
@@ -413,7 +425,7 @@ function ok(res, label) {
     if (upgradedDetail.node.config?.version !== '2.0') throw new Error(`GUI_UPGRADE_NOT_APPLIED:${JSON.stringify(upgradedDetail.node.config)}`)
     await runCard(innerInstance())
     await assertRunsCompleted(await waitForRun('gui-copy-polish', '2.0', 1), 'INNER20_UPGRADED')
-    const upgradedText = await readOutputText(instanceNode.nodeId, inner20.manifest)
+    const upgradedText = await readOutputText(instanceNode.nodeId, inner20.manifest, '草稿修改')
     if (!upgradedText.includes('草稿修改')) throw new Error(`UPGRADED_OUTPUT_WRONG:${upgradedText}`)
     await shot('upgraded-instance-run')
     check('GUI 右键升级节点流：预检通过→确认升级→实例按 2.0 运行（引用形态）')
