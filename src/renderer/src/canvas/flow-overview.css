@@ -120,8 +120,7 @@
 }
 .fo-step-card:hover { border-color: #4a525e; }
 .fo-step.is-attention .fo-step-card {
-  border-left: 3px solid #E0A458;
-  background: linear-gradient(90deg, rgba(224, 164, 88, 0.1), var(--card, #20242a) 45%);
+  background: rgba(224, 164, 88, 0.08);
 }
 .fo-step.is-gated .fo-step-card { opacity: 0.8; }
 .fo-step-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }

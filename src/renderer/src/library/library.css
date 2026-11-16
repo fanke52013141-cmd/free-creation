@@ -1972,7 +1972,6 @@
   display: grid;
   gap: 2px;
   padding: 6px 8px;
-  border-left: 3px solid var(--danger, #d64545);
   background: var(--danger-bg, rgba(214, 69, 69, 0.08));
   border-radius: 4px;
 }
