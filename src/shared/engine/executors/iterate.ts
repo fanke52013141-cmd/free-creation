@@ -258,7 +258,8 @@ async function runItem(
   config: IterateConfig,
   item: Record<string, unknown>,
   index: number,
-  itemRunId: string
+  itemRunId: string,
+  total: number
 ): Promise<IterateItemResult> {
   const source = sourceFor(item, index)
   const base = { source }
@@ -274,6 +275,7 @@ async function runItem(
         nodeIds: targets.map((edge) => edge.nodeId),
         item,
         index,
+        itemCount: total,
         itemId: source.itemId,
         itemRunId,
         iterationNodeId: ctx.node.id,
@@ -431,7 +433,7 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
     const item = items[idx] as Record<string, unknown>
     const source = sourceFor(item, idx)
     const itemRunId = itemRunIdFor(ctx, source)
-    const result = await runItem(ctx, config, item, idx, itemRunId)
+    const result = await runItem(ctx, config, item, idx, itemRunId, items.length)
     results[idx] = result
     publishProgress()
     if (result.status === 'failed') failedAny = true

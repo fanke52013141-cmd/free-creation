@@ -977,6 +977,8 @@ export function deriveGraph(editor: Editor): {
         }
       })
     } else if (shape.type === 'arrow') {
+      // 循环分支的视觉溯源箭头只有绑定、没有端口 meta，不是数据边，不进语义图。
+      if (typeof shape.meta?.iterationProvenance === 'string') continue
       const { start, end } = getArrowBindings(editor, shape.id)
       if (!start || !end) continue
       if (editor.getShape(start.toId)?.type !== 'node-card') continue

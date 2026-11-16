@@ -280,6 +280,7 @@ type MenuState = CreateMenuState | NodeMenuState
  */
 function isWorkflowCanvasShape(shape: { type: string; meta?: Record<string, unknown> }): boolean {
   if (shape.type === 'node-card' || shape.type === 'group' || shape.type === 'backdrop') return true
+  if (shape.type === 'arrow' && typeof shape.meta?.iterationProvenance === 'string') return true
   return (
     shape.type === 'arrow' &&
     typeof shape.meta?.fromPort === 'string' &&

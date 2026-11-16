@@ -37,6 +37,8 @@ import { FlowReviewFeedback } from './FlowReviewFeedback'
 import { GenerationLoadingOverlay } from './GenerationLoadingOverlay'
 import { FixedFlowAssetBody } from './FixedFlowAssetBody'
 import { readFlowAssetSnapshot } from './flow-asset-snapshot'
+import { IterationSnapshotBody } from './IterationSnapshotBody'
+import { readIterationSnapshot } from './iteration-lanes'
 import {
   averageNodeExecutionDuration,
   DEFAULT_NODE_EXECUTION_ESTIMATE_MS,
@@ -155,6 +157,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     }
   }, [shape.props.nodeType, shape.props.config, stableProviders, modelCheckKey])
   const spec = getNodeType(shape.props.nodeType)
+  // 循环分支快照卡：内核是文本节点，呈现层按产出节点身份覆盖图标/身份色，只读不可执行。
+  const iterationSnapshot = readIterationSnapshot(shape)
+  const identitySpec = iterationSnapshot ? getNodeType(iterationSnapshot.role) : spec
   const displayTitle =
     shape.props.nodeType === 'speech' && shape.props.title === '配音'
       ? '语音合成'
@@ -182,7 +187,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     },
     []
   )
-  const titleEditable = true
+  const titleEditable = !iterationSnapshot
 
   /** Follow within the detached hit area, in canvas-local pixels. */
   const updatePortFollow = (event: React.PointerEvent<HTMLSpanElement>, key: string): void => {
@@ -785,8 +790,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const stackMeta = shape.meta as Record<string, unknown> | undefined
   const stackMember = stackMeta?.stackRole === 'member'
   const comboTop = stackMeta?.stackRole === 'top'
-  const visibleInPorts = stackMember ? [] : inLayout.ports
-  const visibleOutPorts = stackMember ? [] : outLayout.ports
+  const visibleInPorts = stackMember || iterationSnapshot ? [] : inLayout.ports
+  const visibleOutPorts = stackMember || iterationSnapshot ? [] : outLayout.ports
   const visibleInY = inLayout.offsets
   const visibleOutY = outLayout.offsets
 
@@ -1231,10 +1236,14 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           </span>
           <span
             className="node-icon"
-            style={{ color: nodeIconColor(spec?.color ?? nodePortColor) }}
+            style={{ color: nodeIconColor(identitySpec?.color ?? nodePortColor) }}
           >
             {/* JSX 尺寸与 ui-surfaces 对 .node-icon svg 的强制 17px 保持一致 */}
-            {spec ? <Icon name={spec.icon} size={17} /> : <Icon name="help" size={17} />}
+            {identitySpec ? (
+              <Icon name={identitySpec.icon} size={17} />
+            ) : (
+              <Icon name="help" size={17} />
+            )}
           </span>
           <div
             ref={titleRef}
@@ -1285,7 +1294,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               对话节点也必须能查看与其他节点相同的输入输出契约。标题必须和 openNodePanel 的
               去向一致——预演台从卡片按钮进，这里写「打开 3D 预演台」会是假提示。
               折叠组合的首位卡不提供单节点属性入口，组合级操作在右上角图标。 */}
-          {!comboTop && (
+          {!comboTop && !iterationSnapshot && (
             <button
               className="node-info-btn"
               title="查看输入输出说明"
@@ -1301,7 +1310,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           )}
           {/* 弹性占位：运行与状态都固定在标题行的右侧。
               折叠组合的首位卡隐藏单节点状态与运行入口，组合级运行在右上角图标。 */}
-          {!comboTop && (
+          {!comboTop && !iterationSnapshot && (
             <>
               {shape.meta.nodeHeightMode === 'manual' && (
                 <button
@@ -1368,8 +1377,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           className={`node-card type-${shape.props.nodeType}`}
           data-node-type={shape.props.nodeType}
           style={{
-            ['--node-accent' as string]: spec?.color ?? '#42b9f5',
-            ['--node-identity-accent' as string]: spec?.color ?? '#42b9f5',
+            ['--node-accent' as string]: identitySpec?.color ?? '#42b9f5',
+            ['--node-identity-accent' as string]: identitySpec?.color ?? '#42b9f5',
             ['--node-action-bottom-inset' as string]: `${NODE_UI.actionBar.bottomInset}px`,
             ['--node-standard-action-height' as string]: `${NODE_UI.actionBar.height}px`
           }}
@@ -1377,7 +1386,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           {/* 保留 DOM 锚点以兼容旧快照；视觉改由 card 左上角的 45° 类型切角承担。 */}
           <div
             className="node-color-bar"
-            style={{ ['--node-accent' as string]: spec?.color ?? '#42b9f5' }}
+            style={{ ['--node-accent' as string]: identitySpec?.color ?? '#42b9f5' }}
           />
           {spec && (
             <NodeCardShell
@@ -1406,7 +1415,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                     )}
                     <div className="node-body-content">
                       <FlowReviewFeedback shape={shape} />
-                      {readFlowAssetSnapshot(shape) ? (
+                      {iterationSnapshot ? (
+                        <IterationSnapshotBody shape={shape} />
+                      ) : readFlowAssetSnapshot(shape) ? (
                         <FixedFlowAssetBody shape={shape} openPreview={openMediaPreview} />
                       ) : (
                         <spec.Body shape={shape} openPreview={openMediaPreview} />

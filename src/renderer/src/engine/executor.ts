@@ -60,7 +60,10 @@ import {
 import {
   clearIterationLanes,
   createIterationLane,
+  iterationFanoutLayout,
   iterationLaneArtifactPosition,
+  liftIterationBodyDefinition,
+  updateIterationLaneGen,
   updateIterationLanePrompt
 } from '../canvas/iteration-lanes'
 import { redactDiagnosticText } from '@shared/diagnostics'
@@ -131,7 +134,13 @@ interface WorkflowContext {
   /** 迭代子流程当前批次（runSubflowForIterate 填写），随节点事件携带 batchId/itemId。 */
   batch?: { batchId: string; itemId?: string }
   /** 当前循环项的画布泳道（runSubflowForIterate 创建）；产物落点与提示词注入读它。 */
-  iterationLane?: { loopId: string; index: number; laneTextNodeId: TLShapeId; prompt?: string }
+  iterationLane?: {
+    loopId: string
+    index: number
+    laneTextNodeId: TLShapeId
+    genCardId: TLShapeId
+    prompt?: string
+  }
   /** 循环节点本轮运行的固定几何锚点：循环卡尺寸随进度变化，泳道等距排布必须用整轮一致的锚点。 */
   iterationLaneAnchor?: { x: number; y: number; w: number; h: number }
   /** 独立节点任务不写入前台工作流的进度和错误汇总。 */
@@ -958,12 +967,10 @@ async function invokeExecutor(
       // Agent commands publish from their committed fixed version. Adding an
       // artifact before receipt commit would change the admitted semantic graph.
       if (ctx.command) return
-      // 循环项产物落进该项泳道：挂在提示词卡右侧，并注入本次运行提示词正文。
+      // 循环项产物落进该项分支：挂在生图快照卡右侧，溯源指向生图快照。
       const lane = ctx.iterationLane
-      const laneShape = lane
-        ? ctx.editor.getShape<NodeCardShape>(lane.laneTextNodeId)
-        : undefined
-      if (lane && laneShape) {
+      const genShape = lane ? ctx.editor.getShape<NodeCardShape>(lane.genCardId) : undefined
+      if (lane && genShape) {
         const siblings = ctx.editor
           .getCurrentPageShapes()
           .filter(
@@ -974,14 +981,14 @@ async function invokeExecutor(
               (candidate.meta as Record<string, unknown> | undefined)?.iterationLaneIndex ===
                 lane.index &&
               (candidate.meta as Record<string, unknown> | undefined)?.artifactProducerId ===
-                lane.laneTextNodeId
+                lane.genCardId
           ).length
-        const position = iterationLaneArtifactPosition(laneShape, siblings)
+        const position = iterationLaneArtifactPosition(genShape, siblings)
         ctx.editor.run(() =>
           materializeArtifact(ctx.editor, current, artifact, ctx.runId, {
             position,
-            producerId: lane.laneTextNodeId,
-            producerPortId: 'out-text',
+            producerId: lane.genCardId,
+            producerPortId: 'out-image',
             extraMeta: {
               iterationLaneLoopId: lane.loopId,
               iterationLaneIndex: lane.index,
@@ -1784,24 +1791,48 @@ async function runSubflowForIterate(
       itemId: request.itemId
     }
   }
-  // 画布泳道：每项一条「输入/提示词 → 产物」分支，自上而下等距排布。
+  // 画布泳道：每项一条「AI 处理 → 生图 → 预览」分支，以循环为中心上下对称均分。
   // Agent 命令执行不建泳道（会改变 admitted 语义图）；headless 隔离画布建了也随运行丢弃。
   if (!ctx.command && request.iterationNodeId) {
     const loopShape = ctx.editor.getShape<NodeCardShape>(request.iterationNodeId as TLShapeId)
     if (loopShape) {
       const index = request.index ?? 0
-      const laneTextNodeId = createIterationLane(
+      const count = request.itemCount ?? 1
+      const cards = createIterationLane(
         ctx.editor,
         loopShape,
         index,
         request.item,
         request.itemRunId ?? ctx.runId,
+        count,
         ctx.iterationLaneAnchor
       )
-      itemCtx.iterationLane = { loopId: request.iterationNodeId, index, laneTextNodeId }
+      itemCtx.iterationLane = {
+        loopId: request.iterationNodeId,
+        index,
+        laneTextNodeId: cards.aiCardId,
+        genCardId: cards.genCardId
+      }
     }
   }
   const nodeIds = expandIterationBody(ctx.graph, request.nodeIds, request.iterationNodeId)
+  // 首项落位前把循环体定义链抬到扇出上方当模板行，让出中心行给分支（奇数项中间分支对齐循环）。
+  if (
+    !ctx.command &&
+    request.iterationNodeId &&
+    (request.index ?? 0) === 0 &&
+    itemCtx.iterationLane
+  ) {
+    const loopShape = ctx.editor.getShape<NodeCardShape>(request.iterationNodeId as TLShapeId)
+    if (loopShape) {
+      const layout = iterationFanoutLayout(
+        loopShape,
+        request.itemCount ?? 1,
+        ctx.iterationLaneAnchor
+      )
+      liftIterationBodyDefinition(ctx.editor, nodeIds, layout.fanTop)
+    }
+  }
   if (nodeIds.some((id) => hasNodeTask(ctx.projectId, id) || nodeTests.has(id as TLShapeId))) {
     throw new Error('循环体节点已在运行或排队，不能重置其结果')
   }
@@ -1852,6 +1883,29 @@ async function runSubflowForIterate(
         if (textValue && (textValue.kind === 'text' || textValue.kind === 'markdown')) {
           lane.prompt = textValue.text
           updateIterationLanePrompt(itemCtx.editor, lane.laneTextNodeId, textValue.text)
+          // 生图快照卡：该轮提交摘要（模型/画幅/分辨率/数量）+ 提示词正文。
+          const genNode = nodeIds
+            .map((id) => byId.get(id))
+            .find((candidate) => candidate?.type === 'image-gen')
+          const genShape = genNode
+            ? itemCtx.editor.getShape<NodeCardShape>(genNode.id as TLShapeId)
+            : undefined
+          let summary = ''
+          if (genShape) {
+            try {
+              const cfg = JSON.parse(genShape.props.config) as Record<string, unknown>
+              const parts = [
+                typeof cfg.modelKey === 'string' ? cfg.modelKey.split('::').pop() : '',
+                typeof cfg.aspectRatio === 'string' ? cfg.aspectRatio : '',
+                typeof cfg.resolution === 'string' ? cfg.resolution : '',
+                typeof cfg.count === 'number' ? `${cfg.count} 张` : ''
+              ].filter(Boolean)
+              summary = parts.join(' · ')
+            } catch {
+              summary = ''
+            }
+          }
+          updateIterationLaneGen(itemCtx.editor, lane.genCardId, textValue.text, summary)
         }
       }
     }

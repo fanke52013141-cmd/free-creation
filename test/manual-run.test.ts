@@ -15,7 +15,7 @@ import {
 import { useConfirmStore } from '@renderer/stores/confirm'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import { createDirectorProject, createDirectorPublishRecord } from '@renderer/nodes/director-data'
-import { ITERATION_LANE_GAP } from '@renderer/canvas/iteration-lanes'
+import { ITERATION_LANE_BRANCH_H, ITERATION_LANE_GAP_V } from '@renderer/canvas/iteration-lanes'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 
 beforeAll(() => registerAllNodeTypes())
@@ -658,12 +658,22 @@ describe('runWorkflow · 迭代体输入隔离', () => {
       updateShape,
       updateShapes: (patches: Parameters<typeof updateShape>[0][]) => patches.forEach(updateShape),
       // 泳道投影需要创建/删除画布形状；桩实现直接落进 shapes map。
-      createShape: (shape: { id: string; type: string; props?: Record<string, unknown>; meta?: Record<string, unknown> }) => {
-        shapes.set(shape.id, { ...shape, props: shape.props ?? {}, meta: shape.meta ?? {} } as unknown as NodeCardShape)
+      createShape: (shape: {
+        id: string
+        type: string
+        props?: Record<string, unknown>
+        meta?: Record<string, unknown>
+      }) => {
+        shapes.set(shape.id, {
+          ...shape,
+          props: shape.props ?? {},
+          meta: shape.meta ?? {}
+        } as unknown as NodeCardShape)
       },
       deleteShapes: (ids: string[]) => {
         ids.forEach((id) => shapes.delete(id))
       },
+      createBinding: () => undefined,
       run: (fn: () => void) => fn(),
       markHistoryStoppingPoint: () => undefined
     } as unknown as Editor
@@ -686,21 +696,23 @@ describe('runWorkflow · 迭代体输入隔离', () => {
     expect(promptRuns).toHaveLength(2)
     expect(new Set(promptRuns.map((run) => run.runId)).size).toBe(2)
     expect(promptRuns.every((run) => run.runId.includes(':item:'))).toBe(true)
-    // 泳道投影：N 项必须落 N 条分支头卡，自上而下等距（用户 2026-11-16 裁决）。
-    const lanes = Array.from(shapes.values())
-      .filter(
-        (shape) =>
-          shape.type === 'node-card' &&
-          (shape.meta as Record<string, unknown>)?.iterationLaneLoopId === iterate.id &&
-          (shape.meta as Record<string, unknown>)?.artifactProducerPortId === 'out-item'
-      )
+    // 泳道投影：N 项落 N 条分支，每条含 AI 处理 + 生图两张身份快照卡，上下等距（用户 2026-11-16 裁决）。
+    const laneCards = Array.from(shapes.values()).filter(
+      (shape) =>
+        shape.type === 'node-card' &&
+        (shape.meta as Record<string, unknown>)?.iterationLaneLoopId === iterate.id &&
+        typeof (shape.meta as Record<string, unknown>)?.iterationLaneRole === 'string'
+    )
+    const heads = laneCards
+      .filter((shape) => (shape.meta as Record<string, unknown>).iterationLaneRole === 'ai-process')
       .sort(
         (a, b) =>
           ((a.meta as Record<string, unknown>).iterationLaneIndex as number) -
           ((b.meta as Record<string, unknown>).iterationLaneIndex as number)
       )
-    expect(lanes).toHaveLength(2)
-    expect(lanes[1].y - lanes[0].y).toBe(ITERATION_LANE_GAP)
+    expect(heads).toHaveLength(2)
+    expect(laneCards).toHaveLength(4)
+    expect(heads[1].y - heads[0].y).toBe(ITERATION_LANE_BRANCH_H + ITERATION_LANE_GAP_V)
   })
 })
 
@@ -870,12 +882,22 @@ describe('runWorkflowForNodes · 子图目标含循环节点时循环体必须�
       getBindingsFromShape: (id: string) => bindings.get(id) ?? [],
       updateShape,
       updateShapes: (patches: Parameters<typeof updateShape>[0][]) => patches.forEach(updateShape),
-      createShape: (shape: { id: string; type: string; props?: Record<string, unknown>; meta?: Record<string, unknown> }) => {
-        shapes.set(shape.id, { ...shape, props: shape.props ?? {}, meta: shape.meta ?? {} } as unknown as NodeCardShape)
+      createShape: (shape: {
+        id: string
+        type: string
+        props?: Record<string, unknown>
+        meta?: Record<string, unknown>
+      }) => {
+        shapes.set(shape.id, {
+          ...shape,
+          props: shape.props ?? {},
+          meta: shape.meta ?? {}
+        } as unknown as NodeCardShape)
       },
       deleteShapes: (ids: string[]) => {
         ids.forEach((id) => shapes.delete(id))
       },
+      createBinding: () => undefined,
       run: (fn: () => void) => fn(),
       markHistoryStoppingPoint: () => undefined
     } as unknown as Editor

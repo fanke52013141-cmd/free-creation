@@ -77,9 +77,13 @@ describe('v1.3 §16.1 端口圆点统一使用节点色、类型色环与柔光'
   })
 
   it('默认每个方向显示一个点，同类型合并而不同类型分别均分节点高度', () => {
-    // Folded stack members hide their ports; ordinary cards retain the shared layout.
-    expect(nodeCardView).toContain('const visibleInPorts = stackMember ? [] : inLayout.ports')
-    expect(nodeCardView).toContain('const visibleOutPorts = stackMember ? [] : outLayout.ports')
+    // Folded stack members and iteration snapshot cards hide their ports; ordinary cards retain the shared layout.
+    expect(nodeCardView).toContain(
+      'const visibleInPorts = stackMember || iterationSnapshot ? [] : inLayout.ports'
+    )
+    expect(nodeCardView).toContain(
+      'const visibleOutPorts = stackMember || iterationSnapshot ? [] : outLayout.ports'
+    )
     expect(nodePortLayout).toContain(
       'const groupTypes = [...new Set(grouped.map((port) => port.type))]'
     )
@@ -1103,7 +1107,7 @@ describe('v1.2 §16.27 浏览器门禁存在：逐镜编辑必须保住镜头额
 
 describe('v1.2 §16.28 3D 预演台：读文档真值、连线数上按钮、只摆画面在变的控件', () => {
   const studio = stripComments(read('src/renderer/src/canvas/DirectorStudioPanel.tsx'))
-const directorFrame = stripComments(read('src/renderer/src/canvas/director-frame.ts'))
+  const directorFrame = stripComments(read('src/renderer/src/canvas/director-frame.ts'))
   const viewport3d = stripComments(read('src/renderer/src/canvas/Director3DViewport.tsx'))
   const dataLayer = read('src/shared/director-data.ts')
   const studioExecutor = stripComments(read('src/shared/engine/executors/director.ts'))
@@ -1156,13 +1160,9 @@ const directorFrame = stripComments(read('src/renderer/src/canvas/director-frame
     // 2026-11-02：两行改成统一 NumberStepper 后不再有 event.target，
     // 但「上限取自同一常量 + 空值回退默认」这两条语义必须保留。
     expect(studio).toContain('max={DIRECTOR_FOCAL_RANGE_MM[1]}')
-    expect(studio).toMatch(
-      /Math\.min\(\s*DIRECTOR_FOCAL_RANGE_MM\[1\],\s*raw \|\| 35\s*\)/
-    )
+    expect(studio).toMatch(/Math\.min\(\s*DIRECTOR_FOCAL_RANGE_MM\[1\],\s*raw \|\| 35\s*\)/)
     expect(studio).toContain('max={DIRECTOR_DURATION_RANGE_SEC[1]}')
-    expect(studio).toMatch(
-      /Math\.min\(\s*DIRECTOR_DURATION_RANGE_SEC\[1\],\s*raw \|\| 5\s*\)/
-    )
+    expect(studio).toMatch(/Math\.min\(\s*DIRECTOR_DURATION_RANGE_SEC\[1\],\s*raw \|\| 5\s*\)/)
     // WebM 导出与界面同一上限：曾经界面 10 秒、告警 12 秒、导出又截成 10 秒。
     // 2026-11-08：画面绘制与预演录制抽到 director-frame.ts（GUI 与外部授权发布共用同一实现），
     // 因此这条断言改查真正拥有该表达式的模块；面板里不得再出现第二份上限换算。
@@ -1330,5 +1330,49 @@ describe('v1.3 底部操作区持有 8px 留白', () => {
     // 这两层容器一旦出现 padding-bottom，实际留白就不再是 8px，规格即被破坏。
     expect(foundation).not.toMatch(/\.node-body\s*\{[^}]*padding-bottom/)
     expect(foundation).not.toMatch(/\.node-body-content\s*\{[^}]*padding-bottom/)
+  })
+})
+
+// 循环扇出呈现裁决（用户 2026-11-16）：循环居中、分支上下对称均分；每条分支以产出节点
+// 身份呈现「AI 处理 → 生图 → 预览」只读运行快照；定义链抬到扇出上方；溯源箭头不是数据边。
+describe('循环扇出对称分支与只读运行快照', () => {
+  const lanes = read('src/renderer/src/canvas/iteration-lanes.ts')
+  const snapshotBody = read('src/renderer/src/canvas/IterationSnapshotBody.tsx')
+
+  it('分支以循环中心为轴对称均分，奇数项中间分支对齐循环', () => {
+    expect(lanes).toContain('const centerY = base.y + base.h / 2')
+    expect(lanes).toContain('const fanTop = centerY - total / 2')
+    expect(lanes).toContain(
+      'const tops = Array.from({ length: n }, (_, index) => fanTop + index * pitch)'
+    )
+  })
+
+  it('快照卡内核仍是文本节点，按产出身份覆盖且固定默认档高度', () => {
+    expect(lanes).toContain("nodeType: 'text'")
+    expect(lanes).toContain('iterationLaneRole: role')
+    expect(lanes).toContain("nodeHeightMode: 'manual'")
+    expect(lanes).toContain('h: ITERATION_LANE_BRANCH_H')
+    expect(nodeCardView).toContain('const iterationSnapshot = readIterationSnapshot(shape)')
+    expect(nodeCardView).toContain(
+      'const identitySpec = iterationSnapshot ? getNodeType(iterationSnapshot.role) : spec'
+    )
+    expect(nodeCardView).toContain('const titleEditable = !iterationSnapshot')
+    expect(nodeCardView).toContain('<IterationSnapshotBody shape={shape} />')
+    expect(snapshotBody).toContain('iteration-snapshot-badge')
+  })
+
+  it('循环→分支溯源箭头只有绑定没有端口 meta，不进语义图且可随项目保存', () => {
+    expect(lanes).toContain('iterationProvenance: loop.id')
+    expect(lanes).not.toContain('fromPort:')
+    expect(graph).toContain("if (typeof shape.meta?.iterationProvenance === 'string') continue")
+    expect(canvasEditor).toContain(
+      "if (shape.type === 'arrow' && typeof shape.meta?.iterationProvenance === 'string') return true"
+    )
+  })
+
+  it('定义链抬到扇出上方让出中心行，重跑清理快照与溯源箭头', () => {
+    expect(lanes).toContain('export function liftIterationBodyDefinition')
+    expect(lanes).toContain('const targetY = fanTop - maxH - 60')
+    expect(lanes).toContain("(shape.type === 'node-card' || shape.type === 'arrow')")
   })
 })

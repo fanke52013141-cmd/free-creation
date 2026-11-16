@@ -88,6 +88,8 @@ export interface SubflowRequest {
   nodeIds: string[]
   item: Record<string, unknown>
   index: number
+  /** 本轮循环的总项数：呈现层据此把 N 条分支以循环为中心上下对称均分。 */
+  itemCount?: number
   itemId?: string
   itemRunId?: string
   iterationNodeId?: string
