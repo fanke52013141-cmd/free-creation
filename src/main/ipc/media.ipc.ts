@@ -93,8 +93,7 @@ const MEDIA_CANCELLED_SIGNAL = Symbol('media-cancelled')
 /** mediaId → 媒体表相对路径 → 绝对路径。素材被删或索引缺失时返回 null。 */
 function mediaAbsPathById(mediaId: string): string | null {
   const row = getDb().prepare('SELECT path FROM media WHERE id = ?').get(mediaId) as
-    | { path?: string }
-    | undefined
+    { path?: string } | undefined
   if (!row?.path) return null
   return getMediaAbsPath(row.path)
 }
@@ -248,7 +247,7 @@ async function importAll(projectId: string, paths: string[]): Promise<MediaImpor
     if (r.ok) {
       assets.push(r.asset)
       // 导入成功即可返回；元数据回填异步进行，失败只意味着少一份时长/尺寸，
-      // 不改变导入结果（时间线在缺少元数据时按占位长度摆放，探测到后再裁）。 
+      // 不改变导入结果（时间线在缺少元数据时按占位长度摆放，探测到后再裁）。
       void backfillMediaMetadata(r.asset)
     } else errors.push({ path: p, reason: r.reason })
   }
@@ -285,8 +284,19 @@ export function registerMediaIpc(): void {
     }
     emitGatewayEvent('artifact.recipe_started', '开始保存生成来源', recipeCorrelation)
     try {
-      saveArtifactRecipe(artifactRecipeSchema.parse(input))
-      emitGatewayEvent('artifact.recipe_saved', '生成来源已保存', recipeCorrelation)
+      const outcome = saveArtifactRecipe(artifactRecipeSchema.parse(input))
+      // 引用形态产物（发布快照 mediaRef / headless 直写素材）本次运行并未生成，
+      // 没有生成来源可记：跳过不是失败，如实记 skipped，运行继续
+      // （2026-11-17 媒体资产节点流回归修复）。
+      if (outcome === 'skipped') {
+        emitGatewayEvent(
+          'artifact.recipe_skipped',
+          '生成来源跳过：产物为引用形态，媒体库无此资产',
+          recipeCorrelation
+        )
+      } else {
+        emitGatewayEvent('artifact.recipe_saved', '生成来源已保存', recipeCorrelation)
+      }
       return ok(true)
     } catch {
       emitGatewayEvent('artifact.recipe_failed', '生成来源保存失败', recipeCorrelation)
@@ -454,16 +464,13 @@ export function registerMediaIpc(): void {
   )
 
   /** 本地 IndexTTS 2.5 运行时探测：只读，不缓存（用户装好后重开面板即生效）。 */
-  ipcMain.handle(
-    IPC.media.indexttsDetect,
-    async (): Promise<IpcEnvelope<IndexTtsRuntimeInfo>> => {
-      try {
-        return ok(await detectIndexTts())
-      } catch (error) {
-        return err('INDEXTTS_DETECT_FAILED', error instanceof Error ? error.message : String(error))
-      }
+  ipcMain.handle(IPC.media.indexttsDetect, async (): Promise<IpcEnvelope<IndexTtsRuntimeInfo>> => {
+    try {
+      return ok(await detectIndexTts())
+    } catch (error) {
+      return err('INDEXTTS_DETECT_FAILED', error instanceof Error ? error.message : String(error))
     }
-  )
+  })
 
   /**
    * 本地 IndexTTS 2.5 合成：参考音频 → 本机推理 → 项目音频资产。
@@ -570,19 +577,25 @@ export function registerMediaIpc(): void {
       const startedAt = Date.now()
       emitGatewayEvent('media.video_thumbnails.started', '视频缩略图生成开始', context)
       if (!input?.projectId || !input.sourceMediaId || !input.count) {
-        emitGatewayEvent('media.video_thumbnails.failed', '视频缩略图参数无效', context, { status: 'failed', phase: 'input' })
+        emitGatewayEvent('media.video_thumbnails.failed', '视频缩略图参数无效', context, {
+          status: 'failed',
+          phase: 'input'
+        })
         return err('INVALID_INPUT', '缺少缩略图参数')
       }
       try {
         const result = await generateVideoThumbnails(input)
         emitGatewayEvent('media.video_thumbnails.completed', '视频缩略图生成完成', context, {
-          status: 'success', durationMs: Date.now() - startedAt,
+          status: 'success',
+          durationMs: Date.now() - startedAt,
           attributes: { count: result.thumbnails.filter(Boolean).length }
         })
         return ok(result)
       } catch (error) {
         emitGatewayEvent('media.video_thumbnails.failed', '视频缩略图生成失败', context, {
-          status: 'failed', phase: 'generate', durationMs: Date.now() - startedAt
+          status: 'failed',
+          phase: 'generate',
+          durationMs: Date.now() - startedAt
         })
         return err(
           'VIDEO_THUMBNAILS_FAILED',

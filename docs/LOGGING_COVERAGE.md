@@ -467,6 +467,11 @@ GLM/C3.3/C4 本批完整 verify 最终串行通过（164 文件、1763 通过、
 复用文件预检发 library.reuse_preview，记录结果及缺文件数，后续复用既有物化/保存和补偿记录。纯提示词预览不记录用户输入；创建取消发生在物化之前。
 验证：recipe-provenance、transfer.integration、library-insert 与浏览器路径验证通过；verify:logging 通过。真机事件落盘、资源复制后的配方传播尚未实现；主进程关闭窗口时来源保存仍待专项验证，不把此记录宣称为全业务来源覆盖。
 
+### 2026-11-17 引用形态产物来源跳过（节点流回归修复）
+
+media IPC saveRecipe 新增 artifact.recipe_skipped 事件：composite 公开媒体产物为引用形态（发布快照 mediaRef、headless 直写素材，media 表无此资产）时跳过落库并如实记录，运行继续；media 存在但路径不属于本项目仍发 recipe_failed 拒绝。配套回归测试 test/artifact-recipe-skip.test.ts（无行 skipped / 本项目 saved / 跨项目拒绝）。
+验证：单测 3 项全过；composite 桌面验收媒体资产节点流恢复通过（见 2026-11-17 节点流测试报告）。
+
 ### 2026-10-04 T09 输出新鲜度与固定
 
 执行指纹复用 node.input_validated/公共唯一终态，不输出输入内容或指纹；UI 派生新鲜度不产生逐渲染日志。
