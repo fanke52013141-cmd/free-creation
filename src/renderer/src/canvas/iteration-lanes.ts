@@ -418,6 +418,60 @@ export function toggleIterationTemplate(editor: Editor, card: NodeCardShape): vo
   layoutIterationTemplate(editor, loop, card, bodies, expanded)
 }
 
+/** 加载归一化：旧快照可能残留不一致几何（展开态框尺寸陈旧、节点跑框外），
+ *  挂载时按当前展开态校验，仅在框尺寸/节点位置不符时重排，保留用户已拖动的有效布局。 */
+export function normalizeIterationTemplate(editor: Editor, card: NodeCardShape): void {
+  const meta = card.meta as Record<string, unknown>
+  const loopId = meta.iterationTemplateCard as TLShapeId
+  const loop = editor.getShape<NodeCardShape>(loopId)
+  if (!loop) return
+  const expanded = Boolean(meta.iterationTemplateExpanded)
+  const memberBodies = editor
+    .getCurrentPageShapes()
+    .filter(
+      (s): s is NodeCardShape =>
+        s.type === 'node-card' &&
+        Boolean((s.meta as Record<string, unknown>)?.iterationTemplateMember) &&
+        (s.meta as Record<string, unknown>)?.iterationTemplateLoopId === loopId
+    )
+  const orderIds = (
+    Array.isArray(meta.iterationTemplateBodyIds) ? meta.iterationTemplateBodyIds : []
+  ).filter((id): id is string => typeof id === 'string')
+  const byId = new Map(memberBodies.map((b) => [b.id as string, b]))
+  const bodies: NodeCardShape[] = orderIds
+    .map((id) => byId.get(id))
+    .filter((b): b is NodeCardShape => b !== undefined)
+  for (const b of memberBodies) if (!bodies.includes(b)) bodies.push(b)
+  if (bodies.length === 0) return
+  const spacing = 96
+  const headerH = 40
+  if (expanded) {
+    const maxH = Math.max(...bodies.map((b) => b.props.h))
+    const expW =
+      bodies.reduce((sum, b) => sum + b.props.w, 0) + spacing * (bodies.length - 1) + spacing * 2
+    const expH = headerH + maxH + spacing * 2
+    const fb = editor.getShapePageBounds(card.id)
+    const sizeOk = Math.abs(card.props.w - expW) < 2 && Math.abs(card.props.h - expH) < 2
+    const inside =
+      fb !== undefined &&
+      bodies.every((b) => {
+        const bb = editor.getShapePageBounds(b.id)
+        return (
+          bb !== undefined &&
+          bb.x >= fb.x - 1 &&
+          bb.maxX <= fb.maxX + 1 &&
+          bb.y >= fb.y - 1 &&
+          bb.maxY <= fb.maxY + 1
+        )
+      })
+    if (sizeOk && inside) return
+  } else {
+    const allHidden = bodies.every((b) => b.opacity === 0)
+    if (card.props.w === NODE_UI.width && card.props.h === 150 && allHidden) return
+  }
+  layoutIterationTemplate(editor, loop, card, bodies, expanded)
+}
+
 /** 清理遗留的独立边界标记形状与 tldraw group，给循环体节点打成员标记。
  *  输入/输出圆点改由框卡呈现层渲染（永远贴框左右边中点、随框移动），不再用独立形状。 */
 function prepareIterationTemplateMembers(

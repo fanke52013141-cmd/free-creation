@@ -40,7 +40,11 @@ import { readFlowAssetSnapshot } from './flow-asset-snapshot'
 import { IterationSnapshotBody } from './IterationSnapshotBody'
 import { IterationTemplateBody } from './IterationTemplateBody'
 import { IterationBoundaryBody } from './IterationBoundaryBody'
-import { readIterationSnapshot, toggleIterationTemplate } from './iteration-lanes'
+import {
+  normalizeIterationTemplate,
+  readIterationSnapshot,
+  toggleIterationTemplate
+} from './iteration-lanes'
 import {
   averageNodeExecutionDuration,
   DEFAULT_NODE_EXECUTION_ESTIMATE_MS,
@@ -181,6 +185,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           (s.meta as Record<string, unknown>)?.iterationTemplateLoopId === loopId
       )
     if (legacy && typeof editor.ungroupShapes === 'function') editor.ungroupShapes([legacy.id])
+    // 加载归一化：修复旧快照不一致几何（框陈旧/节点跑框外），保证框包住所有节点。
+    normalizeIterationTemplate(editor, shape)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, isTemplateCard, shape.id])
   const identitySpec = iterationSnapshot ? getNodeType(iterationSnapshot.role) : spec
