@@ -54,9 +54,10 @@ function collectNodeRects(editor: Editor): PageRect[] {
   return editor.getCurrentPageShapes().flatMap((shape) => {
     if (shape.type !== 'node-card') return []
     const meta = shape.meta as Record<string, unknown> | undefined
-    // 循环体容器框是背景容器、边界圆点是接口标记：二者不挖空连线，
-    // 否则框内的节点前后连线与边界接口连线会被整片遮罩盖掉。
-    if (meta?.iterationTemplateCard || meta?.iterationBoundary) return []
+    // 循环体容器框是背景容器：不挖空连线，否则框内节点链与边界连线被整片遮罩盖掉。
+    if (meta?.iterationTemplateCard) return []
+    // 隐藏节点（opacity:0，如折叠态收拢的循环体）不参与遮罩，否则会盖住框↔循环虚线。
+    if (shape.opacity === 0) return []
     const bounds = editor.getShapePageBounds(shape.id)
     if (!bounds) return []
     return [{ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }]
@@ -313,31 +314,49 @@ function collectEdges(editor: Editor, draftFrom: ConnectionFrom | null): PageEdg
       path: `M ${sx} ${sy} C ${sx} ${midY}, ${tx} ${midY}, ${tx} ${ty}`
     })
   }
-  // 循环体边界接口连线（视觉）：输入标记→首节点、末节点→输出标记，呈现完整子图接口。
+  // 循环体边界接口连线（视觉）：框左边中点→首节点输入、末节点输出→框右边中点。
+  // 圆点是框卡呈现层元素（贴框边中点），锚点直接由框边界计算，随框移动/缩放同步。
   for (const shape of editor.getCurrentPageShapes()) {
-    if (shape.type !== 'node-card' || shape.opacity === 0) continue
+    if (shape.type !== 'node-card') continue
     const meta = shape.meta as Record<string, unknown>
-    const kind = meta?.iterationBoundary
-    if (kind !== 'input' && kind !== 'output') continue
-    const otherId = kind === 'input' ? meta.iterationBoundaryTarget : meta.iterationBoundarySource
-    if (typeof otherId !== 'string') continue
-    const other = editor.getShape<NodeCardShape>(otherId as TLShapeId)
-    if (!other || other.type !== 'node-card' || other.opacity === 0) continue
-    const a = editor.getShapePageBounds(shape.id)
-    const b = editor.getShapePageBounds(other.id)
-    if (!a || !b) continue
-    const from = kind === 'input' ? a : b
-    const to = kind === 'input' ? b : a
+    if (!meta?.iterationTemplateCard || !meta?.iterationTemplateExpanded) continue
+    const frame = editor.getShapePageBounds(shape.id)
+    if (!frame) continue
+    const bodyIds = (
+      Array.isArray(meta.iterationTemplateBodyIds) ? meta.iterationTemplateBodyIds : []
+    ).filter((id): id is string => typeof id === 'string')
+    const bodies = bodyIds
+      .map((id) => editor.getShape<NodeCardShape>(id as TLShapeId))
+      .filter(
+        (s): s is NodeCardShape => s !== undefined && s.type === 'node-card' && s.opacity !== 0
+      )
+    if (bodies.length === 0) continue
+    const first = editor.getShapePageBounds(bodies[0].id)
+    const last = editor.getShapePageBounds(bodies[bodies.length - 1].id)
+    if (!first || !last) continue
+    const frameCenterY = frame.y + frame.height / 2
     result.push({
-      id: `boundary-link:${shape.id}` as TLShapeId,
+      id: `boundary-link:${shape.id}:input` as TLShapeId,
       color: '#34d399',
-      sourceId: kind === 'input' ? shape.id : other.id,
-      targetId: kind === 'input' ? other.id : shape.id,
+      sourceId: shape.id,
+      targetId: bodies[0].id,
       provenance: true,
       path: buildDataEdgePath(
-        { x: from.maxX + NODE_PORT_OUTSET, y: from.y + from.height / 2 },
-        { x: to.x - NODE_PORT_OUTSET, y: to.y + to.height / 2 },
-        { backward: isBackwardEdge(from.x + from.width / 2, to.x + to.width / 2) }
+        { x: frame.x, y: frameCenterY },
+        { x: first.x - NODE_PORT_OUTSET, y: first.y + first.height / 2 },
+        { backward: false }
+      )
+    })
+    result.push({
+      id: `boundary-link:${shape.id}:output` as TLShapeId,
+      color: '#34d399',
+      sourceId: bodies[bodies.length - 1].id,
+      targetId: shape.id,
+      provenance: true,
+      path: buildDataEdgePath(
+        { x: last.maxX + NODE_PORT_OUTSET, y: last.y + last.height / 2 },
+        { x: frame.maxX, y: frameCenterY },
+        { backward: false }
       )
     })
   }

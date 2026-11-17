@@ -192,7 +192,7 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
       if (s.type !== 'node-card') continue
       const m = s.meta as Record<string, unknown>
       if (m?.iterationTemplateLoopId !== loopId) continue
-      if (!m?.iterationTemplateMember && !m?.iterationBoundary) continue
+      if (!m?.iterationTemplateMember) continue
       members.set(s.id, { x: s.x, y: s.y })
     }
     this.templateDrag = members

@@ -418,51 +418,23 @@ export function toggleIterationTemplate(editor: Editor, card: NodeCardShape): vo
   layoutIterationTemplate(editor, loop, card, bodies, expanded)
 }
 
-/** 确保输入/输出边界标记存在并接线（首节点接输入、末节点接输出），给循环体节点打成员标记。 */
-function ensureIterationTemplateContainer(
+/** 清理遗留的独立边界标记形状与 tldraw group，给循环体节点打成员标记。
+ *  输入/输出圆点改由框卡呈现层渲染（永远贴框左右边中点、随框移动），不再用独立形状。 */
+function prepareIterationTemplateMembers(
   editor: Editor,
   loop: NodeCardShape,
   bodies: NodeCardShape[]
-): { input: NodeCardShape; output: NodeCardShape } {
-  const findMarker = (kind: string): NodeCardShape | undefined =>
-    editor
-      .getCurrentPageShapes()
-      .find(
-        (shape) =>
-          shape.type === 'node-card' &&
-          (shape.meta as Record<string, unknown>)?.iterationTemplateLoopId === loop.id &&
-          (shape.meta as Record<string, unknown>)?.iterationBoundary === kind
-      ) as NodeCardShape | undefined
-  const makeMarker = (kind: 'input' | 'output', title: string): NodeCardShape => {
-    const id = createShapeId()
-    editor.createShape({
-      id,
-      type: 'node-card',
-      x: 0,
-      y: 0,
-      props: { nodeType: 'text', title, text: '', w: 16, h: 16 },
-      meta: { iterationBoundary: kind, iterationTemplateLoopId: loop.id, nodeHeightMode: 'manual' }
-    })
-    return editor.getShape<NodeCardShape>(id)!
-  }
-  const input = findMarker('input') ?? makeMarker('input', '输入')
-  const output = findMarker('output') ?? makeMarker('output', '输出')
-  editor.updateShape({
-    id: input.id,
-    type: 'node-card',
-    meta: {
-      ...(input.meta as Record<string, unknown>),
-      iterationBoundaryTarget: bodies[0]?.id ?? null
-    }
-  })
-  editor.updateShape({
-    id: output.id,
-    type: 'node-card',
-    meta: {
-      ...(output.meta as Record<string, unknown>),
-      iterationBoundarySource: bodies[bodies.length - 1]?.id ?? null
-    }
-  })
+): void {
+  const staleMarkers = editor
+    .getCurrentPageShapes()
+    .filter(
+      (shape) =>
+        shape.type === 'node-card' &&
+        (shape.meta as Record<string, unknown>)?.iterationTemplateLoopId === loop.id &&
+        Boolean((shape.meta as Record<string, unknown>)?.iterationBoundary)
+    )
+    .map((shape) => shape.id)
+  if (staleMarkers.length > 0) editor.deleteShapes(staleMarkers)
   // 不用 tldraw group：group 选中会画大包围框并吞掉「展开」按钮的首次单击。
   // 改为给循环体节点打成员标记，由框卡的 onTranslate 拖动带动（见 NodeCardUtil）。
   const legacyGroup = editor
@@ -486,10 +458,6 @@ function ensureIterationTemplateContainer(
       }
     })
   }
-  return {
-    input: editor.getShape<NodeCardShape>(input.id)!,
-    output: editor.getShape<NodeCardShape>(output.id)!
-  }
 }
 
 /** 容器布局：展开=输入标记+节点链+输出标记横排罩进框内（组合整体可拖动）；折叠=紧凑摘要隐藏内容。 */
@@ -503,53 +471,35 @@ function layoutIterationTemplate(
 ): void {
   const base = anchor ?? { x: loop.x, y: loop.y, w: loop.props.w, h: loop.props.h }
   const cx = base.x + base.w / 2
-  const { input, output } = ensureIterationTemplateContainer(editor, loop, bodies)
+  prepareIterationTemplateMembers(editor, loop, bodies)
+  // 等距裁决（2026-11-17）：节点↔节点 与 节点↔框 左右留白统一为 spacing。
+  // spacing 须 > 2×NODE_PORT_OUTSET，否则相邻节点连线锚点交叉退化成反向小环。
+  const spacing = 96
+  const headerH = 40
   if (expanded && bodies.length > 0) {
-    const pad = 24
-    const headerH = 40
-    // 间距须大于 2×NODE_PORT_OUTSET，否则相邻节点连线锚点交叉退化成反向小环。
-    const gap = 96
     const maxH = Math.max(...bodies.map((b) => b.props.h))
-    const innerW = bodies.reduce((sum, b) => sum + b.props.w, 0) + gap * (bodies.length - 1)
-    const frameW = innerW + pad * 2
-    const frameH = headerH + maxH + pad * 2
+    const innerW = bodies.reduce((sum, b) => sum + b.props.w, 0) + spacing * (bodies.length - 1)
+    const frameW = innerW + spacing * 2
+    const frameH = headerH + maxH + spacing * 2
     const cardX = cx - frameW / 2
     const cardY = base.y - frameH - 48
-    const centerY = cardY + frameH / 2
-    let nx = cardX + pad
+    let nx = cardX + spacing
     const bodyUpdates = bodies.map((b) => {
       const u = {
         id: b.id,
         type: 'node-card' as const,
         x: nx,
-        y: cardY + headerH + pad + (maxH - b.props.h) / 2,
-        opacity: 1
+        y: cardY + headerH + spacing,
+        opacity: 1,
+        // 容器内统一高度（最高节点），避免自动量高事后改变高度导致竖直错位。
+        props: { h: maxH },
+        meta: { ...(b.meta as Record<string, unknown>), nodeHeightMode: 'manual' }
       }
-      nx += b.props.w + gap
+      nx += b.props.w + spacing
       return u
     })
-    // 输入/输出圆点贴在框左右边的垂直中心（半嵌在框边上）。
-    const dotUpdates = [
-      {
-        id: input.id,
-        type: 'node-card' as const,
-        x: cardX - 8,
-        y: centerY - 8,
-        opacity: 1,
-        props: { w: 16, h: 16 }
-      },
-      {
-        id: output.id,
-        type: 'node-card' as const,
-        x: cardX + frameW - 8,
-        y: centerY - 8,
-        opacity: 1,
-        props: { w: 16, h: 16 }
-      }
-    ]
-    editor.updateShapes([...bodyUpdates, ...dotUpdates])
-    if (typeof editor.bringToFront === 'function')
-      editor.bringToFront([...bodies.map((b) => b.id), input.id, output.id])
+    editor.updateShapes(bodyUpdates)
+    if (typeof editor.bringToFront === 'function') editor.bringToFront(bodies.map((b) => b.id))
     editor.updateShape({
       id: frameCard.id,
       type: 'node-card',
@@ -564,10 +514,9 @@ function layoutIterationTemplate(
     const cardX = cx - cardW / 2
     const cardY = base.y - cardH - 48
     // 隐藏成员收拢到紧凑卡内（避免散落撑大包围盒），opacity:0 不可见。
-    const members = [input, ...bodies, output]
     editor.updateShapes(
-      members.map((m) => ({
-        id: m.id,
+      bodies.map((b) => ({
+        id: b.id,
         type: 'node-card' as const,
         x: cardX + 8,
         y: cardY + 8,

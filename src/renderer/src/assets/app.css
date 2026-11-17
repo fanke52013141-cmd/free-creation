@@ -2355,6 +2355,34 @@ select:focus-visible {
   min-height: 0 !important;
   cursor: pointer;
 }
+/* 框卡须允许圆点溢出到框边外（半嵌在左右边中点）。 */
+.node-card-wrap.iteration-template-card {
+  overflow: visible !important;
+}
+.node-card-wrap.iteration-template-card .node-card {
+  overflow: visible !important;
+}
+/* 输入/输出圆点：框卡呈现层元素，永远贴框左右边垂直中点、随框移动与缩放。 */
+.iteration-frame-dot {
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  margin-top: -8px;
+  border-radius: 999px;
+  z-index: 6;
+  pointer-events: none;
+}
+.iteration-frame-dot.is-input {
+  left: -8px;
+  background: #e0a458;
+  border: 2px solid color-mix(in srgb, #e0a458 60%, black);
+}
+.iteration-frame-dot.is-output {
+  right: -8px;
+  background: #34d399;
+  border: 2px solid color-mix(in srgb, #34d399 60%, black);
+}
 .node-card-wrap.iteration-template-card .node-standard-scroll {
   height: 100% !important;
   padding: 12px 14px;

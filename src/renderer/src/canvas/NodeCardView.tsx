@@ -1416,6 +1416,14 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             </div>
           ) : (
             <>
+              {isTemplateCard &&
+                Boolean((shape.meta as Record<string, unknown>)?.iterationTemplateExpanded) && (
+                  <>
+                    {/* 输入/输出圆点：框卡呈现层元素，永远贴框左右边垂直中点、随框移动。 */}
+                    <span className="iteration-frame-dot is-input" />
+                    <span className="iteration-frame-dot is-output" />
+                  </>
+                )}
               {/* 保留 DOM 锚点以兼容旧快照；视觉改由 card 左上角的 45° 类型切角承担。 */}
               <div
                 className="node-color-bar"

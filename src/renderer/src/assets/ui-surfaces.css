@@ -2447,10 +2447,9 @@ button {
 
 .data-edge-visible {
   fill: none;
-  /* 2026-11-03 用户裁决：节点与节点之间的连线宽度降为原来的一半（3 → 1.5）。
-     2026-11-04：线宽改为屏幕空间恒定（vector-effect 由组件给出），缩小时不会退化成
-     亚像素细线（亚像素线在缩放时会忽隐忽现，表现为"连线闪"）。 */
-  stroke-width: 1.5;
+  /* 2026-11-03 曾把线宽降为原来的一半（3 → 1.5）；2026-11-17 用户裁决统一恢复两倍
+     （1.5 → 3），线宽屏幕空间恒定（vector-effect 由组件给出），缩小时不退化成亚像素细线。 */
+  stroke-width: 3;
   stroke-linecap: round;
   opacity: 0.78;
   pointer-events: none;
@@ -2462,7 +2461,7 @@ button {
 /* 光晕：一条更宽的低透明度描边垫在实线下面，替代 drop-shadow（无滤镜、无异步光栅）。 */
 .data-edge-glow {
   fill: none;
-  stroke-width: 7;
+  stroke-width: 14;
   stroke-linecap: round;
   opacity: 0.16;
   pointer-events: none;
@@ -2473,8 +2472,8 @@ button {
   fill: none;
   /* 与端口及底线使用同一来源色；避免流光叠加一层偏白色相造成色差。 */
   stroke: currentColor;
-  /* 流光段同步减半（4.5 → 2.25），保持与底线比例一致。 */
-  stroke-width: 2.25;
+  /* 流光段同步两倍（2.25 → 4.5），保持与底线比例一致。 */
+  stroke-width: 4.5;
   stroke-linecap: round;
   /* pathLength=1000：流动段占整条连接路径的 1/6，余下 5/6 为间隔。 */
   stroke-dasharray: 166.667 833.333;
@@ -2487,8 +2486,8 @@ button {
 
 /* 追溯线表达“由该操作产生”，不参与执行，但保持来源色与流向动画。 */
 .artifact-provenance-edge {
-  /* 追溯线同步减半，保持与主连线一致。 */
-  stroke-width: 1.5;
+  /* 追溯线与主连线一致，2026-11-17 同步两倍（1.5 → 3）。 */
+  stroke-width: 3;
   opacity: 0.78;
 }
 
