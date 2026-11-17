@@ -63,7 +63,7 @@ import {
   iterationLaneArtifactPosition,
   prelayoutIterationLanes,
   setIterationLaneStatus,
-  setupIterationTemplateGroup,
+  setupIterationTemplateCard,
   updateIterationLaneGen,
   updateIterationLanePrompt
 } from '../canvas/iteration-lanes'
@@ -1961,7 +1961,7 @@ async function runSubflowForIterate(
   ) {
     const loopShape = ctx.editor.getShape<NodeCardShape>(request.iterationNodeId as TLShapeId)
     if (loopShape) {
-      setupIterationTemplateGroup(ctx.editor, loopShape, nodeIds, ctx.iterationLaneAnchor)
+      setupIterationTemplateCard(ctx.editor, loopShape, nodeIds, ctx.iterationLaneAnchor)
     }
   }
   // 循环项资源按项隔离（itemRunId 维度），不互相判占；手动测试占用仍须避让。

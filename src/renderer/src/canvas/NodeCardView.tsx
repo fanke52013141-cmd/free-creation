@@ -38,7 +38,8 @@ import { GenerationLoadingOverlay } from './GenerationLoadingOverlay'
 import { FixedFlowAssetBody } from './FixedFlowAssetBody'
 import { readFlowAssetSnapshot } from './flow-asset-snapshot'
 import { IterationSnapshotBody } from './IterationSnapshotBody'
-import { readIterationSnapshot } from './iteration-lanes'
+import { IterationTemplateBody } from './IterationTemplateBody'
+import { readIterationSnapshot, expandIterationTemplateCard } from './iteration-lanes'
 import {
   averageNodeExecutionDuration,
   DEFAULT_NODE_EXECUTION_ESTIMATE_MS,
@@ -159,6 +160,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const spec = getNodeType(shape.props.nodeType)
   // 循环分支快照卡：内核是文本节点，呈现层按产出节点身份覆盖图标/身份色，只读不可执行。
   const iterationSnapshot = readIterationSnapshot(shape)
+  // 循环体模板卡（本体模具）：紧凑配方占位，双击展开真实定义节点。
+  const isTemplateCard = Boolean(
+    (shape.meta as Record<string, unknown>)?.iterationTemplateCard
+  )
   const identitySpec = iterationSnapshot ? getNodeType(iterationSnapshot.role) : spec
   const displayTitle =
     shape.props.nodeType === 'speech' && shape.props.title === '配音'
@@ -1382,7 +1387,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         <span className="node-hover-spot" aria-hidden="true" />
         <span className="node-selection-beam" aria-hidden="true" />
         <div
-          className={`node-card type-${shape.props.nodeType}`}
+          className={`node-card type-${shape.props.nodeType}${isTemplateCard ? ' iteration-template-card' : ''}`}
           data-node-type={shape.props.nodeType}
           style={{
             ['--node-accent' as string]: identitySpec?.color ?? '#42b9f5',
@@ -1428,7 +1433,16 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                     )}
                     <div className="node-body-content">
                       <FlowReviewFeedback shape={shape} />
-                      {iterationSnapshot ? (
+                      {isTemplateCard ? (
+                        <div
+                          onDoubleClick={(e) => {
+                            e.stopPropagation()
+                            expandIterationTemplateCard(editor, shape)
+                          }}
+                        >
+                          <IterationTemplateBody shape={shape} />
+                        </div>
+                      ) : iterationSnapshot ? (
                         <IterationSnapshotBody shape={shape} />
                       ) : readFlowAssetSnapshot(shape) ? (
                         <FixedFlowAssetBody shape={shape} openPreview={openMediaPreview} />

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "Loop body template combo group: auto-group loop-body definition nodes into a collapsed '循环体 · 模板' combo frame positioned above the loop with a dashed association edge rendered by DataEdgeLayer from group meta (presentation only, reuses stack-collapse infra; degrades to lift layout when editor lacks groupShapes). No execution contract or external operation change; GUI/CLI/MCP share the same host path. Backward compatible.",
+  "reason": "Loop body template card: replace combo-group with a dedicated compact dashed amber template projection card above the loop (IterationTemplateBody recipe+badge+hint), hide real definition nodes via opacity 0 and skip their data edges in DataEdgeLayer, single dashed template-to-loop association edge; double-click expands definitions. Presentation only, execution contract unchanged, GUI/CLI/MCP same host path. Backward compatible.",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -138,7 +138,7 @@
     "src/renderer/src/canvas/RunTimeline.tsx": "c29fef7a5460a75a6f1d0dfb0f02afbd87d419014b6d0d7122949d5cfd4924a6",
     "src/renderer/src/canvas/flow-asset-actions.ts": "0dd4e5a53510d9566771618052954004bfdc17b31f8f94afe08c0d624554a94f",
     "src/renderer/src/canvas/snapshot-restore.ts": "b5acba9d82fc106e75afb88f59d080b92554ea6954460171fceaed47318592c6",
-    "src/renderer/src/engine/executor.ts": "868b36da518ac1264c8d17ee8beff6ae3f7502334ccf2afda5fc35a4cd8b7281",
+    "src/renderer/src/engine/executor.ts": "79f300f4f5fbb1c3dbaa850b65f98595ac88dcae4b459f601eb399e29d5dd144",
     "src/renderer/src/nodes/chatData.ts": "0fc89aaa9c5cdc678a3644f21422671047d0d5e6f1843dde4de069cc184bdd2f",
     "src/renderer/src/nodes/director-data.ts": "a7aab3c3f5c14187dd683b696f0690770f95c9416cfecb817c709820b6d3aea2",
     "src/renderer/src/nodes/nodeValues.ts": "e90c0f5a50a6d1eabd0d912fddf26fa4d2afad9d28a22c8ae7c1eab0eb01a33c",

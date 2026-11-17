@@ -2336,6 +2336,57 @@ select:focus-visible {
   pointer-events: none;
 }
 
+/* 循环体模板卡（本体模具）：紧凑虚线琥珀框，隐藏标准节点头/操作条/端口，双击展开。 */
+.node-card.iteration-template-card {
+  border: 1.5px dashed color-mix(in srgb, #e0a458 70%, transparent);
+  background: color-mix(in srgb, #e0a458 7%, var(--card));
+  cursor: pointer;
+}
+.node-card.iteration-template-card .node-standard-identity,
+.node-card.iteration-template-card .node-standard-action-bar,
+.node-card.iteration-template-card .port-dot,
+.node-card.iteration-template-card .node-hover-spot,
+.node-card.iteration-template-card .node-selection-beam {
+  display: none;
+}
+.node-card.iteration-template-card .node-standard-scroll {
+  padding: 10px 12px;
+}
+.iteration-template-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+}
+.iteration-template-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.iteration-template-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--txt);
+}
+.iteration-template-badge {
+  padding: 1px 7px;
+  font-size: 9px;
+  font-weight: 600;
+  color: #e0a458;
+  background: color-mix(in srgb, #e0a458 16%, transparent);
+  border: 1px solid color-mix(in srgb, #e0a458 45%, transparent);
+  border-radius: 999px;
+}
+.iteration-template-recipe {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--txt);
+}
+.iteration-template-hint {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .node-textarea {
   width: 100%;
   height: 100%;

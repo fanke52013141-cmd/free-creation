@@ -148,6 +148,9 @@ function collectEdges(editor: Editor, draftFrom: ConnectionFrom | null): PageEdg
     const source = editor.getShape<NodeCardShape>(start.toId)
     const target = editor.getShape<NodeCardShape>(end.toId)
     if (source?.type !== 'node-card' || target?.type !== 'node-card') continue
+    // 隐藏节点（循环体模板态的定义节点 opacity=0）及其数据边不绘制，
+    // 本体只留唯一虚线关联循环，避免多余连线。
+    if (source.opacity === 0 || target.opacity === 0 || arrow.opacity === 0) continue
     const sourcePorts = getNodePortsForShape(source)
     const targetPorts = getNodePortsForShape(target)
     // 端口有效性判定与 deriveGraph / collectContractInputs 同源：都经 getNodeType +
@@ -274,17 +277,17 @@ function collectEdges(editor: Editor, draftFrom: ConnectionFrom | null): PageEdg
       )
     })
   }
-  // 循环体模板组合框 → 循环节点的竖向虚线关联：直接按 group meta 渲染，
-  // 不依赖箭头载体（本体模具关联，非数据边）。
+  // 循环体模板卡 → 循环节点的竖向虚线关联：按模板卡 meta 渲染，
+  // 本体唯一连线（非数据边），不依赖箭头载体。
   for (const shape of editor.getCurrentPageShapes()) {
-    if (shape.type !== 'group') continue
-    const loopId = (shape.meta as Record<string, unknown>)?.iterationTemplateLoopId
+    if (shape.type !== 'node-card') continue
+    const loopId = (shape.meta as Record<string, unknown>)?.iterationTemplateCard
     if (typeof loopId !== 'string') continue
-    const groupBounds = editor.getShapePageBounds(shape.id)
+    const cardBounds = editor.getShapePageBounds(shape.id)
     const loopBounds = editor.getShapePageBounds(loopId as TLShapeId)
-    if (!groupBounds || !loopBounds) continue
-    const sx = groupBounds.x + groupBounds.width / 2
-    const sy = groupBounds.maxY
+    if (!cardBounds || !loopBounds) continue
+    const sx = cardBounds.x + cardBounds.width / 2
+    const sy = cardBounds.maxY
     const tx = loopBounds.x + loopBounds.width / 2
     const ty = loopBounds.y
     const midY = (sy + ty) / 2
