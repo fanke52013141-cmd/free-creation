@@ -53,6 +53,10 @@ type PageRect = EdgePageRect
 function collectNodeRects(editor: Editor): PageRect[] {
   return editor.getCurrentPageShapes().flatMap((shape) => {
     if (shape.type !== 'node-card') return []
+    const meta = shape.meta as Record<string, unknown> | undefined
+    // 循环体容器框是背景容器、边界圆点是接口标记：二者不挖空连线，
+    // 否则框内的节点前后连线与边界接口连线会被整片遮罩盖掉。
+    if (meta?.iterationTemplateCard || meta?.iterationBoundary) return []
     const bounds = editor.getShapePageBounds(shape.id)
     if (!bounds) return []
     return [{ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }]
@@ -153,6 +157,11 @@ function collectEdges(editor: Editor, draftFrom: ConnectionFrom | null): PageEdg
     // 隐藏节点（循环体模板态的定义节点 opacity=0）及其数据边不绘制，
     // 本体只留唯一虚线关联循环，避免多余连线。
     if (source.opacity === 0 || target.opacity === 0 || arrow.opacity === 0) continue
+    // 展开态跨容器边界的 loop↔循环体 数据边不绘制：框↔循环已由唯一模板虚线表达，
+    // 输入/输出由边界圆点接口表达，避免重复连线交叉穿过框内节点链。
+    const srcMember = Boolean((source.meta as Record<string, unknown>)?.iterationTemplateMember)
+    const tgtMember = Boolean((target.meta as Record<string, unknown>)?.iterationTemplateMember)
+    if (srcMember !== tgtMember) continue
     const sourcePorts = getNodePortsForShape(source)
     const targetPorts = getNodePortsForShape(target)
     // 端口有效性判定与 deriveGraph / collectContractInputs 同源：都经 getNodeType +

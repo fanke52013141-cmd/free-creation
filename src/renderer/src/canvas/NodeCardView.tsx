@@ -165,17 +165,24 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const isTemplateCard = Boolean((shape.meta as Record<string, unknown>)?.iterationTemplateCard)
   const isBoundaryMarker = Boolean((shape.meta as Record<string, unknown>)?.iterationBoundary)
   // 循环体容器成员（框内定义节点）：紧凑呈现，隐藏序号、收紧空态图标，更干净。
-  const inTemplateContainer = useValue(
-    'iteration template member',
-    () => {
-      const parent = editor.getShape(shape.parentId)
-      return (
-        parent?.type === 'group' &&
-        Boolean((parent.meta as Record<string, unknown>)?.iterationTemplateLoopId)
-      )
-    },
-    [editor, shape.parentId]
+  const inTemplateContainer = Boolean(
+    (shape.meta as Record<string, unknown>)?.iterationTemplateMember
   )
+  // 旧快照可能残留 tldraw group（会画大包围框并吞掉展开按钮单击）：模板卡挂载时解散。
+  useEffect(() => {
+    if (!isTemplateCard) return
+    const loopId = (shape.meta as Record<string, unknown>)?.iterationTemplateCard
+    if (typeof loopId !== 'string') return
+    const legacy = editor
+      .getCurrentPageShapes()
+      .find(
+        (s) =>
+          s.type === 'group' &&
+          (s.meta as Record<string, unknown>)?.iterationTemplateLoopId === loopId
+      )
+    if (legacy && typeof editor.ungroupShapes === 'function') editor.ungroupShapes([legacy.id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, isTemplateCard, shape.id])
   const identitySpec = iterationSnapshot ? getNodeType(iterationSnapshot.role) : spec
   const displayTitle =
     shape.props.nodeType === 'speech' && shape.props.title === '配音'

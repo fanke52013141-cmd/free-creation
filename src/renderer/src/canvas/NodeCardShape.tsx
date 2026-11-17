@@ -6,6 +6,7 @@ import {
   type RecordProps,
   type TLBaseShape,
   type TLResizeInfo,
+  type TLShapeId,
   type TLShapePartial
 } from 'tldraw'
 import { NodeCardView } from './NodeCardView'
@@ -175,6 +176,48 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
         nodeHeightMode: 'manual'
       }
     }
+  }
+
+  /** 循环体容器拖动：框卡平移时带动成员（循环体节点 + 输入/输出圆点），不用 tldraw group。 */
+  private templateDrag: Map<string, { x: number; y: number }> | null = null
+
+  override onTranslateStart(shape: NodeCardShape): void {
+    const loopId = (shape.meta as Record<string, unknown>)?.iterationTemplateCard
+    if (typeof loopId !== 'string') {
+      this.templateDrag = null
+      return
+    }
+    const members = new Map<string, { x: number; y: number }>()
+    for (const s of this.editor.getCurrentPageShapes()) {
+      if (s.type !== 'node-card') continue
+      const m = s.meta as Record<string, unknown>
+      if (m?.iterationTemplateLoopId !== loopId) continue
+      if (!m?.iterationTemplateMember && !m?.iterationBoundary) continue
+      members.set(s.id, { x: s.x, y: s.y })
+    }
+    this.templateDrag = members
+  }
+
+  override onTranslate(initial: NodeCardShape, current: NodeCardShape): void {
+    if (!this.templateDrag || this.templateDrag.size === 0) return
+    const dx = current.x - initial.x
+    const dy = current.y - initial.y
+    if (dx === 0 && dy === 0) return
+    const updates = [...this.templateDrag.entries()].map(([id, p]) => ({
+      id: id as TLShapeId,
+      type: 'node-card' as const,
+      x: p.x + dx,
+      y: p.y + dy
+    }))
+    this.editor.updateShapes(updates)
+  }
+
+  override onTranslateEnd(): void {
+    this.templateDrag = null
+  }
+
+  override onTranslateCancel(): void {
+    this.templateDrag = null
   }
 
   /** 选中时不再绘制节点外框实线，只保留 tldraw 自带的圆形缩放手柄。 */
