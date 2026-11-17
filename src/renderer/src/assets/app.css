@@ -2336,27 +2336,37 @@ select:focus-visible {
   pointer-events: none;
 }
 
-/* 循环体模板卡（本体模具）：紧凑虚线琥珀框，隐藏标准节点头/操作条/端口，双击展开。 */
-.node-card.iteration-template-card {
-  border: 1.5px dashed color-mix(in srgb, #e0a458 70%, transparent);
-  background: color-mix(in srgb, #e0a458 7%, var(--card));
+/* 循环体模板卡（本体模具）：紧凑虚线琥珀框，隐藏标准节点头/操作条/端口，双击展开。
+   高度由形状 props.h（紧凑档）驱动，内部 flex 填满，不用 auto 以免塌缩。 */
+.node-card-wrap.iteration-template-card .node-header,
+.node-card-wrap.iteration-template-card .port-dot,
+.node-card-wrap.iteration-template-card .node-hover-spot,
+.node-card-wrap.iteration-template-card .node-selection-beam,
+.node-card-wrap.iteration-template-card .node-standard-identity,
+.node-card-wrap.iteration-template-card .node-standard-action-bar {
+  display: none !important;
+}
+.node-card-wrap.iteration-template-card .node-card {
+  border: 1.5px dashed color-mix(in srgb, #e0a458 75%, transparent) !important;
+  box-shadow: none !important;
+  background: color-mix(in srgb, #e0a458 7%, var(--card)) !important;
+  height: 100% !important;
+  min-height: 0 !important;
   cursor: pointer;
 }
-.node-card.iteration-template-card .node-standard-identity,
-.node-card.iteration-template-card .node-standard-action-bar,
-.node-card.iteration-template-card .port-dot,
-.node-card.iteration-template-card .node-hover-spot,
-.node-card.iteration-template-card .node-selection-beam {
-  display: none;
+.node-card-wrap.iteration-template-card .node-standard-scroll {
+  height: 100% !important;
+  padding: 12px 14px;
 }
-.node-card.iteration-template-card .node-standard-scroll {
-  padding: 10px 12px;
+.node-card-wrap.iteration-template-card .node-body,
+.node-card-wrap.iteration-template-card .node-body-content {
+  height: auto !important;
 }
 .iteration-template-body {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  height: 100%;
+  height: auto;
 }
 .iteration-template-head {
   display: flex;

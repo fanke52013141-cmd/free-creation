@@ -353,7 +353,7 @@ export function setupIterationTemplateCard(
     .map((card) => getNodeType(card.props.nodeType)?.label ?? card.props.nodeType)
     .join(' → ')
   const cardW = NODE_UI.width
-  const cardH = 170
+  const cardH = 150
   const cardX = base.x + base.w / 2 - cardW / 2
   const cardY = base.y - cardH - 48
   let templateCard = editor
@@ -391,6 +391,7 @@ export function setupIterationTemplateCard(
       type: 'node-card',
       x: cardX,
       y: cardY,
+      props: { w: cardW, h: cardH },
       meta: {
         ...(templateCard.meta as Record<string, unknown>),
         iterationTemplateRecipe: recipe,

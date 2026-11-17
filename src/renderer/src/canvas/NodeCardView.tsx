@@ -161,9 +161,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   // 循环分支快照卡：内核是文本节点，呈现层按产出节点身份覆盖图标/身份色，只读不可执行。
   const iterationSnapshot = readIterationSnapshot(shape)
   // 循环体模板卡（本体模具）：紧凑配方占位，双击展开真实定义节点。
-  const isTemplateCard = Boolean(
-    (shape.meta as Record<string, unknown>)?.iterationTemplateCard
-  )
+  const isTemplateCard = Boolean((shape.meta as Record<string, unknown>)?.iterationTemplateCard)
   const identitySpec = iterationSnapshot ? getNodeType(iterationSnapshot.role) : spec
   const displayTitle =
     shape.props.nodeType === 'speech' && shape.props.title === '配音'
@@ -902,6 +900,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         // free 尺寸节点（时间线）的高度完全由用户拖动决定，内容不参与量高：
         // 时间轴每帧改 style 会持续触发这里的 MutationObserver，参与测算会反复写文档。
         if (getNodeType(latest.props.nodeType)?.sizePolicy === 'free') return
+        // 循环体模板卡是紧凑投影占位，高度由内容决定，不参与自动量高/最小档钳制。
+        if (metadata.iterationTemplateCard) return
         if (latest.props.nodeType === 'storyboard') {
           if (metadata.nodeHeightMode === 'manual') return
           const table = body.querySelector<HTMLTableElement>('.storyboard-table')
@@ -1107,7 +1107,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     <HTMLContainer style={{ pointerEvents: 'all' }}>
       {/* 外层包一层无裁切的容器：端口圆点要压在卡片边缘外侧，不能被卡片 overflow:hidden 裁掉 */}
       <div
-        className={`node-card-wrap ${selected ? 'is-selected' : ''} ${
+        className={`node-card-wrap ${selected ? 'is-selected' : ''} ${isTemplateCard ? 'iteration-template-card' : ''} ${
           (shape.meta as Record<string, unknown> | undefined)?.stackRole === 'member'
             ? 'stack-member'
             : ''

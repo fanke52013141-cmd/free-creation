@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "Loop body template card: replace combo-group with a dedicated compact dashed amber template projection card above the loop (IterationTemplateBody recipe+badge+hint), hide real definition nodes via opacity 0 and skip their data edges in DataEdgeLayer, single dashed template-to-loop association edge; double-click expands definitions. Presentation only, execution contract unchanged, GUI/CLI/MCP same host path. Backward compatible.",
+  "reason": "Loop-body template card visual refinement: hide standard node header and ports, dashed amber border without glow, compact fixed height (skip auto-height clamp for template projection card). Presentation-only CSS/NodeCardView change; execution contract and external operations unchanged; GUI/CLI/MCP same host path. Backward compatible.",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
