@@ -1402,66 +1402,73 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             ['--node-standard-action-height' as string]: `${NODE_UI.actionBar.height}px`
           }}
         >
-          {/* 保留 DOM 锚点以兼容旧快照；视觉改由 card 左上角的 45° 类型切角承担。 */}
-          <div
-            className="node-color-bar"
-            style={{ ['--node-accent' as string]: identitySpec?.color ?? '#42b9f5' }}
-          />
-          {spec && (
-            <NodeCardShell
-              spec={spec}
-              busy={activeExecution}
-              header={headerActions}
-              openDescription={() =>
-                useNodePanelStore.getState().open('contract', shape.id, 'overview')
-              }
-            >
-              <div ref={bodyRef} className="node-body">
-                {comboTop ? (
-                  /* 折叠组合的首位卡：组合内单个节点的正文失去意义，
-                     只呈现组合规模与操作提示，具体内容展开后查看。 */
-                  <div className="node-combo-summary">
-                    <span className="node-combo-hint">右上角图标可展开或运行整个组合</span>
-                  </div>
-                ) : (
-                  <>
-                    {!hasDedicatedInputSurface && (
-                      <ConnectedInputPreview
-                        editor={editor}
-                        shape={shape}
-                        openPreview={openMediaPreview}
-                      />
-                    )}
-                    <div className="node-body-content">
-                      <FlowReviewFeedback shape={shape} />
-                      {isBoundaryMarker ? (
-                        <IterationBoundaryBody shape={shape} />
-                      ) : isTemplateCard ? (
-                        <div
-                          onDoubleClick={(e) => {
-                            e.stopPropagation()
-                            toggleIterationTemplate(editor, shape)
-                          }}
-                        >
-                          <IterationTemplateBody shape={shape} />
-                        </div>
-                      ) : iterationSnapshot ? (
-                        <IterationSnapshotBody shape={shape} />
-                      ) : readFlowAssetSnapshot(shape) ? (
-                        <FixedFlowAssetBody shape={shape} openPreview={openMediaPreview} />
-                      ) : (
-                        <spec.Body shape={shape} openPreview={openMediaPreview} />
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            </NodeCardShell>
-          )}
-          {!spec && (
+          {isBoundaryMarker ? (
+            /* 边界圆点：纯圆点视觉接口，绕过标准卡片 chrome（无图标/序号/文案）。 */
             <div className="node-body">
-              <div className="node-empty">未知节点类型：{shape.props.nodeType}</div>
+              <IterationBoundaryBody shape={shape} />
             </div>
+          ) : (
+            <>
+              {/* 保留 DOM 锚点以兼容旧快照；视觉改由 card 左上角的 45° 类型切角承担。 */}
+              <div
+                className="node-color-bar"
+                style={{ ['--node-accent' as string]: identitySpec?.color ?? '#42b9f5' }}
+              />
+              {spec && (
+                <NodeCardShell
+                  spec={spec}
+                  busy={activeExecution}
+                  header={headerActions}
+                  openDescription={() =>
+                    useNodePanelStore.getState().open('contract', shape.id, 'overview')
+                  }
+                >
+                  <div ref={bodyRef} className="node-body">
+                    {comboTop ? (
+                      /* 折叠组合的首位卡：组合内单个节点的正文失去意义，
+                         只呈现组合规模与操作提示，具体内容展开后查看。 */
+                      <div className="node-combo-summary">
+                        <span className="node-combo-hint">右上角图标可展开或运行整个组合</span>
+                      </div>
+                    ) : (
+                      <>
+                        {!hasDedicatedInputSurface && (
+                          <ConnectedInputPreview
+                            editor={editor}
+                            shape={shape}
+                            openPreview={openMediaPreview}
+                          />
+                        )}
+                        <div className="node-body-content">
+                          <FlowReviewFeedback shape={shape} />
+                          {isTemplateCard ? (
+                            <div
+                              onDoubleClick={(e) => {
+                                e.stopPropagation()
+                                toggleIterationTemplate(editor, shape)
+                              }}
+                            >
+                              <IterationTemplateBody shape={shape} />
+                            </div>
+                          ) : iterationSnapshot ? (
+                            <IterationSnapshotBody shape={shape} />
+                          ) : readFlowAssetSnapshot(shape) ? (
+                            <FixedFlowAssetBody shape={shape} openPreview={openMediaPreview} />
+                          ) : (
+                            <spec.Body shape={shape} openPreview={openMediaPreview} />
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </NodeCardShell>
+              )}
+              {!spec && (
+                <div className="node-body">
+                  <div className="node-empty">未知节点类型：{shape.props.nodeType}</div>
+                </div>
+              )}
+            </>
           )}
         </div>
         {activeExecution && spec?.executor && (

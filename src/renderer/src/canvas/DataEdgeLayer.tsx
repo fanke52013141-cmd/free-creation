@@ -33,6 +33,8 @@ interface PageEdge {
   sourceId: TLShapeId
   targetId: TLShapeId
   provenance?: boolean
+  /** 可选虚线间隔（如循环体框↔循环节点的关联虚线）；缺省为实线。 */
+  dash?: string
   /**
    * 端口已不存在（backend 切换、参数删除等）的存量边。必须继续画出警示样式：
    * 此前直接跳过会让它在画布上不可见、不可选中，运行期才报「连线指向不存在的
@@ -283,11 +285,10 @@ function collectEdges(editor: Editor, draftFrom: ConnectionFrom | null): PageEdg
     if (shape.type !== 'node-card') continue
     const loopId = (shape.meta as Record<string, unknown>)?.iterationTemplateCard
     if (typeof loopId !== 'string') continue
-    // 展开态真实定义节点可见、其数据边已绘制，模板虚线隐藏避免重复连线。
-    if ((shape.meta as Record<string, unknown>)?.iterationTemplateExpanded) continue
     const cardBounds = editor.getShapePageBounds(shape.id)
     const loopBounds = editor.getShapePageBounds(loopId as TLShapeId)
     if (!cardBounds || !loopBounds) continue
+    // 框底中心 → 循环节点顶部中心，虚线关联（折叠/展开态均显示）。
     const sx = cardBounds.x + cardBounds.width / 2
     const sy = cardBounds.maxY
     const tx = loopBounds.x + loopBounds.width / 2
@@ -299,6 +300,7 @@ function collectEdges(editor: Editor, draftFrom: ConnectionFrom | null): PageEdg
       sourceId: shape.id,
       targetId: loopId as TLShapeId,
       provenance: true,
+      dash: '9 7',
       path: `M ${sx} ${sy} C ${sx} ${midY}, ${tx} ${midY}, ${tx} ${ty}`
     })
   }
@@ -717,7 +719,11 @@ export function DataEdgeLayer({
                           className="data-edge-visible artifact-provenance-edge"
                           d={edge.path}
                           vectorEffect="non-scaling-stroke"
-                          style={{ stroke: edge.color, color: edge.color }}
+                          style={{
+                            stroke: edge.color,
+                            color: edge.color,
+                            ...(edge.dash ? { strokeDasharray: edge.dash } : {})
+                          }}
                         />
                         <path
                           className="data-edge-flow artifact-provenance-flow"

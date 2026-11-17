@@ -2406,7 +2406,7 @@ select:focus-visible {
   background: color-mix(in srgb, #e0a458 22%, transparent);
 }
 
-/* 循环体边界标记（输入/输出视觉接口）：小圆角标记，隐藏标准节点头/端口。 */
+/* 循环体边界圆点（输入/输出视觉接口）：框左右边中心的纯色圆点，无文案、无卡片 chrome。 */
 .node-card-wrap.iteration-boundary-marker .node-header,
 .node-card-wrap.iteration-boundary-marker .port-dot,
 .node-card-wrap.iteration-boundary-marker .node-hover-spot,
@@ -2416,42 +2416,35 @@ select:focus-visible {
   display: none !important;
 }
 .node-card-wrap.iteration-boundary-marker .node-card {
-  border: 1px solid color-mix(in srgb, #34d399 55%, transparent) !important;
-  border-radius: 10px !important;
+  border: none !important;
+  border-radius: 999px !important;
   box-shadow: none !important;
-  background: color-mix(in srgb, #34d399 8%, var(--card)) !important;
+  background: transparent !important;
   height: 100% !important;
   min-height: 0 !important;
 }
+.node-card-wrap.iteration-boundary-marker .node-card::before,
+.node-card-wrap.iteration-boundary-marker .node-card::after {
+  display: none !important;
+}
 .node-card-wrap.iteration-boundary-marker .node-standard-scroll {
   height: 100% !important;
-  padding: 8px;
+  padding: 0 !important;
 }
 .node-card-wrap.iteration-boundary-marker .node-body,
 .node-card-wrap.iteration-boundary-marker .node-body-content {
-  height: auto !important;
+  height: 100% !important;
 }
-.iteration-boundary {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 100%;
-}
-.iteration-boundary-dot {
-  width: 10px;
-  height: 10px;
+.iteration-boundary-dot-only {
+  width: 16px;
+  height: 16px;
   border-radius: 999px;
   background: #34d399;
+  border: 2px solid color-mix(in srgb, #34d399 60%, black);
 }
-.iteration-boundary.is-input .iteration-boundary-dot {
+.iteration-boundary-dot-only.is-input {
   background: #e0a458;
-}
-.iteration-boundary-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--txt);
+  border-color: color-mix(in srgb, #e0a458 60%, black);
 }
 
 /* 循环体容器成员（框内定义节点）：紧凑干净，隐藏序号、收紧空态身份图标。 */
