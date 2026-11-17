@@ -2383,6 +2383,12 @@ select:focus-visible {
   background: #34d399;
   border: 2px solid color-mix(in srgb, #34d399 60%, black);
 }
+/* 隐藏节点（opacity:0，如折叠态收拢的循环体）不得拦截指针：否则会盖住紧凑卡，
+   点击「展开」实际命中隐藏的生图节点导致选中/弹出其面板。须连同子元素一起禁用。 */
+.node-card-wrap.is-opacity-hidden,
+.node-card-wrap.is-opacity-hidden * {
+  pointer-events: none !important;
+}
 .node-card-wrap.iteration-template-card .node-standard-scroll {
   height: 100% !important;
   padding: 12px 14px;

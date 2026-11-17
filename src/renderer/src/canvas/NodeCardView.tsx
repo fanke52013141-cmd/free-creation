@@ -1117,10 +1117,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   )
 
   return (
-    <HTMLContainer style={{ pointerEvents: 'all' }}>
+    <HTMLContainer style={{ pointerEvents: shape.opacity === 0 ? 'none' : 'all' }}>
       {/* 外层包一层无裁切的容器：端口圆点要压在卡片边缘外侧，不能被卡片 overflow:hidden 裁掉 */}
       <div
-        className={`node-card-wrap ${selected ? 'is-selected' : ''} ${isTemplateCard ? 'iteration-template-card' : ''} ${isBoundaryMarker ? 'iteration-boundary-marker' : ''} ${inTemplateContainer && !isTemplateCard && !isBoundaryMarker ? 'iteration-template-member' : ''} ${
+        className={`node-card-wrap ${selected ? 'is-selected' : ''} ${shape.opacity === 0 ? 'is-opacity-hidden' : ''} ${isTemplateCard ? 'iteration-template-card' : ''} ${isBoundaryMarker ? 'iteration-boundary-marker' : ''} ${inTemplateContainer && !isTemplateCard && !isBoundaryMarker ? 'iteration-template-member' : ''} ${
           (shape.meta as Record<string, unknown> | undefined)?.stackRole === 'member'
             ? 'stack-member'
             : ''
