@@ -283,6 +283,8 @@ function collectEdges(editor: Editor, draftFrom: ConnectionFrom | null): PageEdg
     if (shape.type !== 'node-card') continue
     const loopId = (shape.meta as Record<string, unknown>)?.iterationTemplateCard
     if (typeof loopId !== 'string') continue
+    // 展开态真实定义节点可见、其数据边已绘制，模板虚线隐藏避免重复连线。
+    if ((shape.meta as Record<string, unknown>)?.iterationTemplateExpanded) continue
     const cardBounds = editor.getShapePageBounds(shape.id)
     const loopBounds = editor.getShapePageBounds(loopId as TLShapeId)
     if (!cardBounds || !loopBounds) continue

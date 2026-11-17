@@ -34,9 +34,7 @@ export function IterationTemplateBody({ shape }: { shape: NodeCardShape }): Reac
           {expanded ? '收起' : '展开'}
         </button>
       </div>
-      {expanded ? (
-        <div className="iteration-template-hint">已展开 · 循环体定义节点可见，可直接修改</div>
-      ) : (
+      {expanded ? null : (
         <>
           <div className="iteration-template-recipe">{recipe}</div>
           <div className="iteration-template-hint">空占位 · 点展开或双击修改</div>

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "Loop-body template card rounded corners (12px) plus reversible collapse/expand toggle: visible expand/collapse button reveals real definition nodes (opacity 1) for editing and re-hides them (opacity 0); expanded state persisted in meta.iterationTemplateExpanded; setup respects expanded state. Presentation-only, execution contract and external operations unchanged, GUI/CLI/MCP same host path. Backward compatible.",
+  "reason": "Loop-body template becomes a resizable container frame: expanded state enlarges the dashed amber frame to enclose the real definition nodes (laid out inside, brought to front, editable), collapsed state shrinks to compact summary and hides nodes; template dashed link hidden when expanded since real data edges show. Presentation-only, execution contract and external operations unchanged, GUI/CLI/MCP same host path. Backward compatible.",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",

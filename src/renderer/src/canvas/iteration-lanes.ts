@@ -393,9 +393,8 @@ export function setupIterationTemplateCard(
     editor.updateShape({
       id: templateCard.id,
       type: 'node-card',
-      x: cardX,
-      y: cardY,
-      props: { w: cardW, h: cardH },
+      // 展开态保留用户展开的容器框几何；折叠态缩回紧凑摘要。
+      ...(expanded ? {} : { x: cardX, y: cardY, props: { w: cardW, h: cardH } }),
       meta: {
         ...(templateCard.meta as Record<string, unknown>),
         iterationTemplateRecipe: recipe,
@@ -405,22 +404,65 @@ export function setupIterationTemplateCard(
   }
 }
 
-/** 折叠/展开循环体模板：展开恢复真实定义节点可见供编辑，折叠重新隐藏。
- *  模板占位卡保留（作为切换控制），展开态记于 meta.iterationTemplateExpanded。 */
+/** 折叠/展开循环体模板容器框：展开时框放大罩住真实定义节点（节点排进框内、置于框上层，
+ *  可直接编辑），折叠时缩回紧凑摘要并隐藏节点。展开态记于 meta.iterationTemplateExpanded。 */
 export function toggleIterationTemplate(editor: Editor, card: NodeCardShape): void {
   const meta = card.meta as Record<string, unknown>
   const expanded = !meta.iterationTemplateExpanded
-  const bodyIds = Array.isArray(meta.iterationTemplateBodyIds) ? meta.iterationTemplateBodyIds : []
-  editor.updateShapes(
-    bodyIds
-      .filter((id): id is string => typeof id === 'string')
-      .map((id) => ({ id: id as TLShapeId, type: 'node-card' as const, opacity: expanded ? 1 : 0 }))
-  )
-  editor.updateShape({
-    id: card.id,
-    type: 'node-card',
-    meta: { ...meta, iterationTemplateExpanded: expanded }
-  })
+  const bodyIds = (
+    Array.isArray(meta.iterationTemplateBodyIds) ? meta.iterationTemplateBodyIds : []
+  ).filter((id): id is string => typeof id === 'string')
+  const bodies = bodyIds
+    .map((id) => editor.getShape<NodeCardShape>(id as TLShapeId))
+    .filter((shape): shape is NodeCardShape => shape !== undefined && shape.type === 'node-card')
+  const loop = editor.getShape<NodeCardShape>(meta.iterationTemplateCard as TLShapeId)
+  const cx = loop ? loop.x + loop.props.w / 2 : card.x + card.props.w / 2
+  const loopTop = loop ? loop.y : card.y + card.props.h + 48
+  if (expanded && bodies.length > 0) {
+    const pad = 16
+    const headerH = 40
+    const gap = 24
+    const maxH = Math.max(...bodies.map((b) => b.props.h))
+    const innerW = bodies.reduce((sum, b) => sum + b.props.w, 0) + gap * (bodies.length - 1)
+    const frameW = innerW + pad * 2
+    const frameH = headerH + maxH + pad * 2
+    const cardX = cx - frameW / 2
+    const cardY = loopTop - frameH - 48
+    let nx = cardX + pad
+    const updates = bodies.map((b) => {
+      const u = {
+        id: b.id,
+        type: 'node-card' as const,
+        x: nx,
+        y: cardY + headerH + pad,
+        opacity: 1
+      }
+      nx += b.props.w + gap
+      return u
+    })
+    editor.updateShapes(updates)
+    if (typeof editor.bringToFront === 'function') editor.bringToFront(bodies.map((b) => b.id))
+    editor.updateShape({
+      id: card.id,
+      type: 'node-card',
+      x: cardX,
+      y: cardY,
+      props: { w: frameW, h: frameH },
+      meta: { ...meta, iterationTemplateExpanded: true }
+    })
+  } else {
+    editor.updateShapes(bodies.map((b) => ({ id: b.id, type: 'node-card' as const, opacity: 0 })))
+    const cardW = NODE_UI.width
+    const cardH = 150
+    editor.updateShape({
+      id: card.id,
+      type: 'node-card',
+      x: cx - cardW / 2,
+      y: loopTop - cardH - 48,
+      props: { w: cardW, h: cardH },
+      meta: { ...meta, iterationTemplateExpanded: false }
+    })
+  }
 }
 
 export function clearIterationLanes(editor: Editor, loopId: string): void {
