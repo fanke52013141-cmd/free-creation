@@ -320,9 +320,9 @@ export function liftIterationBodyDefinition(
   if (updates.length > 0) editor.run(() => editor.updateShapes(updates), { history: 'ignore' })
 }
 
-/** 循环体模板卡（本体模具）：在循环上方落一张紧凑「循环体 · 模板」占位卡，
- *  隐藏真实定义节点及其数据边（仅留唯一虚线关联循环），过程项实例链从循环右侧扇出。
- *  双击模板卡展开真实定义节点配置；纯呈现，不改图模型与执行契约。 */
+/** 循环体模板容器：循环上方一个可折叠/展开的容器框，组合（拖动整体移动）包裹
+ *  输入边界标记 + 循环体定义节点链 + 输出边界标记。首节点接输入、末节点接输出（视觉接口），
+ *  底层执行仍走 loop→循环体路径。折叠态 compact 摘要，展开态完整子图容器。 */
 export function setupIterationTemplateCard(
   editor: Editor,
   loop: NodeCardShape,
@@ -333,25 +333,9 @@ export function setupIterationTemplateCard(
     .map((id) => editor.getShape<NodeCardShape>(id as TLShapeId))
     .filter((shape): shape is NodeCardShape => shape !== undefined && shape.type === 'node-card')
   if (cards.length === 0) return
-  const base = anchor ?? { x: loop.x, y: loop.y, w: loop.props.w, h: loop.props.h }
-  // 解除旧的模板组合框（若有），把定义节点还原到页面再隐藏。
-  const oldGroup = editor
-    .getCurrentPageShapes()
-    .find(
-      (shape) =>
-        shape.type === 'group' &&
-        (shape.meta as Record<string, unknown>)?.iterationTemplateLoopId === loop.id
-    )
-  if (oldGroup && typeof editor.ungroupShapes === 'function') {
-    editor.ungroupShapes([oldGroup.id])
-  }
   const recipe = cards
     .map((card) => getNodeType(card.props.nodeType)?.label ?? card.props.nodeType)
     .join(' → ')
-  const cardW = NODE_UI.width
-  const cardH = 150
-  const cardX = base.x + base.w / 2 - cardW / 2
-  const cardY = base.y - cardH - 48
   let templateCard = editor
     .getCurrentPageShapes()
     .find(
@@ -359,28 +343,14 @@ export function setupIterationTemplateCard(
         shape.type === 'node-card' &&
         (shape.meta as Record<string, unknown>)?.iterationTemplateCard === loop.id
     ) as NodeCardShape | undefined
-  // 折叠态隐藏真实定义节点（运行态走影子层，内容承载在分支实例）；展开态保留可见供编辑。
-  // 数据边由 DataEdgeLayer 按 opacity 跳过，本体只留唯一虚线关联循环。
-  const expanded = Boolean(
-    (templateCard?.meta as Record<string, unknown>)?.iterationTemplateExpanded
-  )
-  editor.updateShapes(
-    cards.map((card) => ({ id: card.id, type: 'node-card' as const, opacity: expanded ? 1 : 0 }))
-  )
   if (!templateCard) {
     const id = createShapeId()
     editor.createShape({
       id,
       type: 'node-card',
-      x: cardX,
-      y: cardY,
-      props: {
-        nodeType: 'text',
-        title: '循环体 · 模板',
-        text: '',
-        w: cardW,
-        h: cardH
-      },
+      x: loop.x,
+      y: loop.y - 198,
+      props: { nodeType: 'text', title: '循环体 · 模板', text: '', w: NODE_UI.width, h: 150 },
       meta: {
         iterationTemplateCard: loop.id,
         iterationTemplateRecipe: recipe,
@@ -393,8 +363,6 @@ export function setupIterationTemplateCard(
     editor.updateShape({
       id: templateCard.id,
       type: 'node-card',
-      // 展开态保留用户展开的容器框几何；折叠态缩回紧凑摘要。
-      ...(expanded ? {} : { x: cardX, y: cardY, props: { w: cardW, h: cardH } }),
       meta: {
         ...(templateCard.meta as Record<string, unknown>),
         iterationTemplateRecipe: recipe,
@@ -402,10 +370,14 @@ export function setupIterationTemplateCard(
       }
     })
   }
+  if (!templateCard) return
+  const expanded = Boolean(
+    (templateCard.meta as Record<string, unknown>)?.iterationTemplateExpanded
+  )
+  layoutIterationTemplate(editor, loop, templateCard, cards, expanded, anchor)
 }
 
-/** 折叠/展开循环体模板容器框：展开时框放大罩住真实定义节点（节点排进框内、置于框上层，
- *  可直接编辑），折叠时缩回紧凑摘要并隐藏节点。展开态记于 meta.iterationTemplateExpanded。 */
+/** 折叠/展开循环体容器：翻转展开态后重排容器。 */
 export function toggleIterationTemplate(editor: Editor, card: NodeCardShape): void {
   const meta = card.meta as Record<string, unknown>
   const expanded = !meta.iterationTemplateExpanded
@@ -416,51 +388,146 @@ export function toggleIterationTemplate(editor: Editor, card: NodeCardShape): vo
     .map((id) => editor.getShape<NodeCardShape>(id as TLShapeId))
     .filter((shape): shape is NodeCardShape => shape !== undefined && shape.type === 'node-card')
   const loop = editor.getShape<NodeCardShape>(meta.iterationTemplateCard as TLShapeId)
-  const cx = loop ? loop.x + loop.props.w / 2 : card.x + card.props.w / 2
-  const loopTop = loop ? loop.y : card.y + card.props.h + 48
+  if (!loop) return
+  editor.updateShape({
+    id: card.id,
+    type: 'node-card',
+    meta: { ...meta, iterationTemplateExpanded: expanded }
+  })
+  layoutIterationTemplate(editor, loop, card, bodies, expanded)
+}
+
+/** 确保输入/输出边界标记存在并接线（首节点接输入、末节点接输出），把框+标记+节点组合。 */
+function ensureIterationTemplateContainer(
+  editor: Editor,
+  loop: NodeCardShape,
+  frameCard: NodeCardShape,
+  bodies: NodeCardShape[]
+): { input: NodeCardShape; output: NodeCardShape } {
+  const findMarker = (kind: string): NodeCardShape | undefined =>
+    editor
+      .getCurrentPageShapes()
+      .find(
+        (shape) =>
+          shape.type === 'node-card' &&
+          (shape.meta as Record<string, unknown>)?.iterationTemplateLoopId === loop.id &&
+          (shape.meta as Record<string, unknown>)?.iterationBoundary === kind
+      ) as NodeCardShape | undefined
+  const makeMarker = (kind: 'input' | 'output', title: string): NodeCardShape => {
+    const id = createShapeId()
+    editor.createShape({
+      id,
+      type: 'node-card',
+      x: 0,
+      y: 0,
+      props: { nodeType: 'text', title, text: '', w: 72, h: 80 },
+      meta: { iterationBoundary: kind, iterationTemplateLoopId: loop.id, nodeHeightMode: 'manual' }
+    })
+    return editor.getShape<NodeCardShape>(id)!
+  }
+  const input = findMarker('input') ?? makeMarker('input', '输入')
+  const output = findMarker('output') ?? makeMarker('output', '输出')
+  editor.updateShape({
+    id: input.id,
+    type: 'node-card',
+    meta: {
+      ...(input.meta as Record<string, unknown>),
+      iterationBoundaryTarget: bodies[0]?.id ?? null
+    }
+  })
+  editor.updateShape({
+    id: output.id,
+    type: 'node-card',
+    meta: {
+      ...(output.meta as Record<string, unknown>),
+      iterationBoundarySource: bodies[bodies.length - 1]?.id ?? null
+    }
+  })
+  const existingGroup = editor
+    .getCurrentPageShapes()
+    .find(
+      (shape) =>
+        shape.type === 'group' &&
+        (shape.meta as Record<string, unknown>)?.iterationTemplateLoopId === loop.id
+    )
+  if (!existingGroup && typeof editor.groupShapes === 'function') {
+    editor.groupShapes([frameCard.id, input.id, output.id, ...bodies.map((b) => b.id)])
+    const gid = editor.getShape(frameCard.id)?.parentId as TLShapeId | undefined
+    const g = gid ? editor.getShape(gid) : undefined
+    if (g?.type === 'group') {
+      editor.updateShape({
+        id: gid!,
+        type: 'group',
+        meta: {
+          ...(g.meta as Record<string, unknown>),
+          iterationTemplateLoopId: loop.id,
+          label: '循环体 · 模板'
+        }
+      })
+    }
+  }
+  return {
+    input: editor.getShape<NodeCardShape>(input.id)!,
+    output: editor.getShape<NodeCardShape>(output.id)!
+  }
+}
+
+/** 容器布局：展开=输入标记+节点链+输出标记横排罩进框内（组合整体可拖动）；折叠=紧凑摘要隐藏内容。 */
+function layoutIterationTemplate(
+  editor: Editor,
+  loop: NodeCardShape,
+  frameCard: NodeCardShape,
+  bodies: NodeCardShape[],
+  expanded: boolean,
+  anchor?: { x: number; y: number; w: number; h: number }
+): void {
+  const base = anchor ?? { x: loop.x, y: loop.y, w: loop.props.w, h: loop.props.h }
+  const cx = base.x + base.w / 2
+  const { input, output } = ensureIterationTemplateContainer(editor, loop, frameCard, bodies)
+  const members = [input, ...bodies, output]
   if (expanded && bodies.length > 0) {
     const pad = 16
     const headerH = 40
-    const gap = 24
-    const maxH = Math.max(...bodies.map((b) => b.props.h))
-    const innerW = bodies.reduce((sum, b) => sum + b.props.w, 0) + gap * (bodies.length - 1)
+    const gap = 28
+    const maxH = Math.max(...members.map((m) => m.props.h))
+    const innerW = members.reduce((sum, m) => sum + m.props.w, 0) + gap * (members.length - 1)
     const frameW = innerW + pad * 2
     const frameH = headerH + maxH + pad * 2
     const cardX = cx - frameW / 2
-    const cardY = loopTop - frameH - 48
+    const cardY = base.y - frameH - 48
     let nx = cardX + pad
-    const updates = bodies.map((b) => {
+    const updates = members.map((m) => {
       const u = {
-        id: b.id,
+        id: m.id,
         type: 'node-card' as const,
         x: nx,
-        y: cardY + headerH + pad,
+        y: cardY + headerH + pad + (maxH - m.props.h) / 2,
         opacity: 1
       }
-      nx += b.props.w + gap
+      nx += m.props.w + gap
       return u
     })
     editor.updateShapes(updates)
-    if (typeof editor.bringToFront === 'function') editor.bringToFront(bodies.map((b) => b.id))
+    if (typeof editor.bringToFront === 'function') editor.bringToFront(members.map((m) => m.id))
     editor.updateShape({
-      id: card.id,
+      id: frameCard.id,
       type: 'node-card',
       x: cardX,
       y: cardY,
       props: { w: frameW, h: frameH },
-      meta: { ...meta, iterationTemplateExpanded: true }
+      meta: { ...(frameCard.meta as Record<string, unknown>), iterationTemplateExpanded: true }
     })
   } else {
-    editor.updateShapes(bodies.map((b) => ({ id: b.id, type: 'node-card' as const, opacity: 0 })))
+    editor.updateShapes(members.map((m) => ({ id: m.id, type: 'node-card' as const, opacity: 0 })))
     const cardW = NODE_UI.width
     const cardH = 150
     editor.updateShape({
-      id: card.id,
+      id: frameCard.id,
       type: 'node-card',
       x: cx - cardW / 2,
-      y: loopTop - cardH - 48,
+      y: base.y - cardH - 48,
       props: { w: cardW, h: cardH },
-      meta: { ...meta, iterationTemplateExpanded: false }
+      meta: { ...(frameCard.meta as Record<string, unknown>), iterationTemplateExpanded: false }
     })
   }
 }

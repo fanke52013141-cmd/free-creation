@@ -205,6 +205,8 @@ export function GroupOutlineLayer({
 
       for (const shape of editor.getCurrentPageShapes()) {
         if (shape.type !== 'group') continue
+        // 循环体模板组合由模板卡自身渲染容器框，跳过通用分组框避免双重边框。
+        if ((shape.meta as Record<string, unknown>)?.iterationTemplateLoopId) continue
         const bounds = editor.getShapePageBounds(shape.id)
         if (!bounds) continue
         const topLeft = editor.pageToScreen({ x: bounds.x, y: bounds.y })
@@ -422,9 +424,7 @@ export function GroupOutlineLayer({
               }}
             />
           ) : (
-            <span>
-              {outline.label || '分组'}
-            </span>
+            <span>{outline.label || '分组'}</span>
           )}
           <button
             type="button"

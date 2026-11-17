@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "Loop-body template becomes a resizable container frame: expanded state enlarges the dashed amber frame to enclose the real definition nodes (laid out inside, brought to front, editable), collapsed state shrinks to compact summary and hides nodes; template dashed link hidden when expanded since real data edges show. Presentation-only, execution contract and external operations unchanged, GUI/CLI/MCP same host path. Backward compatible.",
+  "reason": "Loop-body becomes a full sub-graph container: a tldraw group (drag moves whole body) wraps the dashed amber frame plus input/output boundary markers and the definition node chain; first node links to input marker, last node to output marker (visual interface edges via DataEdgeLayer); collapse/expand retained. Boundary markers are visual-only, execution still uses loop->body path; execution contract and external operations unchanged, GUI/CLI/MCP same host path. Backward compatible.",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",

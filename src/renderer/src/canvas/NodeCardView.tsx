@@ -39,6 +39,7 @@ import { FixedFlowAssetBody } from './FixedFlowAssetBody'
 import { readFlowAssetSnapshot } from './flow-asset-snapshot'
 import { IterationSnapshotBody } from './IterationSnapshotBody'
 import { IterationTemplateBody } from './IterationTemplateBody'
+import { IterationBoundaryBody } from './IterationBoundaryBody'
 import { readIterationSnapshot, toggleIterationTemplate } from './iteration-lanes'
 import {
   averageNodeExecutionDuration,
@@ -162,6 +163,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const iterationSnapshot = readIterationSnapshot(shape)
   // 循环体模板卡（本体模具）：紧凑配方占位，双击展开真实定义节点。
   const isTemplateCard = Boolean((shape.meta as Record<string, unknown>)?.iterationTemplateCard)
+  const isBoundaryMarker = Boolean((shape.meta as Record<string, unknown>)?.iterationBoundary)
   const identitySpec = iterationSnapshot ? getNodeType(iterationSnapshot.role) : spec
   const displayTitle =
     shape.props.nodeType === 'speech' && shape.props.title === '配音'
@@ -901,7 +903,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         // 时间轴每帧改 style 会持续触发这里的 MutationObserver，参与测算会反复写文档。
         if (getNodeType(latest.props.nodeType)?.sizePolicy === 'free') return
         // 循环体模板卡是紧凑投影占位，高度由内容决定，不参与自动量高/最小档钳制。
-        if (metadata.iterationTemplateCard) return
+        if (metadata.iterationTemplateCard || metadata.iterationBoundary) return
         if (latest.props.nodeType === 'storyboard') {
           if (metadata.nodeHeightMode === 'manual') return
           const table = body.querySelector<HTMLTableElement>('.storyboard-table')
@@ -1107,7 +1109,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     <HTMLContainer style={{ pointerEvents: 'all' }}>
       {/* 外层包一层无裁切的容器：端口圆点要压在卡片边缘外侧，不能被卡片 overflow:hidden 裁掉 */}
       <div
-        className={`node-card-wrap ${selected ? 'is-selected' : ''} ${isTemplateCard ? 'iteration-template-card' : ''} ${
+        className={`node-card-wrap ${selected ? 'is-selected' : ''} ${isTemplateCard ? 'iteration-template-card' : ''} ${isBoundaryMarker ? 'iteration-boundary-marker' : ''} ${
           (shape.meta as Record<string, unknown> | undefined)?.stackRole === 'member'
             ? 'stack-member'
             : ''
@@ -1433,7 +1435,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                     )}
                     <div className="node-body-content">
                       <FlowReviewFeedback shape={shape} />
-                      {isTemplateCard ? (
+                      {isBoundaryMarker ? (
+                        <IterationBoundaryBody shape={shape} />
+                      ) : isTemplateCard ? (
                         <div
                           onDoubleClick={(e) => {
                             e.stopPropagation()

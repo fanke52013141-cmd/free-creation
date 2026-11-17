@@ -302,6 +302,34 @@ function collectEdges(editor: Editor, draftFrom: ConnectionFrom | null): PageEdg
       path: `M ${sx} ${sy} C ${sx} ${midY}, ${tx} ${midY}, ${tx} ${ty}`
     })
   }
+  // 循环体边界接口连线（视觉）：输入标记→首节点、末节点→输出标记，呈现完整子图接口。
+  for (const shape of editor.getCurrentPageShapes()) {
+    if (shape.type !== 'node-card' || shape.opacity === 0) continue
+    const meta = shape.meta as Record<string, unknown>
+    const kind = meta?.iterationBoundary
+    if (kind !== 'input' && kind !== 'output') continue
+    const otherId = kind === 'input' ? meta.iterationBoundaryTarget : meta.iterationBoundarySource
+    if (typeof otherId !== 'string') continue
+    const other = editor.getShape<NodeCardShape>(otherId as TLShapeId)
+    if (!other || other.type !== 'node-card' || other.opacity === 0) continue
+    const a = editor.getShapePageBounds(shape.id)
+    const b = editor.getShapePageBounds(other.id)
+    if (!a || !b) continue
+    const from = kind === 'input' ? a : b
+    const to = kind === 'input' ? b : a
+    result.push({
+      id: `boundary-link:${shape.id}` as TLShapeId,
+      color: '#34d399',
+      sourceId: kind === 'input' ? shape.id : other.id,
+      targetId: kind === 'input' ? other.id : shape.id,
+      provenance: true,
+      path: buildDataEdgePath(
+        { x: from.maxX + NODE_PORT_OUTSET, y: from.y + from.height / 2 },
+        { x: to.x - NODE_PORT_OUTSET, y: to.y + to.height / 2 },
+        { backward: isBackwardEdge(from.x + from.width / 2, to.x + to.width / 2) }
+      )
+    })
+  }
   return result
 }
 
