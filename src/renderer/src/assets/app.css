@@ -2453,6 +2453,22 @@ select:focus-visible {
   font-weight: 600;
   color: var(--txt);
 }
+
+/* 循环体容器成员（框内定义节点）：紧凑干净，隐藏序号、收紧空态身份图标。 */
+.node-card-wrap.iteration-template-member .node-seq {
+  display: none !important;
+}
+.node-card-wrap.iteration-template-member .node-standard-identity {
+  min-height: 44px !important;
+}
+.node-card-wrap.iteration-template-member .node-standard-identity-icon {
+  width: 40px !important;
+  height: 40px !important;
+}
+.node-card-wrap.iteration-template-member .node-standard-identity-icon svg {
+  width: 24px !important;
+  height: 24px !important;
+}
 .iteration-template-recipe {
   font-size: 12px;
   font-weight: 500;

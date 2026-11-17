@@ -14,7 +14,7 @@ import { useConnectionStore } from '../stores/connection'
 import { useNodePanelStore } from '../stores/nodePanel'
 import { beginConnectionDrag } from './connection-drag'
 import { batchConnectionFromSelection } from './batch-connection'
-import { dynamicPortIdsForShape, portPairCompatible, deriveGraph } from './graph'
+import { dynamicPortIdsForShape, portPairCompatible } from './graph'
 import { processorConfigurationIssue } from './processor-readiness'
 import { markUndoPoint } from './history'
 import type { NodeCardShape } from './NodeCardShape'
@@ -25,7 +25,7 @@ import { currentNodeFingerprint, successfulInputFingerprint } from '../engine/re
 import { projectNodeOutputs } from '../nodes/nodeValues'
 import { deriveNodeReadiness } from './node-readiness'
 import { readCompositeInstanceManifest } from '@shared/composite/outputs'
-import { runNodeManually, iterationBodyNodeIds } from '../engine/executor'
+import { runNodeManually } from '../engine/executor'
 import { guiWorkflowInputOptions } from '../stores/workflowInput'
 import { useAppStore } from '../stores/app'
 import { useGatewayStore } from '../stores/gateway'
@@ -164,6 +164,18 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   // 循环体模板卡（本体模具）：紧凑配方占位，双击展开真实定义节点。
   const isTemplateCard = Boolean((shape.meta as Record<string, unknown>)?.iterationTemplateCard)
   const isBoundaryMarker = Boolean((shape.meta as Record<string, unknown>)?.iterationBoundary)
+  // 循环体容器成员（框内定义节点）：紧凑呈现，隐藏序号、收紧空态图标，更干净。
+  const inTemplateContainer = useValue(
+    'iteration template member',
+    () => {
+      const parent = editor.getShape(shape.parentId)
+      return (
+        parent?.type === 'group' &&
+        Boolean((parent.meta as Record<string, unknown>)?.iterationTemplateLoopId)
+      )
+    },
+    [editor, shape.parentId]
+  )
   const identitySpec = iterationSnapshot ? getNodeType(iterationSnapshot.role) : spec
   const displayTitle =
     shape.props.nodeType === 'speech' && shape.props.title === '配音'
@@ -279,14 +291,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     'node selected',
     () => editor.getSelectedShapeIds().includes(shape.id),
     [editor, shape.id]
-  )
-
-  // 循环体模板标识：被 iterate.out-item 驱动的定义节点是「循环体模板」（本体），
-  // 运行态由影子层隔离不填充活卡，内容承载在分支实例上。快照卡无数据边不在集合内。
-  const isLoopBodyTemplate = useValue(
-    'loop body template membership',
-    () => !iterationSnapshot && iterationBodyNodeIds(deriveGraph(editor)).has(shape.id),
-    [editor, shape.id, iterationSnapshot]
   )
 
   // 行首 info 图标统一打开节点契约详情；聊天工作区仍由聊天节点选中/工作区入口打开。
@@ -1109,7 +1113,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     <HTMLContainer style={{ pointerEvents: 'all' }}>
       {/* 外层包一层无裁切的容器：端口圆点要压在卡片边缘外侧，不能被卡片 overflow:hidden 裁掉 */}
       <div
-        className={`node-card-wrap ${selected ? 'is-selected' : ''} ${isTemplateCard ? 'iteration-template-card' : ''} ${isBoundaryMarker ? 'iteration-boundary-marker' : ''} ${
+        className={`node-card-wrap ${selected ? 'is-selected' : ''} ${isTemplateCard ? 'iteration-template-card' : ''} ${isBoundaryMarker ? 'iteration-boundary-marker' : ''} ${inTemplateContainer && !isTemplateCard && !isBoundaryMarker ? 'iteration-template-member' : ''} ${
           (shape.meta as Record<string, unknown> | undefined)?.stackRole === 'member'
             ? 'stack-member'
             : ''
@@ -1403,11 +1407,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             className="node-color-bar"
             style={{ ['--node-accent' as string]: identitySpec?.color ?? '#42b9f5' }}
           />
-          {isLoopBodyTemplate && (
-            <span className="loop-body-template-badge" title="循环体模板：运行内容承载在分支实例上">
-              循环体模板
-            </span>
-          )}
           {spec && (
             <NodeCardShell
               spec={spec}
