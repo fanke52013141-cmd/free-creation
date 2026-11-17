@@ -2348,6 +2348,7 @@ select:focus-visible {
 }
 .node-card-wrap.iteration-template-card .node-card {
   border: 1.5px dashed color-mix(in srgb, #e0a458 75%, transparent) !important;
+  border-radius: 12px !important;
   box-shadow: none !important;
   background: color-mix(in srgb, #e0a458 7%, var(--card)) !important;
   height: 100% !important;
@@ -2386,6 +2387,23 @@ select:focus-visible {
   background: color-mix(in srgb, #e0a458 16%, transparent);
   border: 1px solid color-mix(in srgb, #e0a458 45%, transparent);
   border-radius: 999px;
+}
+.iteration-template-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #e0a458;
+  background: color-mix(in srgb, #e0a458 12%, transparent);
+  border: 1px solid color-mix(in srgb, #e0a458 40%, transparent);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.iteration-template-toggle:hover {
+  background: color-mix(in srgb, #e0a458 22%, transparent);
 }
 .iteration-template-recipe {
   font-size: 12px;

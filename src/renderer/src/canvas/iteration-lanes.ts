@@ -345,10 +345,6 @@ export function setupIterationTemplateCard(
   if (oldGroup && typeof editor.ungroupShapes === 'function') {
     editor.ungroupShapes([oldGroup.id])
   }
-  // 隐藏真实定义节点（运行态走影子层，内容承载在分支实例）；数据边由 DataEdgeLayer 按 opacity 跳过。
-  editor.updateShapes(
-    cards.map((card) => ({ id: card.id, type: 'node-card' as const, opacity: 0 }))
-  )
   const recipe = cards
     .map((card) => getNodeType(card.props.nodeType)?.label ?? card.props.nodeType)
     .join(' → ')
@@ -363,6 +359,14 @@ export function setupIterationTemplateCard(
         shape.type === 'node-card' &&
         (shape.meta as Record<string, unknown>)?.iterationTemplateCard === loop.id
     ) as NodeCardShape | undefined
+  // 折叠态隐藏真实定义节点（运行态走影子层，内容承载在分支实例）；展开态保留可见供编辑。
+  // 数据边由 DataEdgeLayer 按 opacity 跳过，本体只留唯一虚线关联循环。
+  const expanded = Boolean(
+    (templateCard?.meta as Record<string, unknown>)?.iterationTemplateExpanded
+  )
+  editor.updateShapes(
+    cards.map((card) => ({ id: card.id, type: 'node-card' as const, opacity: expanded ? 1 : 0 }))
+  )
   if (!templateCard) {
     const id = createShapeId()
     editor.createShape({
@@ -401,16 +405,22 @@ export function setupIterationTemplateCard(
   }
 }
 
-/** 双击模板卡展开：恢复真实定义节点可见，移除模板占位卡。 */
-export function expandIterationTemplateCard(editor: Editor, card: NodeCardShape): void {
+/** 折叠/展开循环体模板：展开恢复真实定义节点可见供编辑，折叠重新隐藏。
+ *  模板占位卡保留（作为切换控制），展开态记于 meta.iterationTemplateExpanded。 */
+export function toggleIterationTemplate(editor: Editor, card: NodeCardShape): void {
   const meta = card.meta as Record<string, unknown>
+  const expanded = !meta.iterationTemplateExpanded
   const bodyIds = Array.isArray(meta.iterationTemplateBodyIds) ? meta.iterationTemplateBodyIds : []
   editor.updateShapes(
     bodyIds
       .filter((id): id is string => typeof id === 'string')
-      .map((id) => ({ id: id as TLShapeId, type: 'node-card' as const, opacity: 1 }))
+      .map((id) => ({ id: id as TLShapeId, type: 'node-card' as const, opacity: expanded ? 1 : 0 }))
   )
-  editor.deleteShapes([card.id])
+  editor.updateShape({
+    id: card.id,
+    type: 'node-card',
+    meta: { ...meta, iterationTemplateExpanded: expanded }
+  })
 }
 
 export function clearIterationLanes(editor: Editor, loopId: string): void {

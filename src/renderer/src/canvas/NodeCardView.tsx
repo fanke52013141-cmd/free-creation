@@ -39,7 +39,7 @@ import { FixedFlowAssetBody } from './FixedFlowAssetBody'
 import { readFlowAssetSnapshot } from './flow-asset-snapshot'
 import { IterationSnapshotBody } from './IterationSnapshotBody'
 import { IterationTemplateBody } from './IterationTemplateBody'
-import { readIterationSnapshot, expandIterationTemplateCard } from './iteration-lanes'
+import { readIterationSnapshot, toggleIterationTemplate } from './iteration-lanes'
 import {
   averageNodeExecutionDuration,
   DEFAULT_NODE_EXECUTION_ESTIMATE_MS,
@@ -1437,7 +1437,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                         <div
                           onDoubleClick={(e) => {
                             e.stopPropagation()
-                            expandIterationTemplateCard(editor, shape)
+                            toggleIterationTemplate(editor, shape)
                           }}
                         >
                           <IterationTemplateBody shape={shape} />
