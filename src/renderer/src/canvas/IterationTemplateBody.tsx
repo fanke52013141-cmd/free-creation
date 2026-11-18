@@ -18,8 +18,6 @@ export function IterationTemplateBody({ shape }: { shape: NodeCardShape }): Reac
   return (
     <div className="iteration-template-body" data-node-interactive="text-content">
       <div className="iteration-template-head">
-        <span className="iteration-template-title">循环体 · 模板</span>
-        <span className="iteration-template-badge">本体</span>
         <button
           type="button"
           className="iteration-template-toggle"

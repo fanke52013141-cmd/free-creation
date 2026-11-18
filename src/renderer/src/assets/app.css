@@ -2408,20 +2408,6 @@ select:focus-visible {
   align-items: center;
   gap: 8px;
 }
-.iteration-template-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--txt);
-}
-.iteration-template-badge {
-  padding: 1px 7px;
-  font-size: 9px;
-  font-weight: 600;
-  color: #e0a458;
-  background: color-mix(in srgb, #e0a458 16%, transparent);
-  border: 1px solid color-mix(in srgb, #e0a458 45%, transparent);
-  border-radius: 999px;
-}
 .iteration-template-toggle {
   margin-left: auto;
   display: inline-flex;
