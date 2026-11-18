@@ -20,6 +20,7 @@ import { toast } from '../../../stores/toast'
 import { useConfirmStore } from '../../../stores/confirm'
 import { useMediaStore } from '../../../stores/media'
 import type { MediaAsset, MediaImportResult } from '@shared/types'
+import { TEXT_MERGE_SEPARATOR } from '@shared/engine/helpers'
 import { parseImageSplitConfig } from '@shared/image-split'
 import {
   clearMediaResultHistory,
@@ -164,6 +165,42 @@ export function NoModelHint(): React.JSX.Element {
         <span className="gen-empty-model-hint">尚未配置可用模型，请前往项目首页的模型设置</span>
       </NodeIdentity>
     </>
+  )
+}
+
+/**
+ * 上游文本输入的只读预览条（2026-11-19 用户裁决：连线不得夺走节点原有的编辑能力）。
+ * 输入内容独立呈现在此（只读、可选中复制），节点自己的输入框保持可编辑；
+ * 要改输入请编辑上游节点，本条随上游产出实时刷新。
+ * 多条上游按合并分隔符（$$$）拆开呈现，不把内部定界符当正文展示。
+ */
+export function UpstreamInputPreview({
+  text,
+  label = '输入 · 来自上游',
+  title
+}: {
+  text: string
+  label?: string
+  title?: string
+}): React.JSX.Element | null {
+  if (!text.trim()) return null
+  const parts = text
+    .split(TEXT_MERGE_SEPARATOR)
+    .map((part) => part.trim())
+    .filter(Boolean)
+  return (
+    <div className="upstream-input-preview" data-node-selectable-text="true" title={title}>
+      <span className="upstream-input-preview-label">
+        <Icon name="attach" size={11} />
+        {label}
+        {parts.length > 1 ? `（${parts.length} 条上游）` : ''}
+      </span>
+      {parts.map((part, index) => (
+        <span key={index} className="upstream-input-preview-text">
+          {part}
+        </span>
+      ))}
+    </div>
   )
 }
 

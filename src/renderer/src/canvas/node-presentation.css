@@ -556,6 +556,53 @@
   bottom: 0;
 }
 
+/* 上游文本输入只读预览条（2026-11-19 用户裁决）：连线不得夺走节点原有的编辑能力——
+   输入内容独立呈现在此（只读、可选中复制、超高内部滚动），节点自己的输入框保持可编辑。
+   滚动条按全局规范隐藏。 */
+.upstream-input-preview {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px dashed color-mix(in srgb, var(--brand) 35%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--brand) 6%, transparent);
+}
+.upstream-input-preview-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--muted);
+  user-select: none;
+}
+.upstream-input-preview-text {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--txt);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  cursor: text;
+  max-height: 96px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.upstream-input-preview-text::-webkit-scrollbar {
+  display: none;
+}
+/* 生图：拼接规则提示（上游输入 + 本框内容），仅在连有上游文本时出现。 */
+.gen-prompt-merge-hint {
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--muted);
+  user-select: none;
+}
+
 /* AI 结果采用正文内容框，外壳负责高度上限及唯一滚动区。 */
 .node-card.type-ai-process .node-standard-shell .node-body-content > .ai-process-result-frame {
   box-sizing: border-box;

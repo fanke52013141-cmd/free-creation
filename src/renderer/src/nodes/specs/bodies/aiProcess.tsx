@@ -1,14 +1,15 @@
 import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 // AI 处理是一个纯处理节点：卡片保留清晰的操作入口，模型和生成参数统一放在右侧「设置」页。
 import { useEffect } from 'react'
-import { stopEventPropagation, useEditor } from 'tldraw'
+import { stopEventPropagation, useEditor, useValue } from 'tldraw'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Icon } from '../../../components/Icon'
 import { useNodePanelStore } from '../../../stores/nodePanel'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { parseAiProcess, type AiProcessConfig } from '../../../engine/executors/aiProcess'
-import { ModelSelect, NoModelHint } from './shared'
+import { gatherUpstreamText } from '../../../canvas/graph'
+import { ModelSelect, NoModelHint, UpstreamInputPreview } from './shared'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { AppSelect } from '../../../components/AppSelect'
@@ -61,22 +62,37 @@ function schemaFromKey(key: string): AiProcessConfig['jsonSchema'] {
   return found ? { id: found.id, version: found.version } : undefined
 }
 
-/** 成功结果直接呈现；配置沿用标题/右侧面板入口。 */
+/** 输入与输出同时呈现（2026-11-19 用户裁决）：上游输入只读展示（要改输入请编辑上游节点），
+ *  输出是本节点结果；连线/运行不再把卡片折损成单一结果投影。配置沿用标题/右侧面板入口。 */
 export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
+  const upstreamInput = useValue(
+    'ai-process upstream input',
+    () => gatherUpstreamText(editor, shape.id, 'in-text'),
+    [editor, shape.id]
+  )
+  const inputPreview = (
+    <UpstreamInputPreview
+      text={upstreamInput}
+      title="上游节点输出的文本输入（只读）；要修改输入请编辑上游节点"
+    />
+  )
   const result = Object.values(projectNodeOutputs(shape)).find(
     (value) => value?.kind === 'text' || value?.kind === 'markdown' || value?.kind === 'json'
   )
   if (!result)
     return (
-      <NodeIdentity>
-        <NodePrimaryButton
-          onClick={() => useNodePanelStore.getState().open('contract', shape.id, 'settings')}
-        >
-          <Icon name="settings" size={16} />
-          配置处理设置
-        </NodePrimaryButton>
-      </NodeIdentity>
+      <>
+        {inputPreview}
+        <NodeIdentity>
+          <NodePrimaryButton
+            onClick={() => useNodePanelStore.getState().open('contract', shape.id, 'settings')}
+          >
+            <Icon name="settings" size={16} />
+            配置处理设置
+          </NodePrimaryButton>
+        </NodeIdentity>
+      </>
     )
   const resultText =
     result.kind === 'json'
@@ -85,33 +101,36 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
         ? result.text
         : ''
   return (
-    <div
-      className={`ai-process-result-frame${result.kind === 'markdown' ? ' ai-process-markdown' : ''}`}
-      role="textbox"
-      aria-label="完整处理结果"
-      aria-readonly="true"
-      aria-multiline="true"
-      tabIndex={0}
-      onPointerDown={(event) => {
-        if (
-          event.button === 0 &&
-          !event.shiftKey &&
-          !event.ctrlKey &&
-          !event.metaKey &&
-          !editor.getSelectedShapeIds().includes(shape.id)
-        )
-          editor.select(shape.id)
-        stopEventPropagation(event)
-      }}
-    >
-      {result.kind === 'markdown' ? (
-        <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
-          {resultText}
-        </ReactMarkdown>
-      ) : (
-        resultText
-      )}
-    </div>
+    <>
+      {inputPreview}
+      <div
+        className={`ai-process-result-frame${result.kind === 'markdown' ? ' ai-process-markdown' : ''}`}
+        role="textbox"
+        aria-label="完整处理结果"
+        aria-readonly="true"
+        aria-multiline="true"
+        tabIndex={0}
+        onPointerDown={(event) => {
+          if (
+            event.button === 0 &&
+            !event.shiftKey &&
+            !event.ctrlKey &&
+            !event.metaKey &&
+            !editor.getSelectedShapeIds().includes(shape.id)
+          )
+            editor.select(shape.id)
+          stopEventPropagation(event)
+        }}
+      >
+        {result.kind === 'markdown' ? (
+          <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
+            {resultText}
+          </ReactMarkdown>
+        ) : (
+          resultText
+        )}
+      </div>
+    </>
   )
 }
 

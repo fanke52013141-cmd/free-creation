@@ -1392,3 +1392,25 @@ describe('循环扇出对称分支与只读运行快照', () => {
     expect(lanes).toContain("(shape.type === 'node-card' || shape.type === 'arrow')")
   })
 })
+
+// 2026-11-19 用户裁决：连线不得夺走节点原有的编辑能力。生图节点的提示词框是
+// 本节点自己的输入，连了上游也必须可编辑（上游输入走独立只读预览条）；AI 处理
+// 卡片必须同时呈现输入（只读）与输出，不能运行一次就折损成单一结果投影。
+describe('2026-11-19 用户裁决：连线不得改变节点原有的能力', () => {
+  const imageGen = read('src/renderer/src/nodes/specs/bodies/image-gen.tsx')
+  it('生图提示词框始终可编辑：不因连接上游而只读，上游输入走独立只读预览条', () => {
+    const src = stripComments(imageGen)
+    expect(src).not.toContain('readOnly={!!autoPrompt}')
+    expect(src).toContain('value={draft}')
+    expect(src).toContain('<UpstreamInputPreview')
+    expect(src).toContain('gen-prompt-merge-hint')
+  })
+  it('AI 处理卡片同时呈现输入（只读）与输出', () => {
+    expect(stripComments(aiProcess)).toContain('<UpstreamInputPreview')
+    expect(stripComments(aiProcess)).toContain('ai-process-result-frame')
+  })
+  it('上游输入预览条是共享组件：只读呈现、可选中复制，不拦截节点输入框', () => {
+    expect(stripComments(sharedBodies)).toContain('data-node-selectable-text="true"')
+    expect(stripComments(sharedBodies)).toContain('upstream-input-preview')
+  })
+})

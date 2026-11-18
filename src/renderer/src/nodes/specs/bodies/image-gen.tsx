@@ -26,7 +26,7 @@ import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
 import { ImageMentionPrompt } from './ImageMentionPrompt'
 import { canonicalizeMediaMentions, type PromptMediaReference } from './media-mentions'
-import { ModelSelect, NoModelHint, parseJsonProp } from './shared'
+import { ModelSelect, NoModelHint, parseJsonProp, UpstreamInputPreview } from './shared'
 import './node-workbench.css'
 
 type ImageGenData = ImageGenerationConfig
@@ -88,15 +88,15 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const orderedRatios = orderedImageRatios(availableRatios)
   const [draft, setDraft] = useState(shape.props.text)
   const [busy, setBusy] = useState(false)
-  // 上游「镜头提示词」等文本输出注入时，提示词框直接显示优化后的真实提示词（只读），
-  // 让用户在生图模块里看到本次实际使用的画面描述；未连接时仍可手动编辑。
+  // 上游文本输入只做只读预览（独立输入条）；提示词框永远是本节点自己的可编辑输入。
+  // 运行时执行器把「上游输入 + 本框内容」拼接为最终提示词（imageGen 执行器 mergedPrompt），
+  // 连线不得夺走输入框（2026-11-19 用户裁决：连线不能改变节点原有的能力）。
   const connectedPrompt = useValue(
     'image-gen connected prompt',
     () => gatherUpstreamText(editor, shape.id, 'in-text'),
     [editor, shape.id]
   )
   const autoPrompt = connectedPrompt.trim()
-  const displayPrompt = autoPrompt || draft
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
   useEffect(() => {
     const prompt = promptRef.current
@@ -106,7 +106,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
     prompt.style.height = '72px'
     prompt.style.height = `${Math.max(72, Math.min(360, prompt.scrollHeight + 2))}px`
     prompt.style.flex = previousFlex
-  }, [displayPrompt, shape.props.w, options.length])
+  }, [draft, shape.props.w, options.length])
   const engineBusy = ['queued', 'running', 'pending'].includes(shape.props.exec)
 
   useEffect(() => {
@@ -316,27 +316,32 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
           </label>
         )}
       </div>
+      <UpstreamInputPreview
+        text={autoPrompt}
+        title="上游节点的文本输出（只读）；要修改它请编辑上游节点"
+      />
       <ImageMentionPrompt
         ref={promptRef}
         className="gen-prompt"
         references={references}
         rows={4}
-        value={displayPrompt}
-        readOnly={!!autoPrompt}
-        title={autoPrompt ? '提示词来自上游节点，运行后自动填充' : undefined}
+        value={draft}
         spellCheck={false}
-        placeholder="描述要生成的画面…"
-        onValueChange={(text) => {
-          if (!autoPrompt) setDraft(text)
-        }}
+        placeholder={autoPrompt ? '在上方上游输入的基础上补充画面描述…' : '描述要生成的画面…'}
+        onValueChange={setDraft}
         onCommit={(text) => {
-          // 上游注入时提示词框只读，blur 不得把上游正文写回本节点 text（否则下次运行会重复合并）。
-          if (autoPrompt) return
+          // 提交的是本框内容（用户自己的补充/改写），不含上游预览条正文——上游输入
+          // 由执行器运行时拼接，写回本节点 text 会导致重复合并。
           setDraft(text)
           updateText(text)
         }}
         onPointerDown={(e) => e.stopPropagation()}
       />
+      {autoPrompt && (
+        <small className="gen-prompt-merge-hint">
+          运行提示词 = 上游输入 + 本框内容（本框可自由编辑）
+        </small>
+      )}
       <NodePrimaryButton
         className="btn-primary small gen-go"
         disabled={busy || engineBusy}
