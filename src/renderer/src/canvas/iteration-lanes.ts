@@ -577,6 +577,12 @@ function layoutIterationTemplate(
         opacity: 0
       }))
     )
+    // 成员压到最底层：展开时 bringToFront 过的成员折叠后仍叠在紧凑卡上方，
+    // 会拦截画布点击让「展开」按钮失灵（主画布由 getShapeVisibility 豁免命中，
+    // 这里再兜底一层，覆盖没有该回调的画布实例，如组合画布）。
+    if (typeof editor.sendToBack === 'function') {
+      editor.sendToBack(bodies.map((b) => b.id))
+    }
     editor.updateShape({
       id: frameCard.id,
       type: 'node-card',

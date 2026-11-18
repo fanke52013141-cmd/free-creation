@@ -2372,6 +2372,13 @@ export function CanvasEditor({
         dispatchEditNodeTitle(nodeTitle, event)
         return
       }
+      // 循环体模板卡：双击=展开/收起（正文下方的提示文案承诺的行为），
+      // 不能落进 text-content 兜底（模板卡没有文本编辑监听，双击会静默失效）。
+      const templateBody = target.closest<HTMLElement>('.iteration-template-body')
+      if (templateBody && !target.closest('button')) {
+        dispatchNodeDoubleClick(templateBody, event)
+        return
+      }
       const textBody = target.closest<HTMLElement>('[data-node-interactive="text-content"]')
       if (textBody) dispatchEditText(textBody, event)
     }

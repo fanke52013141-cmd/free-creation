@@ -27,6 +27,36 @@ export function showArtifactGroups(editor: Editor): void {
   })
 }
 
-export function artifactShapeVisibility(shape: TLShape): 'hidden' | 'inherit' {
-  return artifactShapeHidden(shape) ? 'hidden' : 'inherit'
+/**
+ * 折叠态循环体成员（opacity:0 收拢进紧凑模板卡）必须对 tldraw 命中测试隐身：
+ * 成员在展开时被 bringToFront 压在框卡上方，折叠后虽不可见但仍占据几何命中，
+ * 画布点击命中的是隐藏成员而非紧凑卡——「展开」按钮永远收不到点击，
+ * 表现为"收起顺畅、展开要点半天"。返回 'hidden' 后 tldraw 不渲染也不参与
+ * getShapeAtPoint 命中（形状保留在 store，执行/布局逻辑不受影响）。
+ */
+export function artifactShapeVisibility(
+  shape: TLShape,
+  editor: Editor
+): 'hidden' | 'inherit' {
+  if (artifactShapeHidden(shape)) return 'hidden'
+  if (shape.type === 'node-card') {
+    const meta = shape.meta as Record<string, unknown>
+    if (meta?.iterationTemplateMember === true && typeof meta.iterationTemplateLoopId === 'string') {
+      const templateCard = editor
+        .getCurrentPageShapes()
+        .find(
+          (s) =>
+            s.type === 'node-card' &&
+            (s.meta as Record<string, unknown>)?.iterationTemplateCard ===
+              meta.iterationTemplateLoopId
+        )
+      if (
+        templateCard &&
+        (templateCard.meta as Record<string, unknown>)?.iterationTemplateExpanded !== true
+      ) {
+        return 'hidden'
+      }
+    }
+  }
+  return 'inherit'
 }

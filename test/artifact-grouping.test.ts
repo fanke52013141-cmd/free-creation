@@ -5,7 +5,11 @@ import { beforeAll, expect, it } from 'vitest'
 import type { Editor, TLShape } from 'tldraw'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 import { deriveGraph } from '@renderer/canvas/graph'
-import { artifactShapeHidden, showArtifactGroups } from '@renderer/canvas/artifact-grouping'
+import {
+  artifactShapeHidden,
+  artifactShapeVisibility,
+  showArtifactGroups
+} from '@renderer/canvas/artifact-grouping'
 beforeAll(registerAllNodeTypes)
 it('旧折叠标记不再隐藏节点；清理后图拓扑不变，可整体撤销', () => {
   const shapes = ['a', 'b'].map((run, index) => ({
@@ -54,4 +58,51 @@ it('旧折叠标记不再隐藏节点；清理后图拓扑不变，可整体撤�
   expect(shapes.every((shape) => shape.meta.resultGroupCollapsed !== true)).toBe(true)
   shapes.splice(0, shapes.length, ...backup)
   expect(shapes.every((shape) => shape.meta.resultGroupCollapsed === true)).toBe(true)
+})
+
+// 循环体模板「展开失灵」回归门禁（2026-11-19）：折叠态成员卡收拢在紧凑卡上方，
+// 必须对 tldraw 命中测试返回 hidden，否则画布点击命中的是隐藏成员，「展开」按钮永远点不到。
+it('折叠态循环体成员对命中测试隐身；展开态与普通节点不受影响', () => {
+  const loopId = 'shape:loop1'
+  const templateCardId = 'shape:tpl1'
+  const templateCard = {
+    id: templateCardId,
+    type: 'node-card',
+    props: { nodeType: 'text' },
+    meta: { iterationTemplateCard: loopId, iterationTemplateExpanded: false }
+  }
+  const collapsedMember = {
+    id: 'shape:member1',
+    type: 'node-card',
+    props: { nodeType: 'ai-process' },
+    meta: { iterationTemplateMember: true, iterationTemplateLoopId: loopId }
+  }
+  const expandedMember = {
+    ...collapsedMember,
+    id: 'shape:member2'
+  }
+  const plainNode = { id: 'shape:plain', type: 'node-card', props: { nodeType: 'text' }, meta: {} }
+  const shapes = [templateCard, collapsedMember, expandedMember, plainNode]
+  const editor = {
+    getCurrentPageShapes: () => shapes,
+    getShape: (id: string) => shapes.find((s) => s.id === id)
+  } as unknown as Editor
+  // 折叠态：成员隐身（不参与 getShapeAtPoint 命中），框卡与普通节点不受影响
+  expect(artifactShapeVisibility(collapsedMember as unknown as TLShape, editor)).toBe('hidden')
+  expect(artifactShapeVisibility(templateCard as unknown as TLShape, editor)).toBe('inherit')
+  expect(artifactShapeVisibility(plainNode as unknown as TLShape, editor)).toBe('inherit')
+  // 展开态：成员恢复可见可命中
+  templateCard.meta.iterationTemplateExpanded = true
+  expect(artifactShapeVisibility(collapsedMember as unknown as TLShape, editor)).toBe('inherit')
+  // 非节点形状、无主孤儿成员不受影响
+  const orphan = {
+    ...collapsedMember,
+    id: 'shape:member3',
+    meta: { iterationTemplateMember: true, iterationTemplateLoopId: 'shape:ghost' }
+  }
+  shapes.push(orphan)
+  expect(artifactShapeVisibility(orphan as unknown as TLShape, editor)).toBe('inherit')
+  expect(artifactShapeVisibility({ id: 'shape:arrow', type: 'arrow' } as unknown as TLShape, editor)).toBe(
+    'inherit'
+  )
 })
