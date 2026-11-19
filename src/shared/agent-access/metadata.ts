@@ -3,9 +3,14 @@
  * - `OPERATION_REQUIREMENTS`：每个操作需要先满足什么（画布已打开 / Agent 节点 / 已配置模型…）
  * - `ACCESS_ERROR_CATALOG`：可能返回的业务错误码及含义（机器可读）
  *
- * 为什么需要：133 项操作里很多有硬前置（节点库只收 chat/agent 节点、物化要求目标画布已打开、
+ * 为什么需要：很多操作有硬前置（节点库只收 chat/agent 节点、物化要求目标画布已打开、
  * Flow 需要已配置模型）。在此之前 Agent 只能靠试错撞出 `CHAT_NODE_REQUIRED` 这类码，
  * 也无法枚举"我可能收到哪些错误码"。这两张表通过 `capability.list` 暴露给客户端。
+ *
+ * 维护约束（2026-11-20 规范审查）：本表只登记 Registry 实际注册的操作 ID；
+ * 操作总数以 `docs/local-agent-access/generated/contracts.json` 为唯一机器真值，
+ * 文档与注释不得手写"当前共 N 项"式计数。幽灵条目（引用未注册操作）会让
+ * capability.list 自相矛盾，登记新操作时必须同包核对本表。
  */
 
 /** 前置条件键：稳定的机器可读标识（不要用自然语言）。 */
@@ -77,8 +82,6 @@ export const OPERATION_REQUIREMENTS: Record<string, readonly string[]> = {
   'chat.skill.bind': ['openProject', 'chatNode'],
   'chat.read': ['openProject', 'chatNode'],
   'chat.messages': ['openProject', 'chatNode'],
-  'chat.start': ['openProject', 'chatNode', 'verifiedModel'],
-  'chat.cancel': ['openProject', 'chatNode'],
   'director.publish.prepare': ['openProject', 'directorNode', 'shot'],
   'director.publish.status': ['publishRequest'],
   'director.publish.continue': ['publishRequest', 'humanAuthorization'],
@@ -91,7 +94,6 @@ export const OPERATION_REQUIREMENTS: Record<string, readonly string[]> = {
   'provider.package.seal': ['activeLicense', 'recipientCredential'],
   'provider.package.preview': ['activeLicense', 'keyPackage'],
   'provider.package.export': ['activeLicense', 'savedConnection'],
-  'provider.credential.export': ['activeLicense'],
   'environment.videoEngine.install': ['pythonRuntime', 'installConfirm'],
   'media.import': ['project'],
   'media.batchExport': ['project'],
@@ -112,43 +114,151 @@ export const OPERATION_REQUIREMENTS: Record<string, readonly string[]> = {
 
 /** 业务错误码目录：code → 人读含义 + 调用方该做什么。 */
 export const ACCESS_ERROR_CATALOG: readonly { code: string; meaning: string; hint: string }[] = [
-  { code: 'INVALID_INPUT', meaning: '入参不符合契约（缺字段/类型/格式/多余字段）', hint: '按 inputSchema 修正；detail 给出字段路径与原因' },
-  { code: 'UNSUPPORTED_OPERATION', meaning: '该操作不存在或未开放', hint: '以 capability.list 为准，不要猜操作名' },
+  {
+    code: 'INVALID_INPUT',
+    meaning: '入参不符合契约（缺字段/类型/格式/多余字段）',
+    hint: '按 inputSchema 修正；detail 给出字段路径与原因'
+  },
+  {
+    code: 'UNSUPPORTED_OPERATION',
+    meaning: '该操作不存在或未开放',
+    hint: '以 capability.list 为准，不要猜操作名'
+  },
   { code: 'NOT_FOUND', meaning: '目标对象不存在', hint: '先 list/get 确认 ID' },
   { code: 'NODE_NOT_FOUND', meaning: '画布中找不到该节点', hint: '先 graph.get 取现有 nodeId' },
   { code: 'MEDIA_NOT_FOUND', meaning: '媒体不存在或不属于该项目', hint: '先 media.list 确认归属' },
-  { code: 'REVISION_CONFLICT', meaning: '图版本与预期不一致（期间有保存/他人编辑）', hint: '用 error.currentGraphVersion 重试' },
+  {
+    code: 'REVISION_CONFLICT',
+    meaning: '图版本与预期不一致（期间有保存/他人编辑）',
+    hint: '用 error.currentGraphVersion 重试'
+  },
   { code: 'RESOURCE_BUSY', meaning: '同一项目有写入正在进行', hint: '稍后用相同幂等键重试' },
-  { code: 'ACTIVE_PROJECT_REQUIRED', meaning: '该操作要求目标项目是当前打开的画布', hint: '先 project.open' },
-  { code: 'FLOW_AGENTS_UNAVAILABLE', meaning: 'Flow 宿主未在此实例中运行', hint: '确认桌面应用已启动' },
-  { code: 'AGENT_NODE_MISSING', meaning: '目标节点不是 Agent 节点', hint: '先用 node.type.get 确认类型' },
-  { code: 'AGENT_TASK_MISSING', meaning: '该 Agent 节点还没有持久化任务', hint: '先 flowAgent.run start' },
-  { code: 'AGENT_GOAL_REQUIRED', meaning: 'Agent 缺少目标配置', hint: '先在 GUI 或 config 里填写目标' },
-  { code: 'CHAT_NODE_REQUIRED', meaning: '该操作只接受 chat/agent 节点', hint: '节点库模板只对这两类开放' },
-  { code: 'MODEL_BINDING_NOT_FOUND', meaning: '该功能没有可用的模型绑定', hint: '先 model.binding.save，并确保模型已验证' },
-  { code: 'MODEL_NOT_VERIFIED', meaning: '模型未通过能力验证', hint: '在 GUI 完成验证（外部不能自行验证成可用）' },
-  { code: 'NETWORK_CONFIRM_REQUIRED', meaning: '该操作会访问供应商，必须显式确认', hint: '传 confirmNetwork: true' },
-  { code: 'COST_CONFIRM_REQUIRED', meaning: '该操作可能计费，必须显式确认', hint: '传 confirmCost: true' },
-  { code: 'INSTALL_CONFIRM_REQUIRED', meaning: '安装会下载依赖，必须显式确认', hint: '传 confirmInstall: true' },
-  { code: 'IMPACT_CONFIRM_REQUIRED', meaning: '删除等破坏性操作需要预检 token', hint: '先调 delete.precheck 拿 impactToken' },
-  { code: 'PATH_NOT_ALLOWED', meaning: '路径不在受控目录内', hint: '只使用受控导出/导入目录内的文件' },
+  {
+    code: 'ACTIVE_PROJECT_REQUIRED',
+    meaning: '该操作要求目标项目是当前打开的画布',
+    hint: '先 project.open'
+  },
+  {
+    code: 'FLOW_AGENTS_UNAVAILABLE',
+    meaning: 'Flow 宿主未在此实例中运行',
+    hint: '确认桌面应用已启动'
+  },
+  {
+    code: 'AGENT_NODE_MISSING',
+    meaning: '目标节点不是 Agent 节点',
+    hint: '先用 node.type.get 确认类型'
+  },
+  {
+    code: 'AGENT_TASK_MISSING',
+    meaning: '该 Agent 节点还没有持久化任务',
+    hint: '先 flowAgent.run start'
+  },
+  {
+    code: 'AGENT_GOAL_REQUIRED',
+    meaning: 'Agent 缺少目标配置',
+    hint: '先在 GUI 或 config 里填写目标'
+  },
+  {
+    code: 'CHAT_NODE_REQUIRED',
+    meaning: '该操作只接受 chat/agent 节点',
+    hint: '节点库模板只对这两类开放'
+  },
+  {
+    code: 'MODEL_BINDING_NOT_FOUND',
+    meaning: '该功能没有可用的模型绑定',
+    hint: '先 model.binding.save，并确保模型已验证'
+  },
+  {
+    code: 'MODEL_NOT_VERIFIED',
+    meaning: '模型未通过能力验证',
+    hint: '在 GUI 完成验证（外部不能自行验证成可用）'
+  },
+  {
+    code: 'NETWORK_CONFIRM_REQUIRED',
+    meaning: '该操作会访问供应商，必须显式确认',
+    hint: '传 confirmNetwork: true'
+  },
+  {
+    code: 'COST_CONFIRM_REQUIRED',
+    meaning: '该操作可能计费，必须显式确认',
+    hint: '传 confirmCost: true'
+  },
+  {
+    code: 'INSTALL_CONFIRM_REQUIRED',
+    meaning: '安装会下载依赖，必须显式确认',
+    hint: '传 confirmInstall: true'
+  },
+  {
+    code: 'IMPACT_CONFIRM_REQUIRED',
+    meaning: '删除等破坏性操作需要预检 token',
+    hint: '先调 delete.precheck 拿 impactToken'
+  },
+  {
+    code: 'PATH_NOT_ALLOWED',
+    meaning: '路径不在受控目录内',
+    hint: '只使用受控导出/导入目录内的文件'
+  },
   { code: 'INPUT_NOT_FOUND', meaning: '受控目录内找不到该输入文件', hint: '确认文件名与位置' },
   { code: 'OUTPUT_EXISTS', meaning: '目标文件已存在（不覆盖）', hint: '换一个文件名' },
-  { code: 'STRUCTURE_SNAPSHOT_MISSING', meaning: '项目没有已保存的画布快照', hint: '先在 GUI 打开并保存一次' },
-  { code: 'KEYS_SERVICE_UNAVAILABLE', meaning: '凭据包服务未就绪（未激活/无密钥库）', hint: '确认已激活' },
+  {
+    code: 'STRUCTURE_SNAPSHOT_MISSING',
+    meaning: '项目没有已保存的画布快照',
+    hint: '先在 GUI 打开并保存一次'
+  },
+  {
+    code: 'KEYS_SERVICE_UNAVAILABLE',
+    meaning: '凭据包服务未就绪（未激活/无密钥库）',
+    hint: '确认已激活'
+  },
   { code: 'DIAGNOSTICS_UNAVAILABLE', meaning: '诊断存储不可用或降级', hint: '检查数据目录可写' },
   { code: 'STORAGE_UNAVAILABLE', meaning: '项目存储不可用', hint: '检查数据目录可写' },
-  { code: 'STORAGE_INCONSISTENT', meaning: '落盘结果与回执不一致', hint: '重新读取核对，不要假定成功' },
-  { code: 'IDEMPOTENCY_CONFLICT', meaning: '同一幂等键被用于不同请求', hint: '每次新请求用新幂等键' },
+  {
+    code: 'STORAGE_INCONSISTENT',
+    meaning: '落盘结果与回执不一致',
+    hint: '重新读取核对，不要假定成功'
+  },
+  {
+    code: 'IDEMPOTENCY_CONFLICT',
+    meaning: '同一幂等键被用于不同请求',
+    hint: '每次新请求用新幂等键'
+  },
   { code: 'IDEMPOTENCY_EXPIRED', meaning: '幂等记录已过期', hint: '用新幂等键重试' },
-  { code: 'OUTCOME_UNKNOWN', meaning: '已准入但结果未知（不能假定失败）', hint: '用 run.get / list 核对真实结果' },
+  {
+    code: 'OUTCOME_UNKNOWN',
+    meaning: '已准入但结果未知（不能假定失败）',
+    hint: '用 run.get / list 核对真实结果'
+  },
   { code: 'PUBLISH_DENIED', meaning: '人工拒绝了发布', hint: '不要重放；征求新授权' },
-  { code: 'VERSION_IMMUTABLE', meaning: '同版本已发布且内容不同，不能覆盖', hint: '递增主版本后重新发布' },
+  {
+    code: 'VERSION_IMMUTABLE',
+    meaning: '同版本已发布且内容不同，不能覆盖',
+    hint: '递增主版本后重新发布'
+  },
   { code: 'VERSION_NOT_NEWER', meaning: '新版本号不高于当前最新发布', hint: '使用更大的主版本号' },
-  { code: 'DRAFT_REVISION_CONFLICT', meaning: '草稿修订与预期不一致（期间有保存/他人编辑）', hint: '重新读取草稿 revision 后重试；本次不会覆盖草稿' },
-  { code: 'PUBLISH_INVALID', meaning: '发布契约校验未通过', hint: '按 issues 修正端口、映射、依赖或预算后重试' },
-  { code: 'CAPABILITY_IN_USE', meaning: '节点流仍被画布实例或其他发布版本嵌套引用，不能物理删除', hint: '先用 composite.references 查看引用；移除实例/引用后再删，或改用 composite.archive 归档' },
-  { code: 'UPGRADE_BLOCKED', meaning: '实例升级预检未通过（接口不兼容或目标 manifest 无效）', hint: '按 impact.breaking/issues 调整连线或目标版本；原实例保持不变' },
-  { code: 'UNKNOWN_NODE_TYPE', meaning: '节点类型不存在或不可创建', hint: '以 node.type.list 为准' },
+  {
+    code: 'DRAFT_REVISION_CONFLICT',
+    meaning: '草稿修订与预期不一致（期间有保存/他人编辑）',
+    hint: '重新读取草稿 revision 后重试；本次不会覆盖草稿'
+  },
+  {
+    code: 'PUBLISH_INVALID',
+    meaning: '发布契约校验未通过',
+    hint: '按 issues 修正端口、映射、依赖或预算后重试'
+  },
+  {
+    code: 'CAPABILITY_IN_USE',
+    meaning: '节点流仍被画布实例或其他发布版本嵌套引用，不能物理删除',
+    hint: '先用 composite.references 查看引用；移除实例/引用后再删，或改用 composite.archive 归档'
+  },
+  {
+    code: 'UPGRADE_BLOCKED',
+    meaning: '实例升级预检未通过（接口不兼容或目标 manifest 无效）',
+    hint: '按 impact.breaking/issues 调整连线或目标版本；原实例保持不变'
+  },
+  {
+    code: 'UNKNOWN_NODE_TYPE',
+    meaning: '节点类型不存在或不可创建',
+    hint: '以 node.type.list 为准'
+  },
   { code: 'EMPTY_NODE_VISIBILITY', meaning: '可见集不能为空', hint: '至少保留一个类型' }
 ]

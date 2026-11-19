@@ -19006,7 +19006,7 @@
       "operationId": "composite.execute",
       "operationVersion": 1,
       "effect": "execute",
-      "description": "headless 执行已发布节点流：不依赖项目/画布，按公开输入端口喂值，异步运行返回 runId；终态与输出经 composite.run.get 读取。媒体输入按 mediaId 全局解析",
+      "description": "headless 执行已发布节点流：不依赖项目/画布。inputs 按公开输入端口的完整端口 ID 喂值（portId 写 `in-<公开输入id>`，如 in-copy）；返回 runId，终态与输出经 composite.run.get / composite.execute.wait 读取。**键约定**：outputs / outputValues 以裸公开输出 id 为键（如 polished），而 outputPorts 摘要与画布端口才带 out- 前缀（out-polished）；resubmit 提交值同样用裸 id。**计费**：运行会真实执行流内模型/联网节点，必须显式 confirmCost=true 才发起（否则 COST_CONFIRM_REQUIRED，不启动任何运行）",
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -19115,6 +19115,9 @@
               ],
               "additionalProperties": false
             }
+          },
+          "confirmCost": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -19229,7 +19232,7 @@
       "operationId": "composite.execute.wait",
       "operationVersion": 1,
       "effect": "read",
-      "description": "阻塞等待 headless 运行到达终态：返回状态/公开输出/失败原因；超时返回当前状态",
+      "description": "阻塞等待 headless 运行到达终态：返回状态/公开输出/失败原因；超时返回当前状态。outputs 以裸公开输出 id 为键（不带 out- 前缀），outputPorts 摘要才是 out-<id>",
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",

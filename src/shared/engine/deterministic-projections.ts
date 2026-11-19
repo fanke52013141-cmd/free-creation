@@ -7,8 +7,6 @@ import { validateNodeSchema } from '../node-schemas'
 import { projectCompositeOutputs } from '../composite/outputs'
 import { projectHumanTaskOutputs } from './executors/humanTask'
 
-
-
 import {
   projectWebsiteOutputsShared,
   projectCodeOutputsShared,
@@ -47,7 +45,9 @@ function flowTextResult(shape: NodeShape): string | null {
 export const projectTextOutputs = (shape: NodeShape): RawNodeOutputs => {
   const flowText = flowTextResult(shape)
   if (flowText) return { 'out-text': { kind: 'text', text: flowText } }
-  return shape.props.text.trim() ? { 'out-text': { kind: 'text', text: shape.props.text.trim() } } : {}
+  return shape.props.text.trim()
+    ? { 'out-text': { kind: 'text', text: shape.props.text.trim() } }
+    : {}
 }
 
 export const projectJsonOutputs = (shape: NodeShape): RawNodeOutputs => {
@@ -103,8 +103,28 @@ export const DETERMINISTIC_PROJECTIONS = {
   composite: projectCompositeOutputs,
   text: projectTextOutputs,
   json: projectJsonOutputs,
-  processor: projectProcessorOutputs
+  processor: projectProcessorOutputs,
+  // 2026-11-20 规范审查（A-⚠6）：file 此前在 main 侧镜像表缺失，output.get 会
+  // fail-closed；补齐与 GUI projectFileOutputs 同源的投影（out-file + 抽出的 out-text）。
+  file: projectFileOutputs
 } as const
+
+/** 文件资产节点：out-file 永远来自 props（导入即真值）；导入时抽出的正文同时投影 out-text。 */
+export function projectFileOutputs(shape: NodeShape): RawNodeOutputs {
+  const base = shape.props.mediaPath
+    ? {
+        'out-file': {
+          kind: 'file' as const,
+          mediaId: shape.props.mediaId,
+          mediaPath: shape.props.mediaPath,
+          mime: shape.props.mediaMime,
+          ...(shape.props.title ? { name: shape.props.title } : {})
+        }
+      }
+    : {}
+  const text = typeof shape.props.text === 'string' ? shape.props.text : ''
+  return text.trim() ? { ...base, 'out-text': { kind: 'text' as const, text } } : base
+}
 
 function latestResultMediaOutput(
   shape: NodeShape,
@@ -184,9 +204,7 @@ export function projectVideoClipOutputs(shape: NodeShape): RawNodeOutputs {
       : null
   if (run && run.status === 'failed') return {}
   const currentRunResults =
-    run && typeof run.runId === 'string'
-      ? results.filter((item) => item.runId === run.runId)
-      : []
+    run && typeof run.runId === 'string' ? results.filter((item) => item.runId === run.runId) : []
   const effective = currentRunResults.length > 0 ? currentRunResults : results
   const byKind = (kind: 'video' | 'audio'): (typeof results)[number] | undefined =>
     effective.filter((item) => (item.mime ?? '').startsWith(`${kind}/`)).at(-1)

@@ -66,7 +66,11 @@ async function main(): Promise<void> {
           annotations: {
             readOnlyHint: spec.effect === 'read',
             destructiveHint: spec.effect !== 'read',
-            idempotentHint: true,
+            // 2026-11-20 规范审查：idempotentHint 必须如实声明——只有只读操作天然幂等；
+            // 写/删/执行类操作的重复调用会产生新副作用（如重复执行、NOT_FOUND），
+            // 其幂等性来自请求级 idempotencyKey（重复提交同一 key 返回同一结果），
+            // 不能向 MCP 客户端虚报操作级幂等。
+            idempotentHint: spec.effect === 'read',
             openWorldHint: false
           }
         }))
@@ -198,7 +202,8 @@ async function main(): Promise<void> {
       const actualPort = address && typeof address === 'object' ? address.port : port
       // 发现信息只走 stdout：本机客户端据此连接。
       process.stdout.write(
-        JSON.stringify({ transport: 'sse', url: `http://127.0.0.1:${actualPort}/sse`, token }) + '\n'
+        JSON.stringify({ transport: 'sse', url: `http://127.0.0.1:${actualPort}/sse`, token }) +
+          '\n'
       )
       return
     }

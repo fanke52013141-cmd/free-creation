@@ -132,4 +132,17 @@ describe('组合能力 Agent 契约（P1 对等）', () => {
       'REQUIRED_INPUT_UNBOUND'
     )
   })
+
+  it('composite.execute 计费确认门（2026-11-20 G6）：confirmCost 进契约，未确认由 dispatch 拒绝', () => {
+    const schema = COMPOSITE_OPERATIONS['composite.execute'].input
+    const base = { capabilityId: 'copy-polish' }
+    expect(schema.safeParse(base).success).toBe(true)
+    expect(schema.safeParse({ ...base, confirmCost: true }).success).toBe(true)
+    expect(schema.safeParse({ ...base, unknown: 1 }).success).toBe(false)
+    // 描述必须写死键约定与计费口径，Agent 才能不试错地正确取 outputs。
+    const description = COMPOSITE_OPERATIONS['composite.execute'].description ?? ''
+    expect(description).toContain('in-<公开输入id>')
+    expect(description).toContain('confirmCost')
+    expect(description).toContain('裸公开输出 id')
+  })
 })

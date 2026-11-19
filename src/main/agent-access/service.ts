@@ -485,6 +485,14 @@ export class LocalAccessService {
       } else if (operationId === 'composite.execute') {
         // headless 节点流执行：不依赖项目/画布。解析已发布 manifest → 合成作用域 →
         // 渲染层隔离 editor 异步运行；终态与输出经台账（composite.run.get）回填。
+        // 2026-11-20 规范审查（G6）：运行会真实执行流内模型/联网节点，与 provider 族
+        // 同一口径——必须显式 confirmCost=true 才发起，否则拒绝且不启动任何运行。
+        if (input.confirmCost !== true)
+          throw new AccessFailure(
+            'COST_CONFIRM_REQUIRED',
+            'precheck',
+            'headless flow may invoke paid model calls; pass confirmCost=true to authorize'
+          )
         if (!this.options.desktop)
           throw new AccessFailure(
             'DESKTOP_UNAVAILABLE',

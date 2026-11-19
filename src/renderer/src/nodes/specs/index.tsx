@@ -850,7 +850,8 @@ export function registerBaseNodeTypes(): void {
     defaultSize: { w: 340, h: 260 },
     sizePolicy: 'standard',
     creatable: false,
-    description: '调试好的节点组合发布成的固定版本能力：公开输入输出、内部图可展开检查，可继续连线。',
+    description:
+      '调试好的节点组合发布成的固定版本能力：公开输入输出、内部图可展开检查，可继续连线。',
     category: 'ai',
     ports: { in: [], out: [] },
     resolvePorts: (shape) => {
@@ -860,8 +861,7 @@ export function registerBaseNodeTypes(): void {
         const manifest =
           parsed.manifest ??
           ((shape.meta as Record<string, unknown> | undefined)?.compositeManifest as
-            | CompositeManifest
-            | undefined)
+            CompositeManifest | undefined)
         if (!manifest) return { in: [], out: [] }
         return {
           in: manifest.inputs.map((input) => ({
@@ -984,6 +984,9 @@ export function registerExtendedNodeTypes(): void {
       out: [output('out-json', '数据', 'json', '校验并格式化后的结构化值。', { schema: JSON_ANY })]
     },
     projectOutputs: projectJsonOutputs,
+    // 2026-11-20 复核：json 保持缺省 run 型——投影虽只读 props.text，但产品裁决要求
+    // 「失败运行不得向下游暴露输出」（manual-run.test.ts 用 json 作闸门 fixture）；
+    // document 的必要条件不充分，注册时不得仅凭投影来源声明 document。
     executor: jsonExecutor,
     Body: JsonBody
   })
@@ -1153,6 +1156,8 @@ export function registerExtendedNodeTypes(): void {
       ]
     },
     projectOutputs: projectStoryboardOutputs,
+    // 2026-11-20 双表对齐：分镜板投影只读 props/config（表格即真值），与 main 侧一致。
+    outputSource: 'document',
     executor: storyboardExecutor,
     Body: StoryboardBody
   })

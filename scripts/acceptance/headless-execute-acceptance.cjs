@@ -90,10 +90,18 @@ const manifest = {
     const status = ok(await cli(dir, ['app', 'status'], {}), 'STATUS')
     check('app.status 就绪')
 
-    // 3. headless 执行（无项目，按公开输入端口喂值）
-    const exec = ok(await cli(dir, ['composite', 'execute'], {
+    // 3. headless 执行（无项目，按公开输入端口喂值；计费确认门 2026-11-20）
+    const execNoGate = await cli(dir, ['composite', 'execute'], {
       capabilityId: 'headless-copy',
       inputs: [{ portId: 'in-copy', value: { kind: 'text', text: '外部输入文本' } }]
+    })
+    if (execNoGate.response?.error?.code !== 'COST_CONFIRM_REQUIRED')
+      throw new Error(`COST_GATE_MISSING:${JSON.stringify(execNoGate.response)}`)
+    check('未带 confirmCost → COST_CONFIRM_REQUIRED 拒绝（计费确认门）')
+    const exec = ok(await cli(dir, ['composite', 'execute'], {
+      capabilityId: 'headless-copy',
+      inputs: [{ portId: 'in-copy', value: { kind: 'text', text: '外部输入文本' } }],
+      confirmCost: true
     }), 'EXECUTE')
     if (!exec.runId || exec.status !== 'running') throw new Error(`EXECUTE_BAD:${JSON.stringify(exec)}`)
     check(`composite.execute 受理 runId=${exec.runId.slice(0, 8)}（无项目）`)
@@ -112,7 +120,7 @@ const manifest = {
     check('composite.run.get 按 runId 全局读取终态（无项目）')
 
     // 6. 缺必填输入 → 应失败（INPUT_REQUIRED）
-    const execNoInput = ok(await cli(dir, ['composite', 'execute'], { capabilityId: 'headless-copy' }), 'EXEC_NOINPUT')
+    const execNoInput = ok(await cli(dir, ['composite', 'execute'], { capabilityId: 'headless-copy', confirmCost: true }), 'EXEC_NOINPUT')
     const waitedNoInput = ok(await cli(dir, ['composite', 'execute', 'wait'], { runId: execNoInput.runId, timeoutMs: 30000 }), 'WAIT_NOINPUT')
     if (waitedNoInput.status !== 'failed') throw new Error(`NOINPUT_SHOULD_FAIL:${JSON.stringify(waitedNoInput)}`)
     check('缺必填输入 → 运行 failed（输入契约守卫）')

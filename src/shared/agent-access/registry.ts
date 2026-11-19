@@ -148,7 +148,8 @@ export const ACCESS_OPERATIONS = {
   },
   'node.runPlan': {
     effect: 'read',
-    description: '预检当前打开画布的目标节点及上游闭包，列出可确定的缺失输入及端口类型。只读，不调用模型。',
+    description:
+      '预检当前打开画布的目标节点及上游闭包，列出可确定的缺失输入及端口类型。只读，不调用模型。',
     input: project.extend({ nodeIds: z.array(nodeId).min(1).max(NODE_EXECUTE_MAX_NODES) }).strict()
   },
   'node.execute': {
@@ -199,7 +200,8 @@ export const ACCESS_OPERATIONS = {
   },
   'media.list': {
     effect: 'read',
-    description: '分页读取项目受控媒体摘要（kind/mime/尺寸/相对引用路径），不返回绝对路径或文件正文',
+    description:
+      '分页读取项目受控媒体摘要（kind/mime/尺寸/相对引用路径），不返回绝对路径或文件正文',
     input: project
       .extend({
         offset: z.number().int().min(0).max(100000).default(0),
@@ -224,7 +226,12 @@ export const ACCESS_OPERATIONS = {
     description:
       '分页读取指定会话的消息正文（role/content/意图/附件引用）；助手回复是模型真实输出，不可伪造',
     input: project
-      .extend({ nodeId, sessionId: z.string().min(1).max(80).optional(), offset: z.number().int().min(0).max(10000).default(0), limit: z.number().int().min(1).max(200).default(50) })
+      .extend({
+        nodeId,
+        sessionId: z.string().min(1).max(80).optional(),
+        offset: z.number().int().min(0).max(10000).default(0),
+        limit: z.number().int().min(1).max(200).default(50)
+      })
       .strict()
   },
   'model.list': {
@@ -380,11 +387,11 @@ export type AccessOperationId = keyof typeof ACCESS_OPERATIONS
 // 2026-11-08 F7 独立验收后，完整项目包/结构包/资源包导入与资源包导出已解除阻断：
 // 它们复用 GUI 同一 store 服务，并且外部入口只接受受控导出目录内的包文件
 // （暂存、媒体 ID/相对路径全量重映射、凭据剥离、失败清理、sha256/字节回执）。
-// 仍阻断的两项不在本包范围，需要单独的安全设计与验收：
-// - keys.importProviders：供应商凭据包导入会越过密钥库/设备授权边界，涉及明文解密与
-//   设备绑定，必须按 F9「受控凭据配置」独立设计，不能借项目/资源包通道旁路。
-// - workspace.import：工作区导入涉及跨项目合并、冲突裁决与运行/审核事实边界，
-//   尚无与 GUI 同源的合并服务，须在 F8/F9 单独验收后再开放。
+// 凭据导入的**受控正道**是 provider.package.importProviders（F9：license 门 +
+// GUI 人工确认后才写入）。下面两项是**永不开注册**的预留阻断位（自检会拒绝
+// 注册同名操作），防止旧设想借旁路复活；其安全设计责任已由 F9 受控路径承接：
+// - keys.importProviders：旧设想的直连凭据导入，会越过密钥库/设备授权边界。
+// - workspace.import：旧设想的工作区合并导入，跨项目冲突裁决无同源服务。
 const PACKAGE_IMPORT_BLOCKLIST: ReadonlySet<string> = new Set([
   'keys.importProviders',
   'workspace.import'
@@ -540,7 +547,15 @@ export const ACCESS_OUTPUTS = {
         projectId: identifier,
         taskId: z.string().max(160),
         source: z.literal('flow-agent-task'),
-        state: z.enum(['ready', 'running', 'waiting', 'blocked', 'completed', 'failed', 'cancelled']),
+        state: z.enum([
+          'ready',
+          'running',
+          'waiting',
+          'blocked',
+          'completed',
+          'failed',
+          'cancelled'
+        ]),
         waitRevision: z.number().int().nonnegative(),
         waitKind: z.enum(['human', 'reconcile']).nullable(),
         reconcileRequired: z.boolean(),
@@ -654,11 +669,23 @@ export const ACCESS_OUTPUTS = {
       moved: z.number().int().nonnegative()
     })
     .strict(),
-  'node.runPlan': z.object({
-    graphVersion: z.number().int().nonnegative(),
-    nodeCount: z.number().int().nonnegative(),
-    missing: z.array(z.object({ nodeId, title: z.string(), portId: z.string(), label: z.string(), type: z.string() }).strict())
-  }).strict(),
+  'node.runPlan': z
+    .object({
+      graphVersion: z.number().int().nonnegative(),
+      nodeCount: z.number().int().nonnegative(),
+      missing: z.array(
+        z
+          .object({
+            nodeId,
+            title: z.string(),
+            portId: z.string(),
+            label: z.string(),
+            type: z.string()
+          })
+          .strict()
+      )
+    })
+    .strict(),
   'node.execute': z
     .object({
       projectId: identifier,
@@ -710,16 +737,20 @@ export const ACCESS_OUTPUTS = {
       modelKey: z.string().max(200),
       system: z.string().max(2000),
       activeConversationId: z.string().max(80).nullable(),
-      conversations: z.array(
-        z.object({
-          id: z.string().max(80),
-          title: z.string().max(120),
-          messageCount: z.number().int().nonnegative(),
-          createdAt: z.number(),
-          updatedAt: z.number(),
-          active: z.boolean()
-        }).strict()
-      ).max(50)
+      conversations: z
+        .array(
+          z
+            .object({
+              id: z.string().max(80),
+              title: z.string().max(120),
+              messageCount: z.number().int().nonnegative(),
+              createdAt: z.number(),
+              updatedAt: z.number(),
+              active: z.boolean()
+            })
+            .strict()
+        )
+        .max(50)
     })
     .strict(),
   'chat.messages': z

@@ -1183,7 +1183,7 @@ export const GENERATED_NODE_CONTRACTS: NodeContractRecord[] = [
     },
     "sizePolicy": "content",
     "executionMode": "auto",
-    "outputSource": "run",
+    "outputSource": "document",
     "initialConfig": null,
     "dynamicPorts": false,
     "ports": {

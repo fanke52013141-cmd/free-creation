@@ -59,12 +59,22 @@ export const outputValueDto = z
   })
   .strict()
 
-/** main 侧输出投影：持久化节点 + 快照 meta → 共享确定性投影。仅覆盖已登记类型。 */
+/**
+ * main 侧输出投影：持久化节点 + 快照 meta → 共享确定性投影。仅覆盖已登记类型。
+ *
+ * 2026-11-20 规范审查（A-❌/⚠6）：本表的 outputSource 必须与 renderer 注册表
+ * （specs 的 outputSource 声明）同口径——image/audio/video-asset/file 的投影
+ * 读 props（mediaId/mediaPath 即真值），GUI 侧声明 document，这里此前误标 run
+ * 且漏了 file。两表的一致性由 test/output-source-parity.test.ts 把守。
+ * chat 有意不登记：其输出走 chat.read/chat.messages 读取，不走 output.get。
+ * json 复核为 run（与 GUI 缺省一致）：「投影只读 props」只是 document 的必要条件，
+ * 产品裁决（manual-run.test.ts 闸门 fixture）要求失败运行不得向下游暴露输出。
+ */
 export const DETERMINISTIC_OUTPUT_SOURCES: Record<string, 'document' | 'run' | 'manual-publish'> = {
   text: 'document',
-  json: 'document',
+  json: 'run',
   processor: 'run',
-  image: 'run',
+  image: 'document',
   'image-gen': 'run',
   'image-edit': 'run',
   'image-crop': 'run',
@@ -81,12 +91,13 @@ export const DETERMINISTIC_OUTPUT_SOURCES: Record<string, 'document' | 'run' | '
   iterate: 'run',
   director: 'manual-publish',
   'ai-process': 'run',
-  audio: 'run',
+  audio: 'document',
   speech: 'run',
   tts: 'run',
   video: 'run',
-  'video-asset': 'run',
+  'video-asset': 'document',
   timeline: 'run',
+  file: 'document',
   agent: 'run',
   'ai-review': 'run',
   // C3：状态机正式 out-state 来自运行推进后的持久化实例。
@@ -141,23 +152,35 @@ export function buildProjectionShape(file: ProjectFile, nodeId: string): Project
 }
 
 /** Values supplied for this run only. Media references always belong to the active project. */
-export const WorkflowInputSchema = z.object({
-  nodeId: z.string().min(1).max(180),
-  portId: z.string().min(1).max(100),
-  value: z.discriminatedUnion('kind', [
-    z.object({ kind: z.literal('text'), text: z.string().trim().min(1).max(100000) }).strict(),
-    z.object({ kind: z.literal('markdown'), text: z.string().trim().min(1).max(100000) }).strict(),
-    z.object({ kind: z.literal('json'), data: z.unknown().refine((value) => value !== undefined) }).strict(),
-    z.object({ kind: z.literal('media'), mediaId: z.string().min(1).max(180) }).strict()
-  ])
-}).strict()
+export const WorkflowInputSchema = z
+  .object({
+    nodeId: z.string().min(1).max(180),
+    portId: z.string().min(1).max(100),
+    value: z.discriminatedUnion('kind', [
+      z.object({ kind: z.literal('text'), text: z.string().trim().min(1).max(100000) }).strict(),
+      z
+        .object({ kind: z.literal('markdown'), text: z.string().trim().min(1).max(100000) })
+        .strict(),
+      z
+        .object({
+          kind: z.literal('json'),
+          data: z.unknown().refine((value) => value !== undefined)
+        })
+        .strict(),
+      z.object({ kind: z.literal('media'), mediaId: z.string().min(1).max(180) }).strict()
+    ])
+  })
+  .strict()
 
-export const WorkflowInputsSchema = z.array(WorkflowInputSchema).max(64).superRefine((inputs, ctx) => {
-  const keys = new Set<string>()
-  for (const [index, input] of inputs.entries()) {
-    const key = JSON.stringify([input.nodeId, input.portId])
-    if (keys.has(key)) ctx.addIssue({ code: 'custom', path: [index], message: '输入端口重复' })
-    keys.add(key)
-  }
-})
+export const WorkflowInputsSchema = z
+  .array(WorkflowInputSchema)
+  .max(64)
+  .superRefine((inputs, ctx) => {
+    const keys = new Set<string>()
+    for (const [index, input] of inputs.entries()) {
+      const key = JSON.stringify([input.nodeId, input.portId])
+      if (keys.has(key)) ctx.addIssue({ code: 'custom', path: [index], message: '输入端口重复' })
+      keys.add(key)
+    }
+  })
 export type WorkflowInput = z.infer<typeof WorkflowInputSchema>

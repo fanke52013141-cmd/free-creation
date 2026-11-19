@@ -10,8 +10,9 @@ import { exportProviders } from '../gateway/provider-transfer'
 import { keysPackageAccessPort } from './keys-bridge'
 import { DesktopAccessError } from './desktop'
 
+// 2026-11-20 规范审查：移除幽灵条目 provider.credential.export——该 ID 从未注册进
+// Registry，凭据导出的受控路径是 provider.package.seal/preview/export（F9 口径）。
 export const KEY_PACKAGE_OPERATION_IDS: ReadonlySet<AccessOperationId> = new Set([
-  'provider.credential.export',
   'provider.package.seal',
   'provider.package.preview'
 ] as AccessOperationId[])
@@ -45,7 +46,8 @@ function writeControlled(
   if (bytes.length <= 0) refuse('EXPORT_FAILED', 'empty-package')
   // 排他创建：并发下也不会覆盖已有文件。
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- 排他写文件需同步 fs；此处 require 与模块其余 ESM 导入并存
-  const { writeFileSync, openSync, closeSync, fsyncSync } = require('node:fs') as typeof import('node:fs')
+  const { writeFileSync, openSync, closeSync, fsyncSync } =
+    require('node:fs') as typeof import('node:fs')
   const fd = openSync(target, 'wx')
   try {
     writeFileSync(fd, bytes)
@@ -85,19 +87,25 @@ export async function runKeyPackageOperation(
   }
 
   const port = keysPackageAccessPort()
-  if (!port) refuse('KEYS_SERVICE_UNAVAILABLE', 'key package service is not published in this instance')
+  if (!port)
+    refuse('KEYS_SERVICE_UNAVAILABLE', 'key package service is not published in this instance')
 
   if (operationId === 'provider.package.seal') {
     // 接收凭证从受控目录读（不接受任意路径），再交给同一服务封包。
     const recipientFile = join(context.exportRoot, input.recipientCredentialFileName as string)
-    if (!existsSync(recipientFile)) refuse('INPUT_NOT_FOUND', String(input.recipientCredentialFileName))
+    if (!existsSync(recipientFile))
+      refuse('INPUT_NOT_FOUND', String(input.recipientCredentialFileName))
     const recipientCredentialText = readFileSync(recipientFile, 'utf8')
     const sealed = await port.sealKeyPackageForRecipient({
       password: input.password as string,
       recipientCredentialText,
       connectionIds: input.connectionIds as string[]
     })
-    const written = writeControlled(context.exportRoot, input.fileName as string, sealed.packageText)
+    const written = writeControlled(
+      context.exportRoot,
+      input.fileName as string,
+      sealed.packageText
+    )
     return {
       ...written,
       packageId: sealed.packageId,
