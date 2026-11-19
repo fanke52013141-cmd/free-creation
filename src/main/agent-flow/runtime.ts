@@ -471,9 +471,15 @@ export function createAgentRuntime(options: {
         telemetry('admission_started', 'task-bind')
         try {
           assertRevision(options.snapshot)
+          // 2026-11-20 规范审查：与 desktop-host.bind 的准入白名单同口径（C2 交付时
+          // 只放宽了 desktop 侧，这里留下沉睡守卫会把带 web.search@1 的专家在
+          // task-bind 分支误拒）。specialist = node.execute@1 + 可选 web.search@1；
+          // 必选性由 desktop 准入（AGENT_TOOL_REQUIRED）与 skills.bind 精确报错承接，
+          // 这里只做"不得出现白名单之外的工具"。
           if (
             options.snapshot.config.tools.some(
-              (tool) => tool.id !== 'node.execute' || tool.version !== '1'
+              (tool) =>
+                !((tool.id === 'node.execute' || tool.id === 'web.search') && tool.version === '1')
             )
           )
             throw new AgentRuntimeError('AGENT_TOOL_UNSUPPORTED', 'task-bind')

@@ -891,6 +891,16 @@ describe('C3 bounded LangGraph task loop', () => {
     const unknown = snapshot()
     unknown.config.tools = [{ id: 'shell', version: '1' }]
     await expect(runtime(fixture(), unknown).start()).rejects.toThrow('AGENT_TOOL_UNSUPPORTED')
+    // 2026-11-20 口径统一：task-bind 与 desktop-host.bind 同一白名单——
+    // node.execute@1 + 可选 web.search@1（C2），不再把联网专家在 task-bind 误拒；
+    // 白名单之外的工具仍拒绝。必选性由 desktop 准入与 skills.bind 精确报错承接。
+    const webSearch = snapshot()
+    webSearch.config.tools = [
+      { id: 'node.execute', version: '1' },
+      { id: 'web.search', version: '1' }
+    ]
+    const webTask = await runtime(fixture(), webSearch).start()
+    expect(webTask.snapshot.config.tools).toHaveLength(2)
     expect(
       (
         await runtime(fixture(), snapshot(), {
