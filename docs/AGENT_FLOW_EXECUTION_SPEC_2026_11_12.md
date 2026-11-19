@@ -1,5 +1,7 @@
 # Agent Flow 优化实施规格（可执行级，2026-11-12）
 
+> **⚠️ 历史执行计划（2026-11-20 标记）**：本文是 L1/L2/R1/R2/L3/R3/C1-C3 的**批次执行计划**，全部批次已实施完成（flow-layout、graph.layout/autoLayout、R2 修复、closed-loop 验收、C1 文本/ai-process 目标、C2 web.search、C3 状态机 op 均已交付）。附录 C"已知基线"（provider 夹具 2 项失败、lint 25 条）已被 AF-00 基线复核实测推翻（lint 0、全量 0 失败）。本文仅供追溯，不作为现行规范。
+
 配套总体方案：[AGENT_FLOW_OPTIMIZATION_PLAN_2026_11_12.md](AGENT_FLOW_OPTIMIZATION_PLAN_2026_11_12.md)。
 本文把每个批次细化到**文件、函数、Schema、代码骨架、命令、断言**。执行 Agent 按批次顺序实施；
 每批结束跑全量验证，汇报 diff 摘要 + commit notes，**用户确认后才提交**。

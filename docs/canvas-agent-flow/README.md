@@ -147,3 +147,27 @@ C3.1b [画布 Agent 任务入口](14-c3-canvas-agent.md)已接通专业 Agent �
 最新 C1 用户路径、验证与边界见 [控制声明交付](10-c1-control-declarations.md)。
 
 当前交付：[C4 故障核对与迁移](20-c4-recovery-transfer.md)、[强杀/断网矩阵](21-c4-crash-network-matrix.md)及[导入/renderer 中断](22-c4-import-renderer-recovery.md)。文本/JSON、命令存储、导入事务强杀及四类 renderer 保存崩溃已验收；main 文件轮转、物理掉电、供应商查询和媒体/并行仍未覆盖。进度以最新台账条目为准。
+
+---
+
+## 文档分类索引（2026-11-20 规范审查收敛）
+
+本目录按三分类管理，新增文档必须归入其一并在本表登记：
+
+**A. 活规范（描述当前行为，执行时必须遵守）**：
+`00-approved-plan.md`（总纲与预算）、`01-product.md`（产品语义）、`02-architecture.md`（一张图三种关系）、
+`05-node-coordination-standard.md`（节点协同 CN-01～09）、`06-implementation-plan.md`（Skill/工具/预算框架）、
+`07-ai-review-node.md`（审核与返工语义）、`10-c1-control-declarations.md`（控制关系单一来源）。
+各文档头部的状态行已于 2026-11-20 校准为"现行规范/历史"如实标注。
+
+**B. 能力现状表**：`49-af00-baseline-and-sample-2026-11-13.md` §2 四态支持矩阵——当前唯一有效的能力现状表，随交付滚动更新。
+
+**C. 历史交付记录（证据链，不再描述"当前"）**：`03/04/08/09/11–47`（C/R 系列交付与台账）、`48/50/51`（AF 评审与交付）、
+`HANDOFF_2026_10_13_*`～`HANDOFF_2026_10_19_*`、`testing/`；docs/ 下 `AGENT_FLOW_EXECUTION_SPEC_2026_11_12.md`、
+`AGENT_FLOW_C2C4W4_PLAN_2026_11_13.md`、`AGENT_FLOW_OPTIMIZATION_PLAN/L3_DELIVERY/R1R2_FINDINGS/TEST_*` 及
+`HANDOFF_2026_11_12/13`（均已标注历史标记或随本索引声明）。
+
+**已知空白（后续收敛 backlog）**：① graph 执行模式（executionMode:'graph'、FlowGraphSchema、三形态）的方案文档目前
+在仓库外（agent-flow-three-form-plan-20261114.md 等），需移入本目录并编号；② AF 执行语义（阶段契约/输入编制/执行信封/
+局部返工/定义版本）与技能系统（SkillPackage/哈希/预算）、恢复语义（unknown 裁决/reconcile/重启结算）缺单一权威文档，
+建议按 SPEC-02～07 方案新写（见 根目录《规范全面审查报告-20261120.md》§五）。

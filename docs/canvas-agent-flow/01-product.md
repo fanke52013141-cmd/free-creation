@@ -1,6 +1,6 @@
 # 产品与节点交互
 
-依据：[产品约束](README.md)与[节点协同规范](05-node-coordination-standard.md)。本页是设计，新增节点均待实现。2026-10-12 的参与方式、资产与 Skill/工具细化见 [详细实施方案](06-implementation-plan.md)。
+依据：[产品约束](README.md)与[节点协同规范](05-node-coordination-standard.md)。本页为产品语义规范（2026-11-20 校准：所述三类节点均已实现并验收，语义仍约束现行实现）。2026-10-12 的参与方式、资产与 Skill/工具细化见 [详细实施方案](06-implementation-plan.md)。
 
 ## 参与方式（2026-10-12 补充）
 

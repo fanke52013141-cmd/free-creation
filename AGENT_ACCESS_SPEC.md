@@ -2,9 +2,14 @@
 
 2026-11-07 接续：用户要求全软件GUI业务能力通过CLI与MCP等价调用。新增的
 [一致性规范](AGENT_PARITY_SPEC.md)、[完整开发计划](docs/local-agent-access/15-gui-cli-mcp-parity-plan.md)
-与[32类节点动作表](docs/local-agent-access/16-node-action-coverage.md)是当前完整目标及后续维护要求。
-本文保留早期A0–A4设计和历史范围；有冲突时以新一致性规范为准。当前Registry已实现25项操作，
-完整画布编辑和节点执行仍待开发，不能把本文目标描述或旧31类计数当作完成声明。
+与[节点动作表](docs/local-agent-access/16-node-action-coverage.md)是当前完整目标及后续维护要求。
+本文保留早期A0–A4设计和历史范围；有冲突时以新一致性规范为准。
+
+**2026-11-20 规范审查校准（重要）**：
+- **操作清单的机器真值**是 `docs/local-agent-access/generated/contracts.json`（与 `capability.list` 同源，由 `check-agent-access` 门禁把守）；本文正文的历史计数（"25 项操作""31 类节点"）是 2026-10 时点值，**不得再当作现状**。节点数以 `src/shared/types/index.ts` 的 `ActiveNodeTypeId`（33 类）为准。
+- **headless 节点流六操作已登记进 Registry 并有验收**（2026-11-12 起）：`composite.execute`（含 `confirmCost` 计费确认门）、`composite.execute.wait`、`composite.run.retry`、`composite.run.submitHuman`、`composite.run.resume`、`composite.run.resubmit`。键约定：inputs 按完整公开端口 ID（`in-<id>`）喂值；outputs/outputValues 以**裸公开输出 id** 为键，`outputPorts` 摘要才带 `out-` 前缀。执行语义不经过 `graph.patch + node.execute`（无项目、无画布实例）。
+- **MCP 注解口径**：`readOnlyHint/destructiveHint/idempotentHint` 按 effect 如实声明（只有只读操作幂等；写操作幂等性来自请求级 idempotencyKey）。
+- 完整画布编辑（graph.patch）与节点执行（node.execute）均已接入；本文"仍待开发"的历史段落以台账为准。
 
 日期：2026-10-24。适用：Canvas Studio 本地单用户 Electron 软件。
 

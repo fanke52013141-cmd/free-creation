@@ -1039,3 +1039,14 @@ node.runPlan 为只读预检，复用 Agent 请求诊断，返回端口元数据
 2026-11-20 三节点链修复：思考事件只进入流式进度，正式正文为空时由现有节点执行器记录失败终态，日志不写思考或正文。自用版发现已有设备密钥库时复用原设备适配器，启动日志只记录接入动作，生图失败仍走既有请求诊断。定向测试覆盖正文为空及正文与思考并存、引用拼接和卡内滚动；真实供应商请求未重放。
 
 2026-11-21 节点引用与 AI 处理正文修复：引用复用公共详情，拖选与复制走浏览器原生交互；无新增执行、存储、网络或诊断事件，引用内容及剪贴板内容不写日志。
+## 2026-11-20 规范审查补登记（AF-02～07、web.search、composite.run.waiting 覆盖断档修补）
+
+核对 `src/shared/observability/events.ts` 白名单与本文条目后发现以下事件**已注册并实际发射**但本文漏登（2026-11-13 AF-01 之后断档），现按既有格式补登，不新增事件、不改发射行为：
+
+- **AF-02 输入编制**：`agent.coordination.stage_context_compiled` / `agent.coordination.stage_context_blocked`（`main/agent-flow/coordinator-host`，events.ts:134-148）。只记 stageKey、carrierNodeId、输入计数与稳定原因码；ContextManifest 内容、节点正文、素材引用不入日志。
+- **AF-05 局部返工**：`agent.coordination.stage_rework`（events.ts:145）。只记阶段身份与轮次计数；返工意见正文不入日志（意见经 ExecutionEnvelope 随命令下发，属业务数据）。
+- **AF-07 人工等待**：`composite.run.waiting`（`main/ipc/composite.ipc`，events.ts:220）。记 runId、stepKey、nodeType；提交值正文不入日志。
+- **C2 受控联网**：`web.search.started / completed / failed`（`main/gateway/doubao-search.ts`，events.ts:477-486）。红线已在 events.ts 声明：不记 query 正文、结果正文与响应原文；只记计数与稳定错误码。
+- **节点流运行**：`composite.run.started/completed/failed/cancelled/step_failed` 与 `composite.draft.*`、`composite.publish.*` 已于 2026-11-11 W1/W3 条目登记（见上），本轮复核无漂移。
+
+验证：`npm run verify:logging` 通过（白名单/终态唯一/transport 故障不改业务）；`test/observability/*` 全绿；grep 复核上述事件在 events.ts 与发射点一一对应。未覆盖：真实模型长任务的日志字段抽查、诊断包导出后的字段复核仍按既有条目边界执行。

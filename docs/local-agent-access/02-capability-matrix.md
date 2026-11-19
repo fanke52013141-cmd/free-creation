@@ -252,3 +252,4 @@ A1.4首包接续：[查询交付台账](08-a1-4-read-only-queries.md)。`library
 执行路径复用 `graph.patch`（`nodeType:'composite'` 仅限带 manifest 对象插入）+ `node.execute` + `run.wait` / `output.get`。W2 的发布预览/关闭确认为 GUI 呈现与人工步骤，未新增业务动作；差异预检复用 `planCompositeUpgrade`。详见 [W2 交付](../composite/W2_DELIVERY_2026_11_11.md)。
 
 2026-11-20：生图参考图排序通过共享执行器同步应用于 GUI 与 CLI/MCP 的 `node.execute`。所有有效参考图传入，未点名的优先，出站提示词内编号随请求顺序重映射。请求 Schema、节点契约版本及存量画布引用编号保持兼容。输入框的 @ 菜单为 GUI 交互，CLI/MCP 可直接传编号。
+**W3/W4/AF-07 补登记（2026-11-20 规范审查）**：画布内实例执行路径仍如上；**headless 独立路径**（无项目、无画布实例，2026-11-12 起）新增六个操作——`composite.execute`（含 `confirmCost` 计费确认门；inputs 按 `in-<id>` 完整端口 ID，outputs 以裸公开输出 id 为键）、`composite.execute.wait`、`composite.run.retry`（受控重试，上限 3 次）、`composite.run.submitHuman`（人工等待提交）、`composite.run.resume`（续跑，跳过已完成步骤）、`composite.run.resubmit`（人工补交）。`composite.upgrade.apply/references/delete` 已按 W3 交付（引用保护、固定版本解析）。验收：`scripts/acceptance/headless-execute-acceptance.cjs`（7 项）与 `composite-desktop-acceptance.cjs`（22 项）。

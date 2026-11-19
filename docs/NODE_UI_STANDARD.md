@@ -252,7 +252,7 @@
 - [`NODE_UI_SPEC.md`](./NODE_UI_SPEC.md)：保存前序各轮的决定、实施记录与逐项 UI 行为；布局冲突以本规范为准，未冲突的用户已确认决定继续有效。
 - [`NODE_COMPLIANCE_MATRIX.md`](./NODE_COMPLIANCE_MATRIX.md)：当前可创建节点的协议索引；更新节点集时同步逐节点呈现表。
 
-## 13. 样式令牌与权威层（实施细则）
+## 13. 样式令牌与权威层（实施细则；**本节令牌表为 v2.2 之前的历史值**，现行几何令牌以 `src/renderer/src/canvas/node-ui-tokens.ts` 与 §22/§23 为准）
 
 ### 13.1 CSS 加载顺序与覆盖规则
 
@@ -304,9 +304,9 @@
 
 ## 15. 按钮实现规格（实施细则）
 
-### 15.1 头部（悬浮行，高 28px；最终值见 ui-surfaces.css）
+### 15.1 头部（2026-11-20 校准：几何已被 §22 的 20px 中轴替代——序号/图标/名称统一 20px 中轴、图标 svg 17px、状态灯 6×6、标题行高 36px；本段保留按钮透明度与禁用色口径）
 
-序号（19px/800 无底框）→ 节点图标 20×20（svg 17px）→ 标题 flex:1 省略号（15px/700）→ info 按钮 22×22 → 状态灯 8×8（margin-left 5px）→ `action-float`（高 24px）内运行按钮 22×22（svg 16px，透明底 opacity .72，disabled `rgba(158,173,189,0.42)`）。JSX `Icon size` 必须与 CSS 强制值一致（node-icon 17、run 16、info 16）。
+序号（19px/800 无底框）→ 节点图标 20×20（svg 17px）→ 标题 flex:1 省略号（15px/700）→ info 按钮 22×22 → 状态灯（现行 6×6，`node-visual-system.css`；旧文写 8×8）→ `action-float`（高 24px）内运行按钮 22×22（svg 16px，透明底 opacity .72，disabled `rgba(158,173,189,0.42)`）。JSX `Icon size` 必须与 CSS 强制值一致（node-icon 17、run 16、info 16）。
 
 ### 15.2 卡体内按钮（历史实现记录；现行规格见 §18.4）
 
@@ -391,7 +391,7 @@ Stitch MCP 已接入并完成一轮设计生成（首轮因 `stitch.googleapis.c
 
 生成类（生图、视频、语音）正文按钮承担生成动作，标题行提供次级运行图标；数据处理/转换类以标题行为主入口。工作台内“应用/发布”是明确提交编辑结果的动作，不能当作另一个模型运行入口。新增节点必须声明采用的节点族，空态/运行/失败/成功复用同一运行状态与禁用规则。
 
-## 18. v1.2 统一节点呈现协议（2026-10-05，当前权威）
+## 18. v1.2 统一节点呈现协议（2026-10-05；**几何与头部数值已被 §22/§23 替代**，本节保留交互归属与内容放置规则，阅读时几何一律以 §22/§23 为准）
 
 ### 18.1 审计结论与适用边界
 
@@ -516,7 +516,7 @@ Stitch MCP 已接入并完成一轮设计生成（首轮因 `stitch.googleapis.c
 复合验收条目仍保留未勾选状态：未逐项模拟所有节点的成功/失败/运行结果组合、输入法、真实旧项目重开及全部多媒体结果；已完成范围以上述脚本及全量测试为准。日志影响见 `docs/LOGGING_COVERAGE.md` 的 v1.2 实施记录；几何元数据通过已有保存恢复链路落盘，不记录正文、模型回复或敏感信息。
 
 
-## 19. v1.3 按内容布局协议（2026-10-05，当前权威）
+## 19. v1.3 按内容布局协议（2026-10-05；**几何数值已被 §22/§23 替代**，本节保留按内容布局协议、指针与滚动规则）
 
 ### 节点指针与输入编辑规则（2026-10-06）
 
@@ -673,9 +673,9 @@ focus-visible 与深浅主题取同一套值。材质只在 `ui-surfaces.css` �
 
 ### 分镜板特殊尺寸规则
 
-分镜板为 JSON 表格，默认 960×420，宽高无产品上限；自动随列数、行高展开，手动调整后保留尺寸。其尺寸规则优先于普通节点边界，详见 docs/STORYBOARD_TABLE_STANDARD.md。输入输出示例须在说明弹窗呈现。
+分镜板为 JSON 表格，默认 340×300（与 §22 standard 默认一致，`node-ui-tokens.STORYBOARD_UI`；2026-11-20 校准：旧文曾写 960×420 与 340×260，以实现值与本条为准），宽高随内容自适应增长；自动随列数、行高展开，手动调整后保留尺寸。详见 docs/STORYBOARD_TABLE_STANDARD.md。输入输出示例须在说明弹窗呈现。
 
-单选节点必须提供真实可拖拽的尺寸控件，不得仅保留程序化 `onResize` 而关闭用户操作入口。普通节点手动高度仍受 260–440px 边界约束；分镜板不受此上限约束。多选继续使用现有组合操作，禁止通过组合缩放偷偷改变组内节点尺寸。验收使用真实鼠标拖拽，并检查手动模式和快照恢复。
+单选节点必须提供真实可拖拽的尺寸控件，不得仅保留程序化 `onResize` 而关闭用户操作入口。普通节点手动高度边界以 §22 档位为准；分镜板不受此上限约束。多选继续使用现有组合操作，禁止通过组合缩放偷偷改变组内节点尺寸。验收使用真实鼠标拖拽，并检查手动模式和快照恢复。
 
 尺寸控件的透明命中区不得遮挡浮动标题中的说明、状态和运行按钮；缩小画布后也必须保持按钮可点击。顶部边和角避让标题，用户通过侧边与底部控件调整尺寸。
 
@@ -842,3 +842,42 @@ focus-visible 与深浅主题取同一套值。材质只在 `ui-surfaces.css` �
 6. **推理模型空正文回退（R-22）**：`waitForChat` 正文为空但有思考内容时回退取思考通道，避免推理模型被误判「模型返回为空」连锁报错；网关 `model.request.completed` 增记 `reasoningChars` 诊断属性。
 7. 守护单测：`test/shadow-editor.test.ts`（影子隔离三项）、`test/iterate.test.ts`（并发缺省 2/钳制）、`test/manual-run.test.ts`（按项运行历史持久化）；节点 UI 浏览器门禁（standard/visual-system/flexible/refinements/colors/pointer）全过。
 8. **连线宽度（2026-11-17 用户裁决）**：2026-11-03 曾把数据线宽减半（3→1.5），用户反馈过细，统一恢复两倍——`.data-edge-visible` 与 `.artifact-provenance-edge` 1.5→3、`.data-edge-glow` 7→14、`.data-edge-flow` 2.25→4.5（`ui-surfaces.css`）。线宽屏幕空间恒定（vector-effect），缩放不退化成亚像素细线。
+
+## 24. 连线与状态口径（2026-11-20 补登：把"只有测试知道"的裁决收进规范）
+
+以下口径此前只散落在 `ui-surfaces.css`/`ui-foundation.css` 注释与 `test/node-ui-decisions.test.ts` 断言里，现补登为本规范的现行条款（全部经 DOM 实测或 CSS 源码核对于 2026-11-20）：
+
+### 24.1 数据连线完整口径
+
+- **线宽**：正式边 `.data-edge-visible` 与溯源边 `.artifact-provenance-edge` = 3px；悬浮 3.8px、选中 4.1px；流动段 `.data-edge-flow` = 4.5px；非法拖拽预览红色虚线警示边 = 2.4px；拖线预览主线 1.7px（`ui-surfaces.css`/`ui-foundation.css`）。
+- **流动段比例**：`stroke-dasharray: 166.667 833.333`——流动段占整条路径的 **1/6**，正式边与拖线预览一致；流光动画 4.05s 减速循环。线宽屏幕空间恒定（`vector-effect: non-scaling-stroke`），缩放不退化。
+- **失效边**：端口已不存在的存量边渲染为红色虚线 + 仍可选中删除（`DataEdgeLayer` invalid 分支）——"可见、可定位、可清理"，不静默隐藏。
+- **glow 层现状**：`.data-edge-glow` 在 `node-visual-system.css` 中 `display:none`（视觉 v2 起停用）；§2026-11-17 第 8 条对 glow 的加粗记录仅为 CSS 数值同步，画布上该层不渲染，悬浮/选中光效来自 `node-interaction-refinement.css`。
+- **拖拽预览配色**：不是"品牌蓝虚线"——预览线使用来源节点色/端口色 + 彩色水流动画（`ConnectionLayer` + `.conn-water-path`，dasharray 与正式边同为 1/6 比例）。
+
+### 24.2 端口几何终值
+
+- 端口核心 12px（**终裁层 = `node-interaction-refinement.css`**，压住 `node-visual-system.css:283` 的旧 8px 覆盖）、命中盒 24px、圆心距卡边 24px、核心可见边缘净距 18px——与 `edge-geometry.ts` 常量及 `test-browser-node-visual-system.cjs` 的 18px 断言一致（2026-11-20 DOM 实测校准）。`edge-geometry.ts` 头注释已按此更新。
+
+### 24.3 执行状态全集（exec 八态）与 readiness 分离
+
+卡片 `props.exec` 的完整状态集为 **8 态**（`node-status.ts` 中文标签 + `NodeCardView.EXEC_COLORS`）：
+
+| 状态 | 标签 | 卡头状态灯色 |
+|---|---|---|
+| `idle` | 未运行 | `#6b7280` |
+| `pending` | 等待执行 | `#9ca3af` |
+| `queued` | 已排队 | `#9ca3af` |
+| `running` | 执行中 | `#fbbf24` |
+| `success` | 执行成功 | `#34d399` |
+| `failed` | 执行失败 | `#ff6b6b` |
+| `cancelled` | 已取消 | `#6b7280` |
+| `cached` | 使用缓存 | `#60a5fa` |
+
+**exec 与 readiness 是两个模型**："缺必填输入/引擎未装"等**就绪度阻塞（blocked）**不属于 `props.exec`，走节点 readiness 通道（契约面板/运行前拦截），不得混入状态灯；§7 状态表按此读。
+
+**双轨状态色并存**：卡头状态灯用上表（卡内小面积语义色）；详情侧栏用 `--overview-state` 系列（待机中性/等待蓝 `#7dd3fc`/执行琥珀/成功绿/失败玫红 `#fb7185`，`ui-surfaces.css`）——两套都是现行，各自约束自己的渲染面，不得混用。
+
+### 24.4 连线不得改变节点编辑能力（2026-11-19 用户裁决）
+
+连线（含模板成员与多选运行场景）**永远不得收窄节点自身能力**：生图节点接上游文本后，提示词框仍可编辑（运行提示词 = 上游输入 + 框内正文，`$$$` 合并）；上游输入只进入独立只读预览条（`UpstreamInputPreview`，可选可复制）；AI 处理节点同理。任何"连线后把节点输入框变成只读镜像"的实现都违反本条（历史缺陷见 commit 35c4343）。守护断言：`test/node-ui-decisions.test.ts`。

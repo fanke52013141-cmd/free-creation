@@ -20,10 +20,11 @@ AI 对话生图补充：消息可保存图片附件（媒体 ID、项目相对�
 
 > 新增或修改节点还必须遵守 [日志与运行诊断规范](./LOGGING_SPEC.md)：复用公共执行生命周期记录，补充功能专属失败阶段、关联和脱敏测试，并更新 [日志覆盖清单](./docs/LOGGING_COVERAGE.md)。日志底座的待实施能力不能当作已有接口。
 
-> 状态：强制规范 2.0（代码字段式多输入/多输出、端口基数语义与表格型分镜编辑；P0-P4 图片修改、M0-M4 本地媒体处理及音频职责拆分已落地）
+> 状态：强制规范 2.1（2026-11-20 全面审查校准：Speech 补 indextts 通道、输出基数补 composite 例外、新增 §4.6 outputSource 契约；代码字段式多输入/多输出、端口基数语义与表格型分镜编辑已落地）
 > 代码入口：`src/shared/types/index.ts`、`src/shared/node-schemas.ts`、`src/renderer/src/nodes/registry.tsx`  
 > 节点定义：`src/renderer/src/nodes/specs/index.tsx`
-> 运行时：`src/renderer/src/engine/contracts.ts`、`src/renderer/src/nodes/nodeValues.ts`
+> 契约运行时核心：`src/shared/engine/`（`inputs.ts` 输入包提取、`values.ts` 节点值与媒体信封、`deterministic-projections.ts` 共享确定性投影镜像、`executors/*` 共享执行器、`retry.ts` 重试）；`src/renderer/src/engine/contracts.ts` 与 `src/renderer/src/nodes/nodeValues.ts` 现为从 `@shared/engine/*` re-export 的兼容 shim
+> 操作计数口径：节点清单、操作总数等"当前共 N 项"一律以机器真值为准（`ActiveNodeTypeId`、`docs/local-agent-access/generated/contracts.json`），本文不维护手工计数
 
 ## 1. 设计原则
 
@@ -35,7 +36,7 @@ AI 对话生图补充：消息可保存图片附件（媒体 ID、项目相对�
 
 2026-10-13 C3.1b：agent@1 的专业角色接入公共 executor → main 可信任务宿主 → C2 命令桥。out-text/out-json 输出已确认任务资产，公共执行器落固定资产节点；main 发布版本核对 completed 任务及真实固定引用。文本/JSON 直接输入按保存画布的真实端口固定版本，媒体输入拒绝自动运行。人工等待保留 main 任务及 checkpoint，公共原子运行不伪造成功。state-machine/ai-review 及 builder/coordinator 自主执行仍待接入。详见 docs/canvas-agent-flow/14-c3-canvas-agent.md；下段 C1 说明为历史基线。
 
-2026-10-12 C1：新增配置阶段的 `agent`、`state-machine`、`ai-review`（contractVersion=1）。配置与正文分别保存到 props.config/props.text；配置可保存恢复。执行器当前明确 skipped，投影为空，禁止从任务目标、阶段配置或旧 meta 捏造运行结果。`review.decision@1` 校验固定资产版本、规则版本、审核修订、结论与反馈；`flow.state@1` 校验 task/stateNode/revision/state。定义见 src/shared/agent-flow/node-contracts.ts。后续 C2/C3 接入真实执行与输出投影，并完成对等验收后才能开放运行。控制关系保存在 config，不能当作普通数据边形成反向 DAG。
+2026-10-12 C1（**历史基线，已被 C2/C3.x 取代**：三类节点的真实执行器与输出投影现已接入，见本节上方 2026-10-13 各段与 §4.6；"执行器明确 skipped、投影为空"不再是现状）：新增配置阶段的 `agent`、`state-machine`、`ai-review`（contractVersion=1）。配置与正文分别保存到 props.config/props.text；配置可保存恢复。当时执行器明确 skipped，投影为空，禁止从任务目标、阶段配置或旧 meta 捏造运行结果。`review.decision@1` 校验固定资产版本、规则版本、审核修订、结论与反馈；`flow.state@1` 校验 task/stateNode/revision/state。定义见 src/shared/agent-flow/node-contracts.ts。控制关系保存在 config，不能当作普通数据边形成反向 DAG。
 
 画布上的节点不是彼此直接调用的功能孤岛。节点只负责一件事：按照已声明的输入契约接收数据，执行自己的能力，再按照输出契约产生数据。
 
@@ -65,7 +66,7 @@ sourceNode.outputs[sourcePortId]
 13. 画布基础交互必须有单一视觉来源：正式连线默认中性，端口承担类型提示，只有悬浮、选中、运行或拖拽时才可高亮；端口、连线、下拉框和 Tooltip 不得在各节点私自复制不同规则。高频选择控件使用统一 `AppSelect`，提示使用可避让边界的 Portal Tooltip；新节点只能复用这些基础组件或扩展其公开变体。
 14. 多选连接是临时画布手势，不是新的业务节点：可由任一已选节点输出端口或选框外的公共连接点发起；系统必须为每个来源节点创建一条真实数据边，并且只允许连接到声明 `many` 的输入端口。不得把“节点集合”保存成隐藏的中间节点、把多项输入折叠为首项，或在校验失败时只创建一部分连线。
 15. 节点标题的可用空间必须由卡片宽度减去固定的序号、图标、说明、状态和运行操作区得到；标题超出时统一单行省略。不得依赖某个节点类型的标题长度、插入空白弹簧或缩小操作图标来挤出空间。
-16. 一般节点同一方向的同一种 `PortType` 至多出现一次；代码节点的具名动态端口等明确声明的受控例外可重复。多个同类输入合并为一个 `many` 端口；多个同类结果使用一个集合输出或物化为关联资产节点。受控例外是代码节点：用户声明的**具名输入参数和具名输出字段**各自生成端口，可有相同类型，但字段名与稳定端口 ID 必须唯一。它们是函数的字段映射，不能充当通用素材入口。
+16. 一般节点同一方向的同一种 `PortType` 至多出现一次；代码节点与组合能力（composite）的动态公开端口等明确声明的受控例外可重复（`registry.getNodePorts` 只对这两类放行同类型重复命名端口，2026-11-20 校准：composite 公开端口同样允许多输入/多输出同类型，每个端口仍有独立稳定 ID）。多个同类输入合并为一个 `many` 端口；多个同类结果使用一个集合输出或物化为关联资产节点。受控例外一：代码节点的**具名输入参数和具名输出字段**各自生成端口，可有相同类型，但字段名与稳定端口 ID 必须唯一，它们是函数的字段映射，不能充当通用素材入口。受控例外二：composite 节点的公开端口由不可变 manifest 投影（`in-<id>`/`out-<id>`），同一方向可有多个同类型端口。
 17. 节点标题是用户可编辑的节点属性：单击只选中节点，双击标题进入重命名，`Enter` 或失焦提交。重命名不得改变 `nodeType`、端口 ID、执行配置或已产生资产的来源关系。
 
 ### 1.1 节点、附加功能与快捷操作的判定
@@ -313,7 +314,7 @@ JSON 节点优先使用 `in-json`：一条连线保留该值原样（包括数�
 
 - `one`：输入端口最多接一条上游连线。
 - `many`：输入端口可以接多条上游连线。契约收集层保留按画布连线记录顺序排列的数据包；执行器按各自的读取方式决定合并规则。
-- 输出端口固定为 `one`：一次执行对一个输出端口最多产生一个 `NodeValue`。该值可以是 JSON 数组；输出端口也可以分叉连接多个下游。
+- 输出端口固定为 `one`：一次执行对一个输出端口最多产生一个 `NodeValue`。该值可以是 JSON 数组；输出端口也可以分叉连接多个下游。**受控例外（2026-11-20）：composite 公开输出端口允许声明 `many`**——节点流的公开输出来自不可变 manifest 的显式映射（`src/shared/composite/manifest.ts` 的 compositeOutputSchema 继承 one|many），发布校验只拒绝反方向（多值来源声明为单值公开输出）；普通节点的输出端口仍固定 `one`。
 - 多值连线与数组值不同：一条 JSON 连线即使传 `[1, 2]`，仍是一个数据包，不会因为值是数组而变成多条连线。
 - `inputJson` 和媒体读取会将每条数据包的值按顺序组成 JavaScript 数组，且不会压平值本身的内层数组。`inputText` 则把非空文本按稳定分隔符 `\n$$$\n` 拼成字符串；该合并只适用于明确声明为 `many` 的文本输入。
 - 代码节点具名参数会直接映射为函数参数：`one` 得到单个值，`many` 得到按连线顺序排列的数组。
@@ -343,11 +344,12 @@ schema: {
 
 #### 模型驱动端口的声明原则（配音节点）
 
-配音（`speech`）节点的端口结构由 `props.config.backend` 决定，而不是由上游节点类型推断。`SpeechBackend = 'minimax' | 'volc'`（`src/shared/speech.ts`）；早期方案中的 `doubao`/`openai` 通道已移除，不再作为端口结构存在：
+配音（`speech`）节点的端口结构由 `props.config.backend` 决定，而不是由上游节点类型推断。`SpeechBackend = 'minimax' | 'volc' | 'indextts'`（`src/shared/speech.ts`；2026-11-20 校准：补登本地 IndexTTS 2.5 通道）；早期方案中的 `doubao`/`openai` 通道已移除，不再作为端口结构存在：
 
-- 静态 `ports` 声明两套结构的并集，只用于注册校验与契约快照；运行时以 `resolvePorts(shape)` 为准。
+- 静态 `ports` 声明三套结构的并集，只用于注册校验与契约快照；运行时以 `resolvePorts(shape)` 为准。
 - `minimax`（默认）：`in-text` + `in-voice` → `out-audio`。音色来自上游 `voice.profile@1` 或节点内填写的 MiniMax voice ID。
 - `volc`：`in-text` + `in-audio` → `out-audio`；`enable_subtitle` 打开时另产出可选 `out-subtitle`（`voice.subtitle@1`）。火山 speaker ID 在节点参数（`voiceId`）中填写，不走 `in-voice` 音色档案端口。
+- `indextts`（本地引擎 IndexTTS 2.5）：`in-text` + `in-audio`（参考音频克隆）→ `out-audio`；无字幕输出。
 - 同一协议下，执行器只读取该协议声明过的输入；未接入的通道必须在执行时**明确失败**，不能静默忽略上游连线（例如把火山 speaker 档案接到 MiniMax 的 `in-voice` 会被拒绝并明确报错）。
 - 非媒体端口值（字幕、音色档案）由执行器经 `updateMeta` 写入 `meta.nodeExtra`（按端口 ID 存放的 JSON），再由 `projectOutputs` 投影；不塞进 `meta.nodeResult` 的媒体结果集合，避免破坏「一个媒体输出」的既有语义。
 
@@ -386,9 +388,18 @@ schema: {
 
 迭代的可恢复运行记录保存在 `meta.nodeResult`，其中每项都有 `source.index`，并在存在非空字符串 `id` 时附带 `source.itemId + source.fingerprint`。恢复规则只能复用 **ID 和内容指纹均匹配** 的 `done/reused` 项；没有稳定 ID、内容已变或上轮失败/中断的项必须重新执行。`runMode: 'failed'` 只允许重跑这次记录中仍匹配的失败项。每个实际执行的列表项还必须拥有独立 `runId`：循环体虽然复用同一批画布节点，但该 ID 必须贯穿节点运行记录、`NodeValuePacket.source.runId`、媒体结果与资产来源；不得让多项共享工作流级 `runId`，否则历史记录会被去重、媒体无法精确反查。运行器会在每项完成后写入进度检查点；暂停是协作式的，只在当前原子项结束后停下，停止会解除暂停等待。循环体执行时若把输入解析后写回 `props.text/config`，运行器必须在每项前恢复冻结的静态输入，并在循环结束后再恢复一次，不能把最后一项的解析结果当作下一轮模板。
 
-## 4.1 AI 节点的失败重试（W1）
+## 4.5 AI 节点的失败重试（W1）
 
 `ai-process` / `image-gen` / `video` 的 config 支持 `retry: { maxRetries: 0–5, backoffMs: 500–30000 }`（缺省关闭，行为与历史一致）。**可重试**的是模型随机性输出与瞬时故障：模型返回为空、JSON 解析/Schema 校验不过、网络错误、超时、429/5xx、生图任务失败；**不可重试**的是配置与契约类错误：未绑定模型、不支持的能力组合、无提示词、输入契约校验失败、用户取消。重试按指数退避（base `backoffMs`），每次尝试写入节点 trace，最终失败时在 reason 中聚合此前各次原因；取消在退避等待中即时生效。`video` 只重试「提交」阶段——提交成功后的轮询失败不可重试（远端任务可能已计费，重复提交会双重扣费）。json 模式未显式选择 Schema 时默认 `json.any`（W9），需要严格结构时再选业务 Schema；解析失败语义不变。
+
+## 4.6 `outputSource`：输出真值来源（2026-11-20 新增条款）
+
+每个 NodeTypeSpec 可声明 `outputSource: 'run' | 'document'`（缺省 `'run'`，见 `src/renderer/src/nodes/registry.tsx`）。它决定「上一次运行没成功」时下游还能不能读到输出：
+
+- `run`（缺省）：输出只是最近一次成功运行的产物。运行失败或被跳过时不得向下游暴露，否则上游卡片留着旧产物、下游却按它继续算，等于把旧结果伪装成新结果。
+- `document`：props 本身就是真值（文本节点的正文、资产节点的 mediaId/mediaPath、JSON/分镜板的表格），用户改完即生效，不需要先跑一次；这类节点的运行只做校验与审计。**只有 projectOutputs 完全不读 `meta.nodeResult` / `meta.nodeExtra` 的节点才允许声明 document**（当前 6 类：text、website、image、video-asset、audio、file，另含 json、storyboard 于 2026-11-20 补声明）。
+
+**双源同步门禁**：main 进程 `output.get` 使用共享确定性投影镜像（`src/shared/engine/deterministic-projections.ts` 的 `DETERMINISTIC_PROJECTIONS` + `src/shared/agent-access/run-ops.ts` 的 `DETERMINISTIC_OUTPUT_SOURCES`）。两张表必须与 renderer 注册表同口径——一致性由 `test/output-source-parity.test.ts` 把守（条目对齐、投影齐备、document 不读运行记录、Active 类型全覆盖，chat 显式豁免走 chat.read/chat.messages）。新增节点时必须同包更新：specs 注册、DETERMINISTIC_OUTPUT_SOURCES 登记、（如投影非共享实现）镜像投影函数。
 
 ## 5. 连线规则
 
@@ -430,12 +441,14 @@ schema: {
 ```ts
 interface NodeValuePacket {
   type: PortType
-  value: unknown
+  value: NodeValue
   schema?: PortSchemaRef
   source: {
     nodeId: string
     portId: string
     runId: string
+    assetId?: string
+    versionId?: string
   }
   createdAt: number
 }
@@ -565,7 +578,7 @@ interface NodeValuePacket {
 | 输入端口             | 类型                     | 语义                                                                    |
 | -------------------- | ------------------------ | ----------------------------------------------------------------------- |
 | `in-images`          | image many               | 唯一的图片输入；多张图片均连这里。连线第 1 张为主图，其余为有序参考图。 |
-| `in-reference-video` | video（多值，最多 3 段） | 运动/镜头参考。                                                         |
+| `in-reference-video` | video（多值，段数上限由所选模型能力描述驱动，如 seedance 基线 3 段、seedance 2.5 为 10 段；见 `src/shared/video-capabilities.ts`） | 运动/镜头参考。应用不得硬编码统一上限，也不得伪造模型接受度。                                                          |
 | `in-reference-audio` | audio many               | 声音、节奏或音色参考，不能伪装为“生成音频”开关。                        |
 
 `@ 引用图片` 是以上 `in-images` 的辅助交互：用户从画布选择一个真实
@@ -729,7 +742,7 @@ mediaId/mediaPath**（`node-invariants`），必须 `emitArtifact` 成本独立�
 - [ ] 已添加契约、连线、执行和迁移测试。
 - [ ] 未破坏已发布端口；如有破坏性变化，已提升版本并提供迁移。
 
-## 11. 示例
+## 12. 示例
 
 ```ts
 registerNodeType({
