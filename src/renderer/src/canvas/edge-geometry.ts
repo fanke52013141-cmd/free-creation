@@ -4,11 +4,13 @@ export interface EdgePoint {
 }
 
 /**
- * 8px可见圆点距卡边净距20px，圆心位于卡片边缘外24px，
+ * 端口几何（2026-11-20 DOM 实测校准，与 NODE_UI_STANDARD §22 一致）：
+ * 可见核心 12px（node-interaction-refinement.css 终裁）、命中盒 24px、
+ * 圆心位于卡片边缘外 24px → 核心可见边缘净距 18px。
  * 也给卡片正文留出完整的点击/选中区域。视觉连线和端口渲染必须共享该距离。
  */
 export const NODE_PORT_OUTSET = 24
-// 可见核心8px，命中盒24px；两者都独立于卡片，不绘制连接底板。
+// 可见核心12px，命中盒24px；两者都独立于卡片，不绘制连接底板。
 export const NODE_PORT_SIZE = 24
 
 /**
@@ -42,9 +44,6 @@ export function buildDataEdgePath(
 }
 
 /** 源节点中心在目标节点中心右侧（含重合）即为反向边，调用方共享同一判定。 */
-export function isBackwardEdge(
-  sourceCenterX: number,
-  targetCenterX: number
-): boolean {
+export function isBackwardEdge(sourceCenterX: number, targetCenterX: number): boolean {
   return sourceCenterX >= targetCenterX
 }

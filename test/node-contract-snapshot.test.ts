@@ -373,6 +373,14 @@ describe('关键端口契约快照（防回归）', () => {
         .out.map((p) => p.id)
         .sort()
     ).toEqual(['out-audio', 'out-subtitle'])
+
+    // IndexTTS 2.5（本地引擎，2026-11-20 规范审查补登记）：参考音频克隆 → 音频。
+    expect(
+      getNodePorts(spec, shapeFor('indextts'))
+        .in.map((p) => p.id)
+        .sort()
+    ).toEqual(['in-audio', 'in-text'])
+    expect(getNodePorts(spec, shapeFor('indextts')).out.map((p) => p.id)).toEqual(['out-audio'])
   })
 
   it('图片/音频资产都是纯源节点，配音与语音克隆各有独立契约', () => {

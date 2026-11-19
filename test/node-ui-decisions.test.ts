@@ -18,6 +18,7 @@ const stripComments = (source: string): string =>
 const foundation = read('src/renderer/src/assets/ui-foundation.css')
 const surfaces = read('src/renderer/src/assets/ui-surfaces.css')
 const app = read('src/renderer/src/assets/app.css')
+const nodeInteractionRefinement = read('src/renderer/src/canvas/node-interaction-refinement.css')
 const nodeCardView = read('src/renderer/src/canvas/NodeCardView.tsx')
 const nodePortLayout = read('src/renderer/src/canvas/node-port-layout.ts')
 const graph = read('src/renderer/src/canvas/graph.ts')
@@ -118,11 +119,19 @@ describe('v1.3 §16.1 端口圆点统一使用节点色、类型色环与柔光'
     expect(foundation).toMatch(/\.port-dot::before\s*\{[^}]*inset:\s*-14px;/)
     expect(nodeCardView).toContain('visibleInY.get(p.id)')
     expect(nodeCardView).toContain('visibleOutY.get(p.id)')
+    // 2026-11-20 DOM 实测校准：端口核心终值 12px 由 node-interaction-refinement.css
+    // 终裁（压住 node-visual-system.css:283 的旧 8px 覆盖，核心可见边缘净距 18px）。
+    // 此断言钉住"终裁层必须是 12px"，防止未来把净距改回 20px。
+    expect(nodeInteractionRefinement).toMatch(
+      /\.canvas-page \.node-card-wrap \.port-core\s*\{[^}]*width:\s*12px;[^}]*height:\s*12px;/
+    )
   })
 })
 
 describe('画布连线宽度与流动段比例', () => {
   it('正式连线和拖线预览都按 1/6 路径长度显示流动段', () => {
+    // 2026-11-17 31c7a3c「thicker lines」决策：连线整体加粗一倍（1.5→3、2.25→4.5），
+    // 1/6 流动段比例（166.667 833.333）不变。
     expect(surfaces).toMatch(
       /\.data-edge-visible\s*\{[^}]*stroke-width:\s*3;[\s\S]*?\.data-edge-flow\s*\{[^}]*stroke-width:\s*4\.5;[^}]*stroke-dasharray:\s*166\.667 833\.333;/
     )
