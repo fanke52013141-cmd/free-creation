@@ -2,7 +2,7 @@
 //
 // 覆盖两类回归保护：
 // 1. needsNodeSizeMigration 历史尺寸识别——旧项目打开时节点尺寸自动规范化的依据；
-// 2. 各节点 defaultSize 不被悄悄改动（统一 340×260 规范的稳定性）。
+// 2. 各节点 defaultSize 不被悄悄改动（统一 340×300 规范的稳定性）。
 // 这些是「旧项目可以打开、保存并再次打开」这条完成标准的纯函数保障。
 import { describe, it, expect, beforeAll } from 'vitest'
 import { registerAllNodeTypes } from './helpers/registerNodes'
@@ -75,13 +75,16 @@ describe('needsNodeSizeMigration · 历史尺寸真值表', () => {
   })
 })
 
-describe('节点默认尺寸稳定性（统一 340×260 规范）', () => {
-  it('standard 节点的 defaultSize 保持 340×260', () => {
+describe('节点默认尺寸稳定性（统一 340×300 规范，2026-11-20 标题校准）', () => {
+  it('standard 节点的 defaultSize 保持 340×300（NODE_UI.height.default）', () => {
     for (const spec of allNodeTypes()) {
       // sizePolicy 为 content/free 的节点在各自令牌里声明尺寸（分镜板 / 时间线），
       // 统一规范只约束 standard 节点。
       if ((spec.sizePolicy ?? 'standard') !== 'standard') continue
-      expect(spec.defaultSize, `${spec.type} 默认尺寸异常`).toEqual({ w: NODE_UI.width, h: NODE_UI.height.default })
+      expect(spec.defaultSize, `${spec.type} 默认尺寸异常`).toEqual({
+        w: NODE_UI.width,
+        h: NODE_UI.height.default
+      })
     }
   })
 
@@ -97,10 +100,9 @@ describe('节点默认尺寸稳定性（统一 340×260 规范）', () => {
         needsNodeSizeMigration(spec.type, spec.defaultSize.w, spec.defaultSize.h),
         `${spec.type} 默认尺寸不应被判为历史异常`
       ).toBe(false)
-      expect(
-        needsNodeSizeMigration(spec.type, 5000, 10000),
-        `${spec.type} 允许任意宽高`
-      ).toBe(false)
+      expect(needsNodeSizeMigration(spec.type, 5000, 10000), `${spec.type} 允许任意宽高`).toBe(
+        false
+      )
     }
     const timeline = getNodeType('timeline')
     expect(timeline?.sizePolicy).toBe('free')

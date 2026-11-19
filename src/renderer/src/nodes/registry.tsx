@@ -109,7 +109,7 @@ export interface NodeTypeSpec {
   color: string
   defaultSize: { w: number; h: number }
   /**
-   * 尺寸策略。缺省 `standard`：默认 340×260，手动缩放高度夹在 UI 规范档位内，
+   * 尺寸策略。缺省 `standard`：默认 340×300（呈现规范 §22），手动缩放高度夹在 UI 规范档位内，
    * 宽高异常时会被旧尺寸迁移重置。
    * `content`：默认尺寸由节点自己的令牌声明，宽高随内容自适应增长（分镜板）。
    * `free`：默认尺寸由节点自己的令牌声明，宽高完全由用户控制，不参与内容自适应
@@ -258,9 +258,9 @@ const PRIOR_UNIFIED_SIZES: Partial<Record<NodeTypeId, { w: number; h: number }>>
   storyboard: { w: 340, h: 300 }
 }
 
-/** 历史兼容保护值（呈现规范 §3.2）：仅作为旧项目异常尺寸迁移阈值使用；
- *  内容自适应高度已改为固定档位（见 node-ui-tokens 的 resolveNodeHeight），
- *  自动增长封顶 440，不再以此值作为产品设计层的自动高度标准。 */
+/** 历史兼容保护值（呈现规范 §3.2）：仅作为旧项目异常尺寸迁移阈值使用（legacyGuard=1200）；
+ *  内容自适应高度已改为固定档位（见 node-ui-tokens 的 resolveNodeHeight，自动增长封顶 480），
+ *  不再以此值作为产品设计层的自动高度标准。 */
 export const MAX_AUTO_NODE_HEIGHT = NODE_UI.height.legacyGuard
 
 export function needsNodeSizeMigration(type: string, w: number, h: number): boolean {
@@ -463,7 +463,9 @@ export function getNodePorts(
   // 代码节点允许用户声明具名函数输入/输出字段；组合能力（W3）的公开端口同样
   // 来自用户确认的稳定映射，允许多输出/多输入同类型（每个端口仍有独立稳定 ID）。
   // 相同类型只在这两处重复；其他节点继续遵守同类型单端口规则。
-  const repeatedNamed = Boolean(spec.resolvePorts && (spec.type === 'code' || spec.type === 'composite'))
+  const repeatedNamed = Boolean(
+    spec.resolvePorts && (spec.type === 'code' || spec.type === 'composite')
+  )
   const errors = portValidationErrors(ports, {
     allowRepeatedNamedInputs: repeatedNamed,
     allowRepeatedNamedOutputs: repeatedNamed

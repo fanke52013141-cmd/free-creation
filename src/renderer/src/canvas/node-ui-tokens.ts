@@ -1,7 +1,8 @@
 // 节点 UI 契约 Token（呈现规范 v1.0 §22）：
 // CSS、NodeCardView、Registry、NodeCardShape 与测试引用的唯一尺寸真值来源。
 // 节点内禁止散落硬编码高度/宽度；Shell 契约全局统一，节点只能声明业务 Body。
-// 2026-11-02 用户裁决：分镜板默认尺寸与其他节点一致（340×260），宽高随内容自适应增长，无上限。
+// 2026-11-02 用户裁决：分镜板默认尺寸与 standard 节点一致（宽 340、高随 standard 档，现为 300），
+// 宽高随内容自适应增长，无上限；2026-11-20 注释校准（曾误写 340×260）。
 export const STORYBOARD_UI = {
   width: 340,
   height: 300,
@@ -108,13 +109,10 @@ export const NODE_UI = {
   }
 } as const
 
-/** 内容所需高度 → 就近固定档位（呈现规范 v1.0 §3.4）。
- *  只允许 260 → 320 → 380 → 440（→ 视频生成节点 560）跳档，禁止内容驱动的连续高度。
- *  超过档位的内容由调用方（node-body）内部滚动承载。 */
-export function resolveNodeHeight(
-  required: number,
-  cap: number = NODE_UI.height.autoMax
-): number {
+/** 内容所需高度 → 就近固定档位（呈现规范 §22，2026-11-20 注释校准）。
+ *  只允许 300 → 360 → 420 → 480 跳档（视频生成等特殊节点可经 cap 上探更高档），
+ *  禁止内容驱动的连续高度。超过档位的内容由调用方（node-body）内部滚动承载。 */
+export function resolveNodeHeight(required: number, cap: number = NODE_UI.height.autoMax): number {
   if (required <= NODE_UI.height.default) return NODE_UI.height.default
   if (required <= NODE_UI.height.expanded) return NODE_UI.height.expanded
   if (required <= NODE_UI.height.rich) return NODE_UI.height.rich
