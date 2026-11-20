@@ -24,6 +24,34 @@ export function parseImageGen(text: string): ImageGenData {
   return normalizeImageGenerationConfig({}, imageCapabilitiesFor('relay'))
 }
 
+// 文内编号按画布连线解释。请求将未点名的图提前，再按请求顺序重写文内编号。
+function orderImageReferences(
+  prompt: string,
+  mediaIds: string[]
+): { prompt: string; referenceMediaIds: string[] } {
+  const mentionPattern = /[@＠](图片|图)[^\S\r\n]*(\d+)(?!\d)/gu
+  const mentioned = new Set(
+    [...prompt.matchAll(mentionPattern)]
+      .map((match) => mediaIds[Number(match[2]) - 1])
+      .filter(Boolean)
+  )
+  if (mentioned.size === 0) return { prompt, referenceMediaIds: mediaIds }
+  const referenceMediaIds = [
+    ...mediaIds.filter((id) => !mentioned.has(id)),
+    ...mediaIds.filter((id) => mentioned.has(id))
+  ]
+  const ordinalById = new Map(referenceMediaIds.map((id, index) => [id, index + 1]))
+  return {
+    referenceMediaIds,
+    prompt: prompt.replace(mentionPattern, (token, label, ordinal) => {
+      const id = mediaIds[Number(ordinal) - 1]
+      if (!id) return token
+      const next = ordinalById.get(id)
+      return next === Number(ordinal) && token.startsWith('@') ? token : `@${label} ${next}`
+    })
+  }
+}
+
 export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const data = parseImageGen(readNodeConfig(ctx.shape))
   // W1：retry 配置与生图参数同源（props.config），缺省为关闭（maxRetries=0）。
@@ -55,13 +83,16 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
   if (config.resolution && !capabilities.resolutions.includes(config.resolution))
     ctx.trace?.('capability', 'info', `分辨率 ${config.resolution} 不被当前模型支持，本次不发送`)
   const bundlePrompt = promptBundleText(inputJson(ctx.inputs, 'in-prompt')[0])
-  const prompt = mergedPrompt(
+  const merged = mergedPrompt(
     ctx.shape.props.text,
     [bundlePrompt, inputText(ctx.inputs, 'in-text')].filter(Boolean).join('\n')
   )
-  // 所有参考图只有一个多值入口；按真实连线顺序提交，保证“图片 1/2/3”的提示词指代可复跑。
+  // 以真实连线顺序给画布中的引用编号，同一张图只上传一次。
   const referenceImages = inputMedia(ctx.inputs, 'in-images', 'image')
-  const referenceMediaIds = [...new Set(referenceImages.map((image) => image.mediaId))]
+  const { prompt, referenceMediaIds } = orderImageReferences(
+    merged,
+    [...new Set(referenceImages.map((image) => image.mediaId))]
+  )
   if (referenceMediaIds.length > capabilities.maxReferenceImages)
     return {
       status: 'failed',
@@ -69,6 +100,9 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
     }
   if (!prompt.trim()) return { status: 'skipped', reason: '无提示词' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+  if (referenceMediaIds.length) {
+    ctx.trace?.('capability', 'info', `已整理 ${referenceMediaIds.length} 张参考图，未点名的图片优先提交`)
+  }
   try {
     // 不把“多张”偷偷折叠成某个供应商私有的 n 参数：每张都是一次明确的模型请求、
     // 一份可追溯的媒体资产。这样能力未知的供应商也不会伪造批量成功。

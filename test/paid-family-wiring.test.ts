@@ -318,6 +318,28 @@ describe('image-gen 接线（不产生真实请求）', () => {
     expect(ctx.artifacts[0]).toMatchObject({ kind: 'image', portId: 'out-image' })
   })
 
+  it('未点名的参考图优先提交，文内编号仍指向原图', async () => {
+    const spy = spyGateway({
+      imageGenerate: () => ({ ok: true, data: mediaAsset('gen-order', 'image') })
+    })
+    const ctx = contextFor({
+      nodeType: 'image-gen',
+      config: { modelKey: 'toapis-1::gpt-image-2-vip' },
+      text: '参考@图片 1的人物，参考＠图3的背景，保持@图片 1的衣服',
+      providers: [provider('toapis-1', 'toapis', [IMAGE_MODEL])],
+      gateway: spy.gateway,
+      inputs: {
+        'in-images': [imagePacket('person'), imagePacket('style'), imagePacket('background')]
+      }
+    })
+
+    expect(await imageGenExecutor(ctx)).toEqual({ status: 'done' })
+    expect(spy.inputOf('imageGenerate')).toMatchObject({
+      referenceMediaIds: ['style', 'person', 'background'],
+      prompt: '参考@图片 2的人物，参考@图 3的背景，保持@图片 2的衣服'
+    })
+  })
+
   it('上限夹紧、无提示词/取消/超量参考图都在请求前拦下', async () => {
     // count 0 → 至少 1 张
     const spyOnce = spyGateway({

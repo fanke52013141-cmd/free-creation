@@ -22,7 +22,7 @@ export function resolvedMentions(
   const named = names.length
     ? `|(?:${names.join('|')})(?![\\p{L}\\p{N}_]|[.-][\\p{L}\\p{N}_])`
     : ''
-  const pattern = new RegExp(`@(?:(图片|图|视频)[^\\S\\r\\n]*(\\d+)(?!\\d)${named})`, 'gu')
+  const pattern = new RegExp(`[@＠](?:(图片|图|视频)[^\\S\\r\\n]*(\\d+)(?!\\d)${named})`, 'gu')
   const images = references.filter((item) => item.kind === 'image')
   const videos = references.filter((item) => item.kind === 'video')
   const result: { index: number; text: string; reference: PromptMediaReference }[] = []
