@@ -21,7 +21,10 @@ import { useDragToCanvas } from '../drag-to-canvas'
 import type { NodeCardShape } from '../NodeCardShape'
 import { LibraryResourcePicker } from '../../library/LibraryResourcePicker'
 
+import type { SearchDestination } from '../SearchPalette'
+
 interface AssetsPanelProps {
+  searchDestination?: SearchDestination
   projectId: string
   editor: Editor | null
   onImport: () => void
@@ -81,6 +84,7 @@ function kindIcon(kind: MediaKind): IconName {
 
 export function AssetsPanel({
   projectId,
+  searchDestination,
   editor,
   onImport,
   onDropMedia
@@ -99,7 +103,10 @@ export function AssetsPanel({
 
   const [typeFilter, setTypeFilter] = useState<MediaKind | 'all'>('all')
   const [selectionMode, setSelectionMode] = useState(false)
-  const [libraryMode, setLibraryMode] = useState(false)
+  const [libraryMode, setLibraryMode] = useState(searchDestination?.kind === 'resource')
+  const [focusedMediaId, setFocusedMediaId] = useState(
+    searchDestination?.kind === 'media' ? searchDestination.id : undefined
+  )
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [exporting, setExporting] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -116,7 +123,7 @@ export function AssetsPanel({
     : []
   const indexed = buildMediaAssetIndex(assets, shapes)
   const sourceOptions = mediaSourceOptions(indexed)
-  const visible = filterMediaAssets(indexed, {
+  const filtered = filterMediaAssets(indexed, {
     filter: typeFilter,
     keyword,
     sourceNodeId,
@@ -147,6 +154,7 @@ export function AssetsPanel({
       return next
     })
   }
+  const visible = focusedMediaId ? indexed.filter((asset) => asset.id === focusedMediaId) : filtered
   const selectedAssets = indexed.filter((item) => selectedIds.has(item.id))
 
   const handleDelete = async (asset: IndexedMediaAsset): Promise<void> => {
@@ -305,7 +313,11 @@ export function AssetsPanel({
         </button>
       </div>
       {libraryMode ? (
-        <LibraryResourcePicker projectId={projectId} editor={editor} />
+        <LibraryResourcePicker
+          projectId={projectId}
+          editor={editor}
+          initialResourceId={searchDestination?.kind === 'resource' ? searchDestination.id : undefined}
+        />
       ) : (
         <>
       <label className="assets-search-row">
@@ -454,6 +466,11 @@ export function AssetsPanel({
         </div>
       )}
 
+      {focusedMediaId && (
+        <button className="btn-ghost small" onClick={() => setFocusedMediaId(undefined)}>
+          查看全部素材
+        </button>
+      )}
       {visible.length === 0 ? (
         <div className="side-panel-empty">没有找到匹配的素材，调整筛选条件或导入新素材。</div>
       ) : (

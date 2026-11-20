@@ -365,6 +365,10 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
       itemCount: 'int'
     }),
     def('canvas.batch_flow.failed', 'error', 'renderer/canvas/storyboard-batch-flow.ts'),
+    def('search.read.started', 'info', 'renderer/canvas/SearchPalette', { source: 'short' }),
+    def('search.read.completed', 'info', 'renderer/canvas/SearchPalette', { source: 'short' }),
+    def('search.read.failed', 'warn', 'renderer/canvas/SearchPalette', { source: 'short' }),
+    def('search.read.cancelled', 'info', 'renderer/canvas/SearchPalette', { source: 'short' }),
     def('media.files_preflight', 'info', 'main/ipc/media.ipc.ts', { missingCount: 'int' }),
     def('media.files_preflight_failed', 'error', 'main/ipc/media.ipc.ts'),
     // app.*：main 生命周期

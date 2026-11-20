@@ -474,7 +474,7 @@ describe('local Agent node library access', () => {
     })
   })
 
-  it('deletes entries without ghosts, renames them and searches by name/title/type', async () => {
+  it('deletes entries without ghosts, renames them and searches by name/title/type/text', async () => {
     const source = await seedSourceProject()
     const composed = await call(
       'node.library.compose',
@@ -497,6 +497,9 @@ describe('local Agent node library access', () => {
     expect((await call('node.library.search', { nodeType: 'video' })).data).toMatchObject({ total: 0 })
     expect((await call('node.library.search', { query: 'v2' })).data).toMatchObject({ total: 1 })
     expect((await call('node.library.search', { query: '说明' })).data).toMatchObject({ total: 1 })
+    const bodyMatch = await call('node.library.search', { query: '多节点组合说明' })
+    expect(bodyMatch.data).toMatchObject({ total: 1, items: [{ id: entryId }] })
+    expect(JSON.stringify(bodyMatch.data)).not.toContain('多节点组合说明')
     const page = await call('node.library.search', { query: '分镜', offset: 0, limit: 10 })
     expect((page.data as any).items[0]).toMatchObject({
       id: entryId,

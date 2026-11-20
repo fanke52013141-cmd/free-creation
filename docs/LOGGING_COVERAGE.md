@@ -1007,3 +1007,11 @@ node.runPlan 为只读预检，复用 Agent 请求诊断，返回端口元数据
 
 新增 `agent.coordination.stage_dispatched`（stageKey、carrierNodeId、inputCount）、`agent.coordination.stage_entry_blocked`（stageKey、稳定 code、missingCount）、`agent.coordination.stage_human_decision_missing`（stageKey、missingCount），均由 `main/agent-flow/coordinator-host` 在固定顺序模式分派阶段/进入条件受阻/等待人工采用时发射，已登记 `src/shared/observability/events.ts` 白名单。只记阶段身份、承载节点 ID、计数与稳定原因码；阶段目标、完成条件、输入正文、交付内容、人工意见一律不入日志。固定顺序推进的开始/唯一终态仍复用既有 `agent.coordination.started/completed/failed`，不重复终态；专业子任务执行沿用公共 `agent.desktop`/`model.request`/command/node/asset 生命周期。ai-process/human-task 输出端口改由保存配置派生（flowDeclaredOutputPort），不新增执行事件，资产登记/命令回执沿用既有阶段。旧模型协调模式语义与日志不变。证据：`test/flow-stage-contracts.test.ts`（11）、`test/flow-fixed-order.test.ts`（6，含零主控模型调用、缺字段/缺人工决定不越过、发布中断 reconcile 不重放）通过，既有 coordinator/runtime/command-ledger/assets 等 10 文件 286 项回归通过，`guard:agent-parity` 三关全绿。未覆盖：真实 GUI 鼠标共创、真实模型固定顺序长任务、诊断包导出字段抽查。
 
+
+### 2026-11-20 画布工具栏全局搜索
+
+- GUI 在已有读取接口上合并画布节点、项目素材、资源库和节点流。画布内存筛选无磁盘或网络请求。项目素材、资源库、节点流模板和组合清单读取分别产生 `search.read.started` 及唯一的完成、失败或取消事件。常驻输入框开始一次有效搜索时加载项目素材和节点流。结束搜索或切换项目取消未完成的读取跟踪，替换关键词取消旧资源库查询的跟踪，迟到结果不会覆盖当前展示。
+- 诊断仅记录固定来源枚举、项目与调用关联 ID、时间和终态。关键词、节点正文、资源内容、路径及原始返回均不进入事件。资源定位复用现有资产、资源库和节点流面板。
+- 验收范围：浏览器模拟数据验证来源图标、自动聚焦、结果定位、读取失败和脱敏，并逐 trace 核验开始与唯一终态。CLI/MCP 复用现有按来源查询，节点流正文匹配由共享服务测试覆盖。未做桌面真实资料库的大规模读性能测试。
+
+- 搜索结果拖放复用现有模板、节点、素材与资源添加路径。已发布节点流和资源库结果的异步读取，复用 `search.read.*` 的开始与唯一终态，固定来源为 `published-flow-drop` 和 `resource-drop`。既有资源实体化及画布持久化承担原有日志，不重复写终态。纯移动和布局不新增执行日志。

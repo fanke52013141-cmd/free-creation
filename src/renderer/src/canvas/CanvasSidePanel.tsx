@@ -2,8 +2,8 @@ import { RunTimeline } from './RunTimeline'
 // 画布右侧抽屉面板：资产中心 / 节点流 / 历史记录（LibTV 侧栏入口落地）
 // 资产中心：项目级媒体库——导入/搜索/筛选/缩略图预览/点击拖到画布/删除
 // 节点流：列出用户保存的单节点或多节点组合，并允许搜索、添加和删除。
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { createShapeId, useValue, type Editor, type TLShapeId } from 'tldraw'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useValue, type Editor, type TLShapeId } from 'tldraw'
 import type { MediaAsset } from '@shared/types'
 import type { CompositeCapabilitySummary } from '@shared/composite/types'
 import type { NodeCardShape } from './NodeCardShape'
@@ -18,7 +18,7 @@ import { useEngineStore } from '../engine/store'
 import { runNodeManually, runWorkflowForNodes } from '../engine/executor'
 import { useGatewayStore } from '../stores/gateway'
 import { useWorkflowStore, type WorkflowTemplate } from '../stores/workflow'
-import { addNodeLibraryEntry } from './node-library'
+import { addNodeLibraryEntry, insertPublishedNodeFlow } from './node-library'
 import { CompositeVersionDialog } from '../composite/CompositeVersionDialog'
 import { CompositeCanvasEditor } from '../composite/CompositeCanvasEditor'
 import { markUndoPoint } from './history'
@@ -34,7 +34,6 @@ import { DiagnosticsProducer, newProducerId, newSpanId, newTraceId } from '@shar
 import { emitDiagnosticsEvent } from '../engine/diagnosticsReporter'
 import { useHistorySnapshots, type HistorySnapshot } from '../stores/history-snapshots'
 import { Icon, type IconName } from '../components/Icon'
-import { getNodeType } from '../nodes/registry'
 import { LibraryCardCover } from '../library/LibraryCardCover'
 import { AppSelect } from '../components/AppSelect'
 import { AssetsPanel } from './side-panel/AssetsPanel'
@@ -42,10 +41,13 @@ import { FlowOverviewPanel } from './FlowOverviewPanel'
 import { useDragToCanvas } from './drag-to-canvas'
 import { deriveHumanInbox, type HumanInboxItem } from '@shared/agent-flow/human-inbox'
 
+import type { SearchDestination } from './SearchPalette'
+
 export type SidePanelTab = 'assets' | 'workflow' | 'history' | 'runs' | 'tasks' | 'flow'
 
 interface CanvasSidePanelProps {
   tab: SidePanelTab | null
+  searchDestination?: (SearchDestination & { selection: number }) | null
   projectId: string
   editor: Editor | null
   onClose: () => void
@@ -82,10 +84,6 @@ function formatTime(ts: number): string {
 }
 
 // ── 节点流面板 ──
-function versionLabel(version: string): string {
-  return version.replace(/\.0\.0$/, '.0')
-}
-
 function nextVersionLabel(version: string | null): string {
   const major = Number.parseInt(version ?? '0', 10)
   return `${Number.isFinite(major) ? major + 1 : 1}.0`
@@ -95,12 +93,14 @@ function WorkflowPanel({
   editor,
   projectId,
   refreshKey,
+  initialCapabilityId,
   onEditNodes,
   onEditInfo
 }: {
   editor: Editor | null
   projectId: string
   refreshKey: number
+  initialCapabilityId?: string
   onEditNodes: (capability: CompositeCapabilitySummary) => void
   onEditInfo: (capability: CompositeCapabilitySummary) => void
 }): React.JSX.Element {
@@ -108,35 +108,37 @@ function WorkflowPanel({
   const wfLoad = useWorkflowStore((s) => s.load)
   const wfRemove = useWorkflowStore((s) => s.remove)
   const [query, setQuery] = useState('')
+  const [focusedCapabilityId, setFocusedCapabilityId] = useState(initialCapabilityId)
   const [composites, setComposites] = useState<CompositeCapabilitySummary[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const needle = query.trim().toLocaleLowerCase()
-  const visibleTemplates = templates.filter((template) =>
-    [template.name, ...template.nodes.flatMap((node) => [node.title, node.nodeType])].some(
-      (value) => value.toLocaleLowerCase().includes(needle)
-    )
-  )
-  const visibleComposites = composites.filter((capability) =>
-    [capability.name, capability.id, ...(capability.tags ?? [])].some((value) =>
+  const visibleTemplates = focusedCapabilityId
+    ? []
+    : templates.filter((template) =>
+        [template.name, ...template.nodes.flatMap((node) => [node.title, node.nodeType])].some(
+          (value) => value.toLocaleLowerCase().includes(needle)
+        )
+      )
+  const visibleComposites = composites.filter((capability) => {
+    if (focusedCapabilityId) return capability.id === focusedCapabilityId
+    return [capability.name, capability.id, ...(capability.tags ?? [])].some((value) =>
       value.toLocaleLowerCase().includes(needle)
     )
-  )
+  })
 
   useEffect(() => {
     void wfLoad().catch((error) => toast(`加载节点流失败：${String(error)}`))
   }, [wfLoad])
 
-  useEffect(() => {
-    void window.api.composite.search({}).then((result) => {
+  const refreshComposites = useCallback((): void => {
+    void window.api.composite.search({ query: focusedCapabilityId }).then((result) => {
       if (result.ok) setComposites(result.data)
     })
-  }, [refreshKey])
+  }, [focusedCapabilityId])
 
-  const refreshComposites = (): void => {
-    void window.api.composite.search({}).then((result) => {
-      if (result.ok) setComposites(result.data)
-    })
-  }
+  useEffect(() => {
+    refreshComposites()
+  }, [refreshKey, refreshComposites])
 
   // W3 删除：先做与 CLI/MCP 同一份引用检查；有引用则阻断，无引用需二次确认。
   const handleDeleteComposite = async (
@@ -190,44 +192,6 @@ function WorkflowPanel({
         ? `已从节点流添加「${tmpl.name}」，${skippedEdges} 条旧连线因端口不明确未恢复`
         : `已从节点流添加「${tmpl.name}」（${tmpl.nodes.length} 个节点）`
     )
-  }
-
-  const insertComposite = async (
-    capability: CompositeCapabilitySummary,
-    dropScreen?: { x: number; y: number }
-  ): Promise<void> => {
-    if (!editor) return
-    const version = capability.latestVersion
-    if (!version) return toast('该组合还没有已发布版本')
-    const result = await window.api.composite.versionGet({ capabilityId: capability.id, version })
-    if (!result.ok || !result.data) return toast('读取组合版本失败')
-    // 拖拽落在光标处，点击放在视口中心。
-    const center = dropScreen
-      ? editor.screenToPage(dropScreen)
-      : editor.getViewportPageBounds().center
-    const id = createShapeId()
-    markUndoPoint(editor, 'insert-composite-node')
-    editor.createShape({
-      id,
-      type: 'node-card',
-      x: center.x - 170,
-      y: center.y - 130,
-      props: {
-        nodeType: 'composite',
-        title: capability.name,
-        w: 340,
-        h: 260,
-        // W3 引用形态：config 存固定版本引用，快照缓存 meta。
-        config: JSON.stringify({
-          capabilityId: capability.id,
-          version,
-          contentHash: result.data.contentHash
-        })
-      },
-      meta: { compositeManifest: result.data.manifest }
-    } as never)
-    editor.select(id)
-    toast(`已添加节点流「${capability.name} v${versionLabel(version)}」`)
   }
 
   // 复制节点流：以最新发布版本为基准登记一个新组合，名称加「副本」，不改动原流。
@@ -298,7 +262,10 @@ function WorkflowPanel({
           <input
             className="assets-search"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setFocusedCapabilityId(undefined)
+              setQuery(event.target.value)
+            }}
             placeholder="搜索节点流"
             aria-label="搜索节点流"
           />
@@ -315,7 +282,9 @@ function WorkflowPanel({
               <CompositeCard
                 key={`composite-${capability.id}`}
                 capability={capability}
-                onInsert={(dropScreen) => void insertComposite(capability, dropScreen)}
+                onInsert={(dropScreen) => {
+                  if (editor) void insertPublishedNodeFlow(editor, capability, dropScreen)
+                }}
                 onEditNodes={() => onEditNodes(capability)}
                 onEditInfo={() => onEditInfo(capability)}
                 onDuplicate={() => void duplicateComposite(capability)}
@@ -360,11 +329,11 @@ function CompositeCard({
       className="asset-card"
       title="点击添加到画布，或直接拖到画布"
       onPointerDown={(e) =>
-        startDrag(e, { label: capability.name, icon: 'layers' }, (x, y) => onInsert({ x, y }))
+        startDrag(e, { label: capability.name, icon: 'node-library' }, (x, y) => onInsert({ x, y }))
       }
       onClick={() => handleClick(() => onInsert())}
     >
-      <LibraryCardCover icon="layers" compact />
+      <LibraryCardCover icon="node-library" compact />
       <button
         type="button"
         className="composite-card-edit"
@@ -439,24 +408,16 @@ function WorkflowCard({
   onRemove: () => void
 }): React.JSX.Element {
   const { startDrag, handleClick } = useDragToCanvas()
-  const outputTypes = new Set(
-    template.nodes.flatMap(
-      (node) => getNodeType(node.nodeType)?.ports.out.map((port) => port.type) ?? []
-    )
-  )
-  const coverIcon =
-    (['video', 'image', 'audio', 'text'] as const).find((kind) => outputTypes.has(kind)) ??
-    (template.nodes.some((node) => node.text?.trim()) ? 'text' : 'node-library')
   return (
     <article
       className="asset-card"
       title="点击添加到画布，或直接拖到画布"
       onPointerDown={(e) =>
-        startDrag(e, { label: template.name, icon: coverIcon }, (x, y) => onApply({ x, y }))
+        startDrag(e, { label: template.name, icon: 'node-library' }, (x, y) => onApply({ x, y }))
       }
       onClick={() => handleClick(() => onApply())}
     >
-      <LibraryCardCover icon={coverIcon} compact />
+      <LibraryCardCover icon="node-library" compact />
       <button
         type="button"
         className="asset-template-run btn-ghost small"
@@ -957,6 +918,7 @@ function TasksPanel({
 
 export function CanvasSidePanel({
   tab,
+  searchDestination,
   projectId,
   editor,
   onClose,
@@ -1057,7 +1019,10 @@ export function CanvasSidePanel({
           </div>
           {tab === 'assets' && (
             <AssetsPanel
-              key={projectId}
+              key={`${projectId}:${searchDestination?.selection ?? ''}`}
+              searchDestination={
+                searchDestination?.kind === 'workflow' ? undefined : (searchDestination ?? undefined)
+              }
               projectId={projectId}
               editor={editor}
               onImport={onImport}
@@ -1066,6 +1031,10 @@ export function CanvasSidePanel({
           )}
           {tab === 'workflow' && (
             <WorkflowPanel
+              key={searchDestination?.selection}
+              initialCapabilityId={
+                searchDestination?.kind === 'workflow' ? searchDestination.id : undefined
+              }
               editor={editor}
               projectId={projectId}
               refreshKey={libraryRefreshKey}

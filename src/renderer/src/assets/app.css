@@ -11708,49 +11708,84 @@ select:focus-visible {
   color: var(--red);
 }
 
-/* ── P1-4 搜索覆盖层 ── */
-.search-overlay {
-  position: fixed;
-  inset: var(--canvas-search-top, 50px) 0 0;
-  z-index: var(--z-modal);
+/* ── 画布底栏全局搜索 ── */
+.dock-search {
+  --search-right: 20px;
+  position: absolute;
+  right: var(--search-right);
+  bottom: 16px;
+  width: min(272px, calc(100% - var(--search-right) - 12px));
+  z-index: var(--z-dock);
 }
 
-.search-panel {
-  position: absolute;
-  left: clamp(8px, var(--canvas-search-left, 50vw), calc(100% - var(--canvas-search-width)));
-  --canvas-search-width: min(268px, max(208px, var(--side-panel-width)), calc(100vw - 16px));
-  width: var(--canvas-search-width);
-  border: 1px solid var(--line);
+.canvas-host:has(> .side-panel, > .node-contract-panel) > .dock-search {
+  --search-right: calc(var(--side-panel-width) + 16px);
+}
+
+@media (max-width: 1200px) {
+  .canvas-host:has(> .side-panel, > .node-contract-panel) > .dock-search {
+    bottom: 70px;
+  }
+}
+
+@media (max-width: 950px) {
+  .dock-search {
+    --search-right: 12px;
+    bottom: 70px;
+  }
+
+  .canvas-host:has(> .side-panel, > .node-contract-panel) > .dock-search {
+    --search-right: min(calc(var(--side-panel-width) + 12px), calc(100vw - 145px));
+  }
 }
 
 .search-header {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 6px 0 8px;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--canvas-surface);
+  cursor: text;
+}
+
+.search-header:focus-within {
+  border-color: var(--txt-dim);
 }
 
 .search-icon {
-  display: inline-flex;
-  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
   color: var(--txt-dim);
+  background: transparent;
+  cursor: text;
+}
+
+.search-icon:focus-visible {
+  outline: 1px solid currentColor;
 }
 
 .search-input {
+  box-sizing: border-box;
   flex: 1;
   min-width: 0;
-  padding: 0;
+  height: 28px;
+  padding: 2px 4px;
   background: transparent;
   border: 0;
   outline: none;
   color: var(--txt);
   font: inherit;
-  font-size: 12px;
-}
-
-.search-input::placeholder {
-  color: var(--txt-dim);
+  font-size: 13px;
+  line-height: 22px;
 }
 
 .search-close {
@@ -11772,18 +11807,28 @@ select:focus-visible {
 }
 
 .search-results {
-  border-top: 1px solid var(--line);
-  max-height: min(360px, calc(100dvh - var(--canvas-search-top, 50px) - 48px));
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 12px);
+  box-sizing: border-box;
+  width: 100%;
+  max-height: min(360px, calc(100dvh - 170px));
   overflow-y: auto;
-  padding: 4px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--canvas-surface);
+  box-shadow: 0 5px 16px rgb(0 0 0 / 22%);
 }
+
 .search-result-group + .search-result-group {
   border-top: 1px solid var(--line);
   margin-top: 6px;
   padding-top: 6px;
 }
 .search-result-group h3 {
-  margin: 8px 10px 3px;
+  margin: 4px 10px 6px;
+  line-height: 17px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 650;
@@ -11794,7 +11839,6 @@ select:focus-visible {
       其余深色面板渲染为浏览器亮色默认滚动条，面板间视觉不一致 ── */
 .side-panel-body,
 .assets-grid,
-.search-results,
 .contract-scroll,
 .json-body,
 .code-body,
@@ -11804,7 +11848,6 @@ select:focus-visible {
 }
 .side-panel-body::-webkit-scrollbar,
 .assets-grid::-webkit-scrollbar,
-.search-results::-webkit-scrollbar,
 .contract-scroll::-webkit-scrollbar,
 .json-body::-webkit-scrollbar,
 .code-body::-webkit-scrollbar,
@@ -11814,7 +11857,6 @@ select:focus-visible {
 }
 .side-panel-body::-webkit-scrollbar-thumb,
 .assets-grid::-webkit-scrollbar-thumb,
-.search-results::-webkit-scrollbar-thumb,
 .contract-scroll::-webkit-scrollbar-thumb,
 .json-body::-webkit-scrollbar-thumb,
 .code-body::-webkit-scrollbar-thumb,
@@ -11824,7 +11866,6 @@ select:focus-visible {
 }
 .side-panel-body::-webkit-scrollbar-track,
 .assets-grid::-webkit-scrollbar-track,
-.search-results::-webkit-scrollbar-track,
 .contract-scroll::-webkit-scrollbar-track,
 .json-body::-webkit-scrollbar-track,
 .code-body::-webkit-scrollbar-track,
@@ -11863,6 +11904,8 @@ select:focus-visible {
   font-size: 13px;
   font-weight: 600;
   color: var(--txt);
+  line-height: 19px;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -11870,6 +11913,8 @@ select:focus-visible {
 .search-hit-snippet {
   font-size: 11px;
   color: var(--muted);
+  line-height: 16px;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -6,6 +6,29 @@ import { markUndoPoint } from '../canvas/history'
 import { useMediaStore } from '../stores/media'
 import { resourceReusePreview } from './reusePreview'
 
+export async function insertLibraryResourceById(
+  editor: Editor,
+  projectId: string,
+  resourceId: string,
+  dropScreen?: { x: number; y: number }
+): Promise<'success' | 'cancelled'> {
+  const pageId = editor.getCurrentPageId()
+  const result = await window.api.getLibraryResource({ resourceId })
+  if (editor.isDisposed || editor.getCurrentPageId() !== pageId) return 'cancelled'
+  if (!result.ok) throw new Error(result.error.message)
+  if (!result.data) throw new Error('资源详情不存在或已被删除')
+  const { data } = result
+  await insertResource(
+    editor,
+    projectId,
+    data,
+    data.components.map((component) => component.id),
+    {},
+    dropScreen
+  )
+  return 'success'
+}
+
 /** Preflight before copying files, then commit all shapes in one undo segment. */
 export async function insertResource(
   editor: Editor,

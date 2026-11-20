@@ -57,7 +57,7 @@ export const NODE_LIBRARY_OPERATIONS = {
   },
   'node.library.search': {
     effect: 'read',
-    description: '按条目名称、节点标题与节点类型过滤节点库条目（分页）；不返回配置正文',
+    description: '按条目名称、节点标题、节点类型与节点文本过滤节点库条目（分页）；返回条目摘要',
     input: z
       .object({
         query: z.string().max(200).optional(),

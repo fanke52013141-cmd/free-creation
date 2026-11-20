@@ -432,7 +432,9 @@ function searchEntries(input: Record<string, unknown>): unknown {
       entry.name,
       ...types,
       ...entry.nodes.flatMap((raw): string[] =>
-        isRecord(raw) && typeof raw.title === 'string' ? [raw.title] : []
+        isRecord(raw)
+          ? [raw.title, raw.text].filter((value): value is string => typeof value === 'string')
+          : []
       )
     ]
     return haystack.some((value) => value.toLocaleLowerCase().includes(query))

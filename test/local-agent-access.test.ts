@@ -19,7 +19,7 @@ import AdmZip from 'adm-zip'
 vi.mock('electron', () => ({ app: undefined }))
 import { closeDb, getDb, getDataDir } from '../src/main/store/db'
 import { createProject, openProject, saveProject } from '../src/main/store/projects.repo'
-import { listWorkflowTemplates } from '../src/main/store/workspace-state.repo'
+import { listWorkflowTemplates, saveWorkflowTemplate } from '../src/main/store/workspace-state.repo'
 import { LocalAccessService } from '../src/main/agent-access/service'
 import { setGatewayEventSink } from '../src/main/diagnostics/gateway-events'
 import {
@@ -103,18 +103,19 @@ describe('local Agent vertical slice', () => {
       inputFile,
       JSON.stringify({ input: { sourcePath, name: 'CLI命名技能' }, idempotencyKey: key() })
     )
-    const cli = await new Promise<{ code: number | null; output: string }>(
-      (resolveCall, reject) => {
+    const runCli = (command: string[], file: string) => new Promise<{
+      code: number | null
+      output: string
+    }>((resolveCall, reject) => {
         const child = spawn(
           process.execPath,
           [
             resolve('out/main/local-agent.js'),
-            'skill',
-            'install',
+            ...command,
             '--data-dir',
             directory,
             '--input-file',
-            inputFile
+            file
           ],
           {
             env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
@@ -128,8 +129,8 @@ describe('local Agent vertical slice', () => {
         })
         child.once('error', reject)
         child.once('exit', (code) => resolveCall({ code, output }))
-      }
-    )
+      })
+    const cli = await runCli(['skill', 'install'], inputFile)
     expect(cli.code).toBe(0)
     expect(JSON.parse(cli.output).data).toMatchObject({ name: 'CLI命名技能', version: 'v1' })
     const client = new Client({ name: 'skill-acceptance', version: '1' }, { capabilities: {} })
@@ -168,6 +169,27 @@ describe('local Agent vertical slice', () => {
       })
       expect(templates.isError).toBe(false)
       expect((templates.structuredContent as any).data.total).toBe(0)
+      const query = 'QA template body only'
+      const entry = saveWorkflowTemplate({
+        name: 'Transport template',
+        nodes: [{ title: 'Text', nodeType: 'text', text: query }],
+        edges: [],
+        nodeCount: 1
+      })
+      const searchFile = join(directory, 'template-search.json')
+      const searchInput = { input: { query } }
+      writeFileSync(searchFile, JSON.stringify(searchInput))
+      const cliSearch = await runCli(['node', 'library', 'search'], searchFile)
+      const mcpSearch = await client.callTool({
+        name: 'node_library_search',
+        arguments: searchInput
+      })
+      expect(cliSearch.code).toBe(0)
+      expect(mcpSearch.isError).toBe(false)
+      const cliData = JSON.parse(cliSearch.output).data
+      expect(cliData).toMatchObject({ total: 1, items: [{ id: entry.id }] })
+      expect(mcpSearch.structuredContent).toMatchObject({ data: cliData })
+      expect(JSON.stringify(cliData)).not.toContain(query)
     } finally {
       await client.close()
       await transport.close()

@@ -102,10 +102,10 @@ function contrast(a, b) {
       await page.screenshot({ path: `${output}/menu-${Object.keys(evidence.categories).length}.png` })
     }
     await page.mouse.move(2600, 1800)
-    await page.evaluate(async () => (await import('/src/stores/search.ts')).useSearchStore.getState().toggle())
-    await page.getByRole('textbox', { name: '搜索画布节点或节点流' }).fill('音频')
-    await page.waitForSelector('.search-hit')
-    const searchColors = await page.locator('.search-hit').evaluateAll((buttons) => buttons.map((el) => ({ label: el.getAttribute('aria-label').split('：')[1], color: getComputedStyle(el.querySelector('.search-hit-icon')).color })))
+    await page.getByRole('textbox', { name: '全局搜索关键词' }).fill('音频')
+    const searchTools = page.getByRole('region', { name: '创建工具' }).locator('.search-hit')
+    await searchTools.first().waitFor()
+    const searchColors = await searchTools.evaluateAll((buttons) => buttons.map((el) => ({ label: el.getAttribute('aria-label').split('：')[1], color: getComputedStyle(el.querySelector('.search-hit-icon')).color })))
     assert.ok(searchColors.length > 0)
     searchColors.forEach((item) => {
       const node = nodes.find((node) => node.label === item.label)
@@ -113,9 +113,9 @@ function contrast(a, b) {
       rgb(item.color).forEach((channel, i) => assert.ok(Math.abs(channel - rgb(node.color)[i]) < 1, `搜索 ${item.label}`))
     })
     evidence.entries.search = searchColors
+    await page.getByRole('textbox', { name: '全局搜索关键词' }).press('Escape')
     await page.evaluate(async () => {
-      (await import('/src/stores/search.ts')).useSearchStore.getState().close()
-      ;(await import('/src/stores/nodePanel.ts')).useNodePanelStore.getState().open('contract', 'shape:color-audio', 'overview')
+      (await import('/src/stores/nodePanel.ts')).useNodePanelStore.getState().open('contract', 'shape:color-audio', 'overview')
     })
     await page.waitForSelector('.contract-head')
     evidence.entries.panel = await page.locator('.contract-head > span').evaluate((el) => getComputedStyle(el).color)

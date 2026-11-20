@@ -1,4 +1,6 @@
 import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
+import type { CompositeCapabilitySummary } from '@shared/composite/types'
+import { toast } from '../stores/toast'
 import { getNodePorts, getNodeType } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { createEdge, portPairCompatible } from './graph'
@@ -76,4 +78,54 @@ export function addNodeLibraryEntry(
 
   if (markHistory) markUndoPoint(editor, 'apply-template')
   return { nodeIds, skippedEdges }
+}
+
+export async function insertPublishedNodeFlow(
+  editor: Editor,
+  capability: Pick<CompositeCapabilitySummary, 'id' | 'name' | 'latestVersion'>,
+  dropScreen?: { x: number; y: number }
+): Promise<'success' | 'failed' | 'cancelled'> {
+  const version = capability.latestVersion
+  if (!version) {
+    toast('该组合还没有已发布版本')
+    return 'failed'
+  }
+  const pageId = editor.getCurrentPageId()
+  const center = dropScreen
+    ? editor.screenToPage(dropScreen)
+    : editor.getViewportPageBounds().center
+  try {
+    const result = await window.api.composite.versionGet({ capabilityId: capability.id, version })
+    if (editor.isDisposed || editor.getCurrentPageId() !== pageId) return 'cancelled'
+    if (!result.ok || !result.data) {
+      toast('读取组合版本失败')
+      return 'failed'
+    }
+    const id = createShapeId()
+    markUndoPoint(editor, 'insert-composite-node')
+    editor.createShape({
+      id,
+      type: 'node-card',
+      x: center.x - 170,
+      y: center.y - 130,
+      props: {
+        nodeType: 'composite',
+        title: capability.name,
+        w: 340,
+        h: 260,
+        config: JSON.stringify({
+          capabilityId: capability.id,
+          version,
+          contentHash: result.data.contentHash
+        })
+      },
+      meta: { compositeManifest: result.data.manifest }
+    } as never)
+    editor.select(id)
+    toast(`已添加节点流「${capability.name} v${version.replace(/\.0\.0$/, '.0')}」`)
+    return 'success'
+  } catch {
+    toast('添加节点流失败')
+    return 'failed'
+  }
 }

@@ -398,20 +398,12 @@
 }
 
 .gw-panel,
-.search-panel,
 .engine-errors,
 .media-preview-box {
   border-color: rgba(231, 238, 247, 0.13);
   background: linear-gradient(145deg, rgba(43, 49, 58, 0.98), rgba(22, 26, 32, 0.98));
   box-shadow: var(--elevation-float);
   backdrop-filter: blur(18px);
-}
-
-.search-panel {
-  border-radius: 9px;
-  background: var(--canvas-surface);
-  box-shadow: 0 5px 16px rgb(0 0 0 / 22%);
-  backdrop-filter: none;
 }
 
 .gw-panel,

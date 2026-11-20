@@ -12,13 +12,15 @@ describe('覆盖层点击外部关闭', () => {
     expect(provider).toContain('if (event.target === event.currentTarget) setModelPickerOpen(false)')
   })
 
-  it('模型目录和搜索面板不会把遮罩点击透传给画布', () => {
+  it('模型目录隔离遮罩点击，底栏搜索只隔离自身的指针事件', () => {
     const catalog = read('src/renderer/src/gateway/ModelCatalogPanel.tsx')
     const search = read('src/renderer/src/canvas/SearchPalette.tsx')
     expect(catalog).toContain('onPointerDown={(event) => stopEventPropagation(event)}')
     expect(catalog).toContain('event.target === event.currentTarget) close()')
-    expect(search).toContain('stopEventPropagation(e)')
-    expect(search).toContain('role="dialog" aria-modal="true" aria-label="搜索节点"')
+    expect(search).toContain('onPointerDown={(event) => stopEventPropagation(event)}')
+    expect(search).toContain("document.addEventListener('pointerdown', dismiss, true)")
+    expect(search).toMatch(/role="search"\s+aria-label="全局搜索"/)
+    expect(search).not.toContain('aria-modal')
   })
 
   it('确认对话框点击背景按取消处理，导演台背景点击关闭且保持焦点语义', () => {

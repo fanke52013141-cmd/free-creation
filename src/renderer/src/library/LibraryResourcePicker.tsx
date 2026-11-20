@@ -5,10 +5,11 @@ import { Icon } from '../components/Icon'
 import { LibraryCardCover } from './LibraryCardCover'
 import { useConfirmStore } from '../stores/confirm'
 import { useToastStore } from '../stores/toast'
-import { insertResource } from './insertResource'
+import { insertLibraryResourceById } from './insertResource'
 import { useDragToCanvas } from '../canvas/drag-to-canvas'
 
 interface LibraryResourcePickerProps {
+  initialResourceId?: string
   projectId: string
   editor: Editor | null
 }
@@ -23,9 +24,11 @@ const resourceDate = new Intl.DateTimeFormat('zh-CN', {
 
 export function LibraryResourcePicker({
   projectId,
+  initialResourceId,
   editor
 }: LibraryResourcePickerProps): React.JSX.Element {
   const [keyword, setKeyword] = useState('')
+  const [resourceId, setResourceId] = useState(initialResourceId)
   const [resources, setResources] = useState<LibraryResourceSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -38,6 +41,13 @@ export function LibraryResourcePicker({
       void (async (): Promise<void> => {
         // loading 在异步回调里更新，避免在 effect 同步体触发级联渲染。
         setLoading(true)
+        if (resourceId) {
+          const result = await window.api.getLibraryResource({ resourceId })
+          if (cancelled) return
+          setResources(result.ok && result.data ? [result.data] : [])
+          setLoading(false)
+          return
+        }
         const result = await window.api.searchLibrary({
           query: keyword.trim() || undefined,
           limit: SEARCH_LIMIT
@@ -51,7 +61,7 @@ export function LibraryResourcePicker({
       cancelled = true
       if (debounceRef.current) window.clearTimeout(debounceRef.current)
     }
-  }, [keyword])
+  }, [keyword, resourceId])
 
   // 点击添加：整份资源加入；拖拽添加时携带光标落点。
   const addResource = async (
@@ -64,12 +74,7 @@ export function LibraryResourcePicker({
     }
     setBusyId(resource.id)
     try {
-      const detailResult = await window.api.getLibraryResource({ resourceId: resource.id })
-      if (!detailResult.ok) throw new Error(detailResult.error.message)
-      const detail = detailResult.data
-      if (!detail) throw new Error('资源详情不存在或已被删除')
-      const componentIds = detail.components.map((item) => item.id)
-      await insertResource(editor, projectId, detail, componentIds, {}, dropScreen)
+      await insertLibraryResourceById(editor, projectId, resource.id, dropScreen)
     } catch (error) {
       useToastStore.getState().show(
         `添加失败：${error instanceof Error ? error.message : String(error)}`
@@ -112,7 +117,10 @@ export function LibraryResourcePicker({
           className="assets-search"
           value={keyword}
           placeholder="搜索资源库"
-          onChange={(e) => setKeyword(e.currentTarget.value)}
+          onChange={(event) => {
+            setResourceId(undefined)
+            setKeyword(event.currentTarget.value)
+          }}
         />
       </label>
 

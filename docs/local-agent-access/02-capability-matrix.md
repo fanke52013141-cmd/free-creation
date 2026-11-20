@@ -4,6 +4,8 @@
 和[32类节点动作表](16-node-action-coverage.md)补齐当前全软件范围。以下A0–A4及planned表保留为历史分期，
 不能用于豁免今后的GUI新功能同步要求；项目/资源包导入纳入最终目标，当前仍未开放。
 
+2026-11-20：画布底部全局搜索将当前画布、当前项目素材、本机资源库和节点流合并展示。CLI 与 MCP 可组合现有 `graph.get`、`media.list`、`library.search` / `library.resource.get`、`node.library.search`、`composite.search` / `composite.get` / `composite.draft.get` 读取对应来源。节点库摘要搜索增加正文匹配，入参与出参结构保持兼容。桌面搜索可见当前编辑中的画布，外部图查询仍以现有项目快照规则为准。未新增合并查询命令。搜索结果拖放复用现有画布移动、节点创建、节点库模板插入、固定版本组合与素材添加，外部入口沿用 graph.patch、node.library.insert、composite.get 和 library.resource.materialize 等已有操作。证据为真实 CLI 与 MCP 传输测试、节点库服务测试和浏览器模拟数据验收。
+
 2026-11-07：新增 Skill 安装/查询、AI 对话技能绑定/查询、节点库保存/查询共6项，Registry共25项。范围、参数与限制见[接入说明](13-chat-skills-node-library.md)。实现不等于全部桌面/安装包验收完成。
 
 2026-10-24 内容 Skill Agent 接续：AI 对话与 AI 处理桌面节点增加固定 Skill 配置和自主内容循环；外部节点执行、Skill 安装仍未开放，不提升本矩阵状态。公共端口/输出和外部 Schema 不变；接入影响、持久化、日志和验证见[本包交付记录](../SKILL_AGENT_DELIVERY_2026_10_24.md)。

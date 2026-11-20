@@ -845,7 +845,7 @@ export function registerBaseNodeTypes(): void {
     type: 'composite',
     contractVersion: 1,
     label: '组合能力',
-    icon: 'layers',
+    icon: 'node-library',
     color: NODE_ACCENTS.composite,
     defaultSize: { w: 340, h: 260 },
     sizePolicy: 'standard',

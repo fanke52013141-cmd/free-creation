@@ -837,7 +837,7 @@
         "node.library.search",
         "node.library.get"
       ],
-      "note": "F7：list 摘要 + search（名称/标题/类型过滤，GUI 面板同一过滤口径）+ get 详情（不返回配置正文）；增删改见下三项"
+      "note": "F7：list 摘要 + search（全局搜索支持名称、节点标题、类型和正文匹配；只返回摘要）+ get 详情（不返回配置正文）；增删改见下三项"
     },
     "ipc.workspace.saveTemplate": {
       "label": "节点库保存",

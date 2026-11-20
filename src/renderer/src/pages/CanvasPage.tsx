@@ -7,7 +7,6 @@ import { useEngineStore } from '../engine/store'
 import { ResourceQueuePanel } from '../engine/ResourceQueuePanel'
 import { CanvasEditor } from '../canvas/CanvasEditor'
 import { ProjectMenu } from '../canvas/ProjectMenu'
-import { useSearchStore } from '../stores/search'
 import { Icon } from '../components/Icon'
 import { Tooltip } from '../components/Tooltip'
 import { CanvasTopHistory } from '../canvas/CanvasHistoryDock'
@@ -53,15 +52,13 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
     const controls = page?.querySelector<HTMLElement>('.engine-controls')
     const host = page?.querySelector<HTMLElement>('.canvas-host')
     const topbar = page?.querySelector<HTMLElement>('.canvas-topbar')
-    const anchor = controls?.querySelector<SVGSVGElement>('.search-trigger svg')
+    const anchor = controls?.querySelector<HTMLElement>('.run-btn')
     if (!page || !controls || !host || !topbar || !anchor) return
     const align = (): void => {
       const hostBounds = host.getBoundingClientRect()
       const searchLeft = anchor.getBoundingClientRect().left
       const width = hostBounds.right - searchLeft
       page.style.setProperty('--side-panel-width', `${Math.max(0, width)}px`)
-      page.style.setProperty('--canvas-search-top', `${topbar.getBoundingClientRect().bottom + 6}px`)
-      page.style.setProperty('--canvas-search-left', `${searchLeft}px`)
     }
     const observer = new ResizeObserver(align)
     observer.observe(page)
@@ -76,7 +73,7 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
     }
   }, [file, loading, recoveryPrompt, isRunning, isPaused, enginePhase])
 
-  // Ctrl+K 唤起搜索面板
+  // Ctrl+K 聚焦常驻搜索框
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
@@ -86,8 +83,10 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
           active instanceof HTMLElement &&
           (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)
         if (typing) return
+        const input = pageRef.current?.querySelector<HTMLInputElement>('.dock-search .search-input')
+        if (!input) return
         e.preventDefault()
-        useSearchStore.getState().toggle()
+        input.focus()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -334,15 +333,7 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
               </span>
             </div>
           )}
-          {/* 搜索按钮；撤销 / 重做紧挨搜索左侧 */}
           <CanvasTopHistory />
-          <TopbarIconButton
-            className="run-btn search-trigger"
-            aria-label="搜索节点（Ctrl+K）"
-            onClick={() => useSearchStore.getState().toggle()}
-          >
-            <Icon name="search" size={16} />
-          </TopbarIconButton>
           {isRunning ? (
             <>
               <Tooltip label={isPaused ? '继续工作流' : '在当前原子任务结束后暂停'}>

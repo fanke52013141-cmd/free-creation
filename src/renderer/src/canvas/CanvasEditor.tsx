@@ -38,7 +38,7 @@ import { NodeContractPanel } from './NodeContractPanel'
 import { DirectorStudioPanel } from './DirectorStudioPanel'
 import { useNodePanelStore } from '../stores/nodePanel'
 import { artifactShapeVisibility } from './artifact-grouping'
-import { SearchPalette } from './SearchPalette'
+import { SearchPalette, type SearchDestination } from './SearchPalette'
 import { CanvasSelectionBackground, GroupOutlineLayer } from './GroupOutlineLayer'
 import { NodeSelectionForeground } from './NodeSelectionForeground'
 import { DataEdgeLayer } from './DataEdgeLayer'
@@ -389,6 +389,7 @@ export function CanvasEditor({
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null)
   // 右键侧栏面板：资产 / 工作流 / 历史记录
   const [panelTab, setPanelTab] = useState<SidePanelTab | null>(null)
+  const [searchDestination, setSearchDestination] = useState<(SearchDestination & { selection: number }) | null>(null)
   // 节点右上角 info 图标显式打开的面板目标（选中不触发；对话节点→聊天，其余→契约窗）
   const nodePanelKind = useNodePanelStore((s) => s.kind)
   useEffect(() => {
@@ -3591,7 +3592,10 @@ export function CanvasEditor({
             <button
               className="palette-item"
               aria-label="打开资产管理"
-              onClick={() => setPanelTab('assets')}
+              onClick={() => {
+                setSearchDestination(null)
+                setPanelTab('assets')
+              }}
             >
               <span className="palette-icon">
                 <Icon name="assets" size={20} />
@@ -3603,7 +3607,10 @@ export function CanvasEditor({
             <button
               className="palette-item"
               aria-label="打开节点流"
-              onClick={() => setPanelTab('workflow')}
+              onClick={() => {
+                setSearchDestination(null)
+                setPanelTab('workflow')
+              }}
             >
               <span className="palette-icon">
                 <Icon name="node-library" size={20} />
@@ -3661,6 +3668,23 @@ export function CanvasEditor({
           </Tooltip>
         </div>
       </div>
+      {editorInstance && (
+        <SearchPalette
+          editor={editorInstance}
+          projectId={project.id}
+          onOpenResult={(destination) => {
+            setSearchDestination((previous) => ({
+              ...destination,
+              selection: (previous?.selection ?? 0) + 1
+            }))
+            setPanelTab(destination.kind === 'workflow' ? 'workflow' : 'assets')
+          }}
+          onCreateNode={handleNodePick}
+          onDropNode={(type, x, y) => createNodeAt(type, x, y, undefined, true)}
+          onDropMedia={(asset, x, y) => createMediaNodes([asset], x, y)}
+          visibleNodeTypeIds={workspaceProfile?.visibleNodeTypeIds}
+        />
+      )}
       <CanvasBottomDock editor={editorInstance} />
       {/* 多选浮动工具栏：选中 2+ 节点时显示对齐与打组 */}
       {editorInstance && (
@@ -3673,14 +3697,6 @@ export function CanvasEditor({
             })
           }
           onSaveWorkflow={(ids) => setWorkflowSaveSelection(ids)}
-        />
-      )}
-      {/* 搜索覆盖层（顶栏按钮触发，在 Tldraw 同级渲染） */}
-      {editorInstance && (
-        <SearchPalette
-          editor={editorInstance}
-          onCreateNode={handleNodePick}
-          visibleNodeTypeIds={workspaceProfile?.visibleNodeTypeIds}
         />
       )}
       {editorInstance && <ResourceInsertRequest editor={editorInstance} projectId={project.id} />}
@@ -3697,15 +3713,20 @@ export function CanvasEditor({
               if (editor) collapseSelection(editor, workflowSaveSelection, name)
             }
             setWorkflowSaveSelection(null)
+            setSearchDestination(null)
             setPanelTab(kind === 'resource' ? 'assets' : 'workflow')
           }}
         />
       )}
       <CanvasSidePanel
         tab={panelTab}
+        searchDestination={searchDestination}
         projectId={project.id}
         editor={editorInstance}
-        onClose={() => setPanelTab(null)}
+        onClose={() => {
+          setSearchDestination(null)
+          setPanelTab(null)
+        }}
         onImport={() => {
           const editor = editorRef.current
           if (!editor) return

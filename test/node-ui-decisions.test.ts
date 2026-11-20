@@ -124,7 +124,7 @@ describe('v1.3 §16.1 端口圆点统一使用节点色、类型色环与柔光'
 describe('画布连线宽度与流动段比例', () => {
   it('正式连线和拖线预览都按 1/6 路径长度显示流动段', () => {
     expect(surfaces).toMatch(
-      /\.data-edge-visible\s*\{[^}]*stroke-width:\s*1\.5;[\s\S]*?\.data-edge-flow\s*\{[^}]*stroke-width:\s*2\.25;[^}]*stroke-dasharray:\s*166\.667 833\.333;/
+      /\.data-edge-visible\s*\{[^}]*stroke-width:\s*3;[\s\S]*?\.data-edge-flow\s*\{[^}]*stroke-width:\s*4\.5;[^}]*stroke-dasharray:\s*166\.667 833\.333;/
     )
     expect(foundation).toMatch(/\.conn-water-path\s*\{[^}]*stroke-dasharray:\s*166\.667 833\.333;/)
     // 2026-11-02 起连线层改为页面坐标 + 镜像 tldraw 相机 transform：线宽在 CSS 中按页面单位

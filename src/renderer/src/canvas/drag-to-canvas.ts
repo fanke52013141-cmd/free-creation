@@ -28,7 +28,8 @@ export interface DragToCanvas {
   startDrag: (
     e: React.PointerEvent,
     payload: DragGhostPayload,
-    onDrop: (x: number, y: number) => void
+    onDrop: (x: number, y: number) => void,
+    canDrop?: (x: number, y: number) => boolean
   ) => void
   handleClick: (cb: () => void) => void
 }
@@ -40,8 +41,11 @@ export function useDragToCanvas(): DragToCanvas {
     (
       e: React.PointerEvent,
       payload: DragGhostPayload,
-      onDrop: (x: number, y: number) => void
+      onDrop: (x: number, y: number) => void,
+      canDrop: (x: number, y: number) => boolean = (x) => x > CANVAS_DROP_EDGE
     ): void => {
+      if (e.button !== 0) return
+      const pointerId = e.pointerId
       const startX = e.clientX
       const startY = e.clientY
       let dragged = false
@@ -49,6 +53,7 @@ export function useDragToCanvas(): DragToCanvas {
       suppressClickRef.current = false
 
       const onMove = (ev: PointerEvent): void => {
+        if (ev.pointerId !== pointerId) return
         if (
           !dragged &&
           (Math.abs(ev.clientX - startX) > DRAG_THRESHOLD ||
@@ -60,18 +65,29 @@ export function useDragToCanvas(): DragToCanvas {
           useDragGhostStore.getState().setGhost({ ...payload, x: ev.clientX, y: ev.clientY })
         }
       }
-      const onUp = (ev: PointerEvent): void => {
+      const cleanup = (): void => {
         window.removeEventListener('pointermove', onMove)
         window.removeEventListener('pointerup', onUp)
+        window.removeEventListener('pointercancel', onCancel)
+        window.removeEventListener('blur', cleanup)
         useDragGhostStore.getState().setGhost(null)
+      }
+      const onCancel = (ev: PointerEvent): void => {
+        if (ev.pointerId === pointerId) cleanup()
+      }
+      const onUp = (ev: PointerEvent): void => {
+        if (ev.pointerId !== pointerId) return
+        cleanup()
         if (dragged) {
           // 抑制拖拽后紧接着派发的 click，避免一次拖拽既落点又触发点击动作。
           suppressClickRef.current = true
-          if (ev.clientX > CANVAS_DROP_EDGE) onDrop(ev.clientX, ev.clientY)
+          if (canDrop(ev.clientX, ev.clientY)) onDrop(ev.clientX, ev.clientY)
         }
       }
       window.addEventListener('pointermove', onMove)
       window.addEventListener('pointerup', onUp)
+      window.addEventListener('pointercancel', onCancel)
+      window.addEventListener('blur', cleanup, { once: true })
     },
     []
   )
