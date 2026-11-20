@@ -260,7 +260,10 @@ async function toapisUploadReference(
     throw toapisNetworkError('参考图上传', error)
   })
   if (!res.ok) {
-    throw new GatewayError('TOAPIS_UPLOAD_FAILED', await errorTail(res, '参考图上传失败'))
+    throw Object.assign(
+      new GatewayError('TOAPIS_UPLOAD_FAILED', await errorTail(res, '参考图上传失败')),
+      { status: res.status }
+    )
   }
   const json: unknown = await res.json().catch(() => null)
   const url = extractFirstImageValue(json, new Set())

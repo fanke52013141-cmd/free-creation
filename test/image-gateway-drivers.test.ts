@@ -26,10 +26,11 @@ vi.mock('ai', () => ({
   generateImage: vi.fn()
 }))
 
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { generateImage } from 'ai'
 import { generateImageToAsset, setImageNetworkFetch } from '../src/main/gateway/image'
 import { readMediaBuffer, saveBufferAsset } from '../src/main/store/media.repo'
-import { requireProvider } from '../src/main/gateway/factory'
+import { createImageModel, requireProvider } from '../src/main/gateway/factory'
 
 const generateImageMock = vi.mocked(generateImage)
 const readMediaBufferMock = vi.mocked(readMediaBuffer)
@@ -248,7 +249,7 @@ describe('image gateway drivers', () => {
       expect(error.message).toContain('内容违规')
     })
 
-    it('中转站直接返回图片 URL 时免轮询直接落盘', async () => {
+    it('ToAPIS 直接返回图片 URL 时免轮询直接落盘', async () => {
       const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = String(input)
         if (url.endsWith('/images/generations') && (init?.method ?? 'GET') === 'POST') {
@@ -266,7 +267,7 @@ describe('image gateway drivers', () => {
         return new Response(`unexpected ${url}`, { status: 500 })
       })
       vi.stubGlobal('fetch', fetchMock)
-      requireProviderMock.mockReturnValue(makeProvider('relay'))
+      requireProviderMock.mockReturnValue(makeProvider('toapis'))
 
       await generateImageToAsset(makeInput({ modelId: 'gpt-image-2' }))
 
@@ -360,6 +361,42 @@ describe('image gateway drivers', () => {
   })
 
   describe('openai-images 驱动（AI SDK 兼容路径）', () => {
+    it('兼容中转的 gpt-image-2.6 带参考图时直接提交 Images Edits', async () => {
+      const provider = makeProvider('relay')
+      requireProviderMock.mockReturnValue(provider)
+      const reference = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwAFgAIyAIxvhwjaAAAAABJRU5ErkJggg==',
+        'base64'
+      )
+      readMediaBufferMock.mockResolvedValue({ buf: reference, mime: 'image/png' })
+      const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
+        jsonResponse({ data: [{ b64_json: reference.toString('base64') }] })
+      )
+      vi.mocked(createImageModel).mockResolvedValueOnce(createOpenAICompatible({
+        name: provider.id,
+        baseURL: provider.baseURL,
+        apiKey: provider.apiKey,
+        fetch: fetchMock
+      }).imageModel('gpt-image-2.6'))
+      const sdk = await vi.importActual<typeof import('ai')>('ai')
+      generateImageMock.mockImplementationOnce(sdk.generateImage)
+      const legacyFetch = vi.fn()
+      setImageNetworkFetch(legacyFetch)
+
+      await generateImageToAsset(makeInput({ modelId: 'gpt-image-2.6', referenceMediaId: 'ref-1' }))
+
+      expect(legacyFetch).not.toHaveBeenCalled()
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      const [url, request] = fetchMock.mock.calls[0]
+      expect(String(url)).toBe(`${provider.baseURL}/images/edits`)
+      expect(request?.method).toBe('POST')
+      const form = request?.body as FormData
+      expect(form.get('model')).toBe('gpt-image-2.6')
+      expect([...form.keys()].some((key) => key === 'image' || key === 'image[]')).toBe(true)
+      expect(saveBufferAssetMock).toHaveBeenCalledTimes(1)
+    })
+
+
     it('OpenAI 官方：只固定带 quality=low，不发 aspectRatio 与 resolution', async () => {
       generateImageMock.mockResolvedValue({
         images: [{ uint8Array: new Uint8Array([1]), mediaType: 'image/png' }]

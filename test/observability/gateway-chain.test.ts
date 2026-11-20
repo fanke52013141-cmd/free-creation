@@ -4,6 +4,7 @@
 // A07（远端成功但下载失败可区分，不误导为需要重新提交）。
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GatewayEvent } from '../../src/shared/contracts'
+import { readMediaBuffer } from '../../src/main/store/media.repo'
 import type { DiagnosticsEventInput } from '../../src/shared/observability'
 import { setGatewayEventSink } from '../../src/main/diagnostics/gateway-events'
 import { startChat, cancelChat } from '../../src/main/gateway/chat'
@@ -335,6 +336,28 @@ describe('生图 TOAPIS 链路 task/media 事件（L03）', () => {
     // 提交只发生一次：不得因下载失败而重复请求上游。
     const submitCalls = fetchMock.mock.calls.filter((call) => String(call[0]).endsWith('/images/generations'))
     expect(submitCalls).toHaveLength(1)
+  })
+
+  it('ToAPIS 参考图上传 404 保留 HTTP 状态，且不会记作下载或提交任务', async () => {
+    const { generateImageToAsset } = await import('../../src/main/gateway/image')
+    vi.mocked(readMediaBuffer).mockResolvedValueOnce({ buf: Buffer.from('test-reference'), mime: 'image/png' })
+    const fetchMock = vi.fn(async () => jsonResponse(404, '{"error":"private-upstream-marker"}'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(generateImageToAsset({ ...imageInput(), referenceMediaId: 'ref-1' })).rejects
+      .toMatchObject({ code: 'TOAPIS_UPLOAD_FAILED', status: 404 })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(events.filter((event) => event.event === 'model.request.failed')).toHaveLength(1)
+    expect(events.find((event) => event.event === 'model.request.failed')?.error).toMatchObject({
+      code: 'UPSTREAM_FAILED',
+      sourceCode: 'TOAPIS_UPLOAD_FAILED',
+      httpStatus: 404,
+      retryable: false
+    })
+    expect(events.some((event) =>
+      ['media.download_failed', 'model.request.accepted'].includes(event.event)
+    )).toBe(false)
+    expect(JSON.stringify(events)).not.toContain('private-upstream-marker')
   })
 
   it('提交 429：attempt_failed 带稳定错误码 RATE_LIMITED（A04）', async () => {

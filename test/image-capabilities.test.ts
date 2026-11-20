@@ -137,14 +137,16 @@ describe('图片模型能力描述', () => {
     expect(normalizeImageGenerationConfig({ count: 99 }, capabilities).count).toBe(9)
   })
 
-  it('中转站配置的 gpt-image-2 自动匹配 ToAPIS 异步任务与分辨率能力', () => {
-    const capabilities = imageCapabilitiesFor('relay', 'gpt-image-2')
-    expect(capabilities.driver).toBe('toapis-task')
-    expect(capabilities.referenceMode).toBe('upload-url')
-    expect(capabilities.resolutions).toEqual(['1k', '2k', '4k'])
-    expect(capabilities.ratios).toContain('16:9')
-    expect(capabilities.ratios).toContain('3:2')
-  })
+  it.each(['gpt-image-2', 'gpt-image-2.6', 'toapis-custom-image'])(
+    '兼容中转站的 %s 按供应商协议选用 OpenAI Images',
+    (modelId) => {
+      const capabilities = imageCapabilitiesFor('relay', modelId)
+      expect(capabilities.driver).toBe('openai-images')
+      expect(capabilities.referenceMode).toBe('binary')
+      expect(capabilities.resolutions).toEqual([])
+      expect(imageCapabilitiesFor('toapis', modelId).driver).toBe('toapis-task')
+    }
+  )
 })
 
 // P 图上「遮罩」「画幅」两个控件的可见性来源：网关会不会把该字段写进请求。
@@ -155,9 +157,9 @@ describe('P 图能力门禁：控件只在真正会发送的通道上出现', ()
     expect(imageEditSendsAspectRatio(capabilities)).toBe(true)
   })
 
-  it('中转站上的 gpt-image-2 同属任务通道：遮罩一样不发', () => {
+  it('兼容中转站上的 gpt-image-2 支持发送遮罩与画幅', () => {
     const capabilities = imageCapabilitiesFor('relay', 'gpt-image-2')
-    expect(imageEditSendsMask(capabilities)).toBe(false)
+    expect(imageEditSendsMask(capabilities)).toBe(true)
     expect(imageEditSendsAspectRatio(capabilities)).toBe(true)
   })
 

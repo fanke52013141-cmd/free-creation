@@ -297,18 +297,8 @@ export function imageCapabilitiesFor(specId: ProviderSpecId, modelId = ''): Imag
         DREAMINA_IMAGE_CAPABILITIES[(modelId || '').trim().toLowerCase()] ??
         DREAMINA_DISABLED_IMAGE_CAPABILITIES
       )
-    default: {
-      const normalized = (modelId || '').toLowerCase().trim()
-      if (
-        normalized === 'gpt-image-2' ||
-        normalized.includes('gpt-image-2') ||
-        normalized.includes('image-2') ||
-        normalized.includes('toapis')
-      ) {
-        return TOAPIS_CAPABILITIES
-      }
+    default:
       return SAFE_OPENAI_COMPAT_CAPABILITIES
-    }
   }
 }
 
