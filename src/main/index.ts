@@ -47,7 +47,7 @@ import { acquireProcessLock, type ProcessLock } from './store/process-lock'
 import { checkWorkspaceHealth, sweepStaleVideoTempFiles } from './store/workspace-health'
 import { bootstrapLegacyProvidersToCatalog, saveProvider } from './gateway/providers.repo'
 import { DREAMINA_IMAGE_MODELS, DREAMINA_VIDEO_MODELS } from '../shared/dreamina-models'
-import { LICENSE_GATE_DISABLED } from '../shared/edition'
+import { LICENSE_GATE_DISABLED, OWNER_EDITION } from '../shared/edition'
 import { SecretVault, setActiveVault } from './security/keystore/vault'
 import { migrateSecretsToVault } from './security/keystore/migrate'
 import type { DeviceKeyAdapter } from './security/license/device/adapter'
@@ -518,8 +518,7 @@ app.whenReady().then(async () => {
   // ── 授权门禁（方案 §3.3）───────────────────────────────────────────────
   // 必须先于一切数据库访问（含进程锁的 SQLite 表）、诊断、密钥迁移、
   // 业务 IPC、媒体协议与外部接入：未激活时只提供授权窗。
-  // 发行版/自用版（CANVAS_DISTRIBUTION=1 / CANVAS_OWNER=1）：不做授权、不注入设备密钥库——
-  // API Key 走系统安全存储（DPAPI），导入即用。自用版保留全部节点，发行版另有裁剪。
+  // 发行版与自用版跳过授权。自用版可以继续读取本机授权版已保存的设备密钥。
   let gate: LicenseGateOutcome | null = null
   let vault: SecretVault | null = null
   // 开发 bypass 时必须真正跳过门禁；不能把 bootLicenseGate 的 null（授权窗路径）误当成
@@ -587,6 +586,11 @@ app.whenReady().then(async () => {
           (migrationResult.rotatedRecommended ? `；其中 ${migrationResult.rotatedRecommended} 条曾为可复制明文，建议在供应商侧轮换` : '')
       )
     }
+  }
+  if (OWNER_EDITION && database.prepare('SELECT 1 FROM secret_vault LIMIT 1').get()) {
+    const { adapter } = await selectDeviceAdapter({ dataDir: getDataDir() })
+    setActiveVault(new SecretVault({ adapter, database: getDb }))
+    log.info('vault: 自用版已接入本机已有密钥库')
   }
   // 工作区健康扫描与过期临时文件清扫是纯家务（只产出报告/清扫，不影响首屏数据），
   // 延后到业务窗创建之后执行，避免同步目录全扫描挡住窗口创建（繁忙机器上尤其明显）。

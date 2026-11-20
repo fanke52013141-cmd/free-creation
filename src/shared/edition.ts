@@ -14,7 +14,7 @@ export const DISTRIBUTION_EDITION: boolean =
 
 /**
  * 自用版（`CANVAS_OWNER=1 npm run build:personal`）：
- * - 跳过授权门禁与设备绑定密钥库（同发行版），密钥走系统安全存储（DPAPI），导入即用；
+ * - 跳过授权门禁；可复用本机已有设备密钥库，新数据目录使用系统安全存储（DPAPI）；
  * - **不裁剪节点**：保留全部节点/分类（发行版会精简调色板和节点集）；
  * - 仅用于本机自用打包，不得对外分发。
  */

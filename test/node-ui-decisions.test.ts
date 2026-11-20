@@ -205,7 +205,7 @@ describe('v1.2 §16.5 媒体后续动作按钮只放文字', () => {
     const video = read('src/renderer/src/nodes/specs/bodies/video.tsx')
     const block =
       video.match(
-        /className="node-media-next-actions media-action-toolbar"[\s\S]*?<NodeHeaderActions>/
+        /className="node-media-next-actions media-action-toolbar"[\s\S]*?<\/NodeFooterActions>/
       )?.[0] ?? ''
     expect(block).not.toBe('')
     for (const label of ['抽帧', '视频截取']) {
@@ -214,16 +214,15 @@ describe('v1.2 §16.5 媒体后续动作按钮只放文字', () => {
     // 2026-11-02 用户裁决：视频操作条撤掉私有浮层底/描边/模糊，改用图片节点的公共样式。
     expect(block).toContain('media-action-toolbar')
     expect(block).toContain('media-action-button')
-    const textActions = block.split('<NodeHeaderActions>')[0]
-    expect(textActions).not.toContain('name="target"')
-    expect(video).toMatch(/<NodeHeaderActions>[\s\S]*?name="target"[\s\S]*?<\/NodeHeaderActions>/)
+    expect(block).not.toContain('name="target"')
+    expect(video).toContain('<MediaFileActions shape={shape} />')
     expect(block).not.toContain('截人声')
     // 截音频已并入「视频截取」，视频节点不再单独提供该入口
     expect(block).not.toContain('截音频')
     // 操作可带图标，但始终保留可读文字；底部操作不再依赖图标才可识别。
-    expect(textActions).toContain('替换')
-    expect(textActions).toContain('视频截取')
-    expect(textActions).toContain('抽帧')
+    expect(block).toContain('替换')
+    expect(block).toContain('视频截取')
+    expect(block).toContain('抽帧')
     expect(block).not.toContain('复制节点')
     expect(video).not.toContain('一键提取人声')
   })
@@ -1394,23 +1393,21 @@ describe('循环扇出对称分支与只读运行快照', () => {
 })
 
 // 2026-11-19 用户裁决：连线不得夺走节点原有的编辑能力。生图节点的提示词框是
-// 本节点自己的输入，连了上游也必须可编辑（上游输入走独立只读预览条）；AI 处理
+// 本节点自己的输入，连了上游也必须可编辑（上游输入走顶部引用）；AI 处理
 // 卡片必须同时呈现输入（只读）与输出，不能运行一次就折损成单一结果投影。
 describe('2026-11-19 用户裁决：连线不得改变节点原有的能力', () => {
   const imageGen = read('src/renderer/src/nodes/specs/bodies/image-gen.tsx')
-  it('生图提示词框始终可编辑：不因连接上游而只读，上游输入走独立只读预览条', () => {
+  it('生图提示词框始终可编辑：不因连接上游而只读，上游输入走顶部引用', () => {
     const src = stripComments(imageGen)
     expect(src).not.toContain('readOnly={!!autoPrompt}')
     expect(src).toContain('value={draft}')
-    expect(src).toContain('<UpstreamInputPreview')
-    expect(src).toContain('gen-prompt-merge-hint')
+    expect(src).not.toContain('<UpstreamInputPreview')
+    expect(src).not.toContain('gen-prompt-merge-hint')
   })
-  it('AI 处理卡片同时呈现输入（只读）与输出', () => {
-    expect(stripComments(aiProcess)).toContain('<UpstreamInputPreview')
+  it('AI 处理通过公共栏显示引用，输出正文可原生选择', () => {
+    expect(stripComments(aiProcess)).not.toContain('<UpstreamInputPreview')
     expect(stripComments(aiProcess)).toContain('ai-process-result-frame')
-  })
-  it('上游输入预览条是共享组件：只读呈现、可选中复制，不拦截节点输入框', () => {
-    expect(stripComments(sharedBodies)).toContain('data-node-selectable-text="true"')
-    expect(stripComments(sharedBodies)).toContain('upstream-input-preview')
+    expect(stripComments(aiProcess)).toContain('data-node-selectable-text="true"')
+    expect(stripComments(sharedBodies)).not.toContain('upstream-input-preview')
   })
 })

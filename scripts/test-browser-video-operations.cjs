@@ -16,6 +16,11 @@ async function main() {
       document.documentElement.classList.add('desktop-window-overlay')
       window.api.getLocalMediaCapabilities = async () => ({ ok: true, data: { ffmpeg: { available: true }, audioSeparator: { available: false } } })
       window.api.generateVideoThumbnails = async () => ({ ok: true, data: { thumbnails: ['data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42nP4z3D4PwQGAQ8Ai/1+GQAAAABJRU5ErkJggg=='] } })
+      window.__revealedVideoIds = []
+      window.api.revealMedia = async (id) => {
+        window.__revealedVideoIds.push(id)
+        return { ok: true, data: true }
+      }
       const { useEditorStore } = await import('/src/stores/editor.ts')
       const editor = useEditorStore.getState().editor
       editor.createShape({
@@ -42,13 +47,21 @@ async function main() {
       ]) {
         editor.createShape({ id, type: 'node-card', x, y: 150, props: {
           nodeType: type, title: '布局验收', w: width, h: height,
-          mediaId: 'video-test', mediaPath: videoData, mediaMime: 'video/mp4'
+          mediaId: id, mediaPath: videoData, mediaMime: 'video/mp4'
         } })
       }
     }, videoData)
+    const camera = () => page.evaluate(async () => {
+      const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
+      const { x, y, z } = editor.getCamera()
+      return { x, y, z }
+    })
     for (const id of ['shape:video-operation-test', 'shape:video-layout-wide', 'shape:video-layout-tall']) {
       const node = page.locator(`[data-node-id="${id}"]`)
       await node.locator('.video-thumbnail-stage').waitFor()
+      const before = await camera()
+      await node.locator('.node-header').getByRole('button', { name: '在资源管理器中定位', exact: true }).click()
+      assert.deepEqual(await camera(), before, id + ' file reveal preserves camera')
       const layout = await node.evaluate((element) => {
         const preview = element.querySelector('.video-thumbnail-stage .node-media').getBoundingClientRect()
         const stage = element.querySelector('.video-thumbnail-stage').getBoundingClientRect()
@@ -69,9 +82,9 @@ async function main() {
       const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
       editor.deleteShapes(['shape:video-layout-wide', 'shape:video-layout-tall'])
     })
-    const center = page.getByRole('button', { name: '在画布中定位居中', exact: true })
-    assert.equal(await center.evaluate((element) => Boolean(element.closest('.node-header'))), true)
-    await center.click()
+    assert.deepEqual(await page.evaluate(() => window.__revealedVideoIds), [
+      'video-test', 'shape:video-layout-wide', 'shape:video-layout-tall'
+    ])
     await page.getByRole('button', { name: '视频截取', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '视频操作工作台' })
     await dialog.waitFor()

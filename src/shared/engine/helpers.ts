@@ -203,11 +203,8 @@ export function waitForChat(
       }
       if (event.kind === 'chat-done') {
         finish()
-        // R-22：推理模型可能把全部输出放进思考通道（reasoning），正文通道为空。
-        // 此前只 resolve(text) 会把这类成功响应当「模型返回为空」失败，下游连锁报错。
-        // 正文非空时优先用正文（思考只是过程）；正文为空但有思考内容时回退取思考内容，
-        // 让节点拿到模型实际产出。两者皆空才返回空串，由执行器按空返回处理。
-        resolve(text.trim() ? text : reasoning)
+        // Reasoning is available in progress only; downstream nodes consume final text.
+        resolve(text)
       }
       if (event.kind === 'chat-error') {
         finish()

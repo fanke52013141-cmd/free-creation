@@ -7,7 +7,7 @@ import { readNodeRunHistory, readNodeRunRecord } from '../engine/runRecord'
 import { commitFlowBuild, commitFlowGraph } from './flow-build-actions'
 import { applyFlowLayout } from './flow-layout-apply'
 import { useAppStore } from '../stores/app'
-import { nodeTextField } from './node-pointer-policy'
+import { nodeSelectableText, nodeTextField } from './node-pointer-policy'
 import { ResourceInsertRequest } from '../library/ResourceInsertRequest'
 import { WorkflowSaveDialog } from './WorkflowSaveDialog'
 import { CompositeUpgradeDialog } from '../composite/CompositeUpgradeDialog'
@@ -2553,6 +2553,14 @@ export function CanvasEditor({
         }
       }
       if (mod && !e.shiftKey && (e.key === 'c' || e.key === 'C')) {
+        const selection = window.getSelection()
+        const selectedText = selection?.anchorNode
+        const target = selectedText instanceof Element ? selectedText : selectedText?.parentElement
+        if (selection && !selection.isCollapsed && target && nodeSelectableText(target)) {
+          // Keep the browser's native copy while bypassing both canvas shortcut handlers.
+          e.stopPropagation()
+          return
+        }
         const n = copySelectionToClipboard(editor)
         if (n > 0) {
           e.preventDefault()

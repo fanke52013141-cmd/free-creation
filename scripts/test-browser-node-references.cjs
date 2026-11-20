@@ -236,6 +236,27 @@ const fs = require('node:fs')
       return { text: clipboardData.getData('text/plain'), types: [...clipboardData.types] }
     })
     assert.deepEqual(copiedName, { text: originalName, types: ['text/plain'] })
+    await page.evaluate(async (audio) => {
+      const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
+      const { createEdge } = await import('/src/canvas/graph.ts')
+      editor.deleteShapes([...editor.getCurrentPageShapeIds()])
+      editor.createShape({ id: 'shape:reference-audio', type: 'node-card', x: -900, y: 0, props: {
+        nodeType: 'audio', title: '音频来源', mediaId: 'reference-audio', mediaPath: audio, mediaMime: 'audio/wav'
+      } })
+      editor.createShape({ id: 'shape:reference-sound', type: 'node-card', x: 360, y: 120, props: { nodeType: 'sound-adjust' } })
+      if (!createEdge(editor, { shapeId: 'shape:reference-audio', portId: 'out-audio' }, { shapeId: 'shape:reference-sound', portId: 'in-audio' })) {
+        throw new Error('音频引用连接失败')
+      }
+      editor.setCamera({ x: 0, y: 0, z: 1 }, { immediate: true })
+    }, 'data:audio/wav;base64,' + fs.readFileSync('test/fixtures/agent-audio.wav').toString('base64'))
+    const audioReference = page.locator('[data-node-type="sound-adjust"] .connected-input-item')
+    await audioReference.focus()
+    const audioDetail = page.locator('.reference-fullview audio')
+    await audioDetail.waitFor()
+    assert.deepEqual(await audioDetail.evaluate(audio => ({ controls: audio.controls, paused: audio.paused })), { controls: true, paused: true })
+    await page.keyboard.press('Escape')
+    await audioDetail.waitFor({ state: 'detached' })
+    console.log('音频引用复用单排和公共播放器，详情无自动播放')
     console.log('引用单排、多项折叠、真实连线、悬浮全文、移入、键盘关闭、缩放、高度回落、JSON 空值及音色 Schema 通过')
     console.log('图片悬浮 3/4 尺寸、生图与生视频引用高亮、断线清除高亮通过')
   } finally { await browser.close() }

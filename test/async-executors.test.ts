@@ -197,7 +197,7 @@ describe('异步网关等待器', () => {
     expect(off).toHaveBeenCalledOnce()
   })
 
-  it('waitForChat 正文为空但有思考内容时回退取思考内容（R-22 推理模型）', async () => {
+  it('waitForChat 正文为空时不将思考内容作为结果', async () => {
     let eventListener: ((event: Record<string, string>) => void) | undefined
     installGateway({
       chatStart: vi.fn().mockResolvedValue({ ok: true, data: { taskId: 'chat-r' } }),
@@ -214,7 +214,7 @@ describe('异步网关等待器', () => {
     await vi.runAllTicks()
     eventListener?.({ kind: 'chat-reasoning', taskId: 'chat-r', text: '思考通道里的完整答案' })
     eventListener?.({ kind: 'chat-done', taskId: 'chat-r' })
-    await expect(reply).resolves.toBe('思考通道里的完整答案')
+    await expect(reply).resolves.toBe('')
   })
 
   it('waitForChat 正文非空时优先用正文，思考只是过程（R-22）', async () => {

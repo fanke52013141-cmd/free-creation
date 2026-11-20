@@ -5,9 +5,9 @@
  * 场景：文本节点 → AI 处理 → 生图（与循环体模板内定义链同构）。
  * 验证点：
  *  1) 生图：连上游文本后提示词框保持可编辑（不再被上游输出劫持为只读），
- *     上游输入走独立只读预览条 + 拼接提示；框内二次修改可提交落盘；
+ *     上游输入仅通过顶部引用呈现；框内二次修改可提交落盘；
  *     运行生图（演示图）验证「上游输入 + 本框内容」拼接链路可用。
- *  2) AI 处理：卡片同时呈现输入（只读预览条）与输出（结果框），不再折损成单一结果投影。
+ *  2) AI 处理：公共单排引用、可滚动的结果框、原生拖选及复制。
  *
  * 用法：node scripts/audit-editable-prompt.cjs [baseUrl] [outputDir]
  * 前置：npx vite --config vite.browser.config.ts（127.0.0.1:5173 浏览器验收环境，演示 mock）
@@ -131,7 +131,7 @@ async function main() {
       const ta = el.querySelector('.gen-prompt')
       return {
         preview: el.querySelector('.upstream-input-preview')?.textContent ?? null,
-        mergeHint: el.querySelector('.gen-prompt-merge-hint')?.textContent ?? null,
+        referenceBar: Boolean(el.querySelector('.connected-inputs')),
         promptValue: ta ? ta.value : null,
         promptReadOnly: ta ? ta.readOnly : null,
         resultFrame: Boolean(el.querySelector('.ai-process-result-frame'))
@@ -170,21 +170,15 @@ async function main() {
     const afterConnect = await readBody(genNode.card)
     await shot(page, '01-gen-connected')
     assert(
-      'gen-preview-shows-upstream',
-      Boolean(afterConnect.preview) && afterConnect.preview.includes('镜头提示词A'),
-      afterConnect.preview
+      'gen-upstream-only-in-reference-bar',
+      afterConnect.referenceBar && afterConnect.preview === null,
+      afterConnect
     )
     assert(
       'gen-prompt-still-editable-and-empty',
       afterConnect.promptReadOnly === false && afterConnect.promptValue === '',
       afterConnect
     )
-    assert(
-      'gen-merge-hint-visible',
-      Boolean(afterConnect.mergeHint) && afterConnect.mergeHint.includes('本框可自由编辑'),
-      afterConnect.mergeHint
-    )
-
     // ── 2. 二次修改：框内输入自己的补充并提交落盘 ────────────
     const prompt = genNode.card.locator('.gen-prompt')
     await prompt.click()
@@ -247,7 +241,7 @@ async function main() {
     await shot(page, '04-ai-input-preview')
     assert(
       'ai-input-preview-visible',
-      Boolean(aiState.preview) && aiState.preview.includes('镜头提示词A'),
+      aiState.referenceBar && aiState.preview === null,
       aiState.preview
     )
 
@@ -265,7 +259,7 @@ async function main() {
           ...shape.meta,
           pinnedOutput: JSON.stringify({
             version: 1,
-            outputs: { 'out-text': { kind: 'text', text: '处理后的分镜文案：少女站在海边回望' } }
+            outputs: { 'out-text': { kind: 'text', text: '处理后的分镜文案：少女站在海边回望\n'.repeat(40) } }
           })
         }
       })
@@ -276,9 +270,29 @@ async function main() {
     assert('ai-output-frame-shown', aiAfter.resultFrame, aiAfter)
     assert(
       'ai-input-and-output-coexist',
-      Boolean(aiAfter.preview) && aiAfter.preview.includes('镜头提示词A'),
+      aiAfter.referenceBar && aiAfter.preview === null,
       aiAfter.preview
     )
+    const resultLayout = await aiNode.card.locator('.ai-process-result-frame').evaluate((frame) => {
+      const scroll = frame.closest('.node-standard-scroll')
+      const fits = frame.getBoundingClientRect().bottom < scroll.getBoundingClientRect().bottom
+      frame.scrollTop = frame.scrollHeight
+      return { fits, scrolls: frame.scrollTop > 0 }
+    })
+    assert('ai-result-frame-fits-and-scrolls', resultLayout.fits && resultLayout.scrolls, resultLayout)
+    const result = aiNode.card.locator('.ai-process-result-frame')
+    await result.evaluate((frame) => { frame.scrollTop = 0 })
+    const box = await result.boundingBox()
+    await page.mouse.move(box.x + 15, box.y + 21)
+    await page.mouse.down()
+    await page.mouse.move(box.x + 100, box.y + 21, { steps: 10 })
+    await page.mouse.up()
+    const selected = await page.evaluate(() => getSelection()?.toString())
+    assert('ai-result-native-selection', Boolean(selected?.trim()), selected)
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+    await page.keyboard.press('Control+C')
+    const copied = await page.evaluate(() => navigator.clipboard.readText())
+    assert('ai-result-copy-copies-selected-text', Boolean(selected) && copied === selected, copied)
     // 多上游：把 AI 处理输出也连进生图 in-text（多值端口），预览条合并两条上游且框仍可编辑
     await dragConnect(page, aiNode.card, 'out-text', genNode.card, 'in-text')
     await page.waitForTimeout(500)
@@ -303,11 +317,9 @@ async function main() {
     const genFinal = await readBody(genNode.card)
     await shot(page, '06-gen-multi-upstream')
     assert(
-      'gen-preview-merges-multiple-upstreams',
-      Boolean(genFinal.preview) &&
-        genFinal.preview.includes('处理后的分镜文案') &&
-        genFinal.preview.includes('镜头提示词A'),
-      genFinal.preview
+      'gen-keeps-only-top-reference-for-multiple-upstreams',
+      genFinal.referenceBar && genFinal.preview === null,
+      genFinal
     )
     assert('gen-prompt-editable-final', genFinal.promptReadOnly === false, genFinal)
   } catch (error) {

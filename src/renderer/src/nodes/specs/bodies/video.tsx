@@ -1,6 +1,5 @@
 import {
   NodeFooterActions,
-  NodeHeaderActions,
   NodeIdentity,
   NodePrimaryButton
 } from '../../../canvas/NodePresentation'
@@ -30,6 +29,7 @@ import { AppSelect } from '../../../components/AppSelect'
 import { ImageMentionPrompt } from './ImageMentionPrompt'
 import { canonicalizeMediaMentions, type PromptMediaReference } from './media-mentions'
 import {
+  MediaFileActions,
   MediaResultGrid,
   removeMediaResultFromShape,
   clearSelectedMediaHistory,
@@ -433,26 +433,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             </div>
           </div>
         </NodeFooterActions>
-        <NodeHeaderActions>
-          <button
-            type="button"
-            className="node-info-btn"
-            title="在画布中定位居中"
-            aria-label="在画布中定位居中"
-            onPointerDown={stopEventPropagation}
-            onClick={(event) => {
-              stopEventPropagation(event)
-              const bounds = editor.getShapePageBounds(shape.id)
-              if (!bounds) return
-              editor.centerOnPoint(
-                { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 },
-                { animation: { duration: 250 } }
-              )
-            }}
-          >
-            <Icon name="target" size={16} />
-          </button>
-        </NodeHeaderActions>
+        <MediaFileActions shape={shape} />
         {videoOperationsOpen && (
           <VideoOperationsWorkbench
             key={videoOperationsMode}

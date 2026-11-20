@@ -15,7 +15,7 @@ import {
 import { defaultImageProviderId } from '@shared/engine/models'
 import type { NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
-import { gatherUpstreamMediaSources, gatherUpstreamText } from '../../../canvas/graph'
+import { gatherUpstreamMediaSources } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
 import { guiWorkflowInputOptions } from '../../../stores/workflowInput'
@@ -26,7 +26,7 @@ import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
 import { ImageMentionPrompt } from './ImageMentionPrompt'
 import { canonicalizeMediaMentions, type PromptMediaReference } from './media-mentions'
-import { ModelSelect, NoModelHint, parseJsonProp, UpstreamInputPreview } from './shared'
+import { ModelSelect, NoModelHint, parseJsonProp } from './shared'
 import './node-workbench.css'
 
 type ImageGenData = ImageGenerationConfig
@@ -88,15 +88,6 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const orderedRatios = orderedImageRatios(availableRatios)
   const [draft, setDraft] = useState(shape.props.text)
   const [busy, setBusy] = useState(false)
-  // 上游文本输入只做只读预览（独立输入条）；提示词框永远是本节点自己的可编辑输入。
-  // 运行时执行器把「上游输入 + 本框内容」拼接为最终提示词（imageGen 执行器 mergedPrompt），
-  // 连线不得夺走输入框（2026-11-19 用户裁决：连线不能改变节点原有的能力）。
-  const connectedPrompt = useValue(
-    'image-gen connected prompt',
-    () => gatherUpstreamText(editor, shape.id, 'in-text'),
-    [editor, shape.id]
-  )
-  const autoPrompt = connectedPrompt.trim()
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
   useEffect(() => {
     const prompt = promptRef.current
@@ -316,10 +307,6 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
           </label>
         )}
       </div>
-      <UpstreamInputPreview
-        text={autoPrompt}
-        title="上游节点的文本输出（只读）；要修改它请编辑上游节点"
-      />
       <ImageMentionPrompt
         ref={promptRef}
         className="gen-prompt"
@@ -327,21 +314,16 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
         rows={4}
         value={draft}
         spellCheck={false}
-        placeholder={autoPrompt ? '在上方上游输入的基础上补充画面描述…' : '描述要生成的画面…'}
+        placeholder="描述要生成的画面…"
         onValueChange={setDraft}
         onCommit={(text) => {
-          // 提交的是本框内容（用户自己的补充/改写），不含上游预览条正文——上游输入
+          // 提交的是本框内容（用户自己的补充/改写），不含上游引用正文——上游输入
           // 由执行器运行时拼接，写回本节点 text 会导致重复合并。
           setDraft(text)
           updateText(text)
         }}
         onPointerDown={(e) => e.stopPropagation()}
       />
-      {autoPrompt && (
-        <small className="gen-prompt-merge-hint">
-          运行提示词 = 上游输入 + 本框内容（本框可自由编辑）
-        </small>
-      )}
       <NodePrimaryButton
         className="btn-primary small gen-go"
         disabled={busy || engineBusy}

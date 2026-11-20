@@ -352,12 +352,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const handleCardPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
     if (event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey) return
     if (!editor.getSelectedShapeIds().includes(shape.id)) editor.select(shape.id)
-    if (
-      shape.props.nodeType === 'ai-process' &&
-      event.target instanceof Element &&
-      event.target.closest('.node-standard-scroll')
-    )
-      stopEventPropagation(event)
   }
 
   const finishTitleEditing = useCallback(
@@ -1116,9 +1110,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   // 拖线过程中，兼容端口额外浮出端口名标签：圆点本身无法回答“这个口收的是什么”，
   // 而用户正是在这里最容易松错手；不兼容的端口保持淡出，校验不因可发现性而放宽。
 
-  // 裁剪和拆图以主预览承载素材，AI 处理只显示输出；这些节点不重复呈现输入。
-  // 视频生成及其他节点统一使用顶部引用区。
-  const hasDedicatedInputSurface = ['image-crop', 'image-split', 'ai-process', 'timeline'].includes(
+  // 裁剪/拆图的主素材与轨道线的可拖入素材池由各自工作区承载。
+  const hasDedicatedInputSurface = ['image-crop', 'image-split', 'timeline'].includes(
     shape.props.nodeType
   )
 

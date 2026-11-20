@@ -11756,7 +11756,7 @@ select:focus-visible {
 }
 
 .search-header:focus-within {
-  border-color: var(--txt-dim);
+  border-color: color-mix(in srgb, var(--txt-dim) 70%, var(--canvas-surface));
 }
 
 .search-icon {

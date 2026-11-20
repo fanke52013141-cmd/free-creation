@@ -204,7 +204,7 @@ describe('F · 模型节点组合链（桩网关）', () => {
     }
   })
 
-  it('F7 R-22 推理模型正文空、思考有内容：回退取思考，不再误判空回复', async () => {
+  it('F7 推理模型正文为空时失败，思考内容不进入节点结果', async () => {
     const restore = installWindowApi({
       ...makeChatGatewayApi({ reply: '完整答案在思考通道', reasoningOnly: true }),
       ...fullModelCatalogApi()
@@ -219,8 +219,8 @@ describe('F · 模型节点组合链（桩网关）', () => {
       )
       await runWorkflow(editor, 'p-f7', stubProviders())
       const state = runStateOf(node('ai'))
-      expect(state.run).toBe('success')
-      expect(JSON.stringify(state.result)).toContain('思考通道')
+      expect(state.run).toBe('failed')
+      expect(state.result).toBeUndefined()
     } finally {
       restore()
     }
