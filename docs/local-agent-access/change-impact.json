@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "生图/P 图以已配置供应商协议选择驱动。GUI、CLI 与 MCP 共用原执行器和网关，现有节点契约和 API Schema 兼容。回归覆盖真实 SDK 请求、ToAPIS 任务路径及上传失败脱敏。",
+  "reason": "同步 OpenAI Images 增加 4 分钟等待上限，响应中断语义明确且 SDK 不自动重发。GUI、CLI 和 MCP 复用原执行器与主进程网关，节点契约和操作 Schema 兼容。",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -91,7 +91,7 @@
     "src/main/gateway/dreamina-cli.ts": "61e8cb559f83c446171cd9c33546a41c9476b4c2866c48078845fb96d6f0052a",
     "src/main/gateway/factory.ts": "4b64f32ecbda7da7e9b5d0f2f25a4128bff6648cc30843179238ef52ee2330e4",
     "src/main/gateway/glm-request.ts": "72aea227be3ec85cb2cdfeda08e451b4481e20fb8d18266912dcb6c14fe6d6ec",
-    "src/main/gateway/image.ts": "2c20395623edf776f466f3c0b9acf0564e44644d200f7ca32691e0f490a987d0",
+    "src/main/gateway/image.ts": "85d3b85e06dab8d97863ea42fedc1ecb89d0081c5142dd8630e8f46946018b04",
     "src/main/gateway/keycrypto.ts": "cdbdd2d9ee95f826a969e381a9ef02c5abc3e4db69db39c00bdc50b2068fe972",
     "src/main/gateway/provider-check.ts": "70228496747e958f6ef4a3bd1b385b7f6ca36ace744280d3389399d6d1ace59a",
     "src/main/gateway/provider-transfer.ts": "fcc0cfcf23ab1f54dee6736fd61977485beb52e388375c7c611cecd955f8311d",
@@ -286,7 +286,7 @@
     "src/shared/engine/values.ts": "e12f56106c9bba7ed5303010d51c41a1ad67766dbdb93f76315e9c6e80daaf6a",
     "src/shared/node-schemas.ts": "8cfee69c687bbe9c3b6cfbac800ac1458b28a4a353145d0d0c93451295de6c07",
     "src/shared/observability/context.ts": "cdf1a70c0b0393892142a2efaf7870399971a0c3b33842631130d48ddf468951",
-    "src/shared/observability/errors.ts": "56424614641b359fa90124b1524350c4c4663fcdbb996c987c020d9919fdab78",
+    "src/shared/observability/errors.ts": "cf0ef93facb69ec7d197941d8c5a900a57eff84ece80b40032421542f1d972b2",
     "src/shared/observability/events.ts": "70211f0f37ee3d115b57279b62453393c7cc2dfe3aa104cad8abb4f7d3e3232f",
     "src/shared/observability/ids.ts": "7def76e572e1c7866fd9732f2264454e47cd43c77566ec103fd7dac95d31c882",
     "src/shared/observability/index.ts": "2f03ca0f3c35217c4471492b968f0753e6c0d3ea01fa855c3ab085689c47af21",

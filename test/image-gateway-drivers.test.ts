@@ -31,6 +31,8 @@ import { generateImage } from 'ai'
 import { generateImageToAsset, setImageNetworkFetch } from '../src/main/gateway/image'
 import { readMediaBuffer, saveBufferAsset } from '../src/main/store/media.repo'
 import { createImageModel, requireProvider } from '../src/main/gateway/factory'
+import { setGatewayEventSink } from '../src/main/diagnostics/gateway-events'
+import type { DiagnosticsEventInput } from '../src/shared/observability'
 
 const generateImageMock = vi.mocked(generateImage)
 const readMediaBufferMock = vi.mocked(readMediaBuffer)
@@ -95,6 +97,7 @@ describe('image gateway drivers', () => {
 
   afterEach(() => {
     setImageNetworkFetch(undefined)
+    setGatewayEventSink(null)
     vi.useRealTimers()
     vi.unstubAllGlobals()
   })
@@ -396,6 +399,52 @@ describe('image gateway drivers', () => {
       expect(saveBufferAssetMock).toHaveBeenCalledTimes(1)
     })
 
+
+    it('OpenAI 兼容请求等待四分钟后中止，SDK 不重复提交', async () => {
+      requireProviderMock.mockReturnValue(makeProvider('relay'))
+      generateImageMock.mockImplementationOnce(({ abortSignal }) =>
+        new Promise((_resolve, reject) => {
+          abortSignal?.addEventListener('abort', () => reject(abortSignal.reason), { once: true })
+        })
+      )
+      const request = generateImageToAsset(makeInput({ modelId: 'gpt-image-2.6' }))
+      const failure = expect(request).rejects.toMatchObject({
+        code: 'TIMEOUT',
+        message: expect.stringContaining('未收到完整图片响应')
+      })
+      await vi.advanceTimersByTimeAsync(240_000)
+      await failure
+      expect(generateImageMock).toHaveBeenCalledTimes(1)
+      expect(generateImageMock).toHaveBeenCalledWith(expect.objectContaining({ maxRetries: 0 }))
+      expect(saveBufferAssetMock).not.toHaveBeenCalled()
+    })
+
+    it('已收到 HTTP 200 后连接中断，返回明确的响应中断错误', async () => {
+      requireProviderMock.mockReturnValue(makeProvider('relay'))
+      const events: DiagnosticsEventInput[] = []
+      setGatewayEventSink({ emit: (event) => { if (event) events.push(event) } })
+      generateImageMock.mockRejectedValueOnce(Object.assign(new Error('private-response'), {
+        statusCode: 200,
+        cause: new TypeError('terminated', { cause: { code: 'UND_ERR_SOCKET' } })
+      }))
+      await expect(generateImageToAsset(makeInput({ modelId: 'gpt-image-2.6' }))).rejects
+        .toMatchObject({
+          code: 'IMAGE_RESPONSE_INTERRUPTED',
+          status: 200,
+          message: '生图连接中断，未收到完整图片响应。'
+        })
+      const failures = events.filter((event) => event.event === 'model.request.failed')
+      expect(failures).toHaveLength(1)
+      expect(failures[0].error).toMatchObject({
+        code: 'NETWORK_FAILED',
+        sourceCode: 'IMAGE_RESPONSE_INTERRUPTED',
+        httpStatus: 200,
+        causeCode: 'UND_ERR_SOCKET',
+        retryable: false
+      })
+      expect(JSON.stringify(events)).not.toContain('private-response')
+      expect(saveBufferAssetMock).not.toHaveBeenCalled()
+    })
 
     it('OpenAI 官方：只固定带 quality=low，不发 aspectRatio 与 resolution', async () => {
       generateImageMock.mockResolvedValue({

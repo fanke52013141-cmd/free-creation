@@ -142,6 +142,18 @@ async function generateWithOpenAiImages(
   )
 }
 
+const OPENAI_IMAGES_TIMEOUT_MS = 4 * 60_000
+
+function imageResponseInterrupted(error: unknown): boolean {
+  let cause = error
+  for (let depth = 0; depth < 5 && cause && typeof cause === 'object'; depth += 1) {
+    const info = cause as { code?: string; cause?: unknown }
+    if (info.code === 'UND_ERR_SOCKET' || info.code === 'ECONNRESET') return true
+    cause = info.cause
+  }
+  return false
+}
+
 async function generateImageWithReference(
   input: Pick<ImageGenerateInput, 'projectId' | 'providerId' | 'modelId' | 'prompt' | 'size'>,
   referenceImages: readonly Buffer[] = [],
@@ -151,17 +163,41 @@ async function generateImageWithReference(
   const prompt = input.prompt.trim()
   // P 图的存量配置里 size 可能存的是比例串（旧版把画幅镜像进 size），同步接口只接受像素尺寸。
   const pixelSize = /^\d+x\d+$/.test(input.size ?? '') ? input.size : undefined
-  const { images } = await generateImage({
-    model: await createImageModel(input.providerId, input.modelId),
-    prompt:
-      referenceImages.length > 0
-        ? { text: prompt, images: [...referenceImages], ...(maskImage ? { mask: maskImage } : {}) }
-        : prompt,
-    ...(pixelSize ? { size: pixelSize as `${number}x${number}` } : {}),
-    ...(providerOptions && Object.keys(providerOptions).length > 0
-      ? { providerOptions: { [input.providerId]: providerOptions } }
-      : {})
-  })
+  const model = await createImageModel(input.providerId, input.modelId)
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), OPENAI_IMAGES_TIMEOUT_MS)
+  let images: Awaited<ReturnType<typeof generateImage>>['images']
+  try {
+    const result = await generateImage({
+      model,
+      abortSignal: controller.signal,
+      // POST may already have been accepted by the provider. Keep retry policy at the node boundary.
+      maxRetries: 0,
+      prompt:
+        referenceImages.length > 0
+          ? { text: prompt, images: [...referenceImages], ...(maskImage ? { mask: maskImage } : {}) }
+          : prompt,
+      ...(pixelSize ? { size: pixelSize as `${number}x${number}` } : {}),
+      ...(providerOptions && Object.keys(providerOptions).length > 0
+        ? { providerOptions: { [input.providerId]: providerOptions } }
+        : {})
+    })
+    images = result.images
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new GatewayError('TIMEOUT', '生图等待超过 4 分钟，未收到完整图片响应。')
+    }
+    if (imageResponseInterrupted(error)) {
+      const status = (error as { statusCode?: number }).statusCode
+      throw Object.assign(
+        new GatewayError('IMAGE_RESPONSE_INTERRUPTED', '生图连接中断，未收到完整图片响应。'),
+        { cause: error, status }
+      )
+    }
+    throw error
+  } finally {
+    clearTimeout(timeout)
+  }
   if (!images?.length) throw new GatewayError('EMPTY_RESULT', '模型未返回图片')
   const img = images[0]
   return saveBufferAsset(
@@ -816,10 +852,31 @@ export async function generateImageEditToAsset(
   ) {
     providerOptions.aspectRatio = input.config.aspectRatio
   }
-  return generateImageWithReference(
-    input,
-    referenceImages,
-    Object.keys(providerOptions).length > 0 ? providerOptions : undefined,
-    maskImage
-  )
+  const diagnostics = { projectId: input.projectId, requestId: ensureRequestId(undefined) }
+  const attributes = { operation: 'image.edit', providerId: input.providerId, modelId: input.modelId }
+  const started = Date.now()
+  emitGatewayEvent('model.request.started', '图片修改请求开始', diagnostics, { attributes })
+  try {
+    const asset = await generateImageWithReference(
+      input,
+      referenceImages,
+      Object.keys(providerOptions).length > 0 ? providerOptions : undefined,
+      maskImage
+    )
+    emitGatewayEvent('model.request.completed', '图片修改请求完成', diagnostics, {
+      status: 'success',
+      durationMs: Date.now() - started,
+      attributes: { ...attributes, mediaId: asset.id }
+    })
+    return asset
+  } catch (error) {
+    emitGatewayEvent('model.request.failed', '图片修改请求失败', diagnostics, {
+      status: 'failed',
+      durationMs: Date.now() - started,
+      error,
+      privateValues: [prompt],
+      attributes
+    })
+    throw error
+  }
 }
