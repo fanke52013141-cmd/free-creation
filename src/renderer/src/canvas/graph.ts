@@ -180,6 +180,61 @@ function inputPortOccupied(editor: Editor, target: EdgeEndpoint): boolean {
   return false
 }
 
+/**
+ * 单值输入端口是否被「其他源节点」占用。
+ *
+ * 同一源节点换一个输出端口重连同一输入口不算占用：互斥输出节点（AI 处理）切换
+ * 输出类型后需要把旧端口连线换到新端口，同内容双端口（AI 对话）也不该把同一回复
+ * 连两次。这种连线由 createEdge 的替换规则原子迁移，其余占用照旧拒绝。
+ */
+function inputPortOccupiedByOther(
+  editor: Editor,
+  target: EdgeEndpoint,
+  sourceShapeId?: TLShapeId
+): boolean {
+  for (const shape of editor.getCurrentPageShapes()) {
+    if (shape.type !== 'arrow') continue
+    const { start, end } = getArrowBindings(editor, shape.id)
+    if (
+      end?.toId !== target.shapeId ||
+      (shape.meta?.toPort as string | undefined) !== target.portId
+    ) {
+      continue
+    }
+    if (sourceShapeId && start?.toId === sourceShapeId) continue
+    return true
+  }
+  return false
+}
+
+/**
+ * 收集同一源节点经「其他输出端口」连到同一目标输入端口的旧连线。
+ * 这些边在互斥输出节点上是永远没有数据的死线，在同内容双端口节点上会重复注入；
+ * createEdge 用「替换」语义移除它们，保证（源节点 → 目标输入端口）只剩一条线。
+ */
+function listSameSourceEdgesToTarget(
+  editor: Editor,
+  from: EdgeEndpoint,
+  to: EdgeEndpoint
+): TLShapeId[] {
+  const replaced: TLShapeId[] = []
+  for (const shape of editor.getCurrentPageShapes()) {
+    if (shape.type !== 'arrow') continue
+    const { start, end } = getArrowBindings(editor, shape.id)
+    if (!start || !end) continue
+    if (
+      start.toId !== from.shapeId ||
+      end.toId !== to.shapeId ||
+      (shape.meta?.toPort as string | undefined) !== to.portId
+    ) {
+      continue
+    }
+    if ((shape.meta?.fromPort as string | undefined) === from.portId) continue
+    replaced.push(shape.id)
+  }
+  return replaced
+}
+
 function clamp01(v: number): number {
   return Math.max(0.02, Math.min(0.98, v))
 }
@@ -231,7 +286,10 @@ export function createEdge(
   // 节点 ID 属于关系键的一部分，因此内容相同的两个不同节点仍可各连一条边。
   if (edgeExists(editor, from, to)) return false
   if (!portPairCompatible(fromPort, toPort)) return false
-  if (toPort.cardinality === 'one' && inputPortOccupied(editor, to)) return false
+  // 同源节点换端口重连视为替换（见 listSameSourceEdgesToTarget），只有其他节点的占用才拒绝。
+  if (toPort.cardinality === 'one' && inputPortOccupiedByOther(editor, to, from.shapeId)) {
+    return false
+  }
 
   // Include the edge being created before calculating positions, so the new type
   // immediately joins the shared equal-spacing layout on both nodes.
@@ -263,7 +321,16 @@ export function createEdge(
   const connDist = Math.hypot(endPage.x - startPage.x, endPage.y - startPage.y)
   const bend = Math.max(20, Math.min(84, connDist * 0.16))
 
+  // 代码/组合节点的具名动态输出是受控例外（registry 允许同类型重复端口）：
+  // 两个具名输出接进同一多值输入是合法用法，不走替换语义；只有静态声明端口
+  // （AI 处理的互斥输出、AI 对话的同内容双端口）才按替换处理。
+  const isDynamicSourcePort = dynamicPortIdsForShape(fromShape).out.has(from.portId)
+  const replacedArrows = isDynamicSourcePort
+    ? []
+    : listSameSourceEdgesToTarget(editor, from, to)
   editor.run(() => {
+    // 换输出端口重连同一输入口：先移除旧端口的旧线，再建新线，保证原子替换。
+    if (replacedArrows.length > 0) editor.deleteShapes(replacedArrows)
     editor.createShape({
       id: arrowId,
       type: 'arrow',
@@ -319,6 +386,58 @@ export function createEdge(
   // 节点创建尚未打点，会与本连线合并为一步（符合直觉）
   if (markHistory) editor.markHistoryStoppingPoint('create-edge')
   return true
+}
+
+/**
+ * 节点输出端口迁移：把从 `fromPortId` 出发的正式数据边改接到 `toPortId`。
+ *
+ * 供互斥输出节点（AI 处理）切换输出类型后保持下游连线有效。替换语义由
+ * createEdge 兜底：新端口边与旧边指向同一目标输入端口，建新边时旧边已随
+ * 替换规则移除。目标已存在同一条新边（重复画布）或目标不兼容新端口时的行为：
+ * 前者移除旧边完成去重；后者保留旧边，绝不静默丢掉用户连线。
+ * 返回被移除的旧边数量。调用方用 editor.run 包裹可获得单步撤销。
+ */
+export function migrateNodeOutputPortEdges(
+  editor: Editor,
+  shapeId: TLShapeId,
+  fromPortId: string,
+  toPortId: string
+): number {
+  const shape = editor.getShape<NodeCardShape>(shapeId)
+  const spec = shape ? getNodeType(shape.props.nodeType) : undefined
+  if (!shape || !spec) return 0
+  const outPorts = getNodePorts(spec, shape).out
+  if (!outPorts.some((port) => port.id === fromPortId)) return 0
+  if (!outPorts.some((port) => port.id === toPortId)) return 0
+
+  const arrows = [...editor.getCurrentPageShapes()].filter((candidate) => {
+    if (candidate.type !== 'arrow') return false
+    const { start } = getArrowBindings(editor, candidate.id)
+    return (
+      start?.toId === shapeId &&
+      (candidate.meta?.fromPort as string | undefined) === fromPortId &&
+      typeof candidate.meta?.toPort === 'string'
+    )
+  })
+
+  let migrated = 0
+  for (const arrow of arrows) {
+    const { end } = getArrowBindings(editor, arrow.id)
+    if (!end) continue
+    const to: EdgeEndpoint = {
+      shapeId: end.toId,
+      portId: arrow.meta?.toPort as string
+    }
+    if (edgeExists(editor, { shapeId, portId: toPortId }, to)) {
+      // 重复画布：新端口边已存在，旧边只是多余副本，直接去重。
+      editor.deleteShape(arrow.id)
+      migrated += 1
+      continue
+    }
+    // 不兼容目标（如 JSON 输入接不了文本输出）时 createEdge 失败，旧边保留。
+    if (createEdge(editor, { shapeId, portId: toPortId }, to, false)) migrated += 1
+  }
+  return migrated
 }
 
 export interface BatchConnectionResult {
@@ -615,7 +734,9 @@ function resolveTargetInputPort(
   targetSpec: NodeTypeSpec,
   sourcePort: PortDecl,
   dropPagePt?: { x: number; y: number },
-  preferredTargetPortId?: string
+  preferredTargetPortId?: string,
+  /** 拖线来源节点；同源节点换端口重连可替换旧线，不算端口被占用。 */
+  sourceShapeId?: TLShapeId
 ): ResolvedTargetPort | { error: string } {
   const targetPorts = getNodePorts(targetSpec, target)
   const compatible = targetPorts.in.filter((port) => portPairCompatible(sourcePort, port))
@@ -627,7 +748,7 @@ function resolveTargetInputPort(
   const usable = compatible.filter(
     (port) =>
       port.cardinality === 'many' ||
-      !inputPortOccupied(editor, { shapeId: target.id, portId: port.id })
+      !inputPortOccupiedByOther(editor, { shapeId: target.id, portId: port.id }, sourceShapeId)
   )
   if (usable.length === 0) {
     return { error: `「${targetSpec.label}」能接收这份内容的连接点已被占用。请先断开原连线。` }
@@ -707,7 +828,15 @@ export function connectionRetargetNotice(
       : undefined
   if (!sourcePort) return null
 
-  const resolved = resolveTargetInputPort(editor, target, targetSpec, sourcePort, dropPagePt)
+  const resolved = resolveTargetInputPort(
+    editor,
+    target,
+    targetSpec,
+    sourcePort,
+    dropPagePt,
+    undefined,
+    from.shapeId
+  )
   if ('error' in resolved || !resolved.aimed || resolved.aimed.id === resolved.port.id) {
     return null
   }
@@ -750,7 +879,8 @@ export function tryConnect(
     targetSpec,
     sourcePort,
     dropPagePt,
-    preferredTargetPortId
+    preferredTargetPortId,
+    from.shapeId
   )
   if ('error' in resolved) return resolved.error
   const port = resolved.port
@@ -847,7 +977,7 @@ export function tryConnectFromInput(
   if (!inputPort) return '目标输入端口不存在'
   if (
     inputPort.cardinality === 'one' &&
-    inputPortOccupied(editor, { shapeId: target.id, portId: inputPort.id })
+    inputPortOccupiedByOther(editor, { shapeId: target.id, portId: inputPort.id }, upstreamShapeId)
   ) {
     return `「${inputPort.name}」已有连线，单值输入请先断开原连线`
   }
@@ -1092,6 +1222,10 @@ export function gatherUpstreamText(
 ): string {
   const parts: string[] = []
   const seenConnections = new Set<string>()
+  // 同一源节点的 text/markdown 双端口投影同一内容（AI 对话），互斥输出节点
+  // （AI 处理）同一时刻只有一个端口有值；历史画布遗留的重复连线按「源节点 + 内容」
+  // 去重，避免同一回复被合并注入两次。代码节点两个不同文本输出内容不同，不受影响。
+  const seenTextsBySource = new Map<TLShapeId, Set<string>>()
   for (const shape of orderedPageArrows(editor)) {
     const { start, end } = getArrowBindings(editor, shape.id)
     if (!start || !end) continue
@@ -1105,7 +1239,12 @@ export function gatherUpstreamText(
     seenConnections.add(connectionKey)
     const output = projectNodeOutputs(src)[fromPort]
     if ((output?.kind === 'text' || output?.kind === 'markdown') && output.text.trim()) {
-      parts.push(output.text.trim())
+      const text = output.text.trim()
+      const seen = seenTextsBySource.get(start.toId) ?? new Set<string>()
+      if (seen.has(text)) continue
+      seen.add(text)
+      seenTextsBySource.set(start.toId, seen)
+      parts.push(text)
     }
   }
   return parts.join(TEXT_MERGE_SEPARATOR)
