@@ -5,6 +5,9 @@ import { useAppStore } from '../stores/app'
 import { useGatewayStore } from '../stores/gateway'
 import { useConfirmStore } from '../stores/confirm'
 import { useToastStore } from '../stores/toast'
+import { useSaveCoordinator } from '../stores/save-coordinator'
+import type { DiagnosticsEventInput } from '@shared/observability'
+import { drainDiagnosticsEvents, emitDiagnosticsEvent } from '../engine/diagnosticsReporter'
 import { Icon } from '../components/Icon'
 import { ProjectCreateDialog } from '../components/ProjectCreateDialog'
 import { ResourceLibraryPage } from '../library/ResourceLibraryPage'
@@ -33,6 +36,60 @@ export function ProjectListPage(): React.JSX.Element {
   const openModelSettings = useGatewayStore((s) => s.openSettings)
   const projectOpenFailure = useAppStore((s) => s.projectOpenFailure)
   const clearProjectOpenFailure = useAppStore((s) => s.clearProjectOpenFailure)
+
+  // ── 开发模式专属：主页顶栏「重载」按钮（固定放「新建项目」左侧） ──
+  // 改完渲染层代码后一键生效，免去关闭重启。仅在真实 Electron 开发会话显示：
+  // 打包版非 DEV；浏览器验收页没有 preload（window.api 缺失）——两者都不渲染。
+  const devReloadAvailable = import.meta.env.DEV && Boolean(window.api)
+  const [devReloading, setDevReloading] = useState(false)
+  const reloadRendererUi = useCallback((): void => {
+    if (devReloading) return
+    setDevReloading(true)
+    // 主页通常没有未落盘改动；防御性冲刷一次保存协调器（无脏数据时是空操作）。
+    useSaveCoordinator.getState().flush()
+    const reloadStartEvent: DiagnosticsEventInput = {
+      event: 'dev.renderer_reload',
+      level: 'info',
+      phase: 'start',
+      message: '主页开发工具触发界面重载'
+    }
+    emitDiagnosticsEvent(reloadStartEvent)
+    // 健康探测：dev server 已死（孤儿窗口）时不白屏刷新，给出诚实提示。
+    const probeTimeout = new Promise<'timeout'>((resolve) => {
+      window.setTimeout(() => resolve('timeout'), 3000)
+    })
+    const probe = window
+      .fetch(window.location.href, { method: 'HEAD', cache: 'no-store' })
+      .then((response): 'ok' | 'unreachable' => (response.ok ? 'ok' : 'unreachable'))
+      .catch((): 'unreachable' => 'unreachable')
+    void Promise.race([probe, probeTimeout])
+      .then(async (result) => {
+        if (result !== 'ok') {
+          setDevReloading(false)
+          const reloadFailedEvent: DiagnosticsEventInput = {
+            event: 'dev.renderer_reload',
+            level: 'warn',
+            phase: 'failed',
+            message: `开发服务不可达（${result}），未执行重载`
+          }
+          emitDiagnosticsEvent(reloadFailedEvent)
+          useToastStore.getState().show('开发会话已结束，请重新运行 npm run dev 后再试')
+          return
+        }
+        // 重载会丢弃缓冲中的诊断事件，先冲刷（带 1.5s 上限，transport 死了也照常重载）。
+        await Promise.race([
+          drainDiagnosticsEvents(),
+          new Promise<'timeout'>((resolve) => {
+            window.setTimeout(() => resolve('timeout'), 1500)
+          })
+        ])
+        window.location.reload()
+      })
+      .catch(() => {
+        setDevReloading(false)
+        useToastStore.getState().show('重载失败，请重新运行 npm run dev')
+      })
+  }, [devReloading])
 
   const refresh = useCallback(async (): Promise<void> => {
     const res = await window.api.listProjects()
@@ -202,6 +259,19 @@ export function ProjectListPage(): React.JSX.Element {
               <Icon name="download" size={16} />
             </TopbarIconButton>
           </div>
+          {/* 2026-11-21 用户裁决：开发重载按钮固定放在「新建项目」左侧。 */}
+          {devReloadAvailable && (
+            <button
+              type="button"
+              className="project-home-button project-home-button-quiet project-home-dev-reload"
+              onClick={reloadRendererUi}
+              disabled={devReloading}
+              title="重新加载界面代码（仅开发模式）：改完渲染层代码后点击生效，无需重启应用"
+            >
+              <Icon name="refresh" size={14} />
+              {devReloading ? '重载中…' : '重载'}
+            </button>
+          )}
           <button
             type="button"
             className="project-home-button project-home-button-primary"
