@@ -8565,23 +8565,24 @@ select:focus-visible {
   margin: 0;
 }
 
+/* 2026-11-21 用户裁决：引用候选改为两列 16:9 缩略卡片网格，文件名放卡片下方；
+   类型徽标（图片绿/视频蓝）+ 视频居中暗淡播放键 + 悬浮右上角放大镜预览大图。 */
 .ref-mention-menu {
   position: fixed;
   z-index: var(--z-modal);
   box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  flex-wrap: nowrap;
-  gap: 3px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-content: start;
+  gap: 8px;
   max-width: 100%;
-  max-height: 132px;
   overflow-y: auto;
   scrollbar-width: none;
-  padding: 5px 6px;
+  padding: 8px;
   border: 1px solid rgba(105, 208, 255, 0.3);
-  border-radius: 7px;
-  background: rgba(24, 31, 41, 0.96);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+  border-radius: 8px;
+  background: rgba(24, 31, 41, 0.97);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.4);
 }
 
 .ref-mention-menu::-webkit-scrollbar {
@@ -8589,25 +8590,121 @@ select:focus-visible {
   height: 0;
 }
 
-/* 2026-11-08 用户裁决：引用候选只占一行，长标题省略，完整内容靠 title 悬浮。 */
-.ref-mention-menu button {
+.ref-mention-menu .ref-card {
+  position: relative;
   display: flex;
-  width: 100%;
+  flex-direction: column;
   min-width: 0;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 7px;
+  padding: 0;
   overflow: hidden;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(231, 238, 247, 0.14);
+  border-radius: 8px;
+  background: var(--surface-1);
   color: var(--txt);
-  font-size: 11px;
-  white-space: nowrap;
+  text-align: left;
   cursor: pointer;
 }
 
-.ref-mention-menu button > span:not(.ref-mention-thumb) {
+.ref-mention-menu .ref-card:hover {
+  border-color: rgba(105, 208, 255, 0.55);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+.ref-card-media {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--surface-1);
+  overflow: hidden;
+}
+
+.ref-card-media :is(img, video) {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 类型徽标：图片绿 / 视频蓝（沿用节点分类身份色系）。 */
+.ref-card-kind {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  padding: 1px 6px;
+  border: 1px solid rgba(74, 222, 128, 0.35);
+  border-radius: 999px;
+  background: rgba(74, 222, 128, 0.2);
+  color: #86efac;
+  font-size: 10px;
+  line-height: 1.5;
+  backdrop-filter: blur(2px);
+}
+
+.ref-card.is-video .ref-card-kind {
+  border-color: rgba(96, 165, 250, 0.4);
+  background: rgba(96, 165, 250, 0.2);
+  color: #93c5fd;
+}
+
+/* 视频卡：居中暗淡播放键。 */
+.ref-card-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.ref-card-play svg {
+  box-sizing: content-box;
+  margin-left: 2px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(8, 12, 18, 0.55);
+  color: rgba(255, 255, 255, 0.66);
+}
+
+/* 悬浮右上角预览按钮；点击进灯箱看大图/播放。 */
+.ref-card-preview {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid rgba(231, 238, 247, 0.3);
+  border-radius: 999px;
+  background: rgba(10, 14, 20, 0.72);
+  color: #dbe7f5;
+  cursor: pointer;
+}
+
+.ref-card:hover .ref-card-preview,
+.ref-card-preview:focus-visible {
+  display: inline-flex;
+}
+
+.ref-card-preview:hover {
+  border-color: rgba(105, 208, 255, 0.6);
+  background: rgba(9, 202, 245, 0.28);
+}
+
+/* 文件名：卡片下方实底信息条（2026-11-21 用户裁决：名称放卡片下面）。 */
+.ref-card-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 7px;
+  background: rgba(13, 17, 24, 0.92);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.ref-card-title {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -8615,32 +8712,37 @@ select:focus-visible {
   white-space: nowrap;
 }
 
-.ref-mention-menu button > small {
+.ref-card-name small {
   flex: 0 0 auto;
-  margin-left: auto;
   color: var(--muted);
   font-size: 10px;
   white-space: nowrap;
 }
 
-.ref-mention-menu button:hover {
-  border-color: rgba(105, 208, 255, 0.4);
-  background: rgba(66, 185, 245, 0.16);
+/* 预览灯箱：点击任意处关闭。 */
+.ref-preview-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(4, 6, 10, 0.86);
+  cursor: zoom-out;
 }
 
-.ref-mention-thumb {
-  position: relative;
-  flex: 0 0 auto;
-  width: 22px;
-  height: 18px;
+.ref-preview-lightbox :is(img, video) {
+  max-width: 72vw;
+  max-height: 78vh;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
 }
 
-.ref-mention-thumb :is(img, video) {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border-radius: 3px;
-  object-fit: cover;
+.ref-preview-caption {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .gen-select {
@@ -11723,6 +11825,8 @@ select:focus-visible {
 
 .canvas-host:has(> .side-panel, > .node-contract-panel) > .dock-search {
   --search-right: calc(var(--side-panel-width) + 16px);
+  /* 2026-11-21 用户裁决：侧边面板打开时收窄搜索框，避免盖住底部工具坞右侧按钮。 */
+  width: min(188px, calc(100% - var(--search-right) - 12px));
 }
 
 @media (max-width: 1200px) {
@@ -11759,6 +11863,7 @@ select:focus-visible {
   border-color: color-mix(in srgb, var(--txt-dim) 70%, var(--canvas-surface));
 }
 
+/* 2026-11-21 用户裁决：放大镜图标与外框同一状态机——待机暗灰，聚焦/有内容才点亮。 */
 .search-icon {
   display: inline-grid;
   place-items: center;
@@ -11767,9 +11872,19 @@ select:focus-visible {
   padding: 0;
   border: 0;
   border-radius: 5px;
-  color: var(--txt-dim);
+  color: color-mix(in srgb, var(--txt-dim) 58%, transparent);
   background: transparent;
   cursor: text;
+  transition: color 0.14s ease;
+}
+
+.dock-search:hover .search-icon {
+  color: color-mix(in srgb, var(--txt-dim) 78%, transparent);
+}
+
+.search-header:focus-within .search-icon,
+.search-icon:focus-visible {
+  color: var(--txt-dim);
 }
 
 .search-icon:focus-visible {

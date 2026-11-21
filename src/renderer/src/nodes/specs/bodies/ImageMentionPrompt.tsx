@@ -31,6 +31,7 @@ export function ImageMentionPrompt({
   const mirror = useRef<HTMLDivElement>(null)
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>()
   const [query, setQuery] = useState<{ start: number; end: number; text: string } | null>(null)
+  const [previewItem, setPreviewItem] = useState<PromptMediaReference | null>(null)
   const matches = references.length ? resolvedMentions(value, references) : []
   const candidates = query
     ? references.filter((item) =>
@@ -39,6 +40,14 @@ export function ImageMentionPrompt({
         )
       )
     : []
+  /** 候选展示名：标题/素材名优先；都没有时回退为「图片 1」这类编号名，绝不显示 UUID。 */
+  const candidateName = (item: PromptMediaReference): string =>
+    item.title || item.name || item.token.replace(/^@/, '')
+  /** 类型徽标文案：编号引用显示「图片 1」，具名引用只显示类型词。 */
+  const candidateKind = (item: PromptMediaReference): string => {
+    const indexed = /^@(图片|视频)\s*(\d+)$/.exec(item.token)
+    return indexed ? `${indexed[1]} ${indexed[2]}` : item.kind === 'video' ? '视频' : '图片'
+  }
   const readQuery = (textarea: HTMLTextAreaElement): void => {
     const { value: next, selectionStart } = textarea
     const match = /[@＠]([^@＠\r\n]*)$/.exec(next.slice(0, selectionStart))
@@ -62,13 +71,15 @@ export function ImageMentionPrompt({
       const top = Math.max(rect.top, body?.top ?? rect.top, 8)
       const below = window.innerHeight - bottom - 12
       const above = top - 12
-      const openAbove = below < 132 && above > below
+      // 2026-11-21 用户裁决：候选改为卡片网格（两列 16:9 缩略卡 + 下方文件名），
+      // 两行卡片约 230px，上下展开阈值与最大高度随之放大。
+      const openAbove = below < 248 && above > below
       const width = Math.min(Math.max(rect.width, 180), window.innerWidth - 16)
       setMenuStyle({
         left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
         ...(openAbove ? { bottom: window.innerHeight - top + 4 } : { top: bottom + 4 }),
         width,
-        maxHeight: Math.min(132, Math.max(openAbove ? above : below, 0))
+        maxHeight: Math.min(248, Math.max(openAbove ? above : below, 0))
       })
     }
     positionMenu()
@@ -220,6 +231,7 @@ export function ImageMentionPrompt({
               <button
                 key={item.token}
                 type="button"
+                className={item.kind === 'video' ? 'ref-card is-video' : 'ref-card'}
                 title={item.title || item.name || item.token}
                 onPointerDown={(event) => {
                   event.preventDefault()
@@ -230,20 +242,59 @@ export function ImageMentionPrompt({
                   insert(item)
                 }}
               >
-                <span className="ref-mention-thumb">
+                <span className="ref-card-media">
                   {item.kind === 'video' ? (
                     <>
                       <video src={mediaUrl(item.mediaPath)} preload="metadata" muted playsInline />
-                      <Icon name="play" size={12} className="reference-video-mark" />
+                      <span className="ref-card-play" aria-hidden="true">
+                        <Icon name="play" size={13} />
+                      </span>
                     </>
                   ) : (
-                    <img src={mediaUrl(item.mediaPath)} alt="" />
+                    <img src={mediaUrl(item.mediaPath)} alt="" loading="lazy" />
                   )}
+                  <span className="ref-card-kind">{candidateKind(item)}</span>
+                  <span
+                    className="ref-card-preview"
+                    role="button"
+                    tabIndex={-1}
+                    aria-label={`预览 ${candidateName(item)}`}
+                    title="预览素材（点击卡片本体插入引用）"
+                    onPointerDown={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                    }}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setPreviewItem(item)
+                    }}
+                  >
+                    <Icon name="search" size={11} />
+                  </span>
                 </span>
-                <span>{item.title || item.name || item.token}</span>
-                {item.title && <small>{item.token}</small>}
+                <span className="ref-card-name">
+                  <span className="ref-card-title">{candidateName(item)}</span>
+                  <small>{item.token}</small>
+                </span>
               </button>
             ))}
+          </div>,
+          document.body
+        )}
+      {previewItem &&
+        createPortal(
+          <div
+            className="ref-preview-lightbox"
+            role="dialog"
+            aria-label="素材预览"
+            onClick={() => setPreviewItem(null)}
+          >
+            {previewItem.kind === 'video' ? (
+              <video src={mediaUrl(previewItem.mediaPath)} controls autoPlay />
+            ) : (
+              <img src={mediaUrl(previewItem.mediaPath)} alt={candidateName(previewItem)} />
+            )}
+            <span className="ref-preview-caption">{candidateName(previewItem)}</span>
           </div>,
           document.body
         )}
