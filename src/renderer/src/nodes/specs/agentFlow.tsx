@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- Node spec registration, like specs/index.tsx. */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { NODE_UI } from '../../canvas/node-ui-tokens'
 import { useEditor, useValue } from 'tldraw'
 import type { PortDecl, PortType } from '@shared/types'
@@ -313,14 +313,98 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
       onChange={(value) => update(key, value)}
     />
   )
+  // ── 实时保存（2026-11-21 用户反馈：面板填写内容不再依赖“保存配置”按钮）──
+  // 草稿变化（editVersion）后防抖自动尝试保存：Schema 通过即写回节点；校验在
+  // 用户停顿后提示。保存配置按钮保留为显式提交（立即校验并提示全部错误）。
+  const draftRef = useRef(draft)
+  const repairConfirmedRef = useRef(repairConfirmed)
+  const savedConfigIsValidRef = useRef(savedConfigIsValid)
+  // 本次 props.config 变化是否来自本组件自己的自动保存（state 而非 ref：
+  // 渲染期守卫要在渲染中读取，渲染期读 ref 被 react-hooks/refs 禁止）。
+  const [ownSave, setOwnSave] = useState(false)
+  // 用户主动编辑的版本号：只有它驱动自动保存；撤销/外部重置不走这条路。
+  const [editVersion, setEditVersion] = useState(0)
+  const pendingEditRef = useRef(false)
+  const attemptSave = (showErrors: boolean): boolean => {
+    // 已保存配置无效且未确认修复：自动保存不得把修复前内容写回节点。
+    if (!savedConfigIsValidRef.current && !repairConfirmedRef.current) {
+      if (showErrors) setError('已保存的配置无效。请先恢复默认配置，再保存修复结果。')
+      return false
+    }
+    const result = schemas[type].safeParse(draftRef.current)
+    if (!result.success) {
+      if (showErrors) setError('配置格式无效，请检查节点 ID、版本、预算和状态转换。')
+      return false
+    }
+    const serialized = JSON.stringify(result.data)
+    if (serialized === shape.props.config) return true
+    const terminal = beginFlowConfigEdit(projectId, shape.id, type)
+    const declaration = resolveFlowDeclaration(
+      { id: shape.id, type, config: serialized, outputPortIds: [] },
+      graph.nodes,
+      graph.edges
+    )
+    if (declaration.issues.length) {
+      if (showErrors) setError(declaration.issues.join('；'))
+      terminal('failed', 'validation')
+      return false
+    }
+    try {
+      setOwnSave(true)
+      markUndoPoint(editor, 'agent-flow-config')
+      editor.updateShape({
+        id: shape.id,
+        type: 'node-card',
+        props: { config: serialized }
+      })
+      setError('')
+      terminal('applied', 'apply')
+      return true
+    } catch {
+      if (showErrors) setError('配置未保存，请重试。')
+      terminal('failed', 'apply')
+      return false
+    }
+  }
+  const attemptRef = useRef(attemptSave)
+  // ref 同步在渲染后的 effect 里完成（react-hooks/refs）；事件与定时器读到的是最新值。
+  useEffect(() => {
+    draftRef.current = draft
+    repairConfirmedRef.current = repairConfirmed
+    savedConfigIsValidRef.current = savedConfigIsValid
+    attemptRef.current = attemptSave
+  })
+  // 草稿编辑防抖自动保存；卸载（关面板/切节点/切 tab，blur 不触发）时立即冲刷。
+  useEffect(() => {
+    if (editVersion === 0) return
+    pendingEditRef.current = true
+    const timer = window.setTimeout(() => {
+      pendingEditRef.current = false
+      attemptRef.current(true)
+    }, 800)
+    return () => window.clearTimeout(timer)
+  }, [editVersion])
+  useEffect(
+    () => () => {
+      if (pendingEditRef.current) attemptRef.current(true)
+    },
+    []
+  )
+  // 保存/撤销/外部写入后的真值同步（render-phase 派生状态，与 website/sound-adjust 同模式）：
+  // 自己的自动保存不重置草稿，避免打断输入法组词；撤销/重做/外部写入完整重置。
   if (saved !== shape.props.config) {
     setSaved(shape.props.config)
-    setDraft(configOf(shape))
-    setRepairConfirmed(false)
+    if (ownSave) {
+      setOwnSave(false)
+    } else {
+      setDraft(configOf(shape))
+      setRepairConfirmed(false)
+    }
   }
   const update = (key: string, value: unknown): void => {
     setDraft({ ...draft, [key]: value })
     setError('')
+    setEditVersion((version) => version + 1)
   }
   const textField = (label: string, key: string): React.JSX.Element => (
     <label className="settings-field">
@@ -815,41 +899,8 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
     </fieldset>
   )
   const save = (): void => {
-    const terminal = beginFlowConfigEdit(projectId, shape.id, type)
-    if (!savedConfigIsValid && !repairConfirmed) {
-      setError('已保存的配置无效。请先恢复默认配置，再保存修复结果。')
-      terminal('failed', 'validation')
-      return
-    }
-    const result = schemas[type].safeParse(draft)
-    if (!result.success) {
-      setError('配置格式无效，请检查节点 ID、版本、预算和状态转换。')
-      terminal('failed', 'validation')
-      return
-    }
-    const declaration = resolveFlowDeclaration(
-      { id: shape.id, type, config: JSON.stringify(result.data), outputPortIds: [] },
-      graph.nodes,
-      graph.edges
-    )
-    if (declaration.issues.length) {
-      setError(declaration.issues.join('；'))
-      terminal('failed', 'validation')
-      return
-    }
-    try {
-      markUndoPoint(editor, 'agent-flow-config')
-      editor.updateShape({
-        id: shape.id,
-        type: 'node-card',
-        props: { config: JSON.stringify(result.data) }
-      })
-      setError('')
-      terminal('applied', 'apply')
-    } catch {
-      setError('配置未保存，请重试。')
-      terminal('failed', 'apply')
-    }
+    // 显式提交：立即校验并提示全部错误；防抖中的自动保存到点后无变化即跳过。
+    attemptSave(true)
   }
   return (
     <section className="node-settings agent-flow-settings">
@@ -862,6 +913,7 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
               setDraft(defaults[type] as Record<string, unknown>)
               setRepairConfirmed(true)
               setError('')
+              setEditVersion((version) => version + 1)
             }}
           >
             恢复默认配置
@@ -915,6 +967,7 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
                       delete next.stages
                       setDraft(next)
                       setError('')
+                      setEditVersion((version) => version + 1)
                     }
                   }}
                 >

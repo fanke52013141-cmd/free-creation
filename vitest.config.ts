@@ -21,7 +21,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['test/**/*.test.ts'],
+    include: ['test/**/*.test.ts', 'test/**/*.test.tsx'],
     globals: true,
     // I/O 密集测试（文件锁、SQLite 事务、fs 读写）在并行全量跑时容易超时。
     // 15s 给足余量，避免假阳性 timeout。

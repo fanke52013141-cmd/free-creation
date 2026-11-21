@@ -184,6 +184,49 @@
   line-height: 1;
 }
 
+/* 侧栏保存状态指示：如实反映「输入中/待保存/保存中/已保存/失败」，配色沿用状态点惯例。 */
+.contract-head .contract-head-title {
+  flex: 1 1 auto;
+  gap: 8px;
+}
+.contract-save-state {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--txt-dim);
+  white-space: nowrap;
+}
+.contract-save-state-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--muted);
+}
+.contract-save-state[data-state='draft'] .contract-save-state-dot,
+.contract-save-state[data-state='dirty'] .contract-save-state-dot {
+  background: #42b9f5;
+}
+.contract-save-state[data-state='saving'] .contract-save-state-dot {
+  background: #42b9f5;
+  animation: node-status-pulse 1.4s ease-in-out infinite;
+}
+.contract-save-state[data-state='saved'] {
+  color: #4ade80;
+}
+.contract-save-state[data-state='saved'] .contract-save-state-dot {
+  background: #4ade80;
+}
+.contract-save-state[data-state='failed'] {
+  color: #ff6b6b;
+}
+.contract-save-state[data-state='failed'] .contract-save-state-dot {
+  background: #ff6b6b;
+}
+
 /* 节点侧栏只保留参数、当前状态和错误，不铺教程式说明。
    显式 status/alert 是实际运行或配置状态，继续呈现。 */
 .node-contract-panel :is(

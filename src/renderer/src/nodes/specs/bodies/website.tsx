@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import { Icon } from '../../../components/Icon'
@@ -91,6 +91,59 @@ export function WebsiteSettings({ shape, editor }: NodeSettingsProps): React.JSX
     setSavedConfig(shape.props.config)
   }
 
+  // 实时保存：合法草稿防抖写入节点；校验只在草稿稳定后提示，不打断输入过程。
+  // 保存网址按钮与 Enter 保留为显式提交（立即校验并提示错误）。
+  const draftRef = useRef(draft)
+  const timerRef = useRef<number | null>(null)
+  const applySave = (): boolean => {
+    const current = draftRef.current
+    const name = current.name.trim()
+    const link = readWebsiteLink(JSON.stringify({ name, url: current.url }))
+    if (!name) return false
+    if (!link) return false
+    const config = JSON.stringify(link)
+    if (config === shape.props.config && shape.props.title === link.name) return true
+    // 2026-11-03 用户裁决：确定网址名称后，节点标题同步为该名称。
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { config, title: link.name }
+    })
+    markUndoPoint(editor, 'website-config')
+    setSavedConfig(config)
+    return true
+  }
+  const applySaveRef = useRef(applySave)
+  const flushSave = (): void => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    applySaveRef.current()
+  }
+  const flushRef = useRef(flushSave)
+  // ref 同步在渲染后的 effect 里完成（react-hooks/refs）；事件与定时器读到的是最新值。
+  useEffect(() => {
+    draftRef.current = draft
+    applySaveRef.current = applySave
+    flushRef.current = flushSave
+  })
+  useEffect(() => () => flushRef.current(), [])
+  const scheduleSave = (): void => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+    const attempted = draftRef.current
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null
+      // 草稿在防抖期间继续变化时不弹校验错误，等最后一次输入的防抖窗口再试。
+      if (applySaveRef.current()) setError('')
+      else if (attempted === draftRef.current) {
+        setError(
+          draftRef.current.name.trim() ? '请输入有效的 HTTP 或 HTTPS 网址' : '请填写网址名称'
+        )
+      }
+    }, 600)
+  }
+
   const save = (): void => {
     const name = draft.name.trim()
     const link = readWebsiteLink(JSON.stringify({ name, url: draft.url }))
@@ -123,6 +176,7 @@ export function WebsiteSettings({ shape, editor }: NodeSettingsProps): React.JSX
           onChange={(event) => {
             setDraft((current) => ({ ...current, name: event.target.value }))
             setError('')
+            scheduleSave()
           }}
         />
       </label>
@@ -138,14 +192,22 @@ export function WebsiteSettings({ shape, editor }: NodeSettingsProps): React.JSX
           onChange={(event) => {
             setDraft((current) => ({ ...current, url: event.target.value }))
             setError('')
+            scheduleSave()
           }}
+          onBlur={flushSave}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') save()
+            if (event.key === 'Enter') {
+              if (timerRef.current !== null) {
+                window.clearTimeout(timerRef.current)
+                timerRef.current = null
+              }
+              save()
+            }
           }}
         />
       </label>
       <p className="contract-settings-hint">
-        未填写协议时会自动补上 https://；只允许打开 HTTP 或 HTTPS 网页。
+        未填写协议时会自动补上 https://；只允许打开 HTTP 或 HTTPS 网页。修改会自动保存。
       </p>
       {error && (
         <p className="website-settings-error" role="alert">

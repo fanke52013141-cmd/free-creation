@@ -65,7 +65,7 @@ function workbenchTimecode(ms: number): string {
 
 // ── 统一时间轴组件 ──
 
-/** 手动时间码输入：接受 mm:ss.mmm 或纯秒数 */
+/** 手动时间码输入：接受 mm:ss.mmm 或纯秒数；合法值防抖自动提交，blur/卸载立即提交 */
 function TimeInput({
   label,
   valueMs,
@@ -81,6 +81,16 @@ function TimeInput({
 }): React.JSX.Element {
   const format = full ? workbenchTimecode : timecode
   const [text, setText] = useState(format(valueMs))
+  // 实时保存：手输时间码防抖提交，工作台/面板关闭不触发 blur 也不会丢。
+  const pendingRef = useRef<number | null>(null)
+  const timerRef = useRef<number | null>(null)
+  const commitRef = useRef(onCommit)
+  const valueMsRef = useRef(valueMs)
+  // ref 同步在渲染后的 effect 里完成（react-hooks/refs）；事件与定时器读到的是最新值。
+  useEffect(() => {
+    commitRef.current = onCommit
+    valueMsRef.current = valueMs
+  })
 
   const parseTimecode = (s: string): number | null => {
     const parts = s.trim().split(':')
@@ -102,10 +112,36 @@ function TimeInput({
     return null
   }
 
+  const commitPending = (): void => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    if (pendingRef.current === null) return
+    const ms = pendingRef.current
+    pendingRef.current = null
+    if (ms !== valueMsRef.current) commitRef.current(ms)
+  }
+  const unmountCommitRef = useRef(commitPending)
+  useEffect(() => {
+    unmountCommitRef.current = commitPending
+  })
+  useEffect(() => () => unmountCommitRef.current(), [])
+
+  // 拖动时间轴/播放位置回灌显示；用户有未提交草稿时不打断输入。
+  useEffect(() => {
+    if (pendingRef.current === null) setText(format(valueMs))
+  }, [format, valueMs])
+
   const handleBlur = (): void => {
     const ms = parseTimecode(text)
     if (ms !== null) {
-      onCommit(clamp(ms, max))
+      pendingRef.current = null
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+      if (clamp(ms, max) !== valueMsRef.current) onCommit(clamp(ms, max))
     } else {
       setText(format(valueMs))
     }
@@ -118,12 +154,25 @@ function TimeInput({
         type="text"
         value={text}
         onPointerDown={(e) => e.stopPropagation()}
-        onChange={(event): void => setText(event.currentTarget.value)}
+        onChange={(event): void => {
+          const next = event.currentTarget.value
+          setText(next)
+          const ms = parseTimecode(next)
+          if (ms === null) return
+          pendingRef.current = clamp(ms, max)
+          if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+          timerRef.current = window.setTimeout(commitPending, 600)
+        }}
         onBlur={handleBlur}
         onKeyDown={(event): void => {
           if (event.key === 'Enter') event.currentTarget.blur()
           if (event.key === 'Escape') {
             setText(format(valueMs))
+            pendingRef.current = null
+            if (timerRef.current !== null) {
+              window.clearTimeout(timerRef.current)
+              timerRef.current = null
+            }
             event.currentTarget.blur()
           }
         }}

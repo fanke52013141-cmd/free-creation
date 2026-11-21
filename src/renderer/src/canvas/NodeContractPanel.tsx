@@ -7,6 +7,8 @@ import { Icon } from '../components/Icon'
 import { AppSelect } from '../components/AppSelect'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 import { useNodePanelStore, type NodePanelInitialTab } from '../stores/nodePanel'
+import { useSaveCoordinator } from '../stores/save-coordinator'
+import { usePanelDraftPending } from './panel-autosave'
 import {
   readNodeRunHistory,
   readNodeRunRecord,
@@ -264,6 +266,31 @@ function defaultDraft(port: PortDecl): TestDraft {
   return { type: port.type === 'any' ? 'text' : port.type, value: '' }
 }
 
+const SAVE_STATE_LABELS: Record<string, string> = {
+  draft: '输入中…',
+  dirty: '待保存',
+  saving: '保存中…',
+  failed: '保存失败',
+  paused: '已暂停',
+  saved: '已保存'
+}
+
+/**
+ * 面板保存状态指示：草稿未写回节点显示“输入中…”，其余跟随项目保存协调器
+ * （写入节点后 800ms 防抖落盘）。让用户不必猜当前内容是否已经保存。
+ */
+function PanelSaveStateHint(): React.JSX.Element {
+  const pending = usePanelDraftPending((state) => state.pending)
+  const phase = useSaveCoordinator((state) => state.phase)
+  const state = pending > 0 ? 'draft' : phase
+  return (
+    <span className="contract-save-state" data-state={state} role="status" aria-live="polite">
+      <span className="contract-save-state-dot" aria-hidden="true" />
+      {SAVE_STATE_LABELS[state] ?? '已保存'}
+    </span>
+  )
+}
+
 function previewTestValue(value: NodeValue): string {
   if (value.kind === 'text' || value.kind === 'markdown') return value.text || '（空文本）'
   if (value.kind === 'json') return JSON.stringify(value.data, null, 2)
@@ -297,6 +324,36 @@ function TestHarness({
     reason?: string
     outputs: Record<string, unknown>
   } | null>(null)
+
+  // 测试输入实时保存：输入防抖回写节点（文本节点写 props.text，其余写 config._testInputs），
+  // blur 立即回写；切 tab、关面板不触发 blur，这里用卸载兜底，草稿不再丢失。
+  const commitRef = useRef(onTextInputCommit)
+  const pendingCommitsRef = useRef(
+    new Map<string, { port: PortDecl; type: PortType; value: string }>()
+  )
+  const commitTimerRef = useRef<number | null>(null)
+  const flushPendingCommits = (): void => {
+    if (commitTimerRef.current !== null) {
+      window.clearTimeout(commitTimerRef.current)
+      commitTimerRef.current = null
+    }
+    if (pendingCommitsRef.current.size === 0) return
+    const pending = [...pendingCommitsRef.current.values()]
+    pendingCommitsRef.current.clear()
+    for (const item of pending) commitRef.current?.(item.port, item.type, item.value)
+  }
+  const flushRef = useRef(flushPendingCommits)
+  // ref 同步在渲染后的 effect 里完成（react-hooks/refs）；事件与定时器读到的是最新值。
+  useEffect(() => {
+    commitRef.current = onTextInputCommit
+    flushRef.current = flushPendingCommits
+  })
+  useEffect(() => () => flushRef.current(), [])
+  const scheduleTextInputCommit = (port: PortDecl, type: PortType, value: string): void => {
+    pendingCommitsRef.current.set(port.id, { port, type, value })
+    if (commitTimerRef.current !== null) window.clearTimeout(commitTimerRef.current)
+    commitTimerRef.current = window.setTimeout(flushPendingCommits, 600)
+  }
 
   useEffect(() => {
     void loadAssets(projectId)
@@ -398,8 +455,14 @@ function TestHarness({
                       ? '输入合法 JSON，例如 {"title":"示例"}'
                       : `输入${port.name}`
                   }
-                  onChange={(event) => updateDraft(port, { value: event.target.value })}
-                  onBlur={(event) => onTextInputCommit?.(port, type, event.target.value)}
+                  onChange={(event) => {
+                    updateDraft(port, { value: event.target.value })
+                    scheduleTextInputCommit(port, type, event.target.value)
+                  }}
+                  onBlur={(event) => {
+                    pendingCommitsRef.current.delete(port.id)
+                    onTextInputCommit?.(port, type, event.target.value)
+                  }}
                 />
               ) : (
                 <AppSelect
@@ -694,8 +757,9 @@ export function NodeContractPanel({
         <span className="side-panel-icon" style={{ color: nodeIconColor(spec.color) }}>
           <Icon name={spec.icon} size={17} />
         </span>
-        <div>
+        <div className="contract-head-title">
           <strong>{contractPanelTitle(shape.props.nodeType, shape.props.title)}</strong>
+          <PanelSaveStateHint />
         </div>
         <button className="side-panel-close" aria-label="关闭节点说明面板" onClick={onClose}>
           <Icon name="close" size={15} />

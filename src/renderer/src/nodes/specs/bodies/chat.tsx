@@ -9,6 +9,7 @@ import { ModelSelect, NoModelHint } from './shared'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import { useNodePanelStore } from '../../../stores/nodePanel'
 import { ChatSkillAgentSettings } from './SkillAgentSettings'
+import { usePanelAutosave } from '../../../canvas/panel-autosave'
 
 export function ChatBody({ shape }: NodeBodyProps): React.JSX.Element {
   return (
@@ -54,6 +55,9 @@ export function ChatSettings({ shape, editor }: NodeSettingsProps): React.JSX.El
     })
   }
 
+  // 系统提示词实时保存：输入防抖写入，blur/面板关闭立即落盘，不再依赖失焦。
+  const systemField = usePanelAutosave(data.system, (value) => save({ system: value }))
+
   if (options.length === 0) {
     return (
       <section className="node-settings chat-node-settings">
@@ -83,10 +87,13 @@ export function ChatSettings({ shape, editor }: NodeSettingsProps): React.JSX.El
         <textarea
           id={`chat-system-${shape.id}`}
           className="node-textarea"
-          defaultValue={data.system}
+          value={systemField.value}
           rows={4}
           placeholder="人设、输出格式或创作要求…"
-          onBlur={(event) => save({ system: event.currentTarget.value })}
+          onChange={systemField.onChange}
+          onBlur={systemField.onBlur}
+          onCompositionStart={systemField.onCompositionStart}
+          onCompositionEnd={systemField.onCompositionEnd}
         />
       </label>
       <div className="settings-row ai-process-number-settings">

@@ -10,6 +10,8 @@ import { parseAiProcess, type AiProcessConfig } from '../../../engine/executors/
 import { ModelSelect, NoModelHint } from './shared'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import { readNodeConfig } from '../../../canvas/node-persistence'
+import { migrateNodeOutputPortEdges } from '../../../canvas/graph'
+import { usePanelAutosave } from '../../../canvas/panel-autosave'
 import { AppSelect } from '../../../components/AppSelect'
 import { NumberStepper } from '../../../components/NumberStepper'
 import { projectNodeOutputs } from '../../nodeValues'
@@ -23,7 +25,7 @@ const AI_SCHEMA_OPTIONS = [
 const AI_MODE_OPTIONS: Array<{
   value: AiProcessConfig['mode']
   label: string
-  /** 唯一正式输出端口；由 projectAiProcessOutputs 投影，不能由 UI 另造结果。 */
+  /** 唯一正式输出端口；由 projectAiProcessOutputs 投影，不能由 UI 另造结果。切换输出类型时旧端口的下游连线由 migrateNodeOutputPortEdges 迁移。 */
   portId: string
   downstream: string
 }> = [
@@ -121,12 +123,26 @@ export function AiProcessSettings({ shape, editor }: NodeSettingsProps): React.J
   }, [loaded, loadProviders])
 
   const save = (patch: Partial<AiProcessConfig>): void => {
-    editor.updateShape({
-      id: shape.id,
-      type: 'node-card',
-      props: { config: JSON.stringify({ ...config, ...patch }) }
+    const next = { ...config, ...patch }
+    editor.run(() => {
+      editor.updateShape({
+        id: shape.id,
+        type: 'node-card',
+        props: { config: JSON.stringify(next) }
+      })
+      // 输出类型切换后，把旧正式输出端口的下游连线迁移到新端口：换模式不再留下
+      // 永远没有数据的死线；目标端口不兼容新输出时旧线保留，不静默丢弃用户连线。
+      const previousPort = modeOption(config.mode).portId
+      const nextPort = modeOption(next.mode).portId
+      if (patch.mode !== undefined && next.mode !== config.mode && previousPort !== nextPort) {
+        migrateNodeOutputPortEdges(editor, shape.id, previousPort, nextPort)
+      }
     })
+    editor.markHistoryStoppingPoint('ai-process-config')
   }
+
+  // 系统提示词实时保存：输入防抖写入，blur/面板关闭立即落盘，不再依赖失焦。
+  const systemField = usePanelAutosave(config.system, (value) => save({ system: value }))
 
   return (
     <section className="node-settings ai-process-settings">
@@ -195,10 +211,13 @@ export function AiProcessSettings({ shape, editor }: NodeSettingsProps): React.J
         <textarea
           id={`ai-process-system-${shape.id}`}
           className="node-textarea"
-          defaultValue={config.system}
+          value={systemField.value}
           rows={4}
           placeholder="定义处理目标、语气或输出约束…"
-          onBlur={(event) => save({ system: event.currentTarget.value })}
+          onChange={systemField.onChange}
+          onBlur={systemField.onBlur}
+          onCompositionStart={systemField.onCompositionStart}
+          onCompositionEnd={systemField.onCompositionEnd}
         />
       </label>
       <div className="settings-row ai-process-number-settings">
