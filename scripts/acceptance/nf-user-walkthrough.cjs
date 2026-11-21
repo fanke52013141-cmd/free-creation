@@ -204,7 +204,8 @@ function ok(res, label) {
     for (const sel of ['.composite-canvas-stage .node-palette', '.composite-canvas-stage .canvas-dock', '.nf-action-bar']) {
       if (!(await page.locator(sel).isVisible())) throw new Error(`EDITOR_CHROME_MISSING:${sel}`)
     }
-    const topText = await page.locator('.composite-canvas-topbar').innerText()
+    // 2026-11-21 弹窗统一：顶栏并入 ModalShell 头部，标题断言改为 modal-shell-title
+    const topText = await page.locator('.modal-shell-title').innerText()
     if (topText.includes('未保存') || topText.includes('当前 v') || topText.trim() !== '角色到分镜')
       throw new Error(`TOPBAR_NOT_NAME_ONLY:${topText}`)
     await shot('04-editor-chrome')
@@ -292,6 +293,16 @@ function ok(res, label) {
     await sleep(500)
     if ((await innerCount()) !== before + 1) throw new Error('EDITOR_ADD_NODE_FAILED')
     await shot('05-editor-added-storyboard')
+    // 分镜板默认落在视口中心，会盖住文本节点（后续 hover 被拦截）——拖开避让
+    const sb = page.locator('.composite-canvas-stage .node-card-wrap:has([data-node-type="storyboard"])').first()
+    const sbBox = await sb.boundingBox()
+    if (sbBox) {
+      await page.mouse.move(sbBox.x + sbBox.width / 2, sbBox.y + 14)
+      await page.mouse.down()
+      await page.mouse.move(sbBox.x + sbBox.width / 2 - 460, sbBox.y + 14, { steps: 8 })
+      await page.mouse.up()
+      await sleep(400)
+    }
     check('编辑节点内用左侧面板添加分镜板（与主画布同规格）')
     await page.locator('.nf-action-bar').getByRole('button', { name: '保存', exact: true }).click()
     await sleep(900)
@@ -350,10 +361,11 @@ function ok(res, label) {
     check('历史版本底部弹层：v2.0 当前 + v1.0 可切换')
     const oldRow = sheet.locator('.nf-version-row', { hasText: 'v1.0' })
     await oldRow.locator('button:has-text("切换为此版本")').click()
-    const confirm = page.locator('.confirm-overlay')
-    await confirm.waitFor({ timeout: 10000 })
+    // 确认弹窗叠在其他 ModalShell 之上：portal 后进居顶，取最后一个 overlay 即最新弹窗
+    const confirmDialog = () => page.locator('.modal-shell-overlay').last()
+    await confirmDialog().waitFor({ timeout: 10000 })
     await shot('10-switch-confirm')
-    await confirm.locator('button:has-text("切换")').click()
+    await confirmDialog().locator('button:has-text("切换")').click()
     await page.waitForSelector('.composite-canvas-overlay', { state: 'detached', timeout: 30000 })
     const v3 = ok(await cli(dir, ['composite', 'get'], { capabilityId: 'nf-walk', version: '3.0' }), 'GET_30')
     if (JSON.stringify(v3.manifest).includes('第二版修改')) throw new Error('SWITCH_DID_NOT_USE_OLD_CONTENT')
@@ -369,7 +381,7 @@ function ok(res, label) {
     )
     await page.locator('.nf-action-bar').getByRole('button', { name: '取消', exact: true }).click()
     await page.waitForSelector('.composite-canvas-overlay', { state: 'detached', timeout: 5000 })
-    if (await page.locator('.confirm-overlay').isVisible().catch(() => false))
+    if (await page.locator('.modal-shell-overlay').isVisible().catch(() => false))
       throw new Error('CANCEL_SHOWED_CONFIRM')
     check('取消立即退出，无二次确认')
 
@@ -448,9 +460,9 @@ function ok(res, label) {
     await saveDialog.locator('button:has-text("保存并发布组合")').click()
     await saveDialog.waitFor({ state: 'detached', timeout: 30000 })
     await cardAction('临时待删', '删除')
-    await confirm.waitFor({ timeout: 10000 })
+    await confirmDialog().waitFor({ timeout: 10000 })
     await shot('15-delete-confirm')
-    await confirm.locator('button:has-text("删除")').click()
+    await confirmDialog().locator('button:has-text("删除")').click()
     await sleep(900)
     if (await libCard('临时待删').isVisible().catch(() => false)) throw new Error('DELETE_NOT_APPLIED')
     check('无引用节点流：二次确认后删除成功')
