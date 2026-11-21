@@ -55,7 +55,7 @@ async function main() {
     await page.getByRole('button', { name: /高级：自定义可见工具/ }).click()
     await page.getByRole('button', { name: '选择视频创作全部节点', exact: true }).click()
     await page.getByRole('button', { name: '保存设置', exact: true }).click()
-    await page.locator('.project-create-mask').waitFor({ state: 'detached' })
+    await page.locator('.modal-shell-overlay').waitFor({ state: 'detached' })
 
     await page.getByRole('button', { name: '展开视频创作节点', exact: true }).click()
     await page.getByRole('button', { name: '添加3D 预演台节点', exact: true }).click()

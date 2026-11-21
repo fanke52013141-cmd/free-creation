@@ -348,64 +348,6 @@ body:has(.composite-canvas-overlay) .app-select-content { z-index: 2501; }
 }
 .nf-publish-confirm:disabled { opacity: 0.5; cursor: wait; }
 
-/* ── W2-B 发布预览 / 关闭确认弹窗（Stitch 屏幕 799a9a6c… / acfa2724…）── */
-.composite-modal-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 2700;
-  display: grid;
-  place-items: center;
-  background: rgba(5, 6, 8, 0.66);
-}
-.composite-modal {
-  display: flex;
-  flex-direction: column;
-  width: min(560px, calc(100vw - 48px));
-  max-height: min(640px, calc(100vh - 64px));
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--card);
-  color: var(--txt);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
-}
-.composite-modal.composite-close-confirm { width: min(420px, calc(100vw - 48px)); }
-.composite-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px 10px;
-}
-.composite-modal-header h3 { margin: 0; font-size: 14px; font-weight: 600; }
-.composite-modal-close {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-.composite-modal-close:hover:not(:disabled) { border-color: var(--line); color: var(--txt); }
-.composite-modal-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 0 16px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.composite-modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--line);
-}
 .composite-modal-footer.is-three { justify-content: space-between; }
 .composite-modal-footer.is-three .run-btn { margin-left: auto; }
 .composite-modal-section h4 {

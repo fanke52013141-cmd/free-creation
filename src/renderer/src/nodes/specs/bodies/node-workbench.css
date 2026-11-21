@@ -30,14 +30,7 @@
   margin-top: 18px;
 }
 
-.image-edit-workbench-mask,
-.video-trim-workbench-mask {
-  cursor: default;
-}
 
-.video-operations-mask {
-  z-index: var(--z-modal);
-}
 
 .desktop-window-overlay .video-operations-mask {
   top: var(--window-caption-height);
@@ -845,9 +838,6 @@
     display: none;
   }
 
-  .video-operations-mask {
-    padding: 10px;
-  }
 
   .video-operations-dialog {
     width: calc(100vw - 20px);

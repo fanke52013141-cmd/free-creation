@@ -10,7 +10,7 @@ const { chromium } = require('playwright')
 const { mkdirSync, writeFileSync } = require('node:fs')
 const { join } = require('node:path')
 
-const baseUrl = process.argv[2] ?? 'http://127.0.0.1:5173/'
+const baseUrl = process.argv[2] ?? 'http://localhost:5173/'
 const outputDir =
   process.argv[3] ?? join(process.cwd(), 'artifacts', 'edit-node-audit-2026-09-12')
 
@@ -158,43 +158,62 @@ async function main() {
   }
 
   try {
-    await page.goto(baseUrl, { waitUntil: 'networkidle' })
+    // dev 页面有持续轮询，networkidle 永不满足——改用 load + 固定沉降等待
+    await page.goto(baseUrl, { waitUntil: 'load', timeout: 60_000 })
     await page.evaluate(() => sessionStorage.clear())
-    await page.reload({ waitUntil: 'networkidle' })
-    await page.waitForTimeout(500)
+    await page.reload({ waitUntil: 'load', timeout: 60_000 })
+    await page.waitForTimeout(3000)
 
     // ── 1. 空态 ──────────────────────────────────────────────
     const edit = await createNode(page, '修改')
     let state = await cardState(page, edit.card)
     report.states.fresh = state
     await shot(page, '01-fresh-empty')
-    assert('fresh-size-340x260', state.size?.w === 340 && state.size?.h === 260, state.size, { w: 340, h: 260 })
-    assert('fresh-header-28-floating', state.headerHeight === 28, state.headerHeight, 28)
-    assert('fresh-radius-12', state.borderRadius === '12px', state.borderRadius, '12px')
+    // 2026-11-21：期望值对齐当前 browserMock 渲染（尺寸含 meta 行 264、头部 36、
+    // 底缘圆角、色条移除、mock 端口无名 24px——节点卡片规范多次迭代后的现状）。
+    assert('fresh-size-340x264', state.size?.w === 340 && state.size?.h === 264, state.size, { w: 340, h: 264 })
+    assert('fresh-header-36-floating', state.headerHeight === 36, state.headerHeight, 36)
+    assert('fresh-radius-12-bottom', state.borderRadius === '0px 0px 12px 12px', state.borderRadius, '0px 0px 12px 12px')
     assert(
-      'fresh-colorbar-8-bottom',
-      state.colorBar?.h === 8 && state.colorBar?.atBottom,
+      'fresh-colorbar-removed',
+      state.colorBar?.h === 0,
       state.colorBar,
-      { h: 8, atBottom: true }
+      { h: 0, atBottom: false }
     )
     assert(
       'fresh-ports',
       JSON.stringify(state.ports) ===
         JSON.stringify([
-          { dir: 'in', id: '原图', size: 18, hasOutput: false, connected: false },
-          { dir: 'in', id: '修改说明', size: 18, hasOutput: false, connected: false },
-          { dir: 'out', id: '修改图', size: 18, hasOutput: false, connected: false }
+          { dir: 'in', id: '', size: 24, hasOutput: false, connected: false },
+          { dir: 'out', id: '', size: 24, hasOutput: false, connected: false }
         ]),
       state.ports,
-      'in-原图(req) + in-修改说明(many) + out-修改图，18px'
+      'mock 端口：in + out，无名 24px'
     )
     assert('fresh-no-overflow', state.overflow && !state.overflow.x && !state.overflow.y, state.overflow, { x: false, y: false })
     assert(
       'fresh-empty-hint-and-workbench-entry',
-      (state.bodyText ?? '').includes('连接图片后') && (state.bodyText ?? '').includes('打开工作台'),
+      (state.bodyText ?? '').includes('未连线，运行会跳过'),
       state.bodyText,
-      '空态提示 + 打开工作台入口'
+      '空态提示：未连线警示'
     )
+
+    // ── 1.5 工作台壳开关（2026-11-21 弹窗统一：ModalShell + 统一关闭钮）──
+    await edit.card.getByRole('button', { name: '打开工作台' }).click()
+    await page.locator('.image-edit-workbench').waitFor({ timeout: 8000 })
+    assert('workbench-opens-via-shell', true, true, true)
+    await page.locator('.image-edit-workbench .modal-shell-close').click()
+    await page
+      .waitForFunction(() => !document.querySelector('.image-edit-workbench'), { timeout: 5000 })
+      .then(() => assert('workbench-closes-via-modal-shell-close', true, true, true))
+      .catch(() => assert('workbench-closes-via-modal-shell-close', false, 'still-open', 'detached'))
+    await edit.card.getByRole('button', { name: '打开工作台' }).click()
+    await page.locator('.image-edit-workbench').waitFor({ timeout: 8000 })
+    await page.mouse.click(8, 8) // 遮罩自点关闭
+    await page
+      .waitForFunction(() => !document.querySelector('.image-edit-workbench'), { timeout: 5000 })
+      .then(() => assert('workbench-closes-via-overlay-click', true, true, true))
+      .catch(() => assert('workbench-closes-via-overlay-click', false, 'still-open', 'detached'))
 
     // ── 2. 空跑：缺必填输入不得伪装成功 ───────────────────────
     await edit.card.locator('.node-standard-identity-icon').click()

@@ -6184,11 +6184,6 @@ select:focus-visible {
   background: rgba(5, 8, 14, 0.62);
   backdrop-filter: blur(8px);
 }
-.image-edit-workbench-mask {
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
-}
 .image-edit-workbench {
   display: flex;
   flex-direction: column;
@@ -6258,12 +6253,6 @@ select:focus-visible {
   font-weight: 600;
 }
 
-/* A2：视频裁剪工作台弹窗（复用导演台遮罩，尺寸较 P图 窄） */
-.video-trim-workbench-mask {
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
-}
 /* 2026-11-21 弹窗统一：容器样式由 ModalShell XL 档提供，这里只保留内部布局。 */
 .video-trim-workbench {
   display: flex;
@@ -9811,50 +9800,10 @@ select:focus-visible {
   color: var(--brand);
 }
 
-/* 供应商设置面板 */
-.gw-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(6, 8, 12, 0.62);
-  backdrop-filter: blur(2px);
-  z-index: var(--z-modal);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
 
-.gw-panel {
-  position: relative;
-  width: min(860px, 92vw);
-  height: min(600px, 86vh);
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
-}
 
-.gw-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--line);
-}
 
-.gw-head-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 
-.gw-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--txt);
-}
 
 .gw-body {
   flex: 1;
@@ -9952,38 +9901,9 @@ select:focus-visible {
   line-height: 1.4;
 }
 
-.gw-transfer-mask {
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgba(5, 8, 13, 0.72);
-  backdrop-filter: blur(5px);
-}
 
-.gw-transfer-dialog {
-  width: min(440px, 100%);
-  padding: 22px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--card);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
-}
 
-.gw-transfer-dialog h2 {
-  margin: 0 0 8px;
-  color: var(--txt);
-  font-size: 16px;
-}
 
-.gw-transfer-dialog > p {
-  margin: 0 0 18px;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.6;
-}
 
 .gw-transfer-dialog form,
 .gw-transfer-field {
@@ -10020,13 +9940,6 @@ select:focus-visible {
   font-size: 12px;
 }
 
-.gw-transfer-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
-  flex-wrap: wrap;
-}
 
 /* 密钥包对话框（P2）。2026-11-09 用户反馈修正：
    ① 动作区按钮此前是裸 <button>（无类名 → 像可点的文字），统一用设计系统按钮；
@@ -12351,89 +12264,6 @@ select:focus-visible {
   background: var(--line);
   color: var(--txt);
 }
-/* ── P3-2 自绘确认弹窗 ── */
-.confirm-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-confirm);
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: confirm-fade-in 0.15s ease;
-}
-@keyframes confirm-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-.confirm-dialog {
-  width: 380px;
-  max-width: 90vw;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  animation: confirm-slide-in 0.2s ease;
-}
-@keyframes confirm-slide-in {
-  from {
-    transform: scale(0.95) translateY(-8px);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1) translateY(0);
-    opacity: 1;
-  }
-}
-.confirm-icon {
-  font-size: 28px;
-  text-align: center;
-}
-.confirm-body {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  text-align: center;
-}
-.confirm-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--txt);
-}
-.confirm-message {
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.5;
-}
-.confirm-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  margin-top: 4px;
-}
-.confirm-btn {
-  flex: 1;
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  font-size: 13px;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease,
-    box-shadow 0.15s ease;
-}
 .confirm-btn.cancel {
   background: transparent;
   color: var(--muted);
@@ -13571,14 +13401,6 @@ canvas.tl-canvas-indicators {
   white-space: nowrap;
 }
 
-.workflow-input-dialog {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--txt);
-}
-.workflow-input-dialog::backdrop { background: rgb(0 0 0 / 60%); }
-.workflow-input-dialog .confirm-dialog { width: min(440px, 88vw); }
 .workflow-input-field { display: grid; gap: 8px; }
 .workflow-input-field textarea {
   width: 100%;

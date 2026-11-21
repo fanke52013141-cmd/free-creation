@@ -1,80 +1,15 @@
-.project-create-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 12000;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgb(11 14 22 / 75%);
-  backdrop-filter: blur(12px);
-}
 
 /* 色彩全部走 ui-foundation.css 的全局 token（--panel/--card/--line/--brand 等），
    与主界面共用同一套深色系；不再维护弹窗自带的独立色板。 */
 /* 2026-11-21 弹窗统一：容器/遮罩样式已并入 ModalShell（modal-shell.css），
    本文件只保留内容样式；.project-create-dialog/.project-create-mask 选择器退役。 */
 
-.project-create-header {
-  min-height: 65px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 20px 24px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--line);
-}
 
-.project-create-heading {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
 
-.project-create-brand-icon {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  color: var(--brand);
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
 
-.project-create-header h2 {
-  margin: 0;
-  color: var(--txt);
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
-}
 
-.project-create-close {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  color: var(--txt-dim);
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
-}
 
-.project-create-close:hover:not(:disabled) {
-  color: var(--txt);
-  background: var(--card-hover);
-}
 
-.project-create-close:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
 
 .project-create-body {
   min-height: 0;
@@ -495,15 +430,6 @@
   font-size: 12px;
 }
 
-.project-create-footer {
-  min-height: 60px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
-  background: var(--surface-1);
-  border-top: 1px solid var(--line);
-}
 
 .project-create-error {
   min-width: 0;
@@ -512,48 +438,9 @@
   font-size: 11px;
 }
 
-.project-create-cancel,
-.project-create-submit {
-  min-height: 36px;
-  padding: 0 20px;
-  border-radius: 8px;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
-}
 
-.project-create-cancel {
-  color: var(--muted);
-  background: transparent;
-  border: 0;
-}
-.project-create-cancel:hover:not(:disabled) {
-  color: var(--txt);
-  background: var(--card-hover);
-}
 
-.project-create-submit {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  color: var(--primary-ink);
-  background: var(--primary-grad);
-  border: 0;
-  box-shadow: var(--primary-glow);
-}
 
-.project-create-submit:hover:not(:disabled) {
-  background: var(--primary-grad-hover);
-  box-shadow: var(--primary-glow-hover);
-}
-.project-create-cancel:disabled,
-.project-create-submit:disabled {
-  opacity: 0.55;
-  cursor: wait;
-}
 
 @media (max-width: 540px) {
   .project-create-node-grid {
@@ -562,16 +449,9 @@
 }
 
 @media (max-width: 639px) {
-  .project-create-mask {
-    padding: 9px;
-  }
   .project-create-dialog {
     max-height: 94vh;
     border-radius: 13px;
-  }
-  .project-create-header {
-    min-height: 58px;
-    padding: 14px 15px;
   }
   .project-create-body {
     gap: 16px;
@@ -580,11 +460,6 @@
   .project-create-top-config {
     grid-template-columns: minmax(0, 1fr);
     gap: 11px;
-  }
-  .project-create-footer {
-    min-height: 60px;
-    flex-wrap: wrap;
-    padding: 10px 15px;
   }
 }
 

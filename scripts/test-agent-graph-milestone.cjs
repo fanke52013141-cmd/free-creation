@@ -1387,11 +1387,11 @@ async function launchLicensedApp(dataDirectory) {
           `F6_PUBLISH_NOT_AWAITING_AUTHORIZATION:${JSON.stringify(prepared.prepared.response.data)}`
         )
         // 人真的在 GUI 上确认：复用应用自己的确认弹窗（外部没有授权通道）。
-        const dialog = page.locator('.confirm-dialog')
+        const dialog = page.locator('.modal-shell')
         await dialog.waitFor({ timeout: 20000 })
         const dialogText = (await dialog.textContent()) ?? ''
         check(dialogText.includes('外部发布请求'), `F6_PUBLISH_GUI_CONFIRM_TEXT:${dialogText.slice(0, 80)}`)
-        await dialog.locator('.confirm-btn.primary').click()
+        await dialog.locator('.modal-btn-primary').click()
         const authorized = await waitStatus(publishRequestId, 'authorized')
         check(Boolean(authorized), 'F6_PUBLISH_NOT_AUTHORIZED_AFTER_GUI_CLICK')
         const versionNow = await stable(created.A)
@@ -1450,8 +1450,8 @@ async function launchLicensedApp(dataDirectory) {
       // (c) 人拒绝：请求作废，continue 被拒，且不产生第二份产物。
       const secondPrepared = await prepareOnce()
       const secondRequestId = secondPrepared.prepared.response.data.publishRequestId
-      await page.locator('.confirm-dialog').waitFor({ timeout: 20000 })
-      await page.locator('.confirm-dialog .confirm-btn.cancel').click()
+      await page.locator('.modal-shell').waitFor({ timeout: 20000 })
+      await page.locator('.modal-shell .modal-btn-secondary').click()
       const denied = await waitStatus(secondRequestId, 'denied')
       check(Boolean(denied), 'F6_PUBLISH_NOT_DENIED')
       const deniedContinue = await runCli(directory, ['director', 'publish', 'continue'], {
