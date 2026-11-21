@@ -51,11 +51,16 @@ describe('处理工作台交互', () => {
   })
 
   it('两个工作台均允许点击遮罩背景关闭', () => {
-    expect(imageEdit).toContain('if (event.target === event.currentTarget) onClose()')
-    expect(imageEdit).toContain('onPointerDown={(event) => stopEventPropagation(event)}')
-    // 视频工作台：只在命中遮罩时关闭，子控件 pointerdown 不再 preventDefault。
-    expect(video).toContain('if (event.target === event.currentTarget) {')
-    expect(video).toContain('event.stopPropagation()')
-    expect(video).toContain('onClose()')
+    // 2026-11-21 弹窗统一：遮罩关闭语义收敛到 ModalShell（closeOnOverlay 默认开启，
+    // onPointerDown 拦截子控件冒泡但不 preventDefault，tab 点击不被吞）。
+    expect(imageEdit).toContain('<ModalShell')
+    expect(imageEdit).toContain('className="image-edit-workbench"')
+    expect(imageEdit).toContain('onClose={onClose}')
+    expect(video).toContain('<ModalShell')
+    expect(video).toContain('className="video-operations-dialog"')
+    expect(video).toContain('hideHeader')
+    const shell = read('src/renderer/src/components/ModalShell.tsx')
+    expect(shell).toContain('onPointerDown={(event) => event.stopPropagation()}')
+    expect(shell).toContain('if (closeOnOverlay && event.target === event.currentTarget) onClose()')
   })
 })
