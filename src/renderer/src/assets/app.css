@@ -6175,13 +6175,14 @@ select:focus-visible {
 }
 
 /* ── 导演台：独立全屏工作区，布局借鉴导演预演工具但不侵占主画布 ── */
+/* 2026-11-21 弹窗统一：遮罩与全应用唯一遮罩一致（规范 §1） */
 .director-studio-mask {
   position: fixed;
   inset: 0;
   z-index: var(--z-modal);
   display: flex;
-  background: rgba(5, 8, 12, 0.82);
-  backdrop-filter: blur(12px);
+  background: rgba(5, 8, 14, 0.62);
+  backdrop-filter: blur(8px);
 }
 .image-edit-workbench-mask {
   align-items: center;
@@ -6263,16 +6264,13 @@ select:focus-visible {
   justify-content: center;
   padding: 32px;
 }
+/* 2026-11-21 弹窗统一：容器样式由 ModalShell XL 档提供，这里只保留内部布局。 */
 .video-trim-workbench {
   display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
   flex-direction: column;
-  width: min(820px, 96vw);
-  max-height: min(920px, 94vh);
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
 }
 .video-trim-workbench-head {
   display: flex;
@@ -8154,10 +8152,12 @@ select:focus-visible {
 }
 
 /* ── 媒体预览浮层 ── */
+/* 2026-11-21 弹窗统一：预览类豁免壳改造，仅统一遮罩（规范 §9） */
 .media-preview-mask {
   position: fixed;
   inset: 0;
-  background: rgba(8, 10, 14, 0.86);
+  background: rgba(5, 8, 14, 0.62);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -8729,7 +8729,8 @@ select:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  background: rgba(4, 6, 10, 0.86);
+  background: rgba(5, 8, 14, 0.62);
+  backdrop-filter: blur(8px);
   cursor: zoom-out;
 }
 

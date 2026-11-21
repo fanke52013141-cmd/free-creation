@@ -1,5 +1,5 @@
 import { TopbarIconButton } from '../components/TopbarIconButton'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ProjectMeta } from '@shared/types'
 import { useAppStore } from '../stores/app'
 import { useGatewayStore } from '../stores/gateway'
@@ -9,6 +9,8 @@ import { useSaveCoordinator } from '../stores/save-coordinator'
 import type { DiagnosticsEventInput } from '@shared/observability'
 import { drainDiagnosticsEvents, emitDiagnosticsEvent } from '../engine/diagnosticsReporter'
 import { Icon } from '../components/Icon'
+import { ModalShell } from '../components/ModalShell'
+import { modalBtn } from '../components/modal-btn'
 import { ProjectCreateDialog } from '../components/ProjectCreateDialog'
 import { ResourceLibraryPage } from '../library/ResourceLibraryPage'
 import freeCreationLogo from '../assets/free-creation-logo.png'
@@ -28,6 +30,7 @@ export function ProjectListPage(): React.JSX.Element {
   const [cloning, setCloning] = useState<ProjectMeta | null>(null)
   const [cloneName, setCloneName] = useState('')
   const [cloneBusy, setCloneBusy] = useState(false)
+  const cloneInputRef = useRef<HTMLInputElement>(null)
   const [cloneError, setCloneError] = useState('')
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -324,45 +327,60 @@ export function ProjectListPage(): React.JSX.Element {
         )}
 
         {cloning && (
-          <div
-            className="project-clone-mask"
-            onMouseDown={(event) =>
-              event.target === event.currentTarget && !cloneBusy && setCloning(null)
+          <ModalShell
+            size="s"
+            title="复制项目"
+            onClose={() => !cloneBusy && setCloning(null)}
+            closeOnEscape={!cloneBusy}
+            closeOnOverlay={!cloneBusy}
+            initialFocusRef={cloneInputRef}
+            footer={
+              <>
+                <button
+                  type="button"
+                  className={modalBtn('secondary')}
+                  disabled={cloneBusy}
+                  onClick={() => setCloning(null)}
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  form="project-clone-form"
+                  className={modalBtn('primary')}
+                  disabled={cloneBusy || !cloneName.trim()}
+                >
+                  {cloneBusy ? '复制中…' : '创建副本'}
+                </button>
+              </>
             }
           >
             <form
-              className="project-clone-dialog"
+              id="project-clone-form"
               onSubmit={(event) => {
                 event.preventDefault()
                 void handleClone()
               }}
             >
-              <h2>复制项目</h2>
-              <p>复制画布、项目配置和全部项目素材，副本可以独立修改。</p>
-              <label>
+              <p className="modal-shell-hint" style={{ margin: '0 0 14px' }}>
+                复制画布、项目配置和全部项目素材，副本可以独立修改。
+              </p>
+              <label className="modal-field">
                 <span>副本名称</span>
                 <input
-                  autoFocus
+                  ref={cloneInputRef}
                   maxLength={120}
                   value={cloneName}
                   onChange={(event) => setCloneName(event.currentTarget.value)}
                 />
               </label>
               {cloneError && (
-                <div className="project-clone-error" role="alert">
+                <div className="modal-error" role="alert" style={{ marginTop: 12 }}>
                   复制失败：{cloneError}
                 </div>
               )}
-              <div className="project-clone-actions">
-                <button type="button" disabled={cloneBusy} onClick={() => setCloning(null)}>
-                  取消
-                </button>
-                <button type="submit" disabled={cloneBusy || !cloneName.trim()}>
-                  {cloneBusy ? '复制中…' : '创建副本'}
-                </button>
-              </div>
             </form>
-          </div>
+          </ModalShell>
         )}
 
         <main className="project-home-workspace">

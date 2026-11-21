@@ -1,9 +1,15 @@
-.gw-catalog {
-  width: min(980px, 92vw);
-  height: min(720px, 88vh);
+/* 2026-11-21 弹窗统一：gw-catalog 容器尺寸退役（ModalShell L 档统一），
+   面板内容在 flush 正文内纵向铺满；说明句从标题栏移到正文顶部。 */
+.modal-shell .gw-catalog-shell {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.gw-catalog-shell > .gw-subtitle {
+  margin: 12px 16px 0;
 }
 .gw-subtitle {
-  margin-left: 10px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 400;

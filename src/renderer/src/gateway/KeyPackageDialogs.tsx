@@ -10,6 +10,8 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from '../stores/toast'
+import { ModalShell } from '../components/ModalShell'
+import { modalBtn } from '../components/modal-btn'
 
 export type KeyPackageDialogMode = 'credential' | 'export' | 'import' | null
 
@@ -68,19 +70,24 @@ function CredentialDialog(props: { onClose: () => void }): React.ReactElement {
   }
 
   return (
-    <DialogShell title="导出设备凭证" onClose={props.onClose}>
+    <DialogShell
+      title="导出设备凭证"
+      onClose={props.onClose}
+      footer={
+        <>
+          <button type="button" className={modalBtn('secondary')} onClick={props.onClose}>
+            取消
+          </button>
+          <button type="button" className={modalBtn('primary')} onClick={submit} disabled={busy}>
+            {busy ? '导出中…' : '导出凭证'}
+          </button>
+        </>
+      }
+    >
       <p className="gw-keys-hint">
-        凭证包含本机有效授权与设备公钥，发给发放员后即可接收密钥包。凭证不包含任何 API Key。
+        这份文件代表你这台电脑的授权身份，发给对方后就能接收密钥包。文件里没有任何 API 密钥，可以放心发送。
       </p>
       {error && <div className="gw-transfer-error">{error}</div>}
-      <div className="gw-transfer-actions">
-        <button type="button" className="btn-primary" onClick={submit} disabled={busy}>
-          {busy ? '导出中…' : '导出凭证'}
-        </button>
-        <button type="button" className="btn-ghost" onClick={props.onClose}>
-          取消
-        </button>
-      </div>
     </DialogShell>
   )
 }
@@ -147,9 +154,22 @@ function ExportDialog(props: { onClose: () => void }): React.ReactElement {
   }
 
   return (
-    <DialogShell title="发放密钥包" onClose={props.onClose}>
+    <DialogShell
+      title="发放密钥包"
+      onClose={props.onClose}
+      footer={
+        <>
+          <button type="button" className={modalBtn('secondary')} onClick={props.onClose}>
+            取消
+          </button>
+          <button type="button" className={modalBtn('primary')} onClick={submit} disabled={!canSubmit}>
+            {busy ? '发放中…' : `发放所选（${selected.size}）`}
+          </button>
+        </>
+      }
+    >
       <ol className="gw-keys-steps">
-        <li>设置发放密码（20–256 字节，通过独立渠道交给接收者）</li>
+        <li>设置发放密码（至少 20 个英文字符或 7 个汉字，请用微信、邮件等其他方式单独发给对方）</li>
         <li>选择接收设备凭证文件（接收方在「导出接收设备凭证」生成）</li>
         <li>勾选要发放的连接（默认全不选），密钥包 7 天内有效</li>
       </ol>
@@ -173,7 +193,7 @@ function ExportDialog(props: { onClose: () => void }): React.ReactElement {
         />
       </label>
       {password.length > 0 && (passwordBytes < 20 || passwordBytes > 256) && (
-        <div className="gw-transfer-error">密码长度 {passwordBytes} 字节，需 20–256 字节</div>
+        <div className="gw-transfer-error">密码长度不符：至少需要 20 个英文字符（或 7 个汉字）</div>
       )}
       <fieldset className="gw-transfer-selection">
         <legend>选择要发放的连接（默认全不选）</legend>
@@ -197,14 +217,6 @@ function ExportDialog(props: { onClose: () => void }): React.ReactElement {
         ))}
       </fieldset>
       {error && <div className="gw-transfer-error">{error}</div>}
-      <div className="gw-transfer-actions">
-        <button type="button" className="btn-primary" onClick={submit} disabled={!canSubmit}>
-          {busy ? '发放中…' : `发放所选（${selected.size}）`}
-        </button>
-        <button type="button" className="btn-ghost" onClick={props.onClose}>
-          取消
-        </button>
-      </div>
     </DialogShell>
   )
 }
@@ -253,9 +265,27 @@ function ImportDialog(props: { onClose: () => void }): React.ReactElement {
 
   if (!preview) {
     return (
-      <DialogShell title="导入设备密钥包" onClose={props.onClose}>
+      <DialogShell
+        title="导入设备密钥包"
+        onClose={props.onClose}
+        footer={
+          <>
+            <button type="button" className={modalBtn('secondary')} onClick={props.onClose}>
+              取消
+            </button>
+            <button
+              type="button"
+              className={modalBtn('primary')}
+              onClick={decode}
+              disabled={busy || password.length === 0}
+            >
+              {busy ? '正在验证…' : '验证密码并查看内容'}
+            </button>
+          </>
+        }
+      >
         <p className="gw-keys-hint">
-          发放员用你的设备凭证签发的密钥包。只有本机且密码正确才能解封；文件被别人拿走也导不进去。
+          这是对方专门发给你这台电脑的密钥包文件。只有在这台电脑上、并且输入正确密码才能打开；就算文件被别人拿到也无法使用。
         </p>
         <label className="gw-transfer-field">
           <span>发放密码</span>
@@ -267,14 +297,6 @@ function ImportDialog(props: { onClose: () => void }): React.ReactElement {
           />
         </label>
         {error && <div className="gw-transfer-error">{error}</div>}
-        <div className="gw-transfer-actions">
-          <button type="button" className="btn-primary" onClick={decode} disabled={busy || password.length === 0}>
-            {busy ? '解封中…' : '解封并预览'}
-          </button>
-          <button type="button" className="btn-ghost" onClick={props.onClose}>
-            取消
-          </button>
-        </div>
       </DialogShell>
     )
   }
@@ -282,13 +304,30 @@ function ImportDialog(props: { onClose: () => void }): React.ReactElement {
   const needsOverwriteConfirm = preview.alreadyImported || preview.existingConnections.length > 0
 
   return (
-    <DialogShell title="确认导入密钥包" onClose={props.onClose}>
+    <DialogShell
+      title="确认导入密钥包"
+      onClose={props.onClose}
+      footer={
+        <>
+          <button type="button" className={modalBtn('secondary')} onClick={props.onClose}>
+            取消
+          </button>
+          <button
+            type="button"
+            className={modalBtn('primary')}
+            onClick={apply}
+            disabled={busy || (needsOverwriteConfirm && !overwriteConfirmed)}
+          >
+            {busy ? '导入中…' : '确认导入'}
+          </button>
+        </>
+      }
+    >
       <p className="gw-keys-hint">
-        包 ID {preview.packageId.slice(0, 8)}… · 发放设备摘要 {preview.issuerDeviceSummary} ·{' '}
-        {formatExpiry(preview.expiresAt)} 前有效
+        来自设备 {preview.issuerDeviceSummary} · {formatExpiry(preview.expiresAt)} 前有效
       </p>
       <fieldset className="gw-transfer-selection">
-        <legend>包内连接（密钥将加密存入本机设备密钥库）</legend>
+        <legend>包内连接（导入后密钥会加密保存在这台电脑上）</legend>
         {preview.connections.map((connection) => (
           <div key={connection.id} className="gw-transfer-option">
             <span>
@@ -318,32 +357,29 @@ function ImportDialog(props: { onClose: () => void }): React.ReactElement {
         </label>
       )}
       {error && <div className="gw-transfer-error">{error}</div>}
-      <div className="gw-transfer-actions">
-        <button
-          type="button"
-          className="btn-primary"
-          onClick={apply}
-          disabled={busy || (needsOverwriteConfirm && !overwriteConfirmed)}
-        >
-          {busy ? '导入中…' : '确认导入'}
-        </button>
-        <button type="button" className="btn-ghost" onClick={props.onClose}>
-          取消
-        </button>
-      </div>
     </DialogShell>
   )
 }
 
 // ── 外壳 ──────────────────────────────────────────────────────────
 
-function DialogShell(props: { title: string; onClose: () => void; children: React.ReactNode }): React.ReactElement {
+function DialogShell(props: {
+  title: string
+  onClose: () => void
+  footer?: React.ReactNode
+  children: React.ReactNode
+}): React.ReactElement {
+  // 2026-11-21 弹窗统一：三步流共用壳并入 ModalShell（标题保持原名，
+  // main 进程侧按标题子串「密钥包/接收设备凭证」匹配的 E2E 依赖不受影响）。
   return (
-    <div className="gw-transfer-mask" onMouseDown={(event) => event.target === event.currentTarget && props.onClose()}>
-      <section role="dialog" aria-modal="true" aria-label={props.title} className="gw-transfer-dialog gw-keys-dialog">
-        <h3>{props.title}</h3>
-        {props.children}
-      </section>
-    </div>
+    <ModalShell
+      size="m"
+      title={props.title}
+      ariaLabel={props.title}
+      onClose={props.onClose}
+      footer={props.footer}
+    >
+      {props.children}
+    </ModalShell>
   )
 }

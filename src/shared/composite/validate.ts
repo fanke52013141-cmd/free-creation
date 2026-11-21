@@ -171,7 +171,7 @@ export function validateCompositeManifest(
   }
 
   // 公开输出
-  if (manifest.outputs.length === 0) issues.push(issue('NO_BUSINESS_OUTPUT', 'outputs', '至少需要一个公开输出'))
+  if (manifest.outputs.length === 0) issues.push(issue('NO_BUSINESS_OUTPUT', 'outputs', '至少要保留一个「对外输出」，否则发布后没法在别的项目里使用'))
   for (const [index, output] of manifest.outputs.entries()) {
     const path = `outputs[${index}]`
     const port = portOf(output.source.nodeId, output.source.portId)

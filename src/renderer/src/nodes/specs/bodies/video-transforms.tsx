@@ -14,6 +14,7 @@ import { toast } from '../../../stores/toast'
 import { runNodeManually } from '../../../engine/executor'
 import { guiWorkflowInputOptions } from '../../../stores/workflowInput'
 import { Icon } from '../../../components/Icon'
+import { ModalShell } from '../../../components/ModalShell'
 import { AppSelect } from '../../../components/AppSelect'
 import { projectNodeOutputs } from '../../nodeValues'
 import {
@@ -607,43 +608,15 @@ function VideoTrimWorkbench({
   }, [onClose])
   const title = mode === 'frame' ? '抽帧' : mode === 'clip' ? '视频截取' : '截音频'
   return createPortal(
-    <div
-      className="director-studio-mask video-trim-workbench-mask"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`${title}工作台`}
-      onPointerDown={(event) => {
-        // 只有点在遮罩本身才关闭；子控件的 pointerdown 不能被 preventDefault，
-        // 否则下拉/标签页的 click 会被浏览器吞掉（用户反馈切换抽帧无效）。
-        if (event.target === event.currentTarget) {
-          event.stopPropagation()
-          onClose()
-        }
-      }}
+    <ModalShell
+      size="xl"
+      title={`${title}工作台`}
+      ariaLabel={`${title}工作台`}
+      bodyClassName="modal-shell-body--flush"
+      onClose={onClose}
     >
+      {/* 2026-11-21 弹窗统一：壳换 ModalShell，工作区结构原样保留。 */}
       <div className="video-trim-workbench">
-        <header className="video-trim-workbench-head">
-          <div className="video-trim-workbench-title">
-            <Icon
-              name={mode === 'frame' ? 'frame' : mode === 'clip' ? 'clip' : 'audio'}
-              size={15}
-            />
-            <span>{title}工作台</span>
-          </div>
-          <button
-            className="btn-ghost small"
-            onPointerDownCapture={(event) => {
-              stopEventPropagation(event)
-              onClose()
-            }}
-            onClick={(event) => {
-              stopEventPropagation(event)
-              onClose()
-            }}
-          >
-            <Icon name="close" size={14} />
-          </button>
-        </header>
         <div className="video-trim-workbench-body">
           <VideoTransformSettings
             shape={shape}
@@ -654,7 +627,7 @@ function VideoTrimWorkbench({
           />
         </div>
       </div>
-    </div>,
+    </ModalShell>,
     document.body
   )
 }
@@ -951,22 +924,20 @@ export function VideoOperationsWorkbench({
     needsVocalSeparation && vocalCfg.mode === 'quality' && separatorAvailable === false
 
   return createPortal(
-    <div
-      className="director-studio-mask video-trim-workbench-mask video-operations-mask"
-      role="dialog"
-      aria-modal="true"
-      aria-label="视频操作工作台"
-      onPointerDown={(event) => {
-        // 只有点在遮罩本身才关闭；子控件的 pointerdown 不能被 preventDefault，
-        // 否则下拉/标签页的 click 会被浏览器吞掉（用户反馈切换抽帧无效）。
-        if (event.target === event.currentTarget) {
-          event.stopPropagation()
-          onClose()
-        }
-      }}
+    <ModalShell
+      size="xl"
+      title="视频操作"
+      className="video-operations-dialog"
+      ariaLabel="视频操作工作台"
+      hideHeader
+      bodyClassName="modal-shell-body--flush"
+      onClose={onClose}
     >
+      {/* 2026-11-21 弹窗统一：壳换 ModalShell（hideHeader：自带三栏工具栏，
+          标题/状态徽章/tabs/关闭按钮原位保留）；video-operations-dialog 类
+          供 E2E 几何断言定位，皮肤 token 随类保留。 */}
       <div
-        className="video-trim-workbench video-operations-dialog"
+        className="video-trim-workbench"
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
@@ -1530,7 +1501,7 @@ export function VideoOperationsWorkbench({
           </button>
         </footer>
       </div>
-    </div>,
+    </ModalShell>,
     document.body
   )
 }

@@ -365,27 +365,14 @@
 
 /* 鈹€鈹€ 鍏ㄥ睆缂栬緫 鈹€鈹€ */
 
-.tl-modal-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgb(0 0 0 / 72%);
-}
-
+/* 2026-11-21 弹窗统一：遮罩/容器样式由 ModalShell XL 档提供，这里只保留内部布局。 */
 .tl-modal {
   display: flex;
-  width: 92vw;
-  height: 80vh;
+  flex: 1 1 auto;
+  min-height: 0;
   flex-direction: column;
   gap: 10px;
   padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--bg);
-  box-shadow: 0 24px 64px rgb(0 0 0 / 55%);
 }
 
 .tl-modal-head {
@@ -669,19 +656,9 @@
    画布 #0E1116 / 面板 #191D24 / 描边 rgb(255 255 255 / 7%) / 强调 #239AD3
    8px 间距网格；面板 12px、片段 4px、控件 6-8px 圆角。
    ───────────────────────────────────────────────────────────────────────── */
-.tl-modal-mask {
-  background: rgb(3 5 8 / 82%);
-}
-
 .tl-modal {
-  width: min(1600px, 97vw);
-  height: 93vh;
   gap: 8px;
   padding: 8px;
-  border: 1px solid rgb(255 255 255 / 9%);
-  border-radius: 14px;
-  background: #0e1116;
-  box-shadow: 0 24px 72px rgb(0 0 0 / 62%);
 }
 
 .tl-modal > .tl-surface.is-fullscreen {

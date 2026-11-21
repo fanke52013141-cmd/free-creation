@@ -454,9 +454,10 @@
   border-radius: 14px;
 }
 
+/* 2026-11-21 弹窗统一：遮罩规格见 app.css 主规则 */
 .media-preview-mask {
-  background: rgba(6, 9, 13, 0.76);
-  backdrop-filter: blur(7px);
+  background: rgba(5, 8, 14, 0.62);
+  backdrop-filter: blur(8px);
 }
 
 .media-preview-title {

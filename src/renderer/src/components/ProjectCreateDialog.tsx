@@ -1,5 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { WorkspaceProfile } from '@shared/workspace-profile'
 import { normalizeWorkspaceProfile } from '@shared/workspace-profile'
 import { NODE_CATEGORY_IDS, type PaletteCategoryId } from '@shared/palette-preferences'
@@ -11,6 +10,8 @@ import {
 } from '../nodes/specs'
 import { PALETTE_CATEGORY_META, nodesForPaletteCategory } from '../canvas/palette-categories'
 import { Icon } from './Icon'
+import { ModalShell } from './ModalShell'
+import { modalBtn } from './modal-btn'
 import './project-create-dialog.css'
 
 registerBaseNodeTypes()
@@ -39,6 +40,7 @@ export function ProjectCreateDialog({
   const dialogId = useId()
   const nameInputId = `${dialogId}-name`
   const searchInputId = `${dialogId}-search`
+  const nameRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState(initialName)
   // T03（F03）：默认沿用最近一次成功创建的可见工具配置（localStorage）；
   // initialProfile（工作台偏好入口）仍最优先。节点选择区默认折叠。
@@ -148,42 +150,51 @@ export function ProjectCreateDialog({
     }
   }
 
-  return createPortal(
-    <div
-      className="project-create-mask"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !busy) onCancel()
-      }}
-    >
-      <section className="project-create-dialog" role="dialog" aria-modal="true" aria-label={title}>
-        <header className="project-create-header">
-          <div className="project-create-heading">
-            <span className="project-create-brand-icon" aria-hidden="true">
-              <Icon name="folder" size={18} />
-            </span>
-            <div>
-              <h2>{title}</h2>
-            </div>
-          </div>
+  return (
+    <ModalShell
+      size="l"
+      title={title}
+      ariaLabel={title}
+      onClose={() => !busy && onCancel()}
+      closeOnEscape={!busy}
+      closeOnOverlay={!busy}
+      initialFocusRef={nameRef}
+      footerLeft={
+        <span className="project-create-error" role="alert">
+          {error}
+        </span>
+      }
+      footer={
+        <>
           <button
             type="button"
-            className="project-create-close"
-            aria-label="关闭"
+            className={modalBtn('secondary')}
             disabled={busy}
             onClick={onCancel}
           >
-            <Icon name="close" size={18} />
+            取消
           </button>
-        </header>
-
-        <div className={`project-create-body ${nameRequired ? '' : 'is-name-hidden'}`}>
+          <button
+            type="button"
+            className={modalBtn('primary')}
+            disabled={busy}
+            onClick={() => void submit()}
+          >
+            {!busy && <Icon name="add" size={15} />}
+            {busy ? '保存中…' : submitLabel}
+          </button>
+        </>
+      }
+    >
+      {/* 2026-11-21 弹窗统一：壳换 ModalShell，节点选择区内容样式原样保留。 */}
+      <div className={`project-create-body ${nameRequired ? '' : 'is-name-hidden'}`}>
           <div className="project-create-top-config">
             {nameRequired && (
               <label className="project-create-name" htmlFor={nameInputId}>
                 <span>项目名称</span>
                 <input
                   id={nameInputId}
-                  autoFocus
+                  ref={nameRef}
                   maxLength={120}
                   value={name}
                   placeholder="给这个项目起个名字"
@@ -333,32 +344,7 @@ export function ProjectCreateDialog({
               )}
             </>
           )}
-        </div>
-
-        <footer className="project-create-footer">
-          <span className="project-create-error" role="alert">
-            {error}
-          </span>
-          <button
-            type="button"
-            className="project-create-cancel"
-            disabled={busy}
-            onClick={onCancel}
-          >
-            取消
-          </button>
-          <button
-            type="button"
-            className="project-create-submit"
-            disabled={busy}
-            onClick={() => void submit()}
-          >
-            {!busy && <Icon name="add" size={15} />}
-            {busy ? '保存中…' : submitLabel}
-          </button>
-        </footer>
-      </section>
-    </div>,
-    document.body
+      </div>
+    </ModalShell>
   )
 }

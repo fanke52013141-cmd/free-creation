@@ -131,11 +131,12 @@
 
 
 /* 全屏节点流编辑：顶栏仅显示名称，其余控件在画布底部（用户裁决 2026-11-11）。 */
+/* 2026-11-21 弹窗统一：fixed 全屏容器由 ModalShell XL 档提供；
+   此处仅保留工作区纵向布局与画布底色。 */
 .composite-canvas-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 2500;
   display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
   flex-direction: column;
   background: var(--canvas-surface, #0d0d0d);
 }
@@ -290,9 +291,10 @@ body:has(.composite-canvas-overlay) .app-select-content { z-index: 2501; }
   border-bottom: 1px solid var(--line);
   color: var(--brand);
 }
+/* 2026-11-21 弹窗统一：sheet 标题/关闭钮对齐规范（§2.1） */
 .nf-sheet-header strong {
   color: var(--txt);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
 }
 .nf-sheet-count { color: var(--muted); font-size: 11px; }
@@ -300,16 +302,16 @@ body:has(.composite-canvas-overlay) .app-select-content { z-index: 2501; }
   margin-left: auto;
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
   transition: color 0.15s ease, background-color 0.15s ease;
 }
-.nf-sheet-close:hover:not(:disabled) { color: var(--txt); background: var(--line); }
+.nf-sheet-close:hover:not(:disabled) { color: var(--txt); background: rgba(255, 255, 255, 0.08); }
 .nf-sheet-body {
   flex: 1;
   min-height: 0;

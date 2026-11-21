@@ -1,7 +1,6 @@
 // 模型供应商设置面板：配置 BaseURL / API Key / 模型列表（M4 网关）
 // 配置存主进程 SQLite（providers 表），渲染端只经 IPC 读写，密钥不落渲染层存储
-import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useRef, useState } from 'react'
 import { stopEventPropagation } from 'tldraw'
 import {
   PROVIDER_SPECS,
@@ -23,6 +22,8 @@ import { toast } from '../stores/toast'
 import { Icon } from '../components/Icon'
 import { AppSelect } from '../components/AppSelect'
 import { KeyPackageDialogs, type KeyPackageDialogMode } from './KeyPackageDialogs'
+import { ModalShell } from '../components/ModalShell'
+import { modalBtn } from '../components/modal-btn'
 
 interface Draft extends Omit<SaveProviderInput, 'apiKey'> {
   apiKey: string
@@ -130,6 +131,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
   const [keysDialog, setKeysDialog] = useState<KeyPackageDialogMode>(null)
   // 供应商配置传输（密码加密文件）：发行版 + 发放员可用——把带 Key 的配置发给客户导入。
   const [transferMode, setTransferMode] = useState<'import' | 'export' | null>(null)
+  const transferPasswordRef = useRef<HTMLInputElement>(null)
   const [transferPassword, setTransferPassword] = useState('')
   const [transferPasswordConfirm, setTransferPasswordConfirm] = useState('')
   const [transferProviderIds, setTransferProviderIds] = useState<Set<string>>(new Set())
@@ -579,28 +581,21 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
   }
 
 
-  return createPortal(
-    <div
-      className="gw-mask"
-      onPointerDown={(event) => stopEventPropagation(event)}
-      onClick={(event) => {
-        stopEventPropagation(event)
-        if (event.target === event.currentTarget) close()
-      }}
+  return (
+    <ModalShell
+      size="l"
+      title="模型供应商"
+      ariaLabel="模型供应商"
+      bodyClassName="modal-shell-body--flush"
+      onClose={close}
+      headerActions={
+        <button className="btn-ghost small" onClick={openCatalog}>
+          模型管理与验证
+        </button>
+      }
     >
-      <div className="gw-panel" onClick={(e) => e.stopPropagation()}>
-        <div className="gw-head">
-          <span className="gw-title">模型供应商</span>
-          <div className="gw-head-actions">
-            <button className="btn-ghost small" onClick={openCatalog}>
-              模型管理与验证
-            </button>
-            <button className="icon-btn" onClick={close} aria-label="关闭供应商设置">
-              <Icon name="close" size={16} />
-            </button>
-          </div>
-        </div>
-        <div className="gw-body">
+      {/* 2026-11-21 弹窗统一：壳换 ModalShell（面板型正文 flush），侧栏/主区结构原样保留。 */}
+      <div className="gw-body">
           <div className="gw-side">
             {picking ? (
               <div className="gw-spec-picker gw-side-actions">
@@ -1130,22 +1125,49 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
           </div>
         </div>
         {transferMode && (
-          <div className="gw-transfer-mask">
-            <section
-              className="gw-transfer-dialog"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="gw-transfer-title"
+          <ModalShell
+            size="m"
+            title={transferMode === 'export' ? '导出模型配置' : '导入模型配置'}
+            ariaLabel={transferMode === 'export' ? '导出模型配置' : '导入模型配置'}
+            initialFocusRef={transferPasswordRef}
+            onClose={finishProviderTransfer}
+            footer={
+              <>
+                <button
+                  type="button"
+                  className={modalBtn('secondary')}
+                  disabled={transferBusy}
+                  onClick={finishProviderTransfer}
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  form="provider-transfer-form"
+                  className={modalBtn('primary')}
+                  disabled={transferBusy}
+                >
+                  {transferBusy
+                    ? transferMode === 'export'
+                      ? '加密中…'
+                      : '导入中…'
+                    : transferMode === 'export'
+                      ? '加密导出'
+                      : '选择文件并导入'}
+                </button>
+              </>
+            }
+          >
+            {/* 2026-11-21 弹窗统一：gw-transfer 内联壳退役（盘点补充面）。 */}
+            <form
+              id="provider-transfer-form"
+              onSubmit={(event) => void submitProviderTransfer(event)}
             >
-              <h2 id="gw-transfer-title">
-                {transferMode === 'export' ? '导出模型配置' : '导入模型配置'}
-              </h2>
               {transferMode === 'import' && (
-                <p>
+                <p className="modal-shell-hint" style={{ margin: '0 0 14px' }}>
                   选择加密配置文件并输入导出时设置的密码。已有同 ID 的供应商将更新，其余配置保留。
                 </p>
               )}
-              <form onSubmit={(event) => void submitProviderTransfer(event)}>
                 {transferMode === 'export' && (
                   <fieldset className="gw-transfer-selection">
                     <legend>选择要导出的模型配置（含 API 密钥）</legend>
@@ -1177,9 +1199,9 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                 <label className="gw-transfer-field">
                   <span>{transferMode === 'export' ? '设置加密密码' : '文件密码'}</span>
                   <input
+                    ref={transferPasswordRef}
                     className="gw-input"
                     type="password"
-                    autoFocus
                     autoComplete="new-password"
                     minLength={8}
                     value={transferPassword}
@@ -1206,28 +1228,8 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                     {transferError}
                   </div>
                 )}
-                <div className="gw-transfer-actions">
-                  <button
-                    type="button"
-                    className="btn-ghost"
-                    disabled={transferBusy}
-                    onClick={finishProviderTransfer}
-                  >
-                    取消
-                  </button>
-                  <button type="submit" className="btn-primary" disabled={transferBusy}>
-                    {transferBusy
-                      ? transferMode === 'export'
-                        ? '加密中…'
-                        : '导入中…'
-                      : transferMode === 'export'
-                        ? '加密导出'
-                        : '选择文件并导入'}
-                  </button>
-                </div>
-              </form>
-            </section>
-          </div>
+            </form>
+          </ModalShell>
         )}
         {keysDialog && (
           <KeyPackageDialogs
@@ -1239,8 +1241,6 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
             }}
           />
         )}
-      </div>
-    </div>,
-    document.body
+    </ModalShell>
   )
 }

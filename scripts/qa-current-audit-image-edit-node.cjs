@@ -62,7 +62,7 @@ async function cardState(page, card) {
         : null,
       status: status ? Array.from(status.classList).find((c) => c.startsWith('node-status-')) : null,
       bodyText: body ? body.textContent?.slice(0, 220) : null,
-      hasOpenWorkbench: Boolean(el.querySelector('.image-edit-workbench-mask')),
+      hasOpenWorkbench: Boolean(el.querySelector('.image-edit-workbench')),
       inlineText: el.querySelector('.image-edit-inline-text')?.textContent ?? ''
     }
   })
@@ -131,17 +131,17 @@ async function openWorkbench(page, card) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     await card.getByRole('button', { name: '打开工作台' }).click().catch(() => {})
     await page.waitForTimeout(400)
-    if (await page.locator('.image-edit-workbench-mask').isVisible().catch(() => false)) return true
+    if (await page.locator('.image-edit-workbench').isVisible().catch(() => false)) return true
   }
   return false
 }
 
 async function closeWorkbench(page) {
   // 打开运行中心等侧栏会触发单例收口、自动关闭工作台——遮罩已不在时直接跳过
-  if (!(await page.locator('.image-edit-workbench-mask').isVisible().catch(() => false))) return
-  await page.locator('.image-edit-workbench-head button').last().click()
+  if (!(await page.locator('.image-edit-workbench').isVisible().catch(() => false))) return
+  await page.locator('.modal-shell-close').click()
   await page
-    .waitForFunction(() => !document.querySelector('.image-edit-workbench-mask'), { timeout: 4000 })
+    .waitForFunction(() => !document.querySelector('.image-edit-workbench'), { timeout: 4000 })
     .catch(() => {})
 }
 
@@ -235,7 +235,7 @@ async function main() {
     // ── 4. 打开工作台 + 画笔标注/撤销重做/颜色 ────────────────
     await edit.card.getByRole('button', { name: '打开工作台' }).click()
     await page.waitForTimeout(500)
-    const wbVisible = await page.locator('.image-edit-workbench-mask').isVisible().catch(() => false)
+    const wbVisible = await page.locator('.image-edit-workbench').isVisible().catch(() => false)
     await shot(page, '04a-workbench-open')
     assert('workbench-opens', wbVisible, wbVisible, true)
     const sourceImg = await page.locator('.image-edit-preview img[alt="待修改原图"]').isVisible().catch(() => false)
@@ -305,7 +305,7 @@ async function main() {
 
     // ── 6. 关闭并重开工作台：标注与说明持久化 ─────────────────
     await closeWorkbench(page)
-    const wbClosed = !(await page.locator('.image-edit-workbench-mask').isVisible().catch(() => false))
+    const wbClosed = !(await page.locator('.image-edit-workbench').isVisible().catch(() => false))
     assert('workbench-closes', wbClosed, wbClosed, true)
     const reopened = await openWorkbench(page, edit.card)
     const marksAfterReopen = await markCount(page)

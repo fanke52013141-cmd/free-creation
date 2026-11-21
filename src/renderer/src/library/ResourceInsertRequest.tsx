@@ -1,3 +1,5 @@
+// 将资源加入画布。2026-11-21 弹窗统一：library-form 壳退役，换 ModalShell M 档；
+// 内容字段沿用无作用域的 library-form-field 样式。
 import { useEffect, useState } from 'react'
 import { useResourceInsertRequest } from './insertRequestStore'
 import type { Editor } from 'tldraw'
@@ -6,7 +8,8 @@ import { legacyCategory, planResourceNodes } from '@shared/library/blueprint'
 import { insertResource } from './insertResource'
 import { resourceReusePreview } from './reusePreview'
 import { useConfirmStore } from '../stores/confirm'
-import { Icon } from '../components/Icon'
+import { ModalShell } from '../components/ModalShell'
+import { modalBtn } from '../components/modal-btn'
 
 export function ResourceInsertRequest({
   editor,
@@ -70,12 +73,12 @@ export function ResourceInsertRequest({
         componentIds: request.componentIds
       })
       if (!files.ok || files.data.missingComponentIds.length)
-        throw new Error('资源文件缺失或预检失败，尚未创建节点')
+        throw new Error('资源的部分文件缺失或检查未通过，还没有创建节点')
       if (
         !(await useConfirmStore.getState().confirm({
-          title: '预览复用内容',
-          message: `资源 v${preview.revision}：将创建 ${preview.nodes.length} 个节点，复制 ${preview.fileCount} 个文件，不新增连线或自动运行。配方生成提示词文本，模型参数仅供参考。`,
-          confirmText: '确认加入画布'
+          title: '确认加入画布？',
+          message: `将创建 ${preview.nodes.length} 个节点、复制 ${preview.fileCount} 个文件；不会自动连线，也不会自动开始生成。`,
+          confirmText: '确认加入'
         }))
       )
         return
@@ -88,84 +91,79 @@ export function ResourceInsertRequest({
     }
   }
   return (
-    <div className="library-form-mask">
-      <section
-        className="library-form-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label="加入资源节点"
-      >
-        <header className="library-form-header">
-          <h2>将「{current?.selectedTitle ?? '资源'}」加入画布</h2>
-          <button className="library-icon-button" disabled={busy} aria-label="关闭" onClick={clear}>
-            <Icon name="close" size={17} />
-          </button>
-        </header>
-        <div className="library-form-scroll">
-          {!current && !error && <p>读取所选资源版本…</p>}
-          {current?.components
-            .filter(
-              (component) =>
-                request.componentIds.includes(component.id) && component.valueType === 'recipe'
-            )
-            .map((component) => (
-              <div key={component.id}>
-                <strong>{component.role}</strong>
-                {[
-                  ...new Set(
-                    [
-                      ...(Array.isArray(component.metadata.variables)
-                        ? component.metadata.variables
-                            .filter((value): value is string => typeof value === 'string')
-                            .map((name) => [name, name])
-                        : []),
-                      ...(component.text ?? '').matchAll(
-                        /\{\{\s*([A-Za-z_][A-Za-z0-9_-]{0,63})\s*\}\}/g
-                      )
-                    ].map((match) => match[1])
-                  )
-                ].map((name) => (
-                  <label className="library-form-field" key={name}>
-                    <span>{name}</span>
-                    <input
-                      disabled={busy}
-                      value={values[component.id]?.[name] ?? ''}
-                      onChange={(event) =>
-                        setValues((all) => ({
-                          ...all,
-                          [component.id]: { ...all[component.id], [name]: event.target.value }
-                        }))
-                      }
-                    />
-                  </label>
-                ))}
-              </div>
-            ))}
-          <p>所选内容将按固定版本生成以下节点，包括当前工作台已隐藏创建入口的节点。</p>
-          <ul>
-            {preview.map((title, index) => (
-              <li key={index}>{title}</li>
-            ))}
-          </ul>
-          {(error || invalid) && (
-            <p className="library-form-error" role="alert">
-              {error || invalid}
-            </p>
-          )}
-        </div>
-        <footer className="library-form-footer">
-          <button disabled={busy} onClick={clear}>
+    <ModalShell
+      size="m"
+      title={`将「${current?.selectedTitle ?? '资源'}」加入画布`}
+      ariaLabel="加入资源节点"
+      onClose={() => !busy && clear()}
+      closeOnEscape={!busy}
+      closeOnOverlay={!busy}
+      footer={
+        <>
+          <button type="button" className={modalBtn('secondary')} disabled={busy} onClick={clear}>
             取消
           </button>
           <button
+            type="button"
+            className={modalBtn('primary')}
             disabled={busy || !current || Boolean(invalid)}
-            className="library-form-primary"
             onClick={() => void insert()}
           >
-            {busy ? '加入中…' : '预览并创建节点'}
+            {busy ? '加入中…' : '加入画布'}
           </button>
-        </footer>
-      </section>
-    </div>
+        </>
+      }
+    >
+      {!current && !error && <p>读取所选资源版本…</p>}
+      {current?.components
+        .filter(
+          (component) =>
+            request.componentIds.includes(component.id) && component.valueType === 'recipe'
+        )
+        .map((component) => (
+          <div key={component.id}>
+            <strong>{component.role}</strong>
+            {[
+              ...new Set(
+                [
+                  ...(Array.isArray(component.metadata.variables)
+                    ? component.metadata.variables
+                        .filter((value): value is string => typeof value === 'string')
+                        .map((name) => [name, name])
+                    : []),
+                  ...(component.text ?? '').matchAll(
+                    /\{\{\s*([A-Za-z_][A-Za-z0-9_-]{0,63})\s*\}\}/g
+                  )
+                ].map((match) => match[1])
+              )
+            ].map((name) => (
+              <label className="library-form-field" key={name}>
+                <span>{name}</span>
+                <input
+                  disabled={busy}
+                  value={values[component.id]?.[name] ?? ''}
+                  onChange={(event) =>
+                    setValues((all) => ({
+                      ...all,
+                      [component.id]: { ...all[component.id], [name]: event.target.value }
+                    }))
+                  }
+                />
+              </label>
+            ))}
+          </div>
+        ))}
+      <p>将按资源当前保存的版本生成以下节点。</p>
+      <ul>
+        {preview.map((title, index) => (
+          <li key={index}>{title}</li>
+        ))}
+      </ul>
+      {(error || invalid) && (
+        <p className="modal-error" role="alert">
+          {error || invalid}
+        </p>
+      )}
+    </ModalShell>
   )
 }

@@ -284,7 +284,7 @@ export function validateCompositeManifestStructure(
       issues.push({ path: `outputs.${index}.source`, message: `来源是不存在的内部节点 ${output.source.nodeId}` })
   }
   // 公开输出必须来自内部图；P1 的端口存在性由 renderer 校验补足。
-  if (manifest.outputs.length === 0) issues.push({ path: 'outputs', message: '至少需要一个公开输出' })
+  if (manifest.outputs.length === 0) issues.push({ path: 'outputs', message: '至少要保留一个「对外输出」，否则发布后没法在别的项目里使用' })
   return issues
 }
 

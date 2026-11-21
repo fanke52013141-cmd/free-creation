@@ -29,6 +29,7 @@ import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { useAppStore } from '../../../stores/app'
 import { toast } from '../../../stores/toast'
 import { Icon } from '../../../components/Icon'
+import { ModalShell } from '../../../components/ModalShell'
 import { AppSelect } from '../../../components/AppSelect'
 import './image-edit-model-row.css'
 import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../registry'
@@ -1063,45 +1064,25 @@ function ImageEditWorkbench({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [onClose])
   return createPortal(
-    <div
-      className="director-studio-mask image-edit-workbench-mask"
-      role="dialog"
-      aria-modal="true"
-      aria-label="P图工作台"
-      onPointerDown={(event) => stopEventPropagation(event)}
-      onClick={(event) => {
-        stopEventPropagation(event)
-        if (event.target === event.currentTarget) onClose()
-      }}
+    <ModalShell
+      size="xl"
+      title="P图工作台"
+      ariaLabel="P图工作台"
+      className="image-edit-workbench"
+      bodyClassName="modal-shell-body--flush"
+      onClose={onClose}
     >
-      <div className="image-edit-workbench">
-        <header className="image-edit-workbench-head">
-          <div className="image-edit-workbench-title">
-            <Icon name="edit" size={15} />
-            <span>P图工作台</span>
-          </div>
-          <button
-            className="btn-ghost small"
-            onPointerDown={stopEventPropagation}
-            onClick={(event) => {
-              stopEventPropagation(event)
-              onClose()
-            }}
-          >
-            <Icon name="close" size={14} />
-          </button>
-        </header>
-        <div className="image-edit-workbench-body">
-          <ImageEditEditorCore
-            shape={shape}
-            editor={editor}
-            projectId={projectId}
-            workbench
-            onRunSubmitted={onClose}
-          />
-        </div>
+      {/* 2026-11-21 弹窗统一：壳换 ModalShell（image-edit-workbench 类供 QA 脚本定位）。 */}
+      <div className="image-edit-workbench-body">
+        <ImageEditEditorCore
+          shape={shape}
+          editor={editor}
+          projectId={projectId}
+          workbench
+          onRunSubmitted={onClose}
+        />
       </div>
-    </div>,
+    </ModalShell>,
     document.body
   )
 }

@@ -1,0 +1,282 @@
+/* ============================================================
+   弹窗统一规范 v1.0 · ModalShell 全局样式（2026-11-21）
+   ------------------------------------------------------------
+   依据 modal-audit-20261121/弹窗统一规范-v1.0.md：
+   - 遮罩唯一：rgba(5,8,14,.62) + blur 8px
+   - 容器：--card / 1px --line / 12px 圆角 / elevation-float 阴影
+   - 三段式：52px 标题栏（标题左 + 28×28 关闭右）→ 正文 → 56px 底部操作栏
+   - 尺寸档位：S 400（确认）/ M 560（表单）/ L 760（管理台）
+   - 按钮：高 34px、圆角 8px、主操作青色渐变、危险红实底
+   分家族迁移完成后，旧的 .confirm-* / .composite-modal-mask /
+   .library-form-mask / .project-clone-* 等壳样式逐步退役。
+   ============================================================ */
+
+.modal-shell-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(5, 8, 14, 0.62);
+  backdrop-filter: blur(8px);
+  animation: modal-shell-fade 0.16s ease;
+}
+
+/* 确认弹窗层：允许叠在普通弹窗之上（如弹窗内再次确认） */
+.modal-shell-overlay--confirm {
+  z-index: var(--z-confirm);
+}
+
+@keyframes modal-shell-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-shell {
+  display: flex;
+  flex-direction: column;
+  width: 560px;
+  max-width: calc(100vw - 48px);
+  max-height: min(640px, calc(100vh - 64px));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--txt);
+  box-shadow: var(--elevation-float);
+  animation: modal-shell-pop 0.16s ease;
+}
+
+@keyframes modal-shell-pop {
+  from {
+    transform: scale(0.96) translateY(-6px);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* 尺寸档位 */
+.modal-shell[data-size='s'] { width: 400px; }
+.modal-shell[data-size='m'] { width: 560px; }
+.modal-shell[data-size='l'] { width: 760px; }
+
+/* XL：全屏工作台（AI 对话/预演台/轨道线/视频操作等），正文由 headerActions/flush 支撑 */
+.modal-shell[data-size='xl'] {
+  width: min(96vw, calc(100vw - 32px));
+  height: 92vh;
+  max-height: 92vh;
+}
+
+/* ── 标题栏（52px）────────────────────────────────────────── */
+.modal-shell-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 12px 8px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-shell-heading {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.modal-shell-eyebrow {
+  margin: 0 0 2px;
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+}
+
+.modal-shell-title {
+  margin: 0;
+  color: var(--txt);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.modal-shell-title-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: var(--brand);
+}
+
+.modal-shell-title-icon.is-danger {
+  color: var(--red);
+}
+
+.modal-shell-close {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.modal-shell-close:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--txt);
+}
+
+.modal-shell-close:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── 正文区 ───────────────────────────────────────────────── */
+.modal-shell-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 20px 24px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.modal-shell-message {
+  margin: 0;
+  color: var(--txt);
+}
+
+/* 面板型正文（gw 设置面板等）：去内边距、不滚动，由内部窗格（gw-body/gw-main）布局 */
+.modal-shell-body--flush {
+  display: flex;
+  padding: 0;
+  overflow: hidden;
+}
+
+.modal-shell-hint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ── 统一表单控件（正文区内）─────────────────────────────────
+   输入框/选择器底 --sunk、描边 --line、圆角 8px、聚焦青色描边 */
+.modal-field {
+  display: grid;
+  gap: 6px;
+}
+
+.modal-field > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.modal-field input:not([type='checkbox']):not([type='radio']),
+.modal-field textarea,
+.modal-field select {
+  width: 100%;
+  padding: 9px 12px;
+  color: var(--txt);
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.modal-field input:focus,
+.modal-field textarea:focus,
+.modal-field select:focus {
+  border-color: rgba(34, 211, 238, 0.5);
+  outline: none;
+}
+
+.modal-error {
+  color: var(--red);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ── 底部操作栏（56px）────────────────────────────────────── */
+.modal-shell-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 56px;
+  padding: 11px 16px 11px 24px;
+  border-top: 1px solid var(--line);
+}
+
+.modal-shell-footer-left {
+  flex: 1 1 auto;
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 统一按钮规格：高 34 / 圆角 8 / 主操作青色渐变 / 危险红实底 */
+.modal-btn {
+  height: 34px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    filter 0.15s ease;
+}
+
+.modal-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.modal-btn-secondary {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--txt);
+}
+
+.modal-btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.modal-btn-primary {
+  background: var(--primary-grad);
+  color: var(--primary-ink);
+  box-shadow: var(--primary-glow);
+}
+
+.modal-btn-primary:hover:not(:disabled) {
+  background: var(--primary-grad-hover);
+  box-shadow: var(--primary-glow-hover);
+}
+
+.modal-btn-danger {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+
+.modal-btn-danger:hover:not(:disabled) {
+  filter: brightness(1.1);
+}

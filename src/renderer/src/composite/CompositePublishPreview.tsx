@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import type { CompositeManifest } from '@shared/composite/manifest'
 import { planCompositeUpgrade } from '@shared/composite/upgrade'
-import { Icon } from '../components/Icon'
+import { ModalShell } from '../components/ModalShell'
+import { modalBtn } from '../components/modal-btn'
 import '../library/library.css'
 
 export interface CompositePublishValidationIssue {
@@ -61,37 +62,41 @@ export function CompositePublishPreview({
   const blocked = validationIssues.length > 0
 
   return (
-    <div
-      className="composite-modal-mask"
-      onMouseDown={(event) => event.target === event.currentTarget && !busy && onCancel()}
-    >
-      <section
-        className="composite-modal composite-publish-preview"
-        role="dialog"
-        aria-modal="true"
-        aria-label="另存为新版本预览"
-        onKeyDown={(event) => {
-          event.stopPropagation()
-          if (event.key === 'Escape' && !busy) onCancel()
-        }}
-      >
-        <header className="composite-modal-header">
-          <h3>另存为新版本</h3>
+    <ModalShell
+      size="m"
+      title="另存为新版本"
+      className="composite-publish-preview"
+      ariaLabel="另存为新版本预览"
+      onClose={() => !busy && onCancel()}
+      closeOnEscape={!busy}
+      closeOnOverlay={!busy}
+      footer={
+        <>
+          <button type="button" className={modalBtn('secondary')} disabled={busy} onClick={onCancel}>
+            取消
+          </button>
           <button
             type="button"
-            className="composite-modal-close"
-            aria-label="关闭发布预览"
-            disabled={busy}
-            onClick={onCancel}
+            className={modalBtn('primary')}
+            disabled={busy || blocked}
+            title={blocked ? '发布校验未通过，请先修复阻断问题' : '确认发布新版本'}
+            onClick={onConfirm}
           >
-            <Icon name="close" size={16} />
+            {busy ? '发布中…' : '确认发布'}
           </button>
-        </header>
-        <div className="composite-modal-scroll">
-          <div className="composite-publish-versions">
-            <span className="composite-publish-version-badge">
-              基准 v{baseManifest ? versionLabel(baseManifest.version) : '—'}
-            </span>
+        </>
+      }
+    >
+      {/* 2026-11-21 弹窗统一：壳换 ModalShell（composite-publish-preview 为验收钩子类）。 */}
+      <div
+        onKeyDown={(event) => {
+          event.stopPropagation()
+        }}
+      >
+      <div className="composite-publish-versions">
+        <span className="composite-publish-version-badge">
+          基准 v{baseManifest ? versionLabel(baseManifest.version) : '—'}
+        </span>
             <span className="composite-publish-version-arrow" aria-hidden="true">
               →
             </span>
@@ -221,22 +226,7 @@ export function CompositePublishPreview({
               </ul>
             )}
           </section>
-        </div>
-        <footer className="composite-modal-footer">
-          <button type="button" className="btn-ghost small" disabled={busy} onClick={onCancel}>
-            取消
-          </button>
-          <button
-            type="button"
-            className="library-form-primary nf-publish-confirm"
-            disabled={busy || blocked}
-            title={blocked ? '发布校验未通过，请先修复阻断问题' : '确认发布新版本'}
-            onClick={onConfirm}
-          >
-            {busy ? '发布中…' : '确认发布'}
-          </button>
-        </footer>
-      </section>
-    </div>
+      </div>
+    </ModalShell>
   )
 }

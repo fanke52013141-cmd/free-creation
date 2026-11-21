@@ -44,6 +44,8 @@
   -webkit-app-region: no-drag;
 }
 
+/* 2026-11-21 弹窗统一：容器尺寸/圆角/阴影由 ModalShell XL 档提供；
+   本规则只保留工作台皮肤 token（面板/强调色），供内部控件取色。 */
 .video-operations-dialog {
   --accent: #38bdf8;
   --line: rgba(148, 163, 184, 0.18);
@@ -54,15 +56,6 @@
   --workbench-height: calc(100dvh - var(--window-caption-height, 0px) - 24px);
   --txt: #e2e8f0;
   --muted: #94a3b8;
-  width: min(1152px, calc(100vw - 24px));
-  height: min(820px, var(--workbench-height));
-  max-height: var(--workbench-height);
-  border-color: rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  background: var(--panel);
-  box-shadow:
-    0 25px 60px -15px rgba(0, 0, 0, 0.8),
-    0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .video-operations-head {

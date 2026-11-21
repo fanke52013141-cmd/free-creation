@@ -1,6 +1,7 @@
 import './assets/app.css'
 import './assets/ui-foundation.css'
 import './assets/ui-surfaces.css'
+import './assets/modal-shell.css'
 import './assets/scrollbars.css'
 import './assets/window-chrome.css'
 import './assets/topbar-icon-buttons.css'

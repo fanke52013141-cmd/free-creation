@@ -11,6 +11,7 @@ import {
 } from '@shared/skill-agent'
 import './skill-agent-settings.css'
 import { Icon } from '../../../components/Icon'
+import { ModalShell } from '../../../components/ModalShell'
 import { NumberStepper } from '../../../components/NumberStepper'
 import { parseJsonObj } from '@shared/engine/helpers'
 import type { NodeSettingsProps } from '../../registry'
@@ -223,24 +224,15 @@ export function SkillAgentSettings({
         </button>
         {helpOpen &&
           createPortal(
-            <div className="skill-help-backdrop" onClick={() => setHelpOpen(false)}>
-              <div
-                className="skill-help-dialog"
-                role="dialog"
-                aria-modal="true"
-                aria-label="技能格式与校验说明"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <button
-                  type="button"
-                  className="skill-help-close"
-                  onClick={() => setHelpOpen(false)}
-                >
-                  关闭
-                </button>
-                <SkillHelpPopover />
-              </div>
-            </div>,
+            <ModalShell
+              size="m"
+              title="技能格式与校验说明"
+              ariaLabel="技能格式与校验说明"
+              onClose={() => setHelpOpen(false)}
+            >
+              {/* 2026-11-21 弹窗统一：文字「关闭」按钮退役，统一标题栏 + 右上关闭。 */}
+              <SkillHelpPopover />
+            </ModalShell>,
             document.body
           )}
       </legend>

@@ -205,12 +205,11 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
         >
           <h2 style={{ margin: '0 0 10px', fontSize: 16 }}>检测到上次关闭时的未保存副本</h2>
           <p style={{ margin: '0 0 8px', fontSize: 13, lineHeight: 1.6 }}>
-            上次关闭时，本项目的保存与外部修改发生冲突。你关闭前的最后视图已保存为
-            <strong> 恢复副本</strong>；当前磁盘上是另一份版本（未受影响）。
+            上次关闭时，本项目的保存与外部修改发生了冲突。你关闭前的画面已保存为
+            <strong> 恢复副本</strong>；电脑里现在保存的是另一份版本（未受影响）。
           </p>
           <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--muted)' }}>
-            选择「使用恢复副本」会把副本内容正式保存为新版本（当前磁盘版本会备份为 .bak
-            可回退）；选择「保留磁盘版本」将丢弃副本，此操作不可撤销。
+            选「使用恢复副本」：把你关闭前的画面正式保存为新版本，现在这份版本会先自动备份一份，随时可以找回。选「保留磁盘版本」：丢弃恢复副本，此操作无法撤销。
           </p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
             <button

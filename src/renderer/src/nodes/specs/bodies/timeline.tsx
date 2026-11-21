@@ -39,6 +39,7 @@ import {
   type TimelineData
 } from '@shared/timeline'
 import { TIMELINE_UI } from '../../../canvas/node-ui-tokens'
+import { ModalShell } from '../../../components/ModalShell'
 import { markUndoPoint } from '../../../canvas/history'
 import { readConnectedNodeInputs } from '../../../canvas/graph'
 import type { NodeValue } from '@shared/engine/values'
@@ -1495,12 +1496,15 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
       {fullscreen ? null : surface}
       {fullscreen
         ? createPortal(
-            <div
-              className="tl-modal-mask"
-              onPointerDown={(event) => {
-                if (event.target === event.currentTarget) setFullscreen(false)
-              }}
+            <ModalShell
+              size="xl"
+              title="轨道线"
+              ariaLabel="轨道线全屏编辑"
+              hideHeader
+              bodyClassName="modal-shell-body--flush"
+              onClose={() => setFullscreen(false)}
             >
+              {/* 2026-11-21 弹窗统一：tl-modal 壳退役（编辑台自带工具栏，hideHeader 模式）。 */}
               <div
                 className="tl-modal"
                 onPointerDown={(event) => event.stopPropagation()}
@@ -1545,7 +1549,7 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
                   {surface}
                 </div>
               </div>
-            </div>,
+            </ModalShell>,
             document.body
           )
         : null}

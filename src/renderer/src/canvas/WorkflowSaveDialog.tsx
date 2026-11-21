@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { Editor, TLShapeId } from 'tldraw'
-import { Icon } from '../components/Icon'
 import { toast } from '../stores/toast'
+import { ModalShell } from '../components/ModalShell'
+import { modalBtn } from '../components/modal-btn'
 import { extractTemplateFromSelection, useWorkflowStore } from '../stores/workflow'
 import { deriveGraph } from './graph'
 import { buildCompositeManifestFromGraph } from '../composite/build-manifest'
@@ -30,6 +31,7 @@ export function WorkflowSaveDialog({
   const [capabilityId, setCapabilityId] = useState('')
   const [version, setVersion] = useState('1.0')
   const [compositeDraft, setCompositeDraft] = useState<CompositeManifest | null>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
   const saveWorkflow = useWorkflowStore((state) => state.save)
   const nodes = useMemo(
     () =>
@@ -138,18 +140,48 @@ export function WorkflowSaveDialog({
   }
 
   return (
-    <div
-      className="library-form-mask"
-      onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}
+    <ModalShell
+      size="m"
+      title="保存节点"
+      className="workflow-save-dialog"
+      ariaLabel="保存节点"
+      onClose={() => !busy && onClose()}
+      closeOnEscape={!busy}
+      closeOnOverlay={!busy}
+      initialFocusRef={nameRef}
+      footerLeft={`${nodes.length} 个节点`}
+      footer={
+        <>
+          <button
+            type="button"
+            className={modalBtn('secondary')}
+            disabled={busy}
+            onClick={onClose}
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            className={modalBtn('primary')}
+            disabled={busy}
+            onClick={() => void save()}
+          >
+            {busy
+              ? '保存中…'
+              : saveKind === 'resource'
+                ? '保存素材资源'
+                : saveKind === 'composite'
+                  ? '保存并发布组合'
+                  : '保存流程模板'}
+          </button>
+        </>
+      }
     >
-      <section
-        className={`library-form-dialog workflow-save-dialog${saveKind === 'composite' ? ' is-composite' : ''}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label="保存节点"
+      {/* 2026-11-21 弹窗统一：壳换 ModalShell，内容类（library-form-field /
+          workflow-save-*）为无作用域样式原样保留；Enter 提交与按键防护不变。 */}
+      <div
         onKeyDown={(event) => {
           event.stopPropagation()
-          if (event.key === 'Escape' && !busy) onClose()
           if (
             event.key === 'Enter' &&
             !busy &&
@@ -162,142 +194,101 @@ export function WorkflowSaveDialog({
           }
         }}
       >
-        <header className="library-form-header">
-          <div>
-            <h2>保存节点</h2>
-          </div>
-          <button
-            type="button"
-            className="library-form-close"
-            aria-label="关闭"
-            disabled={busy}
-            onClick={onClose}
-          >
-            <Icon name="close" size={17} />
-          </button>
-        </header>
-        <div className="library-form-scroll">
-          <label className="library-form-field">
-            <span>内容名称</span>
+        <label className="library-form-field">
+          <span>内容名称</span>
+          <input
+            ref={nameRef}
+            maxLength={100}
+            value={name}
+            onChange={(event) => {
+              setName(event.target.value)
+              setError('')
+            }}
+            placeholder="例如：角色设定到分镜"
+          />
+        </label>
+        <fieldset className="workflow-save-options" disabled={busy}>
+          <legend>选择保存方式</legend>
+          <label>
             <input
-              autoFocus
-              maxLength={100}
-              value={name}
-              onChange={(event) => {
-                setName(event.target.value)
-                setError('')
-              }}
-              placeholder="例如：角色设定到分镜"
+              type="radio"
+              name="reuse-kind"
+              checked={saveKind === 'template'}
+              onChange={() => setSaveKind('template')}
             />
+            流程模板
           </label>
-          <fieldset className="workflow-save-options" disabled={busy}>
-            <legend>选择保存方式</legend>
-            <label>
-              <input
-                type="radio"
-                name="reuse-kind"
-                checked={saveKind === 'template'}
-                onChange={() => setSaveKind('template')}
-              />
-              流程模板
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="reuse-kind"
-                checked={saveKind === 'resource'}
-                disabled={
-                  !nodes.every(
-                    (node) =>
-                      node.props.nodeType === 'text' ||
-                      (['image', 'audio', 'video', 'video-asset'].includes(node.props.nodeType) &&
-                        Boolean(node.props.mediaId))
-                  )
-                }
-                onChange={() => setSaveKind('resource')}
-              />
-              素材资源
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="reuse-kind"
-                checked={saveKind === 'composite'}
-                disabled={nodes.length < 1}
-                onChange={() => {
-                  setSaveKind('composite')
-                  buildBoundary()
-                }}
-              />
-              组合节点
-            </label>
-          </fieldset>
-          {saveKind === 'composite' && (
-            <div className="workflow-save-composite">
-              <div className="workflow-save-composite-fields">
-                <label className="library-form-field">
-                  <span>组合 ID（留空由名称生成）</span>
-                  <input
-                    maxLength={80}
-                    value={capabilityId}
-                    onChange={(event) => {
-                      setCapabilityId(event.target.value)
-                      setError('')
-                    }}
-                    placeholder="character-design"
-                  />
-                </label>
-                <label className="library-form-field">
-                  <span>版本</span>
-                  <input
-                    maxLength={20}
-                    value={version}
-                    onChange={(event) => setVersion(event.target.value)}
-                    placeholder="1.0"
-                  />
-                </label>
-              </div>
-              {compositeDraft ? (
-                <p className="workflow-save-boundary-hint">
-                  公开输入/输出按内部节点规范自动推导：
-                  {compositeDraft.inputs.length} 个输入 · {compositeDraft.outputs.length} 个输出
-                </p>
-              ) : null}
+          <label>
+            <input
+              type="radio"
+              name="reuse-kind"
+              checked={saveKind === 'resource'}
+              disabled={
+                !nodes.every(
+                  (node) =>
+                    node.props.nodeType === 'text' ||
+                    (['image', 'audio', 'video', 'video-asset'].includes(node.props.nodeType) &&
+                      Boolean(node.props.mediaId))
+                )
+              }
+              onChange={() => setSaveKind('resource')}
+            />
+            素材资源
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="reuse-kind"
+              checked={saveKind === 'composite'}
+              disabled={nodes.length < 1}
+              onChange={() => {
+                setSaveKind('composite')
+                buildBoundary()
+              }}
+            />
+            组合节点
+          </label>
+        </fieldset>
+        {saveKind === 'composite' && (
+          <div className="workflow-save-composite">
+            <div className="workflow-save-composite-fields">
+              <label className="library-form-field">
+                <span>组合 ID（留空由名称生成）</span>
+                <input
+                  maxLength={80}
+                  value={capabilityId}
+                  onChange={(event) => {
+                    setCapabilityId(event.target.value)
+                    setError('')
+                  }}
+                  placeholder="character-design"
+                />
+              </label>
+              <label className="library-form-field">
+                <span>版本</span>
+                <input
+                  maxLength={20}
+                  value={version}
+                  onChange={(event) => setVersion(event.target.value)}
+                  placeholder="1.0"
+                />
+              </label>
             </div>
-          )}
-          {error && (
-            <div className="library-form-error" role="alert">
-              {error}
-            </div>
-          )}
-        </div>
-        <footer className="library-form-footer">
-          <span>{nodes.length} 个节点</span>
-          <button
-            type="button"
-            className="library-form-secondary"
-            disabled={busy}
-            onClick={onClose}
-          >
-            取消
-          </button>
-          <button
-            type="button"
-            className="library-form-primary"
-            disabled={busy}
-            onClick={() => void save()}
-          >
-            {busy
-              ? '保存中…'
-              : saveKind === 'resource'
-                ? '保存素材资源'
-                : saveKind === 'composite'
-                  ? '保存并发布组合'
-                  : '保存流程模板'}
-          </button>
-        </footer>
-      </section>
-    </div>
+            {compositeDraft ? (
+              <p className="workflow-save-boundary-hint">
+                公开输入/输出按内部节点规范自动推导：
+                {compositeDraft.inputs.length} 个输入 · {compositeDraft.outputs.length} 个输出
+              </p>
+            ) : null}
+          </div>
+        )}
+        {error && (
+          <div className="modal-error" role="alert" style={{ marginTop: 12 }}>
+            {error}
+          </div>
+        )}
+      </div>
+    </ModalShell>
   )
 }
 

@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { stopEventPropagation } from 'tldraw'
 import type { Capability, Connection, ModelDefinition, ModelOperation } from '@free-creation/model-contracts'
 import { useGatewayStore } from '../stores/gateway'
 import { toast } from '../stores/toast'
 import { useConfirmStore } from '../stores/confirm'
 import { AppSelect } from '../components/AppSelect'
 import { Icon } from '../components/Icon'
+import { ModalShell } from '../components/ModalShell'
 import './ModelCatalogPanel.css'
 
 type Category = 'text' | 'image' | 'video' | 'speech' | 'clone' | 'design'
@@ -107,7 +106,7 @@ export function ModelCatalogPanel(): React.JSX.Element | null {
   }
   const deleteConnection = async (): Promise<void> => {
     if (!currentConnection) return
-    if (!await useConfirmStore.getState().confirm({ title: `删除连接「${currentConnection.name}」`, message: '该连接下的模型、验证记录和旧功能绑定会一并删除；画布和已生成素材不会删除。', confirmText: '删除连接', danger: true })) return
+    if (!await useConfirmStore.getState().confirm({ title: `删除连接「${currentConnection.name}」`, message: '该连接下的模型和验证记录会一并删除，「哪些功能用这条连接」的指定也会清除；画布和已生成的素材不受影响。', confirmText: '删除连接', danger: true })) return
     setBusy(true); const result = await window.api.models.deleteConnection({ connectionId }); setBusy(false)
     if (!result.ok) return toast(`删除连接失败：${result.error.message}`)
     resetConnection(); await Promise.all([load(), useGatewayStore.getState().load()]); toast('连接及其模型已删除')
@@ -182,15 +181,16 @@ export function ModelCatalogPanel(): React.JSX.Element | null {
   }
   const deleteModels = async (ids: string[]): Promise<void> => {
     if (!ids.length) return
-    if (!await useConfirmStore.getState().confirm({ title: ids.length === 1 ? '删除模型' : `删除 ${ids.length} 个模型`, message: '会解除这些模型的旧功能绑定并删除本地验证记录。画布内已有的模型选择不会被自动替换。', confirmText: '删除模型', danger: true })) return
+    if (!await useConfirmStore.getState().confirm({ title: ids.length === 1 ? '删除模型' : `删除 ${ids.length} 个模型`, message: '会一并删除这些模型的验证记录，以及「哪些功能指定用这些模型」的设置；画布里已经选好模型的节点不会被自动改动。', confirmText: '删除模型', danger: true })) return
     setBusy(true); const result = await window.api.models.deleteDefinitions({ modelDefinitionIds: ids }); setBusy(false)
     if (!result.ok) return toast(`删除模型失败：${result.error.message}`)
     setSelected(new Set()); resetModel(); await Promise.all([load(), useGatewayStore.getState().load()]); toast(`已删除 ${result.data} 个模型`)
   }
   const toggle = (modelId: string): void => setSelected((current) => { const next = new Set(current); next.has(modelId) ? next.delete(modelId) : next.add(modelId); return next })
   const options = categories.find((x) => x.value === category)!
-  return createPortal(<div className="gw-mask" onPointerDown={(event) => stopEventPropagation(event)} onClick={(event) => { stopEventPropagation(event); if (event.target === event.currentTarget) close() }}><section ref={dialogRef} tabIndex={-1} className="gw-panel gw-catalog" role="dialog" aria-modal="true" aria-label="模型管理" onClick={(e) => e.stopPropagation()}>
-    <header className="gw-head"><div><span className="gw-title">模型管理</span><span className="gw-subtitle">连接管理“有什么模型”；节点设置决定“引用哪个模型”。</span></div><button className="icon-btn" onClick={close} aria-label="关闭">×</button></header>
+  return (<ModalShell size="l" title="模型管理" ariaLabel="模型管理" bodyClassName="modal-shell-body--flush" onClose={close}>
+    {/* 2026-11-21 弹窗统一：壳换 ModalShell（文字「×」关闭钮随之退役）；说明句移入正文顶部。 */}
+    <div className="gw-catalog-shell"><p className="gw-subtitle">连接管理“有什么模型”；节点设置决定“引用哪个模型”。</p>
     <div className="gw-body"><aside className="gw-side gw-connections"><div className="gw-side-head"><b>连接</b><button className="gw-side-add" onClick={resetConnection}>+ 添加连接</button></div>{connections.map((x) => <button key={x.id} className={`gw-item ${connectionId === x.id ? 'active' : ''}`} onClick={() => chooseConnection(x)}><span className="gw-item-name">{x.name}</span><span className="gw-item-sub">{x.baseUrl}</span></button>)}{!connections.length && <p className="gw-empty">还没有连接</p>}</aside>
     <main className="gw-main gw-catalog-main"><section className="gw-card"><div className="gw-card-head"><div><h2>{connectionId ? '编辑连接' : '添加连接'}</h2><p>{protocol === 'vidu-cli' ? 'Q4：图片参考生视频；Q3：首尾帧。Token 仅加密保存于本机，留空保留原值。' : '编辑时 API Key 留空即保留原值。'}</p></div>{connectionId && <button className="btn-ghost small danger" disabled={busy} onClick={() => void deleteConnection()}>删除连接</button>}</div><div className="gw-grid"><label><span>连接名称</span><input className="gw-input" value={connectionName} onChange={(e) => setConnectionName(e.target.value)} /></label><label><span>服务商类型</span><AppSelect className="gw-input" value={protocol} onChange={(e) => { const next = e.target.value as Connection['protocol']; setProtocol(next); if (next === 'vidu-cli') { setBaseUrl('https://service.vidu.cn'); setConnectionName('Vidu'); setCategory('video'); setModelId('3.4'); setModelName('Vidu Q4（图片参考生视频）') } }}>{protocolOptions.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}</AppSelect></label><label className="wide"><span>API 地址</span><input className="gw-input" value={baseUrl} placeholder="https://api.example.com/v1" onChange={(e) => setBaseUrl(e.target.value)} /></label><label className="wide"><span>{protocol === 'vidu-cli' ? 'Vidu Token' : 'API Key'}</span><input className="gw-input" type="password" value={apiKey} placeholder={connectionId ? '留空以保留已保存的 API Key' : '粘贴 API Key，仅加密保存于本机'} onChange={(e) => setApiKey(e.target.value)} /></label></div><div className="gw-actions"><button className="btn-primary" disabled={busy} onClick={() => void saveConnection()}>保存连接</button>{connectionId && <button className="btn-ghost" disabled={busy} onClick={() => void discover()}>拉取可用模型</button>}</div></section>
     {connectionId && <section className="gw-card"><div className="gw-card-head"><div><h2>{editingModelId ? '编辑模型' : '添加模型'}</h2><p>模型分类表示输出用途；文本模型可以另外声明图片或音频输入能力。</p></div>{editingModelId && <button className="btn-ghost small" onClick={resetModel}>取消编辑</button>}</div><div className="gw-grid"><label><span>模型 ID</span><input className="gw-input" value={modelId} placeholder="例如 gpt-image-1" onChange={(e) => setModelId(e.target.value)} /></label><label><span>显示名称</span><input className="gw-input" value={modelName} placeholder="默认使用模型 ID" onChange={(e) => setModelName(e.target.value)} /></label><label><span>模型分类</span><AppSelect className="gw-input" value={category} onChange={(e) => setCategory(e.target.value as Category)}>{categories.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}</AppSelect></label>{category === 'text' && <label className="gw-check"><input type="checkbox" checked={imageInput} onChange={(e) => setImageInput(e.target.checked)} />支持图片输入（识图，输出仍为文本）</label>}{category === 'text' && <label className="gw-check"><input type="checkbox" checked={audioInput} onChange={(e) => setAudioInput(e.target.checked)} />支持音频输入（听音，输出仍为文本）</label>}{category === 'image' && <label className="gw-check"><input type="checkbox" checked={imageEdit} onChange={(e) => setImageEdit(e.target.checked)} />同时支持图片编辑</label>}</div><p className="gw-capability">声明能力：{options.operations.filter((x) => category !== 'image' || imageEdit || x !== 'image.edit').join('、')}{category === 'text' && imageInput ? ' · 可接收图片（需真实验证）' : ''}{category === 'text' && audioInput ? ' · 可接收音频（需真实验证）' : ''}</p><button className="btn-primary" disabled={busy} onClick={() => void saveModel()}>{editingModelId ? '保存模型' : '添加模型'}</button></section>}
@@ -202,5 +202,5 @@ export function ModelCatalogPanel(): React.JSX.Element | null {
   const toolStatus = x.agentToolCallingValidation?.status === 'verified' ? 'verified' : ['failed', 'unsupported'].includes(x.agentToolCallingValidation?.status ?? '') ? 'failed' : 'pending'
   return <article className="gw-model-card" key={x.id}><input aria-label={`选择 ${x.name}`} type="checkbox" checked={selected.has(x.id)} onChange={() => toggle(x.id)} /><div className="gw-model-card-main"><strong title={x.name}>{x.name}</strong><span className="gw-model-card-meta">{x.modelId} · {categories.find((item) => item.value === categoryOf(x))?.label}{imageInput ? ' · 可接收图片' : ''}{audioInput ? ' · 可接收音频' : ''}<em className={`gw-status gw-status-${status}`}>普通能力：{status === 'verified' ? '已验证' : status === 'failed' ? '验证失败' : '待验证'}</em>{x.capabilities.some((capability) => capability.operation === 'text.generate') && <em className={`gw-status gw-status-${toolStatus}`}>Agent 工具：{toolStatus === 'verified' ? '已验证' : toolStatus === 'failed' ? '验证失败' : '待验证'}</em>}</span></div><div className="gw-model-card-actions"><button className="gw-icon-action" title="验证已声明能力" aria-label={`验证模型 ${x.name}`} disabled={busy} onClick={() => void validateModel(x)}><Icon name="check" size={15} /></button>{x.capabilities.some((capability) => capability.operation === 'text.generate') && <button className="gw-verify-tool-button" aria-label={`验证 Agent 工具调用 ${x.name}`} disabled={busy} onClick={() => void validateAgentToolCalling(x)}>Agent验证</button>}<button className="gw-icon-action" title="编辑" aria-label={`编辑模型 ${x.name}`} disabled={busy} onClick={() => editModel(x)}><Icon name="edit" size={15} /></button><button className="gw-icon-action is-danger" title="删除" aria-label={`删除模型 ${x.name}`} disabled={busy} onClick={() => void deleteModels([x.id])}><Icon name="trash" size={15} /></button></div></article>
 })}{!visibleModels.length && <div className="gw-empty big">{query ? '没有匹配的模型' : '还没有模型。可手动添加，或从 URL 拉取可用模型。'}</div>}</div></section>}</main></div>
-  </section></div>, document.body)
+  </div></ModalShell>)
 }

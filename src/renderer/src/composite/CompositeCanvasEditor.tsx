@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { createShapeId, Tldraw, type Editor, type TLShapeId } from 'tldraw'
 import type { CompositeCapabilitySummary } from '@shared/composite/types'
 import type { CompositeManifest } from '@shared/composite/manifest'
@@ -22,6 +21,7 @@ import { nodeTextField } from '../canvas/node-pointer-policy'
 import { PALETTE_CATEGORY_META, nodesForPaletteCategory } from '../canvas/palette-categories'
 import { allNodeTypes, getNodeType, nodeIconColor } from '../nodes/registry'
 import { Icon } from '../components/Icon'
+import { ModalShell } from '../components/ModalShell'
 import { useGatewayStore } from '../stores/gateway'
 import { useNodePanelStore } from '../stores/nodePanel'
 import { imageGenInitialConfig } from '../stores/imageGenPreference'
@@ -563,24 +563,20 @@ export function CompositeCanvasEditor({
 
   // 侧栏祖先会形成层叠上下文，fixed overlay 若留在原处会被主顶栏盖住头部按钮；
   // 挂到 body 保证全屏编辑始终位于最上层。
-  return createPortal(
-    <div
-      className="composite-canvas-overlay"
-      ref={overlayRef}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="composite-canvas-title"
-      onContextMenu={handleContextMenu}
+  // 2026-11-21 弹窗统一：壳换 ModalShell（取消=立即退出，不做遮罩/Esc 关闭防误退，
+  // 与「取消」按钮同一行为；右上 X 为新增，行为与取消一致）。
+  return (
+    <ModalShell
+      size="xl"
+      title={base.name}
+      bodyClassName="modal-shell-body--flush"
+      onClose={requestClose}
+      closeOnEscape={false}
+      closeOnOverlay={false}
     >
-      <span hidden>{capability.id}</span>
-      <header className="composite-canvas-topbar">
-        <div className="composite-canvas-heading">
-          <h2 id="composite-canvas-title" title={base.name}>
-            {base.name}
-          </h2>
-        </div>
-      </header>
-      <div className="composite-canvas-workspace">
+      <div className="composite-canvas-overlay" ref={overlayRef} onContextMenu={handleContextMenu}>
+        <span hidden>{capability.id}</span>
+        <div className="composite-canvas-workspace">
         <div className="composite-canvas-stage">
           <Tldraw
             shapeUtils={[NodeCardUtil, CarrierArrowUtil, BackdropShapeUtil]}
@@ -786,7 +782,7 @@ export function CompositeCanvasEditor({
           onConfirm={() => void confirmPublish()}
         />
       )}
-    </div>,
-    document.body
+      </div>
+    </ModalShell>
   )
 }

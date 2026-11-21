@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 // 先加载库级基础样式，再加载本编辑器的局部视觉层，保证同权重规则以局部样式收口。
 import './library.css'
 import './library-forms.css'
@@ -11,6 +11,8 @@ import {
 } from '@shared/library/blueprint'
 import { Icon } from '../components/Icon'
 import { AppSelect } from '../components/AppSelect'
+import { ModalShell } from '../components/ModalShell'
+import { modalBtn } from '../components/modal-btn'
 
 const newSlot = (nodeType: LibraryNodeType = 'image'): LibraryNodeSlot => ({
   id: `slot-${crypto.randomUUID()}`,
@@ -45,6 +47,7 @@ export function LibraryCategoryEditor({
   )
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const nameRef = useRef<HTMLInputElement>(null)
   const updateSlot = (id: string, patch: Partial<LibraryNodeSlot>): void =>
     setDraft((current) => ({
       ...current,
@@ -95,184 +98,19 @@ export function LibraryCategoryEditor({
     }
   }
   return (
-    <div className="library-form-mask">
-      <section
-        className="library-form-dialog library-category-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label="资源分类编辑器"
-      >
-        <header className="library-form-header">
-          <h2>{initial ? '编辑分类' : '新建资源分类'}</h2>
+    <ModalShell
+      size="l"
+      title={initial ? '编辑分类' : '新建资源分类'}
+      ariaLabel="资源分类编辑器"
+      onClose={() => !busy && onClose()}
+      closeOnEscape={!busy}
+      closeOnOverlay={!busy}
+      initialFocusRef={nameRef}
+      footer={
+        <>
           <button
             type="button"
-            className="library-icon-button"
-            disabled={busy}
-            aria-label="关闭"
-            onClick={onClose}
-          >
-            <Icon name="close" size={17} />
-          </button>
-        </header>
-        <div className="library-form-scroll">
-          <section className="library-form-group">
-            <header className="library-form-group-head">
-              <span className="library-form-group-index" aria-hidden="true">
-                1
-              </span>
-              <div className="library-form-group-title">
-                <h3>基本信息</h3>
-              </div>
-            </header>
-            <div className="library-form-group-body">
-              <label className="library-form-field">
-                <span>分类名称</span>
-                <input
-                  autoFocus
-                  maxLength={100}
-                  value={draft.name}
-                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                  placeholder="例如：品牌角色卡"
-                />
-              </label>
-              <label className="library-form-field">
-                <span>分类说明</span>
-                <textarea
-                  value={draft.description}
-                  maxLength={2000}
-                  onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-                />
-              </label>
-            </div>
-          </section>
-
-          <section className="library-form-group">
-            <header className="library-form-group-head">
-              <span className="library-form-group-index" aria-hidden="true">
-                2
-              </span>
-              <div className="library-form-group-title">
-                <h3>包含的节点</h3>
-                <p>每项内容有明确的节点类型；开启“允许多项”后，每份内容分别创建节点。</p>
-              </div>
-              <button
-                type="button"
-                className="library-form-group-action"
-                disabled={draft.blueprint.slots.length >= 32}
-                onClick={addSlot}
-              >
-                <Icon name="add" size={13} />
-                添加节点槽位
-              </button>
-            </header>
-            <div className="library-form-group-body">
-              {draft.blueprint.slots.map((slot, index) => (
-                <article className="library-component-edit library-category-slot" key={slot.id}>
-                  <div className="library-component-edit-head">
-                    <strong>节点 {index + 1}</strong>
-                    <div className="library-category-slot-tools">
-                      <button
-                        type="button"
-                        className="library-icon-button library-slot-icon"
-                        title="上移"
-                        aria-label={`上移节点 ${index + 1}`}
-                        disabled={!index}
-                        onClick={() => moveSlotUp(index)}
-                      >
-                        <Icon name="bring-front" size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        className="library-icon-button library-slot-icon library-slot-remove"
-                        title="移除"
-                        aria-label={`移除节点 ${index + 1}`}
-                        onClick={() => removeSlot(slot.id)}
-                      >
-                        <Icon name="trash" size={14} />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="library-form-grid">
-                    <label>
-                      <span>内容名称</span>
-                      <input
-                        value={slot.label}
-                        maxLength={80}
-                        onChange={(e) => updateSlot(slot.id, { label: e.target.value })}
-                        placeholder="例如：正面形象"
-                      />
-                    </label>
-                    <label>
-                      <span>映射到节点</span>
-                      <AppSelect
-                        modal
-                        aria-label="映射到节点"
-                        value={slot.nodeType}
-                        onChange={(e) => {
-                          const type = e.target.value as LibraryNodeType
-                          setDraft((current) => ({
-                            ...current,
-                            coverSlotId:
-                              current.coverSlotId === slot.id && type !== 'image'
-                                ? undefined
-                                : current.coverSlotId,
-                            blueprint: {
-                              ...current.blueprint,
-                              slots: current.blueprint.slots.map((item) =>
-                                item.id === slot.id
-                                  ? {
-                                      ...item,
-                                      nodeType: type,
-                                      contractVersion: LIBRARY_NODE_ADAPTERS[type].contractVersion
-                                    }
-                                  : item
-                              )
-                            }
-                          }))
-                        }}
-                      >
-                        {Object.entries(LIBRARY_NODE_ADAPTERS).map(([type, adapter]) => (
-                          <option key={type} value={type}>
-                            {adapter.label}
-                          </option>
-                        ))}
-                      </AppSelect>
-                    </label>
-                  </div>
-                  <div className="library-slot-options">
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={slot.required}
-                        onChange={(e) => updateSlot(slot.id, { required: e.target.checked })}
-                      />
-                      必填
-                    </label>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={slot.multiple}
-                        onChange={(e) => updateSlot(slot.id, { multiple: e.target.checked })}
-                      />
-                      允许多项
-                    </label>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          {error && (
-            <div className="library-form-error" role="alert">
-              <Icon name="warning" size={14} />
-              <span>{error}</span>
-            </div>
-          )}
-        </div>
-        <footer className="library-form-footer">
-          <button
-            type="button"
-            className="library-form-secondary"
+            className={modalBtn('secondary')}
             disabled={busy}
             onClick={onClose}
           >
@@ -280,14 +118,169 @@ export function LibraryCategoryEditor({
           </button>
           <button
             type="button"
-            className="library-form-primary"
+            className={modalBtn('primary')}
             disabled={busy}
             onClick={() => void save()}
           >
             {busy ? '保存中…' : '保存分类'}
           </button>
-        </footer>
+        </>
+      }
+    >
+      {/* 2026-11-21 弹窗统一：壳换 ModalShell，分组/槽位内容类原样保留。 */}
+      <section className="library-form-group">
+        <header className="library-form-group-head">
+          <span className="library-form-group-index" aria-hidden="true">
+            1
+          </span>
+          <div className="library-form-group-title">
+            <h3>基本信息</h3>
+          </div>
+        </header>
+        <div className="library-form-group-body">
+          <label className="library-form-field">
+            <span>分类名称</span>
+            <input
+              ref={nameRef}
+              maxLength={100}
+              value={draft.name}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              placeholder="例如：品牌角色卡"
+            />
+          </label>
+          <label className="library-form-field">
+            <span>分类说明</span>
+            <textarea
+              value={draft.description}
+              maxLength={2000}
+              onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+            />
+          </label>
+        </div>
       </section>
-    </div>
+
+      <section className="library-form-group">
+        <header className="library-form-group-head">
+          <span className="library-form-group-index" aria-hidden="true">
+            2
+          </span>
+          <div className="library-form-group-title">
+            <h3>包含的节点</h3>
+            <p>每项内容有明确的节点类型；开启“允许多项”后，每份内容分别创建节点。</p>
+          </div>
+          <button
+            type="button"
+            className="library-form-group-action"
+            disabled={draft.blueprint.slots.length >= 32}
+            onClick={addSlot}
+          >
+            <Icon name="add" size={13} />
+            添加节点槽位
+          </button>
+        </header>
+        <div className="library-form-group-body">
+          {draft.blueprint.slots.map((slot, index) => (
+            <article className="library-component-edit library-category-slot" key={slot.id}>
+              <div className="library-component-edit-head">
+                <strong>节点 {index + 1}</strong>
+                <div className="library-category-slot-tools">
+                  <button
+                    type="button"
+                    className="library-icon-button library-slot-icon"
+                    title="上移"
+                    aria-label={`上移节点 ${index + 1}`}
+                    disabled={!index}
+                    onClick={() => moveSlotUp(index)}
+                  >
+                    <Icon name="bring-front" size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="library-icon-button library-slot-icon library-slot-remove"
+                    title="移除"
+                    aria-label={`移除节点 ${index + 1}`}
+                    onClick={() => removeSlot(slot.id)}
+                  >
+                    <Icon name="trash" size={14} />
+                  </button>
+                </div>
+              </div>
+              <div className="library-form-grid">
+                <label>
+                  <span>内容名称</span>
+                  <input
+                    value={slot.label}
+                    maxLength={80}
+                    onChange={(e) => updateSlot(slot.id, { label: e.target.value })}
+                    placeholder="例如：正面形象"
+                  />
+                </label>
+                <label>
+                  <span>映射到节点</span>
+                  <AppSelect
+                    modal
+                    aria-label="映射到节点"
+                    value={slot.nodeType}
+                    onChange={(e) => {
+                      const type = e.target.value as LibraryNodeType
+                      setDraft((current) => ({
+                        ...current,
+                        coverSlotId:
+                          current.coverSlotId === slot.id && type !== 'image'
+                            ? undefined
+                            : current.coverSlotId,
+                        blueprint: {
+                          ...current.blueprint,
+                          slots: current.blueprint.slots.map((item) =>
+                            item.id === slot.id
+                              ? {
+                                  ...item,
+                                  nodeType: type,
+                                  contractVersion: LIBRARY_NODE_ADAPTERS[type].contractVersion
+                                }
+                              : item
+                          )
+                        }
+                      }))
+                    }}
+                  >
+                    {Object.entries(LIBRARY_NODE_ADAPTERS).map(([type, adapter]) => (
+                      <option key={type} value={type}>
+                        {adapter.label}
+                      </option>
+                    ))}
+                  </AppSelect>
+                </label>
+              </div>
+              <div className="library-slot-options">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={slot.required}
+                    onChange={(e) => updateSlot(slot.id, { required: e.target.checked })}
+                  />
+                  必填
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={slot.multiple}
+                    onChange={(e) => updateSlot(slot.id, { multiple: e.target.checked })}
+                  />
+                  允许多项
+                </label>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {error && (
+        <div className="modal-error" role="alert">
+          <Icon name="warning" size={14} />
+          <span>{error}</span>
+        </div>
+      )}
+    </ModalShell>
   )
 }

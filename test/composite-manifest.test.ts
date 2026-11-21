@@ -114,7 +114,7 @@ describe('组合能力 manifest（P1 契约）', () => {
     const noOutput = characterDesign()
     noOutput.outputs = []
     expect(validateCompositeManifestStructure(noOutput)).toEqual(
-      expect.arrayContaining([expect.objectContaining({ message: '至少需要一个公开输出' })])
+      expect.arrayContaining([expect.objectContaining({ message: expect.stringContaining('至少要保留一个「对外输出」') })])
     )
   })
 

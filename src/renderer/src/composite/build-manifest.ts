@@ -135,7 +135,7 @@ export function buildCompositeManifestFromGraph(
       if (!findPort(fromNode, edge.from.portId) || !findPort(toNode, edge.to.portId)) {
         issues.push({
           path: `graph.edges.${edge.id}`,
-          message: '内部连线引用了不存在的端口，发布前需修复'
+          message: '有一根连线连到了不存在的连接点，请把这根连线删掉后再试'
         })
         continue
       }
@@ -149,7 +149,7 @@ export function buildCompositeManifestFromGraph(
       const target = nodeById.get(edge.to.nodeId)
       const port = target ? findPort(target, edge.to.portId) : undefined
       if (!target || !port) {
-        issues.push({ path: `inputs.${edge.id}`, message: '外部输入连线指向不存在的节点端口' })
+        issues.push({ path: `inputs.${edge.id}`, message: '有一根来自画布的输入连线，它的连接点已不存在，请删掉这根连线' })
         continue
       }
       if (!(COMPOSITE_PORT_TYPES as readonly string[]).includes(port.type)) {
@@ -182,7 +182,7 @@ export function buildCompositeManifestFromGraph(
       const source = nodeById.get(edge.from.nodeId)
       const port = source ? findPort(source, edge.from.portId) : undefined
       if (!source || !port) {
-        issues.push({ path: `outputs.${edge.id}`, message: '对外输出连线来自不存在的节点端口' })
+        issues.push({ path: `outputs.${edge.id}`, message: '有一根输出到画布的连线，它的连接点已不存在，请删掉这根连线' })
         continue
       }
       if (!(COMPOSITE_PORT_TYPES as readonly string[]).includes(port.type)) {
@@ -299,7 +299,7 @@ export function buildCompositeManifestFromGraph(
   }
 
   if (outputs.size === 0) {
-    issues.push({ path: 'outputs', message: '组合至少需要一个公开输出' })
+    issues.push({ path: 'outputs', message: '至少要保留一个「对外输出」，否则发布后没法在别的项目里使用' })
   }
 
   const dependencies: CompositeDependency[] = [
@@ -319,7 +319,7 @@ export function buildCompositeManifestFromGraph(
     if (!nested) {
       issues.push({
         path: `graph.nodes.${internalIds.get(node.id)}`,
-        message: '内部组合节点缺少可解析的固定版本 manifest'
+        message: '里面包含的一个节点流还没有锁定版本，请先在节点流面板里保存好它，再发布'
       })
       continue
     }

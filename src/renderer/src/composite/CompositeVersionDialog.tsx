@@ -1,13 +1,14 @@
 /* eslint-disable react-hooks/set-state-in-effect -- 弹窗异步加载草稿后填充表单 */
-// 节点流「编辑名称」弹窗：与创建时同一套 library-form 样式。
-// 只编辑名称；保存 = 写入草稿并同步名称展示（不产生新版本）。
+// 节点流「编辑名称」弹窗。2026-11-21 弹窗统一：壳换 ModalShell（保留
+// workflow-save-dialog 钩子类与 aria-label 供验收脚本定位），只编辑名称；
+// 保存 = 写入草稿并同步名称展示（不产生新版本）。
 // 版本只在「编辑节点」里通过「另存为新版本」产生（用户裁决 2026-11-11）。
-// 公开输入/输出按内部节点规范自动推导，不在此手动挑选。
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CompositeCapabilitySummary } from '@shared/composite/types'
 import type { CompositeManifest } from '@shared/composite/manifest'
-import { Icon } from '../components/Icon'
 import { toast } from '../stores/toast'
+import { ModalShell } from '../components/ModalShell'
+import { modalBtn } from '../components/modal-btn'
 import './composite-editor.css'
 import '../library/library.css'
 
@@ -28,6 +29,7 @@ export function CompositeVersionDialog({
   const [revision, setRevision] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const nameRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const latest = capability.latestVersion
@@ -79,18 +81,39 @@ export function CompositeVersionDialog({
   }
 
   return (
-    <div
-      className="library-form-mask"
-      onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}
+    <ModalShell
+      size="s"
+      title="编辑名称"
+      className="workflow-save-dialog"
+      ariaLabel="编辑名称"
+      onClose={() => !busy && onClose()}
+      closeOnEscape={!busy}
+      closeOnOverlay={!busy}
+      initialFocusRef={nameRef}
+      footer={
+        <>
+          <button
+            type="button"
+            className={modalBtn('secondary')}
+            disabled={busy}
+            onClick={onClose}
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            className={modalBtn('primary')}
+            disabled={busy || !manifest}
+            onClick={() => void save()}
+          >
+            {busy ? '保存中…' : '保存'}
+          </button>
+        </>
+      }
     >
-      <section
-        className="library-form-dialog workflow-save-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label="编辑名称"
+      <div
         onKeyDown={(event) => {
           event.stopPropagation()
-          if (event.key === 'Escape' && !busy) onClose()
           if (
             event.key === 'Enter' &&
             !busy &&
@@ -103,65 +126,28 @@ export function CompositeVersionDialog({
           }
         }}
       >
-        <header className="library-form-header">
-          <div>
-            <h2>编辑名称</h2>
+        {!manifest && !error && <p className="composite-settings-hint">正在读取节点流内容…</p>}
+        {manifest && (
+          <label className="library-form-field">
+            <span>名称</span>
+            <input
+              ref={nameRef}
+              maxLength={100}
+              value={name}
+              onChange={(event) => {
+                setName(event.target.value)
+                setError('')
+              }}
+              placeholder="例如：角色设定到分镜"
+            />
+          </label>
+        )}
+        {error && (
+          <div className="modal-error" role="alert" style={{ marginTop: 12 }}>
+            {error}
           </div>
-          <button
-            type="button"
-            className="library-form-close"
-            aria-label="关闭"
-            disabled={busy}
-            onClick={onClose}
-          >
-            <Icon name="close" size={17} />
-          </button>
-        </header>
-        <div className="library-form-scroll">
-          {!manifest && !error && <p className="composite-settings-hint">正在读取节点流内容…</p>}
-          {manifest && (
-            <>
-              <label className="library-form-field">
-                <span>名称</span>
-                <input
-                  autoFocus
-                  maxLength={100}
-                  value={name}
-                  onChange={(event) => {
-                    setName(event.target.value)
-                    setError('')
-                  }}
-                  placeholder="例如：角色设定到分镜"
-                />
-              </label>
-            </>
-          )}
-          {error && (
-            <div className="library-form-error" role="alert">
-              {error}
-            </div>
-          )}
-        </div>
-        <footer className="library-form-footer">
-          <span />
-          <button
-            type="button"
-            className="library-form-secondary"
-            disabled={busy}
-            onClick={onClose}
-          >
-            取消
-          </button>
-          <button
-            type="button"
-            className="library-form-primary"
-            disabled={busy || !manifest}
-            onClick={() => void save()}
-          >
-            {busy ? '保存中…' : '保存'}
-          </button>
-        </footer>
-      </section>
-    </div>
+        )}
+      </div>
+    </ModalShell>
   )
 }

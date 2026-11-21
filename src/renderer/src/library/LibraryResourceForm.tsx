@@ -1,5 +1,5 @@
 import { AppSelect } from '../components/AppSelect'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 // 先加载库级基础样式，再加载本表单的局部视觉层，保证同权重规则以局部样式收口。
 import './library.css'
 import './library-forms.css'
@@ -12,6 +12,8 @@ import type {
   PublishLibraryRevisionInput
 } from '@shared/library/types'
 import { Icon } from '../components/Icon'
+import { ModalShell } from '../components/ModalShell'
+import { modalBtn } from '../components/modal-btn'
 import { mediaUrl } from '../nodes/registry'
 import { libraryValueTypeLabel } from './value-type-labels'
 
@@ -194,6 +196,7 @@ export function LibraryResourceForm({
   const selectedCategory = availableCategories.find((item) => categoryKey(item) === selectedCategoryKey)
   const formPreset = detail?.formPreset ?? 'custom'
   const [title, setTitle] = useState(detail?.selectedTitle ?? '')
+  const titleRef = useRef<HTMLInputElement>(null)
   const [description, setDescription] = useState(detail?.selectedDescription ?? '')
   const [changeNote, setChangeNote] = useState('')
   const [components, setComponents] = useState<ComponentDraft[]>(() => detail ? initialDrafts(detail) : [])
@@ -413,20 +416,33 @@ export function LibraryResourceForm({
   )
 
   return (
-    <div className="library-form-mask" onMouseDown={(event) => event.target === event.currentTarget && !busy && onCancel()}>
-      <section className="library-form-dialog library-resource-form-dialog" role="dialog" aria-modal="true" aria-label={detail ? '编辑资源' : '新建资源'}>
-        <header className="library-form-header">
-          <h2>{detail ? '编辑资源' : '新建资源'}</h2>
-          <button className="library-icon-button" aria-label="关闭" disabled={busy} onClick={onCancel}><Icon name="close" size={17} /></button>
-        </header>
-        <div className="library-form-scroll">
-          <label className="library-form-field"><span>资源分类</span>
-            <AppSelect modal value={selectedCategoryKey} onChange={(event) => handleCategoryChange(event.currentTarget.value)} aria-label="资源分类">
-              <option value="">{detail ? '未分类自由组合' : '不选分类，保存为自由组合'}</option>
-              {availableCategories.map((category) => <option key={categoryKey(category)} value={categoryKey(category)}>{category.name}</option>)}
-            </AppSelect>
-          </label>
-          <label className="library-form-field"><span>资源名称</span><input autoFocus maxLength={180} value={title} onChange={(event) => setTitle(event.currentTarget.value)} placeholder="例如：主角设定" /></label>
+    <ModalShell
+      size="l"
+      title={detail ? '编辑资源' : '新建资源'}
+      ariaLabel={detail ? '编辑资源' : '新建资源'}
+      onClose={() => !busy && onCancel()}
+      closeOnEscape={!busy}
+      closeOnOverlay={!busy}
+      initialFocusRef={titleRef}
+      footer={
+        <>
+          <button type="button" className={modalBtn('secondary')} disabled={busy} onClick={onCancel}>
+            取消
+          </button>
+          <button type="button" className={modalBtn('primary')} disabled={busy} onClick={() => void submit()}>
+            {busy ? '保存中…' : detail ? '保存为新版本' : '保存资源'}
+          </button>
+        </>
+      }
+    >
+      {/* 2026-11-21 弹窗统一：壳换 ModalShell，资源内容编辑区结构原样保留。 */}
+      <label className="library-form-field"><span>资源分类</span>
+        <AppSelect modal value={selectedCategoryKey} onChange={(event) => handleCategoryChange(event.currentTarget.value)} aria-label="资源分类">
+          <option value="">{detail ? '未分类自由组合' : '不选分类，保存为自由组合'}</option>
+          {availableCategories.map((category) => <option key={categoryKey(category)} value={categoryKey(category)}>{category.name}</option>)}
+        </AppSelect>
+      </label>
+      <label className="library-form-field"><span>资源名称</span><input ref={titleRef} maxLength={180} value={title} onChange={(event) => setTitle(event.currentTarget.value)} placeholder="例如：主角设定" /></label>
           <label className="library-form-field"><span>说明</span><textarea value={description} maxLength={20000} onChange={(event) => setDescription(event.currentTarget.value)} placeholder="记录用途、来源或使用建议" /></label>
 
           <div className="library-form-components-head">
@@ -487,14 +503,8 @@ export function LibraryResourceForm({
             </div>
           )}
 
-          {detail && <label className="library-form-field"><span>本次修改说明</span><input maxLength={1000} value={changeNote} onChange={(event) => setChangeNote(event.currentTarget.value)} placeholder="例如：补充侧面参考图并调整人物描述" /></label>}
-          {error && <div className="library-form-error" role="alert"><Icon name="warning" size={14} /><span>{error}</span></div>}
-        </div>
-        <footer className="library-form-footer">
-          <button type="button" className="library-form-secondary" disabled={busy} onClick={onCancel}>取消</button>
-          <button type="button" className="library-form-primary" disabled={busy} onClick={() => void submit()}>{busy ? '保存中…' : detail ? '保存为新版本' : '保存资源'}</button>
-        </footer>
-      </section>
-    </div>
+      {detail && <label className="library-form-field"><span>本次修改说明</span><input maxLength={1000} value={changeNote} onChange={(event) => setChangeNote(event.currentTarget.value)} placeholder="例如：补充侧面参考图并调整人物描述" /></label>}
+      {error && <div className="modal-error" role="alert"><Icon name="warning" size={14} /><span>{error}</span></div>}
+    </ModalShell>
   )
 }

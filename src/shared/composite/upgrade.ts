@@ -157,7 +157,7 @@ export function planCompositeUpgrade(
 
     if (!nextValue) {
       if (connections.length > 0) {
-        impact.breaking.push({ portId, reason: '已连接端口在新版本中不存在', ...location })
+        impact.breaking.push({ portId, reason: '有一根连着的连线，它的连接点在新版本里没有了，升级后这根连线会被移除', ...location })
       }
       continue
     }

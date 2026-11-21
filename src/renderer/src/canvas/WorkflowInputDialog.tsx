@@ -1,40 +1,44 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+// 运行前补充单个缺失输入。2026-11-21 弹窗统一：原生 <dialog> 并入 ModalShell，
+// 关闭通道（Esc/遮罩/右上 X/取消按钮）统一走 request.finish(null)。
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { WorkflowInput } from '@shared/agent-access/run-ops'
 import { usePendingInput, type Pending } from '../stores/workflowInput'
 import { PortInputField } from './PortInputField'
+import { ModalShell } from '../components/ModalShell'
+import { modalBtn } from '../components/modal-btn'
 
 type InputValue = WorkflowInput['value']
 
 function InputForm({ request }: { request: Pending }): React.JSX.Element {
-  const dialog = useRef<HTMLDialogElement>(null)
   const [value, setValue] = useState<InputValue | null>(null)
-
-  useEffect(() => {
-    dialog.current?.showModal()
-  }, [])
 
   const submit = (event: FormEvent): void => {
     event.preventDefault()
     if (value) request.finish(value)
   }
 
+  // 与旧原生 dialog 一致：弹窗内的按键不向外冒泡，避免触发画布快捷键。
+  const swallowKeys = (event: KeyboardEvent): void => event.stopPropagation()
+
   return (
-    <dialog
-      className="workflow-input-dialog"
-      ref={dialog}
-      aria-labelledby="workflow-input-title"
-      onCancel={(event) => {
-        event.preventDefault()
-        request.finish(null)
-      }}
-      onKeyDown={(event) => event.stopPropagation()}
+    <ModalShell
+      size="m"
+      title="补充运行输入"
+      onClose={() => request.finish(null)}
+      footer={
+        <>
+          <button type="button" className={modalBtn('secondary')} onClick={() => request.finish(null)}>
+            取消运行
+          </button>
+          <button type="submit" form="workflow-input-form" className={modalBtn('primary')} disabled={!value}>
+            继续运行
+          </button>
+        </>
+      }
     >
-      <form className="confirm-dialog" onSubmit={submit}>
-        <div id="workflow-input-title" className="confirm-title">
-          补充运行输入
-        </div>
-        <label className="workflow-input-field">
+      <form id="workflow-input-form" onSubmit={submit} onKeyDown={swallowKeys}>
+        <label className="workflow-input-field modal-field">
           <span>
             {request.title} · {request.port.name}
           </span>
@@ -45,16 +49,8 @@ function InputForm({ request }: { request: Pending }): React.JSX.Element {
             onChange={setValue}
           />
         </label>
-        <div className="confirm-actions">
-          <button type="button" className="btn-ghost" onClick={() => request.finish(null)}>
-            取消运行
-          </button>
-          <button type="submit" className="btn-primary" disabled={!value}>
-            继续运行
-          </button>
-        </div>
       </form>
-    </dialog>
+    </ModalShell>
   )
 }
 

@@ -6,8 +6,9 @@ import type { CompositeVersionRecord } from '@shared/composite/types'
 import { readCompositeInstanceManifest } from '@shared/composite/outputs'
 import { markUndoPoint } from '../canvas/history'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
-import { Icon } from '../components/Icon'
 import { toast } from '../stores/toast'
+import { ModalShell } from '../components/ModalShell'
+import { modalBtn } from '../components/modal-btn'
 
 interface Props {
   editor: Editor
@@ -127,31 +128,21 @@ export function CompositeUpgradeDialog({
 
   if (!shape || !current) {
     return (
-      <div
-        className="composite-modal-mask"
-        onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      <ModalShell
+        size="s"
+        title="升级节点流"
+        ariaLabel="升级节点流"
+        onClose={onClose}
+        footer={
+          <button type="button" className={modalBtn('secondary')} onClick={onClose}>
+            关闭
+          </button>
+        }
       >
-        <section
-          className="composite-modal composite-close-confirm"
-          role="dialog"
-          aria-modal="true"
-          aria-label="升级节点流实例"
-        >
-          <header className="composite-modal-header">
-            <h3>升级节点流实例</h3>
-          </header>
-          <div className="composite-modal-scroll">
-            <p className="composite-close-confirm-text">
-              实例的固定版本快照无法读取，请从节点流面板重新插入。
-            </p>
-          </div>
-          <footer className="composite-modal-footer">
-            <button type="button" className="btn-ghost small" onClick={onClose}>
-              关闭
-            </button>
-          </footer>
-        </section>
-      </div>
+        <p className="composite-close-confirm-text">
+          这个节点流的版本信息无法读取，请从右侧「节点流」面板重新插入。
+        </p>
+      </ModalShell>
     )
   }
 
@@ -172,125 +163,108 @@ export function CompositeUpgradeDialog({
       },
       meta: { ...existingMeta, compositeManifest: next }
     } as never)
-    toast(`已升级到 v${versionLabel(next.version)}（兼容连线已保留）`)
+    toast(`已升级到 v${versionLabel(next.version)}，原有连线全部保留`)
     onClose()
   }
 
   return (
-    <div
-      className="composite-modal-mask"
-      onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}
-    >
-      <section
-        className="composite-modal composite-publish-preview"
-        role="dialog"
-        aria-modal="true"
-        aria-label="升级节点流实例"
-        onKeyDown={(event) => {
-          event.stopPropagation()
-          if (event.key === 'Escape' && !busy) onClose()
-        }}
-      >
-        <header className="composite-modal-header">
-          <h3>升级节点流实例</h3>
-          <button
-            type="button"
-            className="composite-modal-close"
-            aria-label="关闭升级对话框"
-            disabled={busy}
-            onClick={onClose}
-          >
-            <Icon name="close" size={16} />
-          </button>
-        </header>
-        <div className="composite-modal-scroll">
-          <div className="composite-publish-versions">
-            <span className="composite-publish-version-badge">
-              当前 v{versionLabel(current.version)}
-            </span>
-            <span className="composite-publish-version-arrow" aria-hidden="true">
-              →
-            </span>
-            <label className="composite-upgrade-target">
-              <span>目标版本</span>
-              <select
-                aria-label="目标版本"
-                value={targetVersion}
-                disabled={busy}
-                onChange={(event) => setTargetVersion(event.target.value)}
-              >
-                <option value="">选择版本</option>
-                {versions.map((record) => (
-                  <option key={record.version} value={record.version}>
-                    v{versionLabel(record.version)}
-                    {record.version === current.version ? '（当前）' : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <span className="composite-publish-name" title={current.name}>
-              {current.name}
-            </span>
-          </div>
-          {error && (
-            <p className="composite-modal-error" role="alert">
-              {error}
-            </p>
-          )}
-          {preview && (
-            <>
-              <section className="composite-modal-section">
-                <h4>接口差异（{diffSummary.length} 项）</h4>
-                {diffSummary.length === 0 ? (
-                  <p className="composite-modal-empty">接口无变化。</p>
-                ) : (
-                  <ul className="composite-dep-list">
-                    {diffSummary.map((line) => (
-                      <li key={line}>{line}</li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-              <section className="composite-modal-section">
-                <h4>预检结果</h4>
-                {preview.ok ? (
-                  <p className="composite-modal-pass">预检通过，现有连线兼容，可升级。</p>
-                ) : (
-                  <ul className="composite-issue-list is-blocking">
-                    {(preview.impact?.breaking ?? []).map((item, index) => (
-                      <li key={`${item.portId}-${index}`}>
-                        <code>{item.portId}</code> {item.reason}
-                        {item.nodeId
-                          ? `（节点 ${item.nodeId}${item.edgeId ? ` / 边 ${item.edgeId}` : ''}）`
-                          : ''}
-                      </li>
-                    ))}
-                    {(preview.issues ?? []).map((issue, index) => (
-                      <li key={`${issue.code}-${index}`}>
-                        <code>[{issue.code}]</code> {issue.path}: {issue.message}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            </>
-          )}
-        </div>
-        <footer className="composite-modal-footer">
-          <button type="button" className="btn-ghost small" disabled={busy} onClick={onClose}>
+    <ModalShell
+      size="m"
+      title="升级节点流"
+      className="composite-publish-preview"
+      ariaLabel="升级节点流"
+      onClose={() => !busy && onClose()}
+      closeOnEscape={!busy}
+      closeOnOverlay={!busy}
+      footer={
+        <>
+          <button type="button" className={modalBtn('secondary')} disabled={busy} onClick={onClose}>
             取消
           </button>
           <button
             type="button"
-            className="run-btn"
+            className={modalBtn('primary')}
             disabled={busy || !preview?.ok || !targetRecord}
-            title={preview?.ok ? '升级实例并保留兼容连线' : '预检未通过，原实例保持不变'}
+            title={preview?.ok ? '升级后现有连线会保留' : '有问题需要先处理，暂时不能升级'}
             onClick={apply}
           >
-            {busy ? '预检中…' : '确认升级'}
+            {busy ? '正在检查…' : '确认升级'}
           </button>
-        </footer>
-      </section>
-    </div>
+        </>
+      }
+    >
+      {/* 2026-11-21 弹窗统一：壳换 ModalShell（composite-publish-preview 为验收钩子类），
+          版本选择/差异/检查内容类无作用域原样保留。 */}
+      <div
+        onKeyDown={(event) => {
+          event.stopPropagation()
+        }}
+      >
+        <div className="composite-publish-versions">
+          <span className="composite-publish-version-badge">
+            当前 v{versionLabel(current.version)}
+          </span>
+          <span className="composite-publish-version-arrow" aria-hidden="true">
+            →
+          </span>
+          <label className="composite-upgrade-target">
+            <span>目标版本</span>
+            <select
+              aria-label="目标版本"
+              value={targetVersion}
+              disabled={busy}
+              onChange={(event) => setTargetVersion(event.target.value)}
+            >
+              <option value="">选择版本</option>
+              {versions.map((record) => (
+                <option key={record.version} value={record.version}>
+                  v{versionLabel(record.version)}
+                  {record.version === current.version ? '（当前）' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="composite-publish-name" title={current.name}>
+            {current.name}
+          </span>
+        </div>
+        {error && (
+          <p className="composite-modal-error" role="alert">
+            {error}
+          </p>
+        )}
+        {preview && (
+          <>
+            <section className="composite-modal-section">
+              <h4>接口差异（{diffSummary.length} 项）</h4>
+              {diffSummary.length === 0 ? (
+                <p className="composite-modal-empty">接口无变化。</p>
+              ) : (
+                <ul className="composite-dep-list">
+                  {diffSummary.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              )}
+            </section>
+            <section className="composite-modal-section">
+              <h4>检查结果</h4>
+              {preview.ok ? (
+                <p className="composite-modal-pass">检查通过，可以直接升级，现有连线都会保留。</p>
+              ) : (
+                <ul className="composite-issue-list is-blocking">
+                  {(preview.impact?.breaking ?? []).map((item, index) => (
+                    <li key={`${item.portId}-${index}`}>{item.reason}</li>
+                  ))}
+                  {(preview.issues ?? []).map((issue, index) => (
+                    <li key={`${issue.code}-${index}`}>{issue.message}</li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </>
+        )}
+      </div>
+    </ModalShell>
   )
 }

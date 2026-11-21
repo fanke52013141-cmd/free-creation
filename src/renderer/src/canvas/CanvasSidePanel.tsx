@@ -155,19 +155,19 @@ function WorkflowPanel({
       if (projectInstances.length > 0) {
         const projects = [...new Set(projectInstances.map((instance) => instance.projectName))]
         parts.push(
-          `${projectInstances.length} 个画布实例（${projects.slice(0, 3).join('、')}${projects.length > 3 ? ' 等' : ''}）`
+          `${projectInstances.length} 个项目正在用它（${projects.slice(0, 3).join('、')}${projects.length > 3 ? ' 等' : ''}）`
         )
       }
       if (nestedVersions.length > 0) {
-        parts.push(`${nestedVersions.length} 个其他节点流发布版本的嵌套引用`)
+        parts.push(`${nestedVersions.length} 个其他节点流还在引用它`)
       }
-      toast(`无法删除「${capability.name}」：仍被 ${parts.join('、')} 使用。请先移除引用。`)
+      toast(`无法删除「${capability.name}」：它还在被 ${parts.join('、')} 使用。请先在画布里删掉用到它的节点，再回来删除。`)
       return false
     }
     if (
       !(await useConfirmStore.getState().confirm({
         title: `删除节点流「${capability.name}」`,
-        message: '将物理删除全部发布版本与草稿，不可恢复。当前没有画布实例或嵌套引用。',
+        message: '它的全部历史版本和草稿都会被删除，无法恢复。',
         confirmText: '删除',
         danger: true
       }))

@@ -1,20 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+// 运行前按节点分组补充全部缺失输入。2026-11-21 弹窗统一：原生 <dialog> 并入
+// ModalShell；关闭通道（Esc/遮罩/右上 X/取消按钮）统一走 request.finish(null)。
+import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { WorkflowInput } from '@shared/agent-access/run-ops'
 import type { WorkflowInputGap } from '../engine/workflow-inputs'
 import { usePendingInputs, type PendingInputs } from '../stores/workflowInput'
 import { PortInputField } from './PortInputField'
+import { ModalShell } from '../components/ModalShell'
+import { modalBtn } from '../components/modal-btn'
 
 type InputValue = WorkflowInput['value']
 const keyOf = (nodeId: string, portId: string): string => `${nodeId}:${portId}`
 
 function InputsForm({ request }: { request: PendingInputs }): React.JSX.Element {
-  const dialog = useRef<HTMLDialogElement>(null)
   const [values, setValues] = useState<Record<string, InputValue | null>>({})
-
-  useEffect(() => {
-    dialog.current?.showModal()
-  }, [])
 
   // 按节点分组，保持缺口顺序。
   const groups = useMemo(() => {
@@ -42,27 +41,33 @@ function InputsForm({ request }: { request: PendingInputs }): React.JSX.Element 
     request.finish(inputs)
   }
 
+  // 与旧原生 dialog 一致：弹窗内的按键不向外冒泡，避免触发画布快捷键。
+  const swallowKeys = (event: KeyboardEvent): void => event.stopPropagation()
+
   return (
-    <dialog
-      className="workflow-input-dialog workflow-inputs-dialog"
-      ref={dialog}
-      aria-labelledby="workflow-inputs-title"
-      onCancel={(event) => {
-        event.preventDefault()
-        request.finish(null)
-      }}
-      onKeyDown={(event) => event.stopPropagation()}
+    <ModalShell
+      size="m"
+      title="补充运行输入"
+      onClose={() => request.finish(null)}
+      footer={
+        <>
+          <button type="button" className={modalBtn('secondary')} onClick={() => request.finish(null)}>
+            取消运行
+          </button>
+          <button type="submit" form="workflow-inputs-form" className={modalBtn('primary')} disabled={!canSubmit}>
+            开始运行
+          </button>
+        </>
+      }
     >
       <form
-        className="confirm-dialog"
+        id="workflow-inputs-form"
         onSubmit={(event) => {
           event.preventDefault()
           submit()
         }}
+        onKeyDown={swallowKeys}
       >
-        <div id="workflow-inputs-title" className="confirm-title">
-          补充运行输入
-        </div>
         <p className="workflow-inputs-hint">
           填写以下必备输入后开始运行；标注「可选」的项可留空跳过。
         </p>
@@ -97,16 +102,8 @@ function InputsForm({ request }: { request: PendingInputs }): React.JSX.Element 
             还需填写：{missingRequired.map((gap) => `${gap.title} · ${gap.port.name}`).join('、')}
           </div>
         )}
-        <div className="confirm-actions">
-          <button type="button" className="btn-ghost" onClick={() => request.finish(null)}>
-            取消运行
-          </button>
-          <button type="submit" className="btn-primary" disabled={!canSubmit}>
-            开始运行
-          </button>
-        </div>
       </form>
-    </dialog>
+    </ModalShell>
   )
 }
 

@@ -183,9 +183,9 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
           <NodePrimaryButton
             onClick={async () => {
               const confirmed = await useConfirmStore.getState().confirm({
-                title: '重置状态机任务',
+                title: '重置任务进度',
                 message:
-                  '将清除该节点的状态机实例与待应用事件，回到初始阶段。已产出的下游输出不受影响。',
+                  '会清空这个任务当前的执行进度，从头开始。已经生成过的结果不会丢失。',
                 confirmText: '重置',
                 danger: true
               })

@@ -1224,8 +1224,8 @@ export function CanvasEditor({
             // 复用 GUI 自己的确认弹窗；外部没有伪造这一步的通道。
             if (request.action === 'confirm-sensitive') {
               const allowed = await useConfirmStore.getState().confirm({
-                title: (request.confirmTitle ?? '外部敏感操作').slice(0, 120),
-                message: (request.confirmMessage ?? '外部 Agent 请求执行一个敏感操作。').slice(
+                title: (request.confirmTitle ?? '外部 Agent 请求敏感操作').slice(0, 120),
+                message: (request.confirmMessage ?? '外部 Agent 想执行一个有风险的敏感操作，请看完说明后决定是否允许。').slice(
                   0,
                   1000
                 ),
@@ -1253,7 +1253,7 @@ export function CanvasEditor({
               const allowed = isDirector
                 ? await useConfirmStore.getState().confirm({
                     title: '外部发布请求：导演台',
-                    message: `外部 Agent 请求发布这个「3D 预演台」的${modeLabel}。只有你点「允许发布」才会用当前工程渲染，并把结果写成该节点的正式发布记录（可被下游节点使用）。`,
+                    message: `外部 Agent 想渲染这个「3D 预演台」，生成${modeLabel}并保存为这个节点的正式结果。只有你点「允许发布」才会开始，之后后续节点才能使用它。`,
                     confirmText: '允许发布',
                     cancelText: '拒绝'
                   })
