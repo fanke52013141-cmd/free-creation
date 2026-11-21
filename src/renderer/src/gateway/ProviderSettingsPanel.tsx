@@ -586,6 +586,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
       size="l"
       title="模型供应商"
       ariaLabel="模型供应商"
+      className="gw-provider-shell"
       bodyClassName="modal-shell-body--flush"
       onClose={close}
       headerActions={
@@ -613,16 +614,18 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                     {s.label}
                   </button>
                 ))}
-                <button
-                  className="gw-add"
-                  onClick={() => {
-                    setPicking(false)
-                    setDraft(null)
-                    setTestMsg('')
-                  }}
-                >
-                  返回
-                </button>
+                <div className="gw-spec-back-row">
+                  <button
+                    className="gw-spec-back"
+                    onClick={() => {
+                      setPicking(false)
+                      setDraft(null)
+                      setTestMsg('')
+                    }}
+                  >
+                    返回
+                  </button>
+                </div>
               </div>
             ) : !selecting ? (
               <div className="gw-side-toolbar gw-side-actions">

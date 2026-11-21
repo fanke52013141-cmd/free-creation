@@ -9811,6 +9811,7 @@ select:focus-visible {
   min-height: 0;
 }
 
+/* 2026-11-21 用户反馈：供应商面板高度固定（全部展开高度为上限），内容超出侧栏滚动 */
 .gw-side {
   width: 220px;
   border-right: 1px solid var(--line);
@@ -9818,7 +9819,8 @@ select:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  overflow: hidden;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* The create action remains available while a long provider catalog scrolls. */
@@ -9867,6 +9869,32 @@ select:focus-visible {
   padding-top: 8px;
   border-top: 1px solid var(--line);
 }
+
+/* 供应商面板固定为「全部展开」高度：型号列表再长也只在此高度内滚动 */
+.modal-shell.gw-provider-shell {
+  height: min(640px, calc(100vh - 64px));
+}
+
+/* 型号选择态的「返回」：与导出/导入配置同款分隔线（2026-11-21 用户反馈）。
+   分隔线画在容器 div 上——产品规范按钮永不带边框（ui-surfaces button{border:0!important}）。 */
+.gw-spec-picker .gw-spec-back-row {
+  align-self: stretch;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.gw-spec-picker .gw-spec-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 2px 10px;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.gw-spec-picker .gw-spec-back:hover { color: var(--txt); }
 
 /* 2026-11-09 用户反馈：窄栏里"导出接收凭证"折成两行很难看。
    按钮按内容宽度排列、内部永不折行；按钮数量变化时也不会被拉成一整行。 */
