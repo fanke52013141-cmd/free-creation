@@ -75,6 +75,13 @@ export interface ImageCapabilities {
   supportsTransparentBackground: boolean
   /** 文档化的提示词字符上限；未文档化时留空，不做臆测性拦截。 */
   maxPromptChars?: number
+  /**
+   * 同步生图（OpenAI Images 驱动）等待完整响应的上限，毫秒。
+   * 未声明时沿用网关默认 4 分钟；中转站兼容驱动放宽到 10 分钟——
+   * GPT Image 级模型经中转排队常见 5-8 分钟，4 分钟硬顶会中止供应商仍在
+   * 生成（可能已计费）的请求，导致「等待超过 4 分钟」假失败。
+   */
+  syncWaitTimeoutMs?: number
   driver: ImageGatewayDriver
   referenceMode: ImageReferenceMode
 }
@@ -217,6 +224,9 @@ const SAFE_OPENAI_COMPAT_CAPABILITIES: ImageCapabilities = {
   resolutions: [],
   supportsQuality: false,
   supportsTransparentBackground: false,
+  // 中转站慢模型（GPT Image 2.6 等）经排队常见 5-8 分钟，放宽同步等待上限，
+  // 避免 4 分钟硬顶中止供应商仍在生成（可能已计费）的请求。
+  syncWaitTimeoutMs: 10 * 60_000,
   driver: 'openai-images',
   referenceMode: 'binary'
 }

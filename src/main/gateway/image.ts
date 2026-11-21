@@ -138,11 +138,19 @@ async function generateWithOpenAiImages(
   return generateImageWithReference(
     input,
     referenceImages.map((m) => m.buf),
-    Object.keys(providerOptions).length > 0 ? providerOptions : undefined
+    Object.keys(providerOptions).length > 0 ? providerOptions : undefined,
+    undefined,
+    capabilities
   )
 }
 
 const OPENAI_IMAGES_TIMEOUT_MS = 4 * 60_000
+
+/** 同步生图等待上限：能力表可按供应商放宽（中转站 10 分钟），缺省 4 分钟。 */
+function syncWaitTimeoutMs(capabilities?: ImageCapabilities): number {
+  const declared = capabilities?.syncWaitTimeoutMs
+  return typeof declared === 'number' && declared > 0 ? declared : OPENAI_IMAGES_TIMEOUT_MS
+}
 
 function imageResponseInterrupted(error: unknown): boolean {
   let cause = error
@@ -158,14 +166,16 @@ async function generateImageWithReference(
   input: Pick<ImageGenerateInput, 'projectId' | 'providerId' | 'modelId' | 'prompt' | 'size'>,
   referenceImages: readonly Buffer[] = [],
   providerOptions?: Record<string, string | number | boolean>,
-  maskImage?: Buffer
+  maskImage?: Buffer,
+  capabilities?: ImageCapabilities
 ): Promise<MediaAsset> {
   const prompt = input.prompt.trim()
   // P 图的存量配置里 size 可能存的是比例串（旧版把画幅镜像进 size），同步接口只接受像素尺寸。
   const pixelSize = /^\d+x\d+$/.test(input.size ?? '') ? input.size : undefined
   const model = await createImageModel(input.providerId, input.modelId)
+  const waitTimeoutMs = syncWaitTimeoutMs(capabilities)
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), OPENAI_IMAGES_TIMEOUT_MS)
+  const timeout = setTimeout(() => controller.abort(), waitTimeoutMs)
   let images: Awaited<ReturnType<typeof generateImage>>['images']
   try {
     const result = await generateImage({
@@ -185,7 +195,10 @@ async function generateImageWithReference(
     images = result.images
   } catch (error) {
     if (controller.signal.aborted) {
-      throw new GatewayError('TIMEOUT', '生图等待超过 4 分钟，未收到完整图片响应。')
+      throw new GatewayError(
+        'TIMEOUT',
+        `生图等待超过 ${Math.round(waitTimeoutMs / 60_000)} 分钟，未收到完整图片响应。`
+      )
     }
     if (imageResponseInterrupted(error)) {
       const status = (error as { statusCode?: number }).statusCode
@@ -861,7 +874,8 @@ export async function generateImageEditToAsset(
       input,
       referenceImages,
       Object.keys(providerOptions).length > 0 ? providerOptions : undefined,
-      maskImage
+      maskImage,
+      capabilities
     )
     emitGatewayEvent('model.request.completed', '图片修改请求完成', diagnostics, {
       status: 'success',

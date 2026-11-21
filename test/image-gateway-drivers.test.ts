@@ -400,7 +400,7 @@ describe('image gateway drivers', () => {
     })
 
 
-    it('OpenAI 兼容请求等待四分钟后中止，SDK 不重复提交', async () => {
+    it('中转站兼容请求按能力表等待 10 分钟后中止，SDK 不重复提交', async () => {
       requireProviderMock.mockReturnValue(makeProvider('relay'))
       generateImageMock.mockImplementationOnce(({ abortSignal }) =>
         new Promise((_resolve, reject) => {
@@ -408,12 +408,20 @@ describe('image gateway drivers', () => {
         })
       )
       const request = generateImageToAsset(makeInput({ modelId: 'gpt-image-2.6' }))
-      const failure = expect(request).rejects.toMatchObject({
-        code: 'TIMEOUT',
-        message: expect.stringContaining('未收到完整图片响应')
+      let rejection: unknown = null
+      request.catch((error) => {
+        rejection = error
       })
+      // 4 分钟（旧硬顶）时不得中止：中转站慢模型（GPT Image 2.6）经常超 4 分钟仍在生成。
       await vi.advanceTimersByTimeAsync(240_000)
-      await failure
+      expect(rejection).toBeNull()
+      expect(generateImageMock).toHaveBeenCalledTimes(1)
+      // 能力表放宽到 10 分钟，到点才中止。
+      await vi.advanceTimersByTimeAsync(360_000)
+      expect(rejection).toMatchObject({
+        code: 'TIMEOUT',
+        message: expect.stringContaining('10 分钟')
+      })
       expect(generateImageMock).toHaveBeenCalledTimes(1)
       expect(generateImageMock).toHaveBeenCalledWith(expect.objectContaining({ maxRetries: 0 }))
       expect(saveBufferAssetMock).not.toHaveBeenCalled()
