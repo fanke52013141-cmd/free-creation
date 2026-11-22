@@ -225,6 +225,49 @@ describe.skipIf(!toolsReady)('composeTimeline 真实 FFmpeg 合成', () => {
   )
 
   it(
+    '音频延伸到视频之后：成片按时间线总时长导出，视频尾补黑帧',
+    async () => {
+      const outputPath = join(root, 'audio-tail.mp4')
+      const result = await composeTimeline({
+        outputPath,
+        width: 320,
+        height: 240,
+        frameRate: 30,
+        clips: [
+          {
+            kind: 'video',
+            sourcePath: videoWithAudio,
+            startMs: 0,
+            durationMs: 2000,
+            inMs: 0,
+            sourceDurationMs: 2000
+          }
+        ],
+        audioClips: [
+          {
+            kind: 'audio',
+            sourcePath: toneAudio,
+            startMs: 2000,
+            durationMs: 3000,
+            inMs: 0,
+            sourceDurationMs: 4000,
+            volume: 0.5
+          }
+        ]
+      })
+      expect(result.ok, result.ok ? '' : result.reason).toBe(true)
+      if (!result.ok) return
+      // 界面总时长 5s（视频 0–2s + 音频 2–5s）：成片必须导出 5s，不能再截成 2s。
+      const duration = probeDurationMs(outputPath)
+      expect(Math.abs(duration - 5000)).toBeLessThanOrEqual(400)
+      const streams = probeStreams(outputPath)
+      expect(streams.hasAudio).toBe(true)
+      expect(probeMeanVolumeDb(outputPath)).toBeGreaterThan(-50)
+    },
+    120_000
+  )
+
+  it(
     '视频片段自带的原音会进入成片（不是静音补齐）',
     async () => {
       const outputPath = join(root, 'clip-audio.mp4')

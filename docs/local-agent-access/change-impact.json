@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "feat(node-flow): text node keeps user body, run result only in nodeResult and is rendered in a read-only result area (NODE_UI_STANDARD 24.5); projection uses currentTextResult by runId. No port/schema change; GUI, CLI and MCP share the executor, parity unchanged; node contract snapshot unchanged.",
+  "reason": "fix(timeline): compose honours full timeline duration; when audio extends past the video track, a black filler tail keeps the exported length equal to the timeline total (user-facing WYSIWYG). No port/schema change; GUI/CLI/MCP share the same main-process compose path, parity unchanged.",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -119,7 +119,7 @@
     "src/main/media/media-probe.ts": "55367b324750b8356e3a61ebe146aa46cdb64f66e400af8157af87bef21055ec",
     "src/main/media/tar-audio.ts": "91e697c3fb9876ad975a2ff06985febbc21da47c3f954f1a750d5cb4a129cb85",
     "src/main/media/text-decode.ts": "91425315281d19389c0faa5d2736aaed8acec6cadc4dd7a6ecdae80c8316c7c1",
-    "src/main/media/timeline-compose.ts": "de3ff387bb8d3f20861c54fdc8db53a76da5ae12bb3af96f4bbe900ad534911a",
+    "src/main/media/timeline-compose.ts": "30a975c0993fedc9e03cfccf3b1478d14510062c2c1c79ca4afaec92131fcdb1",
     "src/main/media/tts-transform.ts": "48f02a4744da46dae1765ef1cc3c2c1ff564688d6ddf65aedef9eed90571cab8",
     "src/main/media/video-conversion.ts": "a3c72f727b150310974e77f7c3d63de83539aebac3653f7c3ad62dce803a8e05",
     "src/main/media/video-transform.ts": "d69981dcadd484f72e1701e17a799d2e70f9df82f09b455daf0eae60c28b3cca",

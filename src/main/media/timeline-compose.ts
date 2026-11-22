@@ -170,11 +170,45 @@ async function composeInTempDir(
     })
   }
 
+  // 音频轨可以延伸到视频轨之后：成片时长按两条轨的最远末尾计算，视频尾用黑帧补齐。
+  // 否则界面显示的总时长更长、成片却把尾部音频截断——用户看到多长就该导出多长。
+  const audioTracks: Array<{
+    sourcePath: string
+    inMs: number
+    durationMs: number
+    startMs: number
+    volume: number
+  }> = []
+  for (const clip of audioClips) {
+    if (clip.kind === 'image') continue
+    const resolved = await resolveClip(clip)
+    if (resolved.durationMs <= 0 || !resolved.hasAudio) continue
+    audioTracks.push({
+      sourcePath: clip.sourcePath,
+      inMs: resolved.inMs,
+      durationMs: resolved.durationMs,
+      startMs: Math.max(0, Math.round(clip.startMs)),
+      volume: normalizeVolume(clip.volume)
+    })
+  }
+
+  const audioEndMs = audioTracks.reduce(
+    (max, track) => Math.max(max, track.startMs + track.durationMs),
+    0
+  )
+  const timelineEndMs = Math.max(cursorMs, audioEndMs)
+  const tailGapMs = timelineEndMs - cursorMs
+  if (tailGapMs > GAP_TOLERANCE_MS) {
+    const tailPath = join(tempDir, `gap-${padded(gapIndex++)}.mp4`)
+    await renderFiller(tailPath, tailGapMs, renderOptions)
+    segments.push(tailPath)
+    cursorMs += tailGapMs
+  }
+
   const durationMs = cursorMs
   if (durationMs <= 0) {
     return { ok: false, missingTool: false, reason: '时间线总时长为 0，无法生成视频' }
   }
-
   // ── 阶段 2：拼接视频轨（先 copy，失败静默回退重编码）──
   if (isMediaCancelled()) throw new Error(CANCELLED_REASON)
   const listPath = join(tempDir, 'concat.txt')
@@ -239,26 +273,6 @@ async function composeInTempDir(
 
   // ── 阶段 3：混音 + 最终封装 ──
   if (isMediaCancelled()) throw new Error(CANCELLED_REASON)
-  const audioTracks: Array<{
-    sourcePath: string
-    inMs: number
-    durationMs: number
-    startMs: number
-    volume: number
-  }> = []
-  for (const clip of audioClips) {
-    if (clip.kind === 'image') continue
-    const resolved = await resolveClip(clip)
-    if (resolved.durationMs <= 0 || !resolved.hasAudio) continue
-    audioTracks.push({
-      sourcePath: clip.sourcePath,
-      inMs: resolved.inMs,
-      durationMs: resolved.durationMs,
-      startMs: Math.max(0, Math.round(clip.startMs)),
-      volume: normalizeVolume(clip.volume)
-    })
-  }
-
   const args: string[] = ['-i', videoTrackPath]
   const audioInputs: string[] = []
   const filterParts: string[] = []
