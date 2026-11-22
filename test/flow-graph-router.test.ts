@@ -1,6 +1,6 @@
 // O4-P3 声明式图路由：顺序/条件分支/汇合（all/any）；路由只认交付事实，模型文字不能改路由。
 import { describe, expect, it } from 'vitest'
-import { nextReadyNodes, isFlowComplete } from '../src/shared/agent-flow/flow-graph-router'
+import { nextReadyNodes, isFlowComplete, deliveredGraphNodes } from '../src/shared/agent-flow/flow-graph-router'
 import { FlowGraphSchema, type FlowNode, type FlowGraph } from '../src/shared/agent-flow/flow-graph'
 import type { StageEntryFacts, StageDeliveryFact } from '../src/shared/agent-flow/stage-contracts'
 
@@ -130,5 +130,48 @@ describe('O4-P4 循环路由（retry/until，迭代计数由宿主传入）', ()
     expect(result.ready).not.toContain('b')
     expect(result.ready).toContain('c')
     expect(isFlowComplete(g, facts([delivery('b', 'working')]), new Set(['a', 'b', 'c']), { b: 3 })).toBe(true)
+  })
+})
+
+describe('BL-06 交付判定：completed 即交付（不要求产出非空）', () => {
+  it('completed 且 outputs 为空的子任务计入交付；未完成的不计入', () => {
+    const delivered = deliveredGraphNodes([
+      { nodeId: 'a', state: 'completed' },
+      { nodeId: 'b', state: 'waiting' },
+      { nodeId: 'c', state: 'blocked' }
+    ])
+    expect([...delivered]).toEqual(['a'])
+  })
+  it('上游零输出完成后下游就绪（可选输出未产出是合法完成）', () => {
+    const g = graph([node('a'), node('b')], [dataEdge('a', 'b')], 'a', ['b'])
+    const delivered = deliveredGraphNodes([{ nodeId: 'a', state: 'completed' }])
+    // a 没有任何交付输出（facts 为空），但已 completed → b 就绪
+    expect(nextReadyNodes(g, facts([]), delivered).ready).toEqual(['b'])
+  })
+})
+
+describe('BL-07 现状记录：带回边的多节点环在 v1 路由下不可执行', () => {
+  // 该图会被 validateFlowGraph 以 LOOP_BODY_UNSUPPORTED 拒绝；这里只用 schema 解析，
+  // 记录拒绝的原因：环内 c 要等载体 b settled（循环结束）才就绪，循环过程中 c 从不运行。
+  const g = graph(
+    [
+      node('a'),
+      node('b', {
+        joinPolicy: 'any',
+        loop: {
+          maxIterations: 3,
+          exitCondition: [{ kind: 'output-field', stageKey: 'b', path: 'text', op: 'equals', value: 'done' }]
+        }
+      }),
+      node('c')
+    ],
+    [dataEdge('a', 'b'), dataEdge('b', 'c'), dataEdge('c', 'b')],
+    'a',
+    ['c']
+  )
+  it('b 未达退出条件时只会重复 b，c 不就绪', () => {
+    const result = nextReadyNodes(g, facts([delivery('a', 'x'), delivery('b', 'working')]), new Set(['a', 'b']), { b: 1 })
+    expect(result.ready).toContain('b')
+    expect(result.ready).not.toContain('c')
   })
 })

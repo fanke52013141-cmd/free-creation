@@ -31,9 +31,14 @@ import {
 import {
   nextReadyNodes,
   isFlowComplete,
-  loopNeedsAnotherIteration
+  loopNeedsAnotherIteration,
+  deliveredGraphNodes
 } from '../../shared/agent-flow/flow-graph-router'
-import type { FlowNode, FlowGraph } from '../../shared/agent-flow/flow-graph'
+import {
+  isDispatchableFlowNodeKind,
+  type FlowNode,
+  type FlowGraph
+} from '../../shared/agent-flow/flow-graph'
 import {
   buildContextManifest,
   contextManifestBlocking
@@ -328,15 +333,8 @@ export class FlowCoordinatorHost {
     // 图节点承载必须与子节点+审核节点一一对应；路由只认交付事实（见 graphStep）。
     if (graphMode) {
       const graph = config.graph!
-      if (
-        graph.nodes.some(
-          (node) =>
-            node.kind !== 'agent' &&
-            node.kind !== 'capability' &&
-            node.kind !== 'human-task' &&
-            node.kind !== 'review'
-        )
-      )
+      // BL-05：与 validateFlowGraph 同一种类白名单（校验即准入）。
+      if (graph.nodes.some((node) => !isDispatchableFlowNodeKind(node.kind)))
         throw new AgentRuntimeError('FLOW_GRAPH_NODE_KIND_UNSUPPORTED', 'scope')
       const graphNodeIds = new Set(graph.nodes.map((node) => node.nodeId))
       const scopeIds = [...childIds, ...reviewIds]
@@ -1002,11 +1000,8 @@ export class FlowCoordinatorHost {
     const graph = run.config.graph!
     const facts = this.graphFacts(run)
     const loopIterations = { ...(run.loopIterations ?? {}) }
-    const delivered = new Set(
-      run.children
-        .filter((child) => child.state === 'completed' && child.outputs.length)
-        .map((child) => child.nodeId)
-    )
+    // BL-06：completed 即交付（可选输出未产出也算），不再要求 outputs 非空。
+    const delivered = deliveredGraphNodes(run.children)
     // ⑥审核门禁：通过的审核节点视为已交付（下游受控节点据此放行）。
     for (const review of run.reviews ?? []) {
       if (review.state === 'passed') delivered.add(review.nodeId)
@@ -1243,7 +1238,6 @@ export class FlowCoordinatorHost {
     const incoming = graph.edges.filter(
       (edge) =>
         edge.to.nodeId === next.nodeId &&
-        edge.kind === 'data' &&
         (!selectedSources || selectedSources.has(edge.from.nodeId))
     )
     const inputs = incoming.map((edge, index) => {
@@ -1346,7 +1340,7 @@ export class FlowCoordinatorHost {
     const commandId = `graph:${hash([run.taskId, next.nodeId, 'human', run.decisions])}`
     const inputPorts = node.ports.filter((port) => port.dir === 'in')
     const incoming = graph.edges.filter(
-      (edge) => edge.to.nodeId === next.nodeId && edge.kind === 'data'
+      (edge) => edge.to.nodeId === next.nodeId
     )
     const inputs = incoming.map((edge, index) => {
       const upstream = run.children

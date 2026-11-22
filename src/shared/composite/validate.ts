@@ -1,5 +1,6 @@
 import type { CompositeManifest, CompositeManifestIssue } from './manifest'
 import { parseCompositeManifest } from './manifest'
+import { resolveCompositeBudget } from './budget'
 
 export type CompositeValidationCode =
   | 'MANIFEST_SCHEMA'
@@ -39,8 +40,6 @@ export interface CompositeValidationDeps {
 }
 
 const ANY_PORT = 'any'
-const MAX_BUDGET_NODES = 500
-const MAX_BUDGET_EDGES = 1500
 
 function issue(
   code: CompositeValidationCode,
@@ -225,9 +224,7 @@ export function validateCompositeManifest(
   // 嵌套依赖：环、深度、展开节点预算（注入 resolver 时才可判定）。
   const getCapability = deps.getCapability
   if (getCapability) {
-    const policy = manifest.executionPolicy
-    const maxDepth = policy?.maxDepth ?? 5
-    const maxNodes = policy?.maxExpandedNodes ?? MAX_BUDGET_NODES
+    const { maxDepth, maxExpandedNodes: maxNodes } = resolveCompositeBudget(manifest.executionPolicy)
     const walk = (
       current: CompositeManifest,
       depth: number,
@@ -260,9 +257,9 @@ export function validateCompositeManifest(
     walk(manifest, 1, [manifest.capabilityId], { nodes: 0 })
   }
 
-  const policy = manifest.executionPolicy
-  const budgetNodes = policy?.maxExpandedNodes ?? MAX_BUDGET_NODES
-  const budgetEdges = policy?.maxExpandedEdges ?? MAX_BUDGET_EDGES
+  const { maxExpandedNodes: budgetNodes, maxExpandedEdges: budgetEdges } = resolveCompositeBudget(
+    manifest.executionPolicy
+  )
   if (manifest.graph.nodes.length > budgetNodes)
     issues.push(issue('BUDGET_EXCEEDED', 'executionPolicy.maxExpandedNodes', `节点数 ${manifest.graph.nodes.length} 超过预算 ${budgetNodes}`))
   if (manifest.graph.edges.length > budgetEdges)

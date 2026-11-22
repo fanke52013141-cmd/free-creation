@@ -65,18 +65,18 @@ describe('O4-P1 合法图通过', () => {
     expect(validateFlowGraph(g)).toEqual({ ok: true })
   })
 
-  it('有界循环图（环含 loop 载体）', () => {
+  it('有界循环图（单节点 loop 声明，不画回边）', () => {
     const g = graph(
       [
         node('a'),
         node('b', {
           loop: {
             maxIterations: 3,
-            exitCondition: [{ kind: 'output-field', stageKey: 'a', path: 'text', op: 'exists' }]
+            exitCondition: [{ kind: 'output-field', stageKey: 'b', path: 'text', op: 'exists' }]
           }
         })
       ],
-      [dataEdge('a', 'b'), dataEdge('b', 'a')],
+      [dataEdge('a', 'b')],
       'a',
       ['b']
     )
@@ -134,7 +134,7 @@ describe('O4-P1 拓扑/预算拒绝', () => {
           }
         })
       ],
-      [dataEdge('a', 'b'), dataEdge('b', 'a')],
+      [dataEdge('a', 'b')],
       'a',
       ['b'],
       { maxLoopIterations: 8 }
@@ -144,11 +144,119 @@ describe('O4-P1 拓扑/预算拒绝', () => {
     if (!result.ok) expect(result.errors.some((e) => e.code === 'LOOP_BUDGET_EXCEEDED')).toBe(true)
   })
 
+  it('BL-07：多节点环（即使含 loop 载体）拒绝 LOOP_BODY_UNSUPPORTED', () => {
+    const g = graph(
+      [
+        node('a'),
+        node('b', {
+          loop: {
+            maxIterations: 3,
+            exitCondition: [{ kind: 'output-field', stageKey: 'b', path: 'text', op: 'exists' }]
+          }
+        }),
+        node('c')
+      ],
+      [dataEdge('a', 'b'), dataEdge('b', 'c'), dataEdge('c', 'b')],
+      'a',
+      ['c']
+    )
+    const result = validateFlowGraph(g)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.errors.some((e) => e.code === 'LOOP_BODY_UNSUPPORTED' && e.nodeId === 'b')).toBe(true)
+      expect(result.errors.some((e) => e.code === 'CYCLE_WITHOUT_LOOP')).toBe(false)
+    }
+  })
+
+  it('BL-07：自回边（b→b）拒绝 LOOP_BODY_UNSUPPORTED，循环只用 node.loop 声明', () => {
+    const g = graph(
+      [
+        node('a'),
+        node('b', {
+          loop: {
+            maxIterations: 3,
+            exitCondition: [{ kind: 'output-field', stageKey: 'b', path: 'text', op: 'exists' }]
+          }
+        })
+      ],
+      [dataEdge('a', 'b'), dataEdge('b', 'b')],
+      'a',
+      ['b']
+    )
+    const result = validateFlowGraph(g)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.errors.some((e) => e.code === 'LOOP_BODY_UNSUPPORTED')).toBe(true)
+  })
+
   it('入口即出口拒绝', () => {
     const g = graph([node('a')], [], 'a', ['a'])
     const result = validateFlowGraph(g)
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.errors.some((e) => e.code === 'ENTRY_IS_EXIT')).toBe(true)
+  })
+})
+
+describe('BL-05 校验即准入：种类白名单与能力目录', () => {
+  it('state-machine 图节点在校验期即拒绝 NODE_KIND_UNSUPPORTED（与运行准入同口径）', () => {
+    const g = graph(
+      [node('a'), node('b', { kind: 'state-machine' })],
+      [dataEdge('a', 'b')],
+      'a',
+      ['b']
+    )
+    const result = validateFlowGraph(g)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.errors.some((e) => e.code === 'NODE_KIND_UNSUPPORTED' && e.nodeId === 'b')).toBe(true)
+  })
+  it('未知能力在校验期即拒绝 CAPABILITY_UNKNOWN（不再等到编译）', () => {
+    const g = graph(
+      [node('a', { kind: 'capability', capability: 'shell@1' }), node('b')],
+      [dataEdge('a', 'b')],
+      'a',
+      ['b']
+    )
+    const result = validateFlowGraph(g)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.errors.some((e) => e.code === 'CAPABILITY_UNKNOWN' && e.nodeId === 'a')).toBe(true)
+  })
+  it('目录内能力与全部可分派种类通过', () => {
+    const g = graph(
+      [
+        node('a', { kind: 'capability', capability: 'text-pass@1' }),
+        node('b', { kind: 'review', review: { criteria: 'c', rejectPolicy: 'rework', maxReworks: 1 } }),
+        node('c', { participation: 'human', kind: 'human-task' })
+      ],
+      [dataEdge('a', 'b'), dataEdge('b', 'c')],
+      'a',
+      ['c']
+    )
+    expect(validateFlowGraph(g)).toEqual({ ok: true })
+  })
+})
+
+describe('BL-05 control 边已删除', () => {
+  const base = {
+    schemaVersion: 1,
+    graphId: 'g',
+    name: 'test',
+    goal: '总目标',
+    nodes: [node('a'), node('b')],
+    entry: 'a',
+    exits: ['b']
+  }
+  const edge = { from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'b', portId: 'in-text' } }
+  it('省略 kind 兼容旧 JSON，解析为 data', () => {
+    const parsed = FlowGraphSchema.parse({ ...base, edges: [edge] })
+    expect(parsed.edges[0].kind).toBe('data')
+  })
+  it("kind:'control' 显式拒绝，错误带 FLOW_EDGE_KIND_REMOVED 并定位到边", () => {
+    const result = FlowGraphSchema.safeParse({ ...base, edges: [{ ...edge, kind: 'control' }] })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      const issue = result.error.issues.find((item) => item.message.includes('FLOW_EDGE_KIND_REMOVED'))
+      expect(issue).toBeTruthy()
+      expect(issue!.path).toEqual(['edges', 0, 'kind'])
+    }
   })
 })
 

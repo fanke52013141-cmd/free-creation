@@ -124,7 +124,7 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 `{ from: {nodeId, portId}, to: {nodeId, portId}, condition?: StageCondition[] }`：**FlowGraph 只有数据边。**
 
-**AF-4.3a【已决策 · 2026-11-22，目标·G4】删除 `control` 边。** 现行 schema 仍接受 `kind: 'control'`：校验时把它计入可达性，路由和编译时却把它丢掉。改为：
+**AF-4.3a【现行 · BL-05，2026-11-22】删除 `control` 边。** 此前 schema 接受 `kind: 'control'`：校验时把它计入可达性，路由和编译时却把它丢掉。现规定：
 - `kind` 字段只允许 `'data'`（可选，缺省 `'data'`，兼容旧 JSON）；
 - 收到 `'control'` 时报 `FLOW_EDGE_KIND_REMOVED`；读取已发布的定义时同样拒绝，并提示重新发布，**不静默丢弃**；
 - 「仅表示先后、不传数据」的依赖，必须用一条真实的数据边来表达（例如把上游的交付作为下游的可选输入）。
@@ -182,7 +182,7 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 **AF-6.1【现行】** 编译产物（`compileFlowGraph`）包括：每个 FlowNode 对应的画布节点；一个 coordinator 主控节点（`executionMode: graph`，`allowedNodeIds` 为全部子节点，携带 `graph`）；一个派生状态机；数据边；`controls / observes` 控制关系；以及布局坐标（与 GUI 智能整理使用同一算法）。
 
-**AF-6.2【目标·G6/G8】校验即准入**：编译和预览阶段使用的 kind 白名单、端口兼容函数、能力目录，**必须与运行准入完全相同**。现行情况是：schema 和编译器都接受 `state-machine` 节点，运行准入却拒绝它（`FLOW_GRAPH_NODE_KIND_UNSUPPORTED`），用户在人工确认落画布后、第一次运行时才会失败。
+**AF-6.2【种类与能力部分已现行 · BL-05；端口部分为目标·G8，待 BL-11】校验即准入**：种类白名单 `FLOW_GRAPH_DISPATCHABLE_KINDS` 与能力目录 `FLOW_GRAPH_CAPABILITY_IDS` 已成为 validate、compile、运行准入三处的唯一来源。原条款：编译和预览阶段使用的 kind 白名单、端口兼容函数、能力目录，**必须与运行准入完全相同**。现行情况是：schema 和编译器都接受 `state-machine` 节点，运行准入却拒绝它（`FLOW_GRAPH_NODE_KIND_UNSUPPORTED`），用户在人工确认落画布后、第一次运行时才会失败。
 
 ---
 
@@ -192,16 +192,16 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 |---|---|---|
 | V1 | 引用合法：edge、condition、selector 引用的 nodeId 都存在 | 【现行】 |
 | V2 | participation 与 kind 的约束（§4.2 表） | 【现行】 |
-| V3 | 任何环都必须包含一个声明了 `loop` 的载体 | 【现行】（v2 改为子图载体） |
+| V3 | 不含 loop 载体的环 → `CYCLE_WITHOUT_LOOP`；**含载体的多节点环或自回边 → `LOOP_BODY_UNSUPPORTED`**，循环只能用单节点 `node.loop` 声明、不画回边 | 【现行 · BL-07】（v2 改为子图载体） |
 | V4 | 从入口可达全部节点；出口可达；入口不是出口 | 【现行】 |
 | V5 | `loop.maxIterations ≤ budgets.maxLoopIterations` | 【现行】 |
 | V6 | **同一源节点的多条条件出边必须互斥**，或者显式声明 `else` 或优先级 | 【目标·G2】 |
 | V7 | **汇合推断**：入边全部来自互斥分支时，`joinPolicy` 必须为 `any`；显式写 `all` 报错 | 【目标·G1】 |
 | V8 | 数据边端口存在，且按 `portPairCompatible` 类型兼容、Schema 兼容 | 【目标·G8】 |
-| V9 | kind 和能力在运行准入白名单内（与 AF-6.2 同源） | 【目标·G6】 |
+| V9 | kind 和能力在运行准入白名单内（与 AF-6.2 同源）：`NODE_KIND_UNSUPPORTED` / `CAPABILITY_UNKNOWN` | 【现行 · BL-05】 |
 | V10 | 预算交叉检查：`maxSteps ≥ 可执行节点数 + Σ(loop.maxIterations × body 大小)`，否则报错或给出建议值 | 【目标·G9】 |
 | V11 | `required` 输入 selector 引用的源节点，在每条到达本节点的路径上都可能已交付（避免「分支没走 → 必需输入永远缺失」） | 【目标】 |
-| V12 | 错误码语义准确：未知能力用 `CAPABILITY_UNKNOWN`，不复用 `UNREACHABLE_NODE` | 【目标·G9】 |
+| V12 | 错误码语义准确：未知能力用 `CAPABILITY_UNKNOWN`，不复用 `UNREACHABLE_NODE` | 【现行 · BL-05】 |
 | V13–V15 | 角色声明与归属规则（见 §16.1） | 【目标·A4】 |
 
 ---
@@ -215,7 +215,7 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 - **就绪（ready）**：入口节点在未交付时就绪；其他节点按 `joinPolicy` 检查数据入边，入边源节点已落定且边条件满足即就绪。
 - 路由器是纯函数（`flow-graph-router.ts`），输入只有交付事实和声明式条件。
 
-**AF-8.1a【目标·G5】** 交付判定不再要求 `outputs.length > 0`。节点契约允许可选输出本次不产出；「完成且有交付记录」即算交付，输出是否满足要求由下游 required 输入判定。
+**AF-8.1a【现行 · BL-06】** 交付判定不再要求 `outputs.length > 0`（`deliveredGraphNodes`）。节点契约允许可选输出本次不产出；「完成且有交付记录」即算交付，输出是否满足要求由下游 required 输入判定。
 
 ### 8.2 条件【现行】
 
@@ -236,7 +236,7 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 **AF-8.4a【现行】** 循环必须有界：`loop.maxIterations` 加上全局 `maxLoopIterations`；每一轮使用独立 taskId（后缀 `loop:<n>`）；达到上限时强制落定，不允许静默无限循环。
 
-**AF-8.4b【目标·G3】子图循环**：循环体是一组节点。路由器以「轮次作用域」计算 body 内的就绪和落定状态；一轮结束（body 内出口节点交付）后评估 `exitCondition`，不满足且未达上限则开始下一轮。现行的「单载体」语义只支持一个节点自重复，多节点环可以通过校验但无法执行，**在 v2 落地前，校验必须拒绝 body 大于 1 的环**。
+**AF-8.4b【目标·G3】子图循环**：循环体是一组节点。路由器以「轮次作用域」计算 body 内的就绪和落定状态；一轮结束（body 内出口节点交付）后评估 `exitCondition`，不满足且未达上限则开始下一轮。现行的「单载体」语义只支持一个节点自重复。**【现行 · BL-07】** v2 落地前，校验已拒绝多节点环和自回边（`LOOP_BODY_UNSUPPORTED`）。
 
 ### 8.5 完成、停滞与失败
 
@@ -501,8 +501,8 @@ FlowNode {
 | 死路径消除、汇合推断、停滞终态 | AF-8.3a / V7 / AF-8.5b | **P0** |
 | 条件互斥校验 | V6 | **P0** |
 | 校验即准入（kind、端口、能力）+ 删除 control 边 | AF-6.2 / AF-4.3a / V8 / V9 | **P0** |
-| 零输出节点交付 | AF-8.1a | **P0** |
-| 多节点循环（v2 之前先在校验中拒绝） | AF-8.4b | P0（拒绝）/ P1（实现） |
+| ~~零输出节点交付~~ ✅ BL-06 | AF-8.1a | **P0** |
+| 多节点循环（拒绝 ✅ BL-07；实现待 BL-11） | AF-8.4b | P1（实现） |
 | 节点流作为能力、能力目录生成 | §4.4 / NODE_FLOW_SPEC §13 | P1 |
 | params 与显式端口 | §4.4 | P1 |
 | FlowGraph 与画布往返（diverged） | AF-5.4 | P1 |

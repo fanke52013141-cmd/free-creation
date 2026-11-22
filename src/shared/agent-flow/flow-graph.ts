@@ -30,6 +30,29 @@ export const FlowNodeKindSchema = z.enum([
 ])
 export type FlowNodeKind = z.infer<typeof FlowNodeKindSchema>
 
+/**
+ * BL-05 / AF-6.2「校验即准入」：图模式**可分派**的节点种类与**可编译**的能力 ID 唯一来源。
+ * validateFlowGraph（GUI/CLI/MCP 校验与预览）、compileFlowGraph、coordinator-host 运行准入
+ * 共用这两份常量——校验通过的图，运行准入不会再因种类/能力被拒。
+ * state-machine 不是可分派图节点：状态机由编译器为整张图派生。
+ * 能力 ID 列表待 BL-10 改为从注册表与已发布节点流生成。
+ */
+export const FLOW_GRAPH_DISPATCHABLE_KINDS = ['agent', 'capability', 'human-task', 'review'] as const
+export type FlowGraphDispatchableKind = (typeof FLOW_GRAPH_DISPATCHABLE_KINDS)[number]
+export function isDispatchableFlowNodeKind(kind: FlowNodeKind): kind is FlowGraphDispatchableKind {
+  return (FLOW_GRAPH_DISPATCHABLE_KINDS as readonly string[]).includes(kind)
+}
+export const FLOW_GRAPH_CAPABILITY_IDS = [
+  'text-template@1',
+  'text-pass@1',
+  'image-gen@3',
+  'image-edit@2',
+  'video@7',
+  'speech@4',
+  'tts@4'
+] as const
+export type FlowGraphCapabilityId = (typeof FLOW_GRAPH_CAPABILITY_IDS)[number]
+
 export const FlowDecisionSchema = z
   .object({
     allowed: z.array(z.enum(['approve', 'edit', 'reject', 'respond'])).min(1).max(4),
@@ -99,7 +122,17 @@ export const FlowEdgeSchema = z
   .object({
     from: z.object({ nodeId: id, portId: id }).strict(),
     to: z.object({ nodeId: id, portId: id }).strict(),
-    kind: z.enum(['data', 'control']).default('data'),
+    /**
+     * BL-05 / AF-4.3a（2026-11-22）：FlowGraph 只有数据边。字段保留可选以兼容旧 JSON，
+     * 只接受 'data'；旧 'control' 边显式拒绝（不静默丢弃）。控制关系（controls/observes/
+     * review-gate/rework）不是 FlowGraph 边，由编译器写入节点 config.relations。
+     */
+    kind: z
+      .literal(
+        'data',
+        'FLOW_EDGE_KIND_REMOVED: control edges were removed from FlowGraph; express ordering with a data edge and re-publish the graph'
+      )
+      .default('data'),
     /** 条件边：全部满足才流转（复用 evaluateStageEntry 口径）。 */
     condition: z.array(StageConditionSchema).max(16).optional()
   })
@@ -182,6 +215,9 @@ export type FlowGraphErrorCode =
   | 'EXIT_UNREACHABLE'
   | 'LOOP_BUDGET_EXCEEDED'
   | 'ENTRY_IS_EXIT'
+  | 'LOOP_BODY_UNSUPPORTED'
+  | 'NODE_KIND_UNSUPPORTED'
+  | 'CAPABILITY_UNKNOWN'
 export interface FlowGraphError {
   code: FlowGraphErrorCode
   nodeId?: string
@@ -251,10 +287,12 @@ function reachable(adj: Map<string, string[]>, start: string): Set<string> {
 /**
  * 静态校验入口（纯函数，GUI/CLI/MCP 与宿主共用口径）。
  * schema 层（FlowGraphSchema）已保证引用/参与/结构合法；本层补拓扑/预算：
- * 1) 任何环必须含一个声明 loop 的载体节点（防无界循环）；
+ * 1) 循环只能用单节点 `loop` 声明、不画回边（BL-07）：含环的强连通分量（多节点环或自回边）
+ *    若含 loop 载体 → LOOP_BODY_UNSUPPORTED（多节点循环体待 FlowGraph v2）；否则 CYCLE_WITHOUT_LOOP；
  * 2) 入口可达所有节点、出口可达（无孤岛）；
  * 3) 循环 maxIterations 不超过全局预算；
- * 4) 入口不能同时是出口（空流程）。
+ * 4) 入口不能同时是出口（空流程）；
+ * 5) 节点种类在图模式可分派白名单内、capability 在可编译能力目录内（BL-05，与运行准入同源）。
  * 条件互斥的完整可满足性检查（D6）属 P2/P3，本层不做。
  */
 export function validateFlowGraph(graph: FlowGraph): FlowGraphValidation {
@@ -265,19 +303,48 @@ export function validateFlowGraph(graph: FlowGraph): FlowGraphValidation {
   if (graph.exits.includes(graph.entry))
     errors.push({ code: 'ENTRY_IS_EXIT', nodeId: graph.entry, message: 'Entry must not also be an exit' })
 
+  // BL-05：校验即准入——种类白名单与能力目录与 compile / 运行准入同一来源。
+  for (const node of graph.nodes) {
+    if (!isDispatchableFlowNodeKind(node.kind))
+      errors.push({
+        code: 'NODE_KIND_UNSUPPORTED',
+        nodeId: node.nodeId,
+        message: `Node kind ${node.kind} cannot be dispatched in graph mode (allowed: ${FLOW_GRAPH_DISPATCHABLE_KINDS.join(', ')})`
+      })
+    if (
+      node.kind === 'capability' &&
+      node.capability &&
+      !(FLOW_GRAPH_CAPABILITY_IDS as readonly string[]).includes(node.capability)
+    )
+      errors.push({
+        code: 'CAPABILITY_UNKNOWN',
+        nodeId: node.nodeId,
+        message: `Unknown capability ${node.capability} (available: ${FLOW_GRAPH_CAPABILITY_IDS.join(', ')})`
+      })
+  }
+
   // 环检测：每个含环的强连通分量必须有一个有界循环载体。
   for (const component of stronglyConnectedComponents(adj)) {
     const hasCycle =
       component.length > 1 ||
       (adj.get(component[0]) ?? []).includes(component[0])
     if (!hasCycle) continue
-    const hasLoopCarrier = component.some((nodeId) => nodeById.get(nodeId)?.loop)
-    if (!hasLoopCarrier)
+    const carrier = component.find((nodeId) => nodeById.get(nodeId)?.loop)
+    if (!carrier) {
       errors.push({
         code: 'CYCLE_WITHOUT_LOOP',
         nodeId: component[0],
         message: `Cycle [${component.join(', ')}] must contain a node declaring a bounded loop`
       })
+      continue
+    }
+    // 路由器的 settled 语义下，环内其他节点要等载体 settled（即循环结束）才就绪，
+    // 回边又让载体等环内节点——多节点环与自回边都无法执行，故静态拒绝。
+    errors.push({
+      code: 'LOOP_BODY_UNSUPPORTED',
+      nodeId: carrier,
+      message: `Cycle [${component.join(', ')}] is not executable: declare the loop on a single node via node.loop without back edges (multi-node loop bodies arrive with FlowGraph v2)`
+    })
   }
 
   // 可达性：入口可达所有节点；每个出口可达。

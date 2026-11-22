@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "restore 2026-11-20 P0 fixes lost by reset; regenerate after merge with main 2e221e7a..99a30b6e",
+  "reason": "BL-05 remove FlowGraph control edges (kind literal data); BL-07 LOOP_BODY_UNSUPPORTED; BL-06 delivery; BL-08 shared composite budget",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -56,7 +56,7 @@
     "src/main/agent-flow/command-ledger.ts": "4742719adb46cd60f629a3ac862e554ff25b4b68f98d24310300ef9f581c3e57",
     "src/main/agent-flow/commands-electron.ts": "d44a8868e0440c01e832dcc918fd1a2bf51dd684357a168a513a5b906e83c7f4",
     "src/main/agent-flow/coordination-store.ts": "145ab3d0fac8fa81647705d9faa00487058e03b0cfa1db035392c730c6af0593",
-    "src/main/agent-flow/coordinator-host.ts": "ed139978cb1b826ae19fbfe4a87cd09eb37121dfb4be1051c9d44224444529fa",
+    "src/main/agent-flow/coordinator-host.ts": "aed1111c2c2ebce4940e393c357f0f2aa39ad86d4f3cc5dd15ef38a440410dc4",
     "src/main/agent-flow/coordinator-reviews.ts": "e89a3d93a20bd7853cb907c03346c0dfee55fc9a9e86cb842208d940399df7a8",
     "src/main/agent-flow/definition-store.ts": "1b697b101cafb6e863ed412a426e40585c6fe0f7b38d09ff7987938d0e89da27",
     "src/main/agent-flow/desktop-electron.ts": "940a074dc4f5518002dd06a89b9cdc83bebbe9345edfd9b3ac68c5ce31e73153",

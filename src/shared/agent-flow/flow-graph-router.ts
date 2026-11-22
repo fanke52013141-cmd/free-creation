@@ -90,7 +90,7 @@ export function nextReadyNodes(
   for (const node of graph.nodes) {
     if (settled.has(node.nodeId)) continue
     const incoming = graph.edges.filter(
-      (edge) => edge.kind === 'data' && edge.to.nodeId === node.nodeId
+      (edge) => edge.to.nodeId === node.nodeId
     )
     if (incoming.length === 0) {
       if (node.nodeId === graph.entry) {
@@ -106,6 +106,16 @@ export function nextReadyNodes(
     else blocked.push({ nodeId: node.nodeId, reason: 'INCOMING_EDGES_UNSATISFIED' })
   }
   return { ready, blocked }
+}
+
+/**
+ * BL-06 / AF-8.1a 图模式交付判定：子任务 completed 即交付，**不要求产出非空**——可选输出
+ * 本次不产出是合法完成；输出是否满足要求由下游 required 输入判定。
+ */
+export function deliveredGraphNodes(
+  children: ReadonlyArray<{ nodeId: string; state: string }>
+): Set<string> {
+  return new Set(children.filter((child) => child.state === 'completed').map((child) => child.nodeId))
 }
 
 /** 流程完成 = 所有出口节点已 settled（循环出口须满足退出条件或达上限）。 */

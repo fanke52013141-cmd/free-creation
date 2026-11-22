@@ -2,7 +2,7 @@
 title: Canvas Studio 待开发清单（BACKLOG）
 status: living            # 常更新文档；每完成一项就勾选，并附上提交 hash
 last-updated: 2026-11-22
-baseline-commit: 99a30b6e (main)
+baseline-commit: c293701 (main)
 sources:
   - docs/SPEC_DEEP_REVIEW_2026_11_22.md（审查报告，编号 A*/G*/N*/F*/U*）
   - docs/NODE_FLOW_SPEC.md 附录 A（NF-*）
@@ -25,15 +25,16 @@ sources:
 
 ## P0：阻塞类（建议本周完成）
 
-### ⬜ BL-00 恢复 11-20 丢失的 5 个提交并提交规范草案 · S
+### ✅ BL-00 恢复 11-20 丢失的 5 个提交并提交规范草案 · S（2026-11-22，`7e36dd8…c293701`，已推送 origin/main）
 - **来源**：审查报告 §一（P0-0）
 - **范围**：运行 `canvas-studio/restore-p0-20261122.ps1 -Push`。脚本会合回 `48833f2c 7baf9d3a 4e581d58 ff54f212 2172c9fe`，重新生成契约快照，再提交 `NODE_FLOW_SPEC / AGENT_FLOW_SPEC / SPEC_DEEP_REVIEW`。
 - **验收**：
-  - [ ] Summary 全部 PASS：verify:agent-access / guard:agent-parity / verify:logging / test:contract / restored-tests
-  - [ ] `test/output-source-parity.test.ts`、`test/node-flow-e2e-composition.test.ts` 在 main 上存在且通过
-  - [ ] 已推送到 origin/main（用 `git ls-remote` 核对）
-  - [ ] 复核审查报告第一章表格里的 9 项：AGENTS.md、Speech indextts、MCP 注解、计费门、task-bind、计数等全部生效
-- **待确认**：`135cbef8`（P 图审计产物）在 00:05 被立即撤回，是否是有意为之。
+  - [x] Summary 全部 PASS：verify:agent-access / guard:agent-parity / verify:logging / test:contract / restored-tests
+  - [x] `test/output-source-parity.test.ts`、`test/node-flow-e2e-composition.test.ts` 在 main 上存在且通过
+  - [x] 已推送到 origin/main（用 `git ls-remote` 核对）
+  - [x] 复核审查报告第一章表格里的 9 项：AGENTS.md、Speech indextts、MCP 注解、计费门、task-bind、计数等全部生效
+- **结论**：`135cbef8` 只新增了临时脚本 `test/tmp-matrix-dump.test.ts`（提交说明与内容不符），属于误提交，撤回正确，不恢复；转正工作见 BL-51。
+- **记录**：唯一冲突是 `change-impact.json`（生成文件），合入后已重新生成快照（`39610ae`）；test:contract 331 项、恢复的定向测试 283 项全部通过。
 
 ### ⬜ BL-01 外部 Agent 不得代人做人工决定 · M
 - **来源**：审查报告 A6 · AF-1.5 / AF-5.3 / AF-17.2
@@ -49,7 +50,7 @@ sources:
   - [ ] parity 测试覆盖三入口的不同行为（GUI 直接生效，外部只能产生草稿）
   - [ ] 规范 AF-17.2 改为【现行】
 
-### ⬜ BL-02 task-bind 工具白名单回归 · S
+### ✅ BL-02 task-bind 工具白名单回归 · S（随 BL-00 合入 `5cb530c`）
 - **来源**：AF-3.2a（如果 BL-00 合入成功，这一项随之关闭，只需复核）
 - **验收**：[ ] 勾选 `web.search@1` 的专家 Agent 能正常运行；`runtime.ts` 与 `desktop-host.ts:280` 使用同一份白名单常量
 
@@ -71,7 +72,7 @@ sources:
 - **范围**：对 `StageCondition` 做静态互斥检查（同一 stageKey、同一 path 上的 equals/exists/missing/type、count 区间、human-decision、review-passed）。无法判定的组合，要求写明 `else` 或优先级。
 - **验收**：[ ] 两条都可能为真的条件出边，校验时拒绝，错误码 `CONDITION_NOT_EXCLUSIVE`；[ ] 有 `else` 的图可以通过
 
-### ⬜ BL-05 校验即准入 · S–M
+### 🟡 BL-05 校验即准入 · S–M（control 边删除、kind 白名单、能力目录已完成，待提交；数据边端口类型校验转入 BL-11）
 - **来源**：G4 / G6 / G8 · AF-6.2 / V8 / V9
 - **范围**：
   - 校验、编译、运行准入共用同一份 kind 白名单（目前 `state-machine` 能通过校验，但会被准入拒绝）。
@@ -82,22 +83,27 @@ sources:
     - `run-overview.ts` 里 `edges[].kind` 固定为 `'data'`，或者删掉这个字段
     - 画布上的控制关系（`controls / observes / review-gate / rework`，即 `AgentFlowRelation`）**不受影响**；它们保存在节点 config 中，由编译器生成，和 FlowGraph 边是两回事
     - 影响面：全仓 test、scripts、示例里**没有**使用 `kind:'control'` 的 FlowGraph。用户库 `flow_definitions` 里已发布的定义可能含有这类边，读取时按上面的错误码明确拒绝，并提示重新发布，不做静默丢弃
-- **验收**：[ ] 属性测试：随机生成合法 FlowGraph，凡是校验通过的，运行准入一定通过；[ ] 端口不兼容的图在 propose 阶段就被拒绝；[ ] 含 `kind:'control'` 的图在 propose / validate / 读取已发布定义时都返回 `FLOW_EDGE_KIND_REMOVED`；[ ] 源码中不再出现对 FlowGraph 边 kind 的过滤
+- **说明**：FlowGraph v1 只携带 portId、不携带端口类型，`portPairCompatible` 又在 renderer 里，main 侧拿不到类型；端口校验只有在 v2 的显式端口（BL-11）里才能做，因此转入 BL-11。
+- **验收**：[x] 种类和能力：validate、compile、准入共用 `FLOW_GRAPH_DISPATCHABLE_KINDS` / `FLOW_GRAPH_CAPABILITY_IDS`；编译映射的键类型与能力目录在类型层一一对应；[ ] 属性测试（随机生成合法图 → 准入必过）留到 BL-11 一并做；[ ] 端口不兼容的图在 propose 阶段被拒绝 → BL-11；[x] 含 `kind:'control'` 的图在 schema 解析层返回 `FLOW_EDGE_KIND_REMOVED`（propose、validate、读取已发布定义都经同一个 schema）；[x] 源码中已不再出现对 FlowGraph 边 kind 的过滤
 
-### ⬜ BL-06 零输出节点也算交付 · S
+### ✅ BL-06 零输出节点也算交付 · S（待提交）
 - **来源**：G5 · AF-8.1a
 - **代码位置**：`coordinator-host.ts:1005-1009`
-- **验收**：[ ] 可选输出本次没有产出的节点（如 video-clip 只出音频）完成后，下游能正常推进
+- **实现**：`flow-graph-router.ts` 新增 `deliveredGraphNodes`（completed 即交付），`coordinator-host` graphStep 改用它；出口产物仍取「最近一次有输出的出口子节点」，全部出口都没有输出时报 FLOW_CHILD_BLOCKED（不变）。
+- **验收**：[x] 可选输出本次没有产出的节点完成后，下游能正常推进（`flow-graph-router.test.ts` BL-06 用例）
 
-### ⬜ BL-07 多节点循环：正式实现前先在校验里拒绝 · S
+### ✅ BL-07 多节点循环：正式实现前先在校验里拒绝 · S（待提交）
 - **来源**：G3 · AF-8.4b
 - **范围**：如果一个环里除了循环载体还有其他节点，校验时拒绝（错误码 `LOOP_BODY_UNSUPPORTED`）。正式实现放在 BL-11。
-- **验收**：[ ] 先补一条 `B(loop)→C→B` 的路由测试，确认当前行为（审查附录中待确认的第 4 项）；[ ] 加上校验拒绝
+- **实现**：含 loop 载体的多节点环和自回边 → `LOOP_BODY_UNSUPPORTED`；无载体的环仍为 `CYCLE_WITHOUT_LOOP`。
+- **发现**：原测试夹具「有界循环图」用的是 `a→b→a` 回边写法，在 v1 路由下**从第一步起就死锁**（入口 a 有入边，要等 b；b 又要等 a），已改为单节点 loop、不画回边的写法。
+- **验收**：[x] `B(loop)→C→B` 路由测试记录了现状：循环过程中 C 从不就绪（审查附录第 4 项已坐实）；[x] 校验拒绝多节点环和自回边
 
-### ⬜ BL-08 节点流发布期与运行期预算统一 · S
+### ✅ BL-08 节点流发布期与运行期预算统一 · S（待提交）
 - **来源**：审查报告 A7 · NF-10.2
 - **范围**：`composite/validate.ts`（5 层 / 500 节点）和 `composite/runtime.ts`（8 层 / 200 节点）改为共用一个常量模块。
-- **验收**：[ ] 测试断言两处读取的是同一常量；[ ] 300 个节点的流在发布时就被拒绝，或者能正常运行，二者结果一致
+- **实现**：新增 `src/shared/composite/budget.ts`（8 层 / 200 节点 / 1500 连线，取运行期既有值）；validate.ts、runtime.ts 都经 `resolveCompositeBudget`。
+- **验收**：[x] `test/composite-budget-parity.test.ts` 断言两处同源，并且源码中不再写死缺省数字
 
 ---
 
@@ -227,7 +233,7 @@ sources:
 | ⬜ BL-34 | 节点流版本号改为 major.minor；升级应用只占一个撤销步，失败时回滚 | NF-11.2 / 11.5 | M |
 | ⬜ BL-35 | 固定顺序模式统一编译成图模式；预算交叉检查 V10；错误码 `CAPABILITY_UNKNOWN`（V12）；selector 可达性检查 V11 | AGENT_FLOW_SPEC §2.2 / §7 | M |
 | ⬜ BL-36 | 安全与计费：循环项还原媒体时，校验媒体归属和路径（N7）；所有远端异步生成节点只在「提交前或提交失败」时重试（N9 / NF-12.3a） | N7 / N9 | S–M |
-| ⬜ BL-37 | MCP 注解从 OperationSpec 里的 `idempotent / destructive / cost` 声明派生（BL-00 合入后再复核是否已完成） | 审查报告 §七 · NF-14.3 | S |
+| 🟡 BL-37 | MCP 注解从 OperationSpec 里的 `idempotent / destructive / cost` 声明派生（`ccd5057` 已改为 `idempotentHint = 只读`，这是过渡做法；按操作逐项声明仍待完成） | 审查报告 §七 · NF-14.3 | S |
 | ⬜ BL-38 | 体验修复：音色设计按钮的可用状态与功能绑定一致（U-3）；循环体为空时提前提示（F-1）；产物节点放在视口内（U-5） | 组合测试 | S–M |
 | ⬜ BL-39 | ROADMAP R4：批处理中止后，提供「只继续未完成项」入口 | ROADMAP R4 | M |
 | ⬜ BL-40 | ContextManifest 溢出策略 `overflow: fail \| ask-human \| summarize` | AF-10.4 | M |
@@ -248,7 +254,7 @@ sources:
 
 | 问题 | 关联 | 建议 |
 |---|---|---|
-| `135cbef8` 被撤回是否是有意为之 | BL-00 | — |
+| ~~`135cbef8` 被撤回是否是有意为之~~ | BL-00 | ✅ 误提交，不恢复 |
 | ~~`control` 边：删除，还是实现为「仅顺序依赖」~~ | BL-05 | ✅ 2026-11-22 已决定：删除 |
 | 状态机：阶段 FSM 还是 statechart | BL-18 | 阶段 FSM |
 | 人工媒体交付：human-task 扩展类型，还是资产节点模板 | BL-20 | (a) 扩展类型 |

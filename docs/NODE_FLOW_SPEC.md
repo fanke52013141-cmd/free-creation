@@ -238,14 +238,14 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 
 **NF-10.1【现行】** 嵌套只能引用**已发布的固定版本**；运行时同一 `capabilityId` 再次进入调用链即判定为递归（`RECURSIVE_COMPOSITE`）。
 
-**NF-10.2【目标·新发现】发布期与运行期的预算缺省值必须统一**。现行实现两套不一致：
+**NF-10.2【现行 · BL-08，2026-11-22】发布期与运行期的预算缺省值统一**：唯一来源为 `src/shared/composite/budget.ts`（`COMPOSITE_BUDGET_DEFAULTS` = 8 层 / 200 展开节点 / 1500 连线），由 `test/composite-budget-parity.test.ts` 守护。修复前两套缺省不一致：
 
 | 预算 | 发布校验缺省（`validate.ts`） | 运行守卫缺省（`runtime.ts`） |
 |---|---|---|
 | 最大嵌套深度 | 5 | 8 |
 | 最大展开节点数 | 500 | 200 |
 
-后果：一个 300 个节点的节点流能**通过发布**，但**运行必然失败**（`EXPANSION_BUDGET_EXCEEDED`）。要求两处共用同一个常量模块，并加测试守住。
+后果是：嵌套展开总数在 200 到 500 之间的节点流能**通过发布**，但**运行必然失败**（`EXPANSION_BUDGET_EXCEEDED`）。统一采用运行期取值，因此存量实例的运行行为不变。
 
 **NF-10.3【现行】** 运行期预算错误：`RECURSIVE_COMPOSITE`、`DEPTH_EXCEEDED`、`EXPANSION_BUDGET_EXCEEDED`。
 
@@ -371,7 +371,7 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 |---|---|---|
 | 节点流不可被 Agent Flow 编排 | NF-1.4 / NF-13.* | P1 |
 | 端口兼容判定与画布分裂；类型枚举缺 iteration/camera | NF-6.4 / NF-6.5 | P1 |
-| 发布期/运行期预算缺省不一致（5/500 vs 8/200） | NF-10.2 | **P0**（小改动，后果是能发布不能运行） |
+| ~~发布期/运行期预算缺省不一致~~ ✅ BL-08 | NF-10.2 | — |
 | headless 计费确认门（修复提交已丢失） | NF-12.1 | **P0** |
 | 必填输入运行前预检 | NF-7.5 | P1 |
 | 媒体固定输入按类型匹配 | NF-6.2a | P1 |

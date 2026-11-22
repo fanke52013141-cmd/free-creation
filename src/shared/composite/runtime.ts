@@ -2,6 +2,7 @@ import type { CompositeInput, CompositeManifest, CompositeOutput } from './manif
 import type { ContractInputMap } from '../engine/inputs'
 import type { NodeValue } from '../engine/values'
 import type { CompositeRunContext } from '../engine/composite-run-contract'
+import { resolveCompositeBudget } from './budget'
 
 /**
  * 节点流运行时的纯规划/收集逻辑（W1）。
@@ -284,7 +285,7 @@ export interface CompositeRunBudgetCheck {
 /**
  * 运行期递归/深度/展开预算守卫（W3），与发布校验同口径：
  * 同一 capabilityId 再次进入即递归；深度与展开节点数取当前 manifest 的
- * executionPolicy（缺省 8 层 / 200 节点）。纯函数，GUI 隔离执行与测试共用。
+ * executionPolicy（缺省见 budget.ts，与发布校验同一来源）。纯函数，GUI 隔离执行与测试共用。
  */
 export function checkCompositeRunBudget(
   manifest: CompositeManifest,
@@ -296,8 +297,7 @@ export function checkCompositeRunBudget(
     { capabilityId: manifest.capabilityId, version: manifest.version }
   ]
   const expandedNodes = (parentContext?.expandedNodes ?? 0) + manifest.graph.nodes.length
-  const maxDepth = manifest.executionPolicy?.maxDepth ?? 8
-  const maxExpandedNodes = manifest.executionPolicy?.maxExpandedNodes ?? 200
+  const { maxDepth, maxExpandedNodes } = resolveCompositeBudget(manifest.executionPolicy)
   if (parentChain.some((entry) => entry.capabilityId === manifest.capabilityId)) {
     return {
       chain,

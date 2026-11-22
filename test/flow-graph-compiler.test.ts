@@ -128,9 +128,9 @@ describe('O4-P2 编译器', () => {
       graph(
         [
           node('a'),
-          node('b', { loop: { maxIterations: 3, exitCondition: [{ kind: 'output-field', stageKey: 'a', path: 'text', op: 'exists' }] } })
+          node('b', { loop: { maxIterations: 3, exitCondition: [{ kind: 'output-field', stageKey: 'b', path: 'text', op: 'exists' }] } })
         ],
-        [dataEdge('a', 'b'), dataEdge('b', 'a')],
+        [dataEdge('a', 'b')],
         'a',
         ['b']
       )

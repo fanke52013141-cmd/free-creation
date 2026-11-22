@@ -4,7 +4,13 @@ import {
   ReviewNodeConfigSchema,
   StateMachineNodeConfigSchema
 } from './node-contracts'
-import { validateFlowGraph, type FlowGraph, type FlowNode, type FlowGraphError } from './flow-graph'
+import {
+  validateFlowGraph,
+  type FlowGraph,
+  type FlowNode,
+  type FlowGraphError,
+  type FlowGraphCapabilityId
+} from './flow-graph'
 import { layoutGraph } from '../flow-layout'
 
 /**
@@ -64,8 +70,9 @@ export class FlowGraphCompileError extends Error {
 }
 
 /** 能力节点编译映射（与 builder-host TARGETS 同源口径）。 */
+// 键类型 = FLOW_GRAPH_CAPABILITY_IDS：校验目录与编译映射在类型层强制一一对应（BL-05）。
 const CAPABILITY_COMPILE: Record<
-  string,
+  FlowGraphCapabilityId,
   { type: string; contractVersion: number; inputPort: string; outputPort: string; config: string }
 > = {
   'text-template@1': {
@@ -164,8 +171,8 @@ function compileNode(node: FlowNode, graph: FlowGraph): CompiledNode {
     return { ...base, type: 'ai-review', text: node.review!.criteria, config: JSON.stringify(config), contractVersion: 1 }
   }
   if (node.kind === 'capability') {
-    const mapping = CAPABILITY_COMPILE[node.capability!]
-    if (!mapping) throw new FlowGraphCompileError([{ code: 'UNREACHABLE_NODE', nodeId: node.nodeId, message: `Unknown capability ${node.capability}` }])
+    const mapping = CAPABILITY_COMPILE[node.capability as FlowGraphCapabilityId]
+    if (!mapping) throw new FlowGraphCompileError([{ code: 'CAPABILITY_UNKNOWN', nodeId: node.nodeId, message: `Unknown capability ${node.capability}` }])
     return { ...base, type: mapping.type, config: mapping.config, contractVersion: mapping.contractVersion }
   }
   // state-machine 节点：由编译器的派生状态机统一承载，单节点声明此处给出基础配置。
@@ -187,7 +194,6 @@ function deriveStateMachine(graph: FlowGraph): { states: string[]; transitions: 
     { from: 'idle', event: 'flow.started', to: graph.entry }
   ]
   for (const edge of graph.edges) {
-    if (edge.kind !== 'data') continue
     transitions.push({ from: edge.from.nodeId, event: `${edge.to.nodeId}.entered`, to: edge.to.nodeId })
   }
   for (const exit of graph.exits) {
@@ -311,10 +317,9 @@ export function compileFlowGraph(graph: FlowGraph): CompiledGraph {
   const capabilityByNode = new Map(
     graph.nodes
       .filter((node) => node.kind === 'capability')
-      .map((node) => [canvasNodeId(node.nodeId), CAPABILITY_COMPILE[node.capability!]])
+      .map((node) => [canvasNodeId(node.nodeId), CAPABILITY_COMPILE[node.capability as FlowGraphCapabilityId]])
   )
   const edges: CompiledEdge[] = mapped.edges
-    .filter((edge) => edge.kind === 'data')
     .map((edge) => {
       const fromCap = capabilityByNode.get(edge.from.nodeId)
       const toCap = capabilityByNode.get(edge.to.nodeId)

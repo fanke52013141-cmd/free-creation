@@ -64,7 +64,7 @@ ff54f212 2026-11-20 01:57:59 chore(ui): 旧尺寸时代注释校准
 
 1. **立即**：把 `backup/main-before-sync-20261120-200237` 上的 5 个提交 rebase 或 cherry-pick 回 main。之后 11-21 的提交（弹窗规范等）可能产生冲突，需要逐个解决。合回后跑 `npm run verify`、`guard:agent-parity`、`verify:logging` 三道门禁。
 2. **防复发**：规范的修订必须当天推送到 origin；增加一个 `pre-sync` 脚本，在 `reset/pull --rebase` 之前检查是否有未推送的提交，有就阻断；审查报告里「已修复」的结论要附 `commit hash + 已在 origin/main` 的证明。
-**恢复进展（2026-11-22）**：恢复脚本 `canvas-studio/restore-p0-20261122.ps1` 已准备好，尚未执行。已离线完成三方冲突分析，以共同祖先 `35c43431` 为基准：
+**✅ 已恢复（2026-11-22 13:22）**：5 个提交已合回 main（`7e36dd8` `ccd5057` `5cb530c` `32411ef` `b09dacc`），契约快照已重新生成（`39610ae`），规范草案已提交（`c293701`），并推送到 origin/main（`2e221e7..c293701`）。门禁 verify:agent-access / guard:agent-parity / verify:logging / test:contract（331 项）/ 恢复的定向测试（283 项）全部通过。上表 9 项已逐一复核生效。事前分析如下（实际只有 change-impact.json 一处冲突）：已离线完成三方冲突分析，以共同祖先 `35c43431` 为基准：
 - 5 个丢失提交共改动 47 个文件，其中 8 个在 main 上也有改动；
 - 真正有冲突的只有 3 处：`node-ui-decisions.test.ts` 的连线线宽断言（保留 main 一侧）、`LOGGING_COVERAGE.md` 和 `02-capability-matrix.md` 的文末追加（两边合并保留）；
 - 2 个生成文件（`contracts.json`、`change-impact.json`）在合并后重新生成；
