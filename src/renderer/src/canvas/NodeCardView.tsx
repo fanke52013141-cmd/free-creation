@@ -25,6 +25,8 @@ import { currentNodeFingerprint, successfulInputFingerprint } from '../engine/re
 import { projectNodeOutputs } from '../nodes/nodeValues'
 import { deriveNodeReadiness } from './node-readiness'
 import { readCompositeInstanceManifest } from '@shared/composite/outputs'
+import { CHAT_FEATURE_KEY } from '@shared/engine/models'
+import { chatModelBinding } from './chat-readiness'
 import { runNodeManually } from '../engine/executor'
 import { guiWorkflowInputOptions } from '../stores/workflowInput'
 import { useAppStore } from '../stores/app'
@@ -122,7 +124,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     () => JSON.parse(providersKey) as typeof providers,
     [providersKey]
   )
-  const modelCheckKey = `${shape.props.nodeType}:${shape.props.config}:${providersKey}`
+  const modelCheckKey = `${shape.props.nodeType}:${shape.props.nodeType === 'chat' ? shape.props.text : shape.props.config}:${providersKey}`
   const [modelCheck, setModelCheck] = useState<{
     key: string
     available: boolean
@@ -134,16 +136,22 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       'image-edit': { feature: 'image.edit', operation: 'image.edit' },
       video: { feature: 'video.generate', operation: 'video.generate' },
       'ai-process': { feature: 'text.process', operation: 'text.generate' },
-      chat: { feature: 'text.chat', operation: 'text.generate' }
+      chat: { feature: CHAT_FEATURE_KEY, operation: 'text.generate' }
     }
     const target = features[shape.props.nodeType]
     let cancelled = false
     if (target) {
+      // 对话节点的模型选择存在 props.text（序列化会话数据）里；读 props.config 会永远拿不到，
+      // 且功能键曾误用 text.chat，导致合法绑定被判「模型尚未配置」。现与执行器同源。
       let config: { featureKey?: string; modelKey?: string } = {}
-      try {
-        config = JSON.parse(shape.props.config || '{}')
-      } catch {
-        /* executor owns invalid config errors */
+      if (shape.props.nodeType === 'chat') {
+        config = chatModelBinding(shape.props.text)
+      } else {
+        try {
+          config = JSON.parse(shape.props.config || '{}')
+        } catch {
+          /* executor owns invalid config errors */
+        }
       }
       void checkModelAvailability(
         stableProviders,
@@ -161,7 +169,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     return () => {
       cancelled = true
     }
-  }, [shape.props.nodeType, shape.props.config, stableProviders, modelCheckKey])
+  }, [shape.props.nodeType, shape.props.config, shape.props.text, stableProviders, modelCheckKey])
   const spec = getNodeType(shape.props.nodeType)
   // 循环分支快照卡：内核是文本节点，呈现层按产出节点身份覆盖图标/身份色，只读不可执行。
   const iterationSnapshot = readIterationSnapshot(shape)

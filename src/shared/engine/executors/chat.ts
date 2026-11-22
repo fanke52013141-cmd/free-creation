@@ -9,7 +9,7 @@ import {
   serializeChat,
   updateActiveChatConversation
 } from '../chat-data'
-import { featureKeyOf, findTextModel, modelKeyOf, resolveFeatureOption } from '../models'
+import { CHAT_FEATURE_KEY, featureKeyOf, findTextModel, modelKeyOf, resolveFeatureOption } from '../models'
 import { waitForChat } from '../helpers'
 import { buildChatCompressionPrompt, splitChatForCompression } from '../chat-memory'
 import { isReasoningModelId } from '../../model-reasoning'
@@ -135,17 +135,17 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
     ? await resolveFeatureOption(
         ctx.gateway,
         ctx.providers,
-        featureKeyOf(data, 'chat.generate'),
+        featureKeyOf(data, CHAT_FEATURE_KEY),
         'text.generate',
         modelKeyOf(data)
       )
     : findTextModel(ctx.providers, data.modelKey)
-  if (!option) return { status: 'skipped', reason: '功能 chat.generate 尚未绑定已验证文本模型' }
+  if (!option) return { status: 'skipped', reason: `功能 ${CHAT_FEATURE_KEY} 尚未绑定已验证文本模型` }
   // L03：能力解析阶段与目标身份；只记 provider/model 标识，不读对话正文。
   ctx.trace?.('capability', 'info', '已解析对话模型能力')
   ctx.setDiagnosticTarget?.({
     operation: 'chat.generate',
-    featureKey: featureKeyOf(data, 'chat.generate'),
+    featureKey: featureKeyOf(data, CHAT_FEATURE_KEY),
     providerId: option.provider.id,
     providerName: option.provider.name,
     modelId: option.model.id,

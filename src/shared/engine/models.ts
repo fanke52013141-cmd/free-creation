@@ -60,6 +60,9 @@ export interface FeatureModelOption {
   key: string
 }
 
+/** 对话节点唯一功能键：就绪检查、执行器与绑定诊断共用，禁止各处再写字面量。 */
+export const CHAT_FEATURE_KEY = 'chat.generate'
+
 /** Config compatibility: a profile is persisted as featureKey, never as a raw provider/model. */
 export function featureKeyOf(config: unknown, fallback: string): string {
   const value = config && typeof config === 'object' ? (config as Record<string, unknown>).featureKey : undefined
