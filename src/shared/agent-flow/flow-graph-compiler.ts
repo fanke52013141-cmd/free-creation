@@ -210,12 +210,41 @@ function deriveStateMachine(graph: FlowGraph): { states: string[]; transitions: 
 export function canvasNodeId(id: string): string {
   return `shape:${id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
 }
+/**
+ * 条件里的节点引用同样重映射（BL-03 修复）：此前只重映射了 loop.exitCondition，
+ * 边条件、decisions.when、inputs.selectors 仍引用语义 id，编译产物一进 AgentNodeConfigSchema
+ * 的引用校验就失败——带条件分支或最小输入声明的外部图根本无法编译落画布。
+ */
+function remapCondition<T extends { kind: string }>(condition: T): T {
+  if ('stageKey' in condition)
+    return { ...condition, stageKey: canvasNodeId((condition as { stageKey: string }).stageKey) }
+  if ('reviewNodeId' in condition)
+    return {
+      ...condition,
+      reviewNodeId: canvasNodeId((condition as { reviewNodeId: string }).reviewNodeId)
+    }
+  return condition
+}
 function toCanvasGraph(graph: FlowGraph): FlowGraph {
   return {
     ...graph,
     nodes: graph.nodes.map((node) => ({
       ...node,
       nodeId: canvasNodeId(node.nodeId),
+      ...(node.inputs
+        ? {
+            inputs: {
+              ...node.inputs,
+              selectors: node.inputs.selectors.map((selector) => ({
+                ...selector,
+                sourceStageKey: canvasNodeId(selector.sourceStageKey)
+              }))
+            }
+          }
+        : {}),
+      ...(node.decisions?.when
+        ? { decisions: { ...node.decisions, when: node.decisions.when.map(remapCondition) } }
+        : {}),
       ...(node.loop
         ? {
             loop: {
@@ -234,7 +263,8 @@ function toCanvasGraph(graph: FlowGraph): FlowGraph {
     edges: graph.edges.map((edge) => ({
       ...edge,
       from: { ...edge.from, nodeId: canvasNodeId(edge.from.nodeId) },
-      to: { ...edge.to, nodeId: canvasNodeId(edge.to.nodeId) }
+      to: { ...edge.to, nodeId: canvasNodeId(edge.to.nodeId) },
+      ...(edge.condition ? { condition: edge.condition.map(remapCondition) } : {})
     })),
     entry: canvasNodeId(graph.entry),
     exits: graph.exits.map(canvasNodeId)

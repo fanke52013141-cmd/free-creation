@@ -35,6 +35,7 @@ import { getDb } from '../store/db'
 import { openProject } from '../store/projects.repo'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
 import { DesktopAccessError, type AccessDesktop } from './desktop'
+import { cooperateIsHumanDecision, previewValue, requestHumanDecision } from './human-decision'
 
 /** 本族已开放的操作；service.ts 只按这个集合做一次分组委托。 */
 export const FLOW_AGENT_OPERATION_IDS: ReadonlySet<AccessOperationId> = new Set([
@@ -346,9 +347,8 @@ function collaborationFlowAgent(
  */
 async function cooperateFlowAgent(
   input: Record<string, unknown>,
-  _context: FlowAgentOperationContext
+  context: FlowAgentOperationContext
 ): Promise<unknown> {
-  void _context
   const port = flowAgentAccessPort()
   if (!port) refuse('FLOW_AGENTS_UNAVAILABLE', 'flow agent host is not running in this instance')
   const projectId = input.projectId as string
@@ -377,6 +377,23 @@ async function cooperateFlowAgent(
   if (!existing) refuse('AGENT_TASK_MISSING', 'cooperate: the node has no persisted Agent task yet')
   if (collaboration.action === 'discuss' || collaboration.action === 'revise')
     await port.assertAgentScopeToolCalling(collaboration.projectId, collaboration.nodeId)
+  // BL-01：提交成果 / 采纳意见是人工决定——外部 Agent 只能请求，必须由人在 GUI 允许。
+  if (cooperateIsHumanDecision(collaboration)) {
+    const title = file.nodes.find((node) => node.id === nodeId)?.title ?? nodeId
+    const decision = await requestHumanDecision({
+      desktop: context.desktop,
+      projectId,
+      activeProjectId: context.activeProjectId(),
+      prompt: {
+        title: '外部 Agent 请求代你做协作决定',
+        message: `外部 Agent 想在节点「${title}」上${
+          collaboration.action === 'submit' ? '提交选定成果并让流程继续' : '把下面这条意见记为「已采纳」'
+        }。这是人工决定，只有你点「允许」才会生效。\n\n内容：${previewValue(collaboration.text) || '（无文字）'}`,
+        confirmText: '允许'
+      }
+    })
+    if (!decision.ok) refuse(decision.code, decision.detail)
+  }
   const view = (await port.cooperate({ ...collaboration, actor: 'external' })) as {
     task: Parameters<typeof taskDto>[0]
     goal: string
@@ -782,6 +799,18 @@ async function confirmGraphOp(
   }
   if (preview.state !== 'preview')
     refuse('FLOW_BUILD_UNCONFIRMED', `graph preview state is ${preview.state}`)
+  // BL-01 / AF-5.3：落画布是人工决定——外部只能请求，人在 GUI 允许后才走同一 commitFlowGraph。
+  const decision = await requestHumanDecision({
+    desktop: context.desktop,
+    projectId,
+    activeProjectId: context.activeProjectId(),
+    prompt: {
+      title: '外部 Agent 请求把流程图落到画布',
+      message: `外部 Agent 想把流程图「${preview.graph.name}」落到当前画布：新建 ${preview.nodes.length} 个节点、${preview.edges.length} 条连线（含 ${preview.graph.nodes.filter((node) => node.participation !== 'autonomous').length} 个需要你参与的节点）。只有你点「允许落画布」才会写入，写入后可一步撤销。`,
+      confirmText: '允许落画布'
+    }
+  })
+  if (!decision.ok) refuse(decision.code, decision.detail)
   let reply: { graphVersion: number; result?: unknown }
   try {
     reply = await context.desktop.run({ action: 'flow-graph', projectId, buildId }, undefined, 30000)

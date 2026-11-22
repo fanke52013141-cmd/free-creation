@@ -1031,7 +1031,18 @@ export class FlowCoordinatorHost {
       this.store.save(run)
       return false
     }
-    const { ready } = nextReadyNodes(graph, facts, delivered, loopIterations)
+    const route = nextReadyNodes(graph, facts, delivered, loopIterations)
+    const { ready } = route
+    // BL-04 运行期兜底：多值交付同时命中多个互斥分支时拒绝推进（不猜走哪条）。
+    if (route.ambiguous.length > 0) {
+      emitGatewayEvent(
+        'agent.coordination.graph_ambiguous',
+        '图路由：同一节点多个互斥分支同时成立',
+        { projectId: run.projectId, nodeId: run.nodeId, taskId: run.taskId, traceId: run.traceId, spanId: run.spanId },
+        { status: 'failed', attributes: { sourceNodeIds: route.ambiguous.join(',') } }
+      )
+      throw new AgentRuntimeError('FLOW_BRANCH_AMBIGUOUS', 'graph-route')
+    }
     const dispatched = new Set(run.children.map((child) => child.nodeId))
     const next = graph.nodes.find(
       (node) =>
@@ -1045,8 +1056,29 @@ export class FlowCoordinatorHost {
             run.children.some((child) => child.nodeId === node.nodeId && child.state === 'waiting')))
     )
     if (!next) {
-      // 无就绪未分派节点：等待人工/审核或阻塞，不静默放行。
-      return this.wait(run, 'human.wait')
+      // BL-03 / AF-8.5b：区分「确有待办（等人/等审核/有在途子任务）」与「停滞」。
+      // 停滞=没有就绪节点、没有在途或等待中的子任务、没有未通过的审核——不再报成等待人工。
+      const activeChild = run.children.some((child) =>
+        ['ready', 'running', 'queued', 'waiting'].includes(child.state)
+      )
+      const pendingReview = (run.reviews ?? []).some((review) => review.state !== 'passed')
+      if (ready.length > 0 || activeChild || pendingReview) return this.wait(run, 'human.wait')
+      const stalled = route.blocked.map((item) => item.nodeId)
+      const allExitsSkipped = graph.exits.every((exit) => route.skipped.includes(exit))
+      emitGatewayEvent(
+        'agent.coordination.graph_stalled',
+        '图路由停滞：没有可推进的节点',
+        { projectId: run.projectId, nodeId: run.nodeId, taskId: run.taskId, traceId: run.traceId, spanId: run.spanId },
+        {
+          status: 'failed',
+          attributes: {
+            reason: allExitsSkipped ? 'ALL_EXITS_SKIPPED' : 'INCOMING_EDGES_UNSATISFIED',
+            stalledNodeIds: stalled.join(',').slice(0, 512),
+            skippedCount: route.skipped.length
+          }
+        }
+      )
+      throw new AgentRuntimeError('FLOW_STALLED', 'graph-route')
     }
     if (run.decisions + (run.controlSteps ?? 0) >= run.config.maxSteps)
       throw new AgentRuntimeError('AGENT_BUDGET_EXHAUSTED', 'coordination')

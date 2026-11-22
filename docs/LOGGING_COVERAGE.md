@@ -1050,3 +1050,6 @@ node.runPlan 为只读预检，复用 Agent 请求诊断，返回端口元数据
 - **节点流运行**：`composite.run.started/completed/failed/cancelled/step_failed` 与 `composite.draft.*`、`composite.publish.*` 已于 2026-11-11 W1/W3 条目登记（见上），本轮复核无漂移。
 
 验证：`npm run verify:logging` 通过（白名单/终态唯一/transport 故障不改业务）；`test/observability/*` 全绿；grep 复核上述事件在 events.ts 与发射点一一对应。未覆盖：真实模型长任务的日志字段抽查、诊断包导出后的字段复核仍按既有条目边界执行。
+
+2026-11-22 BL-01/03/04/05/06/07/08：图模式新增两个诊断事件——`agent.coordination.graph_stalled`（status=failed；attributes：reason=ALL_EXITS_SKIPPED|INCOMING_EDGES_UNSATISFIED、stalledNodeIds（只含节点 ID，≤512 字符）、skippedCount）和 `agent.coordination.graph_ambiguous`（status=failed；attributes：sourceNodeIds）；随后协调器沿既有 `agent.coordination.failed` 记录终态码 FLOW_STALLED / FLOW_BRANCH_AMBIGUOUS，不重复记终态。人工决定确认（BL-01）复用既有 `confirm-sensitive` 交互请求与 agent.access 调度生命周期，拒绝或超时以错误码 HUMAN_DENIED / HUMAN_DECISION_TIMEOUT 落入既有 access 失败记录；确认框里的内容摘要只展示给人，不写日志或诊断事件。校验与路由是纯函数，错误沿既有返回路径给出，不新增事件。
+

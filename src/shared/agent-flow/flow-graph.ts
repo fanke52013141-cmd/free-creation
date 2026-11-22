@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { StageConditionSchema, StageInputsSchema } from './stage-contracts'
+import { StageConditionSchema, StageInputsSchema, type StageCondition } from './stage-contracts'
+import { canonicalFlowJson } from './semantic-revision'
 
 /**
  * O4-P1 FlowGraph：可序列化流程解释器 IR（纯共享协议，main 不导入 React）。
@@ -133,8 +134,13 @@ export const FlowEdgeSchema = z
         'FLOW_EDGE_KIND_REMOVED: control edges were removed from FlowGraph; express ordering with a data edge and re-publish the graph'
       )
       .default('data'),
-    /** 条件边：全部满足才流转（复用 evaluateStageEntry 口径）。 */
-    condition: z.array(StageConditionSchema).max(16).optional()
+    /** 条件边：全部满足才流转（复用 evaluateStageEntry 口径）。同源条件出边必须两两互斥（BL-04）。 */
+    condition: z.array(StageConditionSchema).max(16).optional(),
+    /**
+     * BL-04 否则分支：同源所有条件出边都已可判定且均不成立时流转；任一成立时不流转。
+     * 不能与 condition 同用；每个源节点最多一条；必须至少有一条同源条件出边。
+     */
+    otherwise: z.literal(true).optional()
   })
   .strict()
 export type FlowEdge = z.infer<typeof FlowEdgeSchema>
@@ -176,6 +182,8 @@ export const FlowGraphSchema = z
         context.addIssue({ code: 'custom', path: ['edges', index], message: 'Edge to must reference a declared node' })
       for (const condition of edge.condition ?? [])
         checkConditionRefs(condition, nodeIds, context, ['edges', index])
+      if (edge.otherwise && (edge.condition?.length ?? 0) > 0)
+        context.addIssue({ code: 'custom', path: ['edges', index], message: 'An otherwise edge must not declare a condition' })
     })
     for (const node of graph.nodes) {
       for (const selector of node.inputs?.selectors ?? [])
@@ -218,6 +226,8 @@ export type FlowGraphErrorCode =
   | 'LOOP_BODY_UNSUPPORTED'
   | 'NODE_KIND_UNSUPPORTED'
   | 'CAPABILITY_UNKNOWN'
+  | 'CONDITION_NOT_EXCLUSIVE'
+  | 'OTHERWISE_INVALID'
 export interface FlowGraphError {
   code: FlowGraphErrorCode
   nodeId?: string
@@ -292,8 +302,8 @@ function reachable(adj: Map<string, string[]>, start: string): Set<string> {
  * 2) 入口可达所有节点、出口可达（无孤岛）；
  * 3) 循环 maxIterations 不超过全局预算；
  * 4) 入口不能同时是出口（空流程）；
- * 5) 节点种类在图模式可分派白名单内、capability 在可编译能力目录内（BL-05，与运行准入同源）。
- * 条件互斥的完整可满足性检查（D6）属 P2/P3，本层不做。
+ * 5) 节点种类在图模式可分派白名单内、capability 在可编译能力目录内（BL-05，与运行准入同源）；
+ * 6) 同源条件出边两两互斥、otherwise 用法合法（BL-04，见 conditionsExclusive）。
  */
 export function validateFlowGraph(graph: FlowGraph): FlowGraphValidation {
   const errors: FlowGraphError[] = []
@@ -321,6 +331,29 @@ export function validateFlowGraph(graph: FlowGraph): FlowGraphValidation {
         nodeId: node.nodeId,
         message: `Unknown capability ${node.capability} (available: ${FLOW_GRAPH_CAPABILITY_IDS.join(', ')})`
       })
+  }
+
+  // BL-04：同源条件出边必须两两互斥；otherwise 至多一条且须有条件兄弟边。
+  for (const node of graph.nodes) {
+    const outgoing = graph.edges.filter((edge) => edge.from.nodeId === node.nodeId)
+    const conditional = outgoing.filter((edge) => (edge.condition?.length ?? 0) > 0)
+    const otherwise = outgoing.filter((edge) => edge.otherwise)
+    if (otherwise.length > 1)
+      errors.push({ code: 'OTHERWISE_INVALID', nodeId: node.nodeId, message: `Node ${node.nodeId} declares more than one otherwise edge` })
+    if (otherwise.length > 0 && conditional.length === 0)
+      errors.push({ code: 'OTHERWISE_INVALID', nodeId: node.nodeId, message: `Otherwise edge from ${node.nodeId} needs at least one conditional sibling edge` })
+    for (let i = 0; i < conditional.length; i++)
+      for (let j = i + 1; j < conditional.length; j++) {
+        const a = conditional[i]
+        const b = conditional[j]
+        if (a.to.nodeId === b.to.nodeId) continue
+        if (!conditionsExclusive(a.condition!, b.condition!))
+          errors.push({
+            code: 'CONDITION_NOT_EXCLUSIVE',
+            nodeId: node.nodeId,
+            message: `Conditional edges ${node.nodeId}→${a.to.nodeId} and ${node.nodeId}→${b.to.nodeId} may both hold; make them mutually exclusive (e.g. exists/missing, equals different values, count ranges) or use an otherwise edge`
+          })
+      }
   }
 
   // 环检测：每个含环的强连通分量必须有一个有界循环载体。
@@ -366,4 +399,42 @@ export function validateFlowGraph(graph: FlowGraph): FlowGraphValidation {
       })
 
   return errors.length ? { ok: false, errors } : { ok: true }
+}
+
+// ── BL-04 条件互斥（声明式可判定子集，纯函数）──
+
+function valueTypeOf(value: unknown): string {
+  return Array.isArray(value) ? 'array' : typeof value
+}
+
+/**
+ * 两个原子条件不可能同时成立。判定按「单值交付」：同一节点、同一路径的 equals 不同值 /
+ * type 不同类型视为互斥；多值交付同时命中多个分支由路由器运行期报 ambiguous 兜底。
+ * exists/equals/type 与 missing 互斥；output-count 的 gte/lte 区间不相交时互斥。
+ * human-decision 与 review-passed 没有否定形式，无法互斥——需要二选一时用 otherwise 边。
+ */
+export function conditionAtomsContradict(a: StageCondition, b: StageCondition): boolean {
+  if (a.kind === 'output-field' && b.kind === 'output-field') {
+    if (a.stageKey !== b.stageKey || a.path !== b.path) return false
+    const positive = (op: string): boolean => op === 'exists' || op === 'equals' || op === 'type'
+    if ((a.op === 'missing' && positive(b.op)) || (b.op === 'missing' && positive(a.op))) return true
+    if (a.op === 'equals' && b.op === 'equals')
+      return canonicalFlowJson(a.value) !== canonicalFlowJson(b.value)
+    if (a.op === 'type' && b.op === 'type') return a.valueType !== b.valueType
+    if (a.op === 'equals' && b.op === 'type') return valueTypeOf(a.value) !== b.valueType
+    if (a.op === 'type' && b.op === 'equals') return valueTypeOf(b.value) !== a.valueType
+    return false
+  }
+  if (a.kind === 'output-count' && b.kind === 'output-count') {
+    if (a.stageKey !== b.stageKey || a.op === b.op) return false
+    const gte = a.op === 'gte' ? a.count : b.count
+    const lte = a.op === 'lte' ? a.count : b.count
+    return lte < gte
+  }
+  return false
+}
+
+/** 两条条件边（各自为合取）互斥 ⇔ 存在一对互相矛盾的原子条件。 */
+export function conditionsExclusive(a: StageCondition[], b: StageCondition[]): boolean {
+  return a.some((left) => b.some((right) => conditionAtomsContradict(left, right)))
 }

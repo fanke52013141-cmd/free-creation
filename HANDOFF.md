@@ -1,3 +1,5 @@
+> **2026-11-22 最新交接入口**：[规范审查 → 两份新权威规范 → P0 修复](docs/HANDOFF_2026_11_22_SPEC_P0.md)。待办唯一来源见 [BACKLOG](docs/BACKLOG.md)；权威规范见 [AGENT_FLOW_SPEC](docs/AGENT_FLOW_SPEC.md)、[NODE_FLOW_SPEC](docs/NODE_FLOW_SPEC.md)。
+
 > 2026-10-24 本地开发最新交接：[已完成与后续工作](docs/HANDOFF_2026_10_24_LOCAL_DEVELOPMENT.md)。优先阅读该文；本文后续历史记录不能替代最新交付与验证状态。
 >
 > 2026-10-24 本地接续批次：[本地媒体运行中停止、诊断排障闭环与状态机独立执行](docs/LOCAL_MEDIA_STOP_STATE_MACHINE_2026_10_24.md)——P1-A 媒体一致性/运行中停止/保存重开（真实桌面验收）、P1-B 诊断 summary trace/span 配对与 recipe/tts 关联补齐、P2-A 状态机独立执行（人工事件驱动）已交付工作区，未提交/推送。

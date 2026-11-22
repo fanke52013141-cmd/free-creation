@@ -2,7 +2,7 @@
 title: Canvas Studio 待开发清单（BACKLOG）
 status: living            # 常更新文档；每完成一项就勾选，并附上提交 hash
 last-updated: 2026-11-22
-baseline-commit: c293701 (main)
+baseline-commit: 28d02e81 (main)
 sources:
   - docs/SPEC_DEEP_REVIEW_2026_11_22.md（审查报告，编号 A*/G*/N*/F*/U*）
   - docs/NODE_FLOW_SPEC.md 附录 A（NF-*）
@@ -36,7 +36,7 @@ sources:
 - **结论**：`135cbef8` 只新增了临时脚本 `test/tmp-matrix-dump.test.ts`（提交说明与内容不符），属于误提交，撤回正确，不恢复；转正工作见 BL-51。
 - **记录**：唯一冲突是 `change-impact.json`（生成文件），合入后已重新生成快照（`39610ae`）；test:contract 331 项、恢复的定向测试 283 项全部通过。
 
-### ⬜ BL-01 外部 Agent 不得代人做人工决定 · M
+### ✅ BL-01 外部 Agent 不得代人做人工决定 · M（2026-11-22 实时确认版，代码已写、**未过门禁、未提交**）
 - **来源**：审查报告 A6 · AF-1.5 / AF-5.3 / AF-17.2
 - **范围**：
   - 在 OperationSpec 里新增动作级别：`read | propose | control | human-decision`。
@@ -44,17 +44,20 @@ sources:
   - GUI 弹出待采用提示，由人点击后生效。
   - 草稿标注 `author: agent:external:<clientId>`。
 - **代码位置**：`src/shared/agent-access/ops/flow-agents.ts`、`src/main/agent-access/flow-agents-ops.ts`、`src/renderer/src/canvas/CanvasEditor.tsx:1806-1855`、`flow-build-actions.ts`
+- **实际实现（与原计划的差异）**：没有做持久草稿队列，复用了已有的 `desktop.ask` + `confirm-sensitive` 交互确认通道（不占用写入槽、只有 renderer 回复通道能确认）。新增 `src/main/agent-access/human-decision.ts`，在 4 个操作的**副作用之前**调用：`flowGraph.confirm`、`flowAgent.build.commit`、`humanTask.submit`、`flowAgent.cooperate`（action=submit 或 accepted=true；note/discuss/revise 属交流，不打扰人）。确认框会说明节点和内容摘要（摘要只用于确认框，不进日志）。拒绝、5 分钟超时、无桌面分别返回 `HUMAN_DENIED` / `HUMAN_DECISION_TIMEOUT` / `DESKTOP_UNAVAILABLE`，都是生效前失败；迟到的允许不生效。
 - **验收**：
-  - [ ] 外部调用上述操作时，画布或节点状态都不变，只多出一份待采用草稿
-  - [ ] GUI 采用后才落画布或完成，且只占一个撤销步
-  - [ ] parity 测试覆盖三入口的不同行为（GUI 直接生效，外部只能产生草稿）
-  - [ ] 规范 AF-17.2 改为【现行】
+  - [x] 外部调用时先弹确认；人拒绝或超时时不调用 desktop.run 或 port.cooperate（单测：build-access 2 例、cooperate-access 4 例）
+  - [x] 允许后走原有的同一实现（commitFlowGraph / commitFlowBuild / human-task-submit / cooperate），撤销步语义不变
+  - [x] 规范 AF-1.5 / AF-5.3 / AF-17.2 改为【现行】
+  - [ ] 持久草稿队列（人离开时外部提交可稍后采用）：后续增强，未排期
+- **待决定**：`flowStateMachine.submitEvent`（状态机人工事件）和 `composite.run.submitHuman`（节点流运行中补人工输入）这次没有纳入，原因是前者不在 AF-17.2 名单里，后者需要支持无桌面的 headless 场景。要不要纳入，请拍板。
+- **⚠️ 需要同步更新的真机验收脚本**：以下脚本通过外部接口调用了这些操作，现在会停在确认框上，需要加一步「点允许」才能跑通——`scripts/acceptance/agent-flow-human-task.cjs`、`agent-flow-human-task-dispatch.cjs`、`scripts/mcp-acceptance.cjs`、`mcp-acceptance-families-4-5-6-9.cjs`、`mcp-acceptance-gap-fill.cjs`、`mcp-acceptance-optimizations.cjs`、`test-agent-graph-milestone.cjs`、`audit-business-actions.cjs`。
 
 ### ✅ BL-02 task-bind 工具白名单回归 · S（随 BL-00 合入 `5cb530c`）
 - **来源**：AF-3.2a（如果 BL-00 合入成功，这一项随之关闭，只需复核）
 - **验收**：[ ] 勾选 `web.search@1` 的专家 Agent 能正常运行；`runtime.ts` 与 `desktop-host.ts:280` 使用同一份白名单常量
 
-### ⬜ BL-03 图模式：死路径消除 + 汇合推断 + 「停滞」终态 · M
+### ✅ BL-03 图模式：死路径消除 + 汇合推断 + 「停滞」终态 · M（代码已写、**未过门禁、未提交**）
 - **来源**：G1 · AF-8.3a / AF-8.3b / AF-8.5b / V7
 - **范围**：
   - 新增子节点状态 `skipped`：条件为假时标记，并沿数据边向下游传播。
@@ -62,17 +65,21 @@ sources:
   - 新增流程终态 `stalled`：判定条件是没有就绪节点、没有运行中节点、也没有人工待办；状态里带上阻塞节点和原因。
   - 删除 `coordinator-host.ts:1052-1055` 里把停滞报告为 `human.wait` 的逻辑。
 - **代码位置**：`flow-graph-router.ts`、`coordinator-host.ts` graphStep、`desktop-tasks.ts` 状态联合、`run-overview.ts`
+- **实现**：路由器重写为「边三态（满足 / 死边 / 待定）+ 跳过的不动点传播」；`all` 新语义；完成判定要求至少一个出口交付；宿主在确实没有待办时报 `blocked` + `FLOW_STALLED`（没有新增状态枚举，blocked 本来就表示「无法自行推进」），并发 `agent.coordination.graph_stalled` 事件（附被阻塞节点 ID）；失败文案已写入 failure-messages。
+- **顺带修复（严重）**：编译器只重映射了 `loop.exitCondition`，没有重映射边条件、`decisions.when`、`inputs.selectors` 里的节点引用，所以**任何带条件分支或最小输入声明的外部图都无法编译落画布**（会被契约校验拒绝）。已修复，并加了编译测试。
 - **验收**：
-  - [ ] 路由测试：XOR 分支 + 默认 all 汇合能走到完成；分支末端作为出口时，流程能完成
-  - [ ] 死锁图返回 `stalled`，并给出节点 ID 和原因码
-  - [ ] UI 上 stalled 与「等待人工」能明显区分（暂用状态文字，正式样式见 BL-16）
+  - [x] 路由测试：XOR 分支 + 默认 all 汇合能走到完成；出口落在未选分支上时流程能完成；全部出口都被跳过时不算完成；条件引用未落定节点时不提前跳过
+  - [x] 协调器测试：条件永不成立时返回 `FLOW_STALLED`，run 状态为 blocked
+  - [ ] UI 上 stalled 与「等待人工」能明显区分：失败文案已有，正式样式和「被跳过节点」的展示见 BL-16
+- **兼容**：已有的 XOR 汇合如果显式写了 `any` 行为不变；显式写了 `all` 的，从「永远等」变为「跳过的分支算已落定」，这正是期望的修复。
 
-### ⬜ BL-04 分支条件互斥校验 · M
+### ✅ BL-04 分支条件互斥校验 · M（代码已写、**未过门禁、未提交**）
 - **来源**：G2 · V6
 - **范围**：对 `StageCondition` 做静态互斥检查（同一 stageKey、同一 path 上的 equals/exists/missing/type、count 区间、human-decision、review-passed）。无法判定的组合，要求写明 `else` 或优先级。
-- **验收**：[ ] 两条都可能为真的条件出边，校验时拒绝，错误码 `CONDITION_NOT_EXCLUSIVE`；[ ] 有 `else` 的图可以通过
+- **实现**：`conditionsExclusive` 做声明式互斥判定；新增 `otherwise` 边（原计划叫 else，为避开关键字改名）。多值交付同时命中多个分支时，运行期报 `FLOW_BRANCH_AMBIGUOUS` 兜底。
+- **验收**：[x] 两条都可能为真的条件出边，校验时拒绝，错误码 `CONDITION_NOT_EXCLUSIVE`；[x] 有 `otherwise` 的图可以通过，非法 otherwise 报 `OTHERWISE_INVALID`；[x] 路由测试覆盖 otherwise 两个方向和多值歧义
 
-### 🟡 BL-05 校验即准入 · S–M（control 边删除、kind 白名单、能力目录已完成，待提交；数据边端口类型校验转入 BL-11）
+### 🟡 BL-05 校验即准入 · S–M（control 边删除、kind 白名单、能力目录 ✅ `28d02e81`；数据边端口类型校验转入 BL-11）
 - **来源**：G4 / G6 / G8 · AF-6.2 / V8 / V9
 - **范围**：
   - 校验、编译、运行准入共用同一份 kind 白名单（目前 `state-machine` 能通过校验，但会被准入拒绝）。
@@ -86,20 +93,20 @@ sources:
 - **说明**：FlowGraph v1 只携带 portId、不携带端口类型，`portPairCompatible` 又在 renderer 里，main 侧拿不到类型；端口校验只有在 v2 的显式端口（BL-11）里才能做，因此转入 BL-11。
 - **验收**：[x] 种类和能力：validate、compile、准入共用 `FLOW_GRAPH_DISPATCHABLE_KINDS` / `FLOW_GRAPH_CAPABILITY_IDS`；编译映射的键类型与能力目录在类型层一一对应；[ ] 属性测试（随机生成合法图 → 准入必过）留到 BL-11 一并做；[ ] 端口不兼容的图在 propose 阶段被拒绝 → BL-11；[x] 含 `kind:'control'` 的图在 schema 解析层返回 `FLOW_EDGE_KIND_REMOVED`（propose、validate、读取已发布定义都经同一个 schema）；[x] 源码中已不再出现对 FlowGraph 边 kind 的过滤
 
-### ✅ BL-06 零输出节点也算交付 · S（待提交）
+### ✅ BL-06 零输出节点也算交付 · S（`28d02e81`，已推送）
 - **来源**：G5 · AF-8.1a
 - **代码位置**：`coordinator-host.ts:1005-1009`
 - **实现**：`flow-graph-router.ts` 新增 `deliveredGraphNodes`（completed 即交付），`coordinator-host` graphStep 改用它；出口产物仍取「最近一次有输出的出口子节点」，全部出口都没有输出时报 FLOW_CHILD_BLOCKED（不变）。
 - **验收**：[x] 可选输出本次没有产出的节点完成后，下游能正常推进（`flow-graph-router.test.ts` BL-06 用例）
 
-### ✅ BL-07 多节点循环：正式实现前先在校验里拒绝 · S（待提交）
+### ✅ BL-07 多节点循环：正式实现前先在校验里拒绝 · S（`28d02e81`，已推送）
 - **来源**：G3 · AF-8.4b
 - **范围**：如果一个环里除了循环载体还有其他节点，校验时拒绝（错误码 `LOOP_BODY_UNSUPPORTED`）。正式实现放在 BL-11。
 - **实现**：含 loop 载体的多节点环和自回边 → `LOOP_BODY_UNSUPPORTED`；无载体的环仍为 `CYCLE_WITHOUT_LOOP`。
 - **发现**：原测试夹具「有界循环图」用的是 `a→b→a` 回边写法，在 v1 路由下**从第一步起就死锁**（入口 a 有入边，要等 b；b 又要等 a），已改为单节点 loop、不画回边的写法。
 - **验收**：[x] `B(loop)→C→B` 路由测试记录了现状：循环过程中 C 从不就绪（审查附录第 4 项已坐实）；[x] 校验拒绝多节点环和自回边
 
-### ✅ BL-08 节点流发布期与运行期预算统一 · S（待提交）
+### ✅ BL-08 节点流发布期与运行期预算统一 · S（`28d02e81`，已推送）
 - **来源**：审查报告 A7 · NF-10.2
 - **范围**：`composite/validate.ts`（5 层 / 500 节点）和 `composite/runtime.ts`（8 层 / 200 节点）改为共用一个常量模块。
 - **实现**：新增 `src/shared/composite/budget.ts`（8 层 / 200 节点 / 1500 连线，取运行期既有值）；validate.ts、runtime.ts 都经 `resolveCompositeBudget`。

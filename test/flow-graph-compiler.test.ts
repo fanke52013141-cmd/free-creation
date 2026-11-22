@@ -172,3 +172,36 @@ describe('P5 编译器补全（落画布后走图路由 + 预览布局）', () =
     expect(distinct.size).toBeGreaterThan(1)
   })
 })
+
+describe('BL-03 编译重映射：条件与最小输入里的节点引用', () => {
+  it('带条件分支、otherwise 与 selectors 的图可编译，引用全部映射为画布 id', () => {
+    const eq = (value: string) =>
+      [{ kind: 'output-field', stageKey: 'a', path: 'text', op: 'equals', value }] as FlowGraph['edges'][number]['condition']
+    const compiled = compileFlowGraph(
+      graph(
+        [
+          node('a'),
+          node('b', { inputs: { selectors: [{ sourceStageKey: 'a', path: 'text', required: true }], budgetBytes: 4096 } }),
+          node('c'),
+          node('d')
+        ],
+        [
+          { ...dataEdge('a', 'b'), condition: eq('yes') },
+          { ...dataEdge('a', 'c'), condition: eq('no') },
+          { ...dataEdge('a', 'd'), otherwise: true }
+        ],
+        'a',
+        ['b', 'c', 'd']
+      )
+    )
+    const coord = compiled.nodes.find((n) => n.id === compiled.coordinatorNodeId)!
+    const config = AgentNodeConfigSchema.parse(JSON.parse(coord.config))
+    const edges = config.graph!.edges
+    expect(edges[0].condition?.[0]).toMatchObject({ stageKey: canvasNodeId('a') })
+    expect(edges[1].condition?.[0]).toMatchObject({ stageKey: canvasNodeId('a') })
+    expect(edges[2].otherwise).toBe(true)
+    const b = config.graph!.nodes.find((n) => n.nodeId === canvasNodeId('b'))!
+    expect(b.inputs?.selectors[0].sourceStageKey).toBe(canvasNodeId('a'))
+  })
+})
+

@@ -22,6 +22,7 @@ import type { AccessOperationId } from '../../shared/agent-access/registry'
 import { openProject } from '../store/projects.repo'
 import { DesktopAccessError, type AccessDesktop } from './desktop'
 import { flowAgentAccessPort, type FlowAgentAccessPort } from './flow-bridge'
+import { requestHumanDecision } from './human-decision'
 
 /** 本模块负责的操作；service.ts 只做一次分组委托。 */
 export const FLOW_AGENT_BUILD_OPERATION_IDS: ReadonlySet<AccessOperationId> = new Set([
@@ -253,6 +254,18 @@ async function commitBuild(
   }
   if (preview.state !== 'preview')
     refuse('FLOW_BUILD_UNCONFIRMED', `build state is ${preview.state}`)
+  // BL-01 / AF-5.3：建图落画布是人工决定——外部只能请求，人在 GUI 允许后才走同一 commitFlowBuild。
+  const decision = await requestHumanDecision({
+    desktop: context.desktop,
+    projectId,
+    activeProjectId: context.activeProjectId(),
+    prompt: {
+      title: '外部 Agent 请求把建图落到画布',
+      message: `外部 Agent 想把建图「${preview.plan.title}」落到当前画布：新建 ${preview.nodes.length} 个节点、${preview.edges.length} 条连线。只有你点「允许落画布」才会写入，写入后可一步撤销。`,
+      confirmText: '允许落画布'
+    }
+  })
+  if (!decision.ok) refuse(decision.code, decision.detail)
   let reply: { graphVersion: number; result?: unknown }
   try {
     // 30s：authorize/save/confirm 是本地动作；超时/失联按 unknown 由服务层核对，不自动重放。

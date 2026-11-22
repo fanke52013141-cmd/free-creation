@@ -139,6 +139,7 @@ import {
   importStructurePackage
 } from './transfer-ops'
 import { runLibraryOperation } from './library-ops'
+import { previewValue, requestHumanDecision } from './human-decision'
 
 class AccessFailure extends Error {
   constructor(
@@ -2066,6 +2067,20 @@ export class LocalAccessService {
     if (node.type !== 'human-task')
       throw new AccessFailure('INVALID_INPUT', 'precheck', 'human-task-node-required')
     const value = input.value as { kind: 'text'; text: string } | { kind: 'json'; data: unknown }
+    // BL-01 / AF-1.5：人工任务的结果只能由人交付——外部 Agent 代交须人在 GUI 亲眼允许。
+    const decision = await requestHumanDecision({
+      desktop: this.options.desktop,
+      projectId: id,
+      activeProjectId: activeId ?? null,
+      prompt: {
+        title: '外部 Agent 请求代你提交人工任务',
+        message: `外部 Agent 想替你提交人工任务「${node.title}」的结果。这是人工交付，只有你点「允许提交」才会生效。\n\n内容：${previewValue(
+          value.kind === 'text' ? value.text : value.data
+        )}`,
+        confirmText: '允许提交'
+      }
+    })
+    if (!decision.ok) throw new AccessFailure(decision.code, 'human-decision', decision.detail)
     const reply = await this.options.desktop.run(
       {
         action: 'human-task-submit',

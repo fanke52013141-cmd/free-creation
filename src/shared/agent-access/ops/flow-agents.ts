@@ -358,7 +358,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowGraph.confirm': {
     effect: 'write',
     description:
-      'P5.3：确认外部建图预览落画布——经渲染器权威 commitFlowGraph（authorize/CAS/单撤销步/保存屏障/confirm），与 GUI 预览面板同一动作；main 按 buildId 触发并核对落盘 committed 与节点真实存在；外部不能绕渲染器自确认',
+      'P5.3：确认外部建图预览落画布——经渲染器权威 commitFlowGraph（authorize/CAS/单撤销步/保存屏障/confirm），与 GUI 预览面板同一动作；main 按 buildId 触发并核对落盘 committed 与节点真实存在；外部不能绕渲染器自确认；BL-01：这是人工决定，外部调用会在桌面弹出确认，只有人点允许才生效，拒绝/超时/无桌面分别返回 HUMAN_DENIED / HUMAN_DECISION_TIMEOUT / DESKTOP_UNAVAILABLE（均零副作用）',
     input: project.extend({ buildId: flowId }).strict()
   },
   'flowGraph.proposeFromDefinition': {
@@ -422,7 +422,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowAgent.cooperate': {
     effect: 'write',
     description:
-      '向指定 Agent 任务写入一次协作事件（note/discuss/submit/revise），与 GUI 面板同一宿主实例与同一任务表；discuss/revise 可能真实调用模型，故先做模型工具调用预检；事件带 actor=external 标记，与人工输入可区分；不接受伪造 revision/waitRevision（由宿主核对）',
+      '向指定 Agent 任务写入一次协作事件（note/discuss/submit/revise），与 GUI 面板同一宿主实例与同一任务表；discuss/revise 可能真实调用模型，故先做模型工具调用预检；事件带 actor=external 标记，与人工输入可区分；不接受伪造 revision/waitRevision（由宿主核对）；BL-01：action=submit 或 accepted=true 属人工决定，外部调用会在桌面弹出确认，只有人点允许才生效，拒绝/超时/无桌面分别返回 HUMAN_DENIED / HUMAN_DECISION_TIMEOUT / DESKTOP_UNAVAILABLE（均零副作用）',
     input: project
       .extend({
         nodeId,
@@ -483,7 +483,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowAgent.build.commit': {
     effect: 'write',
     description:
-      '按 buildId 把已生成的建图预览提交到当前打开的权威画布（复用 GUI 同一 commitFlowBuild：authorize/confirm + 单撤销步 + 保存屏障）；外部不能自带预览内容；已 committed 的重复提交按持久化事实返回，不重复建节点',
+      '按 buildId 把已生成的建图预览提交到当前打开的权威画布（复用 GUI 同一 commitFlowBuild：authorize/confirm + 单撤销步 + 保存屏障）；外部不能自带预览内容；已 committed 的重复提交按持久化事实返回，不重复建节点；BL-01：这是人工决定，外部调用会在桌面弹出确认，只有人点允许才生效，拒绝/超时/无桌面分别返回 HUMAN_DENIED / HUMAN_DECISION_TIMEOUT / DESKTOP_UNAVAILABLE（均零副作用）',
     input: project.extend({ nodeId, buildId }).strict()
   },
   // F8 收官：模型审核（FlowReviewHost，同一实例）。审核结论由模型产生，外部只能提交与读取。
@@ -519,7 +519,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'humanTask.submit': {
     effect: 'write',
     description:
-      '向人工任务节点提交结果（与 GUI 提交结果按钮同一待处理写入）；携带观察到的 expectedRevision，过期提交拒绝；结果类型须与节点声明一致；完成状态在运行节点时由同一执行器校验；要求目标项目已在桌面打开',
+      '向人工任务节点提交结果（与 GUI 提交结果按钮同一待处理写入）；携带观察到的 expectedRevision，过期提交拒绝；结果类型须与节点声明一致；完成状态在运行节点时由同一执行器校验；要求目标项目已在桌面打开；BL-01：这是人工决定，外部调用会在桌面弹出确认，只有人点允许才生效，拒绝/超时/无桌面分别返回 HUMAN_DENIED / HUMAN_DECISION_TIMEOUT / DESKTOP_UNAVAILABLE（均零副作用）',
     input: project
       .extend({
         nodeId,

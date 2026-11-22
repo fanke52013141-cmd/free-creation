@@ -37,7 +37,7 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 **AF-1.4【现行】专业节点不读全图。** 每个节点只能拿到其输入清单（ContextManifest）中的内容；节点正文和文件里的指令都视为数据，不会改变权限。
 
-**AF-1.5【目标·A6】人工决定只能由人做出。** 外部 Agent（CLI/MCP）不得代替人完成「人工决定类」动作，包括：确认建图落画布、提交 human-task 结果、协作节点的采用/拒绝、审核人工复审。外部 Agent 只能附上**草稿**，等人在 GUI 中采用（见 §17）。
+**AF-1.5【现行 · BL-01】人工决定只能由人做出。** 外部 Agent（CLI/MCP）不得代替人完成「人工决定类」动作，包括：确认建图落画布、提交 human-task 结果、协作节点的采用/拒绝、审核人工复审。外部 Agent 只能附上**草稿**，等人在 GUI 中采用（见 §17）。
 
 ---
 
@@ -122,7 +122,9 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 ### 4.3 边【现行】
 
-`{ from: {nodeId, portId}, to: {nodeId, portId}, condition?: StageCondition[] }`：**FlowGraph 只有数据边。**
+`{ from: {nodeId, portId}, to: {nodeId, portId}, condition?: StageCondition[], otherwise?: true }`
+
+**AF-4.3b【现行 · BL-04】** `otherwise: true` 是否则分支：同源所有条件出边都已可判定且均不成立时流转，任一成立时不流转（并沿数据边跳过下游）。互斥判定按单值交付；多值交付同时命中多个分支时，路由器报 `ambiguous`，宿主以 `FLOW_BRANCH_AMBIGUOUS` 拒绝推进，不猜走哪条。：**FlowGraph 只有数据边。**
 
 **AF-4.3a【现行 · BL-05，2026-11-22】删除 `control` 边。** 此前 schema 接受 `kind: 'control'`：校验时把它计入可达性，路由和编译时却把它丢掉。现规定：
 - `kind` 字段只允许 `'data'`（可选，缺省 `'data'`，兼容旧 JSON）；
@@ -163,7 +165,7 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 **AF-5.2【现行】** 落画布经过渲染器的权威动作 `commitFlowGraph`：授权 → semanticRevision CAS → 单个撤销步 → 保存屏障 → 回执核对。
 
-**AF-5.3【目标·A6，安全缺口】确认只能由人在 GUI 发起。** 现行的外部操作 `flowGraph.confirm` 会直接触发 `commitFlowGraph`，**没有任何人可见的确认步骤**（`CanvasEditor.tsx:1806-1855`，代码中的 `confirm` 只是 IPC 动作，不是确认对话框）。这意味着外部 Agent 可以先 propose 再自己 confirm，与 interpreter 方案 §6 第 5 条「外部 Agent 不能自己确认落画布」相矛盾。要求以下二选一：
+**AF-5.3【现行 · BL-01，实现方式为 (a) 的实时确认版】确认只能由人在 GUI 发起。** 现在外部调用会经 `desktop.ask` 弹出确认框（复用 confirm-sensitive），人点允许才执行原有的同一 commitFlowGraph / commitFlowBuild；拒绝、超时（5 分钟）、无桌面时分别返回 `HUMAN_DENIED` / `HUMAN_DECISION_TIMEOUT` / `DESKTOP_UNAVAILABLE`，均为生效前失败，迟到的允许不生效。持久草稿队列（离线后再采用）留作后续增强。原条款： 现行的外部操作 `flowGraph.confirm` 会直接触发 `commitFlowGraph`，**没有任何人可见的确认步骤**（`CanvasEditor.tsx:1806-1855`，代码中的 `confirm` 只是 IPC 动作，不是确认对话框）。这意味着外部 Agent 可以先 propose 再自己 confirm，与 interpreter 方案 §6 第 5 条「外部 Agent 不能自己确认落画布」相矛盾。要求以下二选一：
 - (a) `flowGraph.confirm` 改为「请求确认」：GUI 弹出预览确认框，由人点击后才落画布；外部调用只能拿到 `awaiting-human` 状态；
 - (b) 外部入口不提供 `confirm`，只有 GUI 预览面板可以确认。
 
@@ -182,6 +184,8 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 **AF-6.1【现行】** 编译产物（`compileFlowGraph`）包括：每个 FlowNode 对应的画布节点；一个 coordinator 主控节点（`executionMode: graph`，`allowedNodeIds` 为全部子节点，携带 `graph`）；一个派生状态机；数据边；`controls / observes` 控制关系；以及布局坐标（与 GUI 智能整理使用同一算法）。
 
+**AF-6.3【现行 · BL-03 修复】编译重映射**：编译器把边条件、`decisions.when`、`inputs.selectors.sourceStageKey` 中的节点引用，与 `loop.exitCondition` 一起映射为画布 id。修复前，带条件分支或最小输入声明的外部图一进契约校验就失败，根本无法编译落画布。
+
 **AF-6.2【种类与能力部分已现行 · BL-05；端口部分为目标·G8，待 BL-11】校验即准入**：种类白名单 `FLOW_GRAPH_DISPATCHABLE_KINDS` 与能力目录 `FLOW_GRAPH_CAPABILITY_IDS` 已成为 validate、compile、运行准入三处的唯一来源。原条款：编译和预览阶段使用的 kind 白名单、端口兼容函数、能力目录，**必须与运行准入完全相同**。现行情况是：schema 和编译器都接受 `state-machine` 节点，运行准入却拒绝它（`FLOW_GRAPH_NODE_KIND_UNSUPPORTED`），用户在人工确认落画布后、第一次运行时才会失败。
 
 ---
@@ -195,8 +199,8 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 | V3 | 不含 loop 载体的环 → `CYCLE_WITHOUT_LOOP`；**含载体的多节点环或自回边 → `LOOP_BODY_UNSUPPORTED`**，循环只能用单节点 `node.loop` 声明、不画回边 | 【现行 · BL-07】（v2 改为子图载体） |
 | V4 | 从入口可达全部节点；出口可达；入口不是出口 | 【现行】 |
 | V5 | `loop.maxIterations ≤ budgets.maxLoopIterations` | 【现行】 |
-| V6 | **同一源节点的多条条件出边必须互斥**，或者显式声明 `else` 或优先级 | 【目标·G2】 |
-| V7 | **汇合推断**：入边全部来自互斥分支时，`joinPolicy` 必须为 `any`；显式写 `all` 报错 | 【目标·G1】 |
+| V6 | **同一源节点的多条条件出边必须两两互斥**（`CONDITION_NOT_EXCLUSIVE`，见 `conditionsExclusive`：exists/equals/type 与 missing、equals 不同值、type 不同类型、count 区间不相交），或者改用 `otherwise` 边（每源至多一条、须有条件兄弟边、不能带条件：`OTHERWISE_INVALID`）。human-decision / review-passed 没有否定形式，二选一只能用 otherwise | 【现行 · BL-04】 |
+| V7 | ~~汇合推断~~：已由 AF-8.3b 的新 `all` 语义取代——XOR 汇合用缺省 `all` 即可，无需报错 | 【现行 · BL-03，作废原条款】 |
 | V8 | 数据边端口存在，且按 `portPairCompatible` 类型兼容、Schema 兼容 | 【目标·G8】 |
 | V9 | kind 和能力在运行准入白名单内（与 AF-6.2 同源）：`NODE_KIND_UNSUPPORTED` / `CAPABILITY_UNKNOWN` | 【现行 · BL-05】 |
 | V10 | 预算交叉检查：`maxSteps ≥ 可执行节点数 + Σ(loop.maxIterations × body 大小)`，否则报错或给出建议值 | 【目标·G9】 |
@@ -227,10 +231,9 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 ### 8.3 分支、跳过与汇合
 
-**AF-8.3a【目标·G1】死路径消除**：条件边判定为假时，目标节点标记为 `skipped`（理由：`CONDITION_FALSE`）；`skipped` 沿数据边向下游传播，下游节点的全部入边都来自 skipped 或未满足时，同样 skipped。`skipped` 视为落定。
+**AF-8.3a【现行 · BL-03】死路径消除**：条件边判定为假时，目标节点标记为 `skipped`（理由：`CONDITION_FALSE`）；`skipped` 沿数据边向下游传播，下游节点的全部入边都来自 skipped 或未满足时，同样 skipped。`skipped` 视为落定。
 
-**AF-8.3b【现行】** `joinPolicy: all`（缺省）要求全部入边满足，`any` 要求任一入边满足。
-- **【目标】** 在 AF-8.3a 落地后，`all` 的语义改为「全部入边已落定（满足或 skipped），且至少一条满足」。这样 XOR 分支汇合时无需作者手写 `any`。
+**AF-8.3b【现行 · BL-03】** `joinPolicy: all`（缺省）=「全部入边已落定（满足或已跳过），且至少一条满足」；`any` = 任一入边满足。XOR 分支汇合无需手写 `any`。条件引用的节点尚未落定时，边处于待定状态，不会提前判为死边。
 
 ### 8.4 有界循环
 
@@ -240,9 +243,9 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 ### 8.5 完成、停滞与失败
 
-**AF-8.5a【现行】** 全部 `exits` 落定即完成；完成产物取通过审核的出口审核节点的被审对象，否则取最后一个完成的出口子节点的输出。
+**AF-8.5a【现行 · BL-03 修订】** 全部 `exits` 落定（交付或跳过）且至少一个出口交付即完成；完成产物取通过审核的出口审核节点的被审对象，否则取最后一个完成的出口子节点的输出。
 
-**AF-8.5b【目标·G1】停滞（stalled）是独立终态**：没有就绪节点、没有运行中节点、没有人工待办（human-task 待提交、collaborative 待决策、审核待复审）时，判定为 `stalled`，并给出阻塞节点和原因（`INCOMING_EDGES_UNSATISFIED`、`REQUIRED_INPUT_UNREACHABLE` 等）。**禁止**把停滞报告为 `human.wait`（现行 `coordinator-host.ts:1052-1055`）。
+**AF-8.5b【现行 · BL-03，以 `blocked` + `code: FLOW_STALLED` 表达】停滞是独立终态**：判定条件还要求没有在途或等待中的子任务、没有未通过的审核；同时发出 `agent.coordination.graph_stalled` 事件，附带被阻塞节点 ID。全部出口都被跳过时也判为停滞（`isFlowComplete` 要求至少一个出口交付）。原条款：没有就绪节点、没有运行中节点、没有人工待办（human-task 待提交、collaborative 待决策、审核待复审）时，判定为 `stalled`，并给出阻塞节点和原因（`INCOMING_EDGES_UNSATISFIED`、`REQUIRED_INPUT_UNREACHABLE` 等）。**禁止**把停滞报告为 `human.wait`（现行 `coordinator-host.ts:1052-1055`）。
 
 **AF-8.5c【现行】** 预算耗尽返回 `AGENT_BUDGET_EXHAUSTED`，属于失败，不是等待。
 
@@ -447,7 +450,7 @@ FlowNode {
 | 运行控制 | `flowAgent.run / pause / stop` | 允许（受计费确认门约束） |
 | **人工决定** | `flowGraph.confirm`、`flowAgent.build.commit`、`humanTask.submit`、协作采用/拒绝、人工复审 | **禁止直接生效**：只能写入 `draft`，状态变为 `awaiting-human`，由人在 GUI 中采用 |
 
-现行实现中，外部 `humanTask.submit` 可以直接完成人工任务，`flowGraph.confirm` 可以直接落画布，两者都违反这一条。
+**【现行 · BL-01】** 人工决定类操作从外部调用时，先在桌面弹出确认，人点允许后才执行（实时确认）。覆盖 `flowGraph.confirm`、`flowAgent.build.commit`、`humanTask.submit`、`flowAgent.cooperate`（action=submit 或 accepted=true）。`flowStateMachine.submitEvent` 与 `composite.run.submitHuman` 暂未纳入，待定（见 BACKLOG BL-01 备注）。
 
 **AF-17.3【目标】** 外部 Agent 身份进入审计：每个外部调用都记录 `clientId`，运行总览事件归属为 `agent:external:<clientId>`。
 
@@ -496,10 +499,10 @@ FlowNode {
 
 | 差距 | 条款 | 优先级 |
 |---|---|---|
-| 外部 Agent 可自确认落画布、可代人提交人工任务 | AF-1.5 / AF-5.3 / AF-17.2 | **P0** |
+| ~~外部 Agent 可自确认落画布、可代人提交人工任务~~ ✅ BL-01（实时确认版） | AF-1.5 / AF-5.3 / AF-17.2 | — |
 | task-bind 工具白名单回归 | AF-3.2a | **P0** |
-| 死路径消除、汇合推断、停滞终态 | AF-8.3a / V7 / AF-8.5b | **P0** |
-| 条件互斥校验 | V6 | **P0** |
+| ~~死路径消除、汇合推断、停滞终态~~ ✅ BL-03 | AF-8.3a / V7 / AF-8.5b | — |
+| ~~条件互斥校验~~ ✅ BL-04 | V6 | — |
 | 校验即准入（kind、端口、能力）+ 删除 control 边 | AF-6.2 / AF-4.3a / V8 / V9 | **P0** |
 | ~~零输出节点交付~~ ✅ BL-06 | AF-8.1a | **P0** |
 | 多节点循环（拒绝 ✅ BL-07；实现待 BL-11） | AF-8.4b | P1（实现） |

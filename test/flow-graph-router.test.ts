@@ -57,15 +57,15 @@ describe('O4-P3 条件分支路由', () => {
     'a',
     ['d']
   )
-  it('a 交付 yes → 走 b 分支，c 阻塞', () => {
+  it('a 交付 yes → 走 b 分支，c 跳过（BL-03 死路径消除）', () => {
     const result = nextReadyNodes(g, facts([delivery('a', 'yes')]), new Set(['a']))
     expect(result.ready).toEqual(['b'])
-    expect(result.blocked.some((x) => x.nodeId === 'c')).toBe(true)
+    expect(result.skipped).toContain('c')
   })
-  it('a 交付 no → 走 c 分支，b 阻塞', () => {
+  it('a 交付 no → 走 c 分支，b 跳过', () => {
     const result = nextReadyNodes(g, facts([delivery('a', 'no')]), new Set(['a']))
     expect(result.ready).toEqual(['c'])
-    expect(result.blocked.some((x) => x.nodeId === 'b')).toBe(true)
+    expect(result.skipped).toContain('b')
   })
   it('路由只认交付事实：节点未交付即使有模型文字声称完成也不就绪', () => {
     // delivered 集合为空（无权威交付），即便 facts 里塞入"声称"也不算数——ready 只有入口。
@@ -175,3 +175,93 @@ describe('BL-07 现状记录：带回边的多节点环在 v1 路由下不可执
     expect(result.ready).not.toContain('c')
   })
 })
+
+describe('BL-03 死路径消除与汇合', () => {
+  const xor = (joinPolicy?: 'all' | 'any', exits: string[] = ['d']) =>
+    graph(
+      [node('a'), node('b'), node('c'), node('d', joinPolicy ? { joinPolicy } : {})],
+      [dataEdge('a', 'b', eq('a', 'yes')), dataEdge('a', 'c', eq('a', 'no')), dataEdge('b', 'd'), dataEdge('c', 'd')],
+      'a',
+      exits
+    )
+  it('XOR 分支 + 缺省 all 汇合：未选分支跳过后汇合点就绪，流程能完成', () => {
+    const g = xor()
+    const f = facts([delivery('a', 'yes'), delivery('b', 'y')])
+    const result = nextReadyNodes(g, f, new Set(['a', 'b']))
+    expect(result.skipped).toEqual(['c'])
+    expect(result.ready).toEqual(['d'])
+    expect(isFlowComplete(g, f, new Set(['a', 'b', 'd']))).toBe(true)
+  })
+  it('跳过沿数据边传播：只依赖未选分支的下游也跳过', () => {
+    const g = graph(
+      [node('a'), node('b'), node('c'), node('e')],
+      [dataEdge('a', 'b', eq('a', 'yes')), dataEdge('a', 'c', eq('a', 'no')), dataEdge('c', 'e')],
+      'a',
+      ['b', 'e']
+    )
+    const result = nextReadyNodes(g, facts([delivery('a', 'yes')]), new Set(['a']))
+    expect(result.skipped.sort()).toEqual(['c', 'e'])
+  })
+  it('出口落在未选分支上：已选分支出口交付即完成', () => {
+    const g = xor(undefined, ['b', 'c'])
+    expect(isFlowComplete(g, facts([delivery('a', 'yes'), delivery('b', 'y')]), new Set(['a', 'b']))).toBe(true)
+  })
+  it('全部出口都被跳过：流程不算完成（宿主据此报停滞）', () => {
+    const g = graph([node('a'), node('b')], [dataEdge('a', 'b', eq('a', 'never'))], 'a', ['b'])
+    const f = facts([delivery('a', 'x')])
+    expect(nextReadyNodes(g, f, new Set(['a'])).skipped).toEqual(['b'])
+    expect(isFlowComplete(g, f, new Set(['a']))).toBe(false)
+  })
+  it('条件引用的节点尚未落定时不判死边（不提前跳过）', () => {
+    const g = graph(
+      [node('a'), node('b'), node('c'), node('d')],
+      [dataEdge('a', 'b'), dataEdge('a', 'c'), dataEdge('b', 'd', eq('c', 'go'))],
+      'a',
+      ['d']
+    )
+    const early = nextReadyNodes(g, facts([delivery('a', 'x'), delivery('b', 'y')]), new Set(['a', 'b']))
+    expect(early.skipped).toEqual([])
+    expect(early.blocked.find((x) => x.nodeId === 'd')?.reason).toBe('INCOMING_EDGES_PENDING')
+    const late = nextReadyNodes(
+      g,
+      facts([delivery('a', 'x'), delivery('b', 'y'), delivery('c', 'stop')]),
+      new Set(['a', 'b', 'c'])
+    )
+    expect(late.skipped).toEqual(['d'])
+  })
+})
+
+describe('BL-04 otherwise 边与多值歧义', () => {
+  const g = graph(
+    [node('a'), node('b'), node('c')],
+    [dataEdge('a', 'b', eq('a', 'yes')), { ...dataEdge('a', 'c'), otherwise: true }],
+    'a',
+    ['b', 'c']
+  )
+  it('条件不成立 → otherwise 分支就绪，条件分支跳过', () => {
+    const result = nextReadyNodes(g, facts([delivery('a', 'no')]), new Set(['a']))
+    expect(result.ready).toEqual(['c'])
+    expect(result.skipped).toEqual(['b'])
+  })
+  it('条件成立 → 条件分支就绪，otherwise 分支跳过', () => {
+    const result = nextReadyNodes(g, facts([delivery('a', 'yes')]), new Set(['a']))
+    expect(result.ready).toEqual(['b'])
+    expect(result.skipped).toEqual(['c'])
+  })
+  it('多值交付同时命中两个互斥分支 → ambiguous（宿主拒绝推进）', () => {
+    const xor = graph(
+      [node('a'), node('b'), node('c')],
+      [dataEdge('a', 'b', eq('a', 'yes')), dataEdge('a', 'c', eq('a', 'no'))],
+      'a',
+      ['b', 'c']
+    )
+    const twoValues: StageDeliveryFact = {
+      stageKey: 'a',
+      nodeId: 'a',
+      outputs: [{ kind: 'text', text: 'yes' }, { kind: 'text', text: 'no' }],
+      humanDecided: false
+    }
+    expect(nextReadyNodes(xor, facts([twoValues]), new Set(['a'])).ambiguous).toEqual(['a'])
+  })
+})
+

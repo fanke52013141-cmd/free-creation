@@ -406,7 +406,7 @@ describe('flowAgent 建图/审核准入', () => {
         }
       },
       async ask() {
-        return { authorized: false }
+        return { authorized: true }
       }
     }
     const port = publishFakePort({
@@ -459,7 +459,7 @@ describe('flowAgent 建图/审核准入', () => {
           return { graphVersion: 1, result: { buildId: committed.buildId } }
         },
         async ask() {
-          return { authorized: false }
+          return { authorized: true }
         }
       }
     })
@@ -488,7 +488,7 @@ describe('flowAgent 建图/审核准入', () => {
           throw new DesktopAccessError('DESKTOP_TIMEOUT', true)
         },
         async ask() {
-          return { authorized: false }
+          return { authorized: true }
         }
       }
     })
@@ -515,7 +515,7 @@ describe('flowAgent 建图/审核准入', () => {
           throw new DesktopAccessError('FLOW_REVISION_CONFLICT', false)
         },
         async ask() {
-          return { authorized: false }
+          return { authorized: true }
         }
       }
     })
@@ -526,6 +526,69 @@ describe('flowAgent 建图/审核准入', () => {
     })
     expect(response.status).toBe('failed')
     expect(response.error?.code).toBe('FLOW_REVISION_CONFLICT')
+  })
+
+  it('BL-01：build.commit 须人在 GUI 允许；人拒绝时 HUMAN_DENIED 且不触发桌面提交', async () => {
+    const { projectId, preview: proposed } = withProject()
+    publishFakePort({ inspectReply: proposed })
+    const desktopCalls: unknown[] = []
+    const asks: Array<Record<string, unknown>> = []
+    service = new LocalAccessService({
+      instanceId: randomUUID(),
+      appVersion: 'test',
+      exportDirectory: join(getDataDir(), 'agent-exports'),
+      activeProjectId: () => active,
+      desktop: {
+        async run(input) {
+          desktopCalls.push(input)
+          return { graphVersion: 1 }
+        },
+        async ask(input) {
+          asks.push(input as Record<string, unknown>)
+          return { authorized: false }
+        }
+      }
+    })
+    const response = await write('flowAgent.build.commit', {
+      projectId,
+      nodeId: 'shape:builder',
+      buildId: 'build-test-1'
+    })
+    expect(response.status).toBe('failed')
+    expect(response.error?.code).toBe('HUMAN_DENIED')
+    expect(asks).toHaveLength(1)
+    expect(asks[0]).toMatchObject({ action: 'confirm-sensitive', projectId })
+    expect(String(asks[0].confirmMessage)).toContain('建图标题')
+    expect(desktopCalls).toEqual([])
+  })
+
+  it('BL-01：确认超时按 HUMAN_DECISION_TIMEOUT 失败，零副作用', async () => {
+    const { projectId, preview: proposed } = withProject()
+    publishFakePort({ inspectReply: proposed })
+    const desktopCalls: unknown[] = []
+    service = new LocalAccessService({
+      instanceId: randomUUID(),
+      appVersion: 'test',
+      exportDirectory: join(getDataDir(), 'agent-exports'),
+      activeProjectId: () => active,
+      desktop: {
+        async run(input) {
+          desktopCalls.push(input)
+          return { graphVersion: 1 }
+        },
+        async ask() {
+          return { authorized: false, code: 'PUBLISH_AUTHORIZATION_EXPIRED' }
+        }
+      }
+    })
+    const response = await write('flowAgent.build.commit', {
+      projectId,
+      nodeId: 'shape:builder',
+      buildId: 'build-test-1'
+    })
+    expect(response.status).toBe('failed')
+    expect(response.error?.code).toBe('HUMAN_DECISION_TIMEOUT')
+    expect(desktopCalls).toEqual([])
   })
 
   it('已 committed 的预览重复提交不再次触发桌面动作（回执丢失后的幂等核对）', async () => {

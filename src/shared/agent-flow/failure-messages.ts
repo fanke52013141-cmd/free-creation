@@ -86,7 +86,12 @@ const messages: Record<string, string> = {
   ASSET_VIDEO_CHANGED:
     '固定参考视频不可用或内容发生变化（上限 20 MiB），请检查原素材并核对任务记录。',
   ASSET_OUTPUT_UNAVAILABLE: '输入尚无可提交的结果，请检查来源节点并保存。',
-  ASSET_SOURCE_OCCUPIED: '输入节点有未确认执行，请先核对原运行记录。'
+  ASSET_SOURCE_OCCUPIED: '输入节点有未确认执行，请先核对原运行记录。',
+  // BL-03/04：图路由停滞与分支歧义（不再报成"等待人工"）。
+  FLOW_STALLED:
+    '流程停滞：没有可继续的节点，也没有等你处理的事项。常见原因是分支条件都不成立、全部出口被跳过，或条件引用的节点没有交付；请在流程总览查看被阻塞的节点并调整条件。',
+  FLOW_BRANCH_AMBIGUOUS:
+    '同一节点的多个互斥分支同时成立（通常是该节点交付了多个值），流程没有擅自选择；请让该节点只交付一个值，或改用 otherwise 分支。'
 }
 export function flowAgentFailureMessage(code?: string): string {
   return messages[code ?? ''] ?? '任务未确认完成，请检查节点设置、输入和运行记录。'

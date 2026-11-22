@@ -25,6 +25,9 @@ import type { CanvasNode } from '../src/shared/types'
 let directory: string
 let service: LocalAccessService
 let active: string | null
+// BL-01：人工决定（submit / accepted=true）需人在 GUI 允许；默认允许，个别用例改为拒绝。
+let asks: Array<Record<string, unknown>>
+let askAuthorized: boolean
 const originalDirectory = process.env.CANVAS_DATA_DIR
 const key = () => `${Date.now()}:${randomUUID()}`
 
@@ -107,12 +110,23 @@ beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), 'canvas-cooperate-test-'))
   process.env.CANVAS_DATA_DIR = directory
   active = null
+  asks = []
+  askAuthorized = true
   setGatewayEventSink({ emit: () => undefined })
   service = new LocalAccessService({
     instanceId: randomUUID(),
     appVersion: 'test',
     exportDirectory: join(getDataDir(), 'agent-exports'),
-    activeProjectId: () => active
+    activeProjectId: () => active,
+    desktop: {
+      async run() {
+        throw new Error('cooperate must not use the desktop write slot')
+      },
+      async ask(input) {
+        asks.push(input as Record<string, unknown>)
+        return { authorized: askAuthorized }
+      }
+    }
   })
 })
 
@@ -254,6 +268,73 @@ describe('flowAgent.cooperate', () => {
     expect(response.status).toBe('failed')
     expect(response.error?.code).toBe('AGENT_TASK_MISSING')
     // 关键：没有任务时不得写入任何协作事件
+    expect(cooperate).not.toHaveBeenCalled()
+  })
+
+  it('BL-01：采纳意见（accepted=true）须人在 GUI 允许；确认框说明了节点与内容', async () => {
+    const projectId = seedProject()
+    const { cooperate } = stubPort()
+    const response = await write('flowAgent.cooperate', {
+      projectId,
+      nodeId: 'shape:agent',
+      action: 'note',
+      ...baseCollaboration
+    })
+    expect(response.status, JSON.stringify(response.error)).toBe('completed')
+    expect(asks).toHaveLength(1)
+    expect(asks[0]).toMatchObject({ action: 'confirm-sensitive', projectId })
+    expect(String(asks[0].confirmMessage)).toContain('Agent 节点')
+    expect(String(asks[0].confirmMessage)).toContain('外部备注')
+    expect(cooperate).toHaveBeenCalledTimes(1)
+  })
+
+  it('BL-01：人拒绝时 HUMAN_DENIED，且不写任何协作事件', async () => {
+    const projectId = seedProject()
+    const { cooperate } = stubPort()
+    askAuthorized = false
+    const response = await write('flowAgent.cooperate', {
+      projectId,
+      nodeId: 'shape:agent',
+      action: 'submit',
+      ...baseCollaboration
+    })
+    expect(response.status).toBe('failed')
+    expect(response.error?.code).toBe('HUMAN_DENIED')
+    expect(cooperate).not.toHaveBeenCalled()
+  })
+
+  it('BL-01：普通交流（note 未采纳）不打扰人', async () => {
+    const projectId = seedProject()
+    const { cooperate } = stubPort()
+    const response = await write('flowAgent.cooperate', {
+      projectId,
+      nodeId: 'shape:agent',
+      action: 'note',
+      ...baseCollaboration,
+      accepted: false
+    })
+    expect(response.status, JSON.stringify(response.error)).toBe('completed')
+    expect(asks).toHaveLength(0)
+    expect(cooperate).toHaveBeenCalledTimes(1)
+  })
+
+  it('BL-01：没有桌面可确认时人工决定如实 DESKTOP_UNAVAILABLE（不放行）', async () => {
+    const projectId = seedProject()
+    const { cooperate } = stubPort()
+    service = new LocalAccessService({
+      instanceId: randomUUID(),
+      appVersion: 'test',
+      exportDirectory: join(getDataDir(), 'agent-exports'),
+      activeProjectId: () => active
+    })
+    const response = await write('flowAgent.cooperate', {
+      projectId,
+      nodeId: 'shape:agent',
+      action: 'submit',
+      ...baseCollaboration
+    })
+    expect(response.status).toBe('failed')
+    expect(response.error?.code).toBe('DESKTOP_UNAVAILABLE')
     expect(cooperate).not.toHaveBeenCalled()
   })
 })

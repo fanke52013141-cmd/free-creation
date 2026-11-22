@@ -234,6 +234,60 @@ describe('BL-05 校验即准入：种类白名单与能力目录', () => {
   })
 })
 
+describe('BL-04 同源条件出边互斥', () => {
+  const field = (path: string, op: 'exists' | 'missing') =>
+    [{ kind: 'output-field', stageKey: 'a', path, op }] as FlowGraph['edges'][number]['condition']
+  const eqv = (value: unknown) =>
+    [{ kind: 'output-field', stageKey: 'a', path: 'text', op: 'equals', value }] as FlowGraph['edges'][number]['condition']
+  const branch = (edges: FlowGraph['edges']) =>
+    graph([node('a'), node('b'), node('c')], edges, 'a', ['b', 'c'])
+  const codes = (g: FlowGraph) => {
+    const result = validateFlowGraph(g)
+    return result.ok ? [] : result.errors.map((e) => e.code)
+  }
+  it('可能同时成立的条件拒绝 CONDITION_NOT_EXCLUSIVE', () => {
+    const g = branch([
+      { ...dataEdge('a', 'b'), condition: field('text', 'exists') },
+      { ...dataEdge('a', 'c'), condition: field('data.title', 'exists') }
+    ])
+    expect(codes(g)).toContain('CONDITION_NOT_EXCLUSIVE')
+  })
+  it('equals 不同值 / exists 与 missing / 计数区间不相交 → 互斥通过', () => {
+    expect(codes(branch([{ ...dataEdge('a', 'b'), condition: eqv('yes') }, { ...dataEdge('a', 'c'), condition: eqv('no') }]))).toEqual([])
+    expect(codes(branch([{ ...dataEdge('a', 'b'), condition: field('text', 'exists') }, { ...dataEdge('a', 'c'), condition: field('text', 'missing') }]))).toEqual([])
+    const count = (op: 'gte' | 'lte', n: number) =>
+      [{ kind: 'output-count', stageKey: 'a', op, count: n }] as FlowGraph['edges'][number]['condition']
+    expect(codes(branch([{ ...dataEdge('a', 'b'), condition: count('gte', 2) }, { ...dataEdge('a', 'c'), condition: count('lte', 1) }]))).toEqual([])
+    expect(codes(branch([{ ...dataEdge('a', 'b'), condition: count('gte', 2) }, { ...dataEdge('a', 'c'), condition: count('lte', 2) }]))).toContain('CONDITION_NOT_EXCLUSIVE')
+  })
+  it('人工决定没有否定形式：两条 human-decision 分支不互斥，须改用 otherwise', () => {
+    const decided = [{ kind: 'human-decision', stageKey: 'a' }] as FlowGraph['edges'][number]['condition']
+    expect(codes(branch([{ ...dataEdge('a', 'b'), condition: decided }, { ...dataEdge('a', 'c'), condition: decided }]))).toContain('CONDITION_NOT_EXCLUSIVE')
+    expect(codes(branch([{ ...dataEdge('a', 'b'), condition: decided }, { ...dataEdge('a', 'c'), otherwise: true }]))).toEqual([])
+  })
+  it('otherwise 用法：缺条件兄弟边或多于一条拒绝 OTHERWISE_INVALID；与 condition 同用 schema 拒绝', () => {
+    expect(codes(branch([dataEdge('a', 'b'), { ...dataEdge('a', 'c'), otherwise: true }]))).toContain('OTHERWISE_INVALID')
+    const g = graph(
+      [node('a'), node('b'), node('c'), node('d')],
+      [{ ...dataEdge('a', 'b'), condition: eqv('yes') }, { ...dataEdge('a', 'c'), otherwise: true }, { ...dataEdge('a', 'd'), otherwise: true }],
+      'a',
+      ['b', 'c', 'd']
+    )
+    expect(codes(g)).toContain('OTHERWISE_INVALID')
+    const parsed = FlowGraphSchema.safeParse({
+      schemaVersion: 1,
+      graphId: 'g',
+      name: 'test',
+      goal: '总目标',
+      nodes: [node('a'), node('b')],
+      edges: [{ ...dataEdge('a', 'b'), condition: eqv('yes'), otherwise: true }],
+      entry: 'a',
+      exits: ['b']
+    })
+    expect(parsed.success).toBe(false)
+  })
+})
+
 describe('BL-05 control 边已删除', () => {
   const base = {
     schemaVersion: 1,

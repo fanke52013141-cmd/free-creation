@@ -1933,4 +1933,29 @@ describe('O4-P3 graph mode execution（声明式图路由，mock 模型）', () 
     const run = f.coordinator.store.latest('p', 'main')!
     expect(run.loopIterations?.second).toBe(2)
   })
+
+  it('BL-03：分支条件不成立导致全部出口被跳过 → FLOW_STALLED（不再报成等待人工）', async () => {
+    const stallGraph = FlowGraphSchema.parse({
+      schemaVersion: 1,
+      graphId: 'g',
+      name: '停滞图',
+      goal: '条件永不成立',
+      nodes: [graphNode('first'), graphNode('second')],
+      edges: [
+        {
+          from: { nodeId: 'first', portId: 'out-text' },
+          to: { nodeId: 'second', portId: 'in-text' },
+          condition: [{ kind: 'output-field', stageKey: 'first', path: 'text', op: 'equals', value: '__never__' }]
+        }
+      ],
+      entry: 'first',
+      exits: ['second']
+    })
+    const f = fixture({ graph: stallGraph })
+    await expect(f.host.run(input)).rejects.toMatchObject({ code: 'FLOW_STALLED' })
+    const run = f.coordinator.store.latest('p', 'main')!
+    expect(run.state).toBe('blocked')
+    expect(run.code).toBe('FLOW_STALLED')
+    expect(run.children.map((child) => child.nodeId)).toEqual(['first'])
+  })
 })
