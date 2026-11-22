@@ -1,4 +1,4 @@
-import { NodePrimaryButton, NodeSectionTitle } from '../../../canvas/NodePresentation'
+﻿import { NodePrimaryButton, NodeSectionTitle } from '../../../canvas/NodePresentation'
 // 语音合成节点 Body（MiniMax 异步 / 火山引擎语音合成 1.0）。
 //
 // 这里不绕过 executor 调用模型：按钮只把当前配置与正文写回节点，然后交给统一的
@@ -7,6 +7,7 @@ import { NodePrimaryButton, NodeSectionTitle } from '../../../canvas/NodePresent
 import { useEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../registry'
+import { latestSuccessMediaResult } from '@shared/engine/deterministic-projections'
 import { toast } from '../../../stores/toast'
 import { countIncomingConnections } from '../../../canvas/graph'
 import { markUndoPoint } from '../../../canvas/history'
@@ -85,6 +86,9 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
   const providersLoaded = useGatewayStore((s) => s.loaded)
   const loadProviders = useGatewayStore((s) => s.load)
   const config = parseSpeechConfig(readNodeConfig(shape))
+  // 操作节点不持久化 mediaPath：卡内结果区读本次成功运行的 nodeResult。
+  const resultMedia = latestSuccessMediaResult(shape)
+  const outputMediaPath = shape.props.mediaPath || resultMedia?.mediaPath || ''
   const [draft, setDraft] = useState(shape.props.text)
   const [busy, setBusy] = useState(false)
   const [playing, setPlaying] = useState(false)
@@ -175,7 +179,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
     audioRef.current.src = ''
     audioRef.current = null
     setPlaying(false)
-  }, [shape.props.mediaPath])
+  }, [outputMediaPath])
 
   const updateConfig = (patch: Partial<SpeechConfig>): void => {
     editor.updateShape({
@@ -279,7 +283,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
   }
 
   const togglePlay = (): void => {
-    if (!shape.props.mediaPath) return
+    if (!outputMediaPath) return
     if (playing) {
       audioRef.current?.pause()
       setPlaying(false)
@@ -291,7 +295,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
       void el.play().then(() => setPlaying(true))
       return
     }
-    const created = new Audio(mediaUrl(shape.props.mediaPath))
+    const created = new Audio(mediaUrl(outputMediaPath))
     created.currentTime = 0
     created.onended = () => setPlaying(false)
     created.onpause = () => setPlaying(false)
@@ -319,7 +323,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
     }
   }
 
-  const hasOutput = Boolean(shape.props.mediaPath)
+  const hasOutput = Boolean(outputMediaPath)
   const canGenerate = isLocal
     ? Boolean(draft.trim()) &&
       draft.length <= limit &&
@@ -784,7 +788,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
                 }
                 openPreview({
                   kind: 'audio',
-                  url: mediaUrl(shape.props.mediaPath),
+                  url: mediaUrl(outputMediaPath),
                   title: shape.props.title
                 })
               })

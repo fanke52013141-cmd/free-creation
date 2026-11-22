@@ -1,4 +1,4 @@
-import { projectAudioAssetOutputs } from '@shared/engine/deterministic-projections'
+﻿import { projectAudioAssetOutputs } from '@shared/engine/deterministic-projections'
 // 节点输出投影：把节点已持久化的 props/meta 映射为其声明端口的真实值。
 //
 // 这些函数由各自 NodeTypeSpec 直接注册。运行器和手动触发都只调用

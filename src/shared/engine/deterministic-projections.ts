@@ -1,5 +1,10 @@
-import type { NodeShape } from './executor-types'
-import { parseStoredNodeValue, parseMediaResultCollection, type RawNodeOutputs } from './values'
+﻿import type { NodeShape } from './executor-types'
+import {
+  parseStoredNodeValue,
+  parseMediaResultCollection,
+  type MediaResultItem,
+  type RawNodeOutputs
+} from './values'
 import { projectAgentOutputs, projectStateMachineOutputs } from '../agent-flow/agent-outputs'
 import { projectReviewOutputs } from '../agent-flow/review'
 import { readStoredNodeRunStatus } from './run-status'
@@ -42,6 +47,14 @@ export function currentTextResult(shape: NodeShape): string | null {
   }
 }
 
+/** 操作节点卡内结果区：只取本次成功运行的最近一条媒体结果（props 不再持久化 mediaPath）。 */
+export function latestSuccessMediaResult(shape: NodeShape): MediaResultItem | null {
+  if (readStoredNodeRunStatus(shape.meta?.nodeRun) !== 'success') return null
+  const collection = parseMediaResultCollection(
+    typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
+  )
+  return collection?.results.at(-1) ?? null
+}
 export const projectTextOutputs = (shape: NodeShape): RawNodeOutputs => {
   const result = currentTextResult(shape)
   if (result) return { 'out-text': { kind: 'text', text: result } }

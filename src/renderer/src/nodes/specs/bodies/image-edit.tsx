@@ -1,4 +1,4 @@
-import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
+﻿import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { stopEventPropagation, useEditor, type Editor } from 'tldraw'
@@ -33,6 +33,7 @@ import { ModalShell } from '../../../components/ModalShell'
 import { AppSelect } from '../../../components/AppSelect'
 import './image-edit-model-row.css'
 import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../registry'
+import { latestSuccessMediaResult } from '@shared/engine/deterministic-projections'
 import {
   clearSelectedMediaHistory,
   ImageContinuationActions,
@@ -80,6 +81,9 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const instruction = parseImageEditConfig(readNodeConfig(shape)).instruction
+  // 操作节点不持久化 mediaPath：卡内结果区读本次成功运行的 nodeResult。
+  const resultMedia = latestSuccessMediaResult(shape)
+  const outputMediaPath = shape.props.mediaPath || resultMedia?.mediaPath || ''
 
   // 卸载时清理 tldraw 编辑态，防止键盘事件被画布扣留。
   useEffect(() => {
@@ -117,7 +121,7 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
     <ImageEditWorkbench shape={shape} editor={editor} onClose={() => setWorkbenchOpen(false)} />
   ) : null
 
-  if (!shape.props.mediaPath)
+  if (!outputMediaPath)
     return (
       <NodeIdentity>
         <span className="node-wiring warn">{noSourceLine}</span>
@@ -155,13 +159,13 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
           guard.onDoubleClick(e, () =>
             openPreview({
               kind: 'image',
-              url: mediaUrl(shape.props.mediaPath),
+              url: mediaUrl(outputMediaPath),
               title: shape.props.title
             })
           )
         }
       >
-        <img src={mediaUrl(shape.props.mediaPath)} alt={shape.props.title} draggable={false} />
+        <img src={mediaUrl(outputMediaPath)} alt={shape.props.title} draggable={false} />
       </div>
       <div className="node-media-actions">
         <button
@@ -232,7 +236,7 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
             <figcaption>原图</figcaption>
           </figure>
           <figure>
-            <img src={mediaUrl(shape.props.mediaPath)} alt="修改结果" draggable={false} />
+            <img src={mediaUrl(outputMediaPath)} alt="修改结果" draggable={false} />
             <figcaption>修改结果</figcaption>
           </figure>
         </div>

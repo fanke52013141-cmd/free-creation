@@ -1,4 +1,4 @@
-import { NodePrimaryButton, NodeSectionTitle } from '../../../canvas/NodePresentation'
+﻿import { NodePrimaryButton, NodeSectionTitle } from '../../../canvas/NodePresentation'
 // 音色设计节点 Body（MiniMax voice_design）。
 //
 // 节点定位：输入音色描述 → 输出试听音频与可复用的音色 ID。
@@ -7,6 +7,7 @@ import { NodePrimaryButton, NodeSectionTitle } from '../../../canvas/NodePresent
 import { useEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
+import { latestSuccessMediaResult } from '@shared/engine/deterministic-projections'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
@@ -64,6 +65,9 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
     return model ? [{ provider, model }] : []
   })
   const voiceId = designedVoiceId(shape)
+  // 操作节点不持久化 mediaPath：卡内结果区读本次成功运行的 nodeResult。
+  const resultMedia = latestSuccessMediaResult(shape)
+  const outputMediaPath = shape.props.mediaPath || resultMedia?.mediaPath || ''
 
   useEffect(() => {
     if (!providersLoaded) void loadProviders()
@@ -83,7 +87,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
     audioRef.current.src = ''
     audioRef.current = null
     setPlaying(false)
-  }, [shape.props.mediaPath])
+  }, [outputMediaPath])
 
   const updateConfig = (patch: Partial<VoiceDesignConfig>): void => {
     editor.updateShape({
@@ -99,7 +103,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
   }
 
   const togglePlay = (): void => {
-    if (!shape.props.mediaPath) return
+    if (!outputMediaPath) return
     if (playing) {
       audioRef.current?.pause()
       setPlaying(false)
@@ -111,7 +115,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
       void el.play().then(() => setPlaying(true))
       return
     }
-    const created = new Audio(mediaUrl(shape.props.mediaPath))
+    const created = new Audio(mediaUrl(outputMediaPath))
     created.currentTime = 0
     created.onended = () => setPlaying(false)
     created.onpause = () => setPlaying(false)
@@ -139,7 +143,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
     }
   }
 
-  const hasOutput = Boolean(shape.props.mediaPath)
+  const hasOutput = Boolean(outputMediaPath)
   const canGenerate =
     Boolean(draft.trim()) &&
     Boolean(config.previewText.trim()) &&
@@ -282,7 +286,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
                 }
                 openPreview({
                   kind: 'audio',
-                  url: mediaUrl(shape.props.mediaPath),
+                  url: mediaUrl(outputMediaPath),
                   title: shape.props.title
                 })
               })

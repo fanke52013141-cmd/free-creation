@@ -893,3 +893,14 @@ focus-visible 与深浅主题取同一套值。材质只在 `ui-surfaces.css` �
 3. 只读结果区参与节点选中与拖动，但**不进入正文编辑**；允许原生文本选择（`data-node-selectable-text="true"`），双击仍只对正文生效。
 4. 结果区不新增节点类型、不改执行契约与 CLI/MCP；`nodeSelectableText` 策略与 `.node-text` 既有滚动规则复用。
 5. 守护断言：`test/text-merge-accumulation.test.ts`（不写回、不累积、runId 投影）、`test/flow-target-text.test.ts`（普通执行与 Agent 调度同构）。
+
+### 24.6 操作节点卡内结果区读运行结果（2026-11-22 用户裁决）
+
+语音合成、音色设计、P 图等操作节点的卡片结果区不得以 `props.mediaPath` 为门：按 §11 产物不变式，操作节点禁止把媒体引用持久化到自身定义，`props.mediaPath` 在新建节点上永远为空，结果区因此长期是「死 UI」。
+
+现行规则：
+
+1. 卡内结果区的数据源是 `latestSuccessMediaResult(shape)`（`@shared/engine/deterministic-projections`）：只取 `nodeRun.status === 'success'` 时 `meta.nodeResult` 集合的最近一条结果；失败、未运行或结果为空时不展示，保留「打开工作台 / 未运行」入口。
+2. 播放/预览/对比图统一使用该结果路径，不再读 `props.mediaPath`（历史资产节点的兼容读取保留在 props 优先的回退里）。
+3. 选择、删除、清空结果仍走既有 `MediaResultGrid` + `selectMediaResult` / `removeMediaResultFromShape`，不新增状态。
+4. 守护断言：`test/media-result-area.test.ts`（成功取最新、失败不暴露残留、未运行不展示、空结果不伪造）。
