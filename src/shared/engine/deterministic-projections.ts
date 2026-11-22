@@ -20,9 +20,9 @@ import {
 } from './family-projections'
 
 // These exact functions are registered by the desktop NodeTypeSpecs.
-/** C1：文本节点被 Agent 调度执行时合并结果存 nodeResult（含 runId）；
- *  仅当与当前 nodeRun 同一次运行时优先投影，普通执行/历史残留仍读正文。 */
-function flowTextResult(shape: NodeShape): string | null {
+/** 文本节点本次运行的合并结果存 nodeResult（含 runId）；
+ *  仅当与当前 nodeRun 同一次运行时优先投影/呈现，历史残留回退到正文。 */
+export function currentTextResult(shape: NodeShape): string | null {
   try {
     const raw = shape.meta?.nodeResult
     if (typeof raw !== 'string' || !raw) return null
@@ -43,8 +43,8 @@ function flowTextResult(shape: NodeShape): string | null {
 }
 
 export const projectTextOutputs = (shape: NodeShape): RawNodeOutputs => {
-  const flowText = flowTextResult(shape)
-  if (flowText) return { 'out-text': { kind: 'text', text: flowText } }
+  const result = currentTextResult(shape)
+  if (result) return { 'out-text': { kind: 'text', text: result } }
   return shape.props.text.trim()
     ? { 'out-text': { kind: 'text', text: shape.props.text.trim() } }
     : {}

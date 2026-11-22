@@ -3,6 +3,7 @@ import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentatio
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import { markUndoPoint } from '../../../canvas/history'
+import { currentTextResult } from '@shared/engine/deterministic-projections'
 import type { NodeBodyProps } from '../../registry'
 import { Icon } from '../../../components/Icon'
 
@@ -64,6 +65,9 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
     }
   }
 
+  // 本次运行的合并结果（只读）：正文保持用户素材，结果单独呈现，超高内容内部滚动。
+  const runResult = currentTextResult(shape)
+
   if (editing) {
     return (
       <>
@@ -119,6 +123,12 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
       ) : (
         <NodeIdentity />
       )}
+      {runResult ? (
+        <div className="node-text-result" data-node-selectable-text="true">
+          <span className="node-text-result-label">运行结果</span>
+          <div className="node-text-result-body">{runResult}</div>
+        </div>
+      ) : null}
     </div>
   )
 }

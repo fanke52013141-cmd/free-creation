@@ -175,7 +175,9 @@ describe('W1 验收：文案整理 1.0 / 标题整理 1.0', () => {
     ]))
     expect(bindings.issues).toEqual([])
     const updated: string[] = []
+    const metas: Array<{ nodeResult?: string }> = []
     const ctx = {
+      runId: 'run-inner-1',
       node: { id: 'shape:n1', type: 'text', title: '文案', contractVersion: 3 },
       shape: {
         props: {
@@ -212,14 +214,17 @@ describe('W1 验收：文案整理 1.0 / 标题整理 1.0', () => {
       updateProps: (patch: { text?: string }) => {
         if (patch.text !== undefined) updated.push(patch.text)
       },
+      updateMeta: (patch: { nodeResult?: string }) => metas.push(patch),
       updateResult: () => undefined
     }
     const run = textExecutor(ctx as never)
     expect(run.status).toBe('done')
-    expect(updated[0]).toBe('外部文案\n$$$\n内部说明')
+    expect(updated).toHaveLength(0)
+    const stored = JSON.parse(metas[0]!.nodeResult!) as { kind: string; text: string; runId: string }
+    expect(stored.text).toBe('外部文案\n$$$\n内部说明')
     const output = collectCompositeOutputs(inner, () => ({
       kind: 'text',
-      text: updated[0]!
+      text: stored.text
     }))
     expect(output.issues).toEqual([])
     expect(output.outputs.polished).toEqual({ kind: 'text', text: '外部文案\n$$$\n内部说明' })

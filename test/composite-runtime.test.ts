@@ -161,12 +161,14 @@ describe('节点流 W1 运行时（文本闭环）', () => {
     })
   })
 
-  it('文本节点仍按普通合并规则把上游文本并入正文', () => {
+  it('文本节点仍按普通合并规则合并上游文本，结果只落运行记录、不改写用户正文', () => {
     const inputs: ContractInputMap = new Map([
       packet({ kind: 'text', text: '外部文案' }, 'in-text')
     ])
     const updated: string[] = []
+    const metas: Array<{ nodeResult?: string }> = []
     const ctx = {
+      runId: 'run-text-1',
       node: { id: 'shape:n1', type: 'text', title: '文案', contractVersion: 3 },
       shape: {
         id: 'shape:n1',
@@ -182,11 +184,19 @@ describe('节点流 W1 运行时（文本闭环）', () => {
       updateProps: (patch: { text?: string }) => {
         if (patch.text !== undefined) updated.push(patch.text)
       },
+      updateMeta: (patch: { nodeResult?: string }) => metas.push(patch),
       updateResult: () => undefined
     } as unknown as NodeExecutionContext
     const result = textExecutor(ctx)
     expect(result.status).toBe('done')
-    expect(updated[0]).toBe(`外部文案${TEXT_MERGE_SEPARATOR}内部说明`)
+    // 正文属于用户素材：执行不得静默改写，避免上游变更后旧前缀累积成 A、C、A、B。
+    expect(updated).toHaveLength(0)
+    const stored = JSON.parse(metas[0]!.nodeResult!) as { kind: string; text: string; runId: string }
+    expect(stored).toEqual({
+      kind: 'text',
+      text: `外部文案${TEXT_MERGE_SEPARATOR}内部说明`,
+      runId: 'run-text-1'
+    })
   })
 
   it('正式输出只取本次映射结果；必需输出缺失带节点与端口', () => {

@@ -2,6 +2,7 @@
 // 节点流测试矩阵 · F 模型组合链 + H 特殊宿主停等/状态机 + J 持久化语义（2026-11-17）。
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { runNodeManually, runWorkflow } from '@renderer/engine/executor'
+import { currentTextResult } from '@shared/engine/deterministic-projections'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 import {
   approveAllConfirms,
@@ -47,7 +48,9 @@ describe('F · 模型节点组合链（桩网关）', () => {
       await runWorkflow(editor, 'p-f1', stubProviders())
       expect(runStateOf(node('ai')).run).toBe('success')
       expect(runStateOf(node('out')).run).toBe('success')
-      expect(String(node('out')!.props.text)).toContain('品牌焕新')
+      // 文本节点不再把上游结果写回正文：结果从运行记录按 runId 投影（卡片只读结果区同源）。
+      expect(String(node('out')!.props.text)).toBe('')
+      expect(currentTextResult(node('out')!)).toContain('品牌焕新')
     } finally {
       restore()
     }

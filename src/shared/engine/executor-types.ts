@@ -65,8 +65,6 @@ export interface NodeMetaPatch {
   humanTask?: string
   /** C4：人工任务待应用结果提交；执行器消费后写空串清除（tldraw meta 浅合并，删键不生效）。 */
   humanTaskPending?: string
-  /** 文本节点上次合并的结果与合并前正文（JSON）：下次运行先还原正文，避免上游变更后旧内容累积。 */
-  textMerge?: string
 }
 
 /** 运行控制信号。暂停在当前原子任务结束后生效；停止会解除暂停等待。 */

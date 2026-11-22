@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 // 节点流测试矩阵 · A 单节点冒烟 + B 基础拓扑 + C 失败/跳过语义（2026-11-17 全面测试）。
 // A：33 个活跃节点逐一构造最小可运行输入，验证引擎→执行器→输出投影整链；
 //    模型节点走桩网关（管线正确性），本地媒体走桩信封（真实 ffmpeg 由既有 real-media 测试覆盖）。
@@ -6,6 +6,7 @@
 // C：上游失败/跳过对下游的语义（显式失败、不静默复用旧输出、分支隔离、重跑取新值）。
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { runNodeManually, runWorkflow, runWorkflowForNodes } from '@renderer/engine/executor'
+import { currentTextResult } from '@shared/engine/deterministic-projections'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 import {
   approveAllConfirms,
@@ -752,7 +753,7 @@ describe('B · 基础拓扑', () => {
     expect(runStateOf(node('src')).run).toBe('success')
     expect(runStateOf(node('p')).run).toBe('success')
     expect(runStateOf(node('out')).run).toBe('success')
-    expect(String(node('out')!.props.text)).toContain('原始文案')
+    expect(currentTextResult(node('out')!)).toContain('原始文案')
   })
 
   it('B2 单源扇出三分支：各分支独立成功', async () => {
@@ -773,7 +774,7 @@ describe('B · 基础拓扑', () => {
     expect(runStateOf(node('a')).run).toBe('success')
     expect(runStateOf(node('b')).run).toBe('success')
     expect(runStateOf(node('c')).run).toBe('success')
-    expect(String(node('a')!.props.text)).toContain('一份素材')
+    expect(currentTextResult(node('a')!)).toContain('一份素材')
   })
 
   it('B3 两源扇入：connectOrder 决定取值顺序', async () => {
@@ -790,7 +791,7 @@ describe('B · 基础拓扑', () => {
     )
     await runWorkflow(editor, 'p-b3', [])
     expect(runStateOf(node('sink')).run).toBe('success')
-    expect(String(node('sink')!.props.text)).toContain('第一顺位')
+    expect(currentTextResult(node('sink')!)).toContain('第一顺位')
   })
 
   it('B4 菱形：同源双路各取一字段再汇聚为列表', async () => {
@@ -843,7 +844,7 @@ describe('B · 基础拓扑', () => {
     for (let i = 0; i < 10; i++) {
       expect(runStateOf(node(`n${i}`)).run).toBe('success')
     }
-    expect(String(node('n9')!.props.text)).toContain('链头内容')
+    expect(currentTextResult(node('n9')!)).toContain('链头内容')
   })
 
   it('B6 空图/孤立节点：不误跑不报错', async () => {
@@ -952,12 +953,12 @@ describe('C · 失败/跳过语义', () => {
       [{ from: 'src', to: 'sink', fromPort: 'out-text', toPort: 'in-text' }]
     )
     await runWorkflow(editor, 'p-c4', [])
-    expect(String(node('sink')!.props.text)).toContain('第一版文案')
+    expect(currentTextResult(node('sink')!)).toContain('第一版文案')
 
     node('src')!.props.text = '第二版文案'
     resetEnginePhase()
     await runWorkflow(editor, 'p-c4', [])
-    expect(String(node('sink')!.props.text)).toContain('第二版文案')
+    expect(currentTextResult(node('sink')!)).toContain('第二版文案')
   })
 
   it('C5 json 数字改型防护（R-17）：1e3 会静默变成 1000 → 显式失败提示加引号', async () => {

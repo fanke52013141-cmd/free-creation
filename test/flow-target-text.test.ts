@@ -182,16 +182,17 @@ describe('C1：text 目标执行不写回正文（固定语义修订）', () => 
     return { ctx: ctx as never, metaPatches, propPatches }
   }
 
-  it('普通执行：合并文本写回 props.text，并记录合并状态供下次还原', async () => {
+  it('普通执行：合并文本只落 nodeResult，不写回 props.text', async () => {
     const { textExecutor } = await import('../src/shared/engine/executors/text')
     const { ctx, propPatches, metaPatches } = textCtx({ body: '正文', upstream: '上游' })
     expect(textExecutor(ctx).status).toBe('done')
-    expect(propPatches).toHaveLength(1)
-    expect(String(propPatches[0].text)).toContain('上游')
-    // 追加 textMerge 状态（不是 C1 的 nodeResult）：下次运行先还原用户正文，防止旧上游累积。
+    expect(propPatches).toHaveLength(0)
     expect(metaPatches).toHaveLength(1)
-    expect(metaPatches[0].nodeResult).toBeUndefined()
-    expect(String(metaPatches[0].textMerge)).toContain('"body":"正文"')
+    const stored = JSON.parse(String(metaPatches[0].nodeResult))
+    expect(stored.kind).toBe('text')
+    expect(stored.runId).toBe('run-1')
+    expect(stored.text).toContain('上游')
+    expect(stored.text).toContain('正文')
   })
 
   it('Agent 调度执行：不写回正文，合并结果走 nodeResult（含 runId）', async () => {

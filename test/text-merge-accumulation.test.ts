@@ -1,57 +1,59 @@
 import { describe, expect, it } from 'vitest'
 import { textExecutor } from '../src/shared/engine/executors/text'
-import { TEXT_MERGE_SEPARATOR } from '../src/shared/engine/helpers'
+import { currentTextResult, projectTextOutputs } from '../src/shared/engine/deterministic-projections'
 
 function run(input: {
   body: string
   upstream?: string
-  meta?: Record<string, unknown>
-}): { text: string; meta: Record<string, unknown> } {
-  const result = { text: input.body, meta: { ...(input.meta ?? {}) } }
+  runId?: string
+}): { text: string; props: { text: string }; meta: Record<string, unknown> } {
+  const result = {
+    text: input.body,
+    props: { text: input.body },
+    meta: {} as Record<string, unknown>
+  }
   const ctx = {
-    runId: 'run-1',
+    runId: input.runId ?? 'run-1',
     shape: {
       props: { nodeType: 'text', text: input.body },
-      meta: input.meta ?? {}
+      meta: {}
     },
     inputs: input.upstream
       ? new Map([['in-text', [{ value: { kind: 'text', text: input.upstream } }]]])
       : new Map(),
     updateProps: (patch: { text?: string }) => {
-      if (patch.text !== undefined) result.text = patch.text
+      if (patch.text !== undefined) result.props.text = patch.text
     },
     updateMeta: (patch: Record<string, unknown>) => Object.assign(result.meta, patch)
   }
   const outcome = textExecutor(ctx as never)
-  expect(outcome.status === 'done' || outcome.status === 'skipped').toBe(true)
+  expect(['done', 'skipped']).toContain(outcome.status)
   return result
 }
 
-describe('文本节点合并不累积（D-01 回归）', () => {
-  it('上游从 A 变为 A+C 时不重复旧上游', () => {
-    const first = run({ body: '', upstream: 'A' })
-    expect(first.text).toBe('A')
-    const second = run({ body: first.text, meta: first.meta, upstream: `A${TEXT_MERGE_SEPARATOR}C` })
-    expect(second.text).toBe(`A${TEXT_MERGE_SEPARATOR}C`)
-    expect(second.text.split('A').length - 1).toBe(1)
+describe('文本节点：结果只落运行记录，不改写正文（D-01 终版）', () => {
+  it('普通运行不触碰正文，合并结果进 nodeResult（含 runId）', () => {
+    const out = run({ body: 'B', upstream: 'A' })
+    expect(out.props.text).toBe('B')
+    const stored = JSON.parse(String(out.meta.nodeResult)) as { kind: string; text: string; runId: string }
+    expect(stored).toEqual({ kind: 'text', text: 'A\n$$$\nB', runId: 'run-1' })
   })
 
-  it('用户正文保留，且二次运行不会出现 A、C、A、B', () => {
-    const first = run({ body: 'B', upstream: 'A' })
-    expect(first.text).toBe(`A${TEXT_MERGE_SEPARATOR}B`)
-    const second = run({ body: first.text, meta: first.meta, upstream: `A${TEXT_MERGE_SEPARATOR}C` })
-    expect(second.text).toBe(`A${TEXT_MERGE_SEPARATOR}C${TEXT_MERGE_SEPARATOR}B`)
+  it('连续运行不累积：上游 A→A+C 后正文仍是用户正文', () => {
+    const first = run({ body: '', upstream: 'A', runId: 'r1' })
+    const second = run({ body: first.props.text, upstream: 'A\n$$$\nC', runId: 'r2' })
+    expect(second.props.text).toBe('')
+    const stored = JSON.parse(String(second.meta.nodeResult)) as { text: string }
+    expect(stored.text).toBe('A\n$$$\nC')
   })
 
-  it('用户手动改写正文后按新正文合并，不还原旧结果', () => {
-    const first = run({ body: 'B', upstream: 'A' })
-    const edited = run({ body: '我改过的正文', meta: first.meta, upstream: 'A' })
-    expect(edited.text).toBe(`A${TEXT_MERGE_SEPARATOR}我改过的正文`)
-  })
-
-  it('上游断开后正文回到用户正文', () => {
-    const first = run({ body: 'B', upstream: 'A' })
-    const plain = run({ body: first.text, meta: first.meta })
-    expect(plain.text).toBe('B')
+  it('投影只认与 nodeRun 同 runId 的结果；残留结果回退正文', () => {
+    const shape = (meta: Record<string, unknown>, body = 'B') => ({ props: { text: body }, meta }) as never
+    const fresh = { nodeResult: JSON.stringify({ kind: 'text', text: 'A\n$$$\nB', runId: 'r9' }), nodeRun: { runId: 'r9' } }
+    expect(currentTextResult(shape(fresh))).toBe('A\n$$$\nB')
+    expect(projectTextOutputs(shape(fresh))['out-text']).toEqual({ kind: 'text', text: 'A\n$$$\nB' })
+    const stale = { nodeResult: JSON.stringify({ kind: 'text', text: '旧结果', runId: 'old' }), nodeRun: { runId: 'r9' } }
+    expect(currentTextResult(shape(stale))).toBeNull()
+    expect(projectTextOutputs(shape(stale))['out-text']).toEqual({ kind: 'text', text: 'B' })
   })
 })
