@@ -1895,6 +1895,24 @@ function probeDuration(absFile) {
 /** 等整条工作流回到空闲（顶栏重新出现「运行」，停止按钮消失）。 */
 async function waitWorkflowIdle(rounds = 60) {
   for (let i = 0; i < rounds; i += 1) {
+    // 引擎在运行前可能延迟弹出「补充运行输入」（可选输入可留空）：等待期间自动点「开始运行」。
+    for (const target of app.windows()) {
+      const clicked = await target
+        .evaluate(() => {
+          const button = Array.from(document.querySelectorAll('button')).find(
+            (item) => (item.textContent || '').trim() === '开始运行'
+          )
+          if (!button) return false
+          button.click()
+          return true
+        })
+        .catch(() => false)
+      if (clicked) {
+        log('补充运行输入：已自动点击「开始运行」')
+        await win.waitForTimeout(400)
+        break
+      }
+    }
     if ((await win.getByRole('button', { name: '运行', exact: true }).count()) === 1) return true
     await win.waitForTimeout(500)
   }
@@ -1999,6 +2017,32 @@ async function recipeCancelResume() {
   )
   await runAll.click()
   await win.waitForTimeout(1000)
+  // 续跑会再次弹出「补充运行输入」（循环体·模板是可选文本）：留空点「开始运行」继续。
+  // 该弹窗可能渲染在独立窗口，且按钮可访问名不稳定；逐窗口用 DOM 直接找按钮点击。
+  let resumePromptClicked = false
+  for (let attempt = 0; attempt < 50 && !resumePromptClicked; attempt += 1) {
+    for (const target of app.windows()) {
+      const clicked = await target
+        .evaluate(() => {
+          const button = Array.from(document.querySelectorAll('button')).find(
+            (item) => (item.textContent || '').trim() === '开始运行'
+          )
+          if (!button) return false
+          button.click()
+          return true
+        })
+        .catch(() => false)
+      if (clicked) {
+        resumePromptClicked = true
+        break
+      }
+    }
+    if (!resumePromptClicked) await win.waitForTimeout(300)
+  }
+  if (resumePromptClicked) {
+    log('续跑：已点击「开始运行」跳过可选输入')
+    await win.waitForTimeout(900)
+  }
   check('停止续跑：续跑能跑到收尾', await waitWorkflowIdle(120))
   const resumedShape = await disk(loop, (s) => s.run.status !== 'running')
   const resumedItems = obj(resumedShape.resultRaw).items || []
@@ -2039,10 +2083,16 @@ async function recipeCancelResume() {
     loopText.includes(`${TOTAL}/${TOTAL}`),
     loopText.replace(/\n+/g, ' / ').slice(0, 180)
   )
+  // 影子隔离（2026-11-16）后定义卡只保留静态输入，逐项产物记录在循环结果的 items 里。
+  const recoveredItems = (obj((await disk(loop)).resultRaw).items || []).filter(
+    (item) =>
+      (item.status === 'done' || item.status === 'reused') &&
+      Object.keys(item.outputs || {}).length > 0
+  )
   check(
-    '重启恢复：循环体节点的运行结果仍在磁盘上',
-    Boolean((await disk(body)).resultRaw),
-    String(JSON.stringify((await disk(body)).resultRaw)).slice(0, 80)
+    '重启恢复：循环逐项产物引用仍可追溯',
+    recoveredItems.length === TOTAL,
+    `${recoveredItems.length} / ${TOTAL} 项带产物引用｜定义卡 result=${String((await disk(body)).resultRaw).slice(0, 40)}`
   )
   await shot('restart-recovered')
 }
