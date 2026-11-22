@@ -1178,6 +1178,19 @@ describe('批量补输入（汇总表单回调）', () => {
     expect(target.props.exec).not.toBe('success')
   })
 
+  it('工作流里可选项留空后，节点级预检不再重复询问（D-15）', async () => {
+    const { editor } = emptyTextNode('shape:batch-skip-workflow')
+    let calls = 0
+    await runWorkflow(editor, 'project-1', [], {
+      requestInputs: async () => {
+        calls += 1
+        return []
+      }
+    })
+    // 全局汇总表单问一次；用户留空视为「已确认跳过」，节点级不得再问一次。
+    expect(calls).toBe(1)
+  })
+
   it('输入已满足时不调用汇总回调，直接运行', async () => {
     const { editor, target } = emptyTextNode('shape:batch-satisfied')
     target.props.text = '已有正文'

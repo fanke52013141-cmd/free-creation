@@ -1920,6 +1920,47 @@ async function waitWorkflowIdle(rounds = 60) {
 }
 
 /** §8 P3：工作流跑一半停止 → 续跑复用已完成项 → 关掉进程重开恢复。 */
+/** D-15：等待补充输入的反馈 + 可选输入只问一次。 */
+async function recipeInputFeedback() {
+  const target = await addNode('文本')
+  await organizeForInteraction()
+  const runAll = win.getByRole('button', { name: '运行', exact: true })
+  await ensureClickable(runAll, '顶栏运行工作流')
+  await runAll.click()
+
+  // 弹窗出现前，顶栏必须给出「等待补充输入…」反馈（而不是只写执行中/毫无反应）。
+  const promptTitle = win.getByText('补充运行输入', { exact: true })
+  await promptTitle.waitFor({ state: 'visible', timeout: 20000 })
+  const progressText = await win.locator('.engine-progress-text').innerText().catch(() => '')
+  check('D-15：等待补充输入期间顶栏有明确反馈', /等待补充输入/.test(progressText), progressText)
+  await shot('d15-awaiting-input')
+
+  // 留空点「开始运行」：可选输入视为已确认跳过。
+  const clicked = await win.evaluate(() => {
+    const button = Array.from(document.querySelectorAll('button')).find(
+      (item) => (item.textContent || '').trim() === '开始运行'
+    )
+    if (!button) return false
+    button.click()
+    return true
+  })
+  check('D-15：可点击「开始运行」跳过可选输入', clicked)
+
+  // 2 秒内不得再次弹出同一个补充输入弹窗。
+  await win.waitForTimeout(2000)
+  const promptCountAfter = await promptTitle.count()
+  check('D-15：可选输入不会二次弹窗', promptCountAfter === 0, `弹窗数=${promptCountAfter}`)
+
+  check('D-15：工作流正常结束（不因空可选输入卡死）', await waitWorkflowIdle(120))
+  const shape = await disk(target)
+  check(
+    'D-15：空正文文本节点按缺输入自然跳过',
+    shape.run?.status !== 'success',
+    JSON.stringify({ status: shape.run?.status, result: shape.resultRaw })
+  )
+  await shot('d15-skipped-run')
+}
+
 async function recipeCancelResume() {
   const TOTAL = 6
   // 每项一个 2 秒忙等的代码节点：单项远低于代码运行的 10 秒上限，整轮却够长，能在中途停下。
@@ -2117,6 +2158,7 @@ const RECIPES = [
   ['sound-adjust', '声音调整', recipeSoundAdjust],
   ['website', '网址', recipeWebsite],
   ['director', '导演台', recipeDirector],
+  ['d15-feedback', '补充输入反馈与去重（D-15）', recipeInputFeedback],
   ['p3', '停止续跑与重启恢复', recipeCancelResume]
 ]
 

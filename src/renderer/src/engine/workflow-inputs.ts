@@ -1,4 +1,4 @@
-import type { WorkflowInput } from '@shared/agent-access/run-ops'
+﻿import type { WorkflowInput } from '@shared/agent-access/run-ops'
 import type { CanvasEdge, CanvasNode, MediaAsset, PortDecl } from '@shared/types'
 import type { ContractInputMap } from '@shared/engine/inputs'
 import type { NodeValue } from '@shared/engine/values'
@@ -33,6 +33,11 @@ export interface WorkflowInputOptions {
   /** GUI 优先使用的汇总表单回调；缺省时回退串行 requestInput。 */
   requestInputs?: RequestWorkflowInputs
   confirmPaidRerun?: boolean
+  /**
+   * 本轮汇总表单里用户「留空跳过」的可选端口。
+   * 节点级预检据此不再重复询问同一个端口（D-15：可选输入重复询问）。
+   */
+  skippedPorts?: readonly { nodeId: string; portId: string }[]
 }
 
 /**

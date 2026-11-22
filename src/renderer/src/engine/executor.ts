@@ -1,4 +1,4 @@
-// 工作流执行编排层（契约规范 P3 / 路线图 R1 / R4）。
+﻿// 工作流执行编排层（契约规范 P3 / 路线图 R1 / R4）。
 //
 // 这里只保留运行器：拓扑排序 → 收集输入 → 契约校验 → 按节点执行器执行
 // → 读取 shape 投影输出 → 输出契约校验 → 登记。节点专属执行逻辑已迁移到
@@ -1385,10 +1385,19 @@ async function executeNodeUnscheduled(
         collected.value,
         supplied
       )
-      // 仅对尚未供值的缺口弹汇总表单（预检已补的端口不重复弹）。
-      const unsupplied = missing.filter(
-        (port) => !supplied.some((item) => item.nodeId === node.id && item.portId === port.id)
+      // 仅对尚未供值的缺口弹汇总表单（预检已补或已确认跳过的端口不重复弹）。
+      const acknowledged = new Set(
+        (workflowInputs.skippedPorts ?? [])
+          .filter((item) => item.nodeId === node.id)
+          .map((item) => item.portId)
       )
+      const unsupplied = missing.filter(
+        (port) =>
+          !supplied.some((item) => item.nodeId === node.id && item.portId === port.id) &&
+          !(acknowledged.has(port.id) && !port.required)
+      )
+      // 已确认跳过的可选端口不能再走单端口兜底弹窗（否则汇总表单后还会再问一次）。
+      missing = missing.filter((port) => !(acknowledged.has(port.id) && !port.required))
       if (workflowInputs.requestInputs && unsupplied.length > 0) {
         // 汇总表单：一次性补齐当前节点所有缺口（单节点/组合公开输入层均走此处）。
         const gaps = unsupplied.map((port) => ({
@@ -2329,6 +2338,7 @@ async function prepareWorkflowInputs(
   const options = ctx.workflowInputs
   if (!options?.requestInput && !options?.requestInputs) return true
   let supplied = [...(options.inputs ?? [])]
+  let skipped: Array<{ nodeId: string; portId: string }> = [...(options.skippedPorts ?? [])]
   const gaps = workflowPortGaps(ctx.editor, ctx.graph, order, supplied)
   if (gaps.length > 0) {
     if (options.requestInputs) {
@@ -2340,6 +2350,14 @@ async function prepareWorkflowInputs(
       })
       if (!values || ctx.token.cancelled) return false
       supplied = [...supplied, ...values]
+      // 用户留空的可选端口记成「已确认跳过」：节点级预检不再重复弹同一端口（D-15）。
+      const filled = new Set(values.map((value) => `${value.nodeId}|${value.portId}`))
+      skipped = [
+        ...skipped,
+        ...gaps
+          .filter((gap) => !gap.port.required && !filled.has(`${gap.nodeId}|${gap.port.id}`))
+          .map((gap) => ({ nodeId: gap.nodeId, portId: gap.port.id }))
+      ]
     } else {
       for (const { nodeId, title, port } of gaps) {
         const value = await options.requestInput!({
@@ -2353,7 +2371,7 @@ async function prepareWorkflowInputs(
       }
     }
   }
-  ctx.workflowInputs = { ...options, inputs: supplied }
+  ctx.workflowInputs = { ...options, inputs: supplied, skippedPorts: skipped }
   return true
 }
 

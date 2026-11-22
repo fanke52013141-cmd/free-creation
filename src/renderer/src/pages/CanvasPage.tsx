@@ -4,6 +4,7 @@ import type { ProjectFile } from '@shared/types'
 import type { WorkspaceProfile } from '@shared/workspace-profile'
 import { useAppStore } from '../stores/app'
 import { useEngineStore } from '../engine/store'
+import { usePendingInputs } from '../stores/workflowInput'
 import { ResourceQueuePanel } from '../engine/ResourceQueuePanel'
 import { CanvasEditor } from '../canvas/CanvasEditor'
 import { ProjectMenu } from '../canvas/ProjectMenu'
@@ -42,6 +43,8 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   const enginePause = useEngineStore((s) => s.pause)
   const engineResume = useEngineStore((s) => s.resume)
   const isRunning = enginePhase !== 'idle'
+  // 汇总补输入弹窗等待期间给出明确反馈，避免「点了运行没反应」的错觉。
+  const awaitingInput = usePendingInputs((state) => Boolean(state.request))
   const isPaused = enginePhase === 'paused'
   const [showErrors, setShowErrors] = useState(true)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
@@ -326,9 +329,11 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
                 {engineDone}/{engineTotal} ·{' '}
                 {enginePhase === 'stopping'
                   ? '停止中…'
-                  : isPaused
-                    ? '已暂停（将在当前项结束后停下）'
-                    : engineCurrent || '执行中…'}
+                  : awaitingInput
+                    ? '等待补充输入…'
+                    : isPaused
+                      ? '已暂停（将在当前项结束后停下）'
+                      : engineCurrent || '执行中…'}
               </span>
             </div>
           )}
