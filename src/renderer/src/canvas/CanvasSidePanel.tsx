@@ -13,9 +13,8 @@ import {
   type IndexedNodeRun,
   type RunStatusFilter
 } from '../engine/run-index'
-import { requestWorkflowInput, guiWorkflowInputOptions } from '../stores/workflowInput'
-import { useEngineStore } from '../engine/store'
-import { runNodeManually, runWorkflowForNodes } from '../engine/executor'
+import { guiWorkflowInputOptions } from '../stores/workflowInput'
+import { runNodeManually } from '../engine/executor'
 import { useGatewayStore } from '../stores/gateway'
 import { useWorkflowStore, type WorkflowTemplate } from '../stores/workflow'
 import { addNodeLibraryEntry, insertPublishedNodeFlow } from './node-library'
@@ -34,6 +33,8 @@ import { DiagnosticsProducer, newProducerId, newSpanId, newTraceId } from '@shar
 import { emitDiagnosticsEvent } from '../engine/diagnosticsReporter'
 import { useHistorySnapshots, type HistorySnapshot } from '../stores/history-snapshots'
 import { Icon, type IconName } from '../components/Icon'
+import { ModalShell } from '../components/ModalShell'
+import { modalBtn } from '../components/modal-btn'
 import { LibraryCardCover } from '../library/LibraryCardCover'
 import { AppSelect } from '../components/AppSelect'
 import { AssetsPanel } from './side-panel/AssetsPanel'
@@ -91,25 +92,28 @@ function nextVersionLabel(version: string | null): string {
 
 function WorkflowPanel({
   editor,
-  projectId,
   refreshKey,
   initialCapabilityId,
   onEditNodes,
-  onEditInfo
+  onEditInfo,
+  onEditTemplateNodes
 }: {
   editor: Editor | null
-  projectId: string
   refreshKey: number
   initialCapabilityId?: string
   onEditNodes: (capability: CompositeCapabilitySummary) => void
   onEditInfo: (capability: CompositeCapabilitySummary) => void
+  /** 流程模板类条目的「编辑节点」：与组合节点同一个全屏编辑页，保存即原位覆盖条目。 */
+  onEditTemplateNodes: (template: WorkflowTemplate) => void
 }): React.JSX.Element {
   const templates = useWorkflowStore((s) => s.templates)
   const wfLoad = useWorkflowStore((s) => s.load)
   const wfRemove = useWorkflowStore((s) => s.remove)
+  const wfRename = useWorkflowStore((s) => s.rename)
   const [query, setQuery] = useState('')
   const [focusedCapabilityId, setFocusedCapabilityId] = useState(initialCapabilityId)
   const [composites, setComposites] = useState<CompositeCapabilitySummary[]>([])
+  const [renamingTemplate, setRenamingTemplate] = useState<WorkflowTemplate | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const needle = query.trim().toLocaleLowerCase()
   const visibleTemplates = focusedCapabilityId
@@ -229,29 +233,20 @@ function WorkflowPanel({
     toast(`已复制节点流「${manifest.name}」`)
   }
 
-  const handleRun = async (template: WorkflowTemplate): Promise<void> => {
-    if (!editor || useEngineStore.getState().phase !== 'idle') return
-    const { nodeIds, skippedEdges } = addNodeLibraryEntry(editor, template)
-    if (skippedEdges > 0) {
-      toast('部分旧连线无法恢复，请检查画布中的连线后再运行')
-      return
-    }
-    await runWorkflowForNodes(editor, projectId, useGatewayStore.getState().providers, nodeIds, {
-      requestInput: requestWorkflowInput
-    })
+  // 2026-11-23 用户裁决：节点流条目直接删除，不做二次确认；无论画布上有没有对应实例，
+  // 画布上已创建的节点都不受影响（模板是流程蓝图，删除条目不动画布）。
+  const handleRemoveTemplate = (tmpl: WorkflowTemplate): void => {
+    void wfRemove(tmpl.id)
+      .then(() => toast(`已删除「${tmpl.name}」`))
+      .catch((error) => toast(`删除节点流条目失败：${String(error)}`))
   }
 
-  const handleRemoveTemplate = async (tmpl: WorkflowTemplate): Promise<void> => {
-    if (
-      !(await useConfirmStore.getState().confirm({
-        title: `删除节点流条目「${tmpl.name}」`,
-        message: '删除后该节点流条目不可恢复，画布上已创建的节点不受影响。',
-        confirmText: '删除',
-        danger: true
-      }))
-    )
-      return
-    await wfRemove(tmpl.id).catch((error) => toast(`删除节点流条目失败：${String(error)}`))
+  // 2026-11-23 用户裁决：节点流条目卡片不提供「运行」入口——点击/拖拽卡片铺开到画布
+  // 编辑才是本面板的用法；条目名称走「编辑名称」按钮（与外部 node.library.update 同一事务）。
+  const handleRenameTemplate = async (tmpl: WorkflowTemplate, name: string): Promise<void> => {
+    await wfRename(tmpl.id, name)
+      .then(() => toast(`已重命名为「${name}」`))
+      .catch((error) => toast(`重命名失败：${String(error)}`))
   }
 
   return (
@@ -296,13 +291,24 @@ function WorkflowPanel({
                 key={tmpl.id}
                 template={tmpl}
                 onApply={(dropScreen) => handleApply(tmpl, dropScreen)}
-                onRun={() => void handleRun(tmpl)}
-                onRemove={() => void handleRemoveTemplate(tmpl)}
+                onEditNodes={() => onEditTemplateNodes(tmpl)}
+                onRename={() => setRenamingTemplate(tmpl)}
+                onRemove={() => handleRemoveTemplate(tmpl)}
               />
             ))}
           </div>
         )}
       </div>
+      {renamingTemplate && (
+        <WorkflowRenameDialog
+          template={renamingTemplate}
+          onClose={() => setRenamingTemplate(null)}
+          onSubmit={(name) => {
+            void handleRenameTemplate(renamingTemplate, name)
+            setRenamingTemplate(null)
+          }}
+        />
+      )}
     </>
   )
 }
@@ -395,40 +401,58 @@ function CompositeCard({
   )
 }
 
-/** 节点流卡片：与项目素材共用 .asset-card 材质；只显示名称，点击/拖拽到画布即用。 */
+/** 节点流卡片：与项目素材共用 .asset-card 材质；只显示名称，点击/拖拽铺开到画布编辑。 */
 function WorkflowCard({
   template,
   onApply,
-  onRun,
+  onEditNodes,
+  onRename,
   onRemove
 }: {
   template: WorkflowTemplate
   onApply: (dropScreen?: { x: number; y: number }) => void
-  onRun: () => void
+  onEditNodes: () => void
+  onRename: () => void
   onRemove: () => void
 }): React.JSX.Element {
   const { startDrag, handleClick } = useDragToCanvas()
   return (
     <article
       className="asset-card"
-      title="点击添加到画布，或直接拖到画布"
+      title="点击铺开到画布编辑，或直接拖到画布"
       onPointerDown={(e) =>
         startDrag(e, { label: template.name, icon: 'node-library' }, (x, y) => onApply({ x, y }))
       }
       onClick={() => handleClick(() => onApply())}
     >
       <LibraryCardCover icon="node-library" compact />
+      {/* 2026-11-23 用户裁决：卡片不再有「运行」按钮；动作与组合能力卡片一致——
+          编辑节点（同一个全屏编辑页，保存即覆盖此条目）/编辑名称/删除。 */}
       <button
         type="button"
-        className="asset-template-run btn-ghost small"
-        aria-label={`运行 ${template.name}`}
+        className="composite-card-edit"
+        title="编辑内部节点：在全屏编辑页里修改节点与连线，保存后覆盖此节点流"
+        aria-label={`编辑节点 ${template.name}`}
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation()
-          onRun()
+          onEditNodes()
         }}
       >
-        <Icon name="play" size={13} /> 运行
+        <Icon name="edit" size={12} />
+      </button>
+      <button
+        type="button"
+        className="composite-card-settings"
+        title="编辑名称"
+        aria-label={`编辑名称 ${template.name}`}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation()
+          onRename()
+        }}
+      >
+        <Icon name="settings" size={12} />
       </button>
       <div className="asset-info">
         <span className="asset-name" title={template.name}>
@@ -438,7 +462,9 @@ function WorkflowCard({
       <button
         type="button"
         className="asset-delete"
+        title="删除节点流条目（画布上已创建的节点不受影响）"
         aria-label={`删除节点流条目 ${template.name}`}
+        onPointerDown={(event) => event.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation()
           onRemove()
@@ -447,6 +473,59 @@ function WorkflowCard({
         <Icon name="trash" size={12} />
       </button>
     </article>
+  )
+}
+
+/** 节点流条目改名弹窗（ModalShell 统一规范）：只改名称，内容与画布不受影响。 */
+function WorkflowRenameDialog({
+  template,
+  onClose,
+  onSubmit
+}: {
+  template: WorkflowTemplate
+  onClose: () => void
+  onSubmit: (name: string) => void
+}): React.JSX.Element {
+  const [name, setName] = useState(template.name)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const trimmed = name.trim()
+  return (
+    <ModalShell
+      size="s"
+      title="编辑节点流名称"
+      ariaLabel="编辑节点流名称"
+      onClose={onClose}
+      initialFocusRef={inputRef}
+      footer={
+        <>
+          <button type="button" className={modalBtn('secondary')} onClick={onClose}>
+            取消
+          </button>
+          <button
+            type="button"
+            className={modalBtn('primary')}
+            disabled={!trimmed || trimmed === template.name}
+            onClick={() => onSubmit(trimmed)}
+          >
+            保存
+          </button>
+        </>
+      }
+    >
+      <label className="library-form-field">
+        <span>名称</span>
+        <input
+          ref={inputRef}
+          maxLength={120}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && trimmed && trimmed !== template.name) onSubmit(trimmed)
+          }}
+          placeholder="输入新的节点流名称"
+        />
+      </label>
+    </ModalShell>
   )
 }
 
@@ -934,6 +1013,8 @@ export function CanvasSidePanel({
     manifest: import('@shared/composite/manifest').CompositeManifest
     draftRevision: number | null
   } | null>(null)
+  // 流程模板类条目也在同一个全屏编辑页里改（2026-11-23 用户裁决：节点流的编辑都用专门页面）。
+  const [templateEdit, setTemplateEdit] = useState<WorkflowTemplate | null>(null)
   const [settingsDialog, setSettingsDialog] = useState<CompositeCapabilitySummary | null>(null)
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0)
 
@@ -989,14 +1070,14 @@ export function CanvasSidePanel({
     if (!tab) return
     const onKey = (e: KeyboardEvent): void => {
       // 全屏编辑期间 Escape 属于编辑器（取消选中/退出编辑态），不连带收起侧栏。
-      if (canvasEdit) return
+      if (canvasEdit || templateEdit) return
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => {
       window.removeEventListener('keydown', onKey)
     }
-  }, [tab, onClose, canvasEdit])
+  }, [tab, onClose, canvasEdit, templateEdit])
 
   const meta = tab ? TAB_META[tab] : null
 
@@ -1036,10 +1117,10 @@ export function CanvasSidePanel({
                 searchDestination?.kind === 'workflow' ? searchDestination.id : undefined
               }
               editor={editor}
-              projectId={projectId}
               refreshKey={libraryRefreshKey}
               onEditNodes={(capability) => void openCanvasEdit(capability)}
               onEditInfo={(capability) => setSettingsDialog(capability)}
+              onEditTemplateNodes={setTemplateEdit}
             />
           )}
           {tab === 'history' && <HistoryPanel projectId={projectId} editor={editor} />}
@@ -1058,11 +1139,22 @@ export function CanvasSidePanel({
       )}
       {canvasEdit && (
         <CompositeCanvasEditor
-          capability={canvasEdit.capability}
-          manifest={canvasEdit.manifest}
+          target={{
+            kind: 'composite',
+            capability: canvasEdit.capability,
+            manifest: canvasEdit.manifest,
+            draftRevision: canvasEdit.draftRevision
+          }}
           projectId={projectId}
-          draftRevision={canvasEdit.draftRevision}
           onClose={() => setCanvasEdit(null)}
+          onSaved={() => setLibraryRefreshKey((key) => key + 1)}
+        />
+      )}
+      {templateEdit && (
+        <CompositeCanvasEditor
+          target={{ kind: 'template', template: templateEdit }}
+          projectId={projectId}
+          onClose={() => setTemplateEdit(null)}
           onSaved={() => setLibraryRefreshKey((key) => key + 1)}
         />
       )}

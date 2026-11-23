@@ -32,7 +32,8 @@ import {
   getWorkflowTemplate,
   listWorkflowTemplates,
   renameWorkflowTemplate,
-  saveWorkflowTemplate
+  saveWorkflowTemplate,
+  updateWorkflowTemplateContent
 } from '../store/workspace-state.repo'
 import type { WorkflowTemplateRecord } from '../../shared/contracts'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
@@ -252,14 +253,23 @@ function mediaDescriptor(
 }
 
 /** 组合保存：选中节点（全类型）+ 它们之间的连线 → 节点库条目。 */
-function composeEntry(input: Record<string, unknown>): unknown {
+/** 打开项目并核对图版本；compose 与 replace 共用同一准入（项目在、版本一致）。 */
+function openProjectForEntryPayload(input: Record<string, unknown>): ProjectFile {
   const projectId = input.projectId as string
   const file = projects.openProject(projectId)
   if (!file) refuse('NOT_FOUND', 'read')
   const expected = input.expectedGraphVersion as number
   if (file.meta.graphVersion !== expected)
     throw new GraphVersionConflictError(expected, file.meta.graphVersion)
-  const requested = input.nodeIds as string[]
+  return file
+}
+
+/** 从画布选中节点提取条目负载：chat 技能预设策略、媒体引用记录、连线拓扑与
+ *  尺寸上限与 compose/replace 完全同一份提取（GUI 保存对话框的同构超集）。 */
+function collectEntryPayload(
+  file: ProjectFile,
+  requested: string[]
+): { nodes: LibraryNode[]; edges: LibraryEdge[]; nodeCount: number } {
   const unique: string[] = []
   for (const nodeId of requested) if (!unique.includes(nodeId)) unique.push(nodeId)
   if (unique.length === 0 || unique.length > NODE_LIBRARY_MAX_NODES)
@@ -270,7 +280,7 @@ function composeEntry(input: Record<string, unknown>): unknown {
     return node
   })
   const mediaById = new Map(
-    listMedia(projectId).map((asset) => [
+    listMedia(file.meta.id).map((asset) => [
       asset.id,
       { mime: asset.mime, ...(asset.name ? { name: asset.name } : {}) }
     ])
@@ -356,12 +366,32 @@ function composeEntry(input: Record<string, unknown>): unknown {
   const payload = { nodes, edges, nodeCount: nodes.length }
   if (Buffer.byteLength(JSON.stringify(payload), 'utf8') > MAX_ENTRY_BYTES)
     refuse('ENTRY_TOO_LARGE', 'template-validation')
+  return payload
+}
+
+function composeEntry(input: Record<string, unknown>): unknown {
+  const file = openProjectForEntryPayload(input)
+  const payload = collectEntryPayload(file, input.nodeIds as string[])
   const entry = saveWorkflowTemplate({
     name: input.name as string,
     nodes: payload.nodes as unknown[],
     edges: payload.edges as unknown[],
     nodeCount: payload.nodeCount
   })
+  return summary(entry)
+}
+
+/** node.library.replace：原位覆盖条目内容；名称与画布不受影响（与 GUI「编辑节点」
+ *  保存路径共用 updateWorkflowTemplateContent 同一写口与校验）。 */
+function replaceEntry(input: Record<string, unknown>): unknown {
+  const file = openProjectForEntryPayload(input)
+  const payload = collectEntryPayload(file, input.nodeIds as string[])
+  const entry = updateWorkflowTemplateContent(input.entryId as string, {
+    nodes: payload.nodes as unknown[],
+    edges: payload.edges as unknown[],
+    nodeCount: payload.nodeCount
+  })
+  if (!entry) refuse('NOT_FOUND', 'entry-read', input.entryId as string)
   return summary(entry)
 }
 
@@ -694,6 +724,8 @@ export function runNodeLibraryOperation(
       return composeEntry(input)
     case 'node.library.update':
       return updateEntry(input)
+    case 'node.library.replace':
+      return replaceEntry(input)
     case 'node.library.delete':
       return deleteEntry(input)
     case 'node.library.get':

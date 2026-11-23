@@ -564,6 +564,34 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
       phase: 'short',
       code: 'short'
     }),
+    // workspace.template.*：节点库条目改名（GUI 入口，与外部 node.library.update 同一 repo 事务）。
+    // 只记条目 ID 与终态；新旧名称正文不入日志（脱敏口径同 project-rename）。
+    def('workspace.template.rename.started', 'info', 'main/ipc/workspace-state.ipc.ts', {
+      entryId: 'id',
+      operation: 'short'
+    }),
+    def('workspace.template.rename.completed', 'info', 'main/ipc/workspace-state.ipc.ts', {
+      entryId: 'id',
+      operation: 'short'
+    }),
+    def('workspace.template.rename.failed', 'error', 'main/ipc/workspace-state.ipc.ts', {
+      entryId: 'id',
+      operation: 'short'
+    }),
+    // workspace.template.update.*：节点库条目内容原位覆盖（GUI「编辑节点」+ 外部 node.library.replace）。
+    // 只记条目 ID 与终态；节点正文/配置/连线拓扑不入日志。
+    def('workspace.template.update.started', 'info', 'main/ipc/workspace-state.ipc.ts', {
+      entryId: 'id',
+      operation: 'short'
+    }),
+    def('workspace.template.update.completed', 'info', 'main/ipc/workspace-state.ipc.ts', {
+      entryId: 'id',
+      operation: 'short'
+    }),
+    def('workspace.template.update.failed', 'error', 'main/ipc/workspace-state.ipc.ts', {
+      entryId: 'id',
+      operation: 'short'
+    }),
     // library.*
     def('library.batch_delete_started', 'info', 'renderer/library/ResourceLibraryPage.tsx', {
       count: 'int'

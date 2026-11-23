@@ -581,6 +581,25 @@ export function installBrowserMock(): void {
         templates.unshift(template)
         return Promise.resolve({ ok: true, data: template })
       }) as unknown as WindowApi['workspace']['saveTemplate'],
+      renameTemplate: (id: string, name: string) => {
+        const template = templates.find((item) => item.id === id)
+        if (!template) return Promise.resolve({ ok: true, data: null })
+        ;(template as Record<string, unknown>).name = name.trim().slice(0, 120)
+        return Promise.resolve({ ok: true, data: template }) as unknown as ReturnType<
+          WindowApi['workspace']['renameTemplate']
+        >
+      },
+      updateTemplate: (
+        id: string,
+        input: { nodes: unknown[]; edges: unknown[]; nodeCount: number }
+      ) => {
+        const template = templates.find((item) => item.id === id)
+        if (!template) return Promise.resolve({ ok: true, data: null })
+        Object.assign(template, input)
+        return Promise.resolve({ ok: true, data: template }) as unknown as ReturnType<
+          WindowApi['workspace']['updateTemplate']
+        >
+      },
       deleteTemplate: (id: string) => {
         const index = templates.findIndex((template) => template.id === id)
         if (index >= 0) templates.splice(index, 1)

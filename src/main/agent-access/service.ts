@@ -215,6 +215,7 @@ const GLOBAL_LOCK_OPERATIONS: ReadonlySet<AccessOperationId> = new Set([
 const F7_DISPATCH_OPERATIONS: ReadonlySet<AccessOperationId> = new Set([
   'node.library.compose',
   'node.library.update',
+  'node.library.replace',
   'node.library.delete',
   'node.library.get',
   'node.library.search',
@@ -2494,6 +2495,7 @@ export class LocalAccessService {
       }
       case 'node.library.compose':
       case 'node.library.update':
+      case 'node.library.replace':
       case 'node.library.delete':
       case 'node.library.get':
       case 'node.library.search':

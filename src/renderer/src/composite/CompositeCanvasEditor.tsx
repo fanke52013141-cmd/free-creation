@@ -11,6 +11,7 @@ import { BackdropShapeUtil } from '../canvas/BackdropShape'
 import { createEdge, deriveGraph, tryConnect, tryConnectFromInput } from '../canvas/graph'
 import { NodeContractPanel } from '../canvas/NodeContractPanel'
 import { NodeContextMenu } from '../canvas/NodeContextMenu'
+import { addNodeLibraryEntry } from '../canvas/node-library'
 import { DataEdgeLayer } from '../canvas/DataEdgeLayer'
 import { NodeCreateMenu } from '../canvas/NodeCreateMenu'
 import { CanvasBottomDock } from '../canvas/CanvasMinimap'
@@ -27,6 +28,7 @@ import { useNodePanelStore } from '../stores/nodePanel'
 import { imageGenInitialConfig } from '../stores/imageGenPreference'
 import type { ConnectionFrom } from '../stores/connection'
 import { toast } from '../stores/toast'
+import { templatePayloadFromGraph, useWorkflowStore, type WorkflowTemplate } from '../stores/workflow'
 import { topNotice } from '../stores/topNotice'
 import { buildCompositeManifestFromEditor } from './editor-manifest'
 import {
@@ -50,14 +52,28 @@ const EMPTY_COMPONENTS = {
   ContextMenu: null
 } as const
 
+/**
+ * 编辑目标：
+ * - composite：已发布节点流——草稿、历史版本、另存为新版本；
+ * - template：节点库条目（画布「保存节点 → 流程模板」存下的那类）——没有版本与发布，
+ *   「保存」直接原位覆盖条目内容。
+ */
+export type CompositeCanvasEditTarget =
+  | {
+      kind: 'composite'
+      capability: CompositeCapabilitySummary
+      manifest: CompositeManifest
+      /** 已恢复草稿的 revision；null 表示以已发布版本为基准。 */
+      draftRevision: number | null
+    }
+  | { kind: 'template'; template: WorkflowTemplate }
+
 interface Props {
-  capability: CompositeCapabilitySummary
-  manifest: CompositeManifest
+  target: CompositeCanvasEditTarget
   projectId: string
-  /** 已恢复草稿的 revision；null 表示以已发布版本为基准。 */
-  draftRevision?: number | null
   onClose: () => void
-  onSaved: (manifest: CompositeManifest) => void
+  /** 已有内容落盘（发布新版本 / 切换版本 / 覆盖条目）后通知入口刷新面板。 */
+  onSaved: () => void
 }
 
 function versionLabel(version: string): string {
@@ -72,20 +88,24 @@ function versionLabel(version: string): string {
  * - 历史版本从底部弹层查看，可载入旧版本或切换为旧版本；
  * - 编辑期间隐藏窗口标题栏控制钮，退出恢复；
  * - 保存 = 写入草稿（下次编辑自动恢复）；另存为新版本 = 发布不可变版本；
- * - 公开输入/输出随内部图按节点规范自动推导，不提供手动挑选。
+ * - 公开输入/输出随内部图按节点规范自动推导，不提供手动挑选；
+ * - 节点库条目共用这一页（2026-11-23 用户裁决：节点流的编辑都用专门页面，不在主画布上铺开改）：
+ *   没有「历史版本」「另存为新版本」，保存即原位覆盖条目。
  */
 export function CompositeCanvasEditor({
-  capability,
-  manifest,
+  target,
   projectId,
-  draftRevision = null,
   onClose,
   onSaved
 }: Props): React.JSX.Element {
+  // 条目没有能力身份：草稿、版本、发布相关的入口对它一律不出现。
+  const capability = target.kind === 'composite' ? target.capability : null
   const [editor, setEditor] = useState<Editor | null>(null)
   const [busy, setBusy] = useState(false)
   const [issues, setIssues] = useState<string[]>([])
-  const [revision, setRevision] = useState<number | null>(draftRevision)
+  const [revision, setRevision] = useState<number | null>(
+    target.kind === 'composite' ? target.draftRevision : null
+  )
   const [dirty, setDirty] = useState(false)
   // 空白右键/拉线落空白：创建菜单；source/startPage 记录待连线的源端口。
   const [menu, setMenu] = useState<{
@@ -110,14 +130,16 @@ export function CompositeCanvasEditor({
     next: CompositeManifest
     issues: CompositePublishValidationIssue[]
   } | null>(null)
-  // 当前编辑基准：初始为入口传入的 manifest；「查看」旧版本会替换它。
-  const [base, setBase] = useState<CompositeManifest>(manifest)
+  // 当前编辑基准：初始为入口传入的 manifest；「查看」旧版本会替换它。条目没有版本，恒为 null。
+  const [base, setBase] = useState<CompositeManifest | null>(
+    target.kind === 'composite' ? target.manifest : null
+  )
   const internalIdByShape = useRef(new Map<string, string>())
   const initialized = useRef(false)
   const flyoutTimer = useRef<number | null>(null)
   const providers = useGatewayStore((state) => state.providers)
   // 发布目标版本由入口按最新发布自动递增，不提供手填，避免同版本覆盖被拒。
-  const version = manifest.version
+  const version = base?.version ?? ''
 
   // 编辑期间隐藏 Windows 标题栏覆盖按钮（最小化/最大化/关闭），退出恢复。
   useEffect(() => {
@@ -173,7 +195,15 @@ export function CompositeCanvasEditor({
   useEffect(() => {
     if (!editor || initialized.current) return
     initialized.current = true
-    loadManifestIntoEditor(editor, manifest)
+    if (target.kind === 'template') {
+      // 条目按「铺到画布」同一条路径载入：节点属性、媒体清空与旧连线的端口推断都与
+      // 画布套用一致——编辑页里看到的就是套用后的样子。不能照搬 manifest 的载入方式：
+      // createEdge 对不上端口会静默不建线，老条目（连线没有端口 ID）会打开即丢线。
+      addNodeLibraryEntry(editor, target.template, false)
+      editor.zoomToFit({ animation: { duration: 0 } })
+    } else if (base) {
+      loadManifestIntoEditor(editor, base)
+    }
     // 初始化完成后才监听用户改动，避免把恢复快照本身记为未保存修改。
     const unsubscribeDirty = editor.store.listen(() => setDirty(true), {
       scope: 'document',
@@ -373,11 +403,9 @@ export function CompositeCanvasEditor({
     manifest: CompositeManifest
     issues: string[]
   } => {
-    if (!editor)
-      return {
-        manifest: { ...base, version },
-        issues: []
-      }
+    // 两个调用方（保存草稿/另存为新版本）都先判过 editor；base 为 null 只可能是条目，
+    // 而条目没有这两个入口。
+    if (!editor || !base) throw new Error('没有可保存的节点流内容')
     const graph = deriveGraph(editor)
     const result = buildCompositeManifestFromEditor({
       manifest: base,
@@ -401,7 +429,7 @@ export function CompositeCanvasEditor({
 
   // 保存：写入草稿，不产生新版本；下次「编辑 / 编辑节点」自动恢复。
   const saveDraft = async (): Promise<CompositeManifest | null> => {
-    if (!editor) return null
+    if (!editor || !base) return null
     setBusy(true)
     try {
       const built = buildManifest()
@@ -425,9 +453,27 @@ export function CompositeCanvasEditor({
     }
   }
 
+  // 条目的保存：把编辑页当前内部图原位写回条目（名称、创建时间不变），没有草稿与版本。
+  const saveTemplateEntry = async (): Promise<void> => {
+    if (!editor || target.kind !== 'template') return
+    setBusy(true)
+    try {
+      await useWorkflowStore.getState().update(target.template.id, templatePayloadFromGraph(deriveGraph(editor)))
+      setDirty(false)
+      topNotice(`已保存，「${target.template.name}」的内容已更新`)
+      onSaved()
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause)
+      setIssues((current) => [...current, message])
+      toast(message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   // 另存为新版本：完整校验 + 发布预览，确认后发布不可变新版本。
   const publish = async (): Promise<void> => {
-    if (!editor) return
+    if (!editor || !capability) return
     setBusy(true)
     setIssues([])
     try {
@@ -484,9 +530,9 @@ export function CompositeCanvasEditor({
       if (!published.ok) throw new Error(published.error.message)
       setDirty(false)
       setPreview(null)
-      topNotice(`已另存为「${next.name}」v${versionLabel(next.version)}`)
-      onSaved(next)
-      onClose()
+        topNotice(`已另存为「${next.name}」v${versionLabel(next.version)}`)
+        onSaved()
+        onClose()
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause)
       // 发布失败保留草稿并回到编辑器展示问题。
@@ -568,14 +614,14 @@ export function CompositeCanvasEditor({
   return (
     <ModalShell
       size="xl"
-      title={base.name}
+      title={target.kind === 'template' ? target.template.name : (base?.name ?? '')}
       bodyClassName="modal-shell-body--flush"
       onClose={requestClose}
       closeOnEscape={false}
       closeOnOverlay={false}
     >
       <div className="composite-canvas-overlay" ref={overlayRef} onContextMenu={handleContextMenu}>
-        <span hidden>{capability.id}</span>
+        {capability && <span hidden>{capability.id}</span>}
         <div className="composite-canvas-workspace">
         <div className="composite-canvas-stage">
           <Tldraw
@@ -705,34 +751,42 @@ export function CompositeCanvasEditor({
         {/* 动作簇与历史弹层挂在 workspace 层：右侧节点面板开合会改变 stage 宽度，
             若锚定 stage，按钮会在 pointerdown→pointerup 之间位移导致点击落空。 */}
         <div className="nf-action-bar" role="group" aria-label="节点流编辑动作">
-          <button
-            type="button"
-            className="nf-btn ghost"
-            disabled={busy}
-            title="查看历史版本，可载入或切换为旧版本"
-            onClick={() => setShowVersions(true)}
-          >
-            <Icon name="history" size={14} /> 历史版本
-          </button>
+          {capability && (
+            <button
+              type="button"
+              className="nf-btn ghost"
+              disabled={busy}
+              title="查看历史版本，可载入或切换为旧版本"
+              onClick={() => setShowVersions(true)}
+            >
+              <Icon name="history" size={14} /> 历史版本
+            </button>
+          )}
           <button
             type="button"
             className="nf-btn ghost"
             disabled={busy || !editor}
-            title="暂存当前内容，下次编辑自动恢复；不产生新版本"
-            onClick={() => void saveDraft()}
+            title={
+              capability
+                ? '暂存当前内容，下次编辑自动恢复；不产生新版本'
+                : '保存会直接覆盖这个节点流的节点与连线'
+            }
+            onClick={() => void (capability ? saveDraft() : saveTemplateEntry())}
           >
             <Icon name="check" size={14} /> 保存
           </button>
-          <button
-            type="button"
-            className="nf-btn primary"
-            disabled={busy || !editor}
-            title={`以当前内容发布不可变的新版本 v${versionLabel(version)}`}
-            onClick={() => void publish()}
-          >
-            <Icon name="spark" size={14} />
-            {busy ? '处理中…' : '另存为新版本'}
-          </button>
+          {capability && (
+            <button
+              type="button"
+              className="nf-btn primary"
+              disabled={busy || !editor}
+              title={`以当前内容发布不可变的新版本 v${versionLabel(version)}`}
+              onClick={() => void publish()}
+            >
+              <Icon name="spark" size={14} />
+              {busy ? '处理中…' : '另存为新版本'}
+            </button>
+          )}
           <button
             type="button"
             className="nf-btn ghost"
@@ -743,7 +797,7 @@ export function CompositeCanvasEditor({
             取消
           </button>
         </div>
-        {showVersions && (
+        {capability && showVersions && (
           <CompositeVersionSheet
             capability={capability}
             dirty={dirty}
@@ -756,7 +810,7 @@ export function CompositeCanvasEditor({
               setDirty(true)
             }}
             onSwitched={() => {
-              onSaved(base)
+              onSaved()
               onClose()
             }}
           />
@@ -773,7 +827,7 @@ export function CompositeCanvasEditor({
       )}
       {preview && (
         <CompositePublishPreview
-          capabilityName={manifest.name}
+          capabilityName={base?.name ?? ''}
           baseManifest={preview.base}
           nextManifest={preview.next}
           validationIssues={preview.issues}

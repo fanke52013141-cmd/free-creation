@@ -187,6 +187,8 @@ export const IPC = {
   workspace: {
     listTemplates: 'workspace:templates:list',
     saveTemplate: 'workspace:templates:save',
+    renameTemplate: 'workspace:templates:rename',
+    updateTemplate: 'workspace:templates:update',
     deleteTemplate: 'workspace:templates:delete',
     listSnapshots: 'workspace:snapshots:list',
     saveSnapshot: 'workspace:snapshots:save',

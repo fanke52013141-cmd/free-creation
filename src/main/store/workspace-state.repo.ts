@@ -284,6 +284,29 @@ export function saveWorkflowTemplate(input: SaveWorkflowTemplateInput): Workflow
   return template
 }
 
+/** 只更新条目内容（节点/连线）；id、名称与创建时间保持不变。GUI「编辑节点」与外部
+ *  node.library.replace 共用同一写口，校验口径与 saveWorkflowTemplate 一致。 */
+export function updateWorkflowTemplateContent(
+  id: string,
+  input: Pick<SaveWorkflowTemplateInput, 'nodes' | 'edges' | 'nodeCount'>
+): WorkflowTemplateRecord | null {
+  const existing = getWorkflowTemplate(id)
+  if (!existing) return null
+  if (!Array.isArray(input.nodes) || input.nodes.length === 0)
+    throw new Error('模板至少需要一个节点')
+  if (!Array.isArray(input.edges)) throw new Error('模板连线格式无效')
+  const record: WorkflowTemplateRecord = {
+    ...existing,
+    nodes: input.nodes,
+    edges: input.edges,
+    nodeCount: input.nodeCount
+  }
+  getDb()
+    .prepare('UPDATE workflow_templates SET payload = ? WHERE id = ?')
+    .run(JSON.stringify(record), id)
+  return record
+}
+
 export function deleteWorkflowTemplate(id: string): boolean {
   return getDb().prepare('DELETE FROM workflow_templates WHERE id = ?').run(id).changes > 0
 }

@@ -1,5 +1,6 @@
 // 节点库条目存储：经主进程 SQLite 保存为本机可复用节点/组合。
 import { create } from 'zustand'
+import type { CanvasEdge, CanvasNode } from '@shared/types'
 import type { WorkflowTemplateRecord } from '@shared/contracts'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
 
@@ -51,6 +52,9 @@ interface WorkflowState {
   loaded: boolean
   load: () => Promise<void>
   save: (name: string, data: SavePayload) => Promise<WorkflowTemplate>
+  rename: (id: string, name: string) => Promise<WorkflowTemplate>
+  /** 全屏编辑页「保存」：原位覆盖条目内容；名称与创建时间不变。 */
+  update: (id: string, data: SavePayload) => Promise<WorkflowTemplate>
   remove: (id: string) => Promise<void>
 }
 
@@ -82,6 +86,33 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     return template
   },
 
+  rename: async (id, name) => {
+    const result = await window.api.workspace.renameTemplate(id, name)
+    if (!result.ok) throw new Error(result.error.message)
+    if (!result.data) throw new Error('节点流条目不存在或已被删除')
+    const template = asTemplate(result.data)
+    set({
+      templates: get().templates.map((item) => (item.id === id ? template : item))
+    })
+    return template
+  },
+
+  update: async (id, data) => {
+    if (data.nodes.length === 0) throw new Error('模板至少需要一个节点')
+    const result = await window.api.workspace.updateTemplate(id, {
+      nodes: data.nodes,
+      edges: data.edges,
+      nodeCount: data.nodes.length
+    })
+    if (!result.ok) throw new Error(result.error.message)
+    if (!result.data) throw new Error('节点流条目不存在或已被删除')
+    const template = asTemplate(result.data)
+    set({
+      templates: get().templates.map((item) => (item.id === id ? template : item))
+    })
+    return template
+  },
+
   remove: async (id) => {
     const result = await window.api.workspace.deleteTemplate(id)
     if (!result.ok) throw new Error(result.error.message)
@@ -89,23 +120,65 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   }
 }))
 
+/** 以节点的几何中心为原点：套用时整组按点击位置/视口中心居中铺开。 */
+function centerOnCentroid<T extends { dx: number; dy: number }>(nodes: T[]): T[] {
+  const cx = nodes.reduce((sum, node) => sum + node.dx, 0) / nodes.length
+  const cy = nodes.reduce((sum, node) => sum + node.dy, 0) / nodes.length
+  return nodes.map((node) => ({ ...node, dx: node.dx - cx, dy: node.dy - cy }))
+}
+
 // 工具函数：从编辑器选中形状提取可保存的模板数据
 export function extractTemplateFromSelection(
   nodeShapes: NodeCardShape[],
   arrowMeta: { fromIdx: number; toIdx: number; fromPort?: string; toPort?: string }[]
 ): SavePayload {
   if (nodeShapes.length === 0) return { nodes: [], edges: [] }
-  const cx = nodeShapes.reduce((s, n) => s + n.x, 0) / nodeShapes.length
-  const cy = nodeShapes.reduce((s, n) => s + n.y, 0) / nodeShapes.length
-  const nodes: TemplateNode[] = nodeShapes.map((n) => ({
-    nodeType: n.props.nodeType,
-    title: n.props.title,
-    dx: n.x - cx,
-    dy: n.y - cy,
-    w: n.props.w,
-    h: n.props.h,
-    text: n.props.text,
-    config: n.props.config
-  }))
+  const nodes: TemplateNode[] = centerOnCentroid(
+    nodeShapes.map((n) => ({
+      nodeType: n.props.nodeType,
+      title: n.props.title,
+      dx: n.x,
+      dy: n.y,
+      w: n.props.w,
+      h: n.props.h,
+      text: n.props.text,
+      config: n.props.config
+    }))
+  )
   return { nodes, edges: arrowMeta }
+}
+
+/**
+ * 全屏编辑页的内部图 → 条目负载（条目「编辑节点」后的保存）。
+ * 与画布「保存节点 → 流程模板」同一形状、同一规则：只留固定配置与用户正文，不携带项目媒体。
+ */
+export function templatePayloadFromGraph(graph: { nodes: CanvasNode[]; edges: CanvasEdge[] }): SavePayload {
+  if (graph.nodes.length === 0) return { nodes: [], edges: [] }
+  const indexByShape = new Map(graph.nodes.map((node, index) => [node.id, index]))
+  const nodes: TemplateNode[] = centerOnCentroid(
+    graph.nodes.map((node) => ({
+      nodeType: node.type,
+      title: node.title,
+      dx: node.x,
+      dy: node.y,
+      w: node.w,
+      h: node.h,
+      text: node.content.kind === 'text' ? node.content.text : '',
+      config: typeof node.params.config === 'string' ? node.params.config : ''
+    }))
+  )
+  const edges: TemplateEdge[] = graph.edges.flatMap((edge) => {
+    const fromIdx = indexByShape.get(edge.from.nodeId)
+    const toIdx = indexByShape.get(edge.to.nodeId)
+    if (fromIdx === undefined || toIdx === undefined) return []
+    return [
+      {
+        fromIdx,
+        toIdx,
+        ...(edge.from.portId ? { fromPort: edge.from.portId } : {}),
+        ...(edge.to.portId ? { toPort: edge.to.portId } : {})
+      }
+    ]
+  })
+  return { nodes, edges }
 }

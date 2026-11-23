@@ -1053,3 +1053,9 @@ node.runPlan 为只读预检，复用 Agent 请求诊断，返回端口元数据
 
 2026-11-22 BL-01/03/04/05/06/07/08：图模式新增两个诊断事件——`agent.coordination.graph_stalled`（status=failed；attributes：reason=ALL_EXITS_SKIPPED|INCOMING_EDGES_UNSATISFIED、stalledNodeIds（只含节点 ID，≤512 字符）、skippedCount）和 `agent.coordination.graph_ambiguous`（status=failed；attributes：sourceNodeIds）；随后协调器沿既有 `agent.coordination.failed` 记录终态码 FLOW_STALLED / FLOW_BRANCH_AMBIGUOUS，不重复记终态。人工决定确认（BL-01）复用既有 `confirm-sensitive` 交互请求与 agent.access 调度生命周期，拒绝或超时以错误码 HUMAN_DENIED / HUMAN_DECISION_TIMEOUT 落入既有 access 失败记录；确认框里的内容摘要只展示给人，不写日志或诊断事件。校验与路由是纯函数，错误沿既有返回路径给出，不新增事件。
 
+
+### 2026-11-23 节点流条目卡片去「运行」+ 改名入口
+
+GUI 节点流面板条目卡片移除「运行」按钮（运行走画布既有路径，不新增执行路径），新增「编辑名称」入口：新增 IPC `workspace:templates:rename` 复用 `renameWorkflowTemplate` 既有 repo 事务（与外部 `node.library.update` 同一存储与校验），主进程沿 `workspace.template.rename.started/completed/failed`（events.ts 白名单已注册，owner `main/ipc/workspace-state.ipc.ts`）记录开始/终态/失败摘要。attributes 只含 `entryId`（id 类）与 `operation: 'node-library-rename'`；新旧名称正文不入日志（脱敏口径同 project-rename）；失败经 `safeErrorDetail` 截断脱敏，logger 拒写不影响业务返回。卡片动作变化本身无新增执行/网络路径。验证：`npm run verify:logging` 通过；`test/workflow-card-no-run.test.ts` 锁定三事件与 attribute 口径；`test/local-agent-node-library-access.test.ts` 覆盖同一 repo 改名事务。未覆盖：真实 SQLite 落盘后的日志字段抽查按既有 workspace IPC 条目边界执行。
+
+接续补充（2026-11-23 同日）：条目删除改为无二次确认（用户裁决），删除路径 IPC/repo 未变，无新增或删除的诊断事件；「编辑节点」原位更新新增 IPC `workspace:templates:update`，主进程沿 `workspace.template.update.started/completed/failed`（白名单已注册）记录开始/终态/失败，attributes 只含 `entryId` 与 `operation: 'node-library-replace'`；节点正文、配置、连线拓扑不入日志。GUI 入口为全屏节点流编辑页的「保存」（与组合节点共用同一编辑页；条目载入沿 `addNodeLibraryEntry`，不另建诊断事件），与外部 `node.library.replace` 复用同一 repo 写口 `updateWorkflowTemplateContent` 与域事件口径。

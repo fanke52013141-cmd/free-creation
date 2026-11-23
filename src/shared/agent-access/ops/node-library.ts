@@ -44,6 +44,17 @@ export const NODE_LIBRARY_OPERATIONS = {
     description: '重命名节点库条目；条目内容与画布不受影响',
     input: z.object({ entryId, name: z.string().trim().min(1).max(120) }).strict()
   },
+  'node.library.replace': {
+    effect: 'write',
+    description:
+      '用当前项目画布上选中的节点及其连线原位覆盖节点库条目的内容（同 GUI「编辑节点」保存路径）；条目名称与画布不受影响，媒体引用随内容重新记录',
+    input: revision
+      .extend({
+        entryId,
+        nodeIds: z.array(nodeId).min(1).max(NODE_LIBRARY_MAX_NODES)
+      })
+      .strict()
+  },
   'node.library.delete': {
     effect: 'delete',
     description: '删除节点库条目；画布上已经插入的节点不受影响',
@@ -102,6 +113,7 @@ const mediaOutcome = z
 export const NODE_LIBRARY_OUTPUTS = {
   'node.library.compose': templateSummary,
   'node.library.update': templateSummary,
+  'node.library.replace': templateSummary,
   'node.library.delete': z
     .object({ entryId, deleted: z.literal(true) })
     .strict(),

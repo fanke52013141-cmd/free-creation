@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "generatedFrom": {
-    "ipcChannels": 201,
+    "ipcChannels": 203,
     "canvasActions": 50,
-    "externalOperations": 190
+    "externalOperations": 191
   },
   "totals": {
-    "actions": 251,
+    "actions": 253,
     "byPhase": {
-      "external": 206,
+      "external": 208,
       "excluded": 37,
       "F9": 8
     }
@@ -849,6 +849,26 @@
         "node.library.compose"
       ],
       "note": "node.library.save 保持旧 chat 技能预设子集语义不变；node.library.compose 为 F7 新增的全类型多节点组合保存（含连线拓扑与媒体引用，排除聊天历史/附件/运行结果）"
+    },
+    "ipc.workspace.renameTemplate": {
+      "label": "节点库改名",
+      "channel": "workspace:templates:rename",
+      "gui": "节点流面板条目卡片「编辑名称」",
+      "phase": "external",
+      "external": [
+        "node.library.update"
+      ],
+      "note": "2026-11-23：GUI 补齐改名入口（此前仅外部可达，属反向缺口）；IPC 与 node.library.update 复用同一 renameWorkflowTemplate 事务与校验（trim、≤120），域事件 workspace.template.rename.started/completed/failed 不记名称正文"
+    },
+    "ipc.workspace.updateTemplate": {
+      "label": "节点库内容更新",
+      "channel": "workspace:templates:update",
+      "gui": "节点流面板条目卡片「编辑节点」→ 全屏节点流编辑页「保存」",
+      "phase": "external",
+      "external": [
+        "node.library.replace"
+      ],
+      "note": "2026-11-23：条目内容原位覆盖（id/名称/创建时间不变）。GUI 在全屏编辑页里改内部图，保存时由编辑页内部图提取 nodes/edges（载入走 addNodeLibraryEntry，与铺到画布同一路径，旧连线端口可推断）；外部 node.library.replace 按当前项目画布 nodeIds 经 collectEntryPayload 提取（与 compose 同一份提取与尺寸上限），两侧共用 updateWorkflowTemplateContent 同一写口；域事件 workspace.template.update.started/completed/failed 只记条目 ID，不记节点正文/配置/连线"
     },
     "ipc.workspace.deleteTemplate": {
       "label": "节点库删除",

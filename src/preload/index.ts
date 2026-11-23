@@ -704,6 +704,13 @@ const api = {
       input: SaveWorkflowTemplateInput
     ): Promise<IpcEnvelope<WorkflowTemplateRecord>> =>
       ipcRenderer.invoke(IPC.workspace.saveTemplate, input),
+    renameTemplate: (id: string, name: string): Promise<IpcEnvelope<WorkflowTemplateRecord | null>> =>
+      ipcRenderer.invoke(IPC.workspace.renameTemplate, { id, name }),
+    updateTemplate: (
+      id: string,
+      input: { nodes: unknown[]; edges: unknown[]; nodeCount: number }
+    ): Promise<IpcEnvelope<WorkflowTemplateRecord | null>> =>
+      ipcRenderer.invoke(IPC.workspace.updateTemplate, { id, ...input }),
     deleteTemplate: (id: string): Promise<IpcEnvelope<boolean>> =>
       ipcRenderer.invoke(IPC.workspace.deleteTemplate, id),
     listSnapshots: (projectId: string): Promise<IpcEnvelope<HistorySnapshotRecord[]>> =>
