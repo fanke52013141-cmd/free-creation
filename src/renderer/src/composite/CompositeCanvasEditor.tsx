@@ -609,12 +609,16 @@ export function CompositeCanvasEditor({
 
   // 侧栏祖先会形成层叠上下文，fixed overlay 若留在原处会被主顶栏盖住头部按钮；
   // 挂到 body 保证全屏编辑始终位于最上层。
-  // 2026-11-21 弹窗统一：壳换 ModalShell（取消=立即退出，不做遮罩/Esc 关闭防误退，
-  // 与「取消」按钮同一行为；右上 X 为新增，行为与取消一致）。
+  // 壳走 ModalShell 的全屏档：portal、层级与页内事件隔离沿用统一壳，但真·铺满窗口，
+  // 不显示统一标题栏与右上角 X——顶栏是自有的纯黑顶栏（2026-11-23 用户裁决恢复；
+  // 11-21 弹窗统一时曾被并进 XL 弹窗档）。取消=立即退出，不做遮罩/Esc 关闭防误退。
+  const heading = target.kind === 'template' ? target.template.name : (base?.name ?? '')
   return (
     <ModalShell
-      size="xl"
-      title={target.kind === 'template' ? target.template.name : (base?.name ?? '')}
+      size="fullscreen"
+      hideHeader
+      title={heading}
+      ariaLabel={heading}
       bodyClassName="modal-shell-body--flush"
       onClose={requestClose}
       closeOnEscape={false}
@@ -622,6 +626,15 @@ export function CompositeCanvasEditor({
     >
       <div className="composite-canvas-overlay" ref={overlayRef} onContextMenu={handleContextMenu}>
         {capability && <span hidden>{capability.id}</span>}
+        {/* 顶栏仅显示名称，其余控件在画布底部（用户裁决 2026-11-11）；整条顶栏纯黑，
+            与窗口右上角按钮连成一色（用户裁决 2026-11-16）。 */}
+        <header className="composite-canvas-topbar">
+          <div className="composite-canvas-heading">
+            <h2 id="composite-canvas-title" title={heading}>
+              {heading}
+            </h2>
+          </div>
+        </header>
         <div className="composite-canvas-workspace">
         <div className="composite-canvas-stage">
           <Tldraw

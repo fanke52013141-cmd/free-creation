@@ -204,8 +204,21 @@ function ok(res, label) {
     for (const sel of ['.composite-canvas-stage .node-palette', '.composite-canvas-stage .canvas-dock', '.nf-action-bar']) {
       if (!(await page.locator(sel).isVisible())) throw new Error(`EDITOR_CHROME_MISSING:${sel}`)
     }
-    // 2026-11-21 弹窗统一：顶栏并入 ModalShell 头部，标题断言改为 modal-shell-title
-    const topText = await page.locator('.modal-shell-title').innerText()
+    // 2026-11-23 用户裁决：编辑页恢复真·全屏与自有纯黑顶栏，标题在 composite-canvas-title
+    //（11-21 弹窗统一时曾被并进 XL 弹窗壳——这里同时断言「确实铺满窗口」，再被改成弹窗会直接失败）。
+    const editorBox = await page.locator('.composite-canvas-overlay').boundingBox()
+    const windowSize = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }))
+    if (
+      !editorBox ||
+      Math.abs(editorBox.x) > 1 ||
+      Math.abs(editorBox.y) > 1 ||
+      editorBox.width < windowSize.width - 1 ||
+      editorBox.height < windowSize.height - 1
+    )
+      throw new Error(`EDITOR_NOT_FULLSCREEN:${JSON.stringify(editorBox)} window=${JSON.stringify(windowSize)}`)
+    if (await page.locator('.composite-canvas-topbar').count() !== 1)
+      throw new Error('EDITOR_TOPBAR_MISSING:应有自有的纯黑顶栏')
+    const topText = await page.locator('#composite-canvas-title').innerText()
     if (topText.includes('未保存') || topText.includes('当前 v') || topText.trim() !== '角色到分镜')
       throw new Error(`TOPBAR_NOT_NAME_ONLY:${topText}`)
     await shot('04-editor-chrome')

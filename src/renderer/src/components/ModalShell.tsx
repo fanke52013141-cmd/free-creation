@@ -6,10 +6,11 @@ import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from './Icon'
 
-export type ModalShellSize = 's' | 'm' | 'l' | 'xl'
+export type ModalShellSize = 's' | 'm' | 'l' | 'xl' | 'fullscreen'
 
 export interface ModalShellProps {
-  /** 尺寸档位：s=400 确认 / m=560 表单 / l=760 管理台；缺省 m */
+  /** 尺寸档位：s=400 确认 / m=560 表单 / l=760 管理台 / xl=全屏工作台（96vw×92vh）；
+   *  fullscreen=真·铺满窗口的工作台（自带顶栏，配 hideHeader 用）；缺省 m */
   size?: ModalShellSize
   /** 标题（必填，名词短语） */
   title: string
@@ -115,7 +116,9 @@ export function ModalShell(props: ModalShellProps): React.JSX.Element {
 
   return createPortal(
     <div
-      className="modal-shell-overlay"
+      className={
+        size === 'fullscreen' ? 'modal-shell-overlay modal-shell-overlay--fullscreen' : 'modal-shell-overlay'
+      }
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => {
         event.stopPropagation()
