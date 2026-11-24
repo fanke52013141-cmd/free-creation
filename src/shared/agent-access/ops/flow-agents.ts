@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { identifier, nodeId, project } from './common'
 import { FlowDefinitionSchema } from '../../agent-flow/flow-definition'
 import { FlowGraphSchema } from '../../agent-flow/flow-graph'
+import { capabilityDescriptorDtoSchema } from '../../agent-flow/capability-catalog'
 
 /**
  * 内部 Agent Flow 的**观察**操作（F8，flowAgents 族）。
@@ -417,7 +418,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowAgent.catalog': {
     effect: 'read',
     description:
-      '读取当前打开画布的 Agent 能力目录（可用文本模型、受控工具、固定版本技能摘要）；要求项目已在桌面打开，不返回技能指令正文',
+      '读取当前打开画布的 Agent 能力目录（可用文本模型、受控工具、固定版本技能摘要、可编排能力：节点能力 + 已发布节点流，含端口/参与形态/成本/网络/可调度性与不可调度原因）；要求项目已在桌面打开，不返回技能指令正文',
     input: project
   },
   'flowAgent.collaboration': {
@@ -877,7 +878,9 @@ export const FLOW_AGENTS_OUTPUTS = {
             })
             .strict()
         )
-        .max(200)
+        .max(200),
+      /** BL-10 / NF-13：能力目录（节点注册表 + 已发布节点流自动生成）。 */
+      capabilities: z.array(capabilityDescriptorDtoSchema).max(400)
     })
     .strict(),
   'flowAgent.collaboration': z

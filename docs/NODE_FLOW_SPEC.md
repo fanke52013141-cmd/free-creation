@@ -2,8 +2,8 @@
 title: 节点流（composite）规范
 status: draft            # draft → review → frozen
 version: 0.1
-last-verified: 2026-11-22
-baseline-commit: 99a30b6e (main)
+last-verified: 2026-11-24
+baseline-commit: 76a487b5 (main)
 owner: Canvas Studio 规范组
 supersedes: NODE_CONTRACT_SPEC.md §8.0（该节改为指向本文）
 machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/contracts.json
@@ -289,7 +289,7 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 
 ## 13. 作为 Agent Flow 能力（跨层接口）
 
-**NF-13.1【目标·A1】发布即注册能力**：每个已发布版本自动生成一条可编排能力描述：
+**NF-13.1【现行·BL-10】发布即注册能力**：每个已发布版本自动生成一条可编排能力描述：
 
 ```jsonc
 {
@@ -303,14 +303,14 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 }
 ```
 
-**NF-13.2【目标】参与形态推导**：
+**NF-13.2【现行·BL-10】参与形态推导**：
 - `requiresManualGate` 或 `waitForInput` 为 true → 至少为 `collaborative`；
 - 否则为 `autonomous`。
 - 这个推导值是**下限**：FlowGraph 可以声明更高的人工参与度，但不能更低。
 
-**NF-13.3【目标】** FlowGraph 编译器、上帝 Agent 的能力菜单、MCP 工具描述，全部从这份能力描述**生成**；禁止在编译器里硬编码能力白名单（现行 `CAPABILITY_COMPILE` 必须改为由生成数据驱动）。
+**NF-13.3【现行·BL-10】** FlowGraph 编译器、上帝 Agent 的能力菜单、MCP 工具描述，全部从这份能力描述**生成**；禁止在编译器里硬编码能力白名单（`CAPABILITY_COMPILE` 已删除，改为 `src/shared/agent-flow/capability-catalog.ts` 驱动；节点侧由节点注册表导出快照生成，节点流侧由已发布版本生成）。
 
-**NF-13.4【目标】** 节点流在 Agent Flow 中执行时：最小输入来自 Agent Flow 的 ContextManifest，经公开输入接入；交付为公开输出对应的**不可变资产版本**；内部失败通过 `failureNodeId/failurePortId` 透传给 Agent Flow 的运行总览。
+**NF-13.4【目标】** 节点流在 Agent Flow 中执行时：最小输入来自 Agent Flow 的 ContextManifest，经公开输入接入；交付为公开输出对应的**不可变资产版本**；内部失败通过 `failureNodeId/failurePortId` 透传给 Agent Flow 的运行总览。（BL-10 已打通编译/运行准入/交付与 `failureNodeId` 透传；最小输入编制与真实端口校验随 BL-11/12 推进。）
 
 ---
 
@@ -369,7 +369,7 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 
 | 差距 | 条款 | 优先级 |
 |---|---|---|
-| 节点流不可被 Agent Flow 编排 | NF-1.4 / NF-13.* | P1 |
+| ~~节点流不可被 Agent Flow 编排~~ ✅ BL-10（capabilityRef + 能力目录；最小输入编制/真实端口随 BL-11/12） | NF-1.4 / NF-13.* | P1 |
 | 端口兼容判定与画布分裂；类型枚举缺 iteration/camera | NF-6.4 / NF-6.5 | P1 |
 | ~~发布期/运行期预算缺省不一致~~ ✅ BL-08 | NF-10.2 | — |
 | headless 计费确认门（修复提交已丢失） | NF-12.1 | **P0** |

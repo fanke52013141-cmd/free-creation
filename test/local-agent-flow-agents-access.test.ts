@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto'
 import type { CanvasNode } from '../src/shared/types'
 import { closeDb, getDataDir, getDb } from '../src/main/store/db'
 import { createProject, openProject, saveProject } from '../src/main/store/projects.repo'
+import { publishCompositeVersion } from '../src/main/store/composite.repo'
 import { LocalAccessService } from '../src/main/agent-access/service'
 import type { AccessDesktop } from '../src/main/agent-access/desktop'
 import { setGatewayEventSink } from '../src/main/diagnostics/gateway-events'
@@ -796,5 +797,166 @@ describe('unopened Flow lifecycle actions', () => {
     expect(serialized).not.toContain('交付内容')
     expect(serialized).not.toContain('private-config-value')
     expect(serialized).not.toContain(directory)
+  })
+})
+
+describe('BL-10 节点流即能力（发布 → 目录 → 校验/编译）', () => {
+  const compositeManifest = {
+    schemaVersion: 1 as const,
+    runtimeVersion: 2,
+    capabilityId: 'material-flow',
+    version: '1.0',
+    name: '材料整理流',
+    description: '把来源材料整理成一份可交付文本',
+    inputs: [
+      {
+        id: 'source',
+        label: '来源',
+        type: 'text',
+        required: true,
+        cardinality: 'one',
+        targets: [{ nodeId: 'n1', portId: 'in-text' }]
+      }
+    ],
+    outputs: [
+      {
+        id: 'result',
+        label: '结果',
+        type: 'text',
+        required: true,
+        cardinality: 'one',
+        source: { nodeId: 'n1', portId: 'out-text' }
+      }
+    ],
+    graph: {
+      nodes: [
+        {
+          id: 'n1',
+          nodeType: 'text',
+          contractVersion: 3,
+          title: '整理',
+          dx: 0,
+          dy: 0,
+          w: 340,
+          h: 300,
+          ports: [
+            {
+              id: 'in-text',
+              name: '文本',
+              dir: 'in',
+              type: 'text',
+              required: false,
+              cardinality: 'many'
+            },
+            {
+              id: 'out-text',
+              name: '文本',
+              dir: 'out',
+              type: 'text',
+              required: true,
+              cardinality: 'one'
+            }
+          ]
+        }
+      ],
+      edges: []
+    },
+    executionPolicy: { waitForInput: true },
+    dependencies: [{ kind: 'node' as const, id: 'text', contractVersion: 3 }]
+  }
+
+  it('发布后出现在 flowAgent.catalog，并可被 flowGraph.validate/compile 引用', async () => {
+    const { projectId } = seedFlowProject()
+    active = projectId
+    await publishCompositeVersion(compositeManifest)
+    const catalog = await call('flowAgent.catalog', { projectId })
+    expect(catalog.status).toBe('completed')
+    const capability = catalog.data.capabilities.find(
+      (item: any) => item.capabilityRef.kind === 'composite'
+    )
+    expect(capability).toMatchObject({
+      capabilityRef: { kind: 'composite', id: 'material-flow', version: '1.0' },
+      agentSchedulable: true,
+      participation: 'collaborative'
+    })
+    expect(capability.inputs.map((port: any) => port.portId)).toEqual(['in-source'])
+    expect(capability.outputs.map((port: any) => port.portId)).toEqual(['out-result'])
+
+    const graph = {
+      schemaVersion: 1,
+      graphId: 'bl10-graph',
+      name: '引用节点流的流程',
+      goal: '验证发布即能力',
+      nodes: [
+        {
+          nodeId: 'a',
+          title: '整理者',
+          participation: 'autonomous',
+          kind: 'agent',
+          goal: '整理材料',
+          completion: '提交整理结果'
+        },
+        {
+          nodeId: 'b',
+          title: '材料整理流',
+          participation: 'collaborative',
+          kind: 'capability',
+          capabilityRef: { kind: 'composite', id: 'material-flow', version: '1.0' },
+          goal: '整理成稿',
+          completion: '公开输出交付'
+        }
+      ],
+      edges: [{ from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'b', portId: 'in-source' } }],
+      entry: 'a',
+      exits: ['b']
+    }
+    const validated = await call('flowGraph.validate', { graph })
+    expect(validated.status).toBe('completed')
+    expect(validated.data).toMatchObject({ ok: true, errors: [] })
+    const compiled = await call('flowGraph.compile', { graph })
+    expect(compiled.status).toBe('completed')
+    const composite = compiled.data.compiled.nodes.find((node: any) => node.type === 'composite')
+    expect(composite).toBeTruthy()
+    expect(JSON.parse(composite.config)).toMatchObject({
+      capabilityId: 'material-flow',
+      version: '1.0'
+    })
+  })
+
+  it('未发布的节点流引用在编译前被拒绝（不静默降级）', async () => {
+    const { projectId } = seedFlowProject()
+    active = projectId
+    const graph = {
+      schemaVersion: 1,
+      graphId: 'bl10-missing',
+      name: '引用未发布能力',
+      goal: '明确拒绝',
+      nodes: [
+        {
+          nodeId: 'a',
+          title: '整理者',
+          participation: 'autonomous',
+          kind: 'agent',
+          goal: '整理材料',
+          completion: '提交整理结果'
+        },
+        {
+          nodeId: 'b',
+          title: '缺失能力',
+          participation: 'collaborative',
+          kind: 'capability',
+          capabilityRef: { kind: 'composite', id: 'not-published', version: '9.0' },
+          goal: '不存在',
+          completion: '不存在'
+        }
+      ],
+      edges: [{ from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'b', portId: 'in-source' } }],
+      entry: 'a',
+      exits: ['b']
+    }
+    const validated = await call('flowGraph.validate', { graph })
+    expect(validated.status).toBe('completed')
+    expect(validated.data.ok).toBe(false)
+    expect(validated.data.errors[0].code).toBe('CAPABILITY_UNKNOWN')
   })
 })

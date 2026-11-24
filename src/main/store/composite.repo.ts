@@ -429,6 +429,14 @@ export function listCompositeVersions(capabilityId: string): CompositeVersionRec
   return rows.map(rowToVersion)
 }
 
+/** BL-10：能力目录需要全部已发布版本（只读；按发布时间倒序，便于取最新）。 */
+export function listAllCompositeVersions(limit = 500): CompositeVersionRecord[] {
+  const rows = getDb()
+    .prepare('SELECT * FROM composite_versions ORDER BY published_at DESC LIMIT ?')
+    .all(Math.max(1, Math.min(2000, limit))) as VersionRow[]
+  return rows.map(rowToVersion)
+}
+
 export function listCompositeCapabilities(options: {
   query?: string
   includeArchived?: boolean

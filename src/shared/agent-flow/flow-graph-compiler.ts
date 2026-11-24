@@ -6,11 +6,16 @@ import {
 } from './node-contracts'
 import {
   validateFlowGraph,
+  flowNodeCapabilityRef,
   type FlowGraph,
   type FlowNode,
-  type FlowGraphError,
-  type FlowGraphCapabilityId
+  type FlowGraphError
 } from './flow-graph'
+import {
+  buildCapabilityCatalog,
+  findCapability,
+  type CapabilityDescriptor
+} from './capability-catalog'
 import { layoutGraph } from '../flow-layout'
 
 /**
@@ -69,72 +74,11 @@ export class FlowGraphCompileError extends Error {
   }
 }
 
-/** 能力节点编译映射（与 builder-host TARGETS 同源口径）。 */
-// 键类型 = FLOW_GRAPH_CAPABILITY_IDS：校验目录与编译映射在类型层强制一一对应（BL-05）。
-const CAPABILITY_COMPILE: Record<
-  FlowGraphCapabilityId,
-  { type: string; contractVersion: number; inputPort: string; outputPort: string; config: string }
-> = {
-  'text-template@1': {
-    type: 'processor',
-    contractVersion: 1,
-    inputPort: 'in-value',
-    outputPort: 'out-value',
-    config: JSON.stringify({ operation: 'template', field: '', template: '{{value}}' })
-  },
-  'text-pass@1': {
-    type: 'processor',
-    contractVersion: 1,
-    inputPort: 'in-value',
-    outputPort: 'out-value',
-    config: JSON.stringify({ operation: 'pass', field: '' })
-  },
-  'image-gen@3': {
-    type: 'image-gen',
-    contractVersion: 3,
-    inputPort: 'in-text',
-    outputPort: 'out-image',
-    config: JSON.stringify({ count: 1, retry: { maxRetries: 0 } })
-  },
-  'image-edit@2': {
-    type: 'image-edit',
-    contractVersion: 2,
-    inputPort: 'in-image',
-    outputPort: 'out-image',
-    config: JSON.stringify({
-      version: 1,
-      modelKey: '',
-      size: 'auto',
-      aspectRatio: 'auto',
-      instruction: '',
-      annotations: [],
-      mask: { enabled: false, strokes: [], brushSize: 0.08, invert: false }
-    })
-  },
-  'video@7': {
-    type: 'video',
-    contractVersion: 7,
-    inputPort: 'in-text',
-    outputPort: 'out-video',
-    config: JSON.stringify({ modelKey: '', mode: 'reference', params: {}, taskId: '' })
-  },
-  'speech@4': {
-    type: 'speech',
-    contractVersion: 4,
-    inputPort: 'in-text',
-    outputPort: 'out-audio',
-    config: JSON.stringify({ backend: 'minimax' })
-  },
-  'tts@4': {
-    type: 'tts',
-    contractVersion: 4,
-    inputPort: 'in-audio',
-    outputPort: 'out-json',
-    config: JSON.stringify({ backend: 'minimax' })
-  }
-}
-
-function compileNode(node: FlowNode, graph: FlowGraph): CompiledNode {
+function compileNode(
+  node: FlowNode,
+  graph: FlowGraph,
+  catalog: readonly CapabilityDescriptor[]
+): CompiledNode {
   const base = { id: node.nodeId, title: node.title, text: node.goal, x: 0, y: 0 }
   if (node.kind === 'agent') {
     const config = AgentNodeConfigSchema.parse({
@@ -171,9 +115,22 @@ function compileNode(node: FlowNode, graph: FlowGraph): CompiledNode {
     return { ...base, type: 'ai-review', text: node.review!.criteria, config: JSON.stringify(config), contractVersion: 1 }
   }
   if (node.kind === 'capability') {
-    const mapping = CAPABILITY_COMPILE[node.capability as FlowGraphCapabilityId]
-    if (!mapping) throw new FlowGraphCompileError([{ code: 'CAPABILITY_UNKNOWN', nodeId: node.nodeId, message: `Unknown capability ${node.capability}` }])
-    return { ...base, type: mapping.type, config: mapping.config, contractVersion: mapping.contractVersion }
+    // BL-10：能力载体来自目录（节点注册表 + 已发布节点流），编译器不认识任何能力 ID。
+    const descriptor = findCapability(catalog, flowNodeCapabilityRef(node))
+    if (!descriptor?.carrier)
+      throw new FlowGraphCompileError([
+        {
+          code: 'CAPABILITY_UNKNOWN',
+          nodeId: node.nodeId,
+          message: `Capability ${flowNodeCapabilityRef(node)?.id ?? '(missing)'} has no compile carrier`
+        }
+      ])
+    return {
+      ...base,
+      type: descriptor.carrier.type,
+      config: descriptor.carrier.config,
+      contractVersion: descriptor.carrier.contractVersion
+    }
   }
   // state-machine 节点：由编译器的派生状态机统一承载，单节点声明此处给出基础配置。
   const config = StateMachineNodeConfigSchema.parse({
@@ -276,15 +233,19 @@ function toCanvasGraph(graph: FlowGraph): FlowGraph {
  * 产物：各专业节点 + 一个 coordinator 主控 + 一个派生状态机；数据边 + 控制边。
  * 节点 id 为 tldraw 合法 shape id（'shape:' 前缀），可直接落画布。
  */
-export function compileFlowGraph(graph: FlowGraph): CompiledGraph {
-  const validation = validateFlowGraph(graph)
+export function compileFlowGraph(
+  graph: FlowGraph,
+  options: { catalog?: readonly CapabilityDescriptor[] } = {}
+): CompiledGraph {
+  const catalog = options.catalog ?? buildCapabilityCatalog()
+  const validation = validateFlowGraph(graph, { catalog })
   if (!validation.ok) throw new FlowGraphCompileError(validation.errors)
 
   const mapped = toCanvasGraph(graph)
   const graphIdSlug = graph.graphId.replace(/[^a-zA-Z0-9_-]/g, '-')
   const coordinatorNodeId = `shape:coordinator-${graphIdSlug}`
   const stateNodeId = `shape:state-${graphIdSlug}`
-  const compiledNodes = mapped.nodes.map((node) => compileNode(node, mapped))
+  const compiledNodes = mapped.nodes.map((node) => compileNode(node, mapped, catalog))
   const specialistIds = compiledNodes.map((node) => node.id)
 
   const coordinatorConfig = AgentNodeConfigSchema.parse({
@@ -342,20 +303,29 @@ export function compileFlowGraph(graph: FlowGraph): CompiledGraph {
     }
   ]
 
-  // ②：capability 节点的数据边端口重映射到处理器实际端口（in-value/out-value 等），
-  // 否则落画布 createEdge 与 node.execute 输入端口校验会因 FlowGraph 通用端口名失配。
-  const capabilityByNode = new Map(
+  // ②：capability 节点的数据边端口重映射到载体真实端口；节点流能力保留公开端口
+  // （in-*/out-*，由清单派生），不做编译器重映射。
+  const capabilityPorts = new Map(
     graph.nodes
       .filter((node) => node.kind === 'capability')
-      .map((node) => [canvasNodeId(node.nodeId), CAPABILITY_COMPILE[node.capability as FlowGraphCapabilityId]])
+      .map((node) => {
+        const carrier = findCapability(catalog, flowNodeCapabilityRef(node))?.carrier
+        return [
+          canvasNodeId(node.nodeId),
+          { inputPort: carrier?.inputPort ?? '', outputPort: carrier?.outputPort ?? '' }
+        ]
+      })
   )
   const edges: CompiledEdge[] = mapped.edges
     .map((edge) => {
-      const fromCap = capabilityByNode.get(edge.from.nodeId)
-      const toCap = capabilityByNode.get(edge.to.nodeId)
+      const fromCap = capabilityPorts.get(edge.from.nodeId)
+      const toCap = capabilityPorts.get(edge.to.nodeId)
       return {
-        from: { nodeId: edge.from.nodeId, portId: fromCap ? fromCap.outputPort : edge.from.portId },
-        to: { nodeId: edge.to.nodeId, portId: toCap ? toCap.inputPort : edge.to.portId }
+        from: {
+          nodeId: edge.from.nodeId,
+          portId: fromCap?.outputPort || edge.from.portId
+        },
+        to: { nodeId: edge.to.nodeId, portId: toCap?.inputPort || edge.to.portId }
       }
     })
 

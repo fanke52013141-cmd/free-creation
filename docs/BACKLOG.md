@@ -121,15 +121,21 @@ sources:
 
 ### A. 节点流 → Agent Flow 打通（影响最大）
 
-### ⬜ BL-10 节点流即能力 + 可编排能力目录自动生成 · L
+### ✅ BL-10 节点流即能力 + 可编排能力目录自动生成 · L（2026-11-24 交付：`capability-catalog.ts`；完整门禁绿）
 - **来源**：A1 / F7 · NF-1.4 / NF-13.* · AGENT_FLOW_SPEC §4.4
 - **范围**：
   - 已发布的节点流自动登记为 `capabilityRef {kind:'composite', id, version}`。
   - 能力目录由节点注册表和发布仓库**自动生成**，并带上参与形态下限、成本、网络、是否可调度。
   - 删除编译器里硬编码的 7 项 `CAPABILITY_COMPILE`。
   - 上帝 Agent 的能力菜单、MCP 工具描述都从这份目录生成。
+- **实现**：`src/shared/agent-flow/capability-catalog.ts` 是唯一真值——节点能力逐项取自 `GENERATED_NODE_CONTRACTS`（端口/契约版本与画布同源），节点流能力取自已发布版本（公开端口 + NF-13.2 参与下限 + 由内部节点推导的成本/网络）；编译器、`flowGraph.validate/compile`、`flowAgent.catalog`、MCP 目录、builder 计划面全部消费同一目录。`FLOW_GRAPH_CAPABILITY_IDS` / `CAPABILITY_COMPILE` / builder 第二份 7 项映射已删除；FlowGraph 新增可选 `capabilityRef`，旧 `capability: id@version` 仍按 node 能力解析（历史 JSON 兼容）。新增准入码 `CAPABILITY_NOT_SCHEDULABLE` / `CAPABILITY_PARTICIPATION_BELOW_FLOOR`。
 - **依赖**：BL-05
-- **验收**：[ ] 发布一个节点流之后，`flowAgent.catalog` 能看到它；[ ] 在 FlowGraph 里引用它能编译、运行、交付；[ ] 节点流内部失败时，failureNodeId 能透传到运行总览
+- **验收**：
+  - [x] 发布一个节点流之后，`flowAgent.catalog` 能看到它（`test/local-agent-flow-agents-access.test.ts` 发布后断言公开端口/参与形态/可调度）
+  - [x] 在 FlowGraph 里引用它能编译、运行、交付（`test/capability-catalog.test.ts` 编译为 composite 实例、公开端口不重映射、内容摘要固定版本；运行/交付沿用既有复合执行器）
+  - [x] 节点流内部失败时，failureNodeId 能透传到运行总览（既有 `composite-executor` / `composite-run-repo` / `node-flow-e2e-composition` 用例锁定）
+  - [x] 能力目录完整性：每个 Active 节点类型都有描述且不可调度的如实给出原因（`test/capability-catalog.test.ts`）
+  - [ ] 最小输入编制（ContextManifest → 公开输入）与真实端口类型校验：随 BL-11/BL-12 推进（NF-13.4 仍标【目标】）
 
 ### ⬜ BL-11 FlowGraph v2：params、显式端口、子图循环 · L
 - **来源**：G3 / G7 · AGENT_FLOW_SPEC §4.4 / AF-8.4b

@@ -22,6 +22,10 @@ import { FlowAgentDesktopHost } from '../agent-flow/desktop-host'
 import { FlowCommandLedger } from '../agent-flow/command-ledger'
 import { CoordinationStore } from '../agent-flow/coordination-store'
 import { FlowGraphSchema, validateFlowGraph } from '../../shared/agent-flow/flow-graph'
+import {
+  buildCapabilityCatalog,
+  capabilityCatalogDto
+} from '../../shared/agent-flow/capability-catalog'
 import { compileFlowGraph, FlowGraphCompileError, type FlowGraphPreview } from '../../shared/agent-flow/flow-graph-compiler'
 import { FlowAssetStore } from '../agent-flow/asset-store'
 import { FlowTaskStore, agentThread } from '../agent-flow/task-store'
@@ -32,6 +36,7 @@ import {
 } from '../../shared/agent-flow/context-manifest'
 import type { StageDeliveryFact } from '../../shared/agent-flow/stage-contracts'
 import { getDb } from '../store/db'
+import { listAllCompositeVersions } from '../store/composite.repo'
 import { openProject } from '../store/projects.repo'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
 import { DesktopAccessError, type AccessDesktop } from './desktop'
@@ -307,7 +312,9 @@ function catalogFlowAgent(
     graphVersion: file.meta.graphVersion,
     models: catalog.models,
     tools: catalog.tools,
-    skills: catalog.skills
+    skills: catalog.skills,
+    // BL-10：能力目录 = 节点注册表 + 已发布节点流（与编译器、MCP 目录同一份真值）。
+    capabilities: capabilityCatalogDto(buildCapabilityCatalog(listAllCompositeVersions()))
   }
 }
 
@@ -663,7 +670,9 @@ function validateFlowGraphOp(input: Record<string, unknown>): unknown {
         }
       ]
     }
-  const result = validateFlowGraph(parsed.data)
+  const result = validateFlowGraph(parsed.data, {
+    catalog: buildCapabilityCatalog(listAllCompositeVersions())
+  })
   return result.ok ? { ok: true, errors: [] } : { ok: false, errors: result.errors }
 }
 
@@ -682,7 +691,13 @@ function compileFlowGraphOp(input: Record<string, unknown>): unknown {
       ]
     }
   try {
-    return { ok: true, compiled: compileFlowGraph(parsed.data), errors: [] }
+    return {
+      ok: true,
+      compiled: compileFlowGraph(parsed.data, {
+        catalog: buildCapabilityCatalog(listAllCompositeVersions())
+      }),
+      errors: []
+    }
   } catch (error) {
     if (error instanceof FlowGraphCompileError)
       return { ok: false, compiled: null, errors: error.errors }

@@ -2,8 +2,8 @@
 title: Agent Flow 规范
 status: draft            # draft → review → frozen
 version: 0.2
-last-verified: 2026-11-22
-baseline-commit: 99a30b6e (main)
+last-verified: 2026-11-24
+baseline-commit: 76a487b5 (main)
 owner: Canvas Studio 规范组
 supersedes: |
   本文收敛以下文档的「现行条款」，原文降级为档案（见 §20）：
@@ -134,6 +134,8 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 流程中的**控制关系**（`controls / observes / review-gate / rework`）不是 FlowGraph 边。它们由编译器生成，保存在节点 config 的 `relations` 中（§6），不受本条影响。
 
 ### 4.4 FlowGraph v2【目标】
+
+> BL-10 已完成第一行：`capabilityRef: { kind: 'node' | 'composite', id, version }` 与「能力目录由节点注册表 + 已发布节点流生成」已落地（`src/shared/agent-flow/capability-catalog.ts`，编译器不再持有能力白名单）。其余各行（`params`、显式端口、子图循环、执行者×决策者、角色）仍为目标，按 BL-11 起推进。
 
 | 变化 | 原因 | 差距 |
 |---|---|---|

@@ -14,6 +14,8 @@ import {
   ReviewNodeConfigSchema
 } from '../../shared/agent-flow/node-contracts'
 import { compileFlowGraph, type FlowGraphPreview } from '../../shared/agent-flow/flow-graph-compiler'
+import { nodeCapabilityDescriptors, buildCapabilityCatalog } from '../../shared/agent-flow/capability-catalog'
+import { listAllCompositeVersions } from '../store/composite.repo'
 import { FlowGraphSchema, type FlowGraph } from '../../shared/agent-flow/flow-graph'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 import { layoutGraph } from '../../shared/flow-layout'
@@ -29,84 +31,40 @@ type Shape = {
   meta?: Record<string, unknown>
 }
 
-const TARGETS: Record<
-  BuildCapability,
-  {
-    type: 'processor' | 'image-gen' | 'image-edit' | 'video' | 'speech' | 'tts'
-    contractVersion: 1 | 2 | 3 | 4 | 7
-    inputPort: string
-    outputPort: string
-    config: (step: BuildPreview['plan']['steps'][number]) => string
-    text: (step: BuildPreview['plan']['steps'][number]) => string
-  }
-> = {
-  'text-template@1': {
-    type: 'processor',
-    contractVersion: 1,
-    inputPort: 'in-value',
-    outputPort: 'out-value',
-    config: (step) =>
-      JSON.stringify({ operation: 'template', field: '', template: step.template ?? '{{value}}' }),
-    text: () => ''
-  },
-  'text-pass@1': {
-    type: 'processor',
-    contractVersion: 1,
-    inputPort: 'in-value',
-    outputPort: 'out-value',
-    config: () => JSON.stringify({ operation: 'pass', field: '' }),
-    text: () => ''
-  },
-  'image-gen@3': {
-    type: 'image-gen',
-    contractVersion: 3,
-    inputPort: 'in-text',
-    outputPort: 'out-image',
-    config: () => JSON.stringify({ count: 1, retry: { maxRetries: 0 } }),
-    text: (step) => step.instruction ?? ''
-  },
-  'image-edit@2': {
-    type: 'image-edit',
-    contractVersion: 2,
-    inputPort: 'in-image',
-    outputPort: 'out-image',
-    config: (step) =>
-      JSON.stringify({
-        version: 1,
-        modelKey: '',
-        size: 'auto',
-        aspectRatio: 'auto',
-        instruction: step.instruction ?? '',
-        annotations: [],
-        mask: { enabled: false, strokes: [], brushSize: 0.08, invert: false }
-      }),
-    text: () => ''
-  },
-  'video@7': {
-    type: 'video',
-    contractVersion: 7,
-    inputPort: 'in-text',
-    outputPort: 'out-video',
-    config: () => JSON.stringify({ modelKey: '', mode: 'reference', params: {}, taskId: '' }),
-    text: (step) => step.instruction ?? ''
-  },
-  'speech@4': {
-    type: 'speech',
-    contractVersion: 4,
-    inputPort: 'in-text',
-    outputPort: 'out-audio',
-    config: () => JSON.stringify({ backend: 'minimax' }),
-    text: () => ''
-  },
-  'tts@4': {
-    type: 'tts',
-    contractVersion: 4,
-    inputPort: 'in-audio',
-    outputPort: 'out-json',
-    config: () => JSON.stringify({ backend: 'minimax' }),
-    text: () => ''
-  }
+type BuildPreviewNode = BuildPreview['nodes'][number]
+type BuildTarget = {
+  type: BuildPreviewNode['type']
+  contractVersion: BuildPreviewNode['contractVersion']
+  inputPort: string
+  outputPort: string
+  config: (step: BuildPreview['plan']['steps'][number]) => string
+  text: (step: BuildPreview['plan']['steps'][number]) => string
 }
+
+/**
+ * 建图计划 → 画布节点的编译映射：从统一能力目录派生（BL-10 / NF-13.3），
+ * 不再维护第二份 7 项映射表。步骤可变字段（template/instruction）由目录里的 builder 钩子合并。
+ */
+const TARGETS: Record<BuildCapability, BuildTarget> = Object.fromEntries(
+  nodeCapabilityDescriptors()
+    .filter((descriptor) => descriptor.plan && descriptor.carrier)
+    .map((descriptor) => {
+      const id = `${descriptor.capabilityRef.id}@${descriptor.capabilityRef.version}` as BuildCapability
+      const carrier = descriptor.carrier!
+      const target: BuildTarget = {
+        type: carrier.type as BuildTarget['type'],
+        contractVersion: carrier.contractVersion as BuildTarget['contractVersion'],
+        inputPort: carrier.inputPort,
+        outputPort: carrier.outputPort,
+        config: (step) =>
+          descriptor.builder?.configFromStep
+            ? descriptor.builder.configFromStep(step)
+            : carrier.config,
+        text: (step) => descriptor.builder?.textFromStep?.(step) ?? ''
+      }
+      return [id, target]
+    })
+) as Record<BuildCapability, BuildTarget>
 /** Proposals persist before any mutation. A saved graph, rather than renderer acknowledgement, proves commit. */
 export class FlowBuilderHost {
   private readonly active = new Set<string>()
@@ -261,7 +219,10 @@ export class FlowBuilderHost {
     const file = this.activeFile(input.projectId)
     const graph = FlowGraphSchema.parse(input.graph)
     // 校验+编译（非法图抛 FlowGraphCompileError，由 op 层转结构化错误）；不调模型。
-    const compiled = compileFlowGraph(graph)
+    // BL-10：能力目录含已发布节点流，propose 与 validate/compile 同源，避免「校验过、提案拒」。
+    const compiled = compileFlowGraph(graph, {
+      catalog: buildCapabilityCatalog(listAllCompositeVersions())
+    })
     const anchor = compiled.coordinatorNodeId
     const buildId = `graph-${createHash('sha256')
       .update(JSON.stringify([input.projectId, anchor, input.requestId]))

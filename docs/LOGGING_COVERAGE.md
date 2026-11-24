@@ -1076,3 +1076,11 @@ GUI 节点流面板条目卡片移除「运行」按钮（运行走画布既有�
 - 节点流人工等待：`composite` 执行器把 `status:'waiting'` 映射为 `skipped`（暂停），不再落到输出投影报「输出契约校验失败」；运行记录保持 `waiting-input`，由 `composite.run.submitHuman` + `composite.run.resume` 续跑。该路径不新增诊断事件（运行/等待账本沿用既有 `agent.coordination.*` 与 composite 步骤事件）。
 - 验证：`test/local-agent-interactive-timeout.test.ts`、`test/human-decision-diagnostics.test.ts`、`test/composite-executor.test.ts`（9 项）通过；真机 `scripts/acceptance/agent-flow-human-task.cjs` 12 项全过（含点「允许提交」、等待→提交→续跑→公开输出）。
 - 未覆盖：其余 7 个真机验收脚本仍停在确认框（BACKLOG BL-01 已登记）；外部 node-run 状态枚举没有 waiting，节点流等人时 `run.wait` 仍如实报 `failed` + 等待原因，真相以 `composite.run.get` 的 `waiting-input` 为准。
+
+### 2026-11-24 BL-10 能力目录（节点流即能力）
+
+- 能力目录是**纯只读投影**：`flowAgent.catalog` 新增 `capabilities`（节点注册表 + 已发布节点流），不新增诊断事件、不写数据库；读取失败沿用既有 access 失败记录。目录只含能力身份/端口/参与形态/成本/网络/可调度原因，不含节点正文、配置、提示词或密钥。
+- 编译与校验是纯函数（`flow-graph-compiler` / `flow-graph` / `capability-catalog`），无 I/O、无网络；新增的 `CAPABILITY_NOT_SCHEDULABLE` / `CAPABILITY_PARTICIPATION_BELOW_FLOOR` 是编译前准入错误码，由调用方以既有 access 失败路径返回。
+- 兼容：FlowGraph 新增可选 `capabilityRef`，旧 `capability: id@version` 继续解析；契约快照与 change-impact 已按 `--accept-contract-change` 刷新（兼容结论：可选字段加性、无破坏性迁移）。
+- 验证：`test/capability-catalog.test.ts`(10)、`test/local-agent-flow-agents-access.test.ts`(17)、`flow-graph-*` / `agent-flow-builder` / `builder-expressiveness` / `local-agent-parity` 共 192 项通过；`guard:agent-parity` 三关全绿；`test:contract` 331。
+- 未覆盖：真实端口类型校验与最小输入编制（ContextManifest）随 BL-11/12；真实模型/供应商未发起计费请求。

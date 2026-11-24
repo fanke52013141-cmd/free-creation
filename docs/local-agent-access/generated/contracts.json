@@ -25533,6 +25533,34 @@
                       "minLength": 1,
                       "maxLength": 80
                     },
+                    "capabilityRef": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "node",
+                            "composite"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "id",
+                        "version"
+                      ],
+                      "additionalProperties": false
+                    },
                     "review": {
                       "type": "object",
                       "properties": {
@@ -26389,6 +26417,34 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 80
+                    },
+                    "capabilityRef": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "node",
+                            "composite"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "id",
+                        "version"
+                      ],
+                      "additionalProperties": false
                     },
                     "review": {
                       "type": "object",
@@ -27393,6 +27449,34 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 80
+                    },
+                    "capabilityRef": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "node",
+                            "composite"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "id",
+                        "version"
+                      ],
+                      "additionalProperties": false
                     },
                     "review": {
                       "type": "object",
@@ -29991,6 +30075,34 @@
                       "minLength": 1,
                       "maxLength": 80
                     },
+                    "capabilityRef": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "node",
+                            "composite"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "id",
+                        "version"
+                      ],
+                      "additionalProperties": false
+                    },
                     "review": {
                       "type": "object",
                       "properties": {
@@ -30787,6 +30899,34 @@
                               "type": "string",
                               "minLength": 1,
                               "maxLength": 80
+                            },
+                            "capabilityRef": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "node",
+                                    "composite"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "version": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 40
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "id",
+                                "version"
+                              ],
+                              "additionalProperties": false
                             },
                             "review": {
                               "type": "object",
@@ -31679,6 +31819,34 @@
                                 "type": "string",
                                 "minLength": 1,
                                 "maxLength": 80
+                              },
+                              "capabilityRef": {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "node",
+                                      "composite"
+                                    ]
+                                  },
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 80
+                                  },
+                                  "version": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 40
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "id",
+                                  "version"
+                                ],
+                                "additionalProperties": false
                               },
                               "review": {
                                 "type": "object",
@@ -32584,6 +32752,34 @@
                                   "minLength": 1,
                                   "maxLength": 80
                                 },
+                                "capabilityRef": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "node",
+                                        "composite"
+                                      ]
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 80
+                                    },
+                                    "version": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 40
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "id",
+                                    "version"
+                                  ],
+                                  "additionalProperties": false
+                                },
                                 "review": {
                                   "type": "object",
                                   "properties": {
@@ -33431,7 +33627,7 @@
       "operationId": "flowAgent.catalog",
       "operationVersion": 1,
       "effect": "read",
-      "description": "读取当前打开画布的 Agent 能力目录（可用文本模型、受控工具、固定版本技能摘要）；要求项目已在桌面打开，不返回技能指令正文",
+      "description": "读取当前打开画布的 Agent 能力目录（可用文本模型、受控工具、固定版本技能摘要、可编排能力：节点能力 + 已发布节点流，含端口/参与形态/成本/网络/可调度性与不可调度原因）；要求项目已在桌面打开，不返回技能指令正文",
       "requires": [
         "openProject"
       ],
@@ -33580,6 +33776,279 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "capabilities": {
+                "maxItems": 400,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "capabilityRef": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "node",
+                            "composite"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "id",
+                        "version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "description": {
+                      "type": "string",
+                      "maxLength": 1000
+                    },
+                    "inputs": {
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "portId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "type": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 40
+                          },
+                          "required": {
+                            "type": "boolean"
+                          },
+                          "cardinality": {
+                            "type": "string",
+                            "enum": [
+                              "one",
+                              "many"
+                            ]
+                          },
+                          "name": {
+                            "type": "string",
+                            "maxLength": 80
+                          },
+                          "description": {
+                            "type": "string",
+                            "maxLength": 300
+                          },
+                          "schemaRef": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80
+                              },
+                              "version": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "version"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "portId",
+                          "type",
+                          "required",
+                          "cardinality"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "outputs": {
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "portId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "type": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 40
+                          },
+                          "required": {
+                            "type": "boolean"
+                          },
+                          "cardinality": {
+                            "type": "string",
+                            "enum": [
+                              "one",
+                              "many"
+                            ]
+                          },
+                          "name": {
+                            "type": "string",
+                            "maxLength": 80
+                          },
+                          "description": {
+                            "type": "string",
+                            "maxLength": 300
+                          },
+                          "schemaRef": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80
+                              },
+                              "version": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "version"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "portId",
+                          "type",
+                          "required",
+                          "cardinality"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "participation": {
+                      "type": "string",
+                      "enum": [
+                        "autonomous",
+                        "collaborative"
+                      ]
+                    },
+                    "cost": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "possible",
+                        "certain"
+                      ]
+                    },
+                    "network": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "required"
+                      ]
+                    },
+                    "agentSchedulable": {
+                      "type": "boolean"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "plan": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120
+                        },
+                        "inputType": {
+                          "type": "string",
+                          "enum": [
+                            "text",
+                            "image",
+                            "audio",
+                            "video",
+                            "json"
+                          ]
+                        },
+                        "outputType": {
+                          "type": "string",
+                          "enum": [
+                            "text",
+                            "image",
+                            "audio",
+                            "video",
+                            "json"
+                          ]
+                        },
+                        "instruction": {
+                          "type": "string",
+                          "enum": [
+                            "required",
+                            "optional",
+                            "forbidden"
+                          ]
+                        },
+                        "template": {
+                          "type": "string",
+                          "enum": [
+                            "required",
+                            "optional",
+                            "forbidden"
+                          ]
+                        },
+                        "reviewable": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "inputType",
+                        "outputType",
+                        "instruction",
+                        "template",
+                        "reviewable"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "capabilityRef",
+                    "label",
+                    "description",
+                    "inputs",
+                    "outputs",
+                    "participation",
+                    "cost",
+                    "network",
+                    "agentSchedulable"
+                  ],
+                  "additionalProperties": false
+                }
               }
             },
             "required": [
@@ -33587,7 +34056,8 @@
               "graphVersion",
               "models",
               "tools",
-              "skills"
+              "skills",
+              "capabilities"
             ],
             "additionalProperties": false
           },

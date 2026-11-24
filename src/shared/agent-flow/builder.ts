@@ -1,15 +1,15 @@
 import { z } from 'zod'
+import { planCapabilityCatalog, planCapabilitySurface } from './capability-catalog'
 
-/** Closed set of buildable capabilities; the host owns every node/port/config mapping. */
-export const FLOW_BUILDER_CAPABILITY_CATALOG = [
-  { id: 'text-template@1', input: 'text', output: 'text' },
-  { id: 'text-pass@1', input: 'text', output: 'text' },
-  { id: 'image-gen@3', input: 'text', output: 'image' },
-  { id: 'image-edit@2', input: 'image', output: 'image' },
-  { id: 'video@7', input: 'text', output: 'video' },
-  { id: 'speech@4', input: 'text', output: 'audio' },
-  { id: 'tts@4', input: 'audio', output: 'json' }
-] as const
+/**
+ * 计划面（上帝 Agent 可用的建图能力）从统一能力目录生成（BL-10 / NF-13.3）：
+ * 这里不再维护第二份 7 项白名单，只投影目录里声明了计划面的能力。
+ */
+export const FLOW_BUILDER_CAPABILITY_CATALOG = planCapabilityCatalog().map(({ id, plan }) => ({
+  id,
+  input: plan.inputType,
+  output: plan.outputType
+}))
 
 export const BuildCapabilitySchema = z.enum(
   FLOW_BUILDER_CAPABILITY_CATALOG.map((item) => item.id) as [string, ...string[]]
@@ -36,18 +36,26 @@ const buildStep = z
   })
   .strict()
   .superRefine((step, context) => {
-    if (step.capability === 'text-template@1' && !step.template?.includes('{{value}}'))
+    const surface = planCapabilitySurface(step.capability)
+    if (!surface) {
+      context.addIssue({ code: 'custom', message: `Unknown build capability ${step.capability}` })
+      return
+    }
+    if (surface.template === 'required' && !step.template?.includes('{{value}}'))
       context.addIssue({ code: 'custom', message: 'Text templates must include {{value}}' })
-    if (['image-gen@3', 'image-edit@2', 'video@7'].includes(step.capability) && !step.instruction)
+    if (surface.template === 'forbidden' && step.template !== undefined)
+      context.addIssue({ code: 'custom', message: `Capability ${step.capability} does not accept template` })
+    if (surface.instruction === 'required' && !step.instruction)
       context.addIssue({
         code: 'custom',
         message: 'Media generation and edit capabilities require an instruction'
       })
-    if (step.capability !== 'text-template@1' && step.template !== undefined)
-      context.addIssue({ code: 'custom', message: 'Only text-template accepts template' })
-    if (step.capability === 'text-pass@1' && step.instruction !== undefined)
-      context.addIssue({ code: 'custom', message: 'text-pass does not accept an instruction' })
-    if (step.review && !['text-template@1', 'video@7'].includes(step.capability))
+    if (surface.instruction === 'forbidden' && step.instruction !== undefined)
+      context.addIssue({
+        code: 'custom',
+        message: `Capability ${step.capability} does not accept an instruction`
+      })
+    if (step.review && !surface.reviewable)
       context.addIssue({
         code: 'custom',
         message: 'Review is currently supported only for text-template and sampled video outputs'

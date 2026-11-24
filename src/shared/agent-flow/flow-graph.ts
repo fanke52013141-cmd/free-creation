@@ -1,6 +1,14 @@
 import { z } from 'zod'
 import { StageConditionSchema, StageInputsSchema, type StageCondition } from './stage-contracts'
 import { canonicalFlowJson } from './semantic-revision'
+import {
+  buildCapabilityCatalog,
+  findCapability,
+  participationRank,
+  parseLegacyCapability,
+  type CapabilityDescriptor,
+  type CapabilityRef
+} from './capability-catalog'
 
 /**
  * O4-P1 FlowGraph：可序列化流程解释器 IR（纯共享协议，main 不导入 React）。
@@ -32,27 +40,17 @@ export const FlowNodeKindSchema = z.enum([
 export type FlowNodeKind = z.infer<typeof FlowNodeKindSchema>
 
 /**
- * BL-05 / AF-6.2「校验即准入」：图模式**可分派**的节点种类与**可编译**的能力 ID 唯一来源。
+ * BL-05 / AF-6.2「校验即准入」：图模式**可分派**的节点种类唯一来源。
  * validateFlowGraph（GUI/CLI/MCP 校验与预览）、compileFlowGraph、coordinator-host 运行准入
- * 共用这两份常量——校验通过的图，运行准入不会再因种类/能力被拒。
+ * 共用这份常量——校验通过的图，运行准入不会再因种类被拒。
  * state-machine 不是可分派图节点：状态机由编译器为整张图派生。
- * 能力 ID 列表待 BL-10 改为从注册表与已发布节点流生成。
+ * BL-10：能力目录改由 `capability-catalog` 从节点注册表与已发布节点流生成，本文件不再持有能力白名单。
  */
 export const FLOW_GRAPH_DISPATCHABLE_KINDS = ['agent', 'capability', 'human-task', 'review'] as const
 export type FlowGraphDispatchableKind = (typeof FLOW_GRAPH_DISPATCHABLE_KINDS)[number]
 export function isDispatchableFlowNodeKind(kind: FlowNodeKind): kind is FlowGraphDispatchableKind {
   return (FLOW_GRAPH_DISPATCHABLE_KINDS as readonly string[]).includes(kind)
 }
-export const FLOW_GRAPH_CAPABILITY_IDS = [
-  'text-template@1',
-  'text-pass@1',
-  'image-gen@3',
-  'image-edit@2',
-  'video@7',
-  'speech@4',
-  'tts@4'
-] as const
-export type FlowGraphCapabilityId = (typeof FLOW_GRAPH_CAPABILITY_IDS)[number]
 
 export const FlowDecisionSchema = z
   .object({
@@ -75,8 +73,17 @@ export const FlowNodeSchema = z
     inputs: StageInputsSchema.optional(),
     /** 人机协作决策集（collaborative 必填；autonomous 禁止）。 */
     decisions: FlowDecisionSchema.optional(),
-    /** capability 节点专用（复用建图能力目录 id）。 */
+    /** capability 节点专用（兼容旧 JSON：`id@version`，kind 缺省为 node）。新图用 capabilityRef。 */
     capability: z.string().min(1).max(80).optional(),
+    /** BL-10 / NF-13.1：能力引用——节点能力或已发布节点流（固定版本）。 */
+    capabilityRef: z
+      .object({
+        kind: z.enum(['node', 'composite']),
+        id: z.string().min(1).max(80),
+        version: z.string().min(1).max(40)
+      })
+      .strict()
+      .optional(),
     /** review 节点专用。 */
     review: z
       .object({
@@ -105,19 +112,35 @@ export const FlowNodeSchema = z
       context.addIssue({ code: 'custom', message: 'human participation requires a human-task node' })
     if (node.kind === 'human-task' && node.participation !== 'human')
       context.addIssue({ code: 'custom', message: 'human-task node must use human participation' })
-    if (node.participation === 'collaborative' && (node.kind !== 'agent' || !node.decisions))
+    if (node.participation === 'collaborative' && node.kind === 'agent' && !node.decisions)
       context.addIssue({
         code: 'custom',
-        message: 'collaborative node must be an agent with decisions'
+        message: 'collaborative agent node must declare decisions'
       })
     if (node.participation === 'autonomous' && node.decisions)
       context.addIssue({ code: 'custom', message: 'autonomous node must not declare decisions' })
-    if (node.kind === 'capability' && !node.capability)
-      context.addIssue({ code: 'custom', message: 'capability node requires a capability id' })
+    if (node.kind === 'capability' && !node.capability && !node.capabilityRef)
+      context.addIssue({
+        code: 'custom',
+        message: 'capability node requires capabilityRef (or legacy capability id)'
+      })
+    if (node.kind === 'capability' && node.capability && node.capabilityRef)
+      context.addIssue({
+        code: 'custom',
+        message: 'capability node must not declare both capability and capabilityRef'
+      })
+    if (node.kind !== 'capability' && node.capabilityRef)
+      context.addIssue({ code: 'custom', message: 'only capability nodes may declare capabilityRef' })
     if (node.kind === 'review' && !node.review)
       context.addIssue({ code: 'custom', message: 'review node requires review config' })
   })
 export type FlowNode = z.infer<typeof FlowNodeSchema>
+
+/** 统一读取能力引用：新字段优先，旧 `capability: id@version` 视为 node 能力。 */
+export function flowNodeCapabilityRef(node: FlowNode): CapabilityRef | null {
+  if (node.capabilityRef) return node.capabilityRef
+  return node.capability ? parseLegacyCapability(node.capability) : null
+}
 
 export const FlowEdgeSchema = z
   .object({
@@ -226,6 +249,8 @@ export type FlowGraphErrorCode =
   | 'LOOP_BODY_UNSUPPORTED'
   | 'NODE_KIND_UNSUPPORTED'
   | 'CAPABILITY_UNKNOWN'
+  | 'CAPABILITY_NOT_SCHEDULABLE'
+  | 'CAPABILITY_PARTICIPATION_BELOW_FLOOR'
   | 'CONDITION_NOT_EXCLUSIVE'
   | 'OTHERWISE_INVALID'
 export interface FlowGraphError {
@@ -305,15 +330,22 @@ function reachable(adj: Map<string, string[]>, start: string): Set<string> {
  * 5) 节点种类在图模式可分派白名单内、capability 在可编译能力目录内（BL-05，与运行准入同源）；
  * 6) 同源条件出边两两互斥、otherwise 用法合法（BL-04，见 conditionsExclusive）。
  */
-export function validateFlowGraph(graph: FlowGraph): FlowGraphValidation {
+export function validateFlowGraph(
+  graph: FlowGraph,
+  options: { catalog?: readonly CapabilityDescriptor[] } = {}
+): FlowGraphValidation {
   const errors: FlowGraphError[] = []
   const adj = adjacency(graph)
   const nodeById = new Map(graph.nodes.map((node) => [node.nodeId, node]))
+  const catalog = options.catalog ?? buildCapabilityCatalog()
+  const availableCapabilities = catalog
+    .map((descriptor) => `${descriptor.capabilityRef.id}@${descriptor.capabilityRef.version}`)
+    .join(', ')
 
   if (graph.exits.includes(graph.entry))
     errors.push({ code: 'ENTRY_IS_EXIT', nodeId: graph.entry, message: 'Entry must not also be an exit' })
 
-  // BL-05：校验即准入——种类白名单与能力目录与 compile / 运行准入同一来源。
+  // BL-05 / BL-10：校验即准入——节点种类白名单与能力目录与 compile / 运行准入同一来源。
   for (const node of graph.nodes) {
     if (!isDispatchableFlowNodeKind(node.kind))
       errors.push({
@@ -321,15 +353,31 @@ export function validateFlowGraph(graph: FlowGraph): FlowGraphValidation {
         nodeId: node.nodeId,
         message: `Node kind ${node.kind} cannot be dispatched in graph mode (allowed: ${FLOW_GRAPH_DISPATCHABLE_KINDS.join(', ')})`
       })
-    if (
-      node.kind === 'capability' &&
-      node.capability &&
-      !(FLOW_GRAPH_CAPABILITY_IDS as readonly string[]).includes(node.capability)
-    )
+    if (node.kind !== 'capability') continue
+    const ref = flowNodeCapabilityRef(node)
+    const descriptor = findCapability(catalog, ref)
+    if (!ref || !descriptor) {
       errors.push({
         code: 'CAPABILITY_UNKNOWN',
         nodeId: node.nodeId,
-        message: `Unknown capability ${node.capability} (available: ${FLOW_GRAPH_CAPABILITY_IDS.join(', ')})`
+        message: `Unknown capability ${ref ? `${ref.id}@${ref.version}` : '(missing)'} (available: ${availableCapabilities})`
+      })
+      continue
+    }
+    if (!descriptor.agentSchedulable) {
+      errors.push({
+        code: 'CAPABILITY_NOT_SCHEDULABLE',
+        nodeId: node.nodeId,
+        message: `Capability ${descriptor.capabilityRef.id}@${descriptor.capabilityRef.version} is not schedulable from a FlowGraph: ${descriptor.reason ?? 'no compile carrier'}`
+      })
+      continue
+    }
+    // NF-13.2：目录里的参与形态是下限，FlowGraph 只能更高。
+    if (participationRank(node.participation) < participationRank(descriptor.participation))
+      errors.push({
+        code: 'CAPABILITY_PARTICIPATION_BELOW_FLOOR',
+        nodeId: node.nodeId,
+        message: `Capability ${descriptor.capabilityRef.id}@${descriptor.capabilityRef.version} requires at least ${descriptor.participation} participation (node declares ${node.participation})`
       })
   }
 
