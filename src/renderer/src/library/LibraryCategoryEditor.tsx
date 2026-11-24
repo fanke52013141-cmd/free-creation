@@ -102,6 +102,10 @@ export function LibraryCategoryEditor({
       size="l"
       title={initial ? '编辑分类' : '新建资源分类'}
       ariaLabel="资源分类编辑器"
+      // 保留旧表单钩子类：输入框聚焦的中性描边（无蓝色光环）由 library-forms.css 提供；
+      // 2026-11-21 迁到 ModalShell 时漏了这个类，聚焦回落到 library.css 的全局蓝色
+      // box-shadow（test-browser-library-forms.cjs 断言失败）。只加作用域类，不套用旧壳布局。
+      className="library-category-dialog"
       onClose={() => !busy && onClose()}
       closeOnEscape={!busy}
       closeOnOverlay={!busy}

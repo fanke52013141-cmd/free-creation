@@ -420,6 +420,9 @@ export function LibraryResourceForm({
       size="l"
       title={detail ? '编辑资源' : '新建资源'}
       ariaLabel={detail ? '编辑资源' : '新建资源'}
+      // 保留旧表单钩子类：输入框聚焦的中性描边由 library-forms.css 提供；
+      // 2026-11-21 迁到 ModalShell 时漏了这个类，聚焦回落到全局蓝色 box-shadow。
+      className="library-resource-form-dialog"
       onClose={() => !busy && onCancel()}
       closeOnEscape={!busy}
       closeOnOverlay={!busy}

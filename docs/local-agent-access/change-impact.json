@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "C 组：四个核心节点按真实窗口验收回执登记 desktop-tested（agent/ai-review 创建与连线，state-machine 提交推进，human-task 图路由交付），未覆盖动作保持未测",
+  "reason": "修复 AI 处理引用条回归与节点 UI/弹窗交互一致性（AI 处理仅展示输出、Escape 先关内层下拉、库表单作用域类、浏览器门禁断言对齐阅读面）",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -61,7 +61,7 @@
     "src/main/agent-flow/coordinator-reviews.ts": "e89a3d93a20bd7853cb907c03346c0dfee55fc9a9e86cb842208d940399df7a8",
     "src/main/agent-flow/definition-store.ts": "1b697b101cafb6e863ed412a426e40585c6fe0f7b38d09ff7987938d0e89da27",
     "src/main/agent-flow/desktop-electron.ts": "940a074dc4f5518002dd06a89b9cdc83bebbe9345edfd9b3ac68c5ce31e73153",
-    "src/main/agent-flow/desktop-host.ts": "414b571e23ceaf9e1bbaf96b9d2a66ab5ccf6b83cc2bcb825dba6e99b0f24a93",
+    "src/main/agent-flow/desktop-host.ts": "ea9516850bb588316c6c6599875d37199aaa05dda5b9b8e012661239063d5fcc",
     "src/main/agent-flow/graph-media-review-acceptance.ts": "121988d482d7fad973dc21b5ccba7105afa23d878f5c46b723371d7b6cf63864",
     "src/main/agent-flow/image-assets.ts": "a31ed9411d136d0510d5cc863936304f33ac1ce4df143de78f8d1d11c4151bfb",
     "src/main/agent-flow/ledger-tool.ts": "65fc4a21aefa10e02a79b37a70f907ef2c7e7f17814b71168f421e4a21f53524",

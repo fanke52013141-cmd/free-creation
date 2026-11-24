@@ -52,7 +52,10 @@
   color: #5f6b7a;
 }
 .library-form-dialog.library-resource-form-dialog :is(input:not([type='checkbox']), textarea, select):focus,
-.library-form-dialog.library-category-dialog :is(input:not([type='checkbox']), textarea, select):focus {
+.library-form-dialog.library-category-dialog :is(input:not([type='checkbox']), textarea, select):focus,
+/* 2026-11-21 迁到 ModalShell 后只保留作用域类（不再带旧 .library-form-dialog 壳）。 */
+.library-resource-form-dialog :is(input:not([type='checkbox']), textarea, select):focus,
+.library-category-dialog :is(input:not([type='checkbox']), textarea, select):focus {
   border-color: #69717d;
   outline: none;
   box-shadow: none;

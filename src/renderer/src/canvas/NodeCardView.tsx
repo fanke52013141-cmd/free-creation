@@ -1119,7 +1119,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   // 而用户正是在这里最容易松错手；不兼容的端口保持淡出，校验不因可发现性而放宽。
 
   // 裁剪/拆图的主素材与轨道线的可拖入素材池由各自工作区承载。
-  const hasDedicatedInputSurface = ['image-crop', 'image-split', 'timeline'].includes(
+  // 2026-10-05 节点引用整改决策（docs/CHANGELOG-2026-10-05-NODE-REFERENCES.md）：
+  // 「AI 处理仅展示输出」——它的结果区占满正文，不再显示通用已连接输入条；
+  // 2026-09-10 a69b1a8 重写该表达式时漏掉了 ai-process，导致 AI 处理重新出现引用条
+  // 并挤占结果高度（test-browser-node-standard 第 174 行断言失败，2026-11-24 修复）。
+  const hasDedicatedInputSurface = ['image-crop', 'image-split', 'timeline', 'ai-process'].includes(
     shape.props.nodeType
   )
 

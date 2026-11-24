@@ -112,16 +112,31 @@ const { launchQaBrowser } = require('./qa-browser.cjs')
     assert.deepEqual(external, { status: 'completed', text: '固定正文' })
     await page.evaluate(() => {
       window.api.workspace.listTemplates = async () => ({ ok: true, data: [{
-        id: 'saved-fixture', name: '保存的文案模板', createdAt: 1, nodeCount: 1, edges: [],
-        nodes: [{ nodeType: 'text', title: '模板输入', dx: 0, dy: 0, w: 340, h: 260 }]
+        id: 'saved-fixture', name: '保存的文案模板', createdAt: 1, nodeCount: 3,
+        edges: [{ fromIdx: 0, toIdx: 1, fromPort: 'out-text', toPort: 'in-text' }, { fromIdx: 1, toIdx: 2, fromPort: 'out-text', toPort: 'in-text' }],
+        nodes: [
+          { nodeType: 'text', title: '模板输入', dx: 0, dy: 0, w: 340, h: 260 },
+          { nodeType: 'ai-process', title: '模板处理', dx: 380, dy: 0, w: 340, h: 260 },
+          { nodeType: 'image-gen', title: '模板生图', dx: 760, dy: 0, w: 340, h: 260 }
+        ]
       }] })
     })
     await page.getByRole('button', { name: '打开节点流', exact: true }).click()
     await page.getByRole('textbox', { name: '搜索节点流' }).fill('文案模板')
-    await page.getByRole('button', { name: '运行 保存的文案模板' }).click()
+    // 2026-11-23 用户裁决：条目卡片不再有「运行」按钮；点击卡片铺开到画布后运行。
+    await page.locator('.asset-card').filter({ hasText: '保存的文案模板' }).first().click()
+    // 面板收起后画布运行入口才可见。
+    await page.getByRole('button', { name: '关闭面板' }).click()
+    // 铺开后卡片本身不保持选中：显式选中模板刚插入的节点再运行。
+    await page.evaluate(async () => {
+      const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
+      const target = editor.getCurrentPageShapes().filter((s) => s.type === 'node-card' && ['模板输入', '模板处理', '模板生图'].includes(s.props.title))
+      editor.select(...target.map((s) => s.id))
+    })
+    await page.locator('.ms-run').click()
     await dialog.getByRole('textbox').fill('只用于模板运行')
-    await dialog.getByRole('button', { name: '继续运行' }).click()
-    await page.getByText('已运行所选流程（1 个节点）', { exact: true }).first().waitFor()
+    await dialog.getByRole('button', { name: /开始运行|继续运行/ }).click()
+    await page.getByText('已运行所选流程（3 个节点）', { exact: true }).first().waitFor()
     console.log('Selected workflow: transient text, real graph edges, one final image, no intermediate document card')
   } finally {
     await browser.close()

@@ -1300,9 +1300,25 @@ export class FlowAgentDesktopHost {
       // 会在两者都缺失时把"人已采用"伪造成 true，外部程序可凭空 continue 推进人工门。
       // 主控协调器的等待不是"本人已采用"：它的人工决定记录在每个专业子任务上，
       // 由固定顺序/图模式的阶段门禁再次校验，所以这里只对专业 Agent 任务强制证据。
+      // 只有 continue 才是"人决定继续/采纳"；reconcile/restore 是系统恢复与 unknown 核对，
+      // 不是人工决定，不能因为它们没有确认证据就判成伪造（否则重开恢复会直接失败）。
       const role = agentRoleOf(this.saved(input).shape.props.config)
-      if (old && old.waitKind === 'human' && role !== 'coordinator' && !human && !input.humanConfirmed)
+      const humanEvidenceRequired = input.action === 'continue'
+      if (
+        old &&
+        old.waitKind === 'human' &&
+        humanEvidenceRequired &&
+        role !== 'coordinator' &&
+        !human &&
+        !input.humanConfirmed
+      )
         throw new AgentRuntimeError('HUMAN_DECISION_REQUIRED', 'admission')
+      const acceptedHuman =
+        human !== undefined
+          ? human.accepted !== false
+          : humanEvidenceRequired
+            ? input.humanConfirmed !== undefined
+            : true
       const record =
         input.action === 'start'
           ? await runtime.start()
@@ -1314,7 +1330,7 @@ export class FlowAgentDesktopHost {
               kind: old!.waitKind,
               ...(old!.waitKind === 'human'
                 ? {
-                    accepted: human ? human.accepted !== false : input.humanConfirmed !== undefined,
+                    accepted: acceptedHuman,
                     feedback: human?.text,
                     selectedOutputs: human?.selectedOutputs
                   }

@@ -85,6 +85,12 @@ export function ModalShell(props: ModalShellProps): React.JSX.Element {
 
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
+        // 内层浮层（AppSelect 下拉、菜单）打开时，Esc 属于它：先让它关闭，
+        // 不能在这里把整个弹窗关掉（否则下拉里按 Esc 会连弹窗一起消失）。
+        const openPopup = document.querySelector(
+          '[role="listbox"][data-state="open"], [role="menu"][data-state="open"]'
+        )
+        if (openPopup) return
         if (closeOnEscape) {
           event.preventDefault()
           onClose()
