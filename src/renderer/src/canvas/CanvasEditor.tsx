@@ -178,6 +178,13 @@ function migrateLegacyImageGenNodes(editor: Editor): number {
   return updates.length
 }
 
+/** 无序集合比较：长度相同且每个 id 都在对方集合中（选择集更新守卫用）。 */
+function sameShapeIdSet(a: readonly TLShapeId[], b: readonly TLShapeId[]): boolean {
+  if (a.length !== b.length) return false
+  const set = new Set(b)
+  return a.every((id) => set.has(id))
+}
+
 /** 退役旧「分组节点」（成员迁移为 tldraw 原生 group）与「合成节点」（直接移除）。返回迁移的分组数。 */
 function migrateRetiredNodes(editor: Editor): number {
   const retiredNodes: TLShapeId[] = []
@@ -607,8 +614,10 @@ export function CanvasEditor({
       const brush = state.brush as { x: number; y: number; w: number; h: number } | null
       const rect = brush && brush.w > 1 && brush.h > 1 ? { ...brush } : null
       const desired = desiredSelection(editor, rect)
+      // 集合比较而非数量比较：数量相等但成员不同（如换了一个选中对象）时也必须更新，
+      // 否则旧选中残留，出现"两节点同时处于选中态"的假象（2026-11-24 用户反馈）。
       const current = editor.getSelectedShapeIds()
-      if (desired.length === current.length) return
+      if (sameShapeIdSet(desired, current)) return
       editor.select(...desired)
     }
 
@@ -650,7 +659,7 @@ export function CanvasEditor({
       const merge = (): void => {
         const desired = desiredSelection(editor, rectAtUp, finalBase)
         const current = editor.getSelectedShapeIds()
-        if (desired.length !== current.length) editor.select(...desired)
+        if (!sameShapeIdSet(desired, current)) editor.select(...desired)
       }
       window.setTimeout(merge, 0)
       window.setTimeout(merge, 80)

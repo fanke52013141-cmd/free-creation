@@ -1252,15 +1252,15 @@ select:focus-visible {
    1404×698），backdrop-filter 会让每个缩放步进都重新采样整屏背景并重算模糊，
    表现为快速缩放时"整块画布闪"。改为纯半透明底色，视觉差异极小、缩放零重采样。
    同类先例见 docs/WHEEL_FLICKER_FIX_2026-10-05.md（变换层内大面积材质是闪烁主因）。 */
+/* 2026-11-24 用户反馈：多选范围框此前是实线+浅填充+大阴影，远看像一张巨大的空卡片。
+   按设计注释回归「细虚线范围框」：虚线描边、无填充、无阴影——只表达"选区范围"。 */
 .canvas-selection-underlay {
   position: absolute;
   box-sizing: border-box;
-  border: 1px solid var(--canvas-selection-edge);
+  border: 1px dashed var(--canvas-selection-edge);
   border-radius: 18px;
-  background: var(--canvas-selection-fill);
-  box-shadow:
-    inset 0 1px rgba(255, 255, 255, 0.055),
-    0 10px 34px rgba(0, 0, 0, 0.12);
+  background: transparent;
+  box-shadow: none;
   pointer-events: none;
 }
 
@@ -1285,73 +1285,25 @@ select:focus-visible {
   pointer-events: auto;
   cursor: default;
   transform: translate(13px, -50%);
-  scale: 1;
-  animation: canvas-selection-batch-breathe 3.6s ease-in-out infinite;
-  box-shadow:
-    0 0 12px 3px rgba(238, 247, 255, 0.22),
-    0 0 26px 7px rgba(238, 247, 255, 0.1);
+  scale: 0.82;
+  opacity: 0.92;
 }
 
 .canvas-selection-batch-port:hover {
   background: #fff;
-  transform: translate(13px, -50%) scale(1.03);
+  scale: 0.9;
+  opacity: 1;
 }
 
+/* 2026-11-24 用户反馈：光晕/呼吸动效降调——多选时它看起来像页面坏了，静默小圆点即可 */
 .canvas-selection-batch-port::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  inset: -16px;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(238, 247, 255, 0.24) 0%,
-    rgba(238, 247, 255, 0.12) 30%,
-    rgba(238, 247, 255, 0.04) 55%,
-    transparent 76%
-  );
-  filter: blur(6px);
-  opacity: 0.5;
-  animation: canvas-selection-batch-pulse 3.6s ease-in-out infinite;
-  pointer-events: none;
+  content: none;
 }
 
-@keyframes canvas-selection-batch-breathe {
-  0%,
-  100% {
-    scale: 1;
-    box-shadow:
-      0 0 12px 3px rgba(238, 247, 255, 0.22),
-      0 0 26px 7px rgba(238, 247, 255, 0.1);
-  }
 
-  50% {
-    scale: 1.045;
-    box-shadow:
-      0 0 16px 4px rgba(238, 247, 255, 0.3),
-      0 0 32px 9px rgba(238, 247, 255, 0.14);
-  }
-}
-
-@keyframes canvas-selection-batch-pulse {
-  0%,
-  100% {
-    transform: scale(0.94);
-    opacity: 0.5;
-  }
-
-  50% {
-    transform: scale(1.12);
-    opacity: 0.8;
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
-  .canvas-selection-batch-port,
-  .canvas-selection-batch-port::before {
-    animation: none;
-    scale: 1;
-  }
+
 }
 /* ── 节点创建菜单 ── */
 .node-menu {
