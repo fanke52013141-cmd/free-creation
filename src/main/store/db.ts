@@ -38,7 +38,10 @@ export function getProjectsDir(): string {
 
 export function getDb(): Database.Database {
   if (db) return db
-  const opened = new Database(join(getDataDir(), 'app.db'))
+  // 多进程恢复竞争（process_locks / 素材物化）会在同一时刻抢写锁；
+  // better-sqlite3 默认 5s busy 超时在满载时会被打穿（"database is locked"），
+  // 这里给到 15s，让竞争者排队而不是直接失败（死锁仍由上层占用守卫兜底）。
+  const opened = new Database(join(getDataDir(), 'app.db'), { timeout: 15_000 })
   try {
     opened.pragma('journal_mode = WAL')
     migrateDatabase(opened)

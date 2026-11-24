@@ -26,6 +26,10 @@ const nodeBodiesSharedSource = readFileSync(
   resolve(process.cwd(), 'src/renderer/src/nodes/specs/bodies/shared.tsx'),
   'utf8'
 )
+const portCompatibilitySource = readFileSync(
+  resolve(process.cwd(), 'src/shared/port-compatibility.ts'),
+  'utf8'
+)
 const nodeCardViewSource = readFileSync(
   resolve(process.cwd(), 'src/renderer/src/canvas/NodeCardView.tsx'),
   'utf8'
@@ -166,8 +170,9 @@ describe('画布创建节点交互', () => {
   it('端口兼容判断统一走 portPairCompatible(out, in)，不再出现参数顺序写反', () => {
     // 回归门禁：resolveTargetInputPort 曾把参数写成 (in, out)，导致 iteration→json
     // 高亮允许但建线拒绝。统一谓词后，任何新增判断点都必须复用同一函数。
-    expect(graphSource).toContain('export function portPairCompatible')
-    expect(graphSource).toContain('参数方向固定为 (out, in)')
+    expect(portCompatibilitySource).toContain('export function portPairCompatible')
+    expect(portCompatibilitySource).toContain('方向固定为 (out, in)')
+    expect(graphSource).toContain('export { portPairCompatible }')
     // 旧的直接调用点应全部消失（改经 portPairCompatible）。
     expect(graphSource).not.toMatch(/portCompatible\(port\.type, sourcePort\.type\)/)
     expect(graphSource).not.toMatch(/portCompatible\(aimed\.type, sourcePort\.type\)/)

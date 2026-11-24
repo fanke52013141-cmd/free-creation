@@ -2,8 +2,9 @@
 // 端口信息存 arrow.meta（fromPort/toPort），绑定锚点按端口纵向位置计算
 import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import type { CanvasEdge, CanvasNode, ExecStatus, GroupDecl, PortDecl } from '@shared/types'
-import { nodeSchemasCompatible } from '@shared/node-schemas'
-import { getNodePorts, getNodeType, portCompatible, type NodeTypeSpec } from '../nodes/registry'
+import { portPairCompatible } from '@shared/port-compatibility'
+export { portPairCompatible }
+import { getNodePorts, getNodeType, type NodeTypeSpec } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { collectNodePortConnections, createNodePortLayout } from './node-port-layout'
 import type { BatchConnectionMember, ConnectionFrom } from '../stores/connection'
@@ -31,39 +32,6 @@ export function dynamicPortIdsForShape(shape: NodeCardShape): {
     in: new Set(resolved.in.filter((p) => !staticIds.has(p.id)).map((p) => p.id)),
     out: new Set(resolved.out.filter((p) => !staticIds.has(p.id)).map((p) => p.id))
   }
-}
-
-/**
- * 源输出端口能否接入目标输入端口（类型 + 结构化 Schema 双重校验）。
- *
- * 参数方向固定为 (out, in)：`portCompatible` 对 iteration 输出是非对称规则
- * （循环项只能作为输出注入 JSON 或符合类型的媒体输入），历史上曾出现调用点把参数写反，导致
- * 高亮/菜单认为可连而 tryConnect 实际拒绝。所有兼容判断统一经过本函数，
- * 方向由函数签名约束，不再依赖每个调用点自觉。
- */
-export function portPairCompatible(
-  out: { type: PortDecl['type']; schema?: PortDecl['schema'] },
-  input: { type: PortDecl['type']; schema?: PortDecl['schema'] }
-): boolean {
-  const schemaCompatible =
-    out.type === 'camera'
-      ? Boolean(
-          out.schema &&
-          input.schema &&
-          out.schema.id === input.schema.id &&
-          out.schema.version === input.schema.version
-        )
-      : out.type === 'json'
-        ? nodeSchemasCompatible(out.schema, input.schema)
-        : true
-  return (
-    portCompatible(out.type, input.type) &&
-    !(
-      out.type === input.type &&
-      (out.type === 'json' || out.type === 'camera') &&
-      !schemaCompatible
-    )
-  )
 }
 
 // 默认连线保持中性灰，避免同一画布被端口类型色切成多种视觉噪声；

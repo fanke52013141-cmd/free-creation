@@ -137,15 +137,21 @@ sources:
   - [x] 能力目录完整性：每个 Active 节点类型都有描述且不可调度的如实给出原因（`test/capability-catalog.test.ts`）
   - [ ] 最小输入编制（ContextManifest → 公开输入）与真实端口类型校验：随 BL-11/BL-12 推进（NF-13.4 仍标【目标】）
 
-### ⬜ BL-11 FlowGraph v2：params、显式端口、子图循环 · L
+### ✅ BL-11 FlowGraph v2：params、显式端口、子图循环 · L（2026-11-24 交付；完整门禁绿）
 - **来源**：G3 / G7 · AGENT_FLOW_SPEC §4.4 / AF-8.4b
 - **范围**：
   - FlowNode 新增 `params`，按目标节点的 config schema 校验。
   - 数据边使用目标节点的真实端口，取消重映射。
   - `loop: {body[], maxIterations, exitCondition}`，路由器按轮次计算落定。
   - 旧 v1 图只读兼容。
+- **实现**：`FlowNode.params` + `src/shared/agent-flow/node-params.ts`（公开配置子集，image-gen/video/image-edit/speech/tts/processor；未登记类型明确拒绝）在编译前校验并合并进载体配置；`portPairCompatible` 下沉 `src/shared/port-compatibility.ts`，`validateFlowGraph` 按能力目录/节点契约校验每条边的真实端口与类型，编译器**不再重映射端口**，协调器按 `edge.to.portId` 接线；`FlowNode.loop.body[]` 支持子图循环，路由器以「轮次作用域」计算 body 内交付（同体内边按本轮交付就绪），协调器每轮递增 `loopIterations`、子任务带 `round` 与独立 taskId；v1 单节点循环语义不变，v2 显式声明 body 才允许环（BL-07 拒绝规则只保留给 v1 图）。
 - **依赖**：BL-10
-- **验收**：[ ] video 节点的多端口按语义接线；[ ] 生图参数（模型/比例/张数）生效；[ ] 三节点循环能跑满上限后退出，每轮使用独立 taskId；[ ] BL-07 的拒绝规则撤销
+- **验收**：
+  - [x] video 节点的多端口按语义接线（端口存在性/类型由 `portPairCompatible` 校验，协调器按 `edge.to.portId` 取真实端口）
+  - [x] 生图参数（模型/比例/张数）生效（`test/flow-graph-v2.test.ts`：params 合并进 image-gen 固定配置）
+  - [x] 三节点循环能跑满上限后退出，每轮使用独立 taskId（`test/agent-flow-coordinator.test.ts`：round=[1,2]、taskId 全唯一）
+  - [x] BL-07 的拒绝规则撤销（v2 子图循环通过；v1 多节点环仍拒绝，见 `test/flow-graph-v2.test.ts`）
+  - [x] 旧 v1 图只读兼容（无 body 的循环语义与既有测试不变）
 
 ### B. 节点流规范落地
 

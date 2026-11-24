@@ -10,6 +10,8 @@ import type {
 } from '@shared/types'
 import { ACTIVE_NODE_TYPE_IDS } from '@shared/types'
 import { nodeSchemaRegistered } from '@shared/node-schemas'
+import { portCompatible } from '@shared/port-compatibility'
+export { portCompatible }
 import { NODE_CATEGORY_IDS, type NodeCategoryId } from '@shared/palette-preferences'
 import { DISTRIBUTION_EDITION, DISTRIBUTION_HIDDEN_NODE_TYPES } from '@shared/edition'
 import type { NodeExecutor } from '../engine/executor-types'
@@ -200,19 +202,6 @@ export const PORT_TYPE_LABELS: Record<PortType, string> = {
   any: '任意'
 }
 
-export function portCompatible(a: PortType, b: PortType): boolean {
-  const bothTextual = (a === 'text' || a === 'markdown') && (b === 'text' || b === 'markdown')
-  // 当前项不是普通项目级输出；运行时按列表项形态注入 JSON 或媒体资产引用。
-  const iterationTarget =
-    a === 'iteration' &&
-    (b === 'json' ||
-      b === 'camera' ||
-      b === 'image' ||
-      b === 'video' ||
-      b === 'audio' ||
-      b === 'file')
-  return a === b || bothTextual || iterationTarget || a === 'any' || b === 'any'
-}
 
 /** 旧版本曾把画布坐标误当成缩略图单位，历史快照中会出现几千像素宽的节点。 */
 const LEGACY_DEFAULT_SIZES: Partial<Record<NodeTypeId, { w: number; h: number }>> = {

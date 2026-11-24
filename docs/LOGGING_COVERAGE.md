@@ -1084,3 +1084,12 @@ GUI 节点流面板条目卡片移除「运行」按钮（运行走画布既有�
 - 兼容：FlowGraph 新增可选 `capabilityRef`，旧 `capability: id@version` 继续解析；契约快照与 change-impact 已按 `--accept-contract-change` 刷新（兼容结论：可选字段加性、无破坏性迁移）。
 - 验证：`test/capability-catalog.test.ts`(10)、`test/local-agent-flow-agents-access.test.ts`(17)、`flow-graph-*` / `agent-flow-builder` / `builder-expressiveness` / `local-agent-parity` 共 192 项通过；`guard:agent-parity` 三关全绿；`test:contract` 331。
 - 未覆盖：真实端口类型校验与最小输入编制（ContextManifest）随 BL-11/12；真实模型/供应商未发起计费请求。
+
+### 2026-11-24 BL-11 FlowGraph v2（params / 真实端口 / 子图循环）
+
+- 路由与校验是纯函数：`flow-graph.ts`（端口/params/循环体校验）、`flow-graph-router.ts`（轮次作用域）、`flow-graph-compiler.ts`（params 合并/body 重映射）无 I/O、无网络；新增错误码 `PORT_NOT_FOUND` / `PORT_TYPE_MISMATCH` / `CAPABILITY_PARAMS_UNSUPPORTED` / `CAPABILITY_PARAMS_INVALID` / `LOOP_BODY_INVALID` / `LOOP_BODY_NO_EXIT` 由既有 access 失败路径返回。
+- 协调器循环轮次只写 `CoordinationRun.children[].round` / `loopIterations` 到既有 JSON 账本（无数据库迁移）；每轮 taskId 含 `loop:<round>` 关联；未新增诊断事件（避免白名单漂移），既有 `agent.coordination.graph_dispatched/completed` 继续覆盖子任务开始/终态。
+- 兼容：`params` / `loop.body` 为可选加性字段，v1 图语义不变；`portPairCompatible` 下沉 shared 后画布/主进程同一实现（renderer 只重导出）。
+- 验证：`test/flow-graph-v2.test.ts`(5)、`test/agent-flow-coordinator.test.ts`(51，含三节点 body 跑满两轮/独立 taskId)、`flow-graph-*` / capability / builder / parity 共 302 项通过；`guard:agent-parity` 三关绿。
+- 未覆盖：`iteration/camera` 端口类型枚举、ContextManifest 最小输入编制、真实供应商参数（模型/比例/时长）端到端验收随 BL-12 及后续。
+- 竞争路径加固（同日）：`getDb()` busy 超时提高到 15s、`acquireProcessLock` 对 SQLITE_BUSY 有界重试 3 次；只减少满载瞬时锁失败的假阴性，不改变占用/所有权语义，无新增诊断事件。

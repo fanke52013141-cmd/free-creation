@@ -226,7 +226,18 @@ describe('BL-05 校验即准入：种类白名单与能力目录', () => {
         node('b', { kind: 'review', review: { criteria: 'c', rejectPolicy: 'rework', maxReworks: 1 } }),
         node('c', { participation: 'human', kind: 'human-task' })
       ],
-      [dataEdge('a', 'b'), dataEdge('b', 'c')],
+      [
+        {
+          from: { nodeId: 'a', portId: 'out-value' },
+          to: { nodeId: 'b', portId: 'in-text' },
+          kind: 'data'
+        },
+        {
+          from: { nodeId: 'b', portId: 'out-feedback' },
+          to: { nodeId: 'c', portId: 'in-text' },
+          kind: 'data'
+        }
+      ],
       'a',
       ['c']
     )

@@ -5,6 +5,7 @@
 import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from './Icon'
+import { claimEscapeForPopup } from './escape-owner'
 
 export type ModalShellSize = 's' | 'm' | 'l' | 'xl' | 'fullscreen'
 
@@ -90,7 +91,11 @@ export function ModalShell(props: ModalShellProps): React.JSX.Element {
         const openPopup = document.querySelector(
           '[role="listbox"][data-state="open"], [role="menu"][data-state="open"]'
         )
-        if (openPopup) return
+        if (openPopup) {
+          // 捕获阶段浮层仍在：登记本次 Esc 归浮层，页面级快捷键不再关外层。
+          claimEscapeForPopup()
+          return
+        }
         if (closeOnEscape) {
           event.preventDefault()
           onClose()

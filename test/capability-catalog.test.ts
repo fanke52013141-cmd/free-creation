@@ -303,14 +303,14 @@ describe('BL-10 FlowGraph 能力引用编译与准入', () => {
           completion: '完成'
         }
       ],
-      [{ from: { nodeId: 'a', portId: 'out' }, to: { nodeId: 'b', portId: 'in' } }]
+      [{ from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'b', portId: 'in-text' } }]
     )
     const compiled = compileFlowGraph(g)
     const capability = compiled.nodes.find((node) => node.id === 'shape:b')!
     expect(capability.type).toBe('image-gen')
     expect(capability.contractVersion).toBe(3)
     expect(compiled.edges).toContainEqual({
-      from: { nodeId: 'shape:a', portId: 'out' },
+      from: { nodeId: 'shape:a', portId: 'out-text' },
       to: { nodeId: 'shape:b', portId: 'in-text' }
     })
   })
@@ -319,7 +319,7 @@ describe('BL-10 FlowGraph 能力引用编译与准入', () => {
     const catalog = buildCapabilityCatalog([record()])
     const g = graph(
       [agentNode('a'), { ...compositeCapabilityNode('b'), participation: 'collaborative' }],
-      [{ from: { nodeId: 'a', portId: 'out' }, to: { nodeId: 'b', portId: 'in-source' } }]
+      [{ from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'b', portId: 'in-source' } }]
     )
     expect(validateFlowGraph(g, { catalog }).ok).toBe(true)
     const compiled = compileFlowGraph(g, { catalog })
@@ -332,7 +332,7 @@ describe('BL-10 FlowGraph 能力引用编译与准入', () => {
       contentHash: HASH
     })
     expect(compiled.edges).toContainEqual({
-      from: { nodeId: 'shape:a', portId: 'out' },
+      from: { nodeId: 'shape:a', portId: 'out-text' },
       to: { nodeId: 'shape:b', portId: 'in-source' }
     })
   })
@@ -351,7 +351,7 @@ describe('BL-10 FlowGraph 能力引用编译与准入', () => {
           completion: 'x'
         }
       ],
-      [{ from: { nodeId: 'a', portId: 'out' }, to: { nodeId: 'b', portId: 'in' } }]
+      [{ from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'b', portId: 'in-text' } }]
     )
     expect(errorCode(unknown)).toBe('CAPABILITY_UNKNOWN')
 
@@ -368,14 +368,14 @@ describe('BL-10 FlowGraph 能力引用编译与准入', () => {
           completion: 'x'
         }
       ],
-      [{ from: { nodeId: 'a', portId: 'out' }, to: { nodeId: 'b', portId: 'in' } }]
+      [{ from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'b', portId: 'in-text' } }]
     )
     expect(errorCode(unschedulable)).toBe('CAPABILITY_NOT_SCHEDULABLE')
 
     const catalog = buildCapabilityCatalog([record()])
     const belowFloor = graph(
       [agentNode('a'), compositeCapabilityNode('b')],
-      [{ from: { nodeId: 'a', portId: 'out' }, to: { nodeId: 'b', portId: 'in-source' } }]
+      [{ from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'b', portId: 'in-source' } }]
     )
     expect(errorCode(belowFloor, catalog)).toBe('CAPABILITY_PARTICIPATION_BELOW_FLOOR')
     const raised: FlowGraph = {
@@ -402,7 +402,7 @@ describe('BL-10 FlowGraph 能力引用编译与准入', () => {
           completion: 'done'
         }
       ],
-      [{ from: { nodeId: 'a', portId: 'out' }, to: { nodeId: 'b', portId: 'in-value' } }]
+      [{ from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'b', portId: 'in-value' } }]
     )
     const compiled = compileFlowGraph(legacy)
     expect(compiled.nodes.find((node) => node.id === 'shape:b')!.type).toBe('processor')

@@ -57,6 +57,8 @@ function fixture(
       reportOnly?: boolean
     }
     graph?: import('../src/shared/agent-flow/flow-graph').FlowGraph
+    /** BL-11：额外第三个 agent 节点（子图循环验收）。 */
+    thirdAgent?: boolean
   } = {}
 ) {
   const db = new Database(':memory:')
@@ -95,7 +97,10 @@ function fixture(
     relations: [] as object[]
   })
   const mainConfig = {
-    ...cfg('coordinator', ['first', 'second']),
+    ...cfg(
+      'coordinator',
+      options.graph ? options.graph.nodes.map((graphNode) => graphNode.nodeId) : ['first', 'second']
+    ),
     ...(options.parallel ? { maxParallelTasks: 2 } : {}),
     ...(options.graph ? { executionMode: 'graph', graph: options.graph } : {})
   }
@@ -144,6 +149,8 @@ function fixture(
     shape('process-second', 'processor', '', { operation: 'pass' }),
     shape('state', 'state-machine', '', stateConfig)
   ]
+  if (options.thirdAgent)
+    shapes.push(shape('third', 'agent', '第三段循环体', cfg('specialist', ['process-second'])))
   if (options.review) {
     mainConfig.allowedNodeIds.push('review')
     mainConfig.tools.push({ id: 'review.execute', version: '1' })
@@ -1934,6 +1941,73 @@ describe('O4-P3 graph mode execution（声明式图路由，mock 模型）', () 
     expect(run.loopIterations?.second).toBe(2)
   })
 
+  it('BL-11 子图循环：三节点 body 跑满上限后退出，每轮独立 taskId', async () => {
+    const subgraphLoop = FlowGraphSchema.parse({
+      schemaVersion: 1,
+      graphId: 'g',
+      name: '子图循环',
+      goal: '三节点循环体跑满两轮',
+      nodes: [
+        {
+          nodeId: 'first',
+          title: 'first',
+          participation: 'autonomous',
+          kind: 'agent',
+          goal: '处理并交付',
+          completion: '交付固定成果',
+          loop: {
+            body: ['first', 'second', 'third'],
+            maxIterations: 2,
+            exitCondition: [
+              {
+                kind: 'output-field',
+                stageKey: 'third',
+                path: 'text',
+                op: 'equals',
+                value: '__never__'
+              }
+            ]
+          }
+        },
+        {
+          nodeId: 'second',
+          title: 'second',
+          participation: 'autonomous',
+          kind: 'agent',
+          goal: '第二段',
+          completion: '交付第二段'
+        },
+        {
+          nodeId: 'third',
+          title: 'third',
+          participation: 'autonomous',
+          kind: 'agent',
+          goal: '第三段',
+          completion: '交付第三段'
+        }
+      ],
+      edges: [
+        { from: { nodeId: 'first', portId: 'out-text' }, to: { nodeId: 'second', portId: 'in-text' }, kind: 'data' },
+        { from: { nodeId: 'second', portId: 'out-text' }, to: { nodeId: 'third', portId: 'in-text' }, kind: 'data' },
+        { from: { nodeId: 'third', portId: 'out-text' }, to: { nodeId: 'first', portId: 'in-text' }, kind: 'data' }
+      ],
+      entry: 'first',
+      exits: ['third']
+    })
+    const f = fixture({ graph: subgraphLoop, thirdAgent: true })
+    const done = await f.host.run(input)
+    expect(done.task.state).toBe('completed')
+    expect(f.count().modelCalls).toBe(0)
+    const run = f.coordinator.store.latest('p', 'main')!
+    expect(run.loopIterations?.first).toBe(2)
+    const secondRound = run.children.filter((child) => child.nodeId === 'second')
+    const thirdRound = run.children.filter((child) => child.nodeId === 'third')
+    expect(secondRound.map((child) => child.round)).toEqual([1, 2])
+    expect(thirdRound.map((child) => child.round)).toEqual([1, 2])
+    // 每轮使用独立 taskId（不与上一轮历史复用）。
+    const taskIds = run.children.map((child) => child.taskId)
+    expect(new Set(taskIds).size).toBe(taskIds.length)
+  })
   it('BL-03：分支条件不成立导致全部出口被跳过 → FLOW_STALLED（不再报成等待人工）', async () => {
     const stallGraph = FlowGraphSchema.parse({
       schemaVersion: 1,

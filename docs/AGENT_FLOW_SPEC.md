@@ -3,7 +3,7 @@ title: Agent Flow 规范
 status: draft            # draft → review → frozen
 version: 0.2
 last-verified: 2026-11-24
-baseline-commit: 76a487b5 (main)
+baseline-commit: aea3987a (main)
 owner: Canvas Studio 规范组
 supersedes: |
   本文收敛以下文档的「现行条款」，原文降级为档案（见 §20）：
@@ -133,15 +133,15 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 流程中的**控制关系**（`controls / observes / review-gate / rework`）不是 FlowGraph 边。它们由编译器生成，保存在节点 config 的 `relations` 中（§6），不受本条影响。
 
-### 4.4 FlowGraph v2【目标】
+### 4.4 FlowGraph v2【部分现行】
 
-> BL-10 已完成第一行：`capabilityRef: { kind: 'node' | 'composite', id, version }` 与「能力目录由节点注册表 + 已发布节点流生成」已落地（`src/shared/agent-flow/capability-catalog.ts`，编译器不再持有能力白名单）。其余各行（`params`、显式端口、子图循环、执行者×决策者、角色）仍为目标，按 BL-11 起推进。
+> BL-10/BL-11 已完成前四行：`capabilityRef` + 能力目录生成（`capability-catalog.ts`）、`params`（`node-params.ts`，编译前校验并合并）、真实端口（`port-compatibility.ts` 下沉 shared，编译器不再重映射）、子图循环 `loop.body[]`（路由器轮次作用域 + 每轮独立 taskId）。`control` 边在 BL-05 已删除。剩余「执行者×决策者」「角色」两行仍为目标（BL-21/BL-15）。
 
 | 变化 | 原因 | 差距 |
 |---|---|---|
-| `capability` 改为 `capabilityRef: { kind: 'node' \| 'composite', id, version }`；能力目录由注册表和已发布节点流**生成** | 编译器现在硬编码了能力白名单，节点流无法编排 | A1 |
-| 新增 `params`，按目标节点的 config schema 校验 | 上帝 Agent 现在无法指定模型、比例、时长等参数 | G7 |
-| 数据边端口必须是目标节点 `resolvePorts` 中的真实端口；**禁止编译器重映射端口** | 现在多端口能力会被强行合并到一个端口 | G7 / G8 |
+| ~~`capability` 改为 `capabilityRef`；能力目录生成~~ ✅ BL-10 | 编译器现在硬编码了能力白名单，节点流无法编排 | A1 |
+| ~~新增 `params`，按目标节点 config 校验~~ ✅ BL-11 | 上帝 Agent 无法指定模型、比例、时长等参数 | G7 |
+| ~~数据边端口必须是真实端口；禁止编译器重映射~~ ✅ BL-11 | 多端口能力被强行合并到一个端口 | G7 / G8 |
 | 删除 `control` 边（已决策，见 AF-4.3a） | 现在校验时计入、执行和编译时丢弃 | G4 |
 | `loop` 改为子图载体 `loop: { body: nodeId[], maxIterations, exitCondition }` | 现在多节点循环无法执行 | G3 |
 | 参与形态拆成两维：`executor: human \| ai \| mixed` × `decider: none \| human \| ai-review` | 现在「人微调 capability 结果再确认」必须多包一层 Agent | A4 |
@@ -241,7 +241,7 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 **AF-8.4a【现行】** 循环必须有界：`loop.maxIterations` 加上全局 `maxLoopIterations`；每一轮使用独立 taskId（后缀 `loop:<n>`）；达到上限时强制落定，不允许静默无限循环。
 
-**AF-8.4b【目标·G3】子图循环**：循环体是一组节点。路由器以「轮次作用域」计算 body 内的就绪和落定状态；一轮结束（body 内出口节点交付）后评估 `exitCondition`，不满足且未达上限则开始下一轮。现行的「单载体」语义只支持一个节点自重复。**【现行 · BL-07】** v2 落地前，校验已拒绝多节点环和自回边（`LOOP_BODY_UNSUPPORTED`）。
+**AF-8.4b【现行 · BL-11】子图循环**：循环体是一组节点（`loop.body[]`）。路由器以「轮次作用域」计算 body 内的就绪和落定状态——同体内边按**本轮交付**就绪（循环载体本身要满足退出条件才 settled）；一轮结束（body 内出口节点交付）后评估 `exitCondition`，不满足且未达上限则开下一轮（`run.loopIterations[carrier]` 递增，子任务带 `round` 与独立 taskId）。v1 单节点循环语义不变；**v1 图**（无 body）的多节点环/自回边仍报 `LOOP_BODY_UNSUPPORTED`（只读兼容），v2 图用 body 显式声明后才允许环。
 
 ### 8.5 完成、停滞与失败
 

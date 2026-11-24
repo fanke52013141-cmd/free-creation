@@ -92,7 +92,18 @@ describe('O4-P2 编译器', () => {
 
   it('capability 节点编译为 processor', () => {
     const compiled = compileFlowGraph(
-      graph([node('a', { kind: 'capability', capability: 'text-pass@1' }), node('b')], [dataEdge('a', 'b')], 'a', ['b'])
+      graph(
+        [node('a', { kind: 'capability', capability: 'text-pass@1' }), node('b')],
+        [
+          {
+            from: { nodeId: 'a', portId: 'out-value' },
+            to: { nodeId: 'b', portId: 'in-text' },
+            kind: 'data'
+          }
+        ],
+        'a',
+        ['b']
+      )
     )
     const a = compiled.nodes.find((n) => n.id === canvasNodeId('a'))!
     expect(a.type).toBe('processor')

@@ -30,21 +30,35 @@ export function acquireProcessLock(resource: string): ProcessLock {
   const read = (): Owner | undefined =>
     db.prepare('SELECT token,pid FROM process_locks WHERE resource=?').get(resource) as
       Owner | undefined
-  db.transaction(() => {
-    const owner = read()
-    if (owner) {
-      if (!exited(owner.pid)) throw new GraphWriteInProgressError()
-      const changed = db
-        .prepare('UPDATE process_locks SET token=?,pid=? WHERE resource=? AND token=? AND pid=?')
-        .run(token, process.pid, resource, owner.token, owner.pid)
-      if (changed.changes !== 1) throw new GraphWriteInProgressError()
-    } else
-      db.prepare('INSERT INTO process_locks (resource,token,pid) VALUES (?,?,?)').run(
-        resource,
-        token,
-        process.pid
-      )
-  }).immediate()
+  const claim = (): void => {
+    db.transaction(() => {
+      const owner = read()
+      if (owner) {
+        if (!exited(owner.pid)) throw new GraphWriteInProgressError()
+        const changed = db
+          .prepare('UPDATE process_locks SET token=?,pid=? WHERE resource=? AND token=? AND pid=?')
+          .run(token, process.pid, resource, owner.token, owner.pid)
+        if (changed.changes !== 1) throw new GraphWriteInProgressError()
+      } else
+        db.prepare('INSERT INTO process_locks (resource,token,pid) VALUES (?,?,?)').run(
+          resource,
+          token,
+          process.pid
+        )
+    }).immediate()
+  }
+  // 满载/多进程恢复时 WAL 写锁可能瞬时被占：SQLITE_BUSY 是等待信号，不是业务终态。
+  // 有界重试 3 次（50/100ms）后仍抢不到才如实抛出，避免把「稍后再试」写成失败。
+  for (let attempt = 0; ; attempt++) {
+    try {
+      claim()
+      break
+    } catch (error) {
+      const busy = error instanceof Error && /SQLITE_BUSY|database is locked/i.test(error.message)
+      if (!busy || attempt >= 2) throw error
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50 * (attempt + 1))
+    }
+  }
   const assertOwned = (): void => {
     const owner = read()
     if (!owner || owner.token !== token || owner.pid !== process.pid)

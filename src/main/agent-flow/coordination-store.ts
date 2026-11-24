@@ -50,6 +50,8 @@ export interface CoordinationRun {
     inputs: FlowAgentReply['refs']
     state: string
     outputs: FlowAgentReply['refs']
+    /** BL-11：v2 子图循环体的轮次（缺省=1；非循环节点不写）。 */
+    round?: number
     contextManifest?: import('../../shared/agent-flow/stage-contracts').ContextManifest
     executionEnvelope?: import('../../shared/agent-flow/execution-envelope').ExecutionEnvelope
   }>

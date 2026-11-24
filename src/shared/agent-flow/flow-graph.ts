@@ -9,6 +9,12 @@ import {
   type CapabilityDescriptor,
   type CapabilityRef
 } from './capability-catalog'
+import { GENERATED_NODE_CONTRACTS } from '../agent-access/generated/node-contracts.generated'
+import { portPairCompatible } from '../port-compatibility'
+import { validateNodeParams } from './node-params'
+
+/** 节点契约快照（生成文件只依赖类型，避免 flow-graph ↔ node-contracts 运行时环）。 */
+const CONTRACT_BY_TYPE = new Map(GENERATED_NODE_CONTRACTS.map((record) => [record.typeId, record]))
 
 /**
  * O4-P1 FlowGraph：可序列化流程解释器 IR（纯共享协议，main 不导入 React）。
@@ -93,9 +99,16 @@ export const FlowNodeSchema = z
       })
       .strict()
       .optional(),
+    /**
+     * BL-11 / G7：目标节点的公开配置子集（模型/比例/张数等）。按载体类型的 config
+     * 公开字段校验，编译时合并进固定配置；不接收正文或密钥。
+     */
+    params: z.record(z.string().max(60), z.unknown()).optional(),
     /** 循环载体：有界循环声明。任何环必须包含一个声明 loop 的载体节点。 */
     loop: z
       .object({
+        /** BL-11 / G3：v2 子图循环体（节点 ID）；缺省 = v1 单节点循环。 */
+        body: z.array(id).min(1).max(32).optional(),
         maxIterations: z.number().int().min(1).max(64),
         exitCondition: z.array(StageConditionSchema).min(1).max(16)
       })
@@ -131,6 +144,8 @@ export const FlowNodeSchema = z
       })
     if (node.kind !== 'capability' && node.capabilityRef)
       context.addIssue({ code: 'custom', message: 'only capability nodes may declare capabilityRef' })
+    if (node.kind !== 'capability' && node.params)
+      context.addIssue({ code: 'custom', message: 'only capability nodes may declare params' })
     if (node.kind === 'review' && !node.review)
       context.addIssue({ code: 'custom', message: 'review node requires review config' })
   })
@@ -140,6 +155,41 @@ export type FlowNode = z.infer<typeof FlowNodeSchema>
 export function flowNodeCapabilityRef(node: FlowNode): CapabilityRef | null {
   if (node.capabilityRef) return node.capabilityRef
   return node.capability ? parseLegacyCapability(node.capability) : null
+}
+
+/** BL-11 子图循环体：载体、body 集合与 body 出口（有出边离开 body 或本身是图出口）。 */
+export interface LoopBodyInfo {
+  carrierId: string
+  body: ReadonlySet<string>
+  exits: ReadonlySet<string>
+}
+
+export function loopBodyInfo(graph: FlowGraph): Map<string, LoopBodyInfo> {
+  const result = new Map<string, LoopBodyInfo>()
+  for (const node of graph.nodes) {
+    const bodyIds = node.loop?.body
+    if (!bodyIds?.length) continue
+    const body = new Set(bodyIds)
+    const exits = new Set(
+      bodyIds.filter(
+        (nodeId) =>
+          graph.exits.includes(nodeId) ||
+          graph.edges.some((edge) => edge.from.nodeId === nodeId && !body.has(edge.to.nodeId))
+      )
+    )
+    result.set(node.nodeId, { carrierId: node.nodeId, body, exits })
+  }
+  return result
+}
+
+/** 节点所属的子图循环体（v2）；v1 单节点循环返回 undefined。 */
+export function loopBodyCarrierOf(
+  graph: FlowGraph,
+  nodeId: string
+): LoopBodyInfo | undefined {
+  for (const info of loopBodyInfo(graph).values())
+    if (info.body.has(nodeId)) return info
+  return undefined
 }
 
 export const FlowEdgeSchema = z
@@ -247,10 +297,16 @@ export type FlowGraphErrorCode =
   | 'LOOP_BUDGET_EXCEEDED'
   | 'ENTRY_IS_EXIT'
   | 'LOOP_BODY_UNSUPPORTED'
+  | 'LOOP_BODY_INVALID'
+  | 'LOOP_BODY_NO_EXIT'
   | 'NODE_KIND_UNSUPPORTED'
   | 'CAPABILITY_UNKNOWN'
   | 'CAPABILITY_NOT_SCHEDULABLE'
   | 'CAPABILITY_PARTICIPATION_BELOW_FLOOR'
+  | 'CAPABILITY_PARAMS_UNSUPPORTED'
+  | 'CAPABILITY_PARAMS_INVALID'
+  | 'PORT_NOT_FOUND'
+  | 'PORT_TYPE_MISMATCH'
   | 'CONDITION_NOT_EXCLUSIVE'
   | 'OTHERWISE_INVALID'
 export interface FlowGraphError {
@@ -319,6 +375,50 @@ function reachable(adj: Map<string, string[]>, start: string): Set<string> {
   return seen
 }
 
+interface FlowPort {
+  portId: string
+  type: string
+  schemaRef?: { id: string; version: number }
+}
+
+function parsePortSchema(raw: string | undefined): { id: string; version: number } | undefined {
+  if (!raw) return undefined
+  const at = raw.lastIndexOf('@')
+  if (at <= 0) return undefined
+  const version = Number(raw.slice(at + 1))
+  if (!Number.isInteger(version) || version < 1) return undefined
+  return { id: raw.slice(0, at), version }
+}
+
+/**
+ * BL-11 / G8：节点真实端口（能力节点取目录描述符，其余取节点契约快照）。
+ * 端口不存在时返回 null（未知能力已另行报错）。
+ */
+function flowNodePorts(
+  node: FlowNode,
+  catalog: readonly CapabilityDescriptor[]
+): { inputs: FlowPort[]; outputs: FlowPort[] } | null {
+  if (node.kind === 'capability') {
+    const descriptor = findCapability(catalog, flowNodeCapabilityRef(node))
+    if (!descriptor) return null
+    const map = (port: CapabilityDescriptor['inputs'][number]): FlowPort => ({
+      portId: port.portId,
+      type: port.type,
+      ...(port.schemaRef ? { schemaRef: port.schemaRef } : {})
+    })
+    return { inputs: descriptor.inputs.map(map), outputs: descriptor.outputs.map(map) }
+  }
+  const typeId = node.kind === 'agent' ? 'agent' : node.kind === 'human-task' ? 'human-task' : 'ai-review'
+  const record = CONTRACT_BY_TYPE.get(typeId)
+  if (!record) return null
+  const map = (port: (typeof record.ports.in)[number]): FlowPort => ({
+    portId: port.id,
+    type: port.type,
+    ...(parsePortSchema(port.schema) ? { schemaRef: parsePortSchema(port.schema) } : {})
+  })
+  return { inputs: record.ports.in.map(map), outputs: record.ports.out.map(map) }
+}
+
 /**
  * 静态校验入口（纯函数，GUI/CLI/MCP 与宿主共用口径）。
  * schema 层（FlowGraphSchema）已保证引用/参与/结构合法；本层补拓扑/预算：
@@ -379,6 +479,64 @@ export function validateFlowGraph(
         nodeId: node.nodeId,
         message: `Capability ${descriptor.capabilityRef.id}@${descriptor.capabilityRef.version} requires at least ${descriptor.participation} participation (node declares ${node.participation})`
       })
+    // BL-11 / G7：params 按载体类型的公开配置子集校验；节点流 params 暂不支持（不静默忽略）。
+    if (node.params) {
+      if (descriptor.capabilityRef.kind === 'composite') {
+        errors.push({
+          code: 'CAPABILITY_PARAMS_UNSUPPORTED',
+          nodeId: node.nodeId,
+          message: `Composite capability ${descriptor.capabilityRef.id}@${descriptor.capabilityRef.version} does not accept params yet (use public inputs)`
+        })
+      } else {
+        const carrierType = descriptor.carrier?.type ?? descriptor.capabilityRef.id
+        const params = validateNodeParams(carrierType, node.params)
+        if (!params.ok)
+          errors.push({
+            code: 'CAPABILITY_PARAMS_INVALID',
+            nodeId: node.nodeId,
+            message: `Capability ${descriptor.capabilityRef.id}@${descriptor.capabilityRef.version} params invalid: ${params.message}`
+          })
+      }
+    }
+  }
+
+  // BL-11 / G8：数据边必须接在两端节点的真实端口上，且类型兼容（画布同一判定）。
+  for (const edge of graph.edges) {
+    const source = nodeById.get(edge.from.nodeId)
+    const target = nodeById.get(edge.to.nodeId)
+    if (!source || !target) continue
+    const sourcePorts = flowNodePorts(source, catalog)
+    const targetPorts = flowNodePorts(target, catalog)
+    if (!sourcePorts || !targetPorts) continue
+    const out = sourcePorts.outputs.find((port) => port.portId === edge.from.portId)
+    const input = targetPorts.inputs.find((port) => port.portId === edge.to.portId)
+    if (!out) {
+      errors.push({
+        code: 'PORT_NOT_FOUND',
+        nodeId: source.nodeId,
+        message: `Edge ${edge.from.nodeId}→${edge.to.nodeId} uses unknown output port ${edge.from.portId} (available: ${sourcePorts.outputs.map((port) => port.portId).join(', ')})`
+      })
+      continue
+    }
+    if (!input) {
+      errors.push({
+        code: 'PORT_NOT_FOUND',
+        nodeId: target.nodeId,
+        message: `Edge ${edge.from.nodeId}→${edge.to.nodeId} uses unknown input port ${edge.to.portId} (available: ${targetPorts.inputs.map((port) => port.portId).join(', ')})`
+      })
+      continue
+    }
+    if (
+      !portPairCompatible(
+        { type: out.type as never, schema: out.schemaRef as never },
+        { type: input.type as never, schema: input.schemaRef as never }
+      )
+    )
+      errors.push({
+        code: 'PORT_TYPE_MISMATCH',
+        nodeId: source.nodeId,
+        message: `Edge ${edge.from.nodeId}.${edge.from.portId} (${out.type}) cannot feed ${edge.to.nodeId}.${edge.to.portId} (${input.type})`
+      })
   }
 
   // BL-04：同源条件出边必须两两互斥；otherwise 至多一条且须有条件兄弟边。
@@ -404,27 +562,92 @@ export function validateFlowGraph(
       }
   }
 
-  // 环检测：每个含环的强连通分量必须有一个有界循环载体。
+  // 循环：v2 子图循环体（loop.body）以轮次作用域执行；v1 单节点循环不画回边。
+  const bodies = loopBodyInfo(graph)
+  const v2Graph = bodies.size > 0
+  for (const [carrierId, info] of bodies) {
+    const carrier = nodeById.get(carrierId)
+    const raw = carrier?.loop?.body ?? []
+    if (!carrier || !info.body.has(carrierId))
+      errors.push({
+        code: 'LOOP_BODY_INVALID',
+        nodeId: carrierId,
+        message: `Loop body must include its carrier ${carrierId}`
+      })
+    if (new Set(raw).size !== raw.length)
+      errors.push({
+        code: 'LOOP_BODY_INVALID',
+        nodeId: carrierId,
+        message: `Loop body of ${carrierId} declares duplicate nodes`
+      })
+    if (info.exits.size === 0)
+      errors.push({
+        code: 'LOOP_BODY_NO_EXIT',
+        nodeId: carrierId,
+        message: `Loop body of ${carrierId} has no exit (a body node must lead outside the body or be a graph exit)`
+      })
+    for (const bodyId of info.body) {
+      const bodyNode = nodeById.get(bodyId)
+      if (!bodyNode) {
+        errors.push({
+          code: 'LOOP_BODY_INVALID',
+          nodeId: carrierId,
+          message: `Loop body of ${carrierId} references unknown node ${bodyId}`
+        })
+        continue
+      }
+      if (bodyId !== carrierId && bodyNode.loop?.body?.length)
+        errors.push({
+          code: 'LOOP_BODY_INVALID',
+          nodeId: carrierId,
+          message: `Nested loop ${bodyId} is not supported (body nodes must not declare their own loop body)`
+        })
+    }
+  }
+  const bodyOwners = new Map<string, string>()
+  for (const [carrierId, info] of bodies)
+    for (const bodyId of info.body) {
+      const owner = bodyOwners.get(bodyId)
+      if (owner && owner !== carrierId)
+        errors.push({
+          code: 'LOOP_BODY_INVALID',
+          nodeId: bodyId,
+          message: `Node ${bodyId} belongs to multiple loop bodies (${owner}, ${carrierId})`
+        })
+      bodyOwners.set(bodyId, carrierId)
+    }
+
   for (const component of stronglyConnectedComponents(adj)) {
     const hasCycle =
       component.length > 1 ||
       (adj.get(component[0]) ?? []).includes(component[0])
     if (!hasCycle) continue
-    const carrier = component.find((nodeId) => nodeById.get(nodeId)?.loop)
-    if (!carrier) {
+    const carriers = [...bodies.values()].filter((info) =>
+      component.every((nodeId) => info.body.has(nodeId))
+    )
+    if (carriers.length === 1) continue
+    if (!v2Graph) {
+      const carrier = component.find((nodeId) => nodeById.get(nodeId)?.loop)
+      if (!carrier) {
+        errors.push({
+          code: 'CYCLE_WITHOUT_LOOP',
+          nodeId: component[0],
+          message: `Cycle [${component.join(', ')}] must contain a node declaring a bounded loop`
+        })
+        continue
+      }
+      // v1 语义（无 body）：单节点自重复才可执行；多节点环/自回边显式拒绝。
       errors.push({
-        code: 'CYCLE_WITHOUT_LOOP',
-        nodeId: component[0],
-        message: `Cycle [${component.join(', ')}] must contain a node declaring a bounded loop`
+        code: 'LOOP_BODY_UNSUPPORTED',
+        nodeId: carrier,
+        message: `Cycle [${component.join(', ')}] is not executable in v1: declare loop.body to opt into subgraph loops`
       })
       continue
     }
-    // 路由器的 settled 语义下，环内其他节点要等载体 settled（即循环结束）才就绪，
-    // 回边又让载体等环内节点——多节点环与自回边都无法执行，故静态拒绝。
     errors.push({
-      code: 'LOOP_BODY_UNSUPPORTED',
-      nodeId: carrier,
-      message: `Cycle [${component.join(', ')}] is not executable: declare the loop on a single node via node.loop without back edges (multi-node loop bodies arrive with FlowGraph v2)`
+      code: 'LOOP_BODY_INVALID',
+      nodeId: component[0],
+      message: `Cycle [${component.join(', ')}] must be covered by exactly one loop.body (found ${carriers.length})`
     })
   }
 

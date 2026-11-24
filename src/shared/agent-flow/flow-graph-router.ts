@@ -1,4 +1,4 @@
-import type { FlowGraph, FlowEdge, FlowNode } from './flow-graph'
+import { loopBodyInfo, type FlowGraph, type FlowEdge, type FlowNode } from './flow-graph'
 import {
   evaluateStageEntry,
   type StageCondition,
@@ -105,23 +105,35 @@ export function flowRouteState(
 ): FlowRouteState {
   const settled = settledNodes(graph, facts, delivered, loopIterations)
   const skipped = new Set<string>()
+  const bodies = loopBodyInfo(graph)
+  const carrierOf = new Map<string, string>()
+  for (const [carrierId, info] of bodies)
+    for (const nodeId of info.body) carrierOf.set(nodeId, carrierId)
   const resolved = (nodeId: string): boolean => settled.has(nodeId) || skipped.has(nodeId)
   const edgeState = (edge: FlowEdge): EdgeState => {
     const from = edge.from.nodeId
     if (skipped.has(from)) return 'dead'
-    if (!settled.has(from)) return 'pending'
+    // BL-11：同一循环体内的边按「本轮已交付」判定——循环载体要等退出条件才 settled，
+    // 但 body 内的下游必须在本轮立即就绪，否则每轮都会停滞。
+    const fromCarrier = carrierOf.get(from)
+    const insideBody =
+      fromCarrier !== undefined && fromCarrier === carrierOf.get(edge.to.nodeId)
+    if (insideBody && !delivered.has(from)) return 'pending'
+    if (!insideBody && !settled.has(from)) return 'pending'
+    const conditionResolved = (nodeId: string): boolean =>
+      resolved(nodeId) || (insideBody && delivered.has(nodeId))
     if (edge.otherwise) {
       let pending = false
       for (const sibling of graph.edges) {
         if (sibling === edge || sibling.from.nodeId !== from || !hasCondition(sibling)) continue
         if (conditionsSatisfied(sibling.condition!, facts)) return 'dead'
-        if (!conditionsResolvable(sibling.condition!, resolved)) pending = true
+        if (!conditionsResolvable(sibling.condition!, conditionResolved)) pending = true
       }
       return pending ? 'pending' : 'satisfied'
     }
     if (!hasCondition(edge)) return 'satisfied'
     if (conditionsSatisfied(edge.condition!, facts)) return 'satisfied'
-    return conditionsResolvable(edge.condition!, resolved) ? 'dead' : 'pending'
+    return conditionsResolvable(edge.condition!, conditionResolved) ? 'dead' : 'pending'
   }
   let changed = true
   for (let guard = 0; changed && guard <= graph.nodes.length; guard++) {
@@ -151,10 +163,29 @@ export function nextReadyNodes(
   loopIterations: Readonly<Record<string, number>> = {}
 ): FlowRouteResult {
   const { settled, skipped, edgeState } = flowRouteState(graph, facts, delivered, loopIterations)
+  const bodies = loopBodyInfo(graph)
   const ready: string[] = []
   const blocked: Array<{ nodeId: string; reason: string }> = []
   for (const node of graph.nodes) {
     if (settled.has(node.nodeId) || skipped.has(node.nodeId)) continue
+    const body = bodies.get(node.nodeId)
+    if (body) {
+      // BL-11 / AF-8.4b 轮次作用域：循环载体的就绪只由**体外入边**决定；回边属于上一轮，
+      // 新轮开始时忽略。每轮载体未交付即就绪（round ≥ 1）。
+      const external = graph.edges.filter(
+        (edge) => edge.to.nodeId === node.nodeId && !body.body.has(edge.from.nodeId)
+      )
+      const externalReady = external.every((edge) => edgeState(edge) === 'satisfied')
+      if (externalReady && !delivered.has(node.nodeId)) ready.push(node.nodeId)
+      else if (!externalReady)
+        blocked.push({
+          nodeId: node.nodeId,
+          reason: external.some((edge) => edgeState(edge) === 'pending')
+            ? 'INCOMING_EDGES_PENDING'
+            : 'INCOMING_EDGES_UNSATISFIED'
+        })
+      continue
+    }
     const incoming = graph.edges.filter((edge) => edge.to.nodeId === node.nodeId)
     if (incoming.length === 0) {
       if (node.nodeId === graph.entry) {
@@ -227,4 +258,9 @@ export function loopNeedsAnotherIteration(
   return (
     !conditionsSatisfied(node.loop.exitCondition, facts) && iterations < node.loop.maxIterations
   )
+}
+
+/** 循环退出条件是否成立（宿主在一轮 body 出口交付后据此决定是否再开一轮）。 */
+export function loopExitConditionSatisfied(node: FlowNode, facts: StageEntryFacts): boolean {
+  return !node.loop || conditionsSatisfied(node.loop.exitCondition, facts)
 }

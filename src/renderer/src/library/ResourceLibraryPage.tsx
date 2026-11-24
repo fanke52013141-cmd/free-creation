@@ -7,6 +7,7 @@ import type { LibraryResourceDetail, LibraryResourceSummary, CreateLibraryResour
 import type { LibraryCategory } from '@shared/library/blueprint'
 import { Icon } from '../components/Icon'
 import { AppSelect } from '../components/AppSelect'
+import { consumeEscapeClaim } from '../components/escape-owner'
 import { mediaUrl } from '../nodes/registry'
 import { useConfirmStore } from '../stores/confirm'
 import { useToastStore } from '../stores/toast'
@@ -325,6 +326,10 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
         event.preventDefault()
         searchInputRef.current?.focus()
       } else if (event.key === 'Escape') {
+        // 内层浮层（AppSelect 下拉、菜单）打开时，Esc 属于它：先让它关闭，
+        // 不能在这里把编辑器/页面一起关掉（与 ModalShell 的优先级一致）。
+        // Radix 会在 document 层先卸载浮层，所以这里用捕获阶段留下的归属标记判断。
+        if (consumeEscapeClaim()) return
         if (categoryEditor) setCategoryEditor(null)
         else if (formOpen) setFormOpen(false)
         else if (selectedId) setSelectedId(null)

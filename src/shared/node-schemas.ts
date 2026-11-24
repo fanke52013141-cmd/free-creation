@@ -333,12 +333,7 @@ export function validateNodeSchema(schema: PortSchemaRef, value: unknown): Schem
 /**
  * 连线阶段的 Schema 兼容规则：通用 JSON 可与具体 Schema 相连，但会在运行时按
  * 目标 Schema 验证；具体业务 Schema 必须使用完全相同的 ID 与版本。
+ *
+ * BL-11：实现下沉到 `port-compatibility`（画布/节点流共用），这里保持原导出名。
  */
-export function nodeSchemasCompatible(
-  source: PortSchemaRef | undefined,
-  target: PortSchemaRef | undefined
-): boolean {
-  if (!source || !target) return false
-  if (source.id === 'json.any' || target.id === 'json.any') return true
-  return source.id === target.id && source.version === target.version
-}
+export { nodeSchemasCompatible } from './port-compatibility'

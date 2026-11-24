@@ -125,10 +125,17 @@ function compileNode(
           message: `Capability ${flowNodeCapabilityRef(node)?.id ?? '(missing)'} has no compile carrier`
         }
       ])
+    // BL-11 / G7：params 合并进载体固定配置（校验已在 validateFlowGraph 完成）。
+    const carrierConfig = node.params
+      ? JSON.stringify({
+          ...(JSON.parse(descriptor.carrier.config) as Record<string, unknown>),
+          ...node.params
+        })
+      : descriptor.carrier.config
     return {
       ...base,
       type: descriptor.carrier.type,
-      config: descriptor.carrier.config,
+      config: carrierConfig,
       contractVersion: descriptor.carrier.contractVersion
     }
   }
@@ -206,6 +213,8 @@ function toCanvasGraph(graph: FlowGraph): FlowGraph {
         ? {
             loop: {
               ...node.loop,
+              // BL-11：子图循环体同样重映射为画布 shape id。
+              ...(node.loop.body ? { body: node.loop.body.map(canvasNodeId) } : {}),
               exitCondition: node.loop.exitCondition.map((condition) => {
                 if ('stageKey' in condition)
                   return { ...condition, stageKey: canvasNodeId(condition.stageKey) }
@@ -303,31 +312,12 @@ export function compileFlowGraph(
     }
   ]
 
-  // ②：capability 节点的数据边端口重映射到载体真实端口；节点流能力保留公开端口
-  // （in-*/out-*，由清单派生），不做编译器重映射。
-  const capabilityPorts = new Map(
-    graph.nodes
-      .filter((node) => node.kind === 'capability')
-      .map((node) => {
-        const carrier = findCapability(catalog, flowNodeCapabilityRef(node))?.carrier
-        return [
-          canvasNodeId(node.nodeId),
-          { inputPort: carrier?.inputPort ?? '', outputPort: carrier?.outputPort ?? '' }
-        ]
-      })
-  )
-  const edges: CompiledEdge[] = mapped.edges
-    .map((edge) => {
-      const fromCap = capabilityPorts.get(edge.from.nodeId)
-      const toCap = capabilityPorts.get(edge.to.nodeId)
-      return {
-        from: {
-          nodeId: edge.from.nodeId,
-          portId: fromCap?.outputPort || edge.from.portId
-        },
-        to: { nodeId: edge.to.nodeId, portId: toCap?.inputPort || edge.to.portId }
-      }
-    })
+  // BL-11 / G8：编译器不再重映射端口——数据边必须直接使用目标节点的真实端口
+  // （validateFlowGraph 已按契约/能力目录校验存在性与类型兼容）。
+  const edges: CompiledEdge[] = mapped.edges.map((edge) => ({
+    from: { nodeId: edge.from.nodeId, portId: edge.from.portId },
+    to: { nodeId: edge.to.nodeId, portId: edge.to.portId }
+  }))
 
   // P5：编译产物直接带布局坐标（与建图预览同构，落画布无需再排版）。复用共享 layoutGraph
   // （lanes）——与 GUI 智能整理/graph.layout/builder 同一算法（三入口 parity）。尺寸与

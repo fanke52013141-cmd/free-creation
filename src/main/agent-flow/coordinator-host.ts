@@ -33,10 +33,12 @@ import {
   nextReadyNodes,
   isFlowComplete,
   loopNeedsAnotherIteration,
-  deliveredGraphNodes
+  loopExitConditionSatisfied
 } from '../../shared/agent-flow/flow-graph-router'
 import {
   isDispatchableFlowNodeKind,
+  loopBodyInfo,
+  type LoopBodyInfo,
   type FlowNode,
   type FlowGraph
 } from '../../shared/agent-flow/flow-graph'
@@ -328,7 +330,9 @@ export class FlowCoordinatorHost {
       if (child.props.nodeType !== 'agent' || cfg.role !== 'specialist' || id === input.nodeId)
         throw new AgentRuntimeError('FLOW_COORDINATOR_SCOPE_INVALID', 'scope')
       for (const target of cfg.allowedNodeIds) {
-        if (reservedControls.has(target))
+        // BL-11：graph 模式下控制关系由 FlowGraph 拓扑决定；agent 的 legacy
+        // allowedNodeIds 只作兼容声明，不再与图节点争用控制权。
+        if (!graphMode && reservedControls.has(target))
           throw new AgentRuntimeError('FLOW_CONTROL_OCCUPIED', 'scope')
         controls.add(target)
       }
@@ -764,28 +768,39 @@ export class FlowCoordinatorHost {
     const assignments = admitAssignments(run, decision, candidates)
     const waves = assignmentWaves(assignments, candidates, file)
     const firstWaveIds = new Set(waves[0]?.map((assignment) => assignment.nodeId) ?? [])
-    const children = assignments.map((assignment) => ({
-      nodeId: assignment.nodeId,
-      taskId: hash([
-        run.taskId,
-        assignment.nodeId,
-        ...(run.reworkRound ? [run.reworkRound] : []),
-        ...(run.loopIterations?.[assignment.nodeId]
-          ? [`loop:${run.loopIterations[assignment.nodeId]}`]
-          : [])
-      ]),
-      goal: assignment.goal,
-      completion: assignment.completion,
-      inputs: assignment.inputs,
-      state: firstWaveIds.has(assignment.nodeId) ? 'ready' : 'queued',
-      outputs: [] as FlowAgentReply['refs'],
-      ...(contextManifests?.get(assignment.nodeId)
-        ? { contextManifest: contextManifests.get(assignment.nodeId) }
-        : {}),
-      ...(envelopes?.get(assignment.nodeId)
-        ? { executionEnvelope: envelopes.get(assignment.nodeId) }
-        : {})
-    }))
+    // BL-11：v2 循环体子任务按载体轮次取独立 taskId（与上一轮历史区分）。
+    const bodies = run.config.graph ? loopBodyInfo(run.config.graph) : new Map()
+    const roundOf = (nodeId: string): number | undefined => {
+      for (const info of bodies.values())
+        if (info.body.has(nodeId)) return run.loopIterations?.[info.carrierId] ?? 1
+      return undefined
+    }
+    const children = assignments.map((assignment) => {
+      const round = roundOf(assignment.nodeId)
+      return {
+        nodeId: assignment.nodeId,
+        taskId: hash([
+          run.taskId,
+          assignment.nodeId,
+          ...(run.reworkRound ? [run.reworkRound] : []),
+          ...((round ?? run.loopIterations?.[assignment.nodeId])
+            ? [`loop:${round ?? run.loopIterations?.[assignment.nodeId]}`]
+            : [])
+        ]),
+        goal: assignment.goal,
+        completion: assignment.completion,
+        inputs: assignment.inputs,
+        state: firstWaveIds.has(assignment.nodeId) ? 'ready' : 'queued',
+        outputs: [] as FlowAgentReply['refs'],
+        ...(typeof round === 'number' ? { round } : {}),
+        ...(contextManifests?.get(assignment.nodeId)
+          ? { contextManifest: contextManifests.get(assignment.nodeId) }
+          : {}),
+        ...(envelopes?.get(assignment.nodeId)
+          ? { executionEnvelope: envelopes.get(assignment.nodeId) }
+          : {})
+      }
+    })
     run.children.push(...children)
     run.controlSteps = (run.controlSteps ?? 0) + children.length - 1
     run.decisionPending = false
@@ -1021,13 +1036,19 @@ export class FlowCoordinatorHost {
     signal: AbortSignal
   ): Promise<boolean> {
     const graph = run.config.graph!
-    const facts = this.graphFacts(run)
+    const bodies = loopBodyInfo(graph)
     const loopIterations = { ...(run.loopIterations ?? {}) }
-    // BL-06：completed 即交付（可选输出未产出也算），不再要求 outputs 非空。
-    const delivered = deliveredGraphNodes(run.children)
+    // BL-11 / AF-8.4b：子图循环体按「当前轮次」计算交付；其他节点按全局交付。
+    let delivered = this.roundScopedDelivered(run, bodies, loopIterations)
     // ⑥审核门禁：通过的审核节点视为已交付（下游受控节点据此放行）。
     for (const review of run.reviews ?? []) {
       if (review.state === 'passed') delivered.add(review.nodeId)
+    }
+    let facts = this.graphFacts(run, { bodies, loopIterations })
+    // 一轮 body 出口全部交付后评估退出条件；不满足且未达上限则开下一轮。
+    if (this.advanceLoopRounds(run, graph, facts, delivered, bodies, loopIterations)) {
+      delivered = this.roundScopedDelivered(run, bodies, loopIterations)
+      facts = this.graphFacts(run, { bodies, loopIterations })
     }
     if (isFlowComplete(graph, facts, delivered, loopIterations)) {
       // 出口可能是审核节点（交付物=被审核通过的固定版本）或普通子节点。
@@ -1067,12 +1088,17 @@ export class FlowCoordinatorHost {
       throw new AgentRuntimeError('FLOW_BRANCH_AMBIGUOUS', 'graph-route')
     }
     const dispatched = new Set(run.children.map((child) => child.nodeId))
+    const bodyOf = new Map<string, LoopBodyInfo>()
+    for (const info of bodies.values()) for (const id of info.body) bodyOf.set(id, info)
+    // 轮次入口：v2 循环体节点在「当前轮次未交付」时允许重新分派（上一轮子任务不算本轮交付）。
+    const roundEntry = (nodeId: string): boolean => bodyOf.has(nodeId) && !delivered.has(nodeId)
     const next = graph.nodes.find(
       (node) =>
         // ⑥：review 节点由 reviews.step 控制环驱动，不经图分派。
         node.kind !== 'review' &&
         ready.includes(node.nodeId) &&
         (!dispatched.has(node.nodeId) ||
+          roundEntry(node.nodeId) ||
           loopNeedsAnotherIteration(node, facts, delivered, loopIterations) ||
           // ②：human-task 停等后人工已提交（续跑）→ 重新分派以应用提交并投影交付。
           (node.kind === 'human-task' &&
@@ -1110,6 +1136,8 @@ export class FlowCoordinatorHost {
     const readyDispatchable = graph.nodes.filter(
       (node) =>
         ready.includes(node.nodeId) &&
+        // v2 循环体节点按轮次串行分派，不进入并行 dispatch-many 波次。
+        !bodyOf.has(node.nodeId) &&
         (!dispatched.has(node.nodeId) ||
           loopNeedsAnotherIteration(node, facts, delivered, loopIterations))
     )
@@ -1198,11 +1226,16 @@ export class FlowCoordinatorHost {
           'graph-context'
         )
     }
-    // O4-P4：循环节点重复分派——递增迭代计数（taskId/requestId 含迭代，区别于上一轮）。
-    if (next.loop) {
+    // O4-P4 / BL-11：v1 循环载体递增自身迭代；v2 子图循环体按载体轮次分派。
+    if (next.loop && !next.loop.body) {
       loopIterations[next.nodeId] = (loopIterations[next.nodeId] ?? 0) + 1
       run.loopIterations = loopIterations
+    } else if (next.loop?.body && (loopIterations[next.nodeId] ?? 0) === 0) {
+      loopIterations[next.nodeId] = 1
+      run.loopIterations = loopIterations
     }
+    const nextBody = bodyOf.get(next.nodeId)
+    const nextRound = nextBody ? (loopIterations[nextBody.carrierId] ?? 1) : undefined
     const candidate = this.specialists.describeAssignment(
       {
         ...input,
@@ -1212,7 +1245,9 @@ export class FlowCoordinatorHost {
           run.taskId,
           next.nodeId,
           ...(run.reworkRound ? [run.reworkRound] : []),
-          ...(loopIterations[next.nodeId] ? [`loop:${loopIterations[next.nodeId]}`] : [])
+          ...(nextRound ?? loopIterations[next.nodeId]
+            ? [`loop:${nextRound ?? loopIterations[next.nodeId]}`]
+            : [])
         ])
       },
       true
@@ -1270,13 +1305,20 @@ export class FlowCoordinatorHost {
     const file = this.check(run)
     const node = file.nodes.find((item) => item.id === next.nodeId)
     if (!node) throw new AgentRuntimeError('FLOW_GRAPH_SCOPE_INVALID', 'graph-capability')
+    const capabilityBody = [...loopBodyInfo(graph).values()].find((info) =>
+      info.body.has(next.nodeId)
+    )
+    const capabilityRound = capabilityBody
+      ? (loopIterations[capabilityBody.carrierId] ?? 1)
+      : undefined
+    const loopSuffix = capabilityRound ?? loopIterations[next.nodeId]
     const taskId = hash([
       run.taskId,
       next.nodeId,
       ...(run.reworkRound ? [run.reworkRound] : []),
-      ...(loopIterations[next.nodeId] ? [`loop:${loopIterations[next.nodeId]}`] : [])
+      ...(loopSuffix ? [`loop:${loopSuffix}`] : [])
     ])
-    const commandId = `graph:${hash([run.taskId, next.nodeId, 'capability', loopIterations[next.nodeId] ?? 0])}`
+    const commandId = `graph:${hash([run.taskId, next.nodeId, 'capability', loopSuffix ?? 0])}`
     // ⑥最小必要输入：声明 inputs 时编制 manifest，校验预算/必需缺项，并据选择器筛选上游源。
     let contextManifest: ContextManifest | undefined
     let selectedSources: Set<string> | undefined
@@ -1295,12 +1337,13 @@ export class FlowCoordinatorHost {
         edge.to.nodeId === next.nodeId &&
         (!selectedSources || selectedSources.has(edge.from.nodeId))
     )
-    const inputs = incoming.map((edge, index) => {
+    const inputs = incoming.map((edge) => {
       const upstream = run.children
         .filter((child) => child.nodeId === edge.from.nodeId && child.state === 'completed')
         .at(-1)
       if (!upstream) throw new AgentRuntimeError('FLOW_HANDOFF_INPUT_REJECTED', 'graph-capability')
-      const port = inputPorts[index] ?? inputPorts[0]
+      // BL-11 / G8：按边声明的真实端口接线，不再按数组下标猜端口。
+      const port = inputPorts.find((candidate) => candidate.id === edge.to.portId)
       if (!port) throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'graph-capability')
       // 与 agent bind 的 freeze 同一机制：assets.submit 生成 sourceNodeId=上游节点的固定引用，
       // 与画布边 from 一致，账本输入源校验通过（raw 子任务 outputRefs 指向底层处理器，源不符）。
@@ -1308,7 +1351,7 @@ export class FlowCoordinatorHost {
         projectId: run.projectId,
         nodeId: edge.from.nodeId,
         portId: edge.from.portId,
-        submissionId: `${taskId}:cap-input:${index}`,
+        submissionId: `${taskId}:cap-input:${edge.to.portId}`,
         expectedGraphVersion: file.meta.graphVersion,
         traceId: run.traceId,
         spanId: run.spanId
@@ -1323,6 +1366,7 @@ export class FlowCoordinatorHost {
       inputs: [],
       state: 'ready',
       outputs: [],
+      ...(typeof capabilityRound === 'number' ? { round: capabilityRound } : {}),
       ...(contextManifest ? { contextManifest } : {})
     }
     run.children.push(child)
@@ -1386,10 +1430,15 @@ export class FlowCoordinatorHost {
     const file = this.check(run)
     const node = file.nodes.find((item) => item.id === next.nodeId)
     if (!node) throw new AgentRuntimeError('FLOW_GRAPH_SCOPE_INVALID', 'graph-human-task')
+    const humanBody = [...loopBodyInfo(graph).values()].find((info) =>
+      info.body.has(next.nodeId)
+    )
+    const humanRound = humanBody ? (run.loopIterations?.[humanBody.carrierId] ?? 1) : undefined
     const taskId = hash([
       run.taskId,
       next.nodeId,
-      ...(run.reworkRound ? [run.reworkRound] : [])
+      ...(run.reworkRound ? [run.reworkRound] : []),
+      ...(humanRound ? [`loop:${humanRound}`] : [])
     ])
     // 每次分派用新 commandId：上一轮 skipped 已终态释放占用，续跑重新交付执行以应用人工提交。
     const commandId = `graph:${hash([run.taskId, next.nodeId, 'human', run.decisions])}`
@@ -1397,25 +1446,30 @@ export class FlowCoordinatorHost {
     const incoming = graph.edges.filter(
       (edge) => edge.to.nodeId === next.nodeId
     )
-    const inputs = incoming.map((edge, index) => {
+    const inputs = incoming.map((edge) => {
       const upstream = run.children
         .filter((child) => child.nodeId === edge.from.nodeId && child.state === 'completed')
         .at(-1)
       if (!upstream) throw new AgentRuntimeError('FLOW_HANDOFF_INPUT_REJECTED', 'graph-human-task')
-      const port = inputPorts[index] ?? inputPorts[0]
+      // BL-11 / G8：按边声明的真实端口接线。
+      const port = inputPorts.find((candidate) => candidate.id === edge.to.portId)
       if (!port) throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'graph-human-task')
       const { ref } = this.assets.submit({
         projectId: run.projectId,
         nodeId: edge.from.nodeId,
         portId: edge.from.portId,
-        submissionId: `${taskId}:human-input:${index}:${run.decisions}`,
+        submissionId: `${taskId}:human-input:${edge.to.portId}:${run.decisions}`,
         expectedGraphVersion: file.meta.graphVersion,
         traceId: run.traceId,
         spanId: run.spanId
       })
       return { targetPortId: port.id, assets: [ref] }
     })
-    let child = run.children.find((item) => item.nodeId === next.nodeId)
+    let child = run.children.find(
+      (item) =>
+        item.nodeId === next.nodeId &&
+        (humanRound === undefined || (item.round ?? 1) === humanRound)
+    )
     if (!child) {
       child = {
         nodeId: next.nodeId,
@@ -1424,7 +1478,8 @@ export class FlowCoordinatorHost {
         completion: next.completion,
         inputs: [],
         state: 'ready',
-        outputs: []
+        outputs: [],
+        ...(typeof humanRound === 'number' ? { round: humanRound } : {})
       }
       run.children.push(child)
     }
@@ -1485,11 +1540,78 @@ export class FlowCoordinatorHost {
     return this.wait(run, 'human.wait')
   }
 
+  /**
+   * BL-11 / AF-8.4b：v2 循环体的「当前轮次交付」。
+   * body 内节点只认本轮的 completed 子任务；上一轮历史不参与本轮路由。
+   */
+  private roundScopedDelivered(
+    run: CoordinationRun,
+    bodies: Map<string, LoopBodyInfo>,
+    loopIterations: Record<string, number>
+  ): Set<string> {
+    const carrierOf = new Map<string, string>()
+    for (const [carrierId, info] of bodies)
+      for (const id of info.body) carrierOf.set(id, carrierId)
+    const delivered = new Set<string>()
+    for (const child of run.children) {
+      if (child.state !== 'completed') continue
+      const carrier = carrierOf.get(child.nodeId)
+      if (!carrier) {
+        delivered.add(child.nodeId)
+        continue
+      }
+      if ((child.round ?? 1) === (loopIterations[carrier] ?? 1)) delivered.add(child.nodeId)
+    }
+    return delivered
+  }
+
+  /**
+   * 一轮结束（body 出口全部交付）后评估退出条件：不满足且未达上限则开下一轮。
+   * 退出条件仍只读交付事实；达到上限时由 settledNodes 强制落定。
+   */
+  private advanceLoopRounds(
+    run: CoordinationRun,
+    graph: FlowGraph,
+    facts: StageEntryFacts,
+    delivered: ReadonlySet<string>,
+    bodies: Map<string, LoopBodyInfo>,
+    loopIterations: Record<string, number>
+  ): boolean {
+    let changed = false
+    for (const [carrierId, info] of bodies) {
+      const round = loopIterations[carrierId] ?? 0
+      if (round < 1) continue
+      const carrier = graph.nodes.find((node) => node.nodeId === carrierId)
+      if (!carrier?.loop) continue
+      if (![...info.exits].every((nodeId) => delivered.has(nodeId))) continue
+      if (loopExitConditionSatisfied(carrier, facts)) continue
+      if (round >= carrier.loop.maxIterations) continue
+      loopIterations[carrierId] = round + 1
+      run.loopIterations = loopIterations
+      changed = true
+    }
+    if (changed) this.store.save(run)
+    return changed
+  }
+
   /** O4-P3/P4：图模式交付事实——stageKey 即节点 id；循环节点取最近一次迭代交付。只读权威资产与续接记录。 */
-  private graphFacts(run: CoordinationRun): StageEntryFacts {
+  private graphFacts(
+    run: CoordinationRun,
+    scope?: { bodies: Map<string, LoopBodyInfo>; loopIterations: Record<string, number> }
+  ): StageEntryFacts {
+    const carrierOf = new Map<string, string>()
+    if (scope)
+      for (const [carrierId, info] of scope.bodies)
+        for (const id of info.body) carrierOf.set(id, carrierId)
     const latestByNode = new Map<string, (typeof run.children)[number]>()
     for (const child of run.children) {
       if (child.state !== 'completed') continue
+      const carrier = carrierOf.get(child.nodeId)
+      if (
+        carrier &&
+        (child.round ?? 1) !== (scope!.loopIterations[carrier] ?? 1)
+      )
+        continue
       latestByNode.set(child.nodeId, child)
     }
     const deliveries: StageDeliveryFact[] = []

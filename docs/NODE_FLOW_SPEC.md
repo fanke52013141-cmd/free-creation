@@ -3,7 +3,7 @@ title: 节点流（composite）规范
 status: draft            # draft → review → frozen
 version: 0.1
 last-verified: 2026-11-24
-baseline-commit: 76a487b5 (main)
+baseline-commit: aea3987a (main)
 owner: Canvas Studio 规范组
 supersedes: NODE_CONTRACT_SPEC.md §8.0（该节改为指向本文）
 machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/contracts.json
@@ -370,7 +370,7 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 | 差距 | 条款 | 优先级 |
 |---|---|---|
 | ~~节点流不可被 Agent Flow 编排~~ ✅ BL-10（capabilityRef + 能力目录；最小输入编制/真实端口随 BL-11/12） | NF-1.4 / NF-13.* | P1 |
-| 端口兼容判定与画布分裂；类型枚举缺 iteration/camera | NF-6.4 / NF-6.5 | P1 |
+| ~~端口兼容判定与画布分裂~~ ✅ BL-11（`port-compatibility.ts` 单一实现；`iteration/camera` 类型枚举待 BL-12） | NF-6.4 / NF-6.5 | P1 |
 | ~~发布期/运行期预算缺省不一致~~ ✅ BL-08 | NF-10.2 | — |
 | headless 计费确认门（修复提交已丢失） | NF-12.1 | **P0** |
 | 必填输入运行前预检 | NF-7.5 | P1 |

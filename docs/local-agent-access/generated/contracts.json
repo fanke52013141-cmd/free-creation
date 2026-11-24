@@ -25589,9 +25589,28 @@
                       ],
                       "additionalProperties": false
                     },
+                    "params": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "maxLength": 60
+                      },
+                      "additionalProperties": {}
+                    },
                     "loop": {
                       "type": "object",
                       "properties": {
+                        "body": {
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          }
+                        },
                         "maxIterations": {
                           "type": "integer",
                           "minimum": 1,
@@ -26474,9 +26493,28 @@
                       ],
                       "additionalProperties": false
                     },
+                    "params": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "maxLength": 60
+                      },
+                      "additionalProperties": {}
+                    },
                     "loop": {
                       "type": "object",
                       "properties": {
+                        "body": {
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          }
+                        },
                         "maxIterations": {
                           "type": "integer",
                           "minimum": 1,
@@ -27506,9 +27544,28 @@
                       ],
                       "additionalProperties": false
                     },
+                    "params": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "maxLength": 60
+                      },
+                      "additionalProperties": {}
+                    },
                     "loop": {
                       "type": "object",
                       "properties": {
+                        "body": {
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          }
+                        },
                         "maxIterations": {
                           "type": "integer",
                           "minimum": 1,
@@ -30131,9 +30188,28 @@
                       ],
                       "additionalProperties": false
                     },
+                    "params": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "maxLength": 60
+                      },
+                      "additionalProperties": {}
+                    },
                     "loop": {
                       "type": "object",
                       "properties": {
+                        "body": {
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          }
+                        },
                         "maxIterations": {
                           "type": "integer",
                           "minimum": 1,
@@ -30958,9 +31034,28 @@
                               ],
                               "additionalProperties": false
                             },
+                            "params": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string",
+                                "maxLength": 60
+                              },
+                              "additionalProperties": {}
+                            },
                             "loop": {
                               "type": "object",
                               "properties": {
+                                "body": {
+                                  "minItems": 1,
+                                  "maxItems": 32,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                  }
+                                },
                                 "maxIterations": {
                                   "type": "integer",
                                   "minimum": 1,
@@ -31878,9 +31973,28 @@
                                 ],
                                 "additionalProperties": false
                               },
+                              "params": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string",
+                                  "maxLength": 60
+                                },
+                                "additionalProperties": {}
+                              },
                               "loop": {
                                 "type": "object",
                                 "properties": {
+                                  "body": {
+                                    "minItems": 1,
+                                    "maxItems": 32,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                    }
+                                  },
                                   "maxIterations": {
                                     "type": "integer",
                                     "minimum": 1,
@@ -32810,9 +32924,28 @@
                                   ],
                                   "additionalProperties": false
                                 },
+                                "params": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string",
+                                    "maxLength": 60
+                                  },
+                                  "additionalProperties": {}
+                                },
                                 "loop": {
                                   "type": "object",
                                   "properties": {
+                                    "body": {
+                                      "minItems": 1,
+                                      "maxItems": 32,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 128,
+                                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                      }
+                                    },
                                     "maxIterations": {
                                       "type": "integer",
                                       "minimum": 1,
