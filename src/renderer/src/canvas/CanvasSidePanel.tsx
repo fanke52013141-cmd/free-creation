@@ -962,6 +962,20 @@ function TasksPanel({
   editor: Editor | null
   items: HumanInboxItem[]
 }): React.JSX.Element {
+  const [viewRole, setViewRole] = useState('')
+  const alerts = items.filter((item) => item.kind === 'stalled')
+  const groups = new Map<string, { name: string; items: HumanInboxItem[] }>()
+  for (const item of items) {
+    if (item.kind === 'stalled') continue
+    const roleId = item.humanRole?.roleId ?? 'owner'
+    const group = groups.get(roleId) ?? {
+      name: roleId === 'owner' ? '我' : item.humanRole?.name ?? roleId,
+      items: []
+    }
+    group.items.push(item)
+    groups.set(roleId, group)
+  }
+  const selectedRole = groups.has(viewRole) ? viewRole : ''
   const locate = (item: HumanInboxItem): void => {
     if (!editor) return toast('画布尚未就绪')
     const shape = editor.getShape(item.nodeId as TLShapeId)
@@ -970,41 +984,66 @@ function TasksPanel({
     editor.zoomToSelection({ animation: { duration: 220 } })
     toast(`已定位到「${item.title}」`)
   }
+  const renderItem = (item: HumanInboxItem): React.JSX.Element => (
+    <article className="run-card" key={item.nodeId} role={item.kind === 'stalled' ? 'status' : undefined}>
+      <div className="run-card-head">
+        <div>
+          <strong>{item.title}</strong>
+          <small>
+            {item.kind === 'stalled'
+              ? '流程告警'
+              : item.kind === 'human-task'
+              ? '人工任务'
+              : item.kind === 'coordinator'
+                ? '主控 Agent'
+                : item.kind === 'review'
+                  ? '审核门控'
+                  : item.kind === 'input'
+                    ? '待补输入'
+                    : '协作 Agent'}{' '}
+            · {item.reason}
+          </small>
+        </div>
+      </div>
+      <div className="run-card-actions">
+        <button onClick={() => locate(item)}>
+          <Icon name="target" size={12} /> 回到节点
+        </button>
+      </div>
+    </article>
+  )
   return (
     <div className="side-panel-body runs-panel">
+      {alerts.length > 0 && (
+        <section className="runs-list" aria-label="流程">
+          <strong>流程</strong>
+          {alerts.map(renderItem)}
+        </section>
+      )}
+      {groups.size > 1 && (
+        <label>
+          查看角色
+          <select value={selectedRole} onChange={(event) => setViewRole(event.target.value)}>
+            <option value="">全部角色</option>
+            {[...groups].map(([roleId, group]) => (
+              <option key={roleId} value={roleId}>{group.name}</option>
+            ))}
+          </select>
+        </label>
+      )}
       {items.length === 0 ? (
         <div className="side-panel-empty">
           暂无待你处理的节点。人工任务待提交、或协作 Agent 等待确认时会出现在这里。
         </div>
       ) : (
-        <div className="runs-list">
-          {items.map((item) => (
-            <article className="run-card" key={item.nodeId}>
-              <div className="run-card-head">
-                <div>
-                  <strong>{item.title}</strong>
-                  <small>
-                    {item.kind === 'human-task'
-                      ? '人工任务'
-                      : item.kind === 'coordinator'
-                        ? '主控 Agent'
-                        : item.kind === 'review'
-                          ? '审核门控'
-                          : item.kind === 'input'
-                            ? '待补输入'
-                            : '协作 Agent'}{' '}
-                    · {item.reason}
-                  </small>
-                </div>
-              </div>
-              <div className="run-card-actions">
-                <button onClick={() => locate(item)}>
-                  <Icon name="target" size={12} /> 回到节点
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
+        [...groups]
+          .filter(([roleId]) => !selectedRole || roleId === selectedRole)
+          .map(([roleId, group]) => (
+            <section className="runs-list" key={roleId} aria-label={group.name}>
+              <strong>{group.name}</strong>
+              {group.items.map(renderItem)}
+            </section>
+          ))
       )}
     </div>
   )

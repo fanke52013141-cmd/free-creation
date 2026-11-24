@@ -91,11 +91,11 @@ async function handleHeadlessCompositeExecute(request: DesktopRequest): Promise<
       // AF-07：人工等待续跑——复用 runId、消费已满足提交、跳过已完成步骤。
       resumeRunId: request.compositeResumeRunId,
       humanSubmissions: request.compositeHumanSubmissions as
-        | Record<string, { kind: 'text'; text: string } | { kind: 'json'; data: unknown }>
+        | Record<string, import('@shared/agent-flow/node-contracts').HumanTaskValue>
         | undefined,
       completedSteps: request.compositeCompletedSteps,
       stepOutputs: request.compositeStepOutputs as
-        Record<string, { nodeResult: string | null; nodeRun: unknown }> | undefined
+        Record<string, { nodeResult: string | null; nodeExtra?: string; humanTask?: string; nodeRun: unknown }> | undefined
     }).catch(() => {
       // 失败已由 runCompositeIsolated 写入台账；此处仅兜底未捕获异常。
     })

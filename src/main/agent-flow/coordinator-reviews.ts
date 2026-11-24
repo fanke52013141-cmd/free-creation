@@ -278,7 +278,7 @@ export class CoordinatorReviews {
           throw new AgentRuntimeError('FLOW_REVIEW_BUDGET_EXHAUSTED', 'review-control')
         this.reserve(run)
         cycle.round++
-        cycle.requestId = reviewDigest([run.taskId, cycle.nodeId, cycle.round])
+        cycle.requestId = reviewDigest([run.taskId, cycle.nodeId, ...(run.reworkRound ? [run.reworkRound] : []), cycle.round])
         const responsible = saved(file, owner)
         if (['text', 'json'].includes(responsible.props.nodeType)) {
           if (config.subjectSources.length !== 1)

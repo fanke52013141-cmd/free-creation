@@ -377,3 +377,21 @@ describe('O4-P1 schema 层拒绝', () => {
     ).toBe(false)
   })
 })
+it('validates declared human roles while accepting legacy owner graphs', () => {
+  const base = graph(
+    [node('a', { kind: 'human-task', participation: 'human' }), node('b')],
+    [dataEdge('a', 'b')],
+    'a',
+    ['b']
+  )
+  const roles = [{ roleId: 'writer', name: 'Writer' }]
+  expect(validateFlowGraph(base)).toEqual({ ok: true })
+  expect(validateFlowGraph({ ...base, roles })).toMatchObject({
+    ok: false, errors: expect.arrayContaining([{ code: 'HUMAN_ROLE_REQUIRED', nodeId: 'a', message: expect.any(String) }])
+  })
+  const assigned = { ...base, roles, nodes: [{ ...base.nodes[0], humanRole: 'writer' }, base.nodes[1]] }
+  expect(validateFlowGraph(assigned)).toEqual({ ok: true })
+  expect(validateFlowGraph({ ...assigned, roles: [...roles, ...roles] })).toMatchObject({
+    ok: false, errors: expect.arrayContaining([{ code: 'HUMAN_ROLE_DUPLICATE', message: expect.any(String) }])
+  })
+})

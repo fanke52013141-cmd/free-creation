@@ -6,6 +6,12 @@ export type FlowStepState =
   | 'running'
   | 'waiting-human'
   | 'waiting-reconcile'
+  | 'waiting-execution'
+  | 'waiting-tool'
+  | 'waiting-host'
+  | 'skipped'
+  | 'stalled'
+  | 'cancelled'
   | 'review-pending'
   | 'review-passed'
   | 'rejected'
@@ -13,6 +19,7 @@ export type FlowStepState =
   | 'failed'
   | 'gated'
   | 'idle'
+  | 'stale'
 
 export interface FlowStep {
   nodeId: string
@@ -21,8 +28,10 @@ export interface FlowStep {
   participation: string
   state: FlowStepState
   roleLabel: string
+  humanRole?: { roleId: string; name: string }
   detail?: string
   needsYou: boolean
+  compositeWait?: FlowRunOverview['children'][number]['compositeWait']
   review?: { round: number; maxReworks: number; feedback?: string; state: string }
   gatedBy?: string
 }
@@ -48,12 +57,19 @@ export const STATE_META: Record<FlowStepState, { label: string; glyph: string; c
   running: { label: '执行中', glyph: '●', color: '#fbbf24' },
   'waiting-human': { label: '等待人工', glyph: '◐', color: '#E0A458' },
   'waiting-reconcile': { label: '等待核对', glyph: '◐', color: '#fbbf24' },
+  'waiting-execution': { label: '等待执行结果', glyph: '◷', color: '#fbbf24' },
+  'waiting-tool': { label: '等待工具结果', glyph: '⚙', color: '#fbbf24' },
+  'waiting-host': { label: '等待宿主恢复', glyph: '↻', color: '#fbbf24' },
+  skipped: { label: '分支已跳过', glyph: '↷', color: '#737f8e' },
+  stalled: { label: '流程停滞', glyph: '!', color: '#ff6b6b' },
+  cancelled: { label: '已取消', glyph: '×', color: '#737f8e' },
   'review-pending': { label: '审核中', glyph: '●', color: '#00AEBD' },
   'review-passed': { label: '审核通过', glyph: '✓', color: '#34d399' },
   rejected: { label: '已驳回→返工', glyph: '⛔', color: '#ff6b6b' },
   blocked: { label: '已阻断', glyph: '⛔', color: '#ff6b6b' },
   failed: { label: '执行失败', glyph: '✕', color: '#ff6b6b' },
   gated: { label: '门禁拦截', glyph: '🔒', color: '#737f8e' },
+  stale: { label: '旧交付已过期', glyph: '↻', color: '#a8916b' },
   idle: { label: '待执行', glyph: '○', color: '#6b7280' }
 }
 
@@ -131,16 +147,31 @@ export function deriveFlowSteps(overview: FlowRunOverview): FlowStep[] {
       }
     } else if (child) {
       if (child.state === 'completed') state = 'completed'
+      else if (child.waitKind === 'reconcile') state = 'waiting-reconcile'
+      else if (child.waitKind === 'tool') state = 'waiting-tool'
+      else if (child.waitKind === 'host') state = 'waiting-host'
       else if (child.state === 'running') state = 'running'
       else if (child.state === 'waiting') {
-        if (participation === 'collaborative' || kind === 'human-task') {
+        if (child.compositeWait || child.waitKind === 'human' || kind === 'human-task' ||
+          participation === 'collaborative') {
           state = 'waiting-human'
           needsYou = true
-        } else state = 'waiting-reconcile'
+        } else state = 'waiting-execution'
       } else if (child.state === 'blocked') state = 'blocked'
       else if (child.state === 'failed') state = 'failed'
+      else if (child.state === 'cancelled') state = 'cancelled'
       else state = 'idle'
-      detail = child.goal
+      detail = child.compositeWait
+        ? `等待提交子流程步骤「${child.compositeWait.stepKey}」的结果`
+        : child.goal
+    }
+    if (state === 'idle' && overview.skippedNodeIds?.includes(nodeId)) {
+      state = 'skipped'
+      detail = '当前分支条件未满足'
+    }
+    if (state === 'idle' && overview.stalledNodeIds?.includes(nodeId)) {
+      state = 'stalled'
+      detail = '没有满足的上游交付，无法继续执行'
     }
     // 门禁拦截：上游审核未通过且本节点尚未开始。
     const gateReviewId = reviewPredecessor.get(nodeId)
@@ -151,7 +182,15 @@ export function deriveFlowSteps(overview: FlowRunOverview): FlowStep[] {
         gatedBy = nodeById.get(gateReviewId)?.title ?? '审核门禁'
       }
     }
-    steps.push({ nodeId, title, kind, participation, state, roleLabel, detail, needsYou, review: reviewInfo, gatedBy })
+    if (state === 'idle' && overview.staleNodeIds?.includes(nodeId)) {
+      state = 'stale'
+      detail = '等待重新交付，旧版本保留在历史中'
+    }
+    const roleId = node?.humanRole ?? (node && participation !== 'autonomous' ? 'owner' : undefined)
+    const humanRole = roleId
+      ? { roleId, name: graph?.roles?.find((role) => role.roleId === roleId)?.name ?? (roleId === 'owner' ? '我' : roleId) }
+      : undefined
+    steps.push({ nodeId, title, kind, participation, state, roleLabel, humanRole, detail, needsYou, compositeWait: child?.compositeWait, review: reviewInfo, gatedBy })
   }
   return steps
 }
@@ -184,7 +223,7 @@ export function deriveNow(overview: FlowRunOverview, steps: FlowStep[]): FlowNow
       action: 'locate'
     }
   }
-  const running = steps.find((step) => step.state === 'running' || step.state === 'review-pending' || step.state === 'waiting-reconcile')
+  const running = steps.find((step) => step.state === 'running' || step.state === 'review-pending' || step.state === 'waiting-reconcile' || step.state === 'waiting-execution' || step.state === 'waiting-tool' || step.state === 'waiting-host')
   if (running) {
     return {
       nodeId: running.nodeId,
@@ -196,6 +235,9 @@ export function deriveNow(overview: FlowRunOverview, steps: FlowStep[]): FlowNow
   }
   if (overview.state === 'completed') {
     return { nodeId: null, title: '流程已完成', detail: '', tone: 'done', action: null }
+  }
+  if (overview.code === 'AGENT_SESSION_LOST') {
+    return { nodeId: overview.nodeId, title: '等待宿主恢复', detail: '执行会话已中断，请检查恢复选项。', tone: 'failed', action: 'locate' }
   }
   if (overview.state === 'failed' || overview.state === 'blocked') {
     return { nodeId: overview.nodeId, title: '流程已阻断', detail: overview.code ?? '请核对后重试。', tone: 'failed', action: 'locate' }

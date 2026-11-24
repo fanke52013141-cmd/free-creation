@@ -19,6 +19,20 @@ const deliveries = (outputs: StageDeliveryFact['outputs']): StageDeliveryFact[] 
 const jsonDelivery = (data: unknown) => deliveries([{ kind: 'json', data }])
 
 describe('AF-02 ContextManifest 编制器', () => {
+  it('includes handoff only when explicitly selected and applies required-field rules', () => {
+    const [delivery] = jsonDelivery({ evidence: ['source'], $handoff: 'output field' })
+    const withNote = { ...delivery, handoffNote: 'private delivery note' }
+    expect(buildContextManifest('write', inputs(), [withNote]).entries.map((entry) => entry.value))
+      .toEqual([['source']])
+
+    const selected = inputs({ selectors: [{ sourceStageKey: 'organize', path: '$handoff' }] })
+    const manifest = buildContextManifest('write', selected, [withNote])
+    expect(manifest.entries).toMatchObject([{ kind: 'text', value: 'private delivery note' }])
+    const missing = buildContextManifest('write', selected, [delivery])
+    expect(missing.entries).toEqual([])
+    expect(contextManifestBlocking(missing)).toBe(true)
+  })
+
   it('按字段路径取内容，去重保序，产出稳定 hash', () => {
     const manifest = buildContextManifest(
       'write',

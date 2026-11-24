@@ -22,6 +22,7 @@
 export interface FlowAgentAccessPort {
   /** 与 GUI 面板完全同一运行入口；raw 由调用方按 FlowAgentRunSchema 构造。 */
   run(raw: unknown): Promise<unknown>
+  inspect?(query: { projectId: string; nodeId: string }): import('../../shared/agent-flow/desktop-tasks').FlowAgentView | null
   pause(query: { projectId: string; nodeId: string }): unknown
   stop(query: { projectId: string; nodeId: string }): unknown
   /**
@@ -58,7 +59,7 @@ export interface FlowAgentAccessPort {
    * 与 builder 同一宿主、同一 flow_builds 表（source='graph'）；接收外部已生成图，
    * 不调模型、不写画布。落画布仍走渲染器权威 commitFlowBuild（P5.3）。
    */
-  proposeGraph(raw: { projectId: string; graph: unknown; requestId: string }): Promise<unknown>
+  proposeGraph(raw: { projectId: string; graph: unknown; requestId: string; sourceGraph?: import('../../shared/agent-flow/flow-definition').FlowGraphSource }): Promise<unknown>
   previewGraph(query: { projectId: string; buildId?: string }): Promise<unknown>
   discardGraph(query: { projectId: string; buildId: string }): Promise<unknown>
   listGraphPreviews(projectId: string): unknown

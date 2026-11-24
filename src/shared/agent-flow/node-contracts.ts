@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { VideoReviewEvidenceSchema } from './video-review'
-import { FlowStagesSchema } from './stage-contracts'
+import { FlowStagesSchema, HandoffNoteSchema } from './stage-contracts'
 import { FlowGraphSchema } from './flow-graph'
 import {
   AudioReviewEvidenceSchema,
@@ -38,6 +38,7 @@ export const AgentNodeConfigSchema = z
     schemaVersion: z.literal(1),
     role: z.enum(['builder', 'coordinator', 'specialist']),
     interactionMode: z.enum(['collaborative', 'autonomous']),
+    humanRole: id.optional(),
     modelDefinitionId: id.optional(),
     skills: z.array(versionedBinding).max(32),
     tools: z.array(versionedBinding).max(32),
@@ -151,7 +152,8 @@ export const HumanTaskNodeConfigSchema = z
   .object({
     schemaVersion: z.literal(1),
     /** 人工交付的结果类型：text 走 out-text，json 走 out-json（json.any@1）。 */
-    outputType: z.enum(['text', 'json']).default('text'),
+    outputType: z.enum(['text', 'json', 'image', 'video']).default('text'),
+    humanRole: id.optional(),
     instructions: z.string().max(4096).optional()
   })
   .strict()
@@ -160,20 +162,28 @@ export type HumanTaskNodeConfig = z.infer<typeof HumanTaskNodeConfigSchema>
 /** 人工任务结果值：仅文本或结构化 JSON，与公开端口类型一致。 */
 export const HumanTaskValueSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('text'), text: z.string().max(1048576) }).strict(),
-  z.object({ kind: z.literal('json'), data: z.unknown() }).strict()
+  z.object({ kind: z.literal('json'), data: z.unknown() }).strict(),
+  z.object({ kind: z.literal('image'), mediaId: id }).strict(),
+  z.object({ kind: z.literal('video'), mediaId: id }).strict()
 ])
 export type HumanTaskValue = z.infer<typeof HumanTaskValueSchema>
 
 /** 权威实例（持久化于 meta.humanTask）：执行器是唯一推进权威。 */
+export const HumanActorSchema = z.object({ kind: z.literal('user'), roleId: id }).strict()
+export type HumanActor = z.infer<typeof HumanActorSchema>
+
 export const HumanTaskInstanceSchema = z
   .object({
     schemaVersion: z.literal(1),
     nodeId: id,
     revision: z.number().int().positive(),
     status: z.enum(['pending', 'completed']),
+    scope: id.optional(),
     result: HumanTaskValueSchema.optional(),
     lastSubmissionId: id.optional(),
-    submittedAt: z.number().optional()
+    submittedAt: z.number().optional(),
+    actor: HumanActorSchema.optional(),
+    handoffNote: HandoffNoteSchema.optional()
   })
   .strict()
 export type HumanTaskInstance = z.infer<typeof HumanTaskInstanceSchema>
@@ -183,6 +193,7 @@ export const HumanTaskPendingSchema = z
   .object({
     submissionId: id,
     expectedRevision: z.number().int().positive(),
+    handoffNote: HandoffNoteSchema.optional(),
     value: HumanTaskValueSchema
   })
   .strict()

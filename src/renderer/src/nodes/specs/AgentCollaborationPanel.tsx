@@ -18,6 +18,7 @@ export function AgentCollaborationPanel({
 }: NodeSettingsProps): React.JSX.Element {
   const [view, setView] = useState<FlowAgentCollaborationView | null>(null)
   const [text, setText] = useState('')
+  const [handoffNote, setHandoffNote] = useState('')
   const [goal, setGoal] = useState(shape.props.text)
   const [output, setOutput] = useState('')
   const [inputs, setInputs] = useState<Record<string, string>>({})
@@ -86,6 +87,7 @@ export function AgentCollaborationPanel({
         ...(kind === 'submit'
           ? {
               accepted,
+              ...(accepted && handoffNote.trim() ? { handoffNote: handoffNote.trim() } : {}),
               selectedOutputs: output
                 ? view.candidates.filter((ref) => ref.versionId === output)
                 : []
@@ -117,6 +119,7 @@ export function AgentCollaborationPanel({
       })
       await ensureCanvasSaved()
       if (kind !== 'revise') setText('')
+      if (kind === 'submit' && accepted) setHandoffNote('')
     } catch {
       setError('操作未确认，请重新打开协作记录核对，勿重复执行。')
     } finally {
@@ -156,8 +159,10 @@ export function AgentCollaborationPanel({
                   : message.kind === 'revise'
                     ? '新要求'
                     : '讨论'}
+                {message.actor && ` · ${message.actor.roleId === 'owner' ? '我' : message.actor.roleId}`}
                 ：{message.text}
               </p>
+              {message.handoffNote && <p>交接说明 · {message.handoffNote}</p>}
               {message.reply && <p>Agent：{message.reply}</p>}
             </div>
           ))}
@@ -219,7 +224,11 @@ export function AgentCollaborationPanel({
             查看所选版本
           </button>
           {preview && <pre>{preview}</pre>}
-          <button disabled={!ready} onClick={() => void action('submit', true)}>
+          <label>
+            交接说明（可选）
+            <textarea value={handoffNote} onChange={(event) => setHandoffNote(event.target.value)} maxLength={4096} />
+          </label>
+          <button disabled={!ready || new TextEncoder().encode(handoffNote.trim()).length > 4096} onClick={() => void action('submit', true)}>
             提交意见与选择
           </button>
           <button disabled={!ready} onClick={() => void action('submit', false)}>

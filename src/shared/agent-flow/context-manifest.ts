@@ -83,9 +83,11 @@ export function buildContextManifest(
       continue
     }
     let resolvedAny = false
-    for (const output of fact.outputs) {
-      const { kind, root } = outputRoot(output)
-      const resolved = resolvePath(root, selector.path)
+    const candidates = selector.path === '$handoff'
+      ? fact.handoffNote === undefined ? [] : [{ kind: 'text' as const, root: fact.handoffNote }]
+      : fact.outputs.map(outputRoot)
+    for (const { kind, root } of candidates) {
+      const resolved = resolvePath(root, selector.path === '$handoff' ? '' : selector.path)
       if (!resolved.found) continue
       resolvedAny = true
       const value = resolved.value

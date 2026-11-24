@@ -1,3 +1,5 @@
+import { projectCompositeOutputs } from '../../shared/composite/outputs'
+import { resolveCompositeTarget } from './composite-target'
 import { fixedFlowImage, fixedFlowMedia } from './image-assets'
 import type Database from 'better-sqlite3'
 import { createHash, randomUUID } from 'node:crypto'
@@ -174,7 +176,15 @@ export class FlowAssetStore {
                             ? 'out-image'
                             : 'out-video'
                           : 'out-value'
-        if (record.props.nodeType === 'agent') {
+        const composite =
+          record.props.nodeType === 'composite'
+            ? resolveCompositeTarget(this.db, record.props.config)
+            : null
+        if (record.props.nodeType === 'composite') {
+          if (!composite?.outputs.some((port) => port.id === input.portId))
+            fail('ASSET_PORT_INVALID')
+          if (pinned || runStatus !== 'success') fail('ASSET_OUTPUT_UNAVAILABLE')
+        } else if (record.props.nodeType === 'agent') {
           if (!['out-text', 'out-json'].includes(input.portId)) fail('ASSET_PORT_INVALID')
           if (runStatus !== 'success') fail('ASSET_OUTPUT_UNAVAILABLE')
           const result = JSON.parse(record.meta?.nodeResult ?? '{}')
@@ -224,7 +234,12 @@ export class FlowAssetStore {
         } else if (input.portId !== declaredPort) fail('ASSET_PORT_INVALID')
         if (pinned && Object.keys(pinned).some((key) => key !== declaredPort))
           fail('ASSET_OUTPUT_INVALID')
-        let value = (pinned ?? projection(record))[input.portId]
+        let value = composite
+          ? projectCompositeOutputs({
+              ...record,
+              meta: { ...record.meta, compositeManifest: composite.manifest }
+            })[input.portId]
+          : (pinned ?? projection(record))[input.portId]
         if (!value) fail('ASSET_OUTPUT_UNAVAILABLE')
         if (
           (record.props.nodeType === 'json' && value.kind !== 'json') ||
@@ -241,18 +256,21 @@ export class FlowAssetStore {
         )
           fail('ASSET_VALUE_UNSUPPORTED')
         if (value.kind === 'image') {
-          if (!['image', 'image-gen', 'image-edit'].includes(record.props.nodeType) || pinned)
+          if (
+            !['image', 'image-gen', 'image-edit', 'composite', 'human-task'].includes(record.props.nodeType) ||
+            pinned
+          )
             fail('ASSET_OUTPUT_INVALID')
           value = fixedFlowImage(this.db, input.projectId, value)
         }
         if (value.kind === 'audio') {
-          if (!['audio', 'speech'].includes(record.props.nodeType) || pinned)
+          if (!['audio', 'speech', 'composite'].includes(record.props.nodeType) || pinned)
             fail('ASSET_OUTPUT_INVALID')
           value = fixedFlowMedia(this.db, input.projectId, value)
         }
         if (
           value.kind === 'video' &&
-          (record.props.nodeType === 'video-asset' || record.props.nodeType === 'timeline') &&
+          ['video-asset', 'timeline', 'composite', 'human-task'].includes(record.props.nodeType) &&
           !pinned
         ) {
           // 轨道线的成片与视频资产同源：都是本机已落盘的固定媒体，直接固化引用。

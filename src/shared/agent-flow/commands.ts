@@ -37,6 +37,7 @@ const NodeExecuteCommandObjectSchema = z
       .optional(),
     /** AF-03：执行信封（阶段目标/方法/人工意见/返工反馈），公共内容执行器显式消费。 */
     envelope: ExecutionEnvelopeSchema.optional(),
+    scopedHumanTask: z.literal(true).optional(),
     traceId: id,
     spanId: id
   })
@@ -96,10 +97,17 @@ export interface FlowCommandReceipt {
   inputFingerprint?: string
   inputs: NodeExecuteCommand['inputs']
   outputRefs: z.infer<typeof AgentFlowAssetRefSchema>[]
+  handoffNote?: string
   graphVersion?: number
   code?: string
 }
 export interface FlowCommandGrant {
+  compositeResume?: {
+    resumeRunId: string
+    completedSteps: string[]
+    stepOutputs: NonNullable<import('../engine/composite-run-contract').CompositeRunRequest['stepOutputs']>
+    humanSubmissions: NonNullable<import('../engine/composite-run-contract').CompositeRunRequest['humanSubmissions']>
+  }
   command: NodeExecuteCommand
   leaseId: string
   runId: string

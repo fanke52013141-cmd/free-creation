@@ -1,3 +1,4 @@
+import { graphCanvasVersion } from '../src/main/agent-flow/graph-canvas-version'
 // P5 外部 FlowGraph 建图宿主：proposeGraph/previewGraph/discardGraph/listGraphPreviews。
 // 复用 flow_builds（source=graph）+ committed/CAS；接收外部已生成图，不调模型、不写画布。
 import { afterEach, describe, expect, it } from 'vitest'
@@ -197,8 +198,36 @@ describe('P5.3 flowGraph.authorize / confirm（落画布 CAS 与核对）', () =
     f.file.edges = proposed.edges.map((edge) => ({ from: edge.from, to: edge.to })) as ProjectFile['edges']
     const confirmed = await f.host.confirmGraph({ projectId: 'p', buildId: proposed.buildId })
     expect(confirmed.state).toBe('committed')
+    expect(graphCanvasVersion(f.db, f.file, proposed.coordinatorNodeId)).toEqual({ buildId: proposed.buildId, diverged: false })
     // 幂等：再次 confirm 仍 committed。
     const again = await f.host.confirmGraph({ projectId: 'p', buildId: proposed.buildId })
     expect(again.state).toBe('committed')
+    const coordinator = store[proposed.coordinatorNodeId] as { props: { text: string } }
+    coordinator.props.text = 'Edited draft'
+    const exportPreview = f.host.exportGraphPreview({ projectId: 'p', buildId: proposed.buildId })
+    expect(exportPreview.graph.goal).toBe('Edited draft')
+    expect(exportPreview.graph.edges).toEqual(seqGraph.edges)
+    expect(exportPreview.nodes.find((node) => node.id === proposed.coordinatorNodeId)?.text).toBe('Edited draft')
+    expect(() => f.host.publishCanvasGraph({
+      projectId: 'p', buildId: proposed.buildId, expectedRevision: exportPreview.semanticRevision
+    })).toThrow('FLOW_CANVAS_DIVERGED')
+    for (const node of exportPreview.nodes) {
+      const shape = store[node.id] as { props: { config: string } }
+      shape.props.config = node.config
+    }
+    const ready = f.host.exportGraphPreview({ projectId: 'p', buildId: proposed.buildId })
+    const request = { projectId: 'p', buildId: proposed.buildId, expectedRevision: ready.semanticRevision }
+    expect(() => f.host.publishCanvasGraph({ ...request, expectedRevision: 'stale' }))
+      .toThrow('FLOW_REVISION_CONFLICT')
+    const published = f.host.publishCanvasGraph(request)
+    expect(published.sourceGraph).toMatchObject({ definitionId: seqGraph.graphId, version: 1 })
+    expect(graphCanvasVersion(f.db, f.file, proposed.coordinatorNodeId)).toMatchObject({ diverged: false })
+    expect(f.host.publishCanvasGraph(request).sourceGraph).toEqual(published.sourceGraph)
+    expect(f.db.prepare('SELECT COUNT(*) AS count FROM flow_definitions WHERE project_id=?').get('p')).toEqual({ count: 1 })
+    const first = store[proposed.nodes[1].id] as { props: { config: string } }
+    first.props.config = JSON.stringify({ ...JSON.parse(first.props.config), modelDefinitionId: 'local-model' })
+    expect(() => f.host.exportGraphPreview({ projectId: 'p', buildId: proposed.buildId }))
+      .toThrow('FLOW_CANVAS_EXPORT_UNSUPPORTED')
+    expect(graphCanvasVersion(f.db, f.file, proposed.coordinatorNodeId)).toMatchObject({ buildId: proposed.buildId, diverged: true, sourceGraph: published.sourceGraph })
   })
 })

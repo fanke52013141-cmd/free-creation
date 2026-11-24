@@ -22,6 +22,7 @@ export interface CompositeProjectionShape {
     mediaMime?: string
   }
   meta?: {
+    compositeManifest?: CompositeManifest
     nodeRun?: unknown
     nodeResult?: unknown
     nodeExtra?: unknown

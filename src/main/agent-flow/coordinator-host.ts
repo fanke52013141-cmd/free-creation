@@ -1,11 +1,15 @@
+import { findCompositeCommandWait } from './composite-target'
 import type Database from 'better-sqlite3'
+import { graphCanvasVersion } from './graph-canvas-version'
 import { createHash } from 'node:crypto'
 import { Annotation, StateGraph, START, END } from '@langchain/langgraph'
 import { AsyncLocalStorageProviderSingleton } from '@langchain/core/singletons'
 import type { ProjectFile } from '../../shared/types'
 import {
   AgentNodeConfigSchema,
-  StateMachineNodeConfigSchema
+  ReviewNodeConfigSchema,
+  StateMachineNodeConfigSchema,
+  type AgentFlowAssetRef
 } from '../../shared/agent-flow/node-contracts'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 import type { AgentTaskSnapshot } from '../../shared/agent-flow/runtime-contracts'
@@ -30,6 +34,7 @@ import {
   type StageEntryFacts
 } from '../../shared/agent-flow/stage-contracts'
 import {
+  graphReworkNodes,
   nextReadyNodes,
   isFlowComplete,
   loopNeedsAnotherIteration,
@@ -136,9 +141,16 @@ export class FlowCoordinatorHost {
     run: CoordinationRun,
     eventId: string,
     event: string,
-    expectedRevision: number
+    expectedRevision: number,
+    actorSource?: import('../../shared/agent-flow/run-overview').FlowEventActorSource,
+    resumeRevision?: number
   ): void {
-    this.store.event.bind(this.store)(run, eventId, event, expectedRevision)
+    const child = event.startsWith('agent.')
+      ? run.children.find((entry) => eventId.startsWith(`${entry.taskId}:`))
+      : undefined
+    this.store.event(run, eventId, event, expectedRevision, actorSource ?? (
+      child ? `agent:${child.nodeId}` : 'system'
+    ), resumeRevision)
     if (!this.projectStateEvent) return
     let canvasRevision = 1
     try {
@@ -282,6 +294,9 @@ export class FlowCoordinatorHost {
     const config = AgentNodeConfigSchema.parse(JSON.parse(root.props.config))
     const fixedOrder = config.executionMode === 'fixed-order'
     const graphMode = config.executionMode === 'graph'
+    const canvasVersion = graphMode ? graphCanvasVersion(this.db, file, input.nodeId) : undefined
+    if (canvasVersion?.diverged)
+      throw new AgentRuntimeError('FLOW_CANVAS_DIVERGED', 'definition')
     if (
       root.props.nodeType !== 'agent' ||
       config.role !== 'coordinator' ||
@@ -392,6 +407,7 @@ export class FlowCoordinatorHost {
         ...file.edges.filter((e) => controls.has(e.to.nodeId)).map((e) => e.from.nodeId)
       ])
     ]
+
     const run: CoordinationRun = {
       projectId: input.projectId,
       nodeId: input.nodeId,
@@ -402,6 +418,7 @@ export class FlowCoordinatorHost {
       stateConfig,
       scopeIds,
       scopeRevision: scopeRevision(file, scopeIds),
+      sourceGraph: canvasVersion?.sourceGraph,
       childIds,
       reviews,
       controlSteps: 0,
@@ -437,6 +454,15 @@ export class FlowCoordinatorHost {
     if (run && !terminal(run) && input.action === 'start')
       throw new AgentRuntimeError('AGENT_TASK_OCCUPIED', 'admission')
     if (input.action === 'continue') {
+      if (run && run.taskId === input.expectedTaskId) {
+        const seen = this.store.continuation(run, input.eventId!, input.expectedWaitRevision!)
+        if (seen === 'replay') {
+          if (this.active.has(run.taskId))
+            throw new AgentRuntimeError('AGENT_TASK_BUSY', 'coordination')
+          return this.reply(run)
+        }
+        if (seen === 'conflict') throw new AgentRuntimeError('RESUME_CONFLICT', 'resume')
+      }
       if (
         !run ||
         run.state !== 'waiting' ||
@@ -463,7 +489,13 @@ export class FlowCoordinatorHost {
     })
     try {
       const event = input.action === 'start' ? 'flow.started' : 'human.continue'
-      this.emitTrustedEvent(fixed, input.eventId ?? `${fixed.taskId}:start`, event, fixed.revision)
+      const actorSource = input.humanConfirmed || input.runOrigin !== 'external'
+        ? `user:${fixed.config.humanRole ?? 'owner'}` as const
+        : 'agent:external'
+      this.emitTrustedEvent(
+        fixed, input.eventId ?? `${fixed.taskId}:start`, event, fixed.revision, actorSource,
+        input.action === 'continue' ? input.expectedWaitRevision : undefined
+      )
       fixed.state = 'running'
       fixed.paused = false
       fixed.traceId = input.traceId
@@ -581,7 +613,10 @@ export class FlowCoordinatorHost {
     if (pendingProgress) return true
     if (pendingWait || control === 'wait') return this.wait(run, 'human.wait')
     if (stored.paused) return this.wait(run, 'flow.paused')
-    const queuedChildren = run.children.filter((child) => ['ready', 'queued'].includes(child.state))
+    const queuedChildren = run.children.filter(
+      (child) => ['ready', 'queued'].includes(child.state) &&
+        (run.config.graph?.nodes.find((node) => node.nodeId === child.nodeId)?.kind ?? 'agent') === 'agent'
+    )
     if (queuedChildren.length) {
       const file = this.check(run)
       const assignments = queuedChildren.map((child) => ({
@@ -1036,6 +1071,7 @@ export class FlowCoordinatorHost {
     signal: AbortSignal
   ): Promise<boolean> {
     const graph = run.config.graph!
+    this.recordStageDeliveries(run)
     const bodies = loopBodyInfo(graph)
     const loopIterations = { ...(run.loopIterations ?? {}) }
     // BL-11 / AF-8.4b：子图循环体按「当前轮次」计算交付；其他节点按全局交付。
@@ -1050,6 +1086,9 @@ export class FlowCoordinatorHost {
       delivered = this.roundScopedDelivered(run, bodies, loopIterations)
       facts = this.graphFacts(run, { bodies, loopIterations })
     }
+    const route = nextReadyNodes(graph, facts, delivered, loopIterations)
+    run.skippedNodeIds = route.skipped
+    run.stalledNodeIds = undefined
     if (isFlowComplete(graph, facts, delivered, loopIterations)) {
       // 出口可能是审核节点（交付物=被审核通过的固定版本）或普通子节点。
       const exitReview = (run.reviews ?? []).find(
@@ -1075,7 +1114,6 @@ export class FlowCoordinatorHost {
       this.store.save(run)
       return false
     }
-    const route = nextReadyNodes(graph, facts, delivered, loopIterations)
     const { ready } = route
     // BL-04 运行期兜底：多值交付同时命中多个互斥分支时拒绝推进（不猜走哪条）。
     if (route.ambiguous.length > 0) {
@@ -1101,8 +1139,9 @@ export class FlowCoordinatorHost {
           roundEntry(node.nodeId) ||
           loopNeedsAnotherIteration(node, facts, delivered, loopIterations) ||
           // ②：human-task 停等后人工已提交（续跑）→ 重新分派以应用提交并投影交付。
-          (node.kind === 'human-task' &&
-            run.children.some((child) => child.nodeId === node.nodeId && child.state === 'waiting')))
+          ((node.kind === 'human-task' || node.kind === 'capability') &&
+            run.children.some((child) => child.nodeId === node.nodeId &&
+              (child.state === 'waiting' || (node.kind === 'capability' && child.state === 'ready')))))
     )
     if (!next) {
       // BL-03 / AF-8.5b：区分「确有待办（等人/等审核/有在途子任务）」与「停滞」。
@@ -1113,6 +1152,7 @@ export class FlowCoordinatorHost {
       const pendingReview = (run.reviews ?? []).some((review) => review.state !== 'passed')
       if (ready.length > 0 || activeChild || pendingReview) return this.wait(run, 'human.wait')
       const stalled = route.blocked.map((item) => item.nodeId)
+      run.stalledNodeIds = stalled
       const allExitsSkipped = graph.exits.every((exit) => route.skipped.includes(exit))
       emitGatewayEvent(
         'agent.coordination.graph_stalled',
@@ -1129,7 +1169,9 @@ export class FlowCoordinatorHost {
       )
       throw new AgentRuntimeError('FLOW_STALLED', 'graph-route')
     }
-    if (run.decisions + (run.controlSteps ?? 0) >= run.config.maxSteps)
+    const resumesComposite = next.kind === 'capability' &&
+      run.children.some((child) => child.nodeId === next.nodeId && child.compositeWait)
+    if (!resumesComposite && run.decisions + (run.controlSteps ?? 0) >= run.config.maxSteps)
       throw new AgentRuntimeError('AGENT_BUDGET_EXHAUSTED', 'coordination')
     // ③：并行 fork——多个就绪 agent 节点（无循环、无 capability/human-task 混入）一次性
     // 并发分派（dispatch-many → assignmentWaves 按 maxParallelTasks 真并发），而非逐个串行。
@@ -1318,7 +1360,20 @@ export class FlowCoordinatorHost {
       ...(run.reworkRound ? [run.reworkRound] : []),
       ...(loopSuffix ? [`loop:${loopSuffix}`] : [])
     ])
-    const commandId = `graph:${hash([run.taskId, next.nodeId, 'capability', loopSuffix ?? 0])}`
+    const prior = run.children.find((item) => item.taskId === taskId)
+    const waiting = node.type === 'composite'
+      ? findCompositeCommandWait(this.db, run.projectId, taskId, next.nodeId)
+      : undefined
+    if (waiting && waiting.state !== 'satisfied' && prior) {
+      prior.state = 'waiting'
+      prior.compositeWait = { runId: waiting.runId, stepKey: waiting.stepKey }
+      this.store.save(run)
+      return this.wait(run, 'human.wait')
+    }
+    const resumeRequestId = waiting?.requestId ?? (prior?.compositeWait
+      ? `${prior.compositeWait.runId}:${prior.compositeWait.stepKey}`
+      : null)
+    const commandId = `graph:${hash([taskId, 'capability', resumeRequestId])}`
     // ⑥最小必要输入：声明 inputs 时编制 manifest，校验预算/必需缺项，并据选择器筛选上游源。
     let contextManifest: ContextManifest | undefined
     let selectedSources: Set<string> | undefined
@@ -1337,7 +1392,8 @@ export class FlowCoordinatorHost {
         edge.to.nodeId === next.nodeId &&
         (!selectedSources || selectedSources.has(edge.from.nodeId))
     )
-    const inputs = incoming.map((edge) => {
+    const inputsByPort = new Map<string, AgentFlowAssetRef[]>()
+    for (const edge of incoming) {
       const upstream = run.children
         .filter((child) => child.nodeId === edge.from.nodeId && child.state === 'completed')
         .at(-1)
@@ -1347,18 +1403,21 @@ export class FlowCoordinatorHost {
       if (!port) throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'graph-capability')
       // 与 agent bind 的 freeze 同一机制：assets.submit 生成 sourceNodeId=上游节点的固定引用，
       // 与画布边 from 一致，账本输入源校验通过（raw 子任务 outputRefs 指向底层处理器，源不符）。
-      const { ref } = this.assets.submit({
+      const ref = upstream.outputs.find(
+        (output) => output.sourceNodeId === edge.from.nodeId && output.sourcePortId === edge.from.portId
+      ) ?? this.assets.submit({
         projectId: run.projectId,
         nodeId: edge.from.nodeId,
         portId: edge.from.portId,
-        submissionId: `${taskId}:cap-input:${edge.to.portId}`,
+        submissionId: `cap-input:${hash([taskId, edge.from.nodeId, edge.from.portId, edge.to.portId])}`,
         expectedGraphVersion: file.meta.graphVersion,
         traceId: run.traceId,
         spanId: run.spanId
-      })
-      return { targetPortId: port.id, assets: [ref] }
-    })
-    const child: CoordinationRun['children'][number] = {
+      }).ref
+      inputsByPort.set(port.id, [...(inputsByPort.get(port.id) ?? []), ref])
+    }
+    const inputs = [...inputsByPort].map(([targetPortId, assets]) => ({ targetPortId, assets }))
+    const child: CoordinationRun['children'][number] = prior ?? {
       nodeId: next.nodeId,
       taskId,
       goal: next.goal,
@@ -1369,10 +1428,14 @@ export class FlowCoordinatorHost {
       ...(typeof capabilityRound === 'number' ? { round: capabilityRound } : {}),
       ...(contextManifest ? { contextManifest } : {})
     }
-    run.children.push(child)
-    run.decisions++
+    if (!prior) {
+      run.children.push(child)
+      run.decisions++
+    }
     this.store.save(run)
-    this.emitTrustedEvent(run, `${taskId}:dispatch`, 'agent.dispatched', run.revision)
+    const dispatchEventId = resumeRequestId ? `${commandId}:dispatch` : `${taskId}:dispatch`
+    if (!this.store.hasEvent(run, dispatchEventId, 'agent.dispatched'))
+      this.emitTrustedEvent(run, dispatchEventId, 'agent.dispatched', run.revision)
     emitGatewayEvent(
       'agent.coordination.graph_dispatched',
       '按声明式图路由分派节点',
@@ -1404,6 +1467,16 @@ export class FlowCoordinatorHost {
     )
     if (signal.aborted || this.store.latest(run.projectId, run.nodeId)!.state === 'cancelled')
       return false
+    if (receipt.state === 'skipped' && node.type === 'composite') {
+      const pending = findCompositeCommandWait(this.db, run.projectId, taskId, next.nodeId)
+      if (pending) {
+        child.state = 'waiting'
+        child.compositeWait = { runId: pending.runId, stepKey: pending.stepKey }
+        this.store.save(run)
+        return this.wait(run, 'human.wait')
+      }
+    }
+    delete child.compositeWait
     if (receipt.state !== 'committed') {
       child.state = 'blocked'
       this.store.save(run)
@@ -1441,7 +1514,7 @@ export class FlowCoordinatorHost {
       ...(humanRound ? [`loop:${humanRound}`] : [])
     ])
     // 每次分派用新 commandId：上一轮 skipped 已终态释放占用，续跑重新交付执行以应用人工提交。
-    const commandId = `graph:${hash([run.taskId, next.nodeId, 'human', run.decisions])}`
+    const commandId = `graph:${hash([taskId, 'human', run.decisions])}`
     const inputPorts = node.ports.filter((port) => port.dir === 'in')
     const incoming = graph.edges.filter(
       (edge) => edge.to.nodeId === next.nodeId
@@ -1508,6 +1581,7 @@ export class FlowCoordinatorHost {
           projectId: run.projectId,
           taskId,
           agentNodeId: run.nodeId,
+          scopedHumanTask: true,
           targetNodeId: next.nodeId,
           contractVersion: node.contractVersion,
           inputs,
@@ -1530,6 +1604,7 @@ export class FlowCoordinatorHost {
     if (receipt.state === 'committed') {
       child.state = 'completed'
       child.outputs = receipt.outputRefs
+      child.handoffNote = receipt.handoffNote
       this.store.save(run)
       this.emitTrustedEvent(run, `${taskId}:completed`, 'agent.completed', run.revision)
       return true
@@ -1624,6 +1699,9 @@ export class FlowCoordinatorHost {
         stageKey: child.nodeId,
         nodeId: child.nodeId,
         outputs: versions.map((version) => version.value),
+        handoffNote: isAgent
+          ? this.specialists.deliveryHandoff(run.projectId, child.nodeId, child.taskId)
+          : child.handoffNote,
         humanDecided: isAgent
           ? this.specialists.humanDecision(
               { projectId: run.projectId, nodeId: child.nodeId },
@@ -1663,6 +1741,7 @@ export class FlowCoordinatorHost {
         stageKey: stage.stageKey,
         nodeId: child.nodeId,
         outputs: versions.map((version) => version.value),
+        handoffNote: this.specialists.deliveryHandoff(run.projectId, child.nodeId, child.taskId),
         humanDecided: this.specialists.humanDecision(
           { projectId: run.projectId, nodeId: child.nodeId },
           run.taskId,
@@ -1727,7 +1806,12 @@ export class FlowCoordinatorHost {
 
   /** AF-05：为已完成阶段同步交付验收记录（引用既有不可变资产，不复制全文）。 */
   private recordStageDeliveries(run: CoordinationRun): void {
-    const stageByNode = new Map(run.config.stages!.map((stage) => [stage.nodeId, stage]))
+    const stageByNode = new Map(
+      (run.config.executionMode === 'graph'
+        ? (run.config.graph?.nodes ?? []).map((node) => ({ nodeId: node.nodeId, stageKey: node.nodeId }))
+        : run.config.stages ?? []
+      ).map((stage) => [stage.nodeId, stage])
+    )
     const records = run.stageDeliveries ?? []
     const reviewsPassed = !(run.reviews ?? []).some((review) => review.state !== 'passed')
     for (const child of run.children) {
@@ -1741,17 +1825,20 @@ export class FlowCoordinatorHost {
           nodeId: child.nodeId,
           taskId: child.taskId,
           outputRefs: child.outputs,
+          handoffNote: child.handoffNote ?? this.specialists.deliveryHandoff(run.projectId, child.nodeId, child.taskId),
           ...(child.contextManifest
             ? { contextManifestHash: child.contextManifest.manifestHash }
             : {}),
           ...(child.executionEnvelope
             ? { envelopeHash: `sha256:${hash(child.executionEnvelope)}` }
             : {}),
-          humanDecided: this.specialists.humanDecision(
-            { projectId: run.projectId, nodeId: child.nodeId },
-            run.taskId,
-            child.taskId
-          ),
+          humanDecided: (run.config.executionMode !== 'graph' ||
+            run.config.graph?.nodes.some((node) => node.nodeId === child.nodeId && node.kind === 'agent')) === true
+            && this.specialists.humanDecision(
+              { projectId: run.projectId, nodeId: child.nodeId },
+              run.taskId,
+              child.taskId
+            ),
           reviewPassed: reviewsPassed,
           definitionRevision: `sha256:${run.scopeRevision}`,
           acceptedAt: Date.now(),
@@ -1766,13 +1853,42 @@ export class FlowCoordinatorHost {
    * C 组：返工影响预览（只读）。列出将作废的交付/子任务与保留项，供 GUI 确认弹窗
    * 与 CLI/MCP 预检使用；不修改运行事实、不占占用、不重发命令。
    */
+  private reworkTargets(
+    run: CoordinationRun,
+    stageKey: string
+  ): { index: number; affected: FlowStageReworkImpact['willRerunStages'] } | null {
+    if (run.config.executionMode === 'fixed-order' && run.config.stages) {
+      const index = run.config.stages.findIndex((stage) => stage.stageKey === stageKey)
+      if (index < 0) throw new AgentRuntimeError('FLOW_STAGE_MISSING', 'rework-preview')
+      return { index, affected: run.config.stages.slice(index) }
+    }
+    if (run.config.executionMode !== 'graph' || !run.config.graph) return null
+    const graph = run.config.graph
+    const index = graph.nodes.findIndex((node) => node.nodeId === stageKey)
+    if (index < 0) throw new AgentRuntimeError('FLOW_STAGE_MISSING', 'rework-preview')
+    const file = this.check(run)
+    const dependencies: Array<[string, string]> = []
+    for (const review of run.reviews ?? []) {
+      const config = ReviewNodeConfigSchema.parse(JSON.parse(shape(file, review.nodeId).props.config))
+      if (review.responsibleNodeId) dependencies.push([review.responsibleNodeId, review.nodeId])
+      for (const source of config.subjectSources) dependencies.push([source.nodeId, review.nodeId])
+      for (const nodeId of config.gatedNodeIds) dependencies.push([review.nodeId, nodeId])
+    }
+    const affected = graphReworkNodes(graph, stageKey, dependencies)
+    return {
+      index,
+      affected: graph.nodes.filter((node) => affected.has(node.nodeId))
+        .map((node) => ({ stageKey: node.nodeId, nodeId: node.nodeId }))
+    }
+  }
+
   previewStageRework(input: Identity, stageKey: string): FlowStageReworkImpact | null {
     const run = this.store.latest(input.projectId, input.nodeId)
-    if (!run || !run.config.stages || run.config.executionMode !== 'fixed-order') return null
-    const stages = run.config.stages
-    const index = stages.findIndex((stage) => stage.stageKey === stageKey)
-    if (index < 0) throw new AgentRuntimeError('FLOW_STAGE_MISSING', 'rework-preview')
-    const affected = stages.slice(index)
+    if (!run) return null
+    const targets = this.reworkTargets(run, stageKey)
+    if (!targets) return null
+    const { index, affected } = targets
+    if (run.config.executionMode === 'graph') this.recordStageDeliveries(run)
     const affectedNodes = new Set(affected.map((stage) => stage.nodeId))
     const staleDeliveries = (run.stageDeliveries ?? [])
       .filter((record) => affectedNodes.has(record.nodeId))
@@ -1792,7 +1908,9 @@ export class FlowCoordinatorHost {
       .prepare(
         "SELECT 1 FROM flow_commands WHERE project_id=? AND task_id=? AND state IN ('pending','unknown') LIMIT 1"
       )
-      .get(run.projectId, run.taskId)
+      .get(run.projectId, run.taskId) || run.children.some((child) => this.db.prepare(
+      "SELECT 1 FROM flow_commands WHERE project_id=? AND task_id=? AND state IN ('pending','unknown') LIMIT 1"
+    ).get(run.projectId, child.taskId))
     const blockedReason = this.active.has(run.taskId)
       ? 'AGENT_TASK_BUSY'
       : !['completed', 'waiting', 'blocked'].includes(run.state)
@@ -1824,46 +1942,61 @@ export class FlowCoordinatorHost {
    */
   reworkStage(input: Identity, stageKey: string): FlowAgentView {
     const run = this.store.latest(input.projectId, input.nodeId)
-    if (!run || !run.config.stages || run.config.executionMode !== 'fixed-order')
+    const impact = this.previewStageRework(input, stageKey)
+    if (!run || !impact)
       throw new AgentRuntimeError('FLOW_STAGE_REWORK_UNSUPPORTED', 'rework')
-    if (this.active.has(run.taskId)) throw new AgentRuntimeError('AGENT_TASK_BUSY', 'rework')
-    if (!['completed', 'waiting', 'blocked'].includes(run.state))
-      throw new AgentRuntimeError('FLOW_STAGE_REWORK_BUSY', 'rework')
-    const stages = run.config.stages
-    const index = stages.findIndex((stage) => stage.stageKey === stageKey)
-    if (index < 0) throw new AgentRuntimeError('FLOW_STAGE_MISSING', 'rework')
-    if ((run.reworkRound ?? 0) >= 10)
-      throw new AgentRuntimeError('FLOW_REWORK_BUDGET_EXHAUSTED', 'rework')
-    // 未结算命令（pending/unknown）存在时拒绝返工，避免重发在途副作用。
-    const unresolved = this.db
-      .prepare(
-        "SELECT 1 FROM flow_commands WHERE project_id=? AND task_id=? AND state IN ('pending','unknown') LIMIT 1"
-      )
-      .get(run.projectId, run.taskId)
-    if (unresolved) throw new AgentRuntimeError('FLOW_COMMAND_OUTCOME_UNKNOWN', 'rework')
+    if (!impact.canRework)
+      throw new AgentRuntimeError(impact.blockedReason ?? 'FLOW_STAGE_REWORK_BUSY', 'rework')
     this.check(run)
-    const affected = new Set(stages.slice(index).map((stage) => stage.nodeId))
+    if (run.config.executionMode === 'graph') this.recordStageDeliveries(run)
+    const affected = new Set(impact.willRerunStages.map((stage) => stage.nodeId))
     const history = run.reworkHistory ?? []
     const kept: CoordinationRun['stageDeliveries'] = []
     for (const record of run.stageDeliveries ?? []) {
       if (affected.has(record.nodeId)) history.push({ ...record, stale: true })
       else kept.push(record)
     }
+    const invalidatedWaits = run.children.flatMap((child) =>
+      affected.has(child.nodeId) && child.compositeWait ? [child.compositeWait.runId] : []
+    )
     // 移除受影响阶段的子任务（上游保留）；旧 specialist 任务作为历史保留在任务表。
     run.children = run.children.filter((child) => !affected.has(child.nodeId))
     run.stageDeliveries = kept
     run.reworkHistory = history
     run.reworkRound = (run.reworkRound ?? 0) + 1
+    run.skippedNodeIds = undefined
+    run.stalledNodeIds = undefined
+    if (run.config.executionMode === 'graph') {
+      for (const nodeId of affected) delete run.loopIterations?.[nodeId]
+      run.reviews = run.reviews?.map((review) => affected.has(review.nodeId)
+        ? {
+            nodeId: review.nodeId,
+            responsibleNodeId: review.responsibleNodeId,
+            requestId: hash([run.taskId, review.nodeId, run.reworkRound, 0]),
+            state: 'ready',
+            round: 0
+          }
+        : review)
+      run.decisions = 0
+      run.controlSteps = 0
+    }
     run.outputs = []
     run.code = undefined
     run.decisionPending = false
-    this.emitTrustedEvent(run, `${run.taskId}:rework:${run.reworkRound}`, 'flow.rework', run.revision)
-    // 返工后停在等待态，由显式 continue 恢复固定顺序推进（不自动重发）。
     run.state = 'waiting'
     run.waitRevision++
-    // 完成时曾 release 控制范围；返工重新占用，保证续跑时范围归属一致。
-    this.store.reoccupy(run, run.scopeIds)
-    this.store.save(run)
+    this.db.transaction(() => {
+      this.store.reoccupy(run, run.scopeIds)
+      for (const childRunId of invalidatedWaits) {
+        this.db.prepare(
+          "UPDATE composite_run_waits SET state='cancelled' WHERE run_id=? AND state='open'"
+        ).run(childRunId)
+        this.db.prepare(
+          "UPDATE composite_runs SET status='cancelled', finished_at=? WHERE id=? AND project_id=? AND status='waiting-input'"
+        ).run(Date.now(), childRunId, run.projectId)
+      }
+      this.emitTrustedEvent(run, `${run.taskId}:rework:${run.reworkRound}`, 'flow.rework', run.revision)
+    })()
     emitGatewayEvent(
       'agent.coordination.stage_rework',
       '阶段局部返工',

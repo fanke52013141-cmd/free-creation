@@ -90,6 +90,12 @@ export function diffDefinitions(
  * ④P6：FlowGraph 定义版本（与运行分离，不可变）。图模式的可复用快照——存 FlowGraph IR，
  * contentHash 由宿主计算；一次调用用某定义版本经建图提案管线创建独立运行，不改模板。
  */
+export interface FlowGraphSource {
+  definitionId: string
+  version: number
+  contentHash: string
+}
+
 export const FlowGraphDefinitionSchema = z
   .object({
     schemaVersion: z.literal(1),

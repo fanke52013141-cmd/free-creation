@@ -1,6 +1,6 @@
 // O4-P3 声明式图路由：顺序/条件分支/汇合（all/any）；路由只认交付事实，模型文字不能改路由。
 import { describe, expect, it } from 'vitest'
-import { nextReadyNodes, isFlowComplete, deliveredGraphNodes } from '../src/shared/agent-flow/flow-graph-router'
+import { graphReworkNodes, nextReadyNodes, isFlowComplete, deliveredGraphNodes } from '../src/shared/agent-flow/flow-graph-router'
 import { FlowGraphSchema, type FlowNode, type FlowGraph } from '../src/shared/agent-flow/flow-graph'
 import type { StageEntryFacts, StageDeliveryFact } from '../src/shared/agent-flow/stage-contracts'
 
@@ -265,3 +265,44 @@ describe('BL-04 otherwise 边与多值歧义', () => {
   })
 })
 
+
+describe('图模式返工影响范围', () => {
+  it('只重做修改点及其下游，交汇处重新使用独立分支的成果', () => {
+    const g = graph(
+      ['entry', 'date', 'design', 'copy', 'poster'].map((id) => node(id)),
+      [dataEdge('entry', 'date'), dataEdge('entry', 'design'), dataEdge('date', 'copy'),
+        dataEdge('copy', 'poster'), dataEdge('design', 'poster')],
+      'entry', ['poster']
+    )
+    expect([...graphReworkNodes(g, 'date')]).toEqual(['date', 'copy', 'poster'])
+    expect([...graphReworkNodes(g, 'missing')]).toEqual([])
+  })
+
+  it('重新计算引用修改点的条件分支、兜底分支与审核门禁', () => {
+    const g = graph(
+      ['entry', 'date', 'early', 'regular', 'approved'].map((id) => node(id)),
+      [dataEdge('entry', 'date'), dataEdge('entry', 'early', [{ ...eq('date', 'early')[0] }]),
+        { ...dataEdge('entry', 'regular'), otherwise: true }],
+      'entry', ['early', 'regular']
+    )
+    expect([...graphReworkNodes(g, 'date', [['early', 'approved']])]).toEqual([
+      'date', 'early', 'regular', 'approved'
+    ])
+  })
+
+  it('循环体中任一节点返工会重置整个循环体及其出口', () => {
+    const g = {
+      ...graph(['entry', 'draft', 'check', 'publish'].map((id) => node(id)), [], 'entry', ['publish']),
+      schemaVersion: 2 as const,
+      nodes: [
+        node('entry'),
+        node('draft', { loop: { body: ['draft', 'check'], maxIterations: 2,
+          exitCondition: [{ ...eq('check', 'approved')[0] }] } }),
+        node('check'),
+        node('publish')
+      ],
+      edges: [dataEdge('entry', 'draft'), dataEdge('draft', 'check'), dataEdge('check', 'publish')]
+    }
+    expect(graphReworkNodes(g, 'check')).toEqual(new Set(['check', 'draft', 'publish']))
+  })
+})

@@ -6,6 +6,8 @@ vi.mock('../src/main/store/db', () => ({ getDb: () => fixture.db }))
 
 import {
   createCompositeRun,
+  beginCompositeResume,
+  waitCompositeRun,
   finishCompositeRun,
   getCompositeRun,
   listCompositeRuns,
@@ -29,6 +31,7 @@ beforeEach(() => {
       status TEXT NOT NULL, started_at INTEGER NOT NULL, finished_at INTEGER,
       error_code TEXT, error_message TEXT, created_at INTEGER NOT NULL
     );
+    CREATE TABLE composite_run_waits (run_id TEXT NOT NULL, revision INTEGER NOT NULL, state TEXT NOT NULL);
     CREATE TABLE composite_run_steps (
       run_id TEXT NOT NULL, step_key TEXT NOT NULL, node_type TEXT NOT NULL, status TEXT NOT NULL,
       started_at INTEGER, finished_at INTEGER, reason TEXT, PRIMARY KEY (run_id, step_key)
@@ -68,6 +71,28 @@ describe('组合运行账本（P3 基础）', () => {
     const run = getCompositeRun('run-2')
     expect(run?.run.status).toBe('interrupted')
     expect(run?.run.errorCode).toBe('HOST_RESTARTED')
+  })
+
+  it('重启保留人工等待，提交后只允许领取一次，正在续跑才结算为中断', () => {
+    const run = {
+      id: 'waiting',
+      projectId: 'project',
+      capabilityId: 'review',
+      capabilityVersion: '1.0',
+      contentHash: 'b'.repeat(64)
+    }
+    createCompositeRun(run)
+    waitCompositeRun({ runId: run.id, stepKey: 'review' })
+    fixture.db.prepare("INSERT INTO composite_run_waits VALUES (?, 1, 'open')").run(run.id)
+    expect(settleInterruptedCompositeRuns()).toBe(0)
+    expect(getCompositeRun(run.id)?.run.status).toBe('waiting-input')
+    expect(beginCompositeResume(run)).toBe(false)
+    fixture.db.prepare("UPDATE composite_run_waits SET state='satisfied' WHERE run_id = ?").run(run.id)
+    expect(beginCompositeResume({ ...run, projectId: 'other' })).toBe(false)
+    expect(beginCompositeResume(run)).toBe(true)
+    expect(beginCompositeResume(run)).toBe(false)
+    expect(settleInterruptedCompositeRuns()).toBe(1)
+    expect(getCompositeRun(run.id)?.run.status).toBe('interrupted')
   })
 
   it('失败运行保留有界错误信息', () => {

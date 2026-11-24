@@ -42,12 +42,12 @@ export interface CompositeRunRequest {
   /** AF-07：已满足的人工等待提交值（按内部节点 ID），续跑时消费为人工任务输出。 */
   humanSubmissions?: Record<
     string,
-    { kind: 'text'; text: string } | { kind: 'json'; data: unknown }
+    import('../agent-flow/node-contracts').HumanTaskValue
   >
   /** AF-07：续跑时已完成的内部节点 ID（跳过重跑，保护已付费任务）。 */
   completedSteps?: string[]
   /** AF-07：已完成节点的运行结果回放（nodeId → {nodeResult,nodeRun}），续跑时写入隔离 editor 供下游消费。 */
-  stepOutputs?: Record<string, { nodeResult: string | null; nodeRun: unknown }>
+  stepOutputs?: Record<string, { nodeResult: string | null; nodeExtra?: string; humanTask?: string; nodeRun: unknown }>
 }
 
 export interface CompositeRunFailure {

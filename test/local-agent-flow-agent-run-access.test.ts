@@ -39,6 +39,7 @@ interface FakePort {
   runReply: unknown
   taskView: unknown
   collaborationView: unknown
+  inspectView?: ReturnType<NonNullable<import('../src/main/agent-access/flow-bridge').FlowAgentAccessPort['inspect']>>
   previewImpact: unknown
 }
 
@@ -67,6 +68,7 @@ function publishFakePort(overrides: Partial<FakePort> = {}): FakePort {
     ...overrides
   }
   publishFlowAgentAccessPort({
+    ...(port.inspectView ? { inspect: () => port.inspectView ?? null } : {}),
     async run(raw) {
       port.runs.push(raw)
       return port.runReply
@@ -267,11 +269,23 @@ describe('flowAgent 运行控制', () => {
   })
 
   // P0-2：外部不能凭 action=continue 把人工等待推过去；没有桌面确认时必须 fail-closed。
-  it('外部继续人工等待需要桌面确认，缺桌面时拒绝且宿主不被调用', async () => {
+  it.each(['specialist', 'parent'] as const)('%s 外部继续人工等待需要桌面确认', async (kind) => {
     const project = createProject('运行-人工门')
     active = project.id
     const port = publishFakePort({
-      collaborationView: { task: taskView('waiting') }
+      ...(kind === 'parent'
+        ? {
+            collaborationView: null,
+            inspectView: {
+              taskId: 'agent-task-1',
+              state: 'waiting',
+              waitKind: 'human',
+              waitRevision: 2,
+              decisions: 1,
+              tools: 1
+            }
+          }
+        : { collaborationView: { task: taskView('waiting') } })
     })
     const response = await write('flowAgent.run', {
       projectId: project.id,

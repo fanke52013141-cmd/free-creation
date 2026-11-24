@@ -1,3 +1,4 @@
+import { getDb } from '../store/db'
 import { ipcMain } from 'electron'
 import { IPC } from '../../shared/contracts'
 import type { IpcEnvelope } from '../../shared/contracts'
@@ -23,6 +24,7 @@ import {
 } from '../store/composite.repo'
 import {
   createCompositeRun,
+  beginCompositeResume,
   finishCompositeRun,
   waitCompositeRun,
   recordCompositeStepOutput,
@@ -72,8 +74,9 @@ function runDiagnostics(runId: string): GatewayDiagnosticsContext {
 export function registerCompositeIpc(): void {
   ipcMain.handle(
     IPC.composite.runStart,
-    (_event, input: Parameters<typeof createCompositeRun>[0]): IpcEnvelope<unknown> => {
+    (_event, input: Parameters<typeof createCompositeRun>[0] & { resume?: boolean }): IpcEnvelope<unknown> => {
       try {
+        if (input.resume) return ok(beginCompositeResume(input))
         const record = createCompositeRun(input)
         emitGatewayEvent(
           'composite.run.started',
@@ -163,8 +166,8 @@ export function registerCompositeIpc(): void {
     IPC.composite.runWait,
     (_event, input: { runId: string; stepKey: string; nodeType: string }): IpcEnvelope<boolean> => {
       try {
-        const changed = waitCompositeRun({ runId: input.runId, stepKey: input.stepKey })
-        if (changed) {
+        const changed = getDb().transaction(() => {
+          if (!waitCompositeRun({ runId: input.runId, stepKey: input.stepKey })) return false
           openCompositeRunWait({
             requestId: `${input.runId}:${input.stepKey}`,
             runId: input.runId,
@@ -181,6 +184,9 @@ export function registerCompositeIpc(): void {
               }
             ]
           })
+          return true
+        }).immediate()
+        if (changed) {
           emitGatewayEvent(
             'composite.run.waiting',
             '节点流等待人工提交',
@@ -201,7 +207,7 @@ export function registerCompositeIpc(): void {
     IPC.composite.runStepOutput,
     (
       _event,
-      input: { runId: string; nodeId: string; nodeResult: string | null; nodeRun: unknown }
+      input: { runId: string; nodeId: string; nodeResult: string | null; nodeExtra?: string; humanTask?: string; nodeRun: unknown }
     ): IpcEnvelope<boolean> => {
       try {
         recordCompositeStepOutput(input)

@@ -186,9 +186,10 @@ const api = {
     ipcRenderer.invoke(IPC.flowAgents.build, input),
   graphFlowAgent: (
     input: {
-      action: 'list' | 'preview' | 'authorize' | 'confirm' | 'discard'
+      action: 'list' | 'preview' | 'authorize' | 'confirm' | 'discard' | 'restore-preview' | 'restore-verify' | 'export-preview' | 'export-publish'
       projectId: string
       buildId?: string
+      expectedRevision?: string
     }
   ): Promise<
     IpcEnvelope<
@@ -213,6 +214,7 @@ const api = {
     IpcEnvelope<{
       projectId: string
       overview: import('../shared/agent-flow/run-overview').FlowRunOverview | null
+      canvasVersion?: import('../shared/agent-flow/run-overview').FlowRunOverview['canvasVersion']
     }>
   > => ipcRenderer.invoke(IPC.flowAgents.overview, input),
   stopFlowAgent: (input: {
@@ -654,6 +656,7 @@ const api = {
     }): Promise<IpcEnvelope<import('@shared/composite/upgrade').CompositeUpgradePreviewResult>> =>
       ipcRenderer.invoke(IPC.composite.upgradePreview, input),
     runStart: (input: {
+      resume?: boolean
       id: string
       projectId: string
       capabilityId: string
@@ -697,6 +700,8 @@ const api = {
       runId: string
       nodeId: string
       nodeResult: string | null
+      nodeExtra?: string
+      humanTask?: string
       nodeRun: unknown
     }): Promise<IpcEnvelope<boolean>> => ipcRenderer.invoke(IPC.composite.runStepOutput, input),
     runGet: (runId: string): Promise<IpcEnvelope<unknown>> =>

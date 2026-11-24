@@ -343,6 +343,8 @@ export function recordCompositeStepOutput(input: {
   runId: string
   nodeId: string
   nodeResult: string | null
+  nodeExtra?: string
+  humanTask?: string
   nodeRun: unknown
 }): void {
   const db = getDb()
@@ -350,7 +352,7 @@ export function recordCompositeStepOutput(input: {
     .prepare('SELECT step_outputs FROM composite_runs WHERE id = ?')
     .get(input.runId) as { step_outputs: string | null } | undefined
   const map = row?.step_outputs ? (JSON.parse(row.step_outputs) as Record<string, unknown>) : {}
-  map[input.nodeId] = { nodeResult: input.nodeResult, nodeRun: input.nodeRun }
+  map[input.nodeId] = { nodeResult: input.nodeResult, nodeExtra: input.nodeExtra, humanTask: input.humanTask, nodeRun: input.nodeRun }
   db.prepare('UPDATE composite_runs SET step_outputs = ? WHERE id = ?').run(
     JSON.stringify(map),
     input.runId
@@ -359,14 +361,15 @@ export function recordCompositeStepOutput(input: {
 
 /** AF-07：读取已完成节点的运行结果回放表。 */
 export function getCompositeStepOutputs(
-  runId: string
-): Record<string, { nodeResult: string | null; nodeRun: unknown }> {
-  const row = getDb().prepare('SELECT step_outputs FROM composite_runs WHERE id = ?').get(runId) as
+  runId: string,
+  db = getDb()
+): Record<string, { nodeResult: string | null; nodeExtra?: string; humanTask?: string; nodeRun: unknown }> {
+  const row = db.prepare('SELECT step_outputs FROM composite_runs WHERE id = ?').get(runId) as
     { step_outputs: string | null } | undefined
   return row?.step_outputs
     ? (JSON.parse(row.step_outputs) as Record<
         string,
-        { nodeResult: string | null; nodeRun: unknown }
+        { nodeResult: string | null; nodeExtra?: string; humanTask?: string; nodeRun: unknown }
       >)
     : {}
 }
@@ -391,13 +394,27 @@ export function listCompositeRuns(projectId: string, limit = 20): CompositeRunRe
   return rows.map(rowToRun)
 }
 
+/** 领取同一次运行的续跑权，避免重启时把实际执行中的续跑留在人工等待态。 */
+export function beginCompositeResume(input: Pick<
+  Parameters<typeof createCompositeRun>[0],
+  'id' | 'projectId' | 'capabilityId' | 'capabilityVersion' | 'contentHash'
+>): boolean {
+  return getDb().prepare(`
+    UPDATE composite_runs SET status = 'running'
+    WHERE id = ? AND project_id = ? AND capability_id = ? AND capability_version = ?
+      AND content_hash = ? AND status = 'waiting-input'
+      AND (SELECT state FROM composite_run_waits WHERE run_id = composite_runs.id
+        ORDER BY revision DESC LIMIT 1) = 'satisfied'
+  `).run(input.id, input.projectId, input.capabilityId, input.capabilityVersion, input.contentHash).changes > 0
+}
+
 /** App 启动时调用：上次进程遗留的 running 组合明确标为 interrupted，不伪造成功。 */
 export function settleInterruptedCompositeRuns(): number {
   return getDb()
     .prepare(
       `UPDATE composite_runs SET status = 'interrupted', finished_at = ?, error_code = 'HOST_RESTARTED',
         error_message = '应用关闭或重启中断了组合运行，请核对后重试'
-       WHERE status IN ('accepted','running','waiting-input')`
+       WHERE status IN ('accepted','running')`
     )
     .run(Date.now()).changes
 }

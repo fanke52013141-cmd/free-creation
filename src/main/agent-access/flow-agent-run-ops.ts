@@ -104,8 +104,8 @@ export async function runFlowAgentRunOperation(
               task?: { state?: string; waitKind?: string | null }
             } | null)
           : null
-      const waitingForHuman =
-        current?.task?.state === 'waiting' && current?.task?.waitKind === 'human'
+      const task = port.inspect?.({ projectId, nodeId }) ?? current?.task
+      const waitingForHuman = task?.state === 'waiting' && task.waitKind === 'human'
       if (waitingForHuman) {
         const decision = await requestHumanDecision({
           operation: 'flowAgent.run',
@@ -125,7 +125,7 @@ export async function runFlowAgentRunOperation(
     }
     let reply: unknown
     try {
-      reply = await port.run({ ...parsed.data, ...(humanConfirmed ? { humanConfirmed } : {}) })
+      reply = await port.run({ ...parsed.data, runOrigin: 'external', ...(humanConfirmed ? { humanConfirmed } : {}) })
     } catch (error) {
       fail(error)
     }

@@ -45,10 +45,10 @@ function installLedger(): {
   const calls: LedgerCall[] = []
   const versions = new Map<string, { manifest: CompositeManifest; contentHash: string }>()
   const record =
-    (op: string): ((payload: Record<string, unknown>) => Promise<{ ok: true }>) =>
+    (op: string): ((payload: Record<string, unknown>) => Promise<{ ok: true; data: true }>) =>
     async (payload) => {
       calls.push({ op, payload })
-      return { ok: true }
+      return { ok: true, data: true }
     }
   const api = {
     composite: {

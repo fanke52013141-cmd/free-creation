@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { HandoffNoteSchema } from './stage-contracts'
 import type { FlowAssetValue } from './assets'
 import { SkillBindingSchema } from './runtime-contracts'
 import { AgentFlowAssetRefSchema as importedAssetRef } from './node-contracts'
@@ -22,7 +23,8 @@ export const FlowAgentRunSchema = FlowAgentQuerySchema.extend({
    * - 'desktop-confirm'：外部调用已在 main 经 desktop.ask 由人确认。
    * 缺省表示没有人工确认证据——人工等待的继续必须被拒，不能默认当作"人已采用"。
    */
-  humanConfirmed: z.enum(['gui', 'desktop-confirm']).optional()
+  humanConfirmed: z.enum(['gui', 'desktop-confirm']).optional(),
+  runOrigin: z.literal('external').optional()
 })
   .strict()
   .superRefine((input, context) => {
@@ -73,11 +75,14 @@ export const FlowAgentCollaborationSchema = FlowAgentQuerySchema.extend({
   action: z.enum(['note', 'discuss', 'submit', 'revise']),
   text: z.string().max(4096),
   accepted: z.boolean().optional(),
+  handoffNote: HandoffNoteSchema.optional(),
   selectedOutputs: z.array(importedAssetRef).max(128).optional(),
   selectedInputs: z.array(importedAssetRef).max(128).optional()
 })
   .strict()
   .superRefine((input, context) => {
+    if (input.handoffNote && (input.action !== 'submit' || input.accepted !== true))
+      context.addIssue({ code: 'custom', path: ['handoffNote'], message: 'Handoff requires an accepted submission' })
     const refs = input.selectedOutputs ?? []
     if (new Set(refs.map((ref) => JSON.stringify(ref))).size !== refs.length)
       context.addIssue({ code: 'custom', message: 'Selected outputs must be unique references' })
@@ -87,7 +92,7 @@ export interface FlowAgentCollaborationView {
   task: FlowAgentView
   goal: string
   revision: number
-  messages: Array<{ eventId: string; kind: string; text: string; reply?: string }>
+  messages: Array<{ eventId: string; kind: string; text: string; reply?: string; handoffNote?: string; actor?: import('./node-contracts').HumanActor }>
   inputs: Array<{ sourceNodeId: string; sourcePortId: string; versionId: string }>
   candidates: import('zod').infer<typeof importedAssetRef>[]
   /** AF-04：当前工作稿（最近一次已提交候选成果正文）；无候选时为 undefined。 */

@@ -1,3 +1,4 @@
+import type { CompositeManifest } from '../src/shared/composite/manifest'
 import { afterEach, describe, expect, it } from 'vitest'
 import Database from 'better-sqlite3'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, unlinkSync, symlinkSync } from 'node:fs'
@@ -2424,4 +2425,171 @@ describe('production durable command ledger', () => {
     expect(executions).toBe(1)
     expect(recoveryModelFactories).toBe(0)
   })
+})
+
+function compositeManifest(overrides: Partial<CompositeManifest> = {}): CompositeManifest {
+  return {
+    schemaVersion: 1,
+    runtimeVersion: 2,
+    capabilityId: 'material-flow',
+    version: '1.0',
+    name: '材料整理流',
+    description: '把来源材料整理成一份可交付文本',
+    inputs: [
+      {
+        id: 'source',
+        label: '来源',
+        type: 'text',
+        required: true,
+        cardinality: 'one',
+        targets: [{ nodeId: 'n1', portId: 'in-text' }]
+      }
+    ],
+    outputs: [
+      {
+        id: 'result',
+        label: '结果',
+        type: 'text',
+        required: true,
+        cardinality: 'one',
+        source: { nodeId: 'n1', portId: 'out-text' }
+      }
+    ],
+    graph: {
+      nodes: [
+        {
+          id: 'n1',
+          nodeType: 'text',
+          contractVersion: 3,
+          title: '整理',
+          dx: 0,
+          dy: 0,
+          w: 340,
+          h: 300,
+          ports: [
+            {
+              id: 'in-text',
+              name: '文本',
+              dir: 'in',
+              type: 'text',
+              required: false,
+              cardinality: 'many'
+            },
+            {
+              id: 'out-text',
+              name: '文本',
+              dir: 'out',
+              type: 'text',
+              required: true,
+              cardinality: 'one'
+            }
+          ]
+        }
+      ],
+      edges: []
+    },
+    executionPolicy: { waitForInput: true },
+    ...overrides
+  }
+}
+
+it('commits both public outputs of a pinned published node flow', () => {
+  const f = fixture()
+  const manifest = compositeManifest()
+  manifest.inputs[0].id = 'value'
+  manifest.outputs.push({ ...manifest.outputs[0], id: 'second' })
+  const digest = 'a'.repeat(64)
+  f.db
+    .prepare(
+      "INSERT INTO composite_capabilities (id,name,description,tags,latest_version,archived,created_at,updated_at) VALUES (?,?,?,'[]',?,0,0,0)"
+    )
+    .run(manifest.capabilityId, manifest.name, '', manifest.version)
+  f.db
+    .prepare(
+      "INSERT INTO composite_versions (capability_id,version,manifest,content_hash,published_at,published_by) VALUES (?,?,?,?,0,'test')"
+    )
+    .run(manifest.capabilityId, manifest.version, JSON.stringify(manifest), digest)
+  const config = JSON.stringify({
+    capabilityId: manifest.capabilityId,
+    version: manifest.version,
+    contentHash: digest
+  })
+  f.target.props.nodeType = 'composite'
+  f.target.props.config = config
+  const target = f.file.nodes.find((node) => node.id === f.target.id)!
+  target.type = 'composite'
+  target.params.config = config
+  target.ports = [
+    ...manifest.inputs.map((port) => ({
+      ...port,
+      id: `in-${port.id}`,
+      dir: 'in' as const,
+      name: port.label
+    })),
+    ...manifest.outputs.map((port) => ({
+      ...port,
+      id: `out-${port.id}`,
+      dir: 'out' as const,
+      name: port.label
+    }))
+  ]
+  f.file.edges = []
+  expect(() => f.ledger.prepare({ ...f.command(), inputs: [] })).toThrow('INPUT_REQUIRED')
+  f.file.edges = [
+    {
+      id: 'edge-a',
+      from: { nodeId: f.source.id, portId: 'out-text' },
+      to: { nodeId: target.id, portId: 'in-value' }
+    }
+  ]
+  const grant = f.prepare()
+  f.savedRun(grant, 'skipped')
+  const childRunId = 'waiting-composite'
+  f.db.prepare(`
+    INSERT INTO composite_runs
+      (id,project_id,capability_id,capability_version,content_hash,instance_node_id,parent_run_id,status,started_at,created_at,step_outputs)
+    VALUES (?,?,?,?,?,?,?,'waiting-input',0,0,?)
+  `).run(childRunId, f.file.meta.id, manifest.capabilityId, manifest.version, digest, target.id, grant.runId,
+    JSON.stringify({ n1: { nodeResult: 'saved output', nodeRun: null } }))
+  f.db.prepare(`
+    INSERT INTO composite_run_waits (id,run_id,step_key,revision,kind,state,fields_json,created_at)
+    VALUES ('wait-a',?,'approval',1,'human','open','[]',0)
+  `).run(childRunId)
+  expect(f.ledger.commit(lookup).state).toBe('skipped')
+  const resume = { ...f.command(), commandId: 'resume-command' }
+  expect(() => f.ledger.prepare(resume)).toThrow('HUMAN_WAIT_NOT_SATISFIED')
+  const submission = { kind: 'text', text: 'approved' }
+  f.db.prepare("UPDATE composite_run_waits SET state='satisfied',value_json=? WHERE id='wait-a'")
+    .run(JSON.stringify(submission))
+  const restarted = new FlowCommandLedger(f.db, f.project)
+  const resumed = restarted.prepare(resume)
+  expect(resumed).toMatchObject({ state: 'ready', grant: { compositeResume: {
+    resumeRunId: childRunId, completedSteps: ['n1'], humanSubmissions: { approval: submission }
+  } } })
+  if (resumed.state !== 'ready') throw new Error('expected resume grant')
+  // The fixture saves through the same lease authority used by the desktop host.
+  restarted.check({ projectId: f.file.meta.id, commandId: resume.commandId, leaseId: resumed.grant.leaseId })
+  Object.assign(f.target.meta.nodeRun as object, {
+    status: 'success',
+    runId: resumed.grant.runId,
+    commandId: resume.commandId,
+    commandLeaseId: resumed.grant.leaseId
+  })
+  const [first, second] = manifest.outputs.map((port) => `out-${port.id}`)
+  Object.assign(f.target.meta.nodeRun as object, { outputPorts: [first, second] })
+  f.target.meta.nodeExtra = JSON.stringify({
+    [first]: { kind: 'text', text: 'facts' },
+    [second]: { kind: 'text', text: 'copy' }
+  })
+  const resumeLookup = { ...lookup, commandId: resume.commandId }
+  const receipt = restarted.commit(resumeLookup)
+  expect(receipt.state).toBe('committed')
+  expect(receipt.outputRefs.map((ref) => ref.sourcePortId)).toEqual([first, second])
+  expect(
+    f.assets.resolveInputs(f.file.meta.id, receipt.outputRefs).map((asset) => asset.value)
+  ).toEqual([
+    { kind: 'text', text: 'facts' },
+    { kind: 'text', text: 'copy' }
+  ])
+  expect(restarted.commit(resumeLookup)).toEqual(receipt)
 })

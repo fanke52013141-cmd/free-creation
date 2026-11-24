@@ -955,6 +955,13 @@ async function invokeExecutor(
     .filter((e) => e.from.nodeId === node.id)
     .map((e) => ({ nodeId: e.to.nodeId, fromPortId: e.from.portId, toPortId: e.to.portId }))
   const nodeCtx: NodeExecutionContext = {
+    resolveHumanTaskMedia: async (kind, mediaId) => {
+      const response = await window.api.listMedia(ctx.projectId)
+      const media = response.ok
+        ? response.data.find((asset) => asset.id === mediaId && asset.kind === kind)
+        : undefined
+      return media ? { kind, mediaId, mediaPath: media.path, mime: media.mime } : null
+    },
     node,
     shape,
     inputs,
@@ -967,6 +974,9 @@ async function invokeExecutor(
             commandId: ctx.command.grant.command.commandId,
             leaseId: ctx.command.grant.leaseId
           },
+          ...(ctx.command.grant.command.scopedHumanTask
+            ? { humanTaskScope: ctx.command.grant.command.taskId }
+            : {}),
           ...(ctx.command.grant.command.envelope
             ? { executionEnvelope: ctx.command.grant.command.envelope }
             : {})
@@ -1098,6 +1108,7 @@ async function invokeExecutor(
     runComposite: (request) =>
       runCompositeIsolated(ctx.editor, ctx.projectId, ctx.providers, {
         ...request,
+        ...ctx.command?.grant.compositeResume,
         signal: ctx.token
       }),
     compositeRunContext: ctx.compositeRunContext,

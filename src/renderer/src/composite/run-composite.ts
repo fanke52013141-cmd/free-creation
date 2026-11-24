@@ -117,7 +117,18 @@ async function execute(
   const shapeByNode = new Map<string, TLShapeId>()
   try {
     const contentHash = await compositeContentHash(manifest)
-    if (!resuming) {
+    if (resuming) {
+      const claimed = await window.api.composite.runStart({
+        id: runId,
+        projectId,
+        capabilityId: manifest.capabilityId,
+        capabilityVersion: manifest.version,
+        contentHash,
+        resume: true
+      })
+      if (!claimed.ok || claimed.data !== true)
+        return { status: 'failed', reason: '节点流等待未满足或已被续跑', stepCount: 0 }
+    } else {
       await report(() =>
         window.api.composite.runStart({
           id: runId,
@@ -346,6 +357,10 @@ async function execute(
           type: 'node-card',
           meta: {
             nodeResult: output.nodeResult ?? undefined,
+            nodeExtra: output.nodeExtra,
+            ...(output.humanTask
+              ? { humanTask: JSON.stringify({ ...JSON.parse(output.humanTask), nodeId: shapeId }) }
+              : {}),
             nodeRun: output.nodeRun ? JSON.parse(JSON.stringify(output.nodeRun)) : undefined
           }
         })
@@ -361,7 +376,8 @@ async function execute(
       if (!shapeId) continue
       const nodeType = manifest.graph.nodes.find((node) => node.id === nodeId)?.nodeType ?? ''
       // AF-07：续跑跳过已完成步骤（保护已付费任务，不自动重做）。
-      if (completedSteps.has(nodeId)) {
+      if (completedSteps.has(nodeId) &&
+          (nodeType !== 'human-task' || request.stepOutputs?.[nodeId]?.humanTask)) {
         successfulSteps++
         continue
       }
@@ -369,39 +385,31 @@ async function execute(
       // 已满足的提交值消费为正式输出；否则开放人工等待并停在 waiting-input，
       // 由外部 humanTask.submit 满足后经 composite.run.resume 续跑。
       if (nodeType === 'human-task') {
-        const submission = request.humanSubmissions?.[nodeId]
-        if (submission) {
-          const instance = {
-            schemaVersion: 1,
-            nodeId,
-            revision: 1,
-            status: 'completed',
-            result: submission,
-            lastSubmissionId: `composite:${runId}:${nodeId}`,
-            submittedAt: Date.now()
+        const value = request.humanSubmissions?.[nodeId]
+        if (!value) {
+          await report(() => window.api.composite.runWait({ runId, stepKey: nodeId, nodeType }))
+          return {
+            status: 'waiting',
+            waitingStepKey: nodeId,
+            reason: `节点流等待人工任务「${nodeId}」提交后续跑`,
+            stepCount: successfulSteps
           }
-          runEditor.updateShape({
-            id: shapeId,
-            type: 'node-card',
-            meta: { humanTask: JSON.stringify(instance), humanTaskPending: '' }
-          })
-          await report(() =>
-            window.api.composite.runStep({ runId, stepKey: nodeId, nodeType, status: 'completed' })
-          )
-          successfulSteps++
-          continue
         }
-        await report(() => window.api.composite.runWait({ runId, stepKey: nodeId, nodeType }))
-        return {
-          status: 'waiting',
-          waitingStepKey: nodeId,
-          reason: `节点流等待人工任务「${nodeId}」提交后续跑`,
-          stepCount: successfulSteps
-        }
+        runEditor.updateShape({
+          id: shapeId,
+          type: 'node-card',
+          meta: {
+            humanTaskPending: JSON.stringify({
+              submissionId: crypto.randomUUID(),
+              expectedRevision: 1,
+              value
+            })
+          }
+        })
       }
-      await report(() =>
-        window.api.composite.runStep({ runId, stepKey: nodeId, nodeType, status: 'running' })
-      )
+      const admitted = await window.api.composite.runStep({ runId, stepKey: nodeId, nodeType, status: 'running' })
+      if (!admitted.ok || admitted.data !== true)
+        throw new Error('COMPOSITE_STEP_ADMISSION_UNCONFIRMED')
       const result = await runNodeManually(
         runEditor,
         projectId,
@@ -411,6 +419,21 @@ async function execute(
         undefined,
         runContext
       )
+      // AF-07：持久化已完成节点的运行结果（供人工等待续跑回放，跳过重跑）。
+      if (result.status !== 'failed' && result.status !== 'skipped') {
+        const meta = runEditor.getShape<NodeCardShape>(shapeId)?.meta as
+          Record<string, unknown> | undefined
+        const checkpoint = await window.api.composite.runStepOutput({
+            runId,
+            nodeId,
+            nodeResult: typeof meta?.nodeResult === 'string' ? meta.nodeResult : null,
+            ...(typeof meta?.nodeExtra === 'string' ? { nodeExtra: meta.nodeExtra } : {}),
+            ...(typeof meta?.humanTask === 'string' ? { humanTask: meta.humanTask } : {}),
+            nodeRun: meta?.nodeRun ?? null
+        })
+        if (!checkpoint.ok || checkpoint.data !== true)
+          throw new Error('COMPOSITE_STEP_CHECKPOINT_UNCONFIRMED')
+      }
       await report(() =>
         window.api.composite.runStep({
           runId,
@@ -426,19 +449,6 @@ async function execute(
           ...(result.reason ? { reason: result.reason } : {})
         })
       )
-      // AF-07：持久化已完成节点的运行结果（供人工等待续跑回放，跳过重跑）。
-      if (result.status !== 'failed' && result.status !== 'skipped') {
-        const meta = runEditor.getShape<NodeCardShape>(shapeId)?.meta as
-          Record<string, unknown> | undefined
-        await report(() =>
-          window.api.composite.runStepOutput({
-            runId,
-            nodeId,
-            nodeResult: typeof meta?.nodeResult === 'string' ? meta.nodeResult : null,
-            nodeRun: meta?.nodeRun ?? null
-          })
-        )
-      }
       if (result.status === 'failed') {
         failure = { code: 'NODE_FAILED', phase: 'step', nodeId }
         await finish('failed', {

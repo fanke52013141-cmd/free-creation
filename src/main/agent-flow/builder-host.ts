@@ -1,3 +1,6 @@
+import { exportCanvasFlowGraph } from './graph-canvas-export'
+import { FlowDefinitionStore } from './definition-store'
+import { graphCanvasScopeHash } from './graph-canvas-version'
 import type Database from 'better-sqlite3'
 import { createHash } from 'node:crypto'
 import type { ProjectFile } from '../../shared/types'
@@ -214,6 +217,7 @@ export class FlowBuilderHost {
   async proposeGraph(input: {
     projectId: string
     graph: FlowGraph
+    sourceGraph?: FlowGraphPreview['sourceGraph']
     requestId: string
   }): Promise<FlowGraphPreview> {
     const file = this.activeFile(input.projectId)
@@ -256,6 +260,7 @@ export class FlowBuilderHost {
       ),
       state: 'preview',
       graph,
+      ...(input.sourceGraph ? { sourceGraph: input.sourceGraph } : {}),
       nodes: compiled.nodes,
       edges: compiled.edges,
       coordinatorNodeId: compiled.coordinatorNodeId,
@@ -269,6 +274,7 @@ export class FlowBuilderHost {
     const preview = this.readGraph(input.projectId, input.buildId)
     if (preview?.state === 'preview' && this.committed(preview, file)) {
       preview.state = 'committed'
+      preview.committedScopeHash ??= graphCanvasScopeHash(file, preview)
       this.saveGraph(preview)
     }
     return preview
@@ -279,6 +285,7 @@ export class FlowBuilderHost {
     if (!preview) throw new AgentRuntimeError('FLOW_BUILD_MISSING', 'builder')
     if (this.committed(preview, file)) {
       preview.state = 'committed'
+      preview.committedScopeHash ??= graphCanvasScopeHash(file, preview)
       this.saveGraph(preview)
       return preview
     }
@@ -294,6 +301,7 @@ export class FlowBuilderHost {
     if (!preview) throw new AgentRuntimeError('FLOW_BUILD_MISSING', 'builder')
     if (this.committed(preview, file)) {
       preview.state = 'committed'
+      preview.committedScopeHash ??= graphCanvasScopeHash(file, preview)
       this.saveGraph(preview)
       return preview
     }
@@ -307,6 +315,64 @@ export class FlowBuilderHost {
     return preview
   }
   /** P5.3：核对已保存图含预览节点（committed）才置 committed；不把渲染器回执当成功。 */
+  restorationPreview(input: { projectId: string; buildId: string }): FlowGraphPreview {
+    const file = this.activeFile(input.projectId)
+    const preview = this.readGraph(input.projectId, input.buildId)
+    if (preview?.state !== 'committed' || !preview.committedScopeHash)
+      throw new AgentRuntimeError('FLOW_BUILD_MISSING', 'definition')
+    const ids = preview.nodes.map((node) => node.id)
+    const occupied = this.db.prepare(
+      `SELECT 1 FROM flow_coordination_scope WHERE project_id=? AND node_id IN (${ids.map(() => '?').join(',')})`
+    ).get(input.projectId, ...ids)
+    if (occupied) throw new AgentRuntimeError('FLOW_CONTROL_OCCUPIED', 'definition')
+    return { ...preview, semanticRevision: projectSemanticRevision(file) }
+  }
+  exportGraphPreview(input: { projectId: string; buildId: string }): FlowGraphPreview {
+    const preview = this.restorationPreview(input)
+    const file = this.activeFile(input.projectId)
+    const { graph, compiled } = exportCanvasFlowGraph(
+      file, preview, buildCapabilityCatalog(listAllCompositeVersions())
+    )
+    return { ...preview, graph, nodes: compiled.nodes, edges: compiled.edges }
+  }
+  publishCanvasGraph(input: { projectId: string; buildId: string; expectedRevision: string }): FlowGraphPreview {
+    return this.db.transaction(() => {
+      const current = this.restorationPreview(input)
+      const file = this.activeFile(input.projectId)
+      if (projectSemanticRevision(file) !== input.expectedRevision)
+        throw new AgentRuntimeError('FLOW_REVISION_CONFLICT', 'definition')
+      const hash = graphCanvasScopeHash(file, current)
+      if (current.sourceGraph && hash === current.committedScopeHash) return current
+
+      const exported = this.exportGraphPreview(input)
+      if (!this.committed(exported, file))
+        throw new AgentRuntimeError('FLOW_CANVAS_DIVERGED', 'definition')
+      const definition = new FlowDefinitionStore(this.db, this.open).publishGraph({
+        projectId: input.projectId,
+        definitionId: current.sourceGraph?.definitionId ?? exported.graph.graphId,
+        name: exported.graph.name,
+        graph: exported.graph
+      })
+      const published = {
+        ...exported,
+        committedScopeHash: hash,
+        sourceGraph: {
+          definitionId: definition.definitionId,
+          version: definition.version,
+          contentHash: definition.contentHash
+        }
+      }
+      this.saveGraph(published)
+      return published
+    })()
+  }
+  verifyRestoredGraph(input: { projectId: string; buildId: string }): FlowGraphPreview {
+    const file = this.activeFile(input.projectId)
+    const preview = this.readGraph(input.projectId, input.buildId)
+    if (preview?.state !== 'committed' || graphCanvasScopeHash(file, preview) !== preview.committedScopeHash)
+      throw new AgentRuntimeError('FLOW_CANVAS_DIVERGED', 'definition')
+    return preview
+  }
   async confirmGraph(input: { projectId: string; buildId: string }): Promise<FlowGraphPreview> {
     const file = this.activeFile(input.projectId)
     const preview = this.readGraph(input.projectId, input.buildId)
@@ -314,6 +380,7 @@ export class FlowBuilderHost {
     if (!this.committed(preview, file))
       throw new AgentRuntimeError('FLOW_BUILD_UNCONFIRMED', 'builder')
     preview.state = 'committed'
+    preview.committedScopeHash ??= graphCanvasScopeHash(file, preview)
     this.saveGraph(preview)
     return preview
   }

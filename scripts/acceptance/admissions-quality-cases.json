@@ -1,0 +1,93 @@
+{
+  "domain": "招生通知审核与交付",
+  "kind": "synthetic-evaluation-cases",
+  "review": {
+    "dimensions": [
+      "完整性",
+      "事实忠实度",
+      "目标一致性",
+      "格式合规",
+      "可用性"
+    ],
+    "scale": {
+      "0": "不满足",
+      "1": "需修改",
+      "2": "满足"
+    },
+    "requiredChecks": [
+      "逐条核对指定事实和来源",
+      "核对人工意见是否作用于指定版本并实际生效",
+      "区分技术完成与质量通过"
+    ],
+    "record": [
+      "模型与方法版本",
+      "运行与交付版本",
+      "请求次数及可获得的用量",
+      "耗时",
+      "人工意见及返工次数",
+      "逐条结果和人工复核意见"
+    ]
+  },
+  "cases": [
+    {
+      "id": "short",
+      "input": "报名 3 月 15 日 09:00，教学楼一层；带报名表。",
+      "expected": "保留时间、地点和材料。",
+      "expectedOutcome": "delivery"
+    },
+    {
+      "id": "long",
+      "input": "公告：报名 3 月 15 日，地点教学楼一层，材料为报名表。附件：教学安排、课程介绍和校历。补充通知：现场窗口 09:00 至 16:00，报名表需签字。",
+      "expected": "从公告与补充通知保留日期、时段、地点及签字要求。",
+      "expectedOutcome": "delivery"
+    },
+    {
+      "id": "conflict",
+      "input": "同日收到两份未签发稿，分别写 3 月 15 日和 3 月 18 日。",
+      "expected": "指出冲突并将日期交人工核对。",
+      "expectedOutcome": "human-wait"
+    },
+    {
+      "id": "missing",
+      "input": "通知只说明欢迎报名，未给地点和日期。",
+      "expected": "标记两项缺失，等待补充。",
+      "expectedOutcome": "human-wait"
+    },
+    {
+      "id": "audience",
+      "input": "原稿面向全体家长；编辑要求改为仅面向已登记的候补家庭。",
+      "expected": "正文与行动提示均体现候补范围。",
+      "expectedOutcome": "delivery"
+    },
+    {
+      "id": "reject",
+      "input": "拟稿称必须携带成绩单；已确认材料清单仅列报名表。",
+      "expected": "审核驳回，并针对材料声明发起返工。",
+      "expectedOutcome": "delivery"
+    },
+    {
+      "id": "resume",
+      "input": "审核人尚未确认报名截止时间，待办期间重开应用。",
+      "expected": "恢复同一待办，确认后续跑并保留原交付历史。",
+      "expectedOutcome": "delivery"
+    },
+    {
+      "id": "revision",
+      "input": "春季公告已归档；秋季沿用结构，日期改为 8 月 22 日，地点改为综合楼二层。",
+      "expected": "新稿采用秋季信息，春季归档仍可读取。",
+      "expectedOutcome": "delivery"
+    },
+    {
+      "id": "exception",
+      "input": "报名窗口 09:00 至 16:00，12:00 至 13:00 暂停办理。",
+      "expected": "在发布稿中保留暂停时段。",
+      "expectedOutcome": "delivery"
+    },
+    {
+      "id": "source-update",
+      "input": "已签发更正单明确替代旧公告，将场地由教学楼改为招生办公室。",
+      "expected": "采用更正后的地点，并可追溯更正来源。",
+      "expectedOutcome": "delivery"
+    }
+  ]
+}

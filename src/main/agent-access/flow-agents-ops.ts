@@ -1,3 +1,4 @@
+import { graphCanvasVersion } from '../agent-flow/graph-canvas-version'
 // F8（一）flowAgents 族：把 GUI「Agent Flow 面板」的**观察**动作开放给外部 CLI/MCP。
 //
 // 设计口径（详见 docs/local-agent-access/28-flow-agents-delivery.md）：
@@ -339,6 +340,8 @@ function collaborationFlowAgent(
       eventId: message.eventId,
       kind: message.kind,
       text: message.text,
+      ...(message.handoffNote ? { handoffNote: message.handoffNote } : {}),
+      ...(message.actor ? { actor: message.actor } : {}),
       ...(message.reply !== undefined ? { reply: message.reply } : {})
     })),
     inputs: view.inputs,
@@ -373,6 +376,7 @@ async function cooperateFlowAgent(
     action: input.action,
     text: input.text,
     ...(input.accepted !== undefined ? { accepted: input.accepted } : {}),
+    ...(input.handoffNote !== undefined ? { handoffNote: input.handoffNote } : {}),
     ...(input.selectedOutputs !== undefined ? { selectedOutputs: input.selectedOutputs } : {}),
     ...(input.selectedInputs !== undefined ? { selectedInputs: input.selectedInputs } : {})
   })
@@ -407,7 +411,7 @@ async function cooperateFlowAgent(
     task: Parameters<typeof taskDto>[0]
     goal: string
     revision: number
-    messages: Array<{ eventId: string; kind: string; text: string; reply?: string }>
+    messages: Array<{ eventId: string; kind: string; text: string; reply?: string; handoffNote?: string; actor?: import('../../shared/agent-flow/node-contracts').HumanActor }>
     inputs: unknown[]
     candidates: unknown[]
     workingDraft?: string
@@ -424,6 +428,8 @@ async function cooperateFlowAgent(
       eventId: message.eventId,
       kind: message.kind,
       text: message.text,
+      ...(message.handoffNote ? { handoffNote: message.handoffNote } : {}),
+      ...(message.actor ? { actor: message.actor } : {}),
       ...(message.reply !== undefined ? { reply: message.reply } : {})
     })),
     inputs: view.inputs,
@@ -644,7 +650,8 @@ async function proposeFromGraphDefinition(
   if (!definition) refuse('FLOW_DEFINITION_MISSING', 'graph definition not found')
   return proposeGraphOp(
     { projectId, graph: definition.graph, requestId: input.requestId },
-    context
+    context,
+    { definitionId: definition.definitionId, version: definition.version, contentHash: definition.contentHash }
   )
 }
 function overviewFlowRun(
@@ -653,8 +660,12 @@ function overviewFlowRun(
 ): unknown {
   const projectId = input.projectId as string
   assertActive(projectId, context, 'flowRun.overview')
-  const overview = new CoordinationStore(getDb()).overview(projectId, input.nodeId as string)
-  return { projectId, overview }
+  const file = openProject(projectId)
+  const db = getDb()
+  const nodeId = input.nodeId as string
+  const overview = new CoordinationStore(db).overview(projectId, nodeId, file)
+  const canvasVersion = overview?.canvasVersion ?? (file ? graphCanvasVersion(db, file, nodeId) : undefined)
+  return { projectId, overview, ...(canvasVersion ? { canvasVersion } : {}) }
 }
 
 /** O4-P5：静态校验外部生成的 FlowGraph（只读，纯函数；不写画布、不执行）。 */
@@ -735,7 +746,8 @@ function graphPort(): FlowAgentAccessPort {
 /** P5：外部 FlowGraph 建图提案——校验+编译+持久化预览；不调模型、不写画布。 */
 async function proposeGraphOp(
   input: Record<string, unknown>,
-  context: FlowAgentOperationContext
+  context: FlowAgentOperationContext,
+  sourceGraph?: FlowGraphPreview['sourceGraph']
 ): Promise<unknown> {
   const projectId = input.projectId as string
   assertActive(projectId, context, 'flowGraph.propose')
@@ -756,7 +768,7 @@ async function proposeGraphOp(
     typeof input.requestId === 'string' && input.requestId.trim() ? input.requestId : randomUUID()
   let preview: unknown
   try {
-    preview = await graphPort().proposeGraph({ projectId, graph: parsed.data, requestId })
+    preview = await graphPort().proposeGraph({ projectId, graph: parsed.data, requestId, ...(sourceGraph ? { sourceGraph } : {}) })
   } catch (error) {
     if (error instanceof FlowGraphCompileError)
       return { ok: false, preview: null, errors: error.errors }

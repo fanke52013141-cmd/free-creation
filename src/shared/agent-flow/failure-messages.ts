@@ -79,6 +79,7 @@ const messages: Record<string, string> = {
   SKILL_DISABLED: '绑定的 Skill 已停用，请选择可用版本。',
   SKILL_TOOL_MISSING: 'Skill 所需工具未启用，请检查节点设置。',
   SKILL_RESOURCE_DENIED: 'Skill 请求了未声明的资源，任务已阻断，请检查版本和资源说明。',
+  FLOW_CANVAS_DIVERGED: '画布定义已修改。请在流程总览发布新版本或恢复原定义，再启动。',
   FLOW_REVISION_CONFLICT: '画布已发生变更，请停止旧任务后重新启动。',
   FLOW_PROJECT_INACTIVE: '请返回任务所属画布，再核对或继续。',
   ASSET_IMAGE_CHANGED: '固定图片丢失或内容发生变化，请检查原资产并创建新版本。',

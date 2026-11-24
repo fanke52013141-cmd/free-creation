@@ -1,3 +1,5 @@
+import { HumanTaskValueSchema } from '../../agent-flow/node-contracts'
+import { HandoffNoteSchema } from '../../agent-flow/stage-contracts'
 import { z } from 'zod'
 import { identifier, nodeId, project } from './common'
 import { FlowDefinitionSchema } from '../../agent-flow/flow-definition'
@@ -142,6 +144,10 @@ const flowTaskView = z
     taskId: flowId,
     state: z.enum(['ready', 'running', 'waiting', 'blocked', 'completed', 'failed', 'cancelled']),
     waitKind: z.enum(['human', 'reconcile']).nullable(),
+    waitReason: z.enum(['human', 'active-child', 'pending-review', 'blocked', 'paused']).optional(),
+    children: z.array(z.object({
+      nodeId: flowId, taskId: flowId, state: z.string().max(40)
+    }).strict()).max(128).optional(),
     waitRevision: z.number().int().nonnegative(),
     decisions: z.number().int().nonnegative(),
     tools: z.number().int().nonnegative(),
@@ -281,7 +287,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowStage.reworkPreview': {
     effect: 'read',
     description:
-      '预览固定顺序主控某阶段局部返工的影响：将重跑的阶段（该阶段及下游）、将被标为过期并移入历史的既有交付、保留的交付数量、受影响未完成子任务数与当前是否可返工；只读，不修改运行事实',
+      '预览固定顺序阶段或图模式节点局部返工的影响：将重跑的阶段（该阶段及下游）、将被标为过期并移入历史的既有交付、保留的交付数量、受影响未完成子任务数与当前是否可返工；只读，不修改运行事实',
     input: project.extend({ nodeId, stageKey: flowId }).strict()
   },
   // AF-05：局部返工（写）。从指定阶段起重跑，仅影响该阶段及下游；上游不重跑；
@@ -289,7 +295,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowStage.rework': {
     effect: 'write',
     description:
-      '对固定顺序主控从指定阶段局部返工：移除该阶段及下游子任务并以新轮次重跑，上游已完成阶段不重跑；旧交付移入历史、下游标过期；返工轮次上限 10，在途 pending/unknown 命令未结算时拒绝；非固定顺序/非主控如实拒绝',
+      '对固定顺序阶段或图模式节点执行局部返工。图模式使用节点 ID 作为 stageKey，按数据、条件和审核依赖确定影响范围。确认后由主控继续执行，旧交付留存，未结算命令阻止返工。',
     input: project.extend({ nodeId, stageKey: flowId }).strict()
   },
   // AF-06：流程定义版本（与运行分离）。定义为固定顺序主控的可复用快照，不可变。
@@ -446,6 +452,7 @@ export const FLOW_AGENTS_OPERATIONS = {
         action: z.enum(['note', 'discuss', 'submit', 'revise']),
         text: z.string().max(4096),
         accepted: z.boolean().optional(),
+        handoffNote: HandoffNoteSchema.optional(),
         selectedOutputs: z.array(flowAssetRef).max(128).optional(),
         selectedInputs: z.array(flowAssetRef).max(128).optional()
       })
@@ -544,10 +551,8 @@ export const FLOW_AGENTS_OPERATIONS = {
         nodeId,
         expectedRevision: z.number().int().min(1),
         submissionId: flowId.optional(),
-        value: z.discriminatedUnion('kind', [
-          z.object({ kind: z.literal('text'), text: z.string().max(1048576) }).strict(),
-          z.object({ kind: z.literal('json'), data: z.unknown() }).strict()
-        ])
+        handoffNote: HandoffNoteSchema.optional(),
+        value: HumanTaskValueSchema
       })
       .strict()
   },
@@ -558,6 +563,14 @@ export const FLOW_AGENTS_OPERATIONS = {
     input: project.extend({ nodeId }).strict()
   }
 } as const
+
+const canvasVersionDto = z.object({
+            buildId: flowId,
+            diverged: z.boolean(),
+            sourceGraph: z.object({
+              definitionId: flowId, version: z.number().int().positive(), contentHash: z.string().max(80)
+            }).strict().optional()
+          }).strict().optional()
 
 export const FLOW_AGENTS_OUTPUTS = {
   'flowAgent.inspect': z
@@ -688,6 +701,7 @@ export const FLOW_AGENTS_OUTPUTS = {
   'flowRun.overview': z
     .object({
       projectId: identifier,
+      canvasVersion: canvasVersionDto,
       overview: z
         .object({
           projectId: identifier,
@@ -707,10 +721,54 @@ export const FLOW_AGENTS_OUTPUTS = {
           goal: z.string().max(16384),
           paused: z.boolean(),
           code: z.string().max(120).optional(),
+          executionMode: z.enum(['model', 'fixed-order', 'graph']).optional(),
+          sourceGraph: z.object({
+            definitionId: flowId, version: z.number().int().positive(), contentHash: z.string().max(80)
+          }).strict().optional(),
+          canvasVersion: canvasVersionDto,
+          staleNodeIds: z.array(flowId).max(64).optional(),
+          skippedNodeIds: z.array(flowId).max(64).optional(),
+          stalledNodeIds: z.array(flowId).max(64).optional(),
+          graph: z.object({
+            name: z.string().max(120),
+            entry: flowId,
+            roles: z.array(z.object({ roleId: flowId, name: z.string().max(120) }).strict()).max(16).optional(),
+            exits: z.array(flowId).max(16),
+            nodes: z.array(z.object({
+              nodeId: flowId,
+              title: z.string().max(120),
+              kind: z.string().max(40),
+              participation: z.string().max(40),
+              humanRole: flowId.optional(),
+              review: z.object({
+                criteria: z.string().max(4096),
+                rejectPolicy: z.enum(['rework', 'stop']),
+                maxReworks: z.number().int().nonnegative()
+              }).strict().optional()
+            }).strict()).max(64),
+            edges: z.array(z.object({
+              from: flowId, to: flowId, kind: z.string().max(40)
+            }).strict()).max(256)
+          }).strict().optional(),
+          reviews: z.array(z.object({
+            nodeId: flowId,
+            state: z.string().max(40),
+            round: z.number().int().nonnegative(),
+            responsibleNodeId: flowId.optional(),
+            passed: z.boolean().optional(),
+            feedback: z.string().max(16384).optional()
+          }).strict()).max(64).optional(),
           children: z
             .array(
               z
-                .object({ nodeId: flowId, taskId: flowId, state: z.string().max(40) })
+                .object({
+                  nodeId: flowId,
+                  taskId: flowId,
+                  state: z.string().max(40),
+                  goal: z.string().max(8192).optional(),
+                  waitKind: z.enum(['human', 'reconcile', 'tool', 'host']).optional(),
+                  compositeWait: z.object({ runId: flowId, stepKey: flowId }).strict().optional()
+                })
                 .strict()
             )
             .max(128),
@@ -722,7 +780,8 @@ export const FLOW_AGENTS_OUTPUTS = {
                   revision: z.number().int().nonnegative(),
                   event: z.string().max(120),
                   state: z.string().max(80),
-                  source: z.enum(['user', 'agent'])
+                  source: z.enum(['user', 'agent']),
+                  actorSource: z.string().max(145).optional()
                 })
                 .strict()
             )
@@ -898,6 +957,8 @@ export const FLOW_AGENTS_OUTPUTS = {
               eventId: flowId,
               kind: z.string().max(40),
               text: z.string().max(4096),
+              handoffNote: HandoffNoteSchema.optional(),
+              actor: z.object({ kind: z.literal('user'), roleId: flowId }).strict().optional(),
               reply: z.string().max(4096).optional()
             })
             .strict()
@@ -924,6 +985,8 @@ export const FLOW_AGENTS_OUTPUTS = {
               eventId: flowId,
               kind: z.string().max(40),
               text: z.string().max(4096),
+              handoffNote: HandoffNoteSchema.optional(),
+              actor: z.object({ kind: z.literal('user'), roleId: flowId }).strict().optional(),
               reply: z.string().max(4096).optional()
             })
             .strict()
@@ -1025,13 +1088,9 @@ export const FLOW_AGENTS_OUTPUTS = {
       nodeId,
       status: z.enum(['pending', 'completed']),
       revision: z.number().int().min(1),
-      outputType: z.enum(['text', 'json']),
-      result: z
-        .discriminatedUnion('kind', [
-          z.object({ kind: z.literal('text'), text: z.string() }).strict(),
-          z.object({ kind: z.literal('json'), data: z.unknown() }).strict()
-        ])
-        .nullable(),
+      outputType: z.enum(['text', 'json', 'image', 'video']),
+      result: HumanTaskValueSchema.nullable(),
+      handoffNote: HandoffNoteSchema.optional(),
       pending: z
         .object({ submissionId: flowId, expectedRevision: z.number().int().min(1) })
         .strict()

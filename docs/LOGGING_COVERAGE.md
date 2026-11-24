@@ -1093,3 +1093,23 @@ GUI 节点流面板条目卡片移除「运行」按钮（运行走画布既有�
 - 验证：`test/flow-graph-v2.test.ts`(5)、`test/agent-flow-coordinator.test.ts`(51，含三节点 body 跑满两轮/独立 taskId)、`flow-graph-*` / capability / builder / parity 共 302 项通过；`guard:agent-parity` 三关绿。
 - 未覆盖：`iteration/camera` 端口类型枚举、ContextManifest 最小输入编制、真实供应商参数（模型/比例/时长）端到端验收随 BL-12 及后续。
 - 竞争路径加固（同日）：`getDb()` busy 超时提高到 15s、`acquireProcessLock` 对 SQLITE_BUSY 有界重试 3 次；只减少满载瞬时锁失败的假阴性，不改变占用/所有权语义，无新增诊断事件。
+
+### 2026-11-24 固定版本节点流作为 Agent Flow 步骤
+
+建图确认沿用桌面授权和语义版本检查。运行准入用发布仓库核对摘要，复用节点流输入预检。协调器沿用图调度事件，节点流仍由公共执行器记录子运行，命令账本在同一事务内按公开端口登记产物并保存回执。输入拒绝保留稳定错误码和 input 阶段。没有新增日志事件或正文、路径、凭据等日志字段。GUI、CLI、MCP 继续调用同一建图和运行服务，现有操作 Schema 兼容，回执沿用 outputRefs 数组。验证覆盖命令准入、双输出、重复读取回执和相关回归。安装版贯穿验收待补。
+
+### 2026-11-24 Agent Flow 等待子流程人工交付
+
+父流程沿用 human.wait 和已有续跑诊断，节点流沿用 composite.run.waiting 和原子运行 ID。总览只公开子运行 ID 与待提交步骤键。命令回执和子运行账本关联，人工提交值与步骤输出仅存业务账本，不进入诊断事件。父流程续跑复用现有 GUI 和 flowAgent.run（CLI/MCP），单独节点流的续跑入口会将嵌套运行引回父流程。flowRun.overview 的子项增加可选 compositeWait，旧回执可继续读取。命令账本回归覆盖等待、拒绝过早恢复、重建账本、回放和双输出提交。
+
+### 2026-11-24 图模式 Agent Flow 局部返工
+
+图模式复用 flowStage.reworkPreview 和 flowStage.rework。stageKey 使用画布节点 ID，影响集合来自数据边、条件引用、循环体和审核门禁。旧交付留存，受影响的人工等待撤销，取消和运行状态在同一事务内提交。环境沿用 agent.coordination.stage_rework 与 flow.rework，只记录阶段键、轮次和影响数量。总览使用同一预览与执行入口，CLI 和 MCP 输入输出结构兼容。隔离 Electron 桌面贯穿已验证从总览确认返工，审核和下游重跑并保留两份前序交付。证据见 qa/agent-end-to-end-graph/desktop/execute-report.json。
+
+### 2026-11-24 打包版人工等待恢复
+
+应用重启继续保留 waiting-input。原运行的项目、发布版本和摘要一致且最新人工等待已满足时，公共运行入口才允许从 waiting-input 转到 running。续跑使用同一运行 ID 和现有步骤、等待及终态事件。启动清理只标记真正处于 accepted/running 的中断运行。验证覆盖原项目匹配、重复领取拒绝、保留人工等待及中断结算。Windows 打包版已验证重启后保留父子运行，恢复后完成交付，且返工交付生成新资产版本。证据见 qa/packaged-human-task-restart/receipt.json。
+
+### 2026-11-24 人工图片和视频交付
+
+人工任务按项目媒体 ID 解析图片和视频。待处理提交保持原有修订校验和桌面人工确认。公共执行器将解析失败归入 input 阶段，成功沿用人工任务修订及正式输出诊断。下游固定资产沿用项目归属、MIME 和摘要校验。日志不新增文件路径或正文。独立节点的媒体提交与端口投影已有定向测试，Windows 打包版已验证内部人工任务分别提交图片及视频后续跑，公开输出使用同一项目媒体 ID。证据见 qa/packaged-human-task-media/receipt.json。

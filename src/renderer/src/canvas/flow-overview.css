@@ -118,6 +118,7 @@
   background: var(--card, #20242a); border: 1px solid var(--node-edge, #343a43); border-radius: 2px;
   color: inherit; font: inherit; transition: border-color 0.15s;
 }
+.fo-step-action { margin-top: 4px; }
 .fo-step-card:hover { border-color: #4a525e; }
 .fo-step.is-attention .fo-step-card {
   background: rgba(224, 164, 88, 0.08);

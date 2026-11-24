@@ -58,7 +58,7 @@ import {
   getCompositeStepOutputs
 } from '../store/composite-run.repo'
 import {
-  getOpenCompositeRunWait,
+  getLatestCompositeRunWait,
   satisfyCompositeRunWait,
   getSatisfiedHumanSubmissions
 } from '../store/composite-run-wait.repo'
@@ -78,6 +78,7 @@ import {
 import {
   HumanTaskInstanceSchema,
   HumanTaskPendingSchema,
+  HumanTaskValueSchema,
   HumanTaskNodeConfigSchema
 } from '../../shared/agent-flow/node-contracts'
 import { FLOW_ASSET_OPERATION_IDS, runFlowAssetOperation } from './flow-assets-ops'
@@ -1861,8 +1862,9 @@ export class LocalAccessService {
         'retry requires the desktop host running'
       )
     const runId = String(input.runId ?? '')
-    const existing = getCompositeRun(runId)?.run
-    if (!existing) throw new AccessFailure('NOT_FOUND', 'read', 'composite-run')
+    const detail = getCompositeRun(runId)
+    if (!detail) throw new AccessFailure('NOT_FOUND', 'read', 'composite-run')
+    const existing = detail.run
     if (existing.status !== 'failed' && existing.status !== 'interrupted')
       throw new AccessFailure('RUN_NOT_RETRYABLE', 'precheck', `status:${existing.status}`)
     const rootRunId = existing.retryOf ?? existing.id
@@ -1870,7 +1872,18 @@ export class LocalAccessService {
     if (retriesUsed >= 3)
       throw new AccessFailure('RETRY_LIMIT_EXCEEDED', 'precheck', 'max 3 retries per root run')
     const record = getCompositeVersion(existing.capabilityId, existing.capabilityVersion)
-    if (!record) throw new AccessFailure('VERSION_NOT_PUBLISHED', 'precheck', 'published-version')
+    if (!record || record.contentHash !== existing.contentHash)
+      throw new AccessFailure('VERSION_NOT_PUBLISHED', 'precheck', 'published-version')
+    const preExecutionFailure = existing.status === 'failed' && existing.failurePhase === 'input' &&
+      detail.steps.length === 0
+    const localOnly = record.manifest.graph.nodes.every(({ nodeType }) =>
+      ['text', 'json', 'processor'].includes(nodeType)
+    )
+    if (!preExecutionFailure && !localOnly)
+      throw new AccessFailure(
+        'RUN_RETRY_REQUIRES_RECONCILIATION', 'precheck',
+        'Previous effects are unconfirmed. Check the run and existing deliveries before starting another run.'
+      )
     const validation = validateCompositeManifest(record.manifest)
     if (!validation.ok) throw new AccessFailure('STORAGE_INCONSISTENT', 'read', 'manifest-invalid')
     if (!existing.inputValues)
@@ -1926,13 +1939,24 @@ export class LocalAccessService {
     if (!existing) throw new AccessFailure('NOT_FOUND', 'read', 'composite-run')
     if (existing.status !== 'waiting-input')
       throw new AccessFailure('RUN_NOT_WAITING', 'precheck', `status:${existing.status}`)
-    const wait = getOpenCompositeRunWait(runId)
+    const wait = getLatestCompositeRunWait(runId)
     if (!wait || wait.stepKey !== nodeId)
       throw new AccessFailure('HUMAN_WAIT_NOT_FOUND', 'precheck', `node:${nodeId}`)
+    const version = getCompositeVersion(existing.capabilityId, existing.capabilityVersion)
+    const node = version?.manifest.graph.nodes.find((step) => step.id === nodeId)
+    if (!version || version.contentHash !== existing.contentHash || node?.nodeType !== 'human-task')
+      throw new AccessFailure('VERSION_NOT_PUBLISHED', 'precheck', 'published-human-task')
+    const config = HumanTaskNodeConfigSchema.safeParse(JSON.parse(node.config || '{}'))
+    const value = HumanTaskValueSchema.parse(input.value)
+    if (!config.success || value.kind !== config.data.outputType)
+      throw new AccessFailure('INVALID_INPUT', 'precheck', 'human-task-output-type-mismatch')
+    if ((value.kind === 'image' || value.kind === 'video') &&
+        !listMedia(existing.projectId).some((asset) => asset.id === value.mediaId && asset.kind === value.kind))
+      throw new AccessFailure('INVALID_INPUT', 'precheck', 'human-task-project-media-required')
     const satisfied = satisfyCompositeRunWait({
       requestId: wait.requestId,
       revision: wait.revision,
-      value: input.value,
+      value,
       submittedBy: 'external'
     })
     if (!satisfied.ok)
@@ -1953,6 +1977,10 @@ export class LocalAccessService {
     if (!existing) throw new AccessFailure('NOT_FOUND', 'read', 'composite-run')
     if (existing.status !== 'waiting-input')
       throw new AccessFailure('RUN_NOT_WAITING', 'precheck', `status:${existing.status}`)
+    if (existing.parentRunId && getDb().prepare(
+      'SELECT 1 FROM flow_commands WHERE run_id = ? AND project_id = ? AND target_node_id = ?'
+    ).get(existing.parentRunId, existing.projectId, existing.instanceNodeId))
+      throw new AccessFailure('PARENT_RESUME_REQUIRED', 'precheck', 'continue the parent Agent Flow')
     const record = getCompositeVersion(existing.capabilityId, existing.capabilityVersion)
     if (!record) throw new AccessFailure('VERSION_NOT_PUBLISHED', 'precheck', 'published-version')
     const validation = validateCompositeManifest(record.manifest)
@@ -1980,7 +2008,7 @@ export class LocalAccessService {
     try {
       await this.options.desktop.run({
         action: 'execute-composite-headless',
-        projectId: `headless-${runId}`,
+        projectId: existing.projectId,
         compositeManifest: record.manifest,
         compositeInputs: resolvedInputs,
         ownRunId: runId,
@@ -2068,7 +2096,13 @@ export class LocalAccessService {
     if (!node) throw new AccessFailure('NODE_NOT_FOUND', 'precheck', nodeId.slice(0, 60))
     if (node.type !== 'human-task')
       throw new AccessFailure('INVALID_INPUT', 'precheck', 'human-task-node-required')
-    const value = input.value as { kind: 'text'; text: string } | { kind: 'json'; data: unknown }
+    const value = HumanTaskValueSchema.parse(input.value)
+    const media = value.kind === 'image' || value.kind === 'video'
+      ? listMedia(id).find((asset) => asset.id === value.mediaId)
+      : null
+    if ((value.kind === 'image' || value.kind === 'video') &&
+      (!media || media.kind !== value.kind))
+      throw new AccessFailure('INVALID_INPUT', 'precheck', 'human-task-project-media-required')
     // BL-01 / AF-1.5：人工任务的结果只能由人交付——外部 Agent 代交须人在 GUI 亲眼允许。
     const decision = await requestHumanDecision({
       operation: 'humanTask.submit',
@@ -2078,8 +2112,8 @@ export class LocalAccessService {
       prompt: {
         title: '外部 Agent 请求代你提交人工任务',
         message: `外部 Agent 想替你提交人工任务「${node.title}」的结果。这是人工交付，只有你点「允许提交」才会生效。\n\n内容：${previewValue(
-          value.kind === 'text' ? value.text : value.data
-        )}`,
+          value.kind === 'text' ? value.text : value.kind === 'json' ? value.data : media?.name
+        )}${typeof input.handoffNote === 'string' ? `\n\n交接说明：${input.handoffNote}` : ''}`,
         confirmText: '允许提交'
       }
     })
@@ -2091,6 +2125,7 @@ export class LocalAccessService {
         nodeId,
         humanTaskExpectedRevision: input.expectedRevision as number,
         humanTaskValue: value,
+        ...(typeof input.handoffNote === 'string' ? { humanTaskHandoffNote: input.handoffNote } : {}),
         ...(typeof input.submissionId === 'string'
           ? { humanTaskSubmissionId: input.submissionId }
           : {})
@@ -2187,6 +2222,7 @@ export class LocalAccessService {
       revision,
       outputType,
       result,
+      ...(instance.success && instance.data.handoffNote ? { handoffNote: instance.data.handoffNote } : {}),
       pending: pending.success
         ? {
             submissionId: pending.data.submissionId,

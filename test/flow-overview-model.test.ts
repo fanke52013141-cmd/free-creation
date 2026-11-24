@@ -114,7 +114,7 @@ describe('flow overview model', () => {
     const steps = deriveFlowSteps(data)
     expect(steps.map((step) => step.nodeId)).toEqual(['shape:analysis', 'shape:org', 'shape:down'])
     // 无图拓扑时缺少参与方式元数据，等待态保守呈现为"等待核对"（graph 模式才精确区分人工）。
-    expect(steps[1].state).toBe('waiting-reconcile')
+    expect(steps[1].state).toBe('waiting-execution')
   })
 
   it('labels and attributes timeline events', () => {
@@ -124,4 +124,17 @@ describe('flow overview model', () => {
     expect(eventTone('review.passed', 'agent')).toBe('review')
     expect(eventTone('agent.completed', 'agent')).toBe('agent')
   })
+})
+it('projects router outcomes and excludes command reconciliation from the human inbox', () => {
+  const steps = deriveFlowSteps(overview({
+    children: [
+      { nodeId: 'shape:org', taskId: 'org', state: 'waiting', goal: 'organize', waitKind: 'reconcile' }
+    ],
+    skippedNodeIds: ['shape:review'],
+    stalledNodeIds: ['shape:down']
+  }))
+  const byNode = new Map(steps.map((step) => [step.nodeId, step]))
+  expect(byNode.get('shape:org')).toMatchObject({ state: 'waiting-reconcile', needsYou: false })
+  expect(byNode.get('shape:review')).toMatchObject({ state: 'skipped', needsYou: false })
+  expect(byNode.get('shape:down')).toMatchObject({ state: 'stalled', needsYou: false })
 })

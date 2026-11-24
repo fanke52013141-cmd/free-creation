@@ -7,7 +7,7 @@
 //  3) 主控 Agent（任务 waiting 且 waitReason=human，即阶段待人工采用或人工确认）。
 // A3 引入的 waitReason 优先于旧 waitKind：'active-child'/'pending-review'/'blocked'/'paused'
 // 都不是人工待办，不能出现在收件箱里，否则人会一直被迫盯着"假待办"。
-import { AgentNodeConfigSchema, HumanTaskInstanceSchema } from './node-contracts'
+import { AgentNodeConfigSchema, HumanTaskInstanceSchema, HumanTaskNodeConfigSchema } from './node-contracts'
 
 export interface HumanInboxShape {
   id: string
@@ -18,8 +18,9 @@ export interface HumanInboxShape {
 export interface HumanInboxItem {
   nodeId: string
   title: string
-  kind: 'human-task' | 'collaborative-agent' | 'coordinator' | 'review' | 'input'
+  kind: 'human-task' | 'collaborative-agent' | 'coordinator' | 'review' | 'input' | 'stalled'
   reason: string
+  humanRole?: { roleId: string; name: string }
 }
 
 /** 运行总览里"需要你处理"的一步（deriveFlowSteps 的子集，便于纯函数复用）。 */
@@ -29,6 +30,8 @@ export interface HumanInboxStep {
   kind: string
   state?: string
   needsYou?: boolean
+  humanRole?: HumanInboxItem['humanRole']
+  compositeWait?: { runId: string; stepKey: string }
 }
 
 /** A1：把运行总览里 needsYou 的步骤转成收件箱条目（审核人工复审、返工确认等不在画布 meta 里的事实）。 */
@@ -36,22 +39,35 @@ export function humanInboxFromSteps(steps: readonly HumanInboxStep[]): HumanInbo
   const items: HumanInboxItem[] = []
   for (const step of steps) {
     if (!step.needsYou) continue
+    const ownership = step.humanRole ? { humanRole: step.humanRole } : {}
     if (step.kind === 'review') {
       items.push({
         nodeId: step.nodeId,
         title: step.title,
+        ...ownership,
         kind: 'review',
         reason: '待人工复审 / 返工确认'
       })
       continue
     }
+    if (step.compositeWait) {
+      items.push({
+        nodeId: step.nodeId,
+        title: step.title,
+        kind: 'human-task',
+        ...ownership,
+        reason: `待提交子流程步骤「${step.compositeWait.stepKey}」的结果`
+      })
+      continue
+    }
     if (step.kind === 'human-task') {
-      items.push({ nodeId: step.nodeId, title: step.title, kind: 'human-task', reason: '待提交人工结果' })
+      items.push({ nodeId: step.nodeId, title: step.title, ...ownership, kind: 'human-task', reason: '待提交人工结果' })
       continue
     }
     items.push({
       nodeId: step.nodeId,
       title: step.title,
+      ...ownership,
       kind: 'collaborative-agent',
       reason: '待人工确认 / 讨论'
     })
@@ -64,8 +80,19 @@ export function mergeHumanInbox(
   primary: readonly HumanInboxItem[],
   extra: readonly HumanInboxItem[]
 ): HumanInboxItem[] {
-  const seen = new Set(primary.map((item) => item.nodeId))
-  return [...primary, ...extra.filter((item) => !seen.has(item.nodeId))]
+  const identity = (item: HumanInboxItem): string =>
+    item.kind === 'stalled' ? `stalled:${item.nodeId}` : item.nodeId
+  const seen = new Set(primary.map(identity))
+  const extraByNode = new Map(extra.map((item) => [identity(item), item]))
+  return [
+    ...primary.map((item) => {
+      const humanRole = extraByNode.get(identity(item))?.humanRole
+      return humanRole && (!item.humanRole || item.humanRole.roleId === humanRole.roleId)
+        ? { ...item, humanRole }
+        : item
+    }),
+    ...[...extraByNode].filter(([key]) => !seen.has(key)).map(([, item]) => item)
+  ]
 }
 
 /**
@@ -86,6 +113,14 @@ export function humanInboxFromOverview(
   steps: readonly HumanInboxStep[]
 ): HumanInboxItem[] {
   const items = humanInboxFromSteps(steps)
+  if (overview.state === 'blocked' && overview.code === 'FLOW_STALLED') {
+    items.unshift({
+      nodeId: overview.nodeId,
+      title: '流程停滞',
+      kind: 'stalled',
+      reason: '当前没有可推进的步骤，请检查分支条件和上游交付'
+    })
+  }
   if (overview.code && MISSING_INPUT_CODES.has(overview.code) && overview.state === 'blocked') {
     items.push({
       nodeId: overview.nodeId,
@@ -125,7 +160,10 @@ export function deriveHumanInbox(shapes: readonly HumanInboxShape[]): HumanInbox
       // 无实例视为尚未提交（pending）；已完成不进入收件箱。
       const status = parsed.success ? parsed.data.status : 'pending'
       if (status === 'pending') {
-        items.push({ nodeId: shape.id, title, kind: 'human-task', reason: '待提交人工结果' })
+        const config = HumanTaskNodeConfigSchema.safeParse(parseJson(shape.props.config))
+        const roleId = config.success ? config.data.humanRole : undefined
+        const humanRole = roleId ? { roleId, name: roleId } : undefined
+        items.push({ nodeId: shape.id, title, ...(humanRole ? { humanRole } : {}), kind: 'human-task', reason: '待提交人工结果' })
       }
       continue
     }
@@ -148,7 +186,9 @@ export function deriveHumanInbox(shapes: readonly HumanInboxShape[]): HumanInbox
         continue
       }
       if (config.data.interactionMode !== 'collaborative') continue
+      const roleId = config.data.humanRole
       items.push({
+        ...(roleId ? { humanRole: { roleId, name: roleId } } : {}),
         nodeId: shape.id,
         title,
         kind: 'collaborative-agent',

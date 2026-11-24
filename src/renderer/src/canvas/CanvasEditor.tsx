@@ -1,3 +1,4 @@
+import { admitHumanTaskSubmission } from '@shared/agent-flow/human-task-submission'
 import { WorkflowInputDialog } from './WorkflowInputDialog'
 import { WorkflowInputsDialog } from './WorkflowInputsDialog'
 import { requestWorkflowInput, requestWorkflowInputs } from '../stores/workflowInput'
@@ -1674,22 +1675,6 @@ export function CanvasEditor({
                 replyFail(true, 'INVALID_INPUT', 'expectedRevision/value required')
                 return
               }
-              const meta = shape.meta as Record<string, unknown> | undefined
-              let currentRevision = 1
-              try {
-                const instance = JSON.parse(String(meta?.humanTask ?? '')) as { revision?: number }
-                if (typeof instance?.revision === 'number') currentRevision = instance.revision
-              } catch {
-                // 无实例：初始修订 1（与执行器初始化一致）。
-              }
-              if (expectedRevision !== currentRevision) {
-                replyFail(
-                  true,
-                  'HUMAN_TASK_REVISION_CONFLICT',
-                  `expected ${expectedRevision}, current ${currentRevision}`
-                )
-                return
-              }
               if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
               saveTimerRef.current = null
               const preSave = useSaveCoordinator.getState()
@@ -1711,21 +1696,36 @@ export function CanvasEditor({
                 useAppStore.getState().currentProject?.id !== project.id
               )
                 throw new Error('PATCH_NOT_ADMITTED')
-              const submissionId = request.humanTaskSubmissionId ?? crypto.randomUUID()
-              editor.updateShape({
-                id: nodeId as TLShapeId,
-                type: 'node-card',
-                meta: {
-                  humanTaskPending: JSON.stringify({ submissionId, expectedRevision, value })
-                }
+              const latest = editor.getShape<NodeCardShape>(nodeId as TLShapeId)
+              if (!latest || latest.type !== 'node-card') {
+                replyFail(true, 'INVALID_INPUT', 'human-task-node-required')
+                return
+              }
+              const submitted = admitHumanTaskSubmission(latest, {
+                submissionId: request.humanTaskSubmissionId ?? crypto.randomUUID(),
+                expectedRevision,
+                value,
+                ...(request.humanTaskHandoffNote ? { handoffNote: request.humanTaskHandoffNote } : {})
               })
+              if (!submitted.ok) {
+                replyFail(true, submitted.code)
+                return
+              }
+              const { submissionId } = submitted.pending
+              if (!submitted.replay) {
+                editor.updateShape({
+                  id: latest.id,
+                  type: 'node-card',
+                  meta: { humanTaskPending: JSON.stringify(submitted.pending) }
+                })
+              }
               await ensureCanvasSaved()
               window.api.replyLocalAgentDesktop({
                 requestId: request.requestId,
                 projectId: project.id,
                 ok: true,
                 graphVersion: graphVersionRef.current,
-                result: { revision: currentRevision, submissionId }
+                result: { revision: expectedRevision, submissionId }
               })
               return
             }

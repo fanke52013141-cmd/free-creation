@@ -1,4 +1,6 @@
 import type Database from 'better-sqlite3'
+import type { ProjectFile } from '../../shared/types'
+import { graphCanvasVersion } from './graph-canvas-version'
 import type {
   AgentNodeConfigSchema,
   StateMachineNodeConfigSchema
@@ -8,7 +10,7 @@ import type { FlowAgentReply, FlowAgentView } from '../../shared/agent-flow/desk
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import type { ReviewDecision } from '../../shared/agent-flow/node-contracts'
-import type { FlowRunOverview } from '../../shared/agent-flow/run-overview'
+import type { FlowRunOverview, FlowEventActorSource } from '../../shared/agent-flow/run-overview'
 
 export interface CoordinationReview {
   nodeId: string
@@ -32,6 +34,7 @@ export interface CoordinationRun {
   stateConfig: z.infer<typeof StateMachineNodeConfigSchema>
   scopeIds: string[]
   scopeRevision: string
+  sourceGraph?: FlowRunOverview['sourceGraph']
   childIds: string[]
   state: FlowAgentView['state']
   phase: string
@@ -49,8 +52,10 @@ export interface CoordinationRun {
     completion: string
     inputs: FlowAgentReply['refs']
     state: string
+    handoffNote?: string
     outputs: FlowAgentReply['refs']
     /** BL-11：v2 子图循环体的轮次（缺省=1；非循环节点不写）。 */
+    compositeWait?: { runId: string; stepKey: string }
     round?: number
     contextManifest?: import('../../shared/agent-flow/stage-contracts').ContextManifest
     executionEnvelope?: import('../../shared/agent-flow/execution-envelope').ExecutionEnvelope
@@ -58,6 +63,8 @@ export interface CoordinationRun {
   outputs: FlowAgentReply['refs']
   reviews?: CoordinationReview[]
   controlSteps?: number
+  skippedNodeIds?: string[]
+  stalledNodeIds?: string[]
   decisionPending?: boolean
   recovery?: { reasons: string[]; canRestore: boolean }
   /** AF-05：阶段交付验收记录（按阶段身份索引；返工后下游标 stale）。 */
@@ -150,10 +157,14 @@ export class CoordinationStore {
   /** AF-05：返工后重新占用控制范围（完成时曾 release）；幂等。 */
   reoccupy(run: CoordinationRun, occupied: string[]): void {
     this.db.transaction(() => {
-      for (const id of occupied)
-        this.db
-          .prepare('INSERT OR IGNORE INTO flow_coordination_scope VALUES (?,?,?)')
-          .run(run.projectId, id, run.taskId)
+      for (const id of occupied) {
+        const owner = this.owner(run.projectId, id)
+        if (owner && owner !== run.taskId)
+          throw new AgentRuntimeError('FLOW_CONTROL_OCCUPIED', 'rework')
+        if (!owner)
+          this.db.prepare('INSERT INTO flow_coordination_scope VALUES (?,?,?)')
+            .run(run.projectId, id, run.taskId)
+      }
     })()
   }
   hasEvent(run: CoordinationRun, eventId: string, event: string): boolean {
@@ -164,8 +175,28 @@ export class CoordinationStore {
       .get(run.projectId, run.taskId, eventId) as { signature: string } | undefined
     return !!row && JSON.parse(row.signature).event === event
   }
-  event(run: CoordinationRun, eventId: string, event: string, expectedRevision: number): void {
-    const signature = canonicalFlowJson({ event, expectedRevision })
+  continuation(
+    run: CoordinationRun,
+    eventId: string,
+    waitRevision: number
+  ): 'new' | 'replay' | 'conflict' {
+    const row = this.db.prepare(
+      'SELECT signature FROM flow_coordination_events WHERE project_id=? AND task_id=? AND event_id=?'
+    ).get(run.projectId, run.taskId, eventId) as { signature: string } | undefined
+    if (!row) return 'new'
+    const stored = JSON.parse(row.signature) as { event?: string; waitRevision?: number }
+    return stored.event === 'human.continue' && stored.waitRevision === waitRevision ? 'replay' : 'conflict'
+  }
+  event(
+    run: CoordinationRun,
+    eventId: string,
+    event: string,
+    expectedRevision: number,
+    actorSource?: FlowEventActorSource,
+    resumeRevision?: number
+  ): void {
+    const legacySignature = canonicalFlowJson({ event, expectedRevision })
+    const signature = canonicalFlowJson({ event, expectedRevision, actorSource, waitRevision: resumeRevision })
     this.db.transaction(() => {
       const prior = this.db
         .prepare(
@@ -173,7 +204,7 @@ export class CoordinationStore {
         )
         .get(run.projectId, run.taskId, eventId) as { signature: string } | undefined
       if (prior) {
-        if (prior.signature !== signature)
+        if (prior.signature !== signature && prior.signature !== legacySignature)
           throw new AgentRuntimeError('FLOW_STATE_EVENT_CONFLICT', 'state')
         return
       }
@@ -183,15 +214,25 @@ export class CoordinationStore {
       const next = run.stateConfig.transitions.find(
         (t) => t.from === run.phase && t.event === event
       )
-      if (!next) throw new AgentRuntimeError('FLOW_STATE_TRANSITION_DENIED', 'state')
-      const previous = { phase: run.phase, revision: run.revision }
+      const graphReworkPhase = event === 'flow.rework' && run.config.executionMode === 'graph'
+        ? run.stateConfig.transitions.find((transition) => transition.event === 'human.continue')?.from
+        : undefined
+      const phase = next?.to ?? graphReworkPhase
+      if (!phase) throw new AgentRuntimeError('FLOW_STATE_TRANSITION_DENIED', 'state')
+      if (resumeRevision !== undefined && (stored.state !== 'waiting' || stored.waitRevision !== resumeRevision))
+        throw new AgentRuntimeError('RESUME_CONFLICT', 'resume')
+      const previous = { phase: run.phase, revision: run.revision, state: run.state, paused: run.paused }
       try {
-        run.phase = next.to
+        run.phase = phase
         run.revision++
+        if (resumeRevision !== undefined) {
+          run.state = 'running'
+          run.paused = false
+        }
         this.db
           .prepare('INSERT INTO flow_coordination_events VALUES (?,?,?,?,?,?)')
           .run(run.projectId, run.taskId, eventId, run.revision, signature, run.phase)
-        this.save(run)
+        this.save(run, resumeRevision === undefined)
       } catch (error) {
         Object.assign(run, previous)
         throw error
@@ -204,7 +245,7 @@ export class CoordinationStore {
    * 可回放事件时间线。事件来源归因：human.* 记 user，其余协调器可信事件记 agent。
    * 不写任何状态；权威仍是命令账本与运行实例，本视图仅供总览/回放。
    */
-  overview(projectId: string, nodeId: string): FlowRunOverview | null {
+  overview(projectId: string, nodeId: string, file?: ProjectFile | null): FlowRunOverview | null {
     const run = this.latest(projectId, nodeId)
     if (!run) return null
     const rows = this.db
@@ -220,8 +261,16 @@ export class CoordinationStore {
     }>
     const events = rows.map((row) => {
       let event = ''
+      let actorSource: FlowEventActorSource = 'system'
       try {
-        event = (JSON.parse(row.signature) as { event?: string }).event ?? ''
+        const stored = JSON.parse(row.signature) as { event?: string; actorSource?: FlowEventActorSource }
+        event = stored.event ?? ''
+        const child = event.startsWith('agent.')
+          ? run.children.find((item) => row.event_id.startsWith(`${item.taskId}:`))
+          : undefined
+        actorSource = stored.actorSource ?? (
+          child ? `agent:${child.nodeId}` : event === 'human.continue' ? 'user:owner' : 'system'
+        )
       } catch {
         /* 损坏签名按空事件处理，不阻断总览。 */
       }
@@ -230,6 +279,7 @@ export class CoordinationStore {
         revision: row.revision,
         event,
         state: row.state,
+        actorSource,
         source: (event.startsWith('human.') ? 'user' : 'agent') as 'user' | 'agent'
       }
     })
@@ -241,11 +291,13 @@ export class CoordinationStore {
           name: graph.name,
           entry: graph.entry,
           exits: graph.exits,
+          ...(graph.roles ? { roles: graph.roles.map(({ roleId, name }) => ({ roleId, name })) } : {}),
           nodes: graph.nodes.map((node) => ({
             nodeId: node.nodeId,
             title: node.title,
             kind: node.kind,
             participation: node.participation,
+            ...(node.humanRole ? { humanRole: node.humanRole } : {}),
             ...(node.review
               ? {
                   review: {
@@ -284,12 +336,41 @@ export class CoordinationStore {
       ...(run.code ? { code: run.code } : {}),
       executionMode: (run.config.executionMode ?? 'model') as 'model' | 'fixed-order' | 'graph',
       ...(graphView ? { graph: graphView } : {}),
-      children: run.children.map((child) => ({
-        nodeId: child.nodeId,
-        taskId: child.taskId,
-        state: child.state,
-        goal: child.goal
-      })),
+      ...(run.sourceGraph ? { sourceGraph: run.sourceGraph } : {}),
+      ...(file ? { canvasVersion: graphCanvasVersion(this.db, file, run.nodeId) } : {}),
+      ...(run.skippedNodeIds?.length ? { skippedNodeIds: run.skippedNodeIds } : {}),
+      ...(run.stalledNodeIds?.length ? { stalledNodeIds: run.stalledNodeIds } : {}),
+      children: run.children.map((child) => {
+        const task = ['waiting', 'running', 'blocked'].includes(child.state)
+          ? this.db.prepare(
+              'SELECT wait_kind, code FROM flow_agent_tasks WHERE project_id=? AND agent_node_id=? AND task_id=?'
+            ).get(projectId, child.nodeId, child.taskId) as
+              { wait_kind: 'human' | 'reconcile' | null; code: string | null } | undefined
+          : undefined
+        const command = ['waiting', 'running', 'blocked'].includes(child.state)
+          ? this.db.prepare(
+              "SELECT state, admitted, json_extract(receipt_json, '$.code') AS code FROM flow_commands WHERE project_id=? AND task_id=? AND state IN ('pending','unknown') ORDER BY (state='unknown') DESC LIMIT 1"
+            ).get(projectId, child.taskId) as { state: string; admitted: number; code: string | null } | undefined
+          : undefined
+        const waitKind = task?.wait_kind === 'reconcile' || (command?.state === 'unknown' && command.admitted)
+          ? 'reconcile'
+          : command?.code === 'FLOW_SESSION_LOST' || task?.code === 'AGENT_SESSION_LOST' || run.code === 'AGENT_SESSION_LOST'
+            ? (['waiting', 'running', 'blocked'].includes(child.state) ? 'host' : undefined)
+            : task?.wait_kind === 'human' && child.state === 'waiting'
+              ? 'human'
+              : command?.state === 'pending' && command.admitted ? 'tool' : undefined
+        return {
+          nodeId: child.nodeId,
+          taskId: child.taskId,
+          state: child.state,
+          goal: child.goal,
+          ...(child.compositeWait ? { compositeWait: child.compositeWait } : {}),
+          ...(waitKind ? { waitKind } : {})
+        }
+      }),
+      staleNodeIds: [...new Set((run.reworkHistory ?? []).map((record) => record.nodeId))].filter(
+        (nodeId) => !run.children.some((child) => child.nodeId === nodeId && child.state === 'completed')
+      ),
       reviews,
       events
     }

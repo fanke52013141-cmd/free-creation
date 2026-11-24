@@ -591,6 +591,16 @@ export class FlowAgentDesktopHost {
       agentThread({ projectId: input.projectId, agentNodeId: input.nodeId, taskId })
     )
   }
+  deliveryHandoff(projectId: string, agentNodeId: string, taskId: string): string | undefined {
+    const thread = agentThread({ projectId, agentNodeId, taskId })
+    const submissions = new FlowCollaborationStore(this.db).read(thread)
+      .filter((event) => event.action === 'submit')
+    if (!submissions.length) return undefined
+    const record = this.store.read(thread)
+    if (!this.store.humanAccepted(thread)) return undefined
+    const submission = submissions.findLast((event) => event.waitRevision === record.waitRevision)
+    return submission?.accepted ? submission.handoffNote : undefined
+  }
   /** AF-02：预览主控阶段输入编制（只读）；非主控/无声明返回 null。 */
   previewStageContext(
     input: Identity,
@@ -790,11 +800,13 @@ export class FlowAgentDesktopHost {
             })()
           : []),
         ...events
-      ].map(({ eventId, action, text, reply }) => ({
+      ].map(({ eventId, action, text, reply, actor, handoffNote }) => ({
         eventId,
         kind: action,
         text,
-        reply
+        reply,
+        ...(handoffNote ? { handoffNote } : {}),
+        actor: actor ?? { kind: 'user', roleId: 'owner' }
       })),
       inputs: [
         ...record.snapshot.directInputs,
@@ -873,7 +885,9 @@ export class FlowAgentDesktopHost {
       if (record.snapshot.config.interactionMode !== 'collaborative')
         throw new AgentRuntimeError('HUMAN_WAIT_DENIED', 'discussion')
       if (!input.text.trim()) throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'discussion')
-      new FlowCollaborationStore(this.db).append(agentThread(record.snapshot), input)
+      new FlowCollaborationStore(this.db).append(agentThread(record.snapshot), input, {
+        actor: { kind: 'user', roleId: record.snapshot.config.humanRole ?? 'owner' }
+      })
       return this.collaboration(input)!
     }
     const key = this.key(input)
@@ -909,6 +923,7 @@ export class FlowAgentDesktopHost {
         projectSemanticRevision(file) !== record.snapshot.semanticRevision
       )
         throw new AgentRuntimeError('FLOW_REVISION_CONFLICT', 'collaboration')
+      const actor = { kind: 'user' as const, roleId: record.snapshot.config.humanRole ?? 'owner' }
       if (input.action === 'revise') {
         if (
           !input.text.trim() ||
@@ -985,7 +1000,7 @@ export class FlowAgentDesktopHost {
         this.db.transaction(() => {
           this.store.setState(rows.thread, 'cancelled', 'AGENT_SUPERSEDED')
           this.store.create(child, record.skills)
-          store.append(rows.thread, input, { childTaskId: child.taskId })
+          store.append(rows.thread, input, { actor, childTaskId: child.taskId })
         })()
       } else if (input.action === 'submit') {
         if (typeof input.accepted !== 'boolean')
@@ -1006,7 +1021,7 @@ export class FlowAgentDesktopHost {
           )
         )
           throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'human')
-        store.append(rows.thread, input)
+        store.append(rows.thread, input, { actor })
       } else {
         if (!input.text.trim()) throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'discussion')
         let reply: string | undefined
@@ -1037,7 +1052,7 @@ export class FlowAgentDesktopHost {
           )
             throw new AgentRuntimeError('RESUME_CONFLICT', 'discussion')
         }
-        store.append(rows.thread, input, { reply })
+        store.append(rows.thread, input, { actor, reply })
       }
       return this.collaboration(input)!
     } finally {

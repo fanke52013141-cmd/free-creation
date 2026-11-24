@@ -1,3 +1,5 @@
+import { HumanTaskValueSchema } from '../agent-flow/node-contracts'
+import { HandoffNoteSchema } from '../agent-flow/stage-contracts'
 import { z } from 'zod'
 import { SkillAgentConfigSchema } from '../skill-agent'
 import { GraphPatchOpsSchema, GRAPH_VIEW_MAX_NODES, mediaResolutionSchema } from './graph-ops'
@@ -76,12 +78,8 @@ export const DesktopRequestSchema = z
     /** human-task-submit：人工结果与观察到的实例修订（C4）；submissionId 缺省由宿主生成。 */
     humanTaskExpectedRevision: z.number().int().min(1).optional(),
     humanTaskSubmissionId: z.string().min(1).max(160).optional(),
-    humanTaskValue: z
-      .discriminatedUnion('kind', [
-        z.object({ kind: z.literal('text'), text: z.string().max(1048576) }).strict(),
-        z.object({ kind: z.literal('json'), data: z.unknown() }).strict()
-      ])
-      .optional(),
+    humanTaskValue: HumanTaskValueSchema.optional(),
+    humanTaskHandoffNote: HandoffNoteSchema.optional(),
     /** read-graph：latest 视图分页参数。 */
     offset: z.number().int().min(0).max(100000).optional(),
     limit: z.number().int().min(1).max(GRAPH_VIEW_MAX_NODES).optional(),

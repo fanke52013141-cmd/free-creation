@@ -1,8 +1,13 @@
+import { runNodeManually } from '../engine/executor'
+import { useGatewayStore } from '../stores/gateway'
+import { publishFlowGraphFromCanvas, restoreFlowGraph } from './flow-build-actions'
+import { ensureCanvasSaved } from './flow-asset-actions'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import type { FlowRunOverview } from '@shared/agent-flow/run-overview'
 import { Icon, type IconName } from '../components/Icon'
 import { useNodePanelStore } from '../stores/nodePanel'
+import { useConfirmStore } from '../stores/confirm'
 import { toast } from '../stores/toast'
 import {
   deriveFlowSteps,
@@ -88,10 +93,12 @@ function ProgressRing({ percent }: { percent: number }): React.JSX.Element {
 
 function StepCard({
   step,
-  onLocate
+  onLocate,
+  onRework
 }: {
   step: FlowStep
   onLocate: (nodeId: string) => void
+  onRework?: () => void
 }): React.JSX.Element {
   const meta = STATE_META[step.state]
   const color = KIND_COLOR[step.kind] ?? '#59D4CD'
@@ -113,7 +120,7 @@ function StepCard({
           </span>
           <span className="fo-step-title">{step.title}</span>
           <span className="fo-chip fo-role" style={{ color, borderColor: `${color}55` }}>
-            {step.roleLabel}
+            {step.roleLabel}{step.humanRole ? ` · ${step.humanRole.name}` : ''}
           </span>
           <span className="fo-spacer" />
           {attention && <span className="fo-chip fo-needs-you">需要你</span>}
@@ -137,6 +144,16 @@ function StepCard({
           <div className="fo-step-detail">{step.detail}</div>
         )}
       </button>
+      {onRework && (
+        <button
+          type="button"
+          className="fo-btn fo-step-action"
+          aria-label={`从「${step.title}」返工`}
+          onClick={onRework}
+        >
+          从这里返工
+        </button>
+      )}
     </div>
   )
 }
@@ -145,6 +162,8 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
   const [coordinators, setCoordinators] = useState<CoordinatorRef[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [overview, setOverview] = useState<FlowRunOverview | null>(null)
+  const [canvasVersion, setCanvasVersion] = useState<FlowRunOverview['canvasVersion']>()
+  const [continuing, setContinuing] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const selectedRef = useRef<string | null>(null)
   useEffect(() => {
@@ -182,15 +201,17 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
       let active = selectedRef.current
       if (!active || !refs.some((ref) => ref.nodeId === active)) {
         active = refs[0]?.nodeId ?? null
+        selectedRef.current = active
         setSelected(active)
       }
       let delay = 3000
       if (active && !document.hidden) {
         try {
           const reply = await window.api.flowRunOverview({ projectId, nodeId: active })
-          if (disposed) return
+          if (disposed || selectedRef.current !== active) return
           if (reply.ok) {
             setOverview(reply.data.overview)
+            setCanvasVersion(reply.data.canvasVersion ?? reply.data.overview?.canvasVersion)
             const state = reply.data.overview?.state
             if (state && ['running', 'waiting', 'ready'].includes(state)) delay = 750
           }
@@ -219,6 +240,112 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
   const progress = useMemo(() => flowProgress(steps), [steps])
   const events = useMemo(() => (overview ? [...overview.events].reverse().slice(0, 8) : []), [overview])
 
+  const rework = async (step: FlowStep): Promise<void> => {
+    if (!selected) return
+    const input = { projectId, nodeId: selected, stageKey: step.nodeId }
+    try {
+      const preview = await window.api.flowAgentStageReworkPreview(input)
+      if (!preview.ok || !preview.data?.canRework) {
+        toast(`无法返工：${preview.ok ? preview.data?.blockedReason ?? '流程不支持返工' : preview.error.message}`)
+        return
+      }
+      const impact = preview.data
+      const titles = impact.willRerunStages.map(({ nodeId }) =>
+        steps.find((item) => item.nodeId === nodeId)?.title ?? nodeId
+      )
+      const confirmed = await useConfirmStore.getState().confirm({
+        title: `从「${step.title}」返工？`,
+        message: `重新执行：${titles.join('、')}。
+${impact.staleDeliveries.length} 份交付移入历史，保留 ${impact.keptDeliveries} 份交付。`,
+        confirmText: '确认返工',
+        cancelText: '取消',
+        danger: true
+      })
+      if (!confirmed) return
+      const result = await window.api.flowAgentStageRework(input)
+      if (!result.ok) {
+        toast(`返工失败：${result.error.message}`)
+        return
+      }
+      window.dispatchEvent(new Event('canvas-agent-task-updated'))
+      toast('返工已准备，继续流程后将重新执行受影响步骤')
+    } catch {
+      toast('暂时无法返工')
+    }
+  }
+
+  const restoreDefinition = async (): Promise<void> => {
+    if (!editor || !canvasVersion || continuing) return
+    const { buildId } = canvasVersion
+    const confirmed = await useConfirmStore.getState().confirm({
+      title: '恢复原流程定义？',
+      message: '将还原此流程的节点定义和输入连线。你可以在画布中撤销这次恢复。',
+      confirmText: '恢复原定义',
+      cancelText: '取消',
+      danger: true
+    })
+    if (!confirmed) return
+    setContinuing(true)
+    try {
+      await restoreFlowGraph(editor, projectId, buildId)
+      toast('已恢复原流程定义')
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '流程定义恢复失败')
+    } finally {
+      setContinuing(false)
+    }
+  }
+
+  const publishDefinition = async (): Promise<void> => {
+    if (!editor || !canvasVersion || continuing) return
+    const { buildId } = canvasVersion
+    const confirmed = await useConfirmStore.getState().confirm({
+      title: '发布画布定义为新版本？',
+      message: '发布会校验当前节点和连线，并将这个版本用于下一次运行。',
+      confirmText: '发布新版本',
+      cancelText: '取消'
+    })
+    if (!confirmed) return
+    setContinuing(true)
+    try {
+      const published = await publishFlowGraphFromCanvas(editor, projectId, buildId)
+      toast(`已发布 v${published.sourceGraph?.version ?? 1}`)
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '流程定义发布失败')
+    } finally {
+      setContinuing(false)
+    }
+  }
+
+  const continueFlow = async (): Promise<void> => {
+    if (!editor || !selected || continuing || overview?.state !== 'waiting') return
+    const nodeId = selected as TLShapeId
+    const expectedTaskId = overview.taskId
+    setContinuing(true)
+    try {
+      await ensureCanvasSaved()
+      const current = await window.api.inspectFlowAgent({ projectId, nodeId })
+      if (!current.ok || current.data?.state !== 'waiting' ||
+          current.data.taskId !== expectedTaskId || selectedRef.current !== nodeId ||
+          !editor.getShape(nodeId)) {
+        toast('流程状态已变化，请查看最新进度')
+        return
+      }
+      editor.updateShape({
+        id: nodeId,
+        type: 'node-card',
+        meta: { agentTask: JSON.stringify(current.data) }
+      })
+      const result = await runNodeManually(editor, projectId, useGatewayStore.getState().providers, nodeId)
+      if (result.status === 'failed') toast(result.reason ?? '继续流程失败')
+    } catch {
+      toast('继续流程失败，请查看运行状态')
+    } finally {
+      setContinuing(false)
+      window.dispatchEvent(new Event('canvas-agent-task-updated'))
+    }
+  }
+
   const pause = useCallback(async () => {
     if (!selected) return
     const reply = await window.api.pauseFlowAgent({ projectId, nodeId: selected })
@@ -239,6 +366,54 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
   if (!loaded) {
     return <div className="flow-overview fo-empty">正在读取流程总览…</div>
   }
+  const flowSelector = (
+    coordinators.length > 1 && (
+      <div className="fo-header-top">
+        <select
+          className="fo-flow-select"
+          value={selected ?? ''}
+          onChange={(event) => {
+            selectedRef.current = event.target.value
+            setSelected(event.target.value)
+            setOverview(null)
+            setCanvasVersion(undefined)
+            window.dispatchEvent(new Event('canvas-agent-task-updated'))
+          }}
+          aria-label="选择流程"
+        >
+          {coordinators.map((ref) => (
+            <option key={ref.nodeId} value={ref.nodeId}>
+              {ref.title}
+            </option>
+          ))}
+        </select>
+      </div>
+    )
+  )
+  const versionNotice = (
+    canvasVersion?.diverged && (
+      <div className="fo-gated-note">
+        <span role="status">画布已修改，当前定义与落画布时的版本存在差异</span>
+        <button type="button" className="fo-btn" disabled={continuing} onClick={() => void restoreDefinition()}>
+          恢复原定义
+        </button>
+        <button type="button" className="fo-btn" disabled={continuing} onClick={() => void publishDefinition()}>
+          发布新版本
+        </button>
+      </div>
+    )
+  )
+  if (coordinators.length && !overview) {
+    return (
+      <div className="flow-overview">
+        <header className="fo-header">
+          {flowSelector}
+          {versionNotice}
+          <p>流程尚未运行</p>
+        </header>
+      </div>
+    )
+  }
   if (!coordinators.length || !overview) {
     return (
       <div className="flow-overview fo-empty">
@@ -252,26 +427,18 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
   return (
     <div className="flow-overview">
       <header className="fo-header">
-        {coordinators.length > 1 && (
-          <div className="fo-header-top">
-            <select
-              className="fo-flow-select"
-              value={selected ?? ''}
-              onChange={(event) => setSelected(event.target.value)}
-              aria-label="选择流程"
-            >
-              {coordinators.map((ref) => (
-                <option key={ref.nodeId} value={ref.nodeId}>
-                  {ref.title}
-                </option>
-              ))}
-            </select>
-          </div>
+        {flowSelector}
+        {overview.sourceGraph && (
+          <div className="fo-chip">本次运行来源 v{overview.sourceGraph.version} · {overview.sourceGraph.definitionId}</div>
         )}
+        {versionNotice}
         <div className="fo-header-main">
           <div className="fo-header-title">
             <h1>{overview.graph?.name || coordinators.find((ref) => ref.nodeId === selected)?.title || '流程'}</h1>
             <p>{overview.goal || '多 Agent 协同流程'}</p>
+            {overview.children.map((child) => child.compositeWait && (
+              <p key={child.taskId}>等待人工提交 · {child.goal} / {child.compositeWait.stepKey}</p>
+            ))}
           </div>
           <div className="fo-progress">
             <ProgressRing percent={progress.percent} />
@@ -301,6 +468,11 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
             </div>
             {now.detail && <p className="fo-now-detail">{now.detail}</p>}
           </div>
+          {overview.state === 'waiting' && !overview.paused && (
+            <button type="button" className="fo-now-cta" disabled={continuing} onClick={() => void continueFlow()}>
+              {continuing ? '正在继续' : '继续流程'}
+            </button>
+          )}
           {now.action && now.nodeId && (
             <button
               type="button"
@@ -326,7 +498,15 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
             <div className="fo-map-spine" />
             {steps.map((step, index) => (
               <div key={step.nodeId} className="fo-map-item">
-                <StepCard step={step} onLocate={locate} />
+                <StepCard
+                  step={step}
+                  onLocate={locate}
+                  onRework={overview.executionMode === 'graph' &&
+                    ['waiting', 'blocked', 'completed'].includes(overview.state) &&
+                    ['completed', 'review-passed'].includes(step.state)
+                    ? () => void rework(step)
+                    : undefined}
+                />
                 {step.kind === 'review' && index < steps.length - 1 && (
                   <div className={`fo-gate ${step.state === 'review-passed' ? 'is-open' : ''}`}>
                     <Icon name="ai-review" size={11} />
@@ -364,7 +544,12 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
                   <div className="fo-event-body">
                     <div className="fo-event-head">
                       <span className="fo-chip fo-event-source">
-                        {tone === 'human' ? '人工' : tone === 'review' ? '审核' : 'Agent'}
+                        {event.actorSource === 'system' ? '系统'
+                          : event.actorSource === 'agent:external' ? '外部 Agent'
+                          : event.actorSource?.startsWith('user:')
+                            ? overview.graph?.roles?.find((role) => `user:${role.roleId}` === event.actorSource)?.name
+                              ?? (event.actorSource === 'user:owner' ? '我' : event.actorSource.slice(5))
+                            : tone === 'review' ? '审核' : 'Agent'}
                       </span>
                       <span className="fo-event-label">{eventLabel(event.event)}</span>
                     </div>

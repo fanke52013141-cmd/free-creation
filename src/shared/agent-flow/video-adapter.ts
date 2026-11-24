@@ -107,10 +107,10 @@ export function humanTaskFlowConfigValid(rawConfig: unknown): boolean {
 }
 
 /** AF-01：人工任务正式交付端口由 outputType 派生（text→out-text，json→out-json）。 */
-export function humanTaskFlowOutputPort(rawConfig: unknown): 'out-text' | 'out-json' {
+export function humanTaskFlowOutputPort(rawConfig: unknown): `out-${import('./node-contracts').HumanTaskNodeConfig['outputType']}` {
   const raw = typeof rawConfig === 'string' ? JSON.parse(rawConfig || '{}') : (rawConfig ?? {})
   const parsed = HumanTaskNodeConfigSchema.parse(raw)
-  return parsed.outputType === 'json' ? 'out-json' : 'out-text'
+  return `out-${parsed.outputType}`
 }
 
 /**
@@ -664,7 +664,16 @@ export const HUMAN_TASK_FLOW_PORTS: PortDecl[] = [
     required: false,
     cardinality: 'one',
     schema: { id: 'json.any', version: 1 }
-  }
+  },
+  ...(['image', 'video'] as const).map((type): PortDecl => ({
+    id: `out-${type}`,
+    name: type === 'image' ? '图片' : '视频',
+    dir: 'out',
+    type,
+    description: '人工正式提交并运行后才输出的结果；未提交不产生输出。',
+    required: false,
+    cardinality: 'one'
+  }))
 ]
 
 /** 裁剪/拆图目标端口与注册表一致（in-image 必填单值；拆图另暴露集合口）。 */

@@ -141,6 +141,7 @@ export interface NodeExecutionContext {
   runId?: string
   /** Admitted command identity; media submissions bind to this persisted lease. */
   flowCommand?: import('../agent-flow/commands').CommandLease
+  humanTaskScope?: string
   /** AF-03：执行信封（阶段目标/方法/人工意见/返工反馈）；内容执行器显式消费，不入日志。 */
   executionEnvelope?: import('../agent-flow/execution-envelope').ExecutionEnvelope
   providers: ProviderSummary[]
@@ -164,6 +165,9 @@ export interface NodeExecutionContext {
     | { kind: 'text'; text: string; logs?: string[] }
     | { kind: 'json'; data: unknown; logs?: string[] }
   >
+  resolveHumanTaskMedia?: (
+    kind: 'image' | 'video', mediaId: string
+  ) => Promise<import('./values').MediaNodeValue<'image' | 'video'> | null>
   waitForResume?: () => Promise<void>
   updateProps: (patch: Partial<NodeShape['props']>) => void
   updateResult: (result: string | null) => void

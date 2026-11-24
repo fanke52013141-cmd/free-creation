@@ -20,6 +20,7 @@ function reserveLoopbackPort() {
 ;(async () => {
   const directory = await mkdtemp(join(tmpdir(), 'canvas-flow-agent-'))
   const evidence = qaOutputPath('qa/agent-end-to-end-graph/desktop')
+  const buildDir = resolve(process.env.CANVAS_AGENT_DESKTOP_BUILD_DIR || 'out')
   await mkdir(evidence, { recursive: true })
   let requests = 0
   const provider = createServer(async (request, response) => {
@@ -92,7 +93,7 @@ function reserveLoopbackPort() {
     const env = { ...process.env, CANVAS_AGENT_RENDERER_URL: rendererUrl, CANVAS_AGENT_FIXTURE_BASE_URL: `http://127.0.0.1:${provider.address().port}/v1` }
     delete env.ELECTRON_RUN_AS_NODE
     const exit = await new Promise((done, reject) => {
-      const child = spawn(require('electron'), [resolve('out/main/agent-flow-desktop.js'), `--agent-directory=${directory}`, '--agent-phase=execute', '--end-to-end-graph'], { env, stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true })
+      const child = spawn(require('electron'), [join(buildDir, 'main', 'agent-flow-desktop.js'), `--agent-directory=${directory}`, '--agent-phase=execute', '--end-to-end-graph'], { env, stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true })
       let stderr = ''
       child.stderr.on('data', (chunk) => { stderr += chunk })
       const timer = setTimeout(() => { child.kill(); reject(new Error('E2_ELECTRON_TIMEOUT')) }, 300000)

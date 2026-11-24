@@ -37,7 +37,7 @@ describe('循环当前项注入与 any 口的契约覆盖', () => {
     }
   })
 
-  it('any 口唯一：只有数据处理 in-value 接受任意类型（54 条透传边）', () => {
+  it('any 口唯一：只有数据处理 in-value 接受任意类型（52 条可创建节点透传边）', () => {
     const anyInputs = allNodeTypes().flatMap((spec) =>
       spec.ports.in.filter((port) => port.type === 'any').map((port) => `${spec.type}.${port.id}`)
     )
@@ -50,8 +50,8 @@ describe('循环当前项注入与 any 口的契约覆盖', () => {
         if (portPairCompatible(out, anyPort!)) pairs += 1
       }
     }
-    // 50 = 可创建节点；契约全集含 4 条历史节点为 54。
-    expect(pairs).toBe(50)
+    // 52 条包含人工任务新增的图片和视频交付端口。
+    expect(pairs).toBe(52)
   })
 })
 

@@ -1,5 +1,5 @@
 import type { NodeExecutor } from '../executor-types'
-import type { NodeValue } from '../values'
+import { parseStoredNodeValue, type NodeValue } from '../values'
 import {
   HumanTaskNodeConfigSchema,
   HumanTaskInstanceSchema,
@@ -14,7 +14,7 @@ import {
  * - 人工提交经 expectedRevision 防过期 + submissionId 去重；完成后投影正式 out-text/out-json。
  * - 复用状态机范式：tldraw meta 浅合并，消费 pending 用空串（删键不生效）。
  */
-export const humanTaskExecutor: NodeExecutor = (ctx) => {
+export const humanTaskExecutor: NodeExecutor = async (ctx) => {
   const config = HumanTaskNodeConfigSchema.safeParse(
     (() => {
       try {
@@ -49,11 +49,26 @@ export const humanTaskExecutor: NodeExecutor = (ctx) => {
       diagnosticPhase: 'input'
     }
 
+  const newScope = Boolean(ctx.humanTaskScope && existing?.scope !== ctx.humanTaskScope)
+  if (newScope && existing) {
+    ctx.updateMeta?.({
+      humanTask: JSON.stringify({
+        schemaVersion: 1,
+        nodeId: String(ctx.node.id),
+        revision: existing.revision + 1,
+        status: 'pending',
+        scope: ctx.humanTaskScope
+      }),
+      humanTaskPending: ''
+    })
+    return { status: 'skipped', reason: '等待人工提交' }
+  }
   const instance: HumanTaskInstance = existing ?? {
     schemaVersion: 1,
     nodeId: String(ctx.node.id),
     revision: 1,
-    status: 'pending'
+    status: 'pending',
+    scope: ctx.humanTaskScope
   }
 
   // 待应用的人工提交：损坏的提交按输入失败处理，不静默当作「没有提交」。
@@ -94,16 +109,24 @@ export const humanTaskExecutor: NodeExecutor = (ctx) => {
         reason: `人工提交类型与节点声明不符：节点要求 ${expectedKind}，提交为 ${pending.value.kind}`,
         diagnosticPhase: 'input'
       }
+    const value = pending.value
+    const output = value.kind === 'image' || value.kind === 'video'
+      ? await ctx.resolveHumanTaskMedia?.(value.kind, value.mediaId)
+      : value
+    if (!output)
+      return { status: 'failed', reason: '人工提交的媒体不在当前项目中或类型不符', diagnosticPhase: 'input' }
     const applied: HumanTaskInstance = {
       ...instance,
       revision: instance.revision + 1,
       status: 'completed',
       result: pending.value,
+      handoffNote: pending.handoffNote,
       lastSubmissionId: pending.submissionId,
-      submittedAt: Date.now()
+      submittedAt: Date.now(),
+      actor: { kind: 'user', roleId: config.data.humanRole ?? 'owner' }
     }
     ctx.updateMeta?.({ humanTask: JSON.stringify(applied), humanTaskPending: '' })
-    ctx.updateResult(JSON.stringify(pending.value))
+    ctx.updateResult(JSON.stringify(output))
     ctx.trace?.('execution', 'info', `人工任务完成（修订 ${applied.revision}）`)
     return { status: 'done' }
   }
@@ -111,7 +134,15 @@ export const humanTaskExecutor: NodeExecutor = (ctx) => {
   // 无待提交：已完成则投影既有结果；否则停等（skipped，不伪造成功）。
   ctx.updateMeta?.({ humanTask: JSON.stringify(instance) })
   if (instance.status === 'completed' && instance.result) {
-    ctx.updateResult(JSON.stringify(instance.result))
+    const result = instance.result
+    if (result.kind !== config.data.outputType)
+      return { status: 'skipped', reason: '结果类型已更改，请重新提交', diagnosticPhase: 'input' }
+    const output = result.kind === 'image' || result.kind === 'video'
+      ? await ctx.resolveHumanTaskMedia?.(result.kind, result.mediaId)
+      : result
+    if (!output)
+      return { status: 'failed', reason: '人工交付媒体不可用，请重新提交', diagnosticPhase: 'input' }
+    ctx.updateResult(JSON.stringify(output))
     return { status: 'done' }
   }
   ctx.updateResult(null)
@@ -124,6 +155,7 @@ export const humanTaskExecutor: NodeExecutor = (ctx) => {
 
 /** 正式输出投影：仅 completed 的人工任务结果按声明端口投影，未提交不产生输出。 */
 export function projectHumanTaskOutputs(shape: {
+  props?: { config?: string }
   meta?: Record<string, unknown>
 }): Record<string, NodeValue> {
   const raw = shape.meta?.humanTask
@@ -139,7 +171,12 @@ export function projectHumanTaskOutputs(shape: {
   )
   if (!parsed.success || parsed.data.status !== 'completed' || !parsed.data.result) return {}
   const result = parsed.data.result
-  return result.kind === 'text'
-    ? { 'out-text': { kind: 'text', text: result.text } }
-    : { 'out-json': { kind: 'json', data: result.data } }
+  if (result.kind === 'text') return { 'out-text': { kind: 'text', text: result.text } }
+  if (result.kind === 'json') return { 'out-json': { kind: 'json', data: result.data } }
+  const saved = typeof shape.meta?.nodeResult === 'string'
+    ? parseStoredNodeValue(shape.meta.nodeResult)
+    : null
+  return saved?.kind === result.kind && saved.mediaId === result.mediaId
+    ? { [`out-${result.kind}`]: saved }
+    : {}
 }

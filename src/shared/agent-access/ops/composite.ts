@@ -1,3 +1,4 @@
+import { HumanTaskValueSchema } from '../../agent-flow/node-contracts'
 import { z } from 'zod'
 import { compositeManifestSchema } from '../../composite/manifest'
 
@@ -170,10 +171,7 @@ export const COMPOSITE_OPERATIONS = {
       .object({
         runId: z.string().min(1).max(120),
         nodeId: z.string().min(1).max(120),
-        value: z.discriminatedUnion('kind', [
-          z.object({ kind: z.literal('text'), text: z.string().max(1048576) }).strict(),
-          z.object({ kind: z.literal('json'), data: z.unknown() }).strict()
-        ])
+        value: HumanTaskValueSchema
       })
       .strict()
   },

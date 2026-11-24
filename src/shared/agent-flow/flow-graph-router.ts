@@ -53,6 +53,57 @@ function conditionRef(condition: StageCondition): string {
   return condition.kind === 'review-passed' ? condition.reviewNodeId : condition.stageKey
 }
 
+/** 已交付结果变化后，哪些步骤的输入、路由或循环退出条件可能随之变化。 */
+export function graphReworkNodes(
+  graph: FlowGraph,
+  targetId: string,
+  reviewDependencies: ReadonlyArray<readonly [sourceId: string, targetId: string]> = []
+): Set<string> {
+  if (!graph.nodes.some((node) => node.nodeId === targetId)) return new Set()
+
+  const downstream = new Map<string, Set<string>>()
+  const connect = (sourceId: string, nextId: string): void => {
+    const targets = downstream.get(sourceId) ?? new Set<string>()
+    targets.add(nextId)
+    downstream.set(sourceId, targets)
+  }
+  const conditionSources = new Map<string, Set<string>>()
+  for (const edge of graph.edges) {
+    connect(edge.from.nodeId, edge.to.nodeId)
+    const siblings = conditionSources.get(edge.from.nodeId) ?? new Set<string>()
+    for (const condition of edge.condition ?? []) {
+      const sourceId = conditionRef(condition)
+      connect(sourceId, edge.to.nodeId)
+      siblings.add(sourceId)
+    }
+    conditionSources.set(edge.from.nodeId, siblings)
+  }
+  for (const edge of graph.edges) {
+    if (!edge.otherwise) continue
+    for (const sourceId of conditionSources.get(edge.from.nodeId) ?? [])
+      connect(sourceId, edge.to.nodeId)
+  }
+  for (const node of graph.nodes) {
+    for (const selector of node.inputs?.selectors ?? [])
+      connect(selector.sourceStageKey, node.nodeId)
+    for (const condition of node.loop?.exitCondition ?? [])
+      connect(conditionRef(condition), node.nodeId)
+  }
+  for (const { carrierId, body } of loopBodyInfo(graph).values()) {
+    for (const nodeId of body) {
+      connect(carrierId, nodeId)
+      connect(nodeId, carrierId)
+    }
+  }
+  for (const [sourceId, nextId] of reviewDependencies) connect(sourceId, nextId)
+
+  const affected = new Set([targetId])
+  for (const nodeId of affected) {
+    for (const nextId of downstream.get(nodeId) ?? []) affected.add(nextId)
+  }
+  return affected
+}
+
 /** 条件引用的节点全部已落定（交付或跳过）时，"不成立"才是终局结论，可据此判死边。 */
 function conditionsResolvable(
   conditions: StageCondition[],

@@ -102,6 +102,7 @@ function reserveLoopbackPort() {
     const report = JSON.parse(await readFile(join(directory, 'execute-report.json'), 'utf8'))
     await writeFile(join(evidence, 'execute-report.json'), JSON.stringify(report, null, 2))
     try { await copyFile(join(directory, 'flow-overview.png'), join(evidence, 'flow-overview.png')) } catch { /* screenshot optional */ }
+    for (const file of report.report?.stateScreenshots ?? []) await copyFile(join(directory, file), join(evidence, file))
     if (exit.code !== 0 || report.status !== 'pass') throw new Error(`FOV_ACCEPTANCE_FAILED: code=${exit.code} report=${JSON.stringify(report).slice(0, 400)}`)
     console.log(`Flow overview visual captured: ${evidence}`)
   } finally {

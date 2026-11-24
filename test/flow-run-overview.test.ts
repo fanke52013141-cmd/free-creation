@@ -66,8 +66,8 @@ describe('O3 流程运行统一总览', () => {
     })
     expect(overview!.children).toEqual([{ nodeId: 'first', taskId: 't1', state: 'completed' }])
     expect(overview!.events).toEqual([
-      { eventId: 'e1', revision: 1, event: 'flow.started', state: 'working', source: 'agent' },
-      { eventId: 'e2', revision: 2, event: 'human.wait', state: 'waiting', source: 'user' }
+      { eventId: 'e1', revision: 1, event: 'flow.started', state: 'working', source: 'agent', actorSource: 'system' },
+      { eventId: 'e2', revision: 2, event: 'human.wait', state: 'waiting', source: 'user', actorSource: 'system' }
     ])
     db.close()
   })

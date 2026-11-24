@@ -70,7 +70,9 @@ export const FlowNodeSchema = z
     nodeId: id,
     title: z.string().trim().min(1).max(120),
     participation: FlowParticipationSchema,
+    humanRole: id.optional(),
     kind: FlowNodeKindSchema,
+    humanOutputType: z.enum(['text', 'json', 'image', 'video']).optional(),
     /** 固定阶段目标：分派逐字使用，不由模型补写（沿用 AF-01）。 */
     goal: z.string().min(1).max(8192),
     /** 固定完成条件说明：验收以交付事实为准。 */
@@ -121,6 +123,8 @@ export const FlowNodeSchema = z
   })
   .strict()
   .superRefine((node, context) => {
+    if (node.humanOutputType && node.kind !== 'human-task')
+      context.addIssue({ code: 'custom', message: 'only human-task nodes may declare humanOutputType' })
     if (node.participation === 'human' && node.kind !== 'human-task')
       context.addIssue({ code: 'custom', message: 'human participation requires a human-task node' })
     if (node.kind === 'human-task' && node.participation !== 'human')
@@ -225,6 +229,11 @@ export const FlowGraphSchema = z
     name: z.string().min(1).max(120),
     /** 总目标：复述注入主 Agent（对抗 lost-in-the-middle）。 */
     goal: z.string().min(1).max(32768),
+    roles: z.array(z.object({
+      roleId: id,
+      name: z.string().min(1).max(120),
+      description: z.string().max(4096).optional()
+    }).strict()).max(16).optional(),
     nodes: z.array(FlowNodeSchema).min(1).max(64),
     edges: z.array(FlowEdgeSchema).max(256),
     entry: id,
@@ -291,6 +300,10 @@ function checkConditionRefs(
 // ── 静态校验（图算法层，纯函数；schema 层之外的拓扑/参与/预算检查）──
 
 export type FlowGraphErrorCode =
+  | 'HUMAN_ROLE_DUPLICATE'
+  | 'HUMAN_ROLE_UNKNOWN'
+  | 'HUMAN_ROLE_UNEXPECTED'
+  | 'HUMAN_ROLE_REQUIRED'
   | 'CYCLE_WITHOUT_LOOP'
   | 'UNREACHABLE_NODE'
   | 'EXIT_UNREACHABLE'
@@ -416,7 +429,10 @@ function flowNodePorts(
     type: port.type,
     ...(parsePortSchema(port.schema) ? { schemaRef: parsePortSchema(port.schema) } : {})
   })
-  return { inputs: record.ports.in.map(map), outputs: record.ports.out.map(map) }
+  const outputs = node.kind === 'human-task' && node.humanOutputType
+    ? record.ports.out.filter((port) => port.id === `out-${node.humanOutputType}`)
+    : record.ports.out
+  return { inputs: record.ports.in.map(map), outputs: outputs.map(map) }
 }
 
 /**
@@ -435,6 +451,26 @@ export function validateFlowGraph(
   options: { catalog?: readonly CapabilityDescriptor[] } = {}
 ): FlowGraphValidation {
   const errors: FlowGraphError[] = []
+  const roleIds = new Set(graph.roles?.map((role) => role.roleId) ?? ['owner'])
+  if (graph.roles && roleIds.size !== graph.roles.length)
+    errors.push({ code: 'HUMAN_ROLE_DUPLICATE', message: 'Role ids must be unique' })
+  for (const node of graph.nodes) {
+    if (node.humanRole && !roleIds.has(node.humanRole))
+      errors.push({
+        code: 'HUMAN_ROLE_UNKNOWN', nodeId: node.nodeId,
+        message: `Unknown human role ${node.humanRole}`
+      })
+    if (node.participation === 'autonomous' && node.humanRole)
+      errors.push({
+        code: 'HUMAN_ROLE_UNEXPECTED', nodeId: node.nodeId,
+        message: 'Autonomous nodes cannot declare a human role'
+      })
+    if (graph.roles && node.participation !== 'autonomous' && !node.humanRole)
+      errors.push({
+        code: 'HUMAN_ROLE_REQUIRED', nodeId: node.nodeId,
+        message: 'Human and collaborative nodes must declare a human role'
+      })
+  }
   const adj = adjacency(graph)
   const nodeById = new Map(graph.nodes.map((node) => [node.nodeId, node]))
   const catalog = options.catalog ?? buildCapabilityCatalog()

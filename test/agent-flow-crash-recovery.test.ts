@@ -27,6 +27,7 @@ beforeAll(async () => {
     platform: 'node',
     format: 'cjs',
     external: ['better-sqlite3', 'electron'],
+    alias: { '@shared': resolve('src/shared') },
     logLevel: 'silent'
   })
 })

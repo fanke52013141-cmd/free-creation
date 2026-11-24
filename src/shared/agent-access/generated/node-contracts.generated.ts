@@ -1737,6 +1737,24 @@ export const GENERATED_NODE_CONTRACTS: NodeContractRecord[] = [
           "name": "结构数据",
           "description": "人工正式提交并运行后才输出的结果；未提交不产生输出。",
           "schema": "json.any@1"
+        },
+        {
+          "id": "out-image",
+          "dir": "out",
+          "type": "image",
+          "required": false,
+          "cardinality": "one",
+          "name": "图片",
+          "description": "人工正式提交并运行后才输出的结果；未提交不产生输出。"
+        },
+        {
+          "id": "out-video",
+          "dir": "out",
+          "type": "video",
+          "required": false,
+          "cardinality": "one",
+          "name": "视频",
+          "description": "人工正式提交并运行后才输出的结果；未提交不产生输出。"
         }
       ]
     }

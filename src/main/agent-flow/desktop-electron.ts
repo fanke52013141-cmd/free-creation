@@ -2659,7 +2659,49 @@ if (
           if(!actions.includes('note')||!actions.includes('discuss')||!actions.includes('submit'))throw new Error('E2_COLLABORATION_HISTORY_MISSING');
           const outputs=(await import('/src/nodes/nodeValues.ts')).projectNodeOutputs(editor.getShape('shape:e2-main'));
           if(outputs['out-text']?.text!=='交付：private-e2-material')throw new Error('E2_FINAL_OUTPUT_INVALID');
-          return {status:'pass',projectId,rootTaskId:root.taskId,collaborationRounds:rounds,reviewRevision:decision.reviewRevision,finalOutput:outputs['out-text'].text,checks:['material→analysis→collaborative org→review→bounded rework→final asset in one graph','collaborative org waits twice (original + rework), note/discuss/submit persisted','review rejects then passes fixed rework version (reviewRevision=1)','downstream gated until approval; final committed asset delivered']};
+          const rootId='shape:e2-main';
+          const reworkInput={projectId,nodeId:rootId,stageKey:'shape:e2-review'};
+          const before=value(await window.api.flowRunOverview({projectId,nodeId:rootId})).overview;
+          const impact=value(await window.api.flowAgentStageReworkPreview(reworkInput));
+          const impacted=impact?.willRerunStages.map((stage)=>stage.nodeId);
+          if(!impact?.canRework||JSON.stringify(impacted)!==JSON.stringify(['shape:e2-review','shape:e2-down'])||impact.keptDeliveries!==2)
+            throw new Error('E2_LOCAL_REWORK_IMPACT_INVALID');
+          const overviewButton=document.querySelector('[aria-label="打开流程总览"]');
+          if(!overviewButton)throw new Error('E2_LOCAL_REWORK_OVERVIEW_UNAVAILABLE');
+          overviewButton.click();
+          const waitFor=async(finder,error)=>{for(let i=0;i<100;i++){const item=await finder();if(item)return item;await delay();}throw new Error(error);};
+          const reworkButton=await waitFor(()=>[...document.querySelectorAll('.flow-overview .fo-step')]
+            .find((step)=>step.querySelector('.fo-step-title')?.textContent==='审核')
+            ?.querySelector('.fo-step-action'),'E2_LOCAL_REWORK_BUTTON_UNAVAILABLE');
+          reworkButton.click();
+          const confirm=await waitFor(()=>[...document.querySelectorAll('button')]
+            .find((button)=>button.textContent.trim()==='确认返工'),'E2_LOCAL_REWORK_CONFIRM_UNAVAILABLE');
+          confirm.click();
+          const ready=await waitFor(async()=>{const task=await inspectNode(rootId);return task?.state==='waiting'?task:null;},
+            'E2_LOCAL_REWORK_WAIT_TIMEOUT');
+          if(ready.state!=='waiting'||ready.taskId!==root.taskId)throw new Error('E2_LOCAL_REWORK_NOT_WAITING');
+          const continueButton=await waitFor(()=>[...document.querySelectorAll('.flow-overview button')]
+            .find((button)=>button.textContent.trim()==='继续流程'&&!button.disabled),'E2_CONTINUE_BUTTON_UNAVAILABLE');
+          continueButton.click();
+          const reworked=await waitFor(async()=>{
+            const task=await inspectNode(rootId);
+            if(task&&['blocked','failed','cancelled'].includes(task.state))throw new Error(task.code||'E2_CONTINUE_FAILED');
+            return task?.state==='completed'?task:null;
+          },'E2_CONTINUE_TIMEOUT');
+          await ensureCanvasSaved();
+          if(reworked?.state!=='completed'||reworked.taskId!==root.taskId)throw new Error('E2_LOCAL_REWORK_NOT_COMPLETED');
+          const after=value(await window.api.flowRunOverview({projectId,nodeId:rootId})).overview;
+          const taskOf=(overview,nodeId)=>overview.children.find((child)=>child.nodeId===nodeId)?.taskId;
+          for(const preserved of ['shape:e2-analysis','shape:e2-org']){
+            if(!taskOf(before,preserved)||taskOf(before,preserved)!==taskOf(after,preserved))
+              throw new Error('E2_LOCAL_REWORK_REPEATED_UPSTREAM');
+          }
+          if(!taskOf(after,'shape:e2-down')||taskOf(before,'shape:e2-down')===taskOf(after,'shape:e2-down'))
+            throw new Error('E2_LOCAL_REWORK_REUSED_DOWNSTREAM');
+          const revisedOutput=(await import('/src/nodes/nodeValues.ts')).projectNodeOutputs(editor.getShape(rootId));
+          if(revisedOutput['out-text']?.text!==outputs['out-text'].text)
+            throw new Error('E2_LOCAL_REWORK_OUTPUT_INVALID');
+          return {status:'pass',projectId,rootTaskId:root.taskId,collaborationRounds:rounds,reviewRevision:decision.reviewRevision,localRework:{impacted,keptDeliveries:impact.keptDeliveries,oldDownstreamTask:taskOf(before,'shape:e2-down'),newDownstreamTask:taskOf(after,'shape:e2-down')},finalOutput:outputs['out-text'].text,checks:['material→analysis→collaborative org→review→bounded rework→final asset in one graph','collaborative org waits twice (original + rework), note/discuss/submit persisted','review rejects then passes fixed rework version (reviewRevision=1)','downstream gated until approval; final committed asset delivered','overview continue resumes the same task after local rework']};
         })()`)
       } else if (mediaReviewGraph) {
         const { acceptGraphMediaReview } = await import('./graph-media-review-acceptance')
@@ -2706,6 +2748,114 @@ if (
         active.webContents.invalidate()
         await new Promise((done) => setTimeout(done, 400))
         writeFileSync(join(directory, 'flow-overview.png'), (await active.webContents.capturePage()).toPNG())
+        // Exercise the presentation of rare routing and execution states through the real overview IPC.
+        // The live waiting screenshot above remains the end-to-end run evidence.
+        const database = getDb()
+        const stored = database.prepare('SELECT task_id, body_json FROM flow_coordination_runs WHERE project_id=?')
+          .get(projectId) as { task_id: string; body_json: string }
+        const fixture = JSON.parse(stored.body_json)
+        const states = [
+          'completed', 'running', 'waiting-human', 'waiting-execution', 'waiting-reconcile',
+          'review-pending', 'review-passed', 'rejected', 'blocked', 'failed',
+          'gated', 'stale', 'idle', 'skipped', 'stalled', 'cancelled', 'waiting-tool', 'waiting-host'
+        ]
+        const reviewStates: Record<string, string> = {
+          'review-pending': 'pending', 'review-passed': 'passed', rejected: 'rejected'
+        }
+        fixture.config.graph.nodes = states.map((state) => ({
+          nodeId: 'shape:status-' + state,
+          title: state,
+          kind: reviewStates[state] ? 'review' : state === 'waiting-human' ? 'human-task' : 'agent',
+          participation: state === 'waiting-human' ? 'human' : 'autonomous'
+        }))
+        fixture.config.graph.edges = [{ from: { nodeId: 'shape:status-rejected' }, to: { nodeId: 'shape:status-gated' } }]
+        fixture.reviews = Object.entries(reviewStates).map(([state, value]) => ({
+          nodeId: 'shape:status-' + state, state: value, round: 1
+        }))
+        fixture.children = states.filter((state) =>
+          ['completed', 'running', 'blocked', 'failed', 'cancelled'].includes(state) || state.startsWith('waiting-')
+        ).map((state) => ({
+          nodeId: 'shape:status-' + state, taskId: 'fixture-' + state,
+          state: state.startsWith('waiting-') ? 'waiting' : state, goal: state, outputs: []
+        }))
+        fixture.skippedNodeIds = ['shape:status-skipped']
+        fixture.stalledNodeIds = ['shape:status-stalled']
+        fixture.reworkHistory = [{ nodeId: 'shape:status-stale' }]
+        database.transaction(() => {
+          database.prepare('UPDATE flow_coordination_runs SET body_json=? WHERE project_id=? AND task_id=?')
+            .run(JSON.stringify(fixture), projectId, stored.task_id)
+          database.prepare("UPDATE flow_agent_tasks SET agent_node_id=?, task_id=?, wait_kind='reconcile' WHERE project_id=? AND agent_node_id=?")
+            .run('shape:status-waiting-reconcile', 'fixture-waiting-reconcile', projectId, 'shape:e2-org')
+          for (const [kind, state, admitted, code] of [
+            ['tool', 'pending', 1, null], ['host', 'unknown', 0, 'FLOW_SESSION_LOST']
+          ] as const) {
+            const taskId = 'fixture-waiting-' + kind
+            const nodeId = 'shape:status-waiting-' + kind
+            database.prepare('INSERT INTO flow_command_tasks VALUES (?,?,?,?)')
+              .run(taskId, projectId, nodeId, 1)
+            database.prepare('INSERT INTO flow_commands (project_id, command_id, signature, command_json, target_node_id, task_id, lease_id, owner_session, run_id, state, receipt_json, created_at, admitted) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
+              .run(projectId, taskId, '{}', '{}', nodeId, taskId, 'lease', 'fixture',
+                'fixture-run', state, JSON.stringify({ code }), Date.now(), admitted)
+          }
+        })()
+        const displayed = await active.webContents.executeJavaScript(`(async()=>{
+          const states=${JSON.stringify(states)};
+          window.dispatchEvent(new Event('canvas-agent-task-updated'));
+          for(let i=0;i<100 && !document.querySelector('.fo-step.is-stalled');i++)
+            await new Promise(done=>setTimeout(done,100));
+          return states.map(state=>{
+            const row=document.querySelector('.fo-step.is-'+state);
+            const status=row?.querySelector('.fo-state');
+            const glyph=status?.querySelector('.fo-state-glyph')?.textContent?.trim();
+            const label=status?.textContent?.replace(glyph||'','')?.trim();
+            if(!glyph||!label)throw new Error('FOV_STATUS_MISSING:'+state);
+            return {state,label,glyph};
+          });
+        })()`)
+        const files: string[] = []
+        for (const [from, to] of [[0, 4], [5, 9], [11, 15], [16, 17]]) {
+          const name = 'flow-overview-states-' + from + '-' + to + '.png'
+          await active.webContents.executeJavaScript(`(async()=>{
+            const first=document.querySelector('.fo-step.is-'+${JSON.stringify(states[from])});
+            first.scrollIntoView({block:'start'});
+            await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));
+          })()`)
+          writeFileSync(join(directory, name), (await active.webContents.capturePage()).toPNG())
+          files.push(name)
+        }
+        fixture.state = 'blocked'
+        fixture.code = 'FLOW_STALLED'
+        fixture.config.graph.roles = [{ roleId: 'writer', name: 'Writer' }, { roleId: 'reviewer', name: 'Reviewer' }]
+        for (const role of fixture.config.graph.roles) {
+          const nodeId = 'shape:inbox-' + role.roleId
+          fixture.config.graph.nodes.push({
+            nodeId, title: role.name + ' task', kind: 'human-task', participation: 'human', humanRole: role.roleId
+          })
+          fixture.children.push({ nodeId, taskId: nodeId, state: 'waiting', goal: role.name, outputs: [] })
+        }
+        database.prepare('UPDATE flow_coordination_runs SET body_json=? WHERE project_id=? AND task_id=?')
+          .run(JSON.stringify(fixture), projectId, stored.task_id)
+        const inbox = await active.webContents.executeJavaScript(`(async()=>{
+          document.querySelector('[aria-label="打开待你处理收件箱"]').click();
+          const getAlert = () => document.querySelector('.runs-panel section[aria-label="流程"]');
+          let select;
+          for(let i=0;i<100;i++){
+            select=document.querySelector('.runs-panel select');
+            if(getAlert() && select?.querySelector('option[value="writer"]') && select.querySelector('option[value="reviewer"]'))break;
+            await new Promise(done=>setTimeout(done,100));
+          }
+          if(!getAlert()||!select||getAlert().parentElement.firstElementChild!==getAlert())throw new Error('FOV_INBOX_ALERT_ORDER');
+          select.value='writer';
+          select.dispatchEvent(new Event('change',{bubbles:true}));
+          await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));
+          if(!getAlert()||!document.querySelector('.runs-panel section[aria-label="Writer"]')||
+            document.querySelector('.runs-panel section[aria-label="Reviewer"]'))throw new Error('FOV_INBOX_ROLE_FILTER');
+          return { pinned: true, filteredRole: select.value };
+        })()`)
+        const inboxScreenshot = 'flow-inbox-stalled.png'
+        writeFileSync(join(directory, inboxScreenshot), (await active.webContents.capturePage()).toPNG())
+        files.push(inboxScreenshot)
+        report = { ...(report as object), fixtureStates: displayed, stateScreenshots: files, inbox }
       } else if (coordination) {
         if (recovery && phase === 'reopen') {
           const row = getDb()

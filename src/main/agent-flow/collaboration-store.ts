@@ -3,7 +3,13 @@ import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 import type { FlowAgentCollaboration } from '../../shared/agent-flow/desktop-tasks'
 
-export type CollaborationEvent = FlowAgentCollaboration & { reply?: string; childTaskId?: string }
+import type { HumanActor } from '../../shared/agent-flow/node-contracts'
+
+export type CollaborationEvent = FlowAgentCollaboration & {
+  actor?: HumanActor
+  reply?: string
+  childTaskId?: string
+}
 export class FlowCollaborationStore {
   constructor(private readonly db: Database.Database) {}
   read(thread: string): CollaborationEvent[] {
@@ -33,7 +39,7 @@ export class FlowCollaborationStore {
   append(
     thread: string,
     input: FlowAgentCollaboration,
-    extra: Pick<CollaborationEvent, 'reply' | 'childTaskId'> = {}
+    extra: Pick<CollaborationEvent, 'reply' | 'childTaskId' | 'actor'> = {}
   ): void {
     this.db.transaction(() => {
       if (this.check(thread, input)) return

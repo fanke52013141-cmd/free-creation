@@ -60,6 +60,8 @@ export interface FlowGraphPreview {
   nodeId: string
   semanticRevision: string
   state: 'preview' | 'committed' | 'discarded'
+  sourceGraph?: import('./flow-definition').FlowGraphSource
+  committedScopeHash?: string
   graph: FlowGraph
   nodes: CompiledNode[]
   edges: CompiledEdge[]
@@ -84,6 +86,7 @@ function compileNode(
     const config = AgentNodeConfigSchema.parse({
       schemaVersion: 1,
       role: 'specialist',
+      humanRole: node.participation === 'collaborative' ? node.humanRole ?? 'owner' : undefined,
       interactionMode: node.participation === 'collaborative' ? 'collaborative' : 'autonomous',
       skills: [],
       tools: [],
@@ -96,7 +99,8 @@ function compileNode(
   if (node.kind === 'human-task') {
     const config = HumanTaskNodeConfigSchema.parse({
       schemaVersion: 1,
-      outputType: 'text',
+      outputType: node.humanOutputType ?? 'text',
+      humanRole: node.humanRole ?? 'owner',
       instructions: node.goal
     })
     return { ...base, type: 'human-task', config: JSON.stringify(config), contractVersion: 1 }
@@ -152,17 +156,23 @@ function compileNode(
 
 /** 派生基础状态机（顺序语义）：idle + 各节点状态 + completed；边→完成事件迁移。
  *  条件/循环的精确状态机推导属 P3+；此处保证结构合法（过 StateMachineNodeConfigSchema）。 */
-function deriveStateMachine(graph: FlowGraph): { states: string[]; transitions: Array<{ from: string; event: string; to: string }> } {
-  const states = ['idle', ...graph.nodes.map((n) => n.nodeId), 'completed']
-  const transitions: Array<{ from: string; event: string; to: string }> = [
-    { from: 'idle', event: 'flow.started', to: graph.entry }
+function deriveStateMachine(graph: FlowGraph): {
+  states: string[]
+  transitions: Array<{ from: string; event: string; to: string }>
+} {
+  const running = graph.entry
+  const waiting = 'waiting'
+  const states = ['idle', ...graph.nodes.map((node) => node.nodeId), waiting, 'completed']
+  const transitions = [
+    { from: 'idle', event: 'flow.started', to: running },
+    ...['agent.dispatched', 'agent.completed', 'review.started', 'review.passed',
+      'review.rejected', 'rework.created'].map((event) => ({ from: running, event, to: running })),
+    { from: running, event: 'human.wait', to: waiting },
+    { from: running, event: 'flow.paused', to: waiting },
+    { from: running, event: 'flow.completed', to: 'completed' },
+    { from: waiting, event: 'human.continue', to: running },
+    ...[running, waiting, 'completed'].map((from) => ({ from, event: 'flow.rework', to: waiting }))
   ]
-  for (const edge of graph.edges) {
-    transitions.push({ from: edge.from.nodeId, event: `${edge.to.nodeId}.entered`, to: edge.to.nodeId })
-  }
-  for (const exit of graph.exits) {
-    transitions.push({ from: exit, event: 'flow.completed', to: 'completed' })
-  }
   return { states, transitions }
 }
 

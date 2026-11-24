@@ -129,6 +129,11 @@ export type ContextManifest = z.infer<typeof ContextManifestSchema>
  * 人工决定/审核结论与提交时间。引用既有不可变资产，不复制全文；程序据此确定下游可用版本。
  * stale=true 表示上游返工后本交付过期，禁止当作新版本交付。
  */
+export const HandoffNoteSchema = z.string().min(1).refine(
+  (text) => text.trim().length > 0 && new TextEncoder().encode(text).length <= 4096,
+  'Handoff note must be non-blank and at most 4096 UTF-8 bytes'
+)
+
 export const StageDeliveryRecordSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -144,6 +149,7 @@ export const StageDeliveryRecordSchema = z
       .string()
       .regex(/^sha256:[a-f0-9]{64}$/)
       .optional(),
+    handoffNote: HandoffNoteSchema.optional(),
     humanDecided: z.boolean(),
     reviewPassed: z.boolean(),
     definitionRevision: z.string().regex(/^sha256:[a-f0-9]{64}$/),
@@ -221,6 +227,7 @@ export interface StageDeliveryFact {
   outputs: Array<{ kind: string; data?: unknown; text?: string }>
   /** 存在显式人工采用（accepted=true 的 human 续接记录）。 */
   humanDecided: boolean
+  handoffNote?: string
 }
 export interface StageEntryFacts {
   deliveries: StageDeliveryFact[]

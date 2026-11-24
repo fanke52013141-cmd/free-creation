@@ -407,9 +407,10 @@ export async function publishCompositeVersion(
 
 export function getCompositeVersion(
   capabilityId: string,
-  version: string
+  version: string,
+  db = getDb()
 ): CompositeVersionRecord | null {
-  const row = getDb()
+  const row = db
     .prepare('SELECT * FROM composite_versions WHERE capability_id = ? AND version = ?')
     .get(capabilityId, version) as VersionRow | undefined
   return row ? rowToVersion(row) : null

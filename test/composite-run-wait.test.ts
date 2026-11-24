@@ -35,7 +35,12 @@ describe('组合等待输入（P3）', () => {
     expect(wait.revision).toBe(1)
     expect(getOpenCompositeRunWait('r1')?.requestId).toBe('w1')
     expect(satisfyCompositeRunWait({ requestId: 'w1', revision: 1, value: { text: '人物' }, submittedBy: 'gui' })).toMatchObject({ ok: true })
-    expect(satisfyCompositeRunWait({ requestId: 'w1', revision: 1, value: { text: '重复' }, submittedBy: 'gui' })).toMatchObject({ ok: true })
+    expect(openCompositeRunWait({ requestId: 'w1', runId: 'r1', kind: 'input', fields })).toEqual(
+      expect.objectContaining({ revision: 1, state: 'satisfied' })
+    )
+    expect(satisfyCompositeRunWait({ requestId: 'w1', revision: 1, value: { text: '人物' }, submittedBy: 'cli' })).toMatchObject({ ok: true })
+    expect(satisfyCompositeRunWait({ requestId: 'w1', revision: 1, value: { text: '重复' }, submittedBy: 'gui' })).toMatchObject({ ok: false, reason: 'WAIT_SUBMISSION_CONFLICT' })
+    expect(satisfyCompositeRunWait({ requestId: 'w1', revision: 2, value: { text: '人物' }, submittedBy: 'gui' })).toMatchObject({ ok: false, reason: 'WAIT_REVISION_CONFLICT' })
     expect(getOpenCompositeRunWait('r1')).toBeNull()
   })
 

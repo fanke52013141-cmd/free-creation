@@ -1,3 +1,7 @@
+import { getCompositeStepOutputs } from '../store/composite-run.repo'
+import { getSatisfiedHumanSubmissions } from '../store/composite-run-wait.repo'
+import { planCompositeInputBindings } from '../../shared/composite/runtime'
+import { findCompositeCommandWait, resolveCompositeTarget } from './composite-target'
 import type Database from 'better-sqlite3'
 import { randomUUID, createHash } from 'node:crypto'
 import type { ProjectFile, PortDecl } from '../../shared/types'
@@ -25,7 +29,7 @@ import { readStoredNodeRunStatus } from '../../shared/engine/run-status'
 import { computeInputFingerprint } from '../../shared/engine/input-fingerprint'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import { readPinnedOutputs } from '../../shared/engine/deterministic-projections'
-import { AgentFlowAssetRefSchema } from '../../shared/agent-flow/node-contracts'
+import { AgentFlowAssetRefSchema, HumanTaskInstanceSchema } from '../../shared/agent-flow/node-contracts'
 import {
   AgentNodeConfigSchema,
   ReviewNodeConfigSchema
@@ -276,8 +280,18 @@ export class FlowCommandLedger {
       fail('FLOW_CONTROL_OCCUPIED', 'scope')
     const target = savedShape(project, command.targetNodeId)
     const node = project.nodes.find((item) => item.id === command.targetNodeId)
-    const adapter = node && flowTargetContract(node)
-    if (!node || !adapter || target.props.nodeType !== node.type)
+    const composite =
+      node?.type === 'composite' && node.contractVersion === 1
+        ? resolveCompositeTarget(this.db, target.props.config)
+        : null
+    const inputIds =
+      composite?.inputs.map((port) => port.id) ?? (node && flowTargetContract(node)?.inputs)
+    const ports = composite
+      ? [...composite.inputs, ...composite.outputs]
+      : node
+        ? flowTargetPorts(node)
+        : []
+    if (!node || !inputIds || target.props.nodeType !== node.type)
       fail('FLOW_TYPE_UNSUPPORTED', 'contract')
     if (
       node.type === 'video' &&
@@ -312,22 +326,28 @@ export class FlowCommandLedger {
       fail('FLOW_INPUT_CONTRACT_INVALID', 'human-task-config')
     if (
       command.contractVersion !== node.contractVersion ||
-      portIdentity(node.ports) !== portIdentity(flowTargetPorts(node)) ||
+      portIdentity(node.ports) !== portIdentity(ports) ||
       target.meta?.pinnedOutput !== undefined
     )
       fail('FLOW_CONTRACT_MISMATCH', 'contract')
+    if (
+      composite &&
+      target.meta?.compositeManifest !== undefined &&
+      canonicalFlowJson(target.meta.compositeManifest) !== canonicalFlowJson(composite.manifest)
+    )
+      fail('FLOW_CONTRACT_MISMATCH', 'composite-version')
     this.assertReviewReady(project, command.targetNodeId, command.inputs)
     const incoming = project.edges.filter((edge) => edge.to.nodeId === command.targetNodeId)
     if (
       incoming.some((edge) => {
-        const port = flowTargetPorts(node).find((item) => item.id === edge.to.portId)
+        const port = ports.find((item) => item.id === edge.to.portId)
         return (
           !port ||
           (port.cardinality === 'one' &&
             incoming.filter((item) => item.to.portId === edge.to.portId).length > 1)
         )
       }) ||
-      incoming.some((edge) => !adapter.inputs.includes(edge.to.portId)) ||
+      incoming.some((edge) => !inputIds.includes(edge.to.portId)) ||
       incoming.some(
         (edge) => !command.inputs.some((input) => input.targetPortId === edge.to.portId)
       ) ||
@@ -338,9 +358,8 @@ export class FlowCommandLedger {
     )
       fail('FLOW_INPUT_MANIFEST_INCOMPLETE', 'input')
     for (const input of command.inputs) {
-      const port = flowTargetPorts(node).find(
-        (item) =>
-          item.id === input.targetPortId && item.dir === 'in' && adapter.inputs.includes(item.id)
+      const port = ports.find(
+        (item) => item.id === input.targetPortId && item.dir === 'in' && inputIds.includes(item.id)
       )
       if (!port || (port.cardinality === 'one' && input.assets.length > 1))
         fail('FLOW_INPUT_CONTRACT_INVALID', 'input')
@@ -357,6 +376,25 @@ export class FlowCommandLedger {
       input,
       versions: this.assets.resolveInputs(command.projectId, input.assets)
     }))
+    if (shape.props.nodeType === 'composite') {
+      const composite = resolveCompositeTarget(this.db, shape.props.config)
+      if (!composite) fail('FLOW_TYPE_UNSUPPORTED', 'contract')
+      const { issues } = planCompositeInputBindings(
+        composite.manifest,
+        new Map(
+          resolved.map(({ input, versions }) => [
+            input.targetPortId,
+            versions.map(({ ref, value, createdAt }) => ({
+              type: value.kind,
+              value,
+              source: { nodeId: ref.sourceNodeId, portId: ref.sourcePortId, runId: ref.versionId },
+              createdAt
+            }))
+          ])
+        )
+      )
+      if (issues.length) fail(issues[0].code, 'input')
+    }
     if (shape.props.nodeType === 'video') {
       let config: unknown = {}
       try {
@@ -614,7 +652,22 @@ export class FlowCommandLedger {
           Date.now(),
           principal
         )
+      const wait = savedShape(project, command.targetNodeId).props.nodeType === 'composite'
+        ? findCompositeCommandWait(this.db, command.projectId, command.taskId, command.targetNodeId)
+        : undefined
       const grant: FlowCommandGrant = { command, leaseId, runId, inputs }
+      if (wait) {
+        if (wait.state !== 'satisfied') fail('HUMAN_WAIT_NOT_SATISFIED', 'composite-resume')
+        const stepOutputs = getCompositeStepOutputs(wait.runId, this.db)
+        const humanSubmissions = getSatisfiedHumanSubmissions(wait.runId, this.db)
+        if (!humanSubmissions[wait.stepKey]) fail('HUMAN_WAIT_SUBMISSION_INVALID', 'composite-resume')
+        grant.compositeResume = {
+          resumeRunId: wait.runId,
+          completedSteps: Object.keys(stepOutputs),
+          stepOutputs,
+          humanSubmissions
+        }
+      }
       return { state: 'ready', grant } as const
     })()
   }
@@ -840,27 +893,46 @@ export class FlowCommandLedger {
         }
         if (status === 'success') {
           const targetNode = project.nodes.find((item) => item.id === command.targetNodeId)
+          const composite =
+            targetNode?.type === 'composite'
+              ? resolveCompositeTarget(this.db, shape.props.config)
+              : null
           const targetAdapter = targetNode && flowTargetContract(targetNode)
-          if (!targetAdapter) fail('FLOW_TYPE_UNSUPPORTED', 'saved-output')
-          const outputPort = targetAdapter.output
-          if (!record.outputPorts?.includes(outputPort))
+          if (!composite && !targetAdapter) fail('FLOW_TYPE_UNSUPPORTED', 'saved-output')
+          const outputPorts = composite?.outputs ?? [{ id: targetAdapter!.output, required: true }]
+          if (outputPorts.some((port) => port.required && !record.outputPorts?.includes(port.id)))
             fail('FLOW_SAVED_OUTPUT_MISMATCH', 'saved-output')
+          if (targetNode?.type === 'human-task') {
+            const instance = HumanTaskInstanceSchema.safeParse(JSON.parse(String(shape.meta?.humanTask ?? 'null')))
+            if (instance.success && instance.data.status === 'completed' && instance.data.handoffNote)
+              receipt.handoffNote = instance.data.handoffNote
+          }
           phase = 'output-version'
-          const version = this.assets.submit(
-            {
-              projectId: input.projectId,
-              nodeId: command.targetNodeId,
-              portId: outputPort,
-              submissionId: `command:${createHash('sha256')
-                .update(JSON.stringify([input.projectId, input.commandId]))
-                .digest('hex')}`,
-              expectedGraphVersion: project.meta.graphVersion,
-              traceId: command.traceId,
-              spanId: command.spanId
-            },
-            { commandId: command.commandId, leaseId: row.lease_id }
-          )
-          receipt.outputRefs = [version.ref]
+          receipt.outputRefs = outputPorts
+            .filter((port) => record.outputPorts?.includes(port.id))
+            .map(
+              ({ id: portId }) =>
+                this.assets.submit(
+                  {
+                    projectId: input.projectId,
+                    nodeId: command.targetNodeId,
+                    portId,
+                    submissionId: `command:${createHash('sha256')
+                      .update(
+                        JSON.stringify(
+                          composite
+                            ? [input.projectId, input.commandId, portId]
+                            : [input.projectId, input.commandId]
+                        )
+                      )
+                      .digest('hex')}`,
+                    expectedGraphVersion: project.meta.graphVersion,
+                    traceId: command.traceId,
+                    spanId: command.spanId
+                  },
+                  { commandId: command.commandId, leaseId: row.lease_id }
+                ).ref
+            )
         }
         phase = 'receipt-persist'
         return this.update(row, receipt)

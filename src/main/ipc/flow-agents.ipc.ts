@@ -1,3 +1,4 @@
+import { graphCanvasVersion } from '../agent-flow/graph-canvas-version'
 import { supportsSampledVideoReview } from '../../shared/agent-flow/video-review'
 import { supportsReviewAudioInput } from '../../shared/agent-flow/media-review'
 import { ipcMain, type BrowserWindow } from 'electron'
@@ -371,6 +372,8 @@ export function registerFlowAgentsIpc(
         if (!query.success) throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
         if (phase === 'run') {
           const run = FlowAgentRunSchema.safeParse(raw)
+          if (run.success && run.data.runOrigin)
+            throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
           if (run.success && ['start', 'continue'].includes(run.data.action))
             await assertAgentScopeToolCalling(run.data.projectId, run.data.nodeId)
         } else if (phase === 'cooperate' && collaboration?.success) {
@@ -482,7 +485,7 @@ export function registerFlowAgentsIpc(
   // 同一 FlowBuilderHost 实例（source=graph）；落画布 authorize/confirm 走渲染器权威。
   ipcMain.handle(IPC.flowAgents.graph, async (event, raw): Promise<IpcEnvelope<unknown>> => {
     const context = { traceId: newTraceId(), spanId: newSpanId() }
-    const input = (raw ?? {}) as { action?: unknown; projectId?: unknown; buildId?: unknown }
+    const input = (raw ?? {}) as { action?: unknown; projectId?: unknown; buildId?: unknown; expectedRevision?: unknown }
     const action = typeof input.action === 'string' ? input.action : ''
     const projectId = typeof input.projectId === 'string' ? input.projectId : ''
     if (projectId) Object.assign(context, { projectId })
@@ -506,6 +509,14 @@ export function registerFlowAgentsIpc(
       if (action === 'list') data = builder.listGraphPreviews(projectId)
       else if (action === 'preview')
         data = await builder.previewGraph({ projectId, ...(buildId ? { buildId } : {}) })
+      else if (action === 'restore-preview') data = builder.restorationPreview({ projectId, buildId })
+      else if (action === 'export-preview') data = builder.exportGraphPreview({ projectId, buildId })
+      else if (action === 'export-publish') {
+        if (typeof input.expectedRevision !== 'string')
+          throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
+        data = builder.publishCanvasGraph({ projectId, buildId, expectedRevision: input.expectedRevision })
+      }
+      else if (action === 'restore-verify') data = builder.verifyRestoredGraph({ projectId, buildId })
       else if (action === 'authorize') data = await builder.authorizeGraph({ projectId, buildId })
       else if (action === 'confirm') data = await builder.confirmGraph({ projectId, buildId })
       else if (action === 'discard') data = await builder.discardGraph({ projectId, buildId })
@@ -587,15 +598,18 @@ export function registerFlowAgentsIpc(
     const projectId = String(raw.projectId ?? '')
     const nodeId = String(raw.nodeId ?? '')
     if (!projectId || !nodeId) throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
+    const file = openProject(projectId)
     return {
       projectId,
-      overview: new CoordinationStore(getDb()).overview(projectId, nodeId)
+      overview: new CoordinationStore(getDb()).overview(projectId, nodeId, file),
+      ...(file ? { canvasVersion: graphCanvasVersion(getDb(), file, nodeId) } : {})
     }
   })
   // F8：把**同一个**宿主实例以窄接口发布给本地外部接入（CLI/MCP）。
   // 外部 run/pause/stop/build/review 一律经由它调用；另建实例会出现两个权威并互相覆盖事实。
   publishFlowAgentAccessPort({
     run: (raw) => host.run(raw),
+    inspect: (query) => host.inspect(query),
     pause: (query) => host.pause(query),
     stop: (query) => host.stop(query),
     assertAgentScopeToolCalling: (projectId, nodeId) =>
@@ -613,6 +627,7 @@ export function registerFlowAgentsIpc(
       builder.proposeGraph({
         projectId: raw.projectId,
         graph: raw.graph as Parameters<typeof builder.proposeGraph>[0]['graph'],
+        sourceGraph: raw.sourceGraph,
         requestId: raw.requestId
       }),
     previewGraph: (query) => builder.previewGraph(query),

@@ -433,7 +433,7 @@ describe('flowAgent.collaboration', () => {
     })
     expect(result.data.task).toMatchObject({ taskId, state: 'waiting', waitKind: 'human' })
     expect(result.data.messages).toEqual([
-      { eventId: 'evt-1', kind: 'note', text: '人工备注：先核对来源' }
+      { eventId: 'evt-1', kind: 'note', actor: { kind: 'user', roleId: 'owner' }, text: '人工备注：先核对来源' }
     ])
     expect(result.data.inputs).toEqual([])
     expect(result.data.candidates).toEqual([])

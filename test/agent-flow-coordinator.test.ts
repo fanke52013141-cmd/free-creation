@@ -1,3 +1,4 @@
+import { graphCanvasScopeHash } from '../src/main/agent-flow/graph-canvas-version'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { writeFile } from 'node:fs/promises'
 import Database from 'better-sqlite3'
@@ -964,13 +965,21 @@ describe('C3.3 coordinator sequential handoff', () => {
       expectedWaitRevision: waiting.waitRevision
     })
     await f.publish(child.nodeId, resumed)
-    const done = await f.host.run({
+    const continuation = {
       ...input,
-      action: 'continue', humanConfirmed: 'gui' as const,
+      action: 'continue' as const, humanConfirmed: 'gui' as const,
       eventId: 'human-main',
       expectedTaskId: first.task.taskId,
       expectedWaitRevision: first.task.waitRevision
-    })
+    }
+    const accepted = f.host.run(continuation)
+    await expect(f.host.run(continuation)).rejects.toMatchObject({ code: 'AGENT_TASK_BUSY' })
+    await expect(f.host.run({ ...continuation, eventId: 'competing-event' }))
+      .rejects.toMatchObject({ code: 'RESUME_CONFLICT' })
+    const done = await accepted
+    expect(await f.host.run(continuation)).toEqual(done)
+    await expect(f.host.run({ ...continuation, expectedWaitRevision: first.task.waitRevision + 1 }))
+      .rejects.toMatchObject({ code: 'RESUME_CONFLICT' })
     expect(done.task.state).toBe('completed')
     expect(f.count().executions).toBe(4)
   })
@@ -1879,12 +1888,62 @@ describe('O4-P3 graph mode execution（声明式图路由，mock 模型）', () 
 
   it('顺序图路由端到端完成，且不调用主控决策模型', async () => {
     const f = fixture({ graph: seqGraph })
+    const preview = {
+      state: 'committed', nodes: [{ id: 'main' }, { id: 'first' }, { id: 'second' }]
+    } as import('../src/shared/agent-flow/flow-graph-compiler').FlowGraphPreview
+    const committedScopeHash = graphCanvasScopeHash(f.file, preview)
+    f.byId.main.meta.flowBuildId = 'version-test'
+    f.db.prepare('INSERT INTO flow_builds (project_id,node_id,build_id,body_json,source) VALUES (?,?,?,?,?)')
+      .run('p', 'main', 'version-test', JSON.stringify({ ...preview, committedScopeHash }), 'graph')
+    const original = f.byId.first.props.text
+    f.byId.first.props.text = 'changed draft'
+    await expect(f.host.run(input)).rejects.toMatchObject({ code: 'FLOW_CANVAS_DIVERGED' })
+    expect(f.count().executions).toBe(0)
+    expect(f.coordinator.store.latest('p', 'main')).toBeNull()
+    f.byId.first.props.text = original
     const done = await f.host.run(input)
     expect(done.task.state).toBe('completed')
     expect(f.count().modelCalls).toBe(0)
     expect(f.count().executions).toBe(4)
     expect(f.byId.first.meta.nodeResult).toBeTruthy()
     expect(f.byId.second.meta.nodeResult).toBeTruthy()
+  })
+
+  it('从图中间返工时保留独立分支，旧交付留在历史', async () => {
+    const graph = FlowGraphSchema.parse({
+      ...seqGraph,
+      nodes: [...seqGraph.nodes, graphNode('third')],
+      edges: [...seqGraph.edges, {
+        from: { nodeId: 'first', portId: 'out-text' },
+        to: { nodeId: 'third', portId: 'in-text' }
+      }],
+      exits: ['second', 'third']
+    })
+    const f = fixture({ graph, thirdAgent: true, parallel: true })
+    expect((await f.host.run(input)).task.state).toBe('completed')
+    const identity = { projectId: 'p', nodeId: 'main' }
+    const original = f.coordinator.store.latest('p', 'main')!
+    const impact = f.coordinator.previewStageRework(identity, 'second')
+    expect(impact?.willRerunStages.map((item) => item.nodeId)).toEqual(['second'])
+    expect(impact?.keptDeliveries).toBe(2)
+    const pending = f.coordinator.reworkStage(identity, 'second')
+    expect(pending.state).toBe('waiting')
+    const result = await f.host.run({
+      ...input,
+      action: 'continue',
+      requestId: 'graph-rework',
+      eventId: 'graph-rework-continue',
+      expectedTaskId: pending.taskId,
+      expectedWaitRevision: pending.waitRevision
+    })
+    expect(result.task.state).toBe('completed')
+    const completed = f.coordinator.store.latest('p', 'main')!
+    for (const id of ['first', 'third']) {
+      expect(completed.children.find((child) => child.nodeId === id))
+        .toEqual(original.children.find((child) => child.nodeId === id))
+    }
+    expect(completed.reworkHistory?.map(({ nodeId, stale }) => ({ nodeId, stale })))
+      .toEqual([{ nodeId: 'second', stale: true }])
   })
 
   it('图模式拒绝 state-machine 图节点（状态机由协调器派生，不作可分派图节点）', async () => {

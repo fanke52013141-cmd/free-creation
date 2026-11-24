@@ -1,11 +1,14 @@
 /* eslint-disable react-refresh/only-export-components -- Node spec registration, like specs/index.tsx. */
+import { admitHumanTaskSubmission } from '@shared/agent-flow/human-task-submission'
 import { useState } from 'react'
 import { useEditor } from 'tldraw'
-import type { PortDecl } from '@shared/types'
+import { HUMAN_TASK_FLOW_PORTS } from '@shared/agent-flow/video-adapter'
+import { useAppStore } from '../../stores/app'
 import {
   HumanTaskNodeConfigSchema,
   HumanTaskInstanceSchema,
   type HumanTaskNodeConfig,
+  type HumanTaskValue,
   type HumanTaskInstance
 } from '@shared/agent-flow/node-contracts'
 import { humanTaskExecutor, projectHumanTaskOutputs } from '@shared/engine/executors/humanTask'
@@ -50,36 +53,47 @@ function instanceOf(shape: NodeBodyProps['shape']): HumanTaskInstance | null {
   return parsed.success ? parsed.data : null
 }
 
-function port(id: string, type: 'text' | 'json', dir: 'in' | 'out'): PortDecl {
-  return {
-    id,
-    name: type === 'text' ? '文本' : '结构数据',
-    dir,
-    description:
-      dir === 'in'
-        ? '可选上下文：供人工参考的已提交资产，不自动决定结果。'
-        : '人工正式提交并运行后才输出的结果；未提交不产生输出。',
-    type,
-    required: false,
-    cardinality: dir === 'in' ? 'many' : 'one',
-    ...(type === 'json' ? { schema: { id: 'json.any', version: 1 } } : {})
-  }
-}
-
 /** 人工任务卡片：展示任务说明与状态；人工填写结果并提交（只写 pending meta，执行器权威推进）。 */
 function HumanTaskBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
+  const projectId = useAppStore((state) => state.currentProject?.id)
+  const [picking, setPicking] = useState(false)
   const config = configOf(shape)
   const instance = instanceOf(shape)
   const [draft, setDraft] = useState('')
+  const [handoffNote, setHandoffNote] = useState('')
   const [error, setError] = useState('')
   const completed = instance?.status === 'completed'
   const revision = instance?.revision ?? 1
 
-  const submit = (): void => {
+  const mediaKind = config.outputType === 'image' || config.outputType === 'video'
+    ? config.outputType
+    : undefined
+
+  const submit = async (): Promise<void> => {
     setError('')
-    let value: { kind: 'text'; text: string } | { kind: 'json'; data: unknown }
-    if (config.outputType === 'json') {
+    let value: HumanTaskValue
+    if (mediaKind) {
+      if (!projectId) return
+      setPicking(true)
+      try {
+        const imported = await window.api.pickMedia(projectId)
+        const media = imported.ok && imported.data.assets.find((asset) => asset.kind === mediaKind)
+        if (!media) {
+          if (!imported.ok || imported.data.assets.length || imported.data.errors.length)
+            setError('请选择与交付类型一致的媒体')
+          return
+        }
+        if (useAppStore.getState().currentProject?.id !== projectId || !editor.getShape(shape.id))
+          return
+        value = { kind: mediaKind, mediaId: media.id }
+      } catch {
+        setError('媒体导入失败，请重新选择')
+        return
+      } finally {
+        setPicking(false)
+      }
+    } else if (config.outputType === 'json') {
       try {
         value = { kind: 'json', data: JSON.parse(draft) }
       } catch {
@@ -93,19 +107,30 @@ function HumanTaskBody({ shape }: NodeBodyProps): React.JSX.Element {
       }
       value = { kind: 'text', text: draft }
     }
-    markUndoPoint(editor, shape.id)
-    editor.updateShape({
-      id: shape.id,
-      type: 'node-card',
-      meta: {
-        humanTaskPending: JSON.stringify({
-          submissionId: crypto.randomUUID(),
-          expectedRevision: revision,
-          value
-        })
-      }
+    const current = editor.getShape<typeof shape>(shape.id)
+    if (!current || current.type !== 'node-card') return
+    const submitted = admitHumanTaskSubmission(current, {
+      submissionId: crypto.randomUUID(),
+      expectedRevision: revision,
+      ...(handoffNote.trim() ? { handoffNote: handoffNote.trim() } : {}),
+      value
     })
+    if (!submitted.ok) {
+      setError(submitted.code === 'HUMAN_TASK_SUBMISSION_CONFLICT'
+        ? '本轮已有待应用的提交，请继续流程处理该提交'
+        : '任务或交付类型已变化，请核对后重新提交')
+      return
+    }
+    if (!submitted.replay) {
+      markUndoPoint(editor, shape.id)
+      editor.updateShape({
+        id: shape.id,
+        type: 'node-card',
+        meta: { humanTaskPending: JSON.stringify(submitted.pending) }
+      })
+    }
     setDraft('')
+    setHandoffNote('')
   }
 
   return (
@@ -126,20 +151,31 @@ function HumanTaskBody({ shape }: NodeBodyProps): React.JSX.Element {
           </p>
         )}
       </NodeIdentity>
-      <textarea
+      {!mediaKind && <textarea
         className="agent-flow-textarea"
         aria-label="人工任务结果"
         rows={4}
         value={draft}
         placeholder={config.outputType === 'json' ? '输入 JSON 结果' : '输入结果文本'}
         onChange={(event) => setDraft(event.target.value)}
+      />}
+      {instance?.handoffNote && <p className="agent-flow-pending">交接说明 · {instance.handoffNote}</p>}
+      <textarea
+        className="agent-flow-textarea"
+        aria-label="交接说明"
+        placeholder="交接说明（可选）"
+        value={handoffNote}
+        maxLength={4096}
+        onChange={(event) => setHandoffNote(event.target.value)}
       />
       {error ? (
         <p className="agent-flow-pending" role="alert">
           {error}
         </p>
       ) : null}
-      <NodePrimaryButton onClick={submit}>提交结果</NodePrimaryButton>
+      <NodePrimaryButton disabled={picking || new TextEncoder().encode(handoffNote.trim()).length > 4096} onClick={() => void submit()}>
+        {picking ? '正在选择素材' : mediaKind ? '选择媒体并提交' : '提交结果'}
+      </NodePrimaryButton>
     </div>
   )
 }
@@ -161,10 +197,12 @@ function HumanTaskSettings({ shape, editor }: NodeSettingsProps): React.JSX.Elem
         <AppSelect
           aria-label="结果类型"
           value={config.outputType}
-          onChange={(event) => update({ outputType: event.target.value as 'text' | 'json' })}
+          onChange={(event) => update({ outputType: event.target.value as HumanTaskNodeConfig['outputType'] })}
         >
           <option value="text">文本（out-text）</option>
           <option value="json">结构数据（out-json）</option>
+          <option value="image">图片（out-image）</option>
+          <option value="video">视频（out-video）</option>
         </AppSelect>
       </label>
       <label className="settings-field">
@@ -193,8 +231,8 @@ export function registerHumanTaskNodeType(): void {
     initialConfig: JSON.stringify(DEFAULT_HUMAN_TASK_CONFIG),
     description: '纯人工任务：人工填写并提交结果，运行后正式交付；未提交时停等，不伪造成功。',
     ports: {
-      in: [port('in-text', 'text', 'in'), port('in-json', 'json', 'in')],
-      out: [port('out-text', 'text', 'out'), port('out-json', 'json', 'out')]
+      in: HUMAN_TASK_FLOW_PORTS.filter((port) => port.dir === 'in'),
+      out: HUMAN_TASK_FLOW_PORTS.filter((port) => port.dir === 'out')
     },
     executor: humanTaskExecutor,
     projectOutputs: projectHumanTaskOutputs,

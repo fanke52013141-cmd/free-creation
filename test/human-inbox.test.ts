@@ -224,3 +224,10 @@ describe('A1 运行总览来源与合并', () => {
     ])
   })
 })
+it('preserves a stalled flow alert alongside a task at the same coordinator', () => {
+  const [alert] = humanInboxFromOverview({ nodeId: 'root', state: 'blocked', code: 'FLOW_STALLED' }, [])
+  expect(alert).toMatchObject({ kind: 'stalled', nodeId: 'root' })
+  const task = { kind: 'coordinator' as const, nodeId: 'root', title: 'Main', reason: 'Wait' }
+  expect(mergeHumanInbox([task], [alert, alert])).toEqual([task, alert])
+  expect(humanInboxFromOverview({ nodeId: 'root', state: 'waiting', code: 'FLOW_STALLED' }, [])).toEqual([])
+})
