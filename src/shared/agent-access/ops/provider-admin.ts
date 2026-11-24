@@ -47,12 +47,16 @@ export const PROVIDER_ADMIN_OPERATIONS = {
   },
   'provider.package.import': {
     effect: 'write',
+    // 人工决定：返回前等人在 GUI 点「允许导入」。
+    interactive: true,
     description:
       '导入受控目录内的凭据包（.cskeys）：必须显式 confirmImport=true，并会在 GUI 弹人工确认框；只有人点允许才解密并写入连接，回执给包ID/新增/更新/模型数，不含密钥',
     input: z.object({ fileName, password, confirmImport: z.boolean().optional() }).strict()
   },
   'provider.package.importProviders': {
     effect: 'write',
+    // 人工决定：返回前等人在 GUI 点「允许导入」。
+    interactive: true,
     description:
       '导入受控目录内的旧版供应商包（.cskeys 旧格式）：必须显式 confirmImport=true，并会在 GUI 弹人工确认框；只有人点允许才写入，回执给新增数量，不含密钥',
     input: z.object({ fileName, password, confirmImport: z.boolean().optional() }).strict()

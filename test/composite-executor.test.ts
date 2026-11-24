@@ -139,6 +139,34 @@ describe('composite executor（P2）', () => {
     expect(result.diagnosticPhase).toBe('execution')
   })
 
+  it('AF-07：内部人工等待不算失败，按暂停（skipped）记账并给出等待步骤', async () => {
+    const ctx = context({
+      runComposite: vi.fn(async () => ({
+        status: 'waiting' as const,
+        waitingStepKey: 'hn1',
+        reason: '节点流等待人工任务「hn1」提交后续跑',
+        stepCount: 0
+      }))
+    })
+    const result = await compositeExecutor(ctx)
+    expect(result).toMatchObject({
+      status: 'skipped',
+      reason: '节点流等待人工任务「hn1」提交后续跑'
+    })
+    // 等待不是完成：不能写产物，也不能落成失败。
+    expect(ctx.updateResult).not.toHaveBeenCalled()
+  })
+
+  it('AF-07：等待结果缺 reason 时给出可读的兜底文案', async () => {
+    const ctx = context({
+      runComposite: vi.fn(async () => ({ status: 'waiting' as const, waitingStepKey: 'hn2' }))
+    })
+    const result = await compositeExecutor(ctx)
+    expect(result.status).toBe('skipped')
+    expect(result.reason).toContain('hn2')
+    expect(ctx.updateResult).not.toHaveBeenCalled()
+  })
+
   it('W4：输出阶段失败携带节点/端口，diagnosticPhase 归 output', async () => {
     const ctx = context({
       runComposite: vi.fn(async () => ({

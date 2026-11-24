@@ -365,6 +365,8 @@ export const FLOW_AGENTS_OPERATIONS = {
   },
   'flowGraph.confirm': {
     effect: 'write',
+    // 人工决定：返回前等人在 GUI 点「允许落画布」，CLI 不能按 15s 默认超时放弃。
+    interactive: true,
     description:
       'P5.3：确认外部建图预览落画布——经渲染器权威 commitFlowGraph（authorize/CAS/单撤销步/保存屏障/confirm），与 GUI 预览面板同一动作；main 按 buildId 触发并核对落盘 committed 与节点真实存在；外部不能绕渲染器自确认；BL-01：这是人工决定，外部调用会在桌面弹出确认，只有人点允许才生效，拒绝/超时/无桌面分别返回 HUMAN_DENIED / HUMAN_DECISION_TIMEOUT / DESKTOP_UNAVAILABLE（均零副作用）',
     input: project.extend({ buildId: flowId }).strict()
@@ -429,6 +431,8 @@ export const FLOW_AGENTS_OPERATIONS = {
   // discuss/revise 会真实调用模型，因此先走与 IPC 入口同一的工具调用预检。
   'flowAgent.cooperate': {
     effect: 'write',
+    // submit / accepted=true 是人工决定：返回前等人在 GUI 点「允许」。
+    interactive: true,
     description:
       '向指定 Agent 任务写入一次协作事件（note/discuss/submit/revise），与 GUI 面板同一宿主实例与同一任务表；discuss/revise 可能真实调用模型，故先做模型工具调用预检；事件带 actor=external 标记，与人工输入可区分；不接受伪造 revision/waitRevision（由宿主核对）；BL-01：action=submit 或 accepted=true 属人工决定，外部调用会在桌面弹出确认，只有人点允许才生效，拒绝/超时/无桌面分别返回 HUMAN_DENIED / HUMAN_DECISION_TIMEOUT / DESKTOP_UNAVAILABLE（均零副作用）',
     input: project
@@ -451,6 +455,8 @@ export const FLOW_AGENTS_OPERATIONS = {
   // 预检失败发生在任何模型请求之前（付费路径不会被偷偷触发）。
   'flowAgent.run': {
     effect: 'execute',
+    // action=continue 命中人工等待时，返回前等人在 GUI 点「允许继续」。
+    interactive: true,
     description:
       '在当前打开的 Agent 节点上启动/继续/对账/恢复内部 Agent 运行（与 GUI 面板同一宿主实例与同一任务账本）；start/continue 先做模型工具调用预检，失败发生在任何模型请求之前；不新建宿主、不伪造运行身份',
     input: project
@@ -490,6 +496,8 @@ export const FLOW_AGENTS_OPERATIONS = {
   },
   'flowAgent.build.commit': {
     effect: 'write',
+    // 人工决定：返回前等人在 GUI 点「允许落画布」。
+    interactive: true,
     description:
       '按 buildId 把已生成的建图预览提交到当前打开的权威画布（复用 GUI 同一 commitFlowBuild：authorize/confirm + 单撤销步 + 保存屏障）；外部不能自带预览内容；已 committed 的重复提交按持久化事实返回，不重复建节点；BL-01：这是人工决定，外部调用会在桌面弹出确认，只有人点允许才生效，拒绝/超时/无桌面分别返回 HUMAN_DENIED / HUMAN_DECISION_TIMEOUT / DESKTOP_UNAVAILABLE（均零副作用）',
     input: project.extend({ nodeId, buildId }).strict()
@@ -526,6 +534,8 @@ export const FLOW_AGENTS_OPERATIONS = {
   // 运行节点时由 humanTaskExecutor 校验修订/去重并交付）；外部不能直接改完成状态。
   'humanTask.submit': {
     effect: 'write',
+    // 人工决定：返回前等人在 GUI 点「允许提交」。
+    interactive: true,
     description:
       '向人工任务节点提交结果（与 GUI 提交结果按钮同一待处理写入）；携带观察到的 expectedRevision，过期提交拒绝；结果类型须与节点声明一致；完成状态在运行节点时由同一执行器校验；要求目标项目已在桌面打开；BL-01：这是人工决定，外部调用会在桌面弹出确认，只有人点允许才生效，拒绝/超时/无桌面分别返回 HUMAN_DENIED / HUMAN_DECISION_TIMEOUT / DESKTOP_UNAVAILABLE（均零副作用）',
     input: project

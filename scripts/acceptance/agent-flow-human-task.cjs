@@ -111,9 +111,13 @@ async function runNode(dir, projectId, nodeId) {
     assert(!(out0.outputs || []).some((o) => o.portId === 'out-text'), '未提交不产生公开输出（不伪造成功）')
 
     // 外部提交（与 GUI 同一 pending 写入）→ 运行 → 正式交付。
-    const sub = ok(await cli(dir, ['humanTask', 'submit'], {
+    // BL-01：外部提交会先弹人工确认，必须由人在窗口里点「允许提交」；这里扮演人。
+    // 客户端按交互式操作等待（shared/agent-access/interactive），不会 15s 就报 OUTCOME_UNKNOWN。
+    const submitPending = cli(dir, ['humanTask', 'submit'], {
       projectId, nodeId: h1, expectedRevision: 1, value: { kind: 'text', text: '人工审核结论：通过。' }
-    }), 'SUBMIT')
+    })
+    await page.getByRole('button', { name: '允许提交' }).click({ timeout: 60000 })
+    const sub = ok(await submitPending, 'SUBMIT')
     assert(sub.pending === true, '外部提交写入待处理（pending=true）')
     await runNode(dir, projectId, h1)
     view = ok(await cli(dir, ['humanTask', 'get'], { projectId, nodeId: h1 }), 'GET2')
@@ -125,9 +129,12 @@ async function runNode(dir, projectId, nodeId) {
     assert(textOut && textOut.text === '人工审核结论：通过。', '公开 out-text 投影人工交付结果')
 
     // 修订防过期：基于旧修订 1 的提交被拒绝。
-    const stale = await cli(dir, ['humanTask', 'submit'], {
+    // 人工决定先于修订判定，所以这里也要人点一次「允许提交」；拒绝后不产生任何写入。
+    const stalePending = cli(dir, ['humanTask', 'submit'], {
       projectId, nodeId: h1, expectedRevision: 1, value: { kind: 'text', text: '过期提交' }
     })
+    await page.getByRole('button', { name: '允许提交' }).click({ timeout: 60000 })
+    const stale = await stalePending
     assert(stale.response?.error?.code === 'HUMAN_TASK_REVISION_CONFLICT', `过期修订提交拒绝（${stale.response?.error?.code}）`)
 
     // composite fail-closed：内部 human-task 显式拒绝（隔离执行无人工通道）。
@@ -154,13 +161,46 @@ async function runNode(dir, projectId, nodeId) {
         config: { capabilityId: 'human-flow', version: '1.0' } }
     ], 'BATCH2')
     const inst = Object.fromEntries(batch2.created.map((c) => [c.ref, c.nodeId])).inst
+    // AF-07（2026-11-13 起）：节点流内部的人工任务不再 fail-closed，而是停在人工等待；
+    // 运行记录保持 waiting-input，由人工提交 + 续跑消费。
+    // 注意：外部 node-run 状态枚举没有 waiting，节点执行按暂停记账并透出等待原因
+    // （与纯 human-task 停等同一口径），真相以 composite.run.get 的 waiting-input 为准。
     const waited = await runNode(dir, projectId, inst)
-    assert(waited.state === 'failed', `composite 内部人工节点 fail-closed（运行 ${waited.state}）`)
+    assert(waited.state === 'failed', `节点流停在人工等待（运行 ${waited.state}）`)
+    assert(
+      String(waited.error ?? '').includes('等待人工任务'),
+      `等待原因可读（${waited.error}）`
+    )
     const runs = ok(await cli(dir, ['composite', 'run', 'list'], { projectId, limit: 5 }), 'RUN_LIST')
-    const detail = ok(await cli(dir, ['composite', 'run', 'get'], { runId: runs[0].id }), 'RUN_GET')
-    receipt.outputs.compositeFailure = { code: detail.run.errorCode, phase: detail.run.failurePhase, nodeId: detail.run.failureNodeId }
-    assert(detail.run.errorCode === 'HUMAN_TASK_UNSUPPORTED_IN_COMPOSITE', `fail-closed 稳定码（${detail.run.errorCode}）`)
-    assert(detail.run.failureNodeId === 'hn1', `fail-closed 定位内部人工节点（${detail.run.failureNodeId}）`)
+    const runId = runs[0].id
+    let detail = ok(await cli(dir, ['composite', 'run', 'get'], { runId }), 'RUN_GET')
+    assert(detail.run.status === 'waiting-input', `等待人工（status=${detail.run.status}）`)
+    assert(detail.run.errorCode === null, `等待不是失败（code=${detail.run.errorCode}）`)
+    const submittedHuman = ok(await cli(dir, ['composite', 'run', 'submitHuman'], {
+      runId, nodeId: 'hn1', value: { kind: 'text', text: '人工审核结论：通过。' }
+    }), 'SUBMIT_HUMAN')
+    assert(submittedHuman.satisfied === true, '人工提交满足开放等待')
+    ok(await cli(dir, ['composite', 'run', 'resume'], { runId }), 'RESUME')
+    for (let i = 0; i < 20; i++) {
+      await sleep(500)
+      detail = ok(await cli(dir, ['composite', 'run', 'get'], { runId }), 'RUN_GET_FINAL')
+      if (detail.run.status === 'completed' || detail.run.status === 'failed') break
+    }
+    receipt.outputs.compositeResume = {
+      status: detail.run.status,
+      steps: detail.steps.map((step) => ({ key: step.stepKey, status: step.status })),
+      output: detail.run.outputValues?.res ?? null
+    }
+    assert(detail.run.status === 'completed', `续跑完成（status=${detail.run.status}）`)
+    const resumedText = detail.run.outputValues?.res
+    assert(
+      resumedText?.kind === 'text' && resumedText.text === '人工审核结论：通过。',
+      '续跑把人工提交消费为正式公开输出'
+    )
+    assert(
+      detail.steps.some((step) => step.stepKey === 'hn1' && step.status === 'completed'),
+      '内部人工步骤记为完成'
+    )
 
     console.log(JSON.stringify({ ok: true, ...receipt }, null, 2))
     fs.mkdirSync(evidenceDir, { recursive: true })

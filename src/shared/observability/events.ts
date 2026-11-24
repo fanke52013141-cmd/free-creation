@@ -77,6 +77,14 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
         }
       )
     ),
+    // BL-01 人工决定：外部 Agent 请求的人工决定未生效时的唯一终态
+    // （人拒绝 / 超时 / 无桌面 / 目标画布未打开）。只记操作身份、稳定错误码与原因枚举；
+    // 确认框里的业务内容、提示词与密钥一律不入日志。
+    def('agent.human_decision.rejected', 'warn', 'main/agent-access/human-decision', {
+      operation: 'short',
+      code: 'short',
+      reason: 'short'
+    }),
     ...['started', 'completed', 'failed'].map((stage) =>
       def(
         `workspace.recovery.${stage}`,

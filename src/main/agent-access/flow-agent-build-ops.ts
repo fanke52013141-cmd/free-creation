@@ -256,6 +256,7 @@ async function commitBuild(
     refuse('FLOW_BUILD_UNCONFIRMED', `build state is ${preview.state}`)
   // BL-01 / AF-5.3：建图落画布是人工决定——外部只能请求，人在 GUI 允许后才走同一 commitFlowBuild。
   const decision = await requestHumanDecision({
+    operation: 'flowAgent.build.commit',
     desktop: context.desktop,
     projectId,
     activeProjectId: context.activeProjectId(),

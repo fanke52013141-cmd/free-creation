@@ -2071,6 +2071,7 @@ export class LocalAccessService {
     const value = input.value as { kind: 'text'; text: string } | { kind: 'json'; data: unknown }
     // BL-01 / AF-1.5：人工任务的结果只能由人交付——外部 Agent 代交须人在 GUI 亲眼允许。
     const decision = await requestHumanDecision({
+      operation: 'humanTask.submit',
       desktop: this.options.desktop,
       projectId: id,
       activeProjectId: activeId ?? null,

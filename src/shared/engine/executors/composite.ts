@@ -91,6 +91,17 @@ export const compositeExecutor: NodeExecutor = async (
     }
   }
 
+  if (outcome.status === 'waiting') {
+    // AF-07：节点流内部停在人工等待不是失败，也不是完成——运行记录保持 waiting-input，
+    // 由外部 humanTask 提交 + composite.run.resume 续跑；节点执行按暂停（skipped）记账。
+    // 若落到输出投影，会把「等人」误报成「输出契约校验失败」。
+    return {
+      status: 'skipped',
+      reason:
+        outcome.reason ?? `节点流等待人工任务「${outcome.waitingStepKey ?? ''}」提交后续跑`
+    }
+  }
+
   const outputs = outcome.outputs ?? {}
   const mediaOutputs: NodeValue[] = []
   const extraOutputs: Record<string, NodeValue> = {}

@@ -11,7 +11,7 @@
 const { chromium } = require('playwright')
 const assert = require('node:assert/strict')
 
-const ORIGIN = process.env.BROWSER_ORIGIN || 'http://127.0.0.1:5173'
+const ORIGIN = process.env.CANVAS_QA_URL || process.env.BROWSER_ORIGIN || 'http://127.0.0.1:5173'
 const DEMO_MEDIA_KEY = 'canvas-studio.browser-demo.media.v1'
 // 两张 1×1 PNG：只用来让 blob 解码不报错，断言看的是标题、提示与素材库条目。
 const PNG = Buffer.from(
@@ -47,13 +47,36 @@ async function recordToasts(page) {
 
 const readToasts = (page) => page.evaluate(() => window.__toasts)
 
+// 两级调色板（2026-11-23 起）：先点左侧分类，再从二级菜单点节点入口。
+async function addNode(page, label) {
+  const button = page.getByRole('button', { name: `添加${label}节点`, exact: true })
+  const available = []
+  for (const category of await page.locator('.palette-category-item').all()) {
+    await category.click()
+    for (let attempt = 0; attempt < 6; attempt++) {
+      if (await button.isVisible()) {
+        await button.click()
+        await page.mouse.move(800, 100)
+        return
+      }
+      await page.waitForTimeout(150)
+    }
+    available.push(
+      ...(await page
+        .locator('.palette-node-item')
+        .evaluateAll((items) => items.map((item) => item.getAttribute('aria-label'))))
+    )
+  }
+  throw new Error(`两级菜单没有节点入口：${label}；实际入口：${available.join('、')}`)
+}
+
 async function main() {
   const browser = await launchBrowser()
   const page = await browser.newPage({ viewport: { width: 1707, height: 900 } })
   page.setDefaultTimeout(15_000)
   await page.goto(`${ORIGIN}/`)
 
-  await page.getByRole('button', { name: '添加图片节点', exact: true }).click()
+  await addNode(page, '图片')
   const topbarBottom = await page.evaluate(() => {
     const bar = document.querySelector('.canvas-topbar')
     return bar ? bar.getBoundingClientRect().bottom : 0
@@ -67,7 +90,8 @@ async function main() {
       ) >= minY,
     topbarBottom
   )
-  await page.getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true }).click()
+  // 2026-11-24 缩放坞收进小地图：「定位画布内容」= 适配画布（缩放到所有节点）。
+  await page.getByRole('button', { name: '定位画布内容', exact: true }).click()
   // 卡片定位必须用导入前后都存在的类：导入成功后空态按钮会卸载。
   const card = page.locator('.node-card-wrap:has(.type-image)').first()
   await card.getByRole('button', { name: '导入图片', exact: true }).waitFor()

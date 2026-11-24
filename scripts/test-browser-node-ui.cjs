@@ -4,7 +4,7 @@ const { chromium } = require('playwright')
 const assert = require('node:assert/strict')
 
 // 与另外四支浏览器门禁一致：默认 5173，可用 BROWSER_ORIGIN 指到别的端口。
-const ORIGIN = process.env.BROWSER_ORIGIN || 'http://127.0.0.1:5173'
+const ORIGIN = process.env.CANVAS_QA_URL || process.env.BROWSER_ORIGIN || 'http://127.0.0.1:5173'
 
 async function addNode(page, label) {
   const button = page.getByRole('button', { name: `添加${label}节点`, exact: true })
@@ -204,7 +204,12 @@ async function main() {
     const splitNode = page.locator('.node-card-wrap:has(.type-image-split)').first()
     await splitNode.waitFor()
     assert.match(await splitNode.locator('.node-status').getAttribute('aria-label'), /缺少输入.*原图/)
-    assert.equal(await splitNode.locator('.node-run-btn').isDisabled(), true)
+    // D-15 起：缺输入时运行按钮可点（点击弹窗补输入并运行），只有模型缺失/运行中才置灰。
+    assert.equal(
+      await splitNode.locator('.node-run-btn').isDisabled(),
+      false,
+      '缺输入时运行按钮必须可点，由点击补充输入并运行'
+    )
     assert.equal(
       await splitNode.locator('.image-split-quick-controls').count(),
       1,
@@ -255,12 +260,12 @@ async function main() {
     const destinationRect = await destination.boundingBox()
     assert.equal(
       await source.locator('.port-dot.out').evaluate((port) => getComputedStyle(port).width),
-      '28px',
-      '端口需要与公共几何协议相同的 28px 透明命中区'
+      '24px',
+      '端口需要与公共几何协议相同的 24px 透明命中区（v2.2 §22）'
     )
     assert.ok(a.x >= sourceRect.x + sourceRect.width, '输出端口必须完整位于节点外侧')
     assert.ok(b.x + b.width <= destinationRect.x, '输入端口必须完整位于节点外侧')
-    // 当前公共端口是 28px 命中区 + 12px 实色核心；旧 ::after 材质已退役。
+    // 当前公共端口是 24px 命中区 + 12px 实色核心；旧 ::after 材质已退役。
     const outPortStyle = await source
       .locator('.port-dot.out')
       .evaluate((port) => {
@@ -313,8 +318,12 @@ async function main() {
     await page.mouse.move(obstacleStart.x + deltaX, obstacleStart.y + deltaY, { steps: 15 })
     await page.mouse.up()
     await page.waitForTimeout(200)
-    const mask = await page.locator('.data-edge-visible').first().getAttribute('mask')
-    assert.match(mask, /^url\(#data-edge-node-mask-/)
+    // 2026-11-24：遮罩挂在数据线的分组 <g> 上（每张真实节点一个黑色矩形），
+    // 不再写回单条路径的 mask 属性。
+    const maskedGroup = page
+      .locator('.data-edge-layer g[mask^="url(#data-edge-node-mask-"]')
+      .first()
+    assert.equal(await maskedGroup.count(), 1, '数据线必须由节点遮罩分组裁剪')
     assert.equal(await page.locator('.data-edge-layer mask rect[fill="black"]').count(), await page.locator('.node-card-wrap').count(), '遮挡使用每张真实节点的 SVG 黑色遮罩，不再生成旧淡化片段类')
     await page.keyboard.press('Shift+Alt+f')
     await page.waitForTimeout(350)
@@ -342,12 +351,19 @@ async function main() {
       'edge away from port must resize'
     )
     assert.equal(await page.locator('.node-readiness-badge').count(), 0)
-    const headerAlignment = await source.evaluate((card) => {
+    const headerInfo = await source.evaluate((card) => {
       const cardRect = card.getBoundingClientRect()
       const runRect = card.querySelector('.node-run-btn')?.getBoundingClientRect()
-      return runRect ? cardRect.right - runRect.right : Number.POSITIVE_INFINITY
+      return runRect
+        ? { diff: cardRect.right - runRect.right, top: runRect.top - cardRect.top }
+        : null
     })
-    assert.ok(headerAlignment <= 4, '运行按钮必须贴齐节点右上角')
+    // v2.2：运行按钮在标题行右端（卡片内边距内），不再是旧版绝对贴边的浮动按钮。
+    assert.ok(
+      headerInfo && headerInfo.diff >= 0 && headerInfo.diff <= 12,
+      '运行按钮必须在标题行右端（内缩不超过 12px）'
+    )
+    assert.ok(headerInfo.top >= 0 && headerInfo.top <= 12, '运行按钮必须位于卡片顶部标题行')
 
     // 两个已连接节点分组后，数据边必须继续存在。
     await source.locator('.node-card').click()
@@ -399,9 +415,14 @@ async function main() {
     // 桌面画布统一深色；说明侧栏必须不透明，旧浅色切换入口已移除。
     await destination.getByRole('button', { name: '打开节点说明' }).click()
     await page.getByRole('tab', { name: '输入输出', exact: true }).click()
-    const panelBackground = await page.locator('.node-contract-panel').evaluate(el => ({ image: getComputedStyle(el).backgroundImage, opacity: getComputedStyle(el).opacity }))
+    const panelBackground = await page.locator('.node-contract-panel').evaluate(el => ({ image: getComputedStyle(el).backgroundImage, color: getComputedStyle(el).backgroundColor, opacity: getComputedStyle(el).opacity }))
     assert.equal(panelBackground.opacity, '1')
-    assert.ok(panelBackground.image.includes('linear-gradient(') && !panelBackground.image.includes('rgba('), '说明侧栏渐变每个色标必须完全不透明')
+    // 2026-11-24 起说明侧栏是实色卡片底（--card），不再用半透明渐变叠层。
+    assert.equal(panelBackground.image, 'none', '说明侧栏不得再叠半透明渐变')
+    assert.ok(
+      panelBackground.color.startsWith('rgb('),
+      '说明侧栏底色必须完全不透明'
+    )
     // P1-2 回归（QA-NODE-AUDIT-2026-09-06）：运行中心打开时，节点详情请求必须
     // 收口侧栏并打开详情面板，而不是被静默忽略。
     await page.getByRole('button', { name: '打开运行中心', exact: true }).click()

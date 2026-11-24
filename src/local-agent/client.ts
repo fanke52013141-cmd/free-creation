@@ -10,6 +10,7 @@ import {
 } from '../shared/agent-access/registry'
 import { ConnectionDescriptorSchema } from '../shared/agent-access/connection'
 import { RUN_WAIT_MAX_TIMEOUT_MS } from '../shared/agent-access/run-ops'
+import { responseTimeoutMs } from '../shared/agent-access/interactive'
 
 export function defaultDataDirectory(): string {
   if (process.env.CANVAS_DATA_DIR) return process.env.CANVAS_DATA_DIR
@@ -80,7 +81,9 @@ export async function callLocalOperation(
       operationId === 'run.wait' && typeof waitInput?.timeoutMs === 'number'
         ? Math.min(waitInput.timeoutMs, RUN_WAIT_MAX_TIMEOUT_MS)
         : 0
-    socket.setTimeout(requestedWaitMs > 0 ? requestedWaitMs + 30_000 : 15000, disconnected)
+    // 交互式操作（人工决定）在返回前要等人点确认，这段等待没有下行流量；
+    // 用 15s 默认超时会把「人还没点」误报成 OUTCOME_UNKNOWN。口径见 shared/agent-access/interactive。
+    socket.setTimeout(responseTimeoutMs(operationId, requestedWaitMs), disconnected)
     socket.on('error', disconnected)
     socket.on('close', disconnected)
     socket.on('connect', () => {

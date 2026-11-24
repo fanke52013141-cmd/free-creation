@@ -108,6 +108,7 @@ export async function runFlowAgentRunOperation(
         current?.task?.state === 'waiting' && current?.task?.waitKind === 'human'
       if (waitingForHuman) {
         const decision = await requestHumanDecision({
+          operation: 'flowAgent.run',
           desktop: context.desktop,
           projectId,
           activeProjectId: context.activeProjectId(),

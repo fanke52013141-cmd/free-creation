@@ -382,6 +382,7 @@ async function cooperateFlowAgent(
   if (cooperateIsHumanDecision(collaboration)) {
     const title = file.nodes.find((node) => node.id === nodeId)?.title ?? nodeId
     const decision = await requestHumanDecision({
+      operation: 'flowAgent.cooperate',
       desktop: context.desktop,
       projectId,
       activeProjectId: context.activeProjectId(),
@@ -816,6 +817,7 @@ async function confirmGraphOp(
     refuse('FLOW_BUILD_UNCONFIRMED', `graph preview state is ${preview.state}`)
   // BL-01 / AF-5.3：落画布是人工决定——外部只能请求，人在 GUI 允许后才走同一 commitFlowGraph。
   const decision = await requestHumanDecision({
+    operation: 'flowGraph.confirm',
     desktop: context.desktop,
     projectId,
     activeProjectId: context.activeProjectId(),

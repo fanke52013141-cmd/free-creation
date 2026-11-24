@@ -1067,3 +1067,12 @@ GUI 节点流面板条目卡片移除「运行」按钮（运行走画布既有�
 - 收件箱：`deriveHumanInbox` 为纯派生函数，新增主控/审核/待补输入来源；渲染层只读取运行总览与节点 meta，无新增存储或网络路径。
 - 节点流编辑页：初始视图固定 100%、新节点避让已有卡片、顶栏去分隔线、编辑页打开时主画布不接管键盘（修复删除/复制/粘贴失效）、二级菜单恢复鱼眼特效与拖拽建节点。纯前端交互，无执行/存储/网络/诊断事件变化。
 - 验证：`npm run verify:logging` 通过（无日志旁路）；全量测试与三关门禁见本次提交说明。未覆盖：真实模型长任务下的人工拒绝事件仍未单列（`agent.human_decision.rejected` 拟后续新增并登记白名单）。
+
+### 2026-11-24 人工决定的客户端等待口径、拒绝事件与节点流人工等待
+
+- 缺陷：BL-01 让 `humanTask.submit` 等人工决定操作在返回前 `desktop.ask` 等人点确认，但本地 CLI 客户端仍按 15s 默认响应超时；人还没点，客户端就先报 `OUTCOME_UNKNOWN / phase=connect`，而 main 仍在等待并可能随后生效（客户端以为失败、服务端后来成功）。真机脚本 `scripts/acceptance/agent-flow-human-task.cjs` 因此卡在 `humanTask.submit`。
+- 修复：`src/shared/agent-access/interactive.ts` 统一「哪些操作是交互式」与「客户端等多久」；操作定义以 `interactive: true` 声明（flowGraph.confirm、flowAgent.build.commit、flowAgent.run、flowAgent.cooperate、humanTask.submit、provider.package.import、provider.package.importProviders）。客户端对交互式操作等待 `HUMAN_DECISION_TIMEOUT_MS + 30s`，`run.wait` 仍按请求时长，其余保持 15s；等待上限与 main 的 `requestHumanDecision` 同源，避免两处数字漂移。
+- 诊断：新增 `agent.human_decision.rejected`（events.ts 白名单，owner `main/agent-access/human-decision`，level warn）。人工决定未生效时发唯一终态，attributes 只含 `operation` / `code`（HUMAN_DENIED / HUMAN_DECISION_TIMEOUT / DESKTOP_UNAVAILABLE / ACTIVE_PROJECT_REQUIRED）/ `reason`（denied / timeout / unavailable / active-project-required）；确认框正文、任务内容、提示词与密钥不入日志；诊断写入失败不影响拒绝结果。
+- 节点流人工等待：`composite` 执行器把 `status:'waiting'` 映射为 `skipped`（暂停），不再落到输出投影报「输出契约校验失败」；运行记录保持 `waiting-input`，由 `composite.run.submitHuman` + `composite.run.resume` 续跑。该路径不新增诊断事件（运行/等待账本沿用既有 `agent.coordination.*` 与 composite 步骤事件）。
+- 验证：`test/local-agent-interactive-timeout.test.ts`、`test/human-decision-diagnostics.test.ts`、`test/composite-executor.test.ts`（9 项）通过；真机 `scripts/acceptance/agent-flow-human-task.cjs` 12 项全过（含点「允许提交」、等待→提交→续跑→公开输出）。
+- 未覆盖：其余 7 个真机验收脚本仍停在确认框（BACKLOG BL-01 已登记）；外部 node-run 状态枚举没有 waiting，节点流等人时 `run.wait` 仍如实报 `failed` + 等待原因，真相以 `composite.run.get` 的 `waiting-input` 为准。

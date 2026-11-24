@@ -1,8 +1,8 @@
 ---
 title: Canvas Studio 待开发清单（BACKLOG）
 status: living            # 常更新文档；每完成一项就勾选，并附上提交 hash
-last-updated: 2026-11-22
-baseline-commit: 28d02e81 (main)
+last-updated: 2026-11-24
+baseline-commit: f0e9b994 (main)
 sources:
   - docs/SPEC_DEEP_REVIEW_2026_11_22.md（审查报告，编号 A*/G*/N*/F*/U*）
   - docs/NODE_FLOW_SPEC.md 附录 A（NF-*）
@@ -36,7 +36,7 @@ sources:
 - **结论**：`135cbef8` 只新增了临时脚本 `test/tmp-matrix-dump.test.ts`（提交说明与内容不符），属于误提交，撤回正确，不恢复；转正工作见 BL-51。
 - **记录**：唯一冲突是 `change-impact.json`（生成文件），合入后已重新生成快照（`39610ae`）；test:contract 331 项、恢复的定向测试 283 项全部通过。
 
-### ✅ BL-01 外部 Agent 不得代人做人工决定 · M（2026-11-22 实时确认版，代码已写、**未过门禁、未提交**）
+### ✅ BL-01 外部 Agent 不得代人做人工决定 · M（2026-11-24 交付：`8a2444ac` 实时确认 + CLI 等待口径/拒绝事件，门禁全绿）
 - **来源**：审查报告 A6 · AF-1.5 / AF-5.3 / AF-17.2
 - **范围**：
   - 在 OperationSpec 里新增动作级别：`read | propose | control | human-decision`。
@@ -49,15 +49,18 @@ sources:
   - [x] 外部调用时先弹确认；人拒绝或超时时不调用 desktop.run 或 port.cooperate（单测：build-access 2 例、cooperate-access 4 例）
   - [x] 允许后走原有的同一实现（commitFlowGraph / commitFlowBuild / human-task-submit / cooperate），撤销步语义不变
   - [x] 规范 AF-1.5 / AF-5.3 / AF-17.2 改为【现行】
+  - [x] CLI 客户端对交互式操作按人工决定上限等待（`src/shared/agent-access/interactive.ts`；此前 15s 默认超时会在人点确认之前误报 `OUTCOME_UNKNOWN`）
+  - [x] 人工决定未生效的唯一终态事件 `agent.human_decision.rejected`（白名单 + 覆盖率 + 单测）
+  - [x] 真机 `agent-flow-human-task.cjs` 12 项全过（含点「允许提交」与节点流等待→提交→续跑→公开输出）
   - [ ] 持久草稿队列（人离开时外部提交可稍后采用）：后续增强，未排期
 - **待决定**：`flowStateMachine.submitEvent`（状态机人工事件）和 `composite.run.submitHuman`（节点流运行中补人工输入）这次没有纳入，原因是前者不在 AF-17.2 名单里，后者需要支持无桌面的 headless 场景。要不要纳入，请拍板。
-- **⚠️ 需要同步更新的真机验收脚本**：以下脚本通过外部接口调用了这些操作，现在会停在确认框上，需要加一步「点允许」才能跑通——`scripts/acceptance/agent-flow-human-task.cjs`、`agent-flow-human-task-dispatch.cjs`、`scripts/mcp-acceptance.cjs`、`mcp-acceptance-families-4-5-6-9.cjs`、`mcp-acceptance-gap-fill.cjs`、`mcp-acceptance-optimizations.cjs`、`test-agent-graph-milestone.cjs`、`audit-business-actions.cjs`。
+- **⚠️ 需要同步更新的真机验收脚本**：以下脚本通过外部接口调用了这些操作，需要加一步「点允许」才能跑通——`scripts/acceptance/agent-flow-human-task.cjs`（**2026-11-24 已修好**：点「允许提交」+ AF-07 等待/续跑）、`agent-flow-human-task-dispatch.cjs`、`scripts/mcp-acceptance.cjs`、`mcp-acceptance-families-4-5-6-9.cjs`、`mcp-acceptance-gap-fill.cjs`、`mcp-acceptance-optimizations.cjs`、`test-agent-graph-milestone.cjs`、`audit-business-actions.cjs`（其余 7 个仍待补）。
 
 ### ✅ BL-02 task-bind 工具白名单回归 · S（随 BL-00 合入 `5cb530c`）
 - **来源**：AF-3.2a（如果 BL-00 合入成功，这一项随之关闭，只需复核）
 - **验收**：[ ] 勾选 `web.search@1` 的专家 Agent 能正常运行；`runtime.ts` 与 `desktop-host.ts:280` 使用同一份白名单常量
 
-### ✅ BL-03 图模式：死路径消除 + 汇合推断 + 「停滞」终态 · M（代码已写、**未过门禁、未提交**）
+### ✅ BL-03 图模式：死路径消除 + 汇合推断 + 「停滞」终态 · M（`cd873b31` 已进 main；门禁见 2026-11-24 `verify`）
 - **来源**：G1 · AF-8.3a / AF-8.3b / AF-8.5b / V7
 - **范围**：
   - 新增子节点状态 `skipped`：条件为假时标记，并沿数据边向下游传播。
@@ -73,7 +76,7 @@ sources:
   - [ ] UI 上 stalled 与「等待人工」能明显区分：失败文案已有，正式样式和「被跳过节点」的展示见 BL-16
 - **兼容**：已有的 XOR 汇合如果显式写了 `any` 行为不变；显式写了 `all` 的，从「永远等」变为「跳过的分支算已落定」，这正是期望的修复。
 
-### ✅ BL-04 分支条件互斥校验 · M（代码已写、**未过门禁、未提交**）
+### ✅ BL-04 分支条件互斥校验 · M（`cd873b31` 已进 main；门禁见 2026-11-24 `verify`）
 - **来源**：G2 · V6
 - **范围**：对 `StageCondition` 做静态互斥检查（同一 stageKey、同一 path 上的 equals/exists/missing/type、count 区间、human-decision、review-passed）。无法判定的组合，要求写明 `else` 或优先级。
 - **实现**：`conditionsExclusive` 做声明式互斥判定；新增 `otherwise` 边（原计划叫 else，为避开关键字改名）。多值交付同时命中多个分支时，运行期报 `FLOW_BRANCH_AMBIGUOUS` 兜底。
@@ -244,6 +247,7 @@ sources:
 | ⬜ BL-38 | 体验修复：音色设计按钮的可用状态与功能绑定一致（U-3）；循环体为空时提前提示（F-1）；产物节点放在视口内（U-5） | 组合测试 | S–M |
 | ⬜ BL-39 | ROADMAP R4：批处理中止后，提供「只继续未完成项」入口 | ROADMAP R4 | M |
 | ⬜ BL-40 | ContextManifest 溢出策略 `overflow: fail \| ask-human \| summarize` | AF-10.4 | M |
+| ✅ BL-41 | 外围浏览器脚本修复并纳入 `test:optimization-ui` 门禁（node-ui / panel-sync / media-import） | 2026-11-24 | S |
 
 ---
 
