@@ -163,7 +163,7 @@ C3.1b [画布 Agent 任务入口](14-c3-canvas-agent.md)已接通专业 Agent �
 **B. 能力现状表**：`49-af00-baseline-and-sample-2026-11-13.md` §2 四态支持矩阵——当前唯一有效的能力现状表，随交付滚动更新。
 
 **C. 历史交付记录（证据链，不再描述"当前"）**：`03/04/08/09/11–47`（C/R 系列交付与台账）、`48/50/51`（AF 评审与交付）、
-`HANDOFF_2026_10_13_*`～`HANDOFF_2026_10_19_*`、`testing/`；docs/ 下 `AGENT_FLOW_EXECUTION_SPEC_2026_11_12.md`、
+`HANDOFF_2026_10_13_*`～`HANDOFF_2026_10_19_*`、`HANDOFF_2026_11_24_HUMAN_GATE_AND_BROWSER_GATE.md`、`testing/`；docs/ 下 `AGENT_FLOW_EXECUTION_SPEC_2026_11_12.md`、
 `AGENT_FLOW_C2C4W4_PLAN_2026_11_13.md`、`AGENT_FLOW_OPTIMIZATION_PLAN/L3_DELIVERY/R1R2_FINDINGS/TEST_*` 及
 `HANDOFF_2026_11_12/13`（均已标注历史标记或随本索引声明）。
 
