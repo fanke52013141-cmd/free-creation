@@ -45,6 +45,7 @@ export const FLOW_AGENT_OPERATION_IDS: ReadonlySet<AccessOperationId> = new Set(
   'flowAgent.cooperate',
   'flowStage.context.preview',
   'flowStage.rework',
+  'flowStage.reworkPreview',
   'flowDefinition.publish',
   'flowDefinition.list',
   'flowDefinition.get',
@@ -497,6 +498,20 @@ function reworkStage(input: Record<string, unknown>, context: FlowAgentOperation
   return { projectId, nodeId, task: task ? taskDto(task) : null }
 }
 
+/** C 组：返工影响预览（只读）——与 GUI 弹窗同一事实来源，列出将作废的交付与将重跑的阶段。 */
+function reworkPreview(input: Record<string, unknown>, context: FlowAgentOperationContext): unknown {
+  const projectId = input.projectId as string
+  const nodeId = input.nodeId as string
+  const stageKey = input.stageKey as string
+  projectFile(projectId)
+  if (context.activeProjectId() !== projectId)
+    refuse('FLOW_PROJECT_INACTIVE', 'rework-preview: project.open the target canvas first')
+  const port = flowAgentAccessPort()
+  if (!port) refuse('FLOW_AGENTS_UNAVAILABLE', 'flow agent host is not running in this instance')
+  const impact = port.previewStageRework({ projectId, nodeId, stageKey })
+  return { projectId, nodeId, impact: impact ?? null }
+}
+
 /** AF-06：流程定义版本（与运行分离；只读定义快照，publish 读已保存配置）。 */
 function definitionStore(): FlowDefinitionStore {
   return new FlowDefinitionStore(getDb(), openProject)
@@ -861,6 +876,8 @@ export async function runFlowAgentOperation(
         return previewStageContext(input, context)
       case 'flowStage.rework':
         return reworkStage(input, context)
+      case 'flowStage.reworkPreview':
+        return reworkPreview(input, context)
       case 'flowDefinition.publish':
         return publishDefinition(input, context)
       case 'flowDefinition.list':

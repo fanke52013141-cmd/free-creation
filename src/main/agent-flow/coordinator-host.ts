@@ -19,6 +19,7 @@ import {
   CoordinationDecisionSchema,
   type CoordinationDecision,
   type AgentPublication,
+  type FlowStageReworkImpact,
   type ModelIdentity
 } from '../../shared/agent-flow/coordination'
 import {
@@ -181,11 +182,33 @@ export class FlowCoordinatorHost {
       throw new AgentRuntimeError('FLOW_REVISION_CONFLICT', 'coordination')
     return file
   }
+  /**
+   * A3：等待原因单一判定。此前 view() 把所有 waiting 都报成 waitKind='human'，
+   * 于是"有在途子任务 / 排队待审 / 就绪但不可分派"都被当成人工待办；
+   * 这里按运行事实区分，只有确实在等人（等待中的子任务或未决定的人工阶段）才算 human。
+   */
+  private waitReason(run: CoordinationRun): FlowAgentView['waitReason'] {
+    if (run.state !== 'waiting') return undefined
+    if (run.paused) return 'paused'
+    if (run.children.some((child) => ['ready', 'running', 'queued'].includes(child.state)))
+      return 'active-child'
+    if ((run.reviews ?? []).some((review) => review.state === 'pending')) return 'pending-review'
+    if (run.children.some((child) => child.state === 'waiting')) return 'human'
+    const undecided = (run.config.stages ?? []).some((stage) => {
+      if (!stage.requireHumanDecision) return false
+      const delivery = (run.stageDeliveries ?? []).find((item) => item.stageKey === stage.stageKey)
+      return Boolean(delivery && !delivery.humanDecided)
+    })
+    if (undecided) return 'human'
+    return 'blocked'
+  }
   private view(run: CoordinationRun): FlowAgentView {
+    const waitReason = this.waitReason(run)
     return {
       taskId: run.taskId,
       state: run.state,
-      waitKind: run.state === 'waiting' ? 'human' : null,
+      waitKind: waitReason === 'human' ? 'human' : null,
+      waitReason,
       waitRevision: run.waitRevision,
       decisions: run.decisions,
       tools: run.children.length,
@@ -1615,6 +1638,61 @@ export class FlowCoordinatorHost {
       )
     }
     run.stageDeliveries = records
+  }
+
+  /**
+   * C 组：返工影响预览（只读）。列出将作废的交付/子任务与保留项，供 GUI 确认弹窗
+   * 与 CLI/MCP 预检使用；不修改运行事实、不占占用、不重发命令。
+   */
+  previewStageRework(input: Identity, stageKey: string): FlowStageReworkImpact | null {
+    const run = this.store.latest(input.projectId, input.nodeId)
+    if (!run || !run.config.stages || run.config.executionMode !== 'fixed-order') return null
+    const stages = run.config.stages
+    const index = stages.findIndex((stage) => stage.stageKey === stageKey)
+    if (index < 0) throw new AgentRuntimeError('FLOW_STAGE_MISSING', 'rework-preview')
+    const affected = stages.slice(index)
+    const affectedNodes = new Set(affected.map((stage) => stage.nodeId))
+    const staleDeliveries = (run.stageDeliveries ?? [])
+      .filter((record) => affectedNodes.has(record.nodeId))
+      .map((record) => ({
+        stageKey: record.stageKey,
+        nodeId: record.nodeId,
+        acceptedAt: record.acceptedAt,
+        outputCount: record.outputRefs.length
+      }))
+    const keptDeliveries = (run.stageDeliveries ?? []).filter(
+      (record) => !affectedNodes.has(record.nodeId)
+    ).length
+    const activeChildCount = run.children.filter(
+      (child) => affectedNodes.has(child.nodeId) && child.state !== 'completed'
+    ).length
+    const unresolved = this.db
+      .prepare(
+        "SELECT 1 FROM flow_commands WHERE project_id=? AND task_id=? AND state IN ('pending','unknown') LIMIT 1"
+      )
+      .get(run.projectId, run.taskId)
+    const blockedReason = this.active.has(run.taskId)
+      ? 'AGENT_TASK_BUSY'
+      : !['completed', 'waiting', 'blocked'].includes(run.state)
+        ? 'FLOW_STAGE_REWORK_BUSY'
+        : (run.reworkRound ?? 0) >= 10
+          ? 'FLOW_REWORK_BUDGET_EXHAUSTED'
+          : unresolved
+            ? 'FLOW_COMMAND_OUTCOME_UNKNOWN'
+            : undefined
+    return {
+      stageKey,
+      stageIndex: index + 1,
+      round: run.reworkRound ?? 0,
+      nextRound: (run.reworkRound ?? 0) + 1,
+      maxRounds: 10,
+      willRerunStages: affected.map((stage) => ({ stageKey: stage.stageKey, nodeId: stage.nodeId })),
+      staleDeliveries,
+      keptDeliveries,
+      activeChildCount,
+      canRework: !blockedReason,
+      ...(blockedReason ? { blockedReason } : {})
+    }
   }
 
   /**

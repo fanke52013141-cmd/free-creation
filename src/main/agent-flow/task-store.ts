@@ -226,14 +226,18 @@ export class FlowTaskStore {
   }
 
   /**
-   * AF-01：本任务是否存在显式人工采用（kind=human 且 accepted=true 的续接记录）。
-   * 只读已持久化的续接事实，供固定顺序模式判定「人工决定」进入条件；不从聊天文字推断。
+   * AF-01 / P0-4：本任务是否存在显式人工采用（kind=human 且 accepted=true 的续接记录）。
+   * 只认**最近一次等待修订**：早先的采纳不能冒充对后续新等待/新交付的批准，
+   * 否则一次「继续」会长期有效，等于把人工门变成一次性开关。只读已持久化事实，不从聊天推断。
    */
   humanAccepted(thread: string): boolean {
+    const record = this.read(thread)
+    if (!record) return false
     const rows = this.db
-      .prepare('SELECT signature FROM flow_agent_responses WHERE thread=?')
-      .all(thread) as Array<{ signature: string }>
+      .prepare('SELECT signature, wait_revision FROM flow_agent_responses WHERE thread=?')
+      .all(thread) as Array<{ signature: string; wait_revision: number }>
     return rows.some((row) => {
+      if (row.wait_revision !== record.waitRevision) return false
       try {
         const response = JSON.parse(row.signature) as { kind?: string; accepted?: boolean }
         return response.kind === 'human' && response.accepted === true

@@ -268,6 +268,12 @@ const NODE_TABLE: Record<string, Overrides> = {
   agent: {
     contractVersion: 1,
     family: 'agent',
+    // C 组（2026-11-24）：真窗口验收只证明"节点创建/排列/连线呈现"，
+    // 不据此宣称 Agent 自主运行已验收（运行仍需已验证工具调用模型）。
+    desktop: {
+      N2: '真窗口：scripts/acceptance/agent-flow-layout.cjs（12 节点泳道布局、角色徽标、单步撤销）与 agent-flow-edges-walkthrough.cjs（控制线四色/淡化）均通过，agent 节点在真实画布创建与排列；qa/agent-flow-layout/receipt.json',
+      N4: '真窗口：scripts/acceptance/agent-flow-edges-walkthrough.cjs 通过（controls/observes/review-gate/rework 四色关系线、无关边淡化、取消选中恢复），agent 节点连线在真实画布成立；qa/agent-flow-edges/receipt.json'
+    },
     extra: {
       // F8 第二批：运行控制已开放，但真实 Agent 运行需要已验证的工具调用模型，
       // 目前只有"预检失败时零模型请求"的服务级证据，因此不写 desktop-tested。
@@ -279,19 +285,37 @@ const NODE_TABLE: Record<string, Overrides> = {
       )
     }
   },
-  'state-machine': { contractVersion: 1, family: 'agent' },
-  'ai-review': { contractVersion: 1, family: 'agent' },
+  'state-machine': {
+    contractVersion: 1,
+    family: 'agent',
+    // C 组（2026-11-24）：真窗口创建→提交事件→推进→读投影→过期修订拒绝，全链路通过。
+    desktop: {
+      N2: '真窗口：scripts/acceptance/agent-flow-state-machine.cjs 通过（创建状态机节点并打开画布）；qa/agent-flow-state-machine/receipt.json',
+      N5: '真窗口：同一脚本外部提交 flow.started/flow.completed 推动运行推进（真实渲染器+执行器），7 项检查全过；qa/agent-flow-state-machine/receipt.json',
+      N6: '真窗口：同一脚本 output.get 投影 out-state（flow.state@1，working/修订2）；qa/agent-flow-state-machine/receipt.json',
+      N7: '真窗口：同一脚本 flowStateMachine.get 读取当前阶段/修订/合法事件，过期修订被 STATE_MACHINE_REVISION_CONFLICT 拒绝；qa/agent-flow-state-machine/receipt.json'
+    }
+  },
+  'ai-review': {
+    contractVersion: 1,
+    family: 'agent',
+    // C 组（2026-11-24）：审核节点在真窗口参与布局与 review-gate 控制线；
+    // 审核执行（真实模型判断）未为本轮证据，不写 N5。
+    desktop: {
+      N2: '真窗口：scripts/acceptance/agent-flow-layout.cjs 与 agent-flow-edges-walkthrough.cjs 通过，审核节点在真实画布创建并参与泳道布局；qa/agent-flow-layout/receipt.json',
+      N4: '真窗口：agent-flow-edges-walkthrough.cjs 中 review-gate 控制线着色与淡化通过，审核门禁连线在真实画布成立；qa/agent-flow-edges/receipt.json'
+    }
+  },
   // C4：纯人工任务节点——人工提交结果、执行器权威交付；停等语义，composite 内 fail-closed。
   'human-task': {
     contractVersion: 1,
     family: 'agent',
-    extra: {
-      N5: C(
-        'humanTaskExecutor 停等语义：未提交返回 skipped 不伪造成功；人工提交经 expectedRevision 防过期 + submissionId 去重后交付（test/human-task.test.ts）'
-      ),
-      N7: C(
-        'humanTask.submit/get 与 GUI 提交结果按钮同一 meta.humanTaskPending 写入（渲染器权威动作 + 保存屏障）；composite 内部人工节点 fail-closed 显式拒绝'
-      )
+    // C 组（2026-11-24）：图模式真窗口验收（fixture 模型）证明"等人工→人工提交→执行器交付→路由采用"。
+    desktop: {
+      N2: '真窗口：node scripts/test-agent-flow-human-task-graph.cjs 通过，human-task 节点在真实画布创建并参与图路由；qa/agent-human-task-graph/desktop/execute-report.json',
+      N5: '真窗口：同一脚本通过——人工提交后经 C4 执行器在 continue 上交付，图路由采用人工交付为最终输出（无伪造成功）；qa/agent-human-task-graph/desktop/execute-report.json',
+      N6: '真窗口：同一脚本通过——human delivery 作为最终输出被图路由采用并投影；qa/agent-human-task-graph/desktop/execute-report.json',
+      N7: '真窗口：同一脚本通过——human-task 图节点等待人工提交（不伪造成功）、协调器在人工恢复后完成；qa/agent-human-task-graph/desktop/execute-report.json'
     }
   },
   // 导演台

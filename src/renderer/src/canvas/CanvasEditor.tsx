@@ -2469,6 +2469,10 @@ export function CanvasEditor({
     const onKey = (e: KeyboardEvent): void => {
       const editor = editorRef.current
       if (!editor) return
+      // 全屏节点流编辑页（节点流编辑/新建）打开时，主画布不接管键盘：
+      // 它这个监听在 window 捕获阶段，会先把 Delete/Backspace 吞掉，
+      // 导致编辑页里选中的节点永远删不掉（2026-11-24 用户实测）。
+      if (document.querySelector('.composite-canvas-overlay')) return
       // 正在编辑文本（节点内文本/标题、顶栏项目名、各类输入框）时不拦截，
       // 避免把画布快捷键误注入到用户的输入上下文
       const active = document.activeElement

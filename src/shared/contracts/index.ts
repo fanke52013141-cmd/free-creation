@@ -67,6 +67,7 @@ export const IPC = {
     cooperate: 'flow-agents:cooperate',
     stageContextPreview: 'flow-agents:stage-context-preview',
     stageRework: 'flow-agents:stage-rework',
+    stageReworkPreview: 'flow-agents:stage-rework-preview',
     definitionPublish: 'flow-agents:definition-publish',
     definitionList: 'flow-agents:definition-list',
     definitionGet: 'flow-agents:definition-get',

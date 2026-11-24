@@ -2352,6 +2352,14 @@
       ],
       "note": "AF-05 新增：从指定阶段局部返工，移除该阶段及下游子任务并以新轮次重跑，上游已完成阶段不重跑；旧交付移入历史、下游标过期；返工轮次上限 10，在途 pending/unknown 命令未结算时拒绝；与 GUI 同一宿主 coordinator.reworkStage，经共享端口调用不另建权威；非固定顺序/非主控如实拒绝"
     },
+    "ipc.flowAgents.stageReworkPreview":  {
+        "label":  "Flow 阶段返工影响预览",
+        "channel":  "flow-agents:stage-rework-preview",
+        "gui":  "Agent 主控设置面板阶段「返工」按钮的确认弹窗",
+        "phase":  "external",
+        "external":  [ "flowStage.reworkPreview" ],
+        "note":  "C 组：返工前只读预览影响（将重跑阶段、将作废并移入历史的交付、保留数量、未完成子任务数、是否可返工及原因码）；GUI 确认弹窗与外部预检同一事实来源；零写副作用"
+    },
     "ipc.flowAgents.definitionPublish": {
       "label": "Flow 定义发布",
       "channel": "flow-agents:definition-publish",

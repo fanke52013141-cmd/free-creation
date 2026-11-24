@@ -33,6 +33,7 @@ export const OPERATION_REQUIREMENTS: Record<string, readonly string[]> = {
   'flowAgent.inspect': ['openProject', 'agentNode'],
   'flowStage.context.preview': ['openProject', 'agentNode'],
   'flowStage.rework': ['openProject', 'agentNode'],
+  'flowStage.reworkPreview': ['openProject', 'agentNode'],
   'flowDefinition.publish': ['openProject', 'agentNode'],
   'flowDefinition.list': ['openProject'],
   'flowDefinition.get': ['openProject'],

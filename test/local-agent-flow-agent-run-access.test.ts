@@ -38,6 +38,8 @@ interface FakePort {
   precheckError: Error | null
   runReply: unknown
   taskView: unknown
+  collaborationView: unknown
+  previewImpact: unknown
 }
 
 function publishFakePort(overrides: Partial<FakePort> = {}): FakePort {
@@ -49,6 +51,19 @@ function publishFakePort(overrides: Partial<FakePort> = {}): FakePort {
     precheckError: null,
     runReply: { task: taskView('running'), refs: [], outputs: {} },
     taskView: taskView('waiting'),
+    collaborationView: { task: taskView('running') },
+    previewImpact: {
+      stageKey: 'write',
+      stageIndex: 2,
+      round: 0,
+      nextRound: 1,
+      maxRounds: 10,
+      willRerunStages: [{ stageKey: 'write', nodeId: 'second' }],
+      staleDeliveries: [{ stageKey: 'write', nodeId: 'second', acceptedAt: 1, outputCount: 1 }],
+      keptDeliveries: 1,
+      activeChildCount: 0,
+      canRework: true
+    },
     ...overrides
   }
   publishFlowAgentAccessPort({
@@ -77,6 +92,15 @@ function publishFakePort(overrides: Partial<FakePort> = {}): FakePort {
     },
     async assertReviewToolCalling() {
       return undefined
+    },
+    // P0-2：运行控制入口会先读协作视图判断是否在人工等待；默认桩成"无人工等待"，
+    // 人工门禁另有专门用例。
+    collaboration() {
+      return port.collaborationView
+    },
+    // C 组：返工影响预览（只读）走同一宿主端口。
+    previewStageRework() {
+      return port.previewImpact
     }
   })
   return port
@@ -240,6 +264,65 @@ describe('flowAgent 运行控制', () => {
     expect(raw.action).toBe('continue')
     expect(raw.expectedTaskId).toBe('agent-task-1')
     expect(raw.expectedWaitRevision).toBe(2)
+  })
+
+  // P0-2：外部不能凭 action=continue 把人工等待推过去；没有桌面确认时必须 fail-closed。
+  it('外部继续人工等待需要桌面确认，缺桌面时拒绝且宿主不被调用', async () => {
+    const project = createProject('运行-人工门')
+    active = project.id
+    const port = publishFakePort({
+      collaborationView: { task: taskView('waiting') }
+    })
+    const response = await write('flowAgent.run', {
+      projectId: project.id,
+      nodeId: 'shape:agent-1',
+      action: 'continue',
+      eventId: 'event-human-1',
+      expectedTaskId: 'agent-task-1',
+      expectedWaitRevision: 2
+    })
+    expect(response.status).toBe('failed')
+    expect(response.error?.code).toBe('DESKTOP_UNAVAILABLE')
+    expect(port.runs).toEqual([])
+    // 外部也不能自造"人已确认"的证据：该字段不在外部输入契约里，直接判输入非法。
+    const forged = await write('flowAgent.run', {
+      projectId: project.id,
+      nodeId: 'shape:agent-1',
+      action: 'continue',
+      eventId: 'event-human-2',
+      expectedTaskId: 'agent-task-1',
+      expectedWaitRevision: 2,
+      humanConfirmed: 'gui'
+    })
+    expect(forged.status).toBe('failed')
+    expect(forged.error?.code).toBe('INVALID_INPUT')
+    expect(port.runs).toEqual([])
+  })
+
+  // C 组：返工影响预览是只读外部门；未打开目标画布必须拒绝，正常时返回同源影响。
+  it('C：返工影响预览只读且未打开目标画布时拒绝', async () => {
+    const project = createProject('返工预览')
+    const port = publishFakePort()
+    active = null
+    const denied = await write('flowStage.reworkPreview', {
+      projectId: project.id,
+      nodeId: 'shape:main',
+      stageKey: 'write'
+    })
+    expect(denied.status).toBe('failed')
+    expect(denied.error?.code).toBe('FLOW_PROJECT_INACTIVE')
+    active = project.id
+    const ok = await write('flowStage.reworkPreview', {
+      projectId: project.id,
+      nodeId: 'shape:main',
+      stageKey: 'write'
+    })
+    expect(ok.status, JSON.stringify(ok.error)).toBe('completed')
+    const impact = (ok.data as { impact: { stageKey: string; canRework: boolean } }).impact
+    expect(impact.stageKey).toBe('write')
+    expect(impact.canRework).toBe(true)
+    // 只读：没有触发任何运行控制
+    expect(port.runs).toEqual([])
   })
 
   it('存在活动 Agent 任务时 run/pause/stop 不被占用检查挡住，其他写入仍被挡住', async () => {

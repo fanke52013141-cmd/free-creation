@@ -39,7 +39,7 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 
 “内部 Flow 支持”只表示画布原生 Agent Flow 已有目标适配/命令协议；它不是 `implemented`，也不是外部 MCP/CLI/API 的可用证明。桌面节点有 executor 同样不能推导为可由外部 Agent 自动执行。
 
-覆盖率分母由主规范的 operation Registry 自动生成：每个唯一 `operationId`、每个 transport 暴露和 32 个 Active 节点分别计数。每次发布报告列出 `implemented / verified / excluded / planned` 的实际 operation、transport 和节点清单，不以“已有 IPC 数”或“已有 executor 数”替代。
+覆盖率分母由主规范的 operation Registry 自动生成：每个唯一 `operationId`、每个 transport 暴露和 33 个 Active 节点分别计数（节点数以 `generated/contracts.json` 为机器真值）。每次发布报告列出 `implemented / verified / excluded / planned` 的实际 operation、transport 和节点清单，不以“已有 IPC 数”或“已有 executor 数”替代。
 
 ### 1.2 阶段
 
@@ -139,7 +139,7 @@ A1.4首包接续：[查询交付台账](08-a1-4-read-only-queries.md)。`library
 
 节点标识、版本和可创建范围以 [共享节点清单](../../src/shared/types/index.ts) 和 [注册表](../../src/renderer/src/nodes/specs/index.tsx) 为准。下表的“结构化适配”均为 A2 目标：列举、读取契约与安全摘要、创建、更新 config/text、端口连线和图校验。`执行`描述的是建议开放阶段，并不表示当前对外可执行。
 
-**32个节点的外部动作目前全部为planned，登记完成不等于可调用。** 实施账本按 `discover/read/create/update/connect/execute/result/export` × transport 记录独立状态、证据链接和不适用原因；表中合并展示的A2目标不能代替动作级验收。资产节点可查询/投影而无需创建执行任务；没有对应端口或产物的动作明确不适用。
+**节点动作状态以 `node-actions.ts` 矩阵与 `generated/contracts.json` 为机器真值，本文不再手写“全部 planned”。** 2026-11-24 按真实窗口验收回执登记了四个核心节点的部分动作：`agent` desktopTested=2（创建/排列、连线）、`state-machine`=4（创建、事件推进、输出投影、状态读取）、`ai-review`=2（创建、review-gate 连线）、`human-task`=4（创建、执行交付、输出投影、等待/恢复）；未覆盖动作仍保持 contract-tested/planned。登记完成不等于全部动作可调用，实施账本按 `discover/read/create/update/connect/execute/result/export` × transport 记录独立状态、证据链接和不适用原因。
 
 | 节点              | 标签      | 结构化适配与执行建议         | 当前内部 Flow    | 外部限制                                                               |
 | ----------------- | --------- | ---------------------------- | ---------------- | ---------------------------------------------------------------------- |

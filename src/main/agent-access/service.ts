@@ -1039,7 +1039,8 @@ export class LocalAccessService {
         // F8（第二批）：Agent 运行控制只经由启动时创建的那一个宿主实例（flow-bridge 窄接口），
         // 外部不新建宿主、不自造运行身份；start/continue 先走与 IPC 入口相同的模型工具调用预检。
         result = await runFlowAgentRunOperation(operationId, input, {
-          activeProjectId: this.options.activeProjectId
+          activeProjectId: this.options.activeProjectId,
+          desktop: this.options.desktop
         })
       } else if (operationId === 'flowStateMachine.submitEvent') {
         // C3：状态机人工事件——与 GUI 提交事件按钮同一 meta.stateMachinePending 写入，
@@ -2837,6 +2838,7 @@ export class LocalAccessService {
       case 'flowAgent.inspect':
       case 'flowStage.context.preview':
       case 'flowStage.rework':
+      case 'flowStage.reworkPreview':
       case 'flowDefinition.publish':
       case 'flowDefinition.list':
       case 'flowDefinition.get':

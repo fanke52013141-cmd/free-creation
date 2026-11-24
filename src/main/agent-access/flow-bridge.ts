@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Flow Agent 运行控制的**共享宿主端口**（F8）。
  *
  * 为什么需要它：内部 Agent 运行由 `registerFlowAgentsIpc` 启动时创建的那一个
@@ -51,6 +51,8 @@ export interface FlowAgentAccessPort {
   collaboration(query: { projectId: string; nodeId: string }): unknown
   /** AF-05：局部返工（固定顺序主控），与 GUI 同一宿主 coordinator.reworkStage；不支持返回 null。 */
   reworkStage(query: { projectId: string; nodeId: string; stageKey: string }): unknown
+  /** C 组：返工影响预览（只读，固定顺序主控）；不支持返回 null。 */
+  previewStageRework(query: { projectId: string; nodeId: string; stageKey: string }): unknown
   /**
    * P5：外部 FlowGraph 建图（FlowBuilderHost.proposeGraph/previewGraph/discardGraph）。
    * 与 builder 同一宿主、同一 flow_builds 表（source='graph'）；接收外部已生成图，

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { createShapeId, Tldraw, type Editor, type TLShapeId } from 'tldraw'
 import type { CompositeCapabilitySummary } from '@shared/composite/types'
 import type { CompositeManifest } from '@shared/composite/manifest'
@@ -19,6 +19,7 @@ import { ConnectionLayer, PendingConnectionLayer } from '../canvas/ConnectionLay
 import { setConnectionFinishOverride, type ConnectionFinish } from '../canvas/connection-drag'
 import { NODE_PORT_OUTSET } from '../canvas/edge-geometry'
 import { nodeTextField } from '../canvas/node-pointer-policy'
+import { useDockMagnify } from '../canvas/useDockMagnify'
 import { PALETTE_CATEGORY_META, nodesForPaletteCategory } from '../canvas/palette-categories'
 import { allNodeTypes, getNodeType, nodeIconColor } from '../nodes/registry'
 import { Icon } from '../components/Icon'
@@ -137,6 +138,16 @@ export function CompositeCanvasEditor({
   const internalIdByShape = useRef(new Map<string, string>())
   const initialized = useRef(false)
   const flyoutTimer = useRef<number | null>(null)
+  // 与主画布一致：二级菜单鱼眼特效 + 从二级菜单直接拖出节点。
+  const nodeFlyoutRef = useRef<HTMLDivElement | null>(null)
+  const [nodeDrag, setNodeDrag] = useState<{ type: string; x: number; y: number } | null>(null)
+  const suppressPickRef = useRef(false)
+  const nodeFlyoutMagnify = useDockMagnify(nodeFlyoutRef, {
+    direction: 'vertical',
+    maxScale: 1.28,
+    range: 64,
+    maxTranslate: 3
+  })
   const providers = useGatewayStore((state) => state.providers)
   // 发布目标版本由入口按最新发布自动递增，不提供手填，避免同版本覆盖被拒。
   const version = base?.version ?? ''
@@ -148,6 +159,24 @@ export function CompositeCanvasEditor({
       void window.api.setTitleBarOverlay(true)
     }
   }, [])
+
+  /**
+   * 初始视图固定 100%：此前用 zoomToFit，内容一多就自动缩到 92%/160%（用户反馈
+   * 打开即不是 100%）。这里只把内容居中，不改缩放倍率。
+   */
+  const resetViewport = (instance: Editor): void => {
+    const bounds = instance.getCurrentPageBounds()
+    if (!bounds) {
+      instance.setCamera({ x: 0, y: 0, z: 1 })
+      return
+    }
+    const viewport = instance.getViewportScreenBounds()
+    instance.setCamera({
+      x: viewport.w / 2 - bounds.center.x,
+      y: viewport.h / 2 - bounds.center.y,
+      z: 1
+    })
+  }
 
   /** 把一份 manifest 铺进编辑器：清空旧形状、重建节点与连线、固定内部 ID。 */
   const loadManifestIntoEditor = (instance: Editor, m: CompositeManifest): void => {
@@ -189,7 +218,7 @@ export function CompositeCanvasEditor({
         )
       }
     }
-    instance.zoomToFit({ animation: { duration: 0 } })
+    resetViewport(instance)
   }
 
   useEffect(() => {
@@ -200,7 +229,7 @@ export function CompositeCanvasEditor({
       // 画布套用一致——编辑页里看到的就是套用后的样子。不能照搬 manifest 的载入方式：
       // createEdge 对不上端口会静默不建线，老条目（连线没有端口 ID）会打开即丢线。
       addNodeLibraryEntry(editor, target.template, false)
-      editor.zoomToFit({ animation: { duration: 0 } })
+      resetViewport(editor)
     } else if (base) {
       loadManifestIntoEditor(editor, base)
     }
@@ -392,11 +421,58 @@ export function CompositeCanvasEditor({
     return id
   }
 
-  /** 左侧面板点选节点：落在当前视口中心。 */
+  /** 左侧面板点选节点：落在当前视口中心；中心已被占就向右下找空位。
+   *  旧实现固定落中心，新节点正好压在已有卡片下面，用户会以为"点了没反应"。 */
   const addNodeAtCenter = (nodeType: string): void => {
     if (!editor) return
+    const spec = getNodeType(nodeType)
+    if (!spec) return
     const center = editor.pageToScreen(editor.getViewportPageBounds().center)
+    const { w, h } = spec.defaultSize
+    const occupied = editor.getCurrentPageShapes().flatMap((shape) => {
+      const bounds = editor.getShapePageBounds(shape)
+      return bounds ? [bounds] : []
+    })
+    const step = 24
+    for (let i = 0; i < 40; i += 1) {
+      const screen = { x: center.x + i * step, y: center.y + i * step }
+      const point = editor.screenToPage(screen)
+      const box = { x: point.x - w / 2, y: point.y - h / 2, w, h }
+      const overlaps = occupied.some(
+        (b) =>
+          box.x < b.x + b.w && box.x + box.w > b.x && box.y < b.y + b.h && box.y + box.h > b.y
+      )
+      if (!overlaps) {
+        addNode(nodeType, screen.x, screen.y)
+        return
+      }
+    }
     addNode(nodeType, center.x, center.y)
+  }
+
+  /** 与主画布同一交互：从二级菜单按住拖出，松手落在画布位置建节点。 */
+  const startNodeDrag = (event: ReactPointerEvent<HTMLButtonElement>, nodeType: string): void => {
+    const startX = event.clientX
+    const startY = event.clientY
+    let dragged = false
+    const onMove = (ev: PointerEvent): void => {
+      if (Math.abs(ev.clientX - startX) > 6 || Math.abs(ev.clientY - startY) > 6) dragged = true
+      setNodeDrag({ type: nodeType, x: ev.clientX, y: ev.clientY })
+    }
+    const onUp = (ev: PointerEvent): void => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      setNodeDrag(null)
+      if (!dragged) return
+      // 拖拽建节点后抑制随后的 click，避免再在视口中心建一个。
+      suppressPickRef.current = true
+      window.setTimeout(() => {
+        suppressPickRef.current = false
+      }, 0)
+      addNode(nodeType, ev.clientX, ev.clientY)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
   }
 
   const buildManifest = (): {
@@ -591,7 +667,14 @@ export function CompositeCanvasEditor({
       window.clearTimeout(flyoutTimer.current)
       flyoutTimer.current = null
     }
-    setActiveCategory({ id: category, top: target.getBoundingClientRect().top })
+    setActiveCategory({
+      id: category,
+      // 与主画布一致：以按钮中心线校准首个二级项，并夹在窗口内。
+      top: Math.max(
+        12,
+        Math.min(target.getBoundingClientRect().top + target.getBoundingClientRect().height / 2 - 16, window.innerHeight - 220)
+      )
+    })
   }
   const scheduleFlyoutClose = (): void => {
     if (flyoutTimer.current !== null) window.clearTimeout(flyoutTimer.current)
@@ -685,7 +768,15 @@ export function CompositeCanvasEditor({
               onMouseEnter={keepFlyout}
               onMouseLeave={scheduleFlyoutClose}
             >
-              <div className="palette-node-flyout-list scrollbar-hidden">
+              <div
+                className="palette-node-flyout-list scrollbar-hidden"
+                ref={nodeFlyoutRef}
+                onPointerMove={nodeFlyoutMagnify.onPointerMove}
+                onPointerLeave={() => {
+                  nodeFlyoutMagnify.onPointerLeave()
+                  scheduleFlyoutClose()
+                }}
+              >
                 {flyoutNodes.map((spec) => (
                   <button
                     key={spec.type}
@@ -693,12 +784,20 @@ export function CompositeCanvasEditor({
                     className="palette-item palette-node-item"
                     aria-label={`添加${spec.label}节点`}
                     onClick={() => {
+                      if (suppressPickRef.current) return
                       addNodeAtCenter(spec.type)
                       setActiveCategory(null)
                     }}
+                    onPointerDown={(event) => startNodeDrag(event, spec.type)}
                   >
-                    <span className="palette-icon" style={{ color: nodeIconColor(spec.color) }}>
-                      <Icon name={spec.icon} size={18} strokeWidth={2} />
+                    <span
+                      className="palette-icon"
+                      style={{
+                        color: nodeIconColor(spec.color),
+                        ['--palette-accent' as string]: spec.color
+                      }}
+                    >
+                      <Icon name={spec.icon} size={20} strokeWidth={2} />
                     </span>
                     <span className="palette-label">{spec.label}</span>
                   </button>
@@ -709,6 +808,19 @@ export function CompositeCanvasEditor({
 
           {/* 左下角：与主画布同一份小地图 + 缩放控制坞。 */}
           <CanvasBottomDock editor={editor} />
+
+          {/* 拖拽预览：与主画布同一个 .add-drag-ghost 样式。 */}
+          {nodeDrag && (
+            <div
+              className="add-drag-ghost"
+              style={{ left: nodeDrag.x + 14, top: nodeDrag.y + 14 }}
+            >
+              {getNodeType(nodeDrag.type) && (
+                <Icon name={getNodeType(nodeDrag.type)!.icon} size={16} />
+              )}{' '}
+              {getNodeType(nodeDrag.type)?.label}
+            </div>
+          )}
 
           {menu && (
             <NodeCreateMenu

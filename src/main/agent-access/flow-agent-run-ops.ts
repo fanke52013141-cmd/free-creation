@@ -20,7 +20,8 @@ import {
 } from '../../shared/agent-flow/desktop-tasks'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 import type { AccessOperationId } from '../../shared/agent-access/registry'
-import { DesktopAccessError } from './desktop'
+import { DesktopAccessError, type AccessDesktop } from './desktop'
+import { requestHumanDecision } from './human-decision'
 import { flowAgentAccessPort } from './flow-bridge'
 
 /** 本模块负责的操作；service.ts 只做一次分组委托。 */
@@ -32,6 +33,8 @@ export const FLOW_AGENT_RUN_OPERATION_IDS: ReadonlySet<AccessOperationId> = new 
 
 export interface FlowAgentRunContext {
   activeProjectId: () => string | null
+  /** BL-01：外部触发的人工决定必须在 GUI 由人确认；缺桌面时 fail-closed。 */
+  desktop?: AccessDesktop | null
 }
 
 /** 准入前失败：明确错误码、无副作用（service 映射为 failed）。 */
@@ -90,9 +93,38 @@ export async function runFlowAgentRunOperation(
         fail(error)
       }
     }
+    // P0-2：外部调用 continue 时，若目标正处于人工等待，必须在 GUI 由人确认。
+    // 外部不能凭一个 action=continue 就把人工门推过去；拒绝/超时在生效前失败（零副作用）。
+    let humanConfirmed: 'desktop-confirm' | undefined
+    if (parsed.data.action === 'continue') {
+      const inspect = port.collaboration
+      const current =
+        typeof inspect === 'function'
+          ? (inspect.call(port, { projectId, nodeId }) as {
+              task?: { state?: string; waitKind?: string | null }
+            } | null)
+          : null
+      const waitingForHuman =
+        current?.task?.state === 'waiting' && current?.task?.waitKind === 'human'
+      if (waitingForHuman) {
+        const decision = await requestHumanDecision({
+          desktop: context.desktop,
+          projectId,
+          activeProjectId: context.activeProjectId(),
+          prompt: {
+            title: '外部 Agent 请求继续一个人工等待中的任务',
+            message:
+              '外部 Agent 想让人工等待中的 Agent 任务继续。只有你在这里确认后才会继续；这次确认等同你在界面上亲自点「继续」。',
+            confirmText: '允许继续'
+          }
+        })
+        if (!decision.ok) refuse(decision.code, decision.detail)
+        humanConfirmed = 'desktop-confirm'
+      }
+    }
     let reply: unknown
     try {
-      reply = await port.run(parsed.data)
+      reply = await port.run({ ...parsed.data, ...(humanConfirmed ? { humanConfirmed } : {}) })
     } catch (error) {
       fail(error)
     }

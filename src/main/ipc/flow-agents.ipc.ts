@@ -1,4 +1,4 @@
-﻿import { supportsSampledVideoReview } from '../../shared/agent-flow/video-review'
+import { supportsSampledVideoReview } from '../../shared/agent-flow/video-review'
 import { supportsReviewAudioInput } from '../../shared/agent-flow/media-review'
 import { ipcMain, type BrowserWindow } from 'electron'
 import { IPC, type IpcEnvelope } from '../../shared/contracts'
@@ -318,12 +318,21 @@ export function registerFlowAgentsIpc(
     'collaboration',
     'cooperate',
     'stageContextPreview',
-    'stageRework'
+    'stageRework',
+    'stageReworkPreview'
   ] as const) {
     ipcMain.handle(IPC.flowAgents[phase], async (event, raw): Promise<IpcEnvelope<unknown>> => {
       const context = { traceId: newTraceId(), spanId: newSpanId() }
       const query = FlowAgentQuerySchema.safeParse(
-        ['run', 'cooperate', 'build', 'review', 'stageContextPreview', 'stageRework'].includes(
+        [
+          'run',
+          'cooperate',
+          'build',
+          'review',
+          'stageContextPreview',
+          'stageRework',
+          'stageReworkPreview'
+        ].includes(
           phase
         ) &&
           raw &&
@@ -380,7 +389,12 @@ export function registerFlowAgentsIpc(
         const data =
           phase === 'stageRework'
             ? host.reworkStage(query.data, String((raw as { stageKey?: unknown }).stageKey ?? ''))
-            : phase === 'stageContextPreview'
+            : phase === 'stageReworkPreview'
+              ? host.previewStageRework(
+                  query.data,
+                  String((raw as { stageKey?: unknown }).stageKey ?? '')
+                )
+              : phase === 'stageContextPreview'
               ? host.previewStageContext(
                   query.data,
                   String((raw as { stageKey?: unknown }).stageKey ?? ''),
@@ -391,7 +405,13 @@ export function registerFlowAgentsIpc(
                 : phase === 'build'
                   ? await builder.handle(raw)
                   : phase === 'run'
-                    ? await host.run(raw)
+                    ? // P0-2/P0-3：这条通道只对可信渲染器开放（上方已校验 sender/主框架），
+                      // 因此 continue 可以标记为"人在 GUI 上亲自确认"，不需要再次弹确认框。
+                      await host.run(
+                        (raw as { action?: unknown }).action === 'continue'
+                          ? { ...(raw as Record<string, unknown>), humanConfirmed: 'gui' }
+                          : raw
+                      )
                     : phase === 'cooperate'
                       ? await host.cooperate(raw)
                       : phase === 'collaboration'
@@ -587,6 +607,8 @@ export function registerFlowAgentsIpc(
     collaboration: (query) => host.collaboration(query),
     reworkStage: (query) =>
       host.reworkStage({ projectId: query.projectId, nodeId: query.nodeId }, query.stageKey),
+    previewStageRework: (query) =>
+      host.previewStageRework({ projectId: query.projectId, nodeId: query.nodeId }, query.stageKey),
     proposeGraph: (raw) =>
       builder.proposeGraph({
         projectId: raw.projectId,

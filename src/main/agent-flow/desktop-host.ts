@@ -601,6 +601,21 @@ export class FlowAgentDesktopHost {
       return null
     return this.coordinator.previewStageContext?.(input, stageKey, includeBody) ?? null
   }
+  /** C 组：返工影响预览（只读，固定顺序主控）；非主控/不支持返回 null。 */
+  previewStageRework(
+    input: Identity,
+    stageKey: string
+  ): import('../../shared/agent-flow/coordination').FlowStageReworkImpact | null {
+    if (!this.coordinator || agentRoleOf(this.saved(input).shape.props.config) !== 'coordinator')
+      return null
+    const coordinator = this.coordinator as CoordinatorPort & {
+      previewStageRework?: (
+        input: Identity,
+        stageKey: string
+      ) => import('../../shared/agent-flow/coordination').FlowStageReworkImpact | null
+    }
+    return coordinator.previewStageRework?.(input, stageKey) ?? null
+  }
   /** AF-05：局部返工（固定顺序主控）；非主控/不支持返回 null。 */
   reworkStage(input: Identity, stageKey: string): FlowAgentView | null {
     if (!this.coordinator || agentRoleOf(this.saved(input).shape.props.config) !== 'coordinator')
@@ -1280,6 +1295,14 @@ export class FlowAgentDesktopHost {
             .filter((event) => event.action === 'submit' && event.waitRevision === old.waitRevision)
             .at(-1)
         : undefined
+      // P0-2/P0-3：人工等待只能由①本等待修订的显式人工提交，或②可信入口携带的人工确认
+      // （GUI 点击 / 外部经 desktop.ask 确认）满足。此前 `accepted: human?.accepted ?? true`
+      // 会在两者都缺失时把"人已采用"伪造成 true，外部程序可凭空 continue 推进人工门。
+      // 主控协调器的等待不是"本人已采用"：它的人工决定记录在每个专业子任务上，
+      // 由固定顺序/图模式的阶段门禁再次校验，所以这里只对专业 Agent 任务强制证据。
+      const role = agentRoleOf(this.saved(input).shape.props.config)
+      if (old && old.waitKind === 'human' && role !== 'coordinator' && !human && !input.humanConfirmed)
+        throw new AgentRuntimeError('HUMAN_DECISION_REQUIRED', 'admission')
       const record =
         input.action === 'start'
           ? await runtime.start()
@@ -1291,7 +1314,7 @@ export class FlowAgentDesktopHost {
               kind: old!.waitKind,
               ...(old!.waitKind === 'human'
                 ? {
-                    accepted: human?.accepted ?? true,
+                    accepted: human ? human.accepted !== false : input.humanConfirmed !== undefined,
                     feedback: human?.text,
                     selectedOutputs: human?.selectedOutputs
                   }

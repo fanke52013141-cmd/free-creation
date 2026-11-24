@@ -158,6 +158,7 @@ export function installBrowserMock(): void {
     flowAgentCollaboration: async () => ({ ok: true, data: null }),
     flowAgentStageContextPreview: async () => ({ ok: true, data: null }),
     flowAgentStageRework: async () => ({ ok: true, data: null }),
+    flowAgentStageReworkPreview: async () => ({ ok: true, data: null }),
     flowDefinitionPublish: async () => notImplementedInDemo('流程定义发布'),
     flowDefinitionList: async () => ({ ok: true, data: { projectId: '', definitions: [] } }),
     flowDefinitionGet: async () => ({ ok: true, data: { projectId: '', definition: null } }),

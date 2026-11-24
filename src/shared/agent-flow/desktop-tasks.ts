@@ -15,7 +15,14 @@ export const FlowAgentRunSchema = FlowAgentQuerySchema.extend({
   action: z.enum(['start', 'continue', 'reconcile', 'restore']),
   eventId: id.optional(),
   expectedTaskId: id.optional(),
-  expectedWaitRevision: z.number().int().nonnegative().optional()
+  expectedWaitRevision: z.number().int().nonnegative().optional(),
+  /**
+   * P0-2/P0-3：人工继续的来源证据。只有可信入口能填：
+   * - 'gui'：渲染器里人亲自点了继续；
+   * - 'desktop-confirm'：外部调用已在 main 经 desktop.ask 由人确认。
+   * 缺省表示没有人工确认证据——人工等待的继续必须被拒，不能默认当作"人已采用"。
+   */
+  humanConfirmed: z.enum(['gui', 'desktop-confirm']).optional()
 })
   .strict()
   .superRefine((input, context) => {
@@ -36,6 +43,11 @@ export interface FlowAgentView {
   taskId: string
   state: 'ready' | 'running' | 'waiting' | 'blocked' | 'completed' | 'failed' | 'cancelled'
   waitKind: 'human' | 'reconcile' | null
+  /**
+   * A3：等待的真实原因。只有 'human' 代表确实在等人处理；
+   * 其余（在途子任务、待审核、受阻、已暂停）都不是人工待办，不得计入收件箱。
+   */
+  waitReason?: 'human' | 'active-child' | 'pending-review' | 'blocked' | 'paused'
   waitRevision: number
   decisions: number
   tools: number

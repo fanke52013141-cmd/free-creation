@@ -87,6 +87,36 @@ export interface CoordinatorPort {
     stageKey: string,
     includeBody?: boolean
   ): StageContextPreview | null
+  /** C 组：预览阶段返工影响（只读，固定顺序模式）；不修改任何运行事实。 */
+  previewStageRework?(
+    input: { projectId: string; nodeId: string },
+    stageKey: string
+  ): FlowStageReworkImpact | null
+}
+/** C 组：返工/摒弃影响预览与确认所需的只读事实。 */
+export interface FlowStageReworkImpact {
+  stageKey: string
+  /** 1 起的阶段序号，与画布上的阶段编号一致。 */
+  stageIndex: number
+  round: number
+  nextRound: number
+  maxRounds: number
+  /** 将被重跑的阶段（该阶段及下游）。 */
+  willRerunStages: Array<{ stageKey: string; nodeId: string }>
+  /** 将被标为过期（stale）并移入历史的既有交付。 */
+  staleDeliveries: Array<{
+    stageKey: string
+    nodeId: string
+    acceptedAt: number
+    outputCount: number
+  }>
+  /** 不受影响、继续保留的交付数量。 */
+  keptDeliveries: number
+  /** 受影响范围内尚未完成的子任务数量（会一并作废）。 */
+  activeChildCount: number
+  /** 当前能否执行返工；false 时 blockReason 给出稳定原因码。 */
+  canRework: boolean
+  blockedReason?: string
 }
 export interface StageContextPreview {
   stageKey: string

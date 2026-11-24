@@ -1395,7 +1395,7 @@ describe('production durable command ledger', () => {
         host.run({
           ...start,
           requestId: 'stale-continuation',
-          action: 'continue',
+          action: 'continue', humanConfirmed: 'gui' as const,
           expectedTaskId: waiting.task.taskId,
           expectedWaitRevision: waiting.task.waitRevision,
           eventId: 'old-confirmation'
@@ -1734,7 +1734,7 @@ describe('production durable command ledger', () => {
         eventId: 'late-response',
         traceId: 'trace',
         spanId: 'span',
-        action: 'continue',
+        action: 'continue', humanConfirmed: 'gui' as const,
         expectedTaskId: 'initial',
         expectedWaitRevision: 1
       })
@@ -1875,7 +1875,7 @@ describe('production durable command ledger', () => {
     const result = await host.run({
       ...input,
       requestId: 'continue-run',
-      action: 'continue',
+      action: 'continue', humanConfirmed: 'gui' as const,
       expectedTaskId: waiting.task.taskId,
       expectedWaitRevision: waiting.task.waitRevision,
       eventId: 'continue-event'

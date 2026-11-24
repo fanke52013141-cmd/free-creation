@@ -145,7 +145,8 @@
   display: flex;
   align-items: center;
   padding: 0 16px;
-  border-bottom: 1px solid var(--line);
+  /* 2026-11-24 用户裁决：顶栏纯黑，没有分隔白线（此前 1px var(--line) 在深色主题下像一条白杠）。 */
+  border-bottom: 0;
   /* 与窗口右上角标题栏覆盖钮同色（#0d0d0d），整条顶栏统一纯黑（用户裁决 2026-11-16）。 */
   background: var(--canvas-surface, #0d0d0d);
   color: var(--txt);

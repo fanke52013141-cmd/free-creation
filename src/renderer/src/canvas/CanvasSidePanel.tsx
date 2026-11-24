@@ -40,7 +40,13 @@ import { AppSelect } from '../components/AppSelect'
 import { AssetsPanel } from './side-panel/AssetsPanel'
 import { FlowOverviewPanel } from './FlowOverviewPanel'
 import { useDragToCanvas } from './drag-to-canvas'
-import { deriveHumanInbox, type HumanInboxItem } from '@shared/agent-flow/human-inbox'
+import {
+  deriveHumanInbox,
+  humanInboxFromOverview,
+  mergeHumanInbox,
+  type HumanInboxItem
+} from '@shared/agent-flow/human-inbox'
+import { deriveFlowSteps } from './flow-overview-model'
 
 import type { SearchDestination } from './SearchPalette'
 
@@ -978,7 +984,16 @@ function TasksPanel({
                 <div>
                   <strong>{item.title}</strong>
                   <small>
-                    {item.kind === 'human-task' ? '人工任务' : '协作 Agent'} · {item.reason}
+                    {item.kind === 'human-task'
+                      ? '人工任务'
+                      : item.kind === 'coordinator'
+                        ? '主控 Agent'
+                        : item.kind === 'review'
+                          ? '审核门控'
+                          : item.kind === 'input'
+                            ? '待补输入'
+                            : '协作 Agent'}{' '}
+                    · {item.reason}
                   </small>
                 </div>
               </div>
@@ -1053,17 +1068,73 @@ export function CanvasSidePanel({
         : [],
     [tab, editor]
   )
+  // A1：审核人工复审 / 返工确认等状态在运行事实里（不在画布 meta），
+  // 这里按主控节点轮询运行总览，把 needsYou 的步骤并入收件箱。
+  const [overviewInbox, setOverviewInbox] = useState<HumanInboxItem[]>([])
+  useEffect(() => {
+    if (tab !== 'tasks' || !editor || !projectId || !window.api.flowRunOverview) return
+    let disposed = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const coordinatorIds = (): string[] => {
+      const ids: string[] = []
+      for (const shape of editor.getCurrentPageShapes()) {
+        if (shape.type !== 'node-card') continue
+        const card = shape.props as { nodeType?: string; config?: string }
+        if (card.nodeType !== 'agent') continue
+        try {
+          const config = JSON.parse(card.config ?? '{}') as { role?: string }
+          if (config.role === 'coordinator') ids.push(shape.id)
+        } catch {
+          /* 配置损坏的节点跳过，不阻断收件箱 */
+        }
+      }
+      return ids
+    }
+    const tick = async (): Promise<void> => {
+      if (disposed) return
+      const items: HumanInboxItem[] = []
+      for (const nodeId of coordinatorIds().slice(0, 4)) {
+        try {
+          const reply = await window.api.flowRunOverview({ projectId, nodeId })
+          if (disposed) return
+          if (reply.ok && reply.data.overview)
+            items.push(
+              ...humanInboxFromOverview(reply.data.overview, deriveFlowSteps(reply.data.overview))
+            )
+        } catch {
+          /* 读取失败保持上一帧，不打断用户 */
+        }
+      }
+      if (disposed) return
+      setOverviewInbox(mergeHumanInbox([], items))
+      timer = setTimeout(() => void tick(), document.hidden ? 5000 : 2000)
+    }
+    void tick()
+    const onTaskUpdated = (): void => {
+      if (timer) clearTimeout(timer)
+      void tick()
+    }
+    window.addEventListener('canvas-agent-task-updated', onTaskUpdated)
+    return () => {
+      disposed = true
+      if (timer) clearTimeout(timer)
+      window.removeEventListener('canvas-agent-task-updated', onTaskUpdated)
+    }
+  }, [tab, editor, projectId])
   const humanInbox = useValue(
     'human inbox items',
     () =>
       tab === 'tasks' && editor
-        ? deriveHumanInbox(
-            editor
-              .getCurrentPageShapes()
-              .filter((shape): shape is NodeCardShape => shape.type === 'node-card')
+        ? mergeHumanInbox(
+            deriveHumanInbox(
+              editor
+                .getCurrentPageShapes()
+                .filter((shape): shape is NodeCardShape => shape.type === 'node-card')
+            ),
+            overviewInbox
           )
         : [],
-    [tab, editor]
+    [tab, editor, overviewInbox]
   )
 
   useEffect(() => {

@@ -204,4 +204,37 @@ describe('AF-05 stage delivery acceptance + local rework', () => {
     expect(() => f.coordinator.reworkStage({ projectId: 'p', nodeId: 'main' }, 'ghost'))
       .toThrow(/FLOW_STAGE_MISSING/)
   })
+
+  // C 组：返工前的影响预览必须只读，并如实列出将作废的交付与保留项。
+  it('C：影响预览列出将重跑阶段与将作废交付，且不修改任何运行事实', async () => {
+    const f = fixture()
+    await f.host.run(input)
+    const before = f.coordinator.store.latest('p', 'main')!
+    const impact = f.coordinator.previewStageRework({ projectId: 'p', nodeId: 'main' }, 'write')!
+    expect(impact.canRework).toBe(true)
+    expect(impact.stageIndex).toBe(2)
+    expect(impact.willRerunStages.map((s) => s.stageKey)).toEqual(['write'])
+    expect(impact.staleDeliveries.map((d) => d.stageKey)).toEqual(['write'])
+    expect(impact.staleDeliveries[0]!.outputCount).toBeGreaterThan(0)
+    expect(impact.keptDeliveries).toBe(1)
+    expect(impact.round).toBe(0)
+    expect(impact.nextRound).toBe(1)
+    // 只读：状态、轮次、交付记录都保持原样
+    const after = f.coordinator.store.latest('p', 'main')!
+    expect(after.state).toBe(before.state)
+    expect(after.reworkRound).toBe(before.reworkRound)
+    expect(after.stageDeliveries).toEqual(before.stageDeliveries)
+    expect(after.waitRevision).toBe(before.waitRevision)
+  })
+
+  it('C：预算耗尽时预览如实标记不可返工并给稳定原因', async () => {
+    const f = fixture()
+    await f.host.run(input)
+    const run = f.coordinator.store.latest('p', 'main')!
+    run.reworkRound = 10
+    f.coordinator.store.save(run)
+    const impact = f.coordinator.previewStageRework({ projectId: 'p', nodeId: 'main' }, 'write')!
+    expect(impact.canRework).toBe(false)
+    expect(impact.blockedReason).toBe('FLOW_REWORK_BUDGET_EXHAUSTED')
+  })
 })

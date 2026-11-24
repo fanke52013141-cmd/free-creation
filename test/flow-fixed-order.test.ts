@@ -405,7 +405,7 @@ describe('AF-01 fixed-order coordination', () => {
     const resumed = await f.host.run({
       ...input,
       nodeId: 'second',
-      action: 'continue',
+      action: 'continue', humanConfirmed: 'gui' as const,
       requestId: 'human-adopt',
       eventId: 'human-adopt',
       expectedTaskId: child.taskId,
@@ -414,7 +414,7 @@ describe('AF-01 fixed-order coordination', () => {
     await f.publish('second', resumed)
     const done = await f.host.run({
       ...input,
-      action: 'continue',
+      action: 'continue', humanConfirmed: 'gui' as const,
       requestId: 'main-resume',
       eventId: 'main-resume',
       expectedTaskId: waiting.task.taskId,
@@ -422,6 +422,28 @@ describe('AF-01 fixed-order coordination', () => {
     })
     expect(done.task.state).toBe('completed')
     expect(f.count().coordinatorModelCalls).toBe(0)
+  })
+
+  // P0-3：人工等待不能靠"没有确认证据的 continue"伪造出"人已采用"。
+  it('P0-3：人工等待缺少人工确认证据时 continue 被拒，且不改变任何事实', async () => {
+    const f = fixture({ requireHumanDecision: true })
+    const waiting = await f.host.run(input)
+    const child = waiting.task.children!.find((c) => c.nodeId === 'second')!
+    const childView = f.host.inspect({ projectId: 'p', nodeId: 'second' })!
+    const executionsBefore = f.count().executions
+    await expect(
+      f.host.run({
+        ...input,
+        nodeId: 'second',
+        action: 'continue',
+        requestId: 'forged-continue',
+        eventId: 'forged-continue',
+        expectedTaskId: child.taskId,
+        expectedWaitRevision: childView.waitRevision
+      })
+    ).rejects.toMatchObject({ code: 'HUMAN_DECISION_REQUIRED' })
+    expect(f.host.inspect({ projectId: 'p', nodeId: 'second' })?.state).toBe('waiting')
+    expect(f.count().executions).toBe(executionsBefore)
   })
 
   it('发布中断后 reconcile/restore 不触发模型、不重复执行', async () => {

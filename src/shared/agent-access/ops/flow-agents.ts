@@ -275,6 +275,14 @@ export const FLOW_AGENTS_OPERATIONS = {
       .extend({ nodeId, stageKey: flowId, includeBody: z.boolean().optional() })
       .strict()
   },
+  // C 组：返工影响预览（只读）。列出将作废的交付、将重跑的阶段与当前是否可返工，
+// 供 GUI 确认弹窗与外部预检使用；不修改任何运行事实。
+  'flowStage.reworkPreview': {
+    effect: 'read',
+    description:
+      '预览固定顺序主控某阶段局部返工的影响：将重跑的阶段（该阶段及下游）、将被标为过期并移入历史的既有交付、保留的交付数量、受影响未完成子任务数与当前是否可返工；只读，不修改运行事实',
+    input: project.extend({ nodeId, stageKey: flowId }).strict()
+  },
   // AF-05：局部返工（写）。从指定阶段起重跑，仅影响该阶段及下游；上游不重跑；
   // 旧交付保留为历史，下游标过期；有界轮次；在途命令未结算时拒绝。与 GUI 同一宿主方法。
   'flowStage.rework': {
@@ -587,6 +595,41 @@ export const FLOW_AGENTS_OUTPUTS = {
             })
             .strict(),
           blocking: z.boolean()
+        })
+        .strict()
+        .nullable()
+    })
+    .strict(),
+  'flowStage.reworkPreview': z
+    .object({
+      projectId: identifier,
+      nodeId,
+      impact: z
+        .object({
+          stageKey: z.string(),
+          stageIndex: z.number().int().positive(),
+          round: z.number().int().nonnegative(),
+          nextRound: z.number().int().nonnegative(),
+          maxRounds: z.number().int().positive(),
+          willRerunStages: z
+            .array(z.object({ stageKey: z.string(), nodeId: z.string() }).strict())
+            .max(64),
+          staleDeliveries: z
+            .array(
+              z
+                .object({
+                  stageKey: z.string(),
+                  nodeId: z.string(),
+                  acceptedAt: z.number().int().nonnegative(),
+                  outputCount: z.number().int().nonnegative()
+                })
+                .strict()
+            )
+            .max(128),
+          keptDeliveries: z.number().int().nonnegative(),
+          activeChildCount: z.number().int().nonnegative(),
+          canRework: z.boolean(),
+          blockedReason: z.string().optional()
         })
         .strict()
         .nullable()

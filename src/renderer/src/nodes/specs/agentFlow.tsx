@@ -875,12 +875,58 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
             type="button"
             aria-label={`返工阶段 ${index + 1}`}
             onClick={() => {
-              void window.api
-                .flowAgentStageRework({ projectId, nodeId: shape.id, stageKey: stage.stageKey })
-                .then((reply) => {
+              void (async (): Promise<void> => {
+                try {
+                  // C 组：先取影响预览，人看清"会作废什么"再确认；取消则什么都不做。
+                  const preview = await window.api.flowAgentStageReworkPreview({
+                    projectId,
+                    nodeId: shape.id,
+                    stageKey: stage.stageKey
+                  })
+                  if (!preview.ok) {
+                    setError(`返工预检失败：${preview.error.code}`)
+                    return
+                  }
+                  const impact = preview.data
+                  if (!impact) {
+                    setError('当前主控不支持阶段返工')
+                    return
+                  }
+                  if (!impact.canRework) {
+                    setError(`现在不能返工：${impact.blockedReason ?? '原因未知'}`)
+                    return
+                  }
+                  const lines = [
+                    `将从第 ${impact.stageIndex} 阶段「${impact.stageKey}」重跑，共影响 ${impact.willRerunStages.length} 个阶段（含下游）。`,
+                    impact.staleDeliveries.length
+                      ? `将作废 ${impact.staleDeliveries.length} 份已交付成果并移入历史：${impact.staleDeliveries
+                          .map((item) => item.stageKey)
+                          .join('、')}`
+                      : '当前没有已交付成果会被作废。',
+                    impact.activeChildCount
+                      ? `另有 ${impact.activeChildCount} 个未完成子任务会被取消。`
+                      : '',
+                    `保留上游 ${impact.keptDeliveries} 份交付，不重跑。`,
+                    `这将是第 ${impact.nextRound}/${impact.maxRounds} 轮返工。`
+                  ].filter(Boolean)
+                  const confirmed = await useConfirmStore.getState().confirm({
+                    title: '确认从该阶段返工？',
+                    message: lines.join('\n'),
+                    confirmText: '确认返工',
+                    cancelText: '取消',
+                    danger: true
+                  })
+                  if (!confirmed) return
+                  const reply = await window.api.flowAgentStageRework({
+                    projectId,
+                    nodeId: shape.id,
+                    stageKey: stage.stageKey
+                  })
                   setError(reply.ok ? '' : `返工失败：${reply.error.code}`)
-                })
-                .catch(() => setError('返工不可用'))
+                } catch {
+                  setError('返工不可用')
+                }
+              })()
             }}
           >
             从此阶段返工

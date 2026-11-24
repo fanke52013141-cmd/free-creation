@@ -112,6 +112,8 @@
     "test:local-agent-access": "node scripts/test-local-agent-access.cjs",
     "verify:acceptance": "node scripts/verify-acceptance.cjs",
     "verify:acceptance:fast": "node scripts/verify-acceptance.cjs --fast",
+    "verify:daily": "node scripts/daily-gate.cjs",
+    "verify:daily:fast": "node scripts/daily-gate.cjs --fast",
     "acceptance:composite-desktop": "node scripts/acceptance/composite-desktop-acceptance.cjs",
     "acceptance:composite-gui": "node scripts/acceptance/composite-gui-acceptance.cjs",
     "acceptance:agent-flow-layout": "node scripts/acceptance/agent-flow-layout.cjs",

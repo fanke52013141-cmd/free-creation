@@ -287,6 +287,13 @@ const api = {
   }): Promise<
     IpcEnvelope<import('../shared/agent-flow/desktop-tasks').FlowAgentView | null>
   > => ipcRenderer.invoke(IPC.flowAgents.stageRework, input),
+  flowAgentStageReworkPreview: (input: {
+    projectId: string
+    nodeId: string
+    stageKey: string
+  }): Promise<
+    IpcEnvelope<import('../shared/agent-flow/coordination').FlowStageReworkImpact | null>
+  > => ipcRenderer.invoke(IPC.flowAgents.stageReworkPreview, input),
   flowDefinitionPublish: (input: {
     projectId: string
     definitionId: string

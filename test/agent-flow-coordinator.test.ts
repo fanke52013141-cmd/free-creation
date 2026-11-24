@@ -596,7 +596,7 @@ describe('C3.3 coordinator sequential handoff', () => {
     expect(f.count()).toEqual(count)
     const done = await f.host.run({
       ...input,
-      action: 'continue',
+      action: 'continue', humanConfirmed: 'gui' as const,
       requestId: 'continue-restored',
       eventId: 'continue-restored',
       expectedTaskId: run.taskId,
@@ -822,7 +822,7 @@ describe('C3.3 coordinator sequential handoff', () => {
     await f.host.run({
       ...input,
       nodeId: 'first',
-      action: 'continue',
+      action: 'continue', humanConfirmed: 'gui' as const,
       requestId: 'first-confirm',
       expectedTaskId: firstWait.taskId,
       expectedWaitRevision: firstWait.waitRevision,
@@ -830,7 +830,7 @@ describe('C3.3 coordinator sequential handoff', () => {
     })
     root = await f.host.run({
       ...input,
-      action: 'continue',
+      action: 'continue', humanConfirmed: 'gui' as const,
       requestId: 'root-resume',
       expectedTaskId: root.task.taskId,
       expectedWaitRevision: root.task.waitRevision,
@@ -843,7 +843,7 @@ describe('C3.3 coordinator sequential handoff', () => {
     const before = f.count().executions
     const waitingAgain = await f.host.run({
       ...input,
-      action: 'continue',
+      action: 'continue', humanConfirmed: 'gui' as const,
       requestId: 'still-wait',
       expectedTaskId: root.task.taskId,
       expectedWaitRevision: root.task.waitRevision,
@@ -861,7 +861,7 @@ describe('C3.3 coordinator sequential handoff', () => {
     await f.host.run({
       ...input,
       nodeId: 'first',
-      action: 'continue',
+      action: 'continue', humanConfirmed: 'gui' as const,
       requestId: 'explicit-rework-confirm',
       expectedTaskId: revised.task.taskId,
       expectedWaitRevision: revised.task.waitRevision,
@@ -869,7 +869,7 @@ describe('C3.3 coordinator sequential handoff', () => {
     })
     const done = await f.host.run({
       ...input,
-      action: 'continue',
+      action: 'continue', humanConfirmed: 'gui' as const,
       requestId: 'finish-reviewed',
       expectedTaskId: root.task.taskId,
       expectedWaitRevision: waitingAgain.task.waitRevision,
@@ -885,7 +885,7 @@ describe('C3.3 coordinator sequential handoff', () => {
     await expect(
       f.host.run({
         ...input,
-        action: 'continue',
+        action: 'continue', humanConfirmed: 'gui' as const,
         requestId: 'bad-edit',
         eventId: 'bad-edit',
         expectedTaskId: waiting.task.taskId,
@@ -951,7 +951,7 @@ describe('C3.3 coordinator sequential handoff', () => {
     const resumed = await f.host.run({
       ...input,
       nodeId: child.nodeId,
-      action: 'continue',
+      action: 'continue', humanConfirmed: 'gui' as const,
       eventId: 'human-child',
       expectedTaskId: child.taskId,
       expectedWaitRevision: waiting.waitRevision
@@ -959,7 +959,7 @@ describe('C3.3 coordinator sequential handoff', () => {
     await f.publish(child.nodeId, resumed)
     const done = await f.host.run({
       ...input,
-      action: 'continue',
+      action: 'continue', humanConfirmed: 'gui' as const,
       eventId: 'human-main',
       expectedTaskId: first.task.taskId,
       expectedWaitRevision: first.task.waitRevision
@@ -1230,7 +1230,7 @@ describe('C3.3 coordinator sequential handoff', () => {
     pause = () => {}
     const done = await f.host.run({
       ...input,
-      action: 'continue',
+      action: 'continue', humanConfirmed: 'gui' as const,
       eventId: 'pause-resume',
       expectedTaskId: waiting.task.taskId,
       expectedWaitRevision: waiting.task.waitRevision
@@ -1503,7 +1503,7 @@ describe('bounded parallel coordination', () => {
     const completed = await f.host.run({
       ...input,
       nodeId: 'first',
-      action: 'continue',
+      action: 'continue', humanConfirmed: 'gui' as const,
       requestId: 'shared-queue-child-continue',
       eventId: 'shared-queue-child-continue',
       expectedTaskId: child.taskId,
@@ -1512,7 +1512,7 @@ describe('bounded parallel coordination', () => {
     expect(completed.task.state).toBe('completed')
     const resumed = await f.host.run({
       ...input,
-      action: 'continue',
+      action: 'continue', humanConfirmed: 'gui' as const,
       requestId: 'shared-queue-root-continue',
       eventId: 'shared-queue-root-continue',
       expectedTaskId: waiting.task.taskId,
@@ -1606,7 +1606,7 @@ describe('bounded parallel coordination', () => {
       const childDone = await f.host.run({
         ...input,
         nodeId: 'first',
-        action: 'continue',
+        action: 'continue', humanConfirmed: 'gui' as const,
         requestId: `per03-wave-${wave}-child-continue`,
         eventId: `per03-wave-${wave}-child-continue`,
         expectedTaskId: child.taskId,
@@ -1616,7 +1616,7 @@ describe('bounded parallel coordination', () => {
 
       const completed = await f.host.run({
         ...input,
-        action: 'continue',
+        action: 'continue', humanConfirmed: 'gui' as const,
         requestId: `per03-wave-${wave}-root-continue`,
         eventId: `per03-wave-${wave}-root-continue`,
         expectedTaskId: waiting.task.taskId,
@@ -1768,7 +1768,7 @@ describe('bounded parallel coordination', () => {
       await f.host.run({
         ...input,
         nodeId: 'second',
-        action: 'continue',
+        action: 'continue', humanConfirmed: 'gui' as const,
         requestId: 'second-continue',
         eventId: 'second-continue',
         expectedTaskId: child.taskId,
@@ -1777,7 +1777,7 @@ describe('bounded parallel coordination', () => {
       if (reviewWait) vi.spyOn(CoordinatorReviews.prototype, 'step').mockResolvedValue('wait')
       const resumed = await f.host.run({
         ...input,
-        action: 'continue',
+        action: 'continue', humanConfirmed: 'gui' as const,
         requestId: 'main-continue',
         eventId: 'main-continue',
         expectedTaskId: waiting.task.taskId,
@@ -1838,7 +1838,7 @@ it('restores both completed parallel projections without running another tool or
   expect(f.count()).toEqual(before)
   const completed = await f.host.run({
     ...input,
-    action: 'continue',
+    action: 'continue', humanConfirmed: 'gui' as const,
     requestId: 'join-restored',
     eventId: 'join-restored',
     expectedTaskId: run.taskId,

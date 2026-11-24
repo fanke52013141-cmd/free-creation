@@ -1573,3 +1573,51 @@ describe('C3 single-step SDK adapter', () => {
     expect(fixture.requests).toHaveLength(0)
   })
 })
+
+describe('P0-4 人工采用绑定到等待修订', () => {
+  function resumeOf(
+    snap: ReturnType<typeof snapshot>,
+    waitRevision: number,
+    eventId: string,
+    accepted: boolean
+  ) {
+    return {
+      taskId: snap.taskId,
+      semanticRevision: snap.semanticRevision,
+      waitRevision,
+      eventId,
+      kind: 'human' as const,
+      accepted
+    }
+  }
+
+  it('旧的采纳不能冒充后续新等待的批准', () => {
+    const f = fixture()
+    const snap = snapshot('collaborative')
+    f.store.create(snap, [])
+    const thread = agentThread(snap)
+
+    const first = f.store.wait(thread, 'human')
+    f.store.response(thread, resumeOf(snap, first, 'accept-1', true))
+    expect(f.store.humanAccepted(thread)).toBe(true)
+
+    // 同一条任务再次进入人工等待：上一次采纳已经消费，不再代表当前交付。
+    const second = f.store.wait(thread, 'human')
+    expect(second).toBeGreaterThan(first)
+    expect(f.store.humanAccepted(thread)).toBe(false)
+
+    // 只接受新等待的显式采纳才恢复。
+    f.store.response(thread, resumeOf(snap, second, 'accept-2', true))
+    expect(f.store.humanAccepted(thread)).toBe(true)
+  })
+
+  it('拒绝/非人工续接不计入人工采用', () => {
+    const f = fixture()
+    const snap = snapshot('collaborative')
+    f.store.create(snap, [])
+    const thread = agentThread(snap)
+    const revision = f.store.wait(thread, 'human')
+    f.store.response(thread, resumeOf(snap, revision, 'reject-1', false))
+    expect(f.store.humanAccepted(thread)).toBe(false)
+  })
+})
