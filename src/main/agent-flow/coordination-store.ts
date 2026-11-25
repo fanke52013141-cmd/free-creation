@@ -338,9 +338,7 @@ export class CoordinationStore {
       paused: run.paused,
       ...(run.code ? { code: run.code } : {}),
       ...(run.state === 'waiting' && run.code === 'FLOW_CONTEXT_OVER_BUDGET' &&
-        run.contextWaitStageKey && !run.config.graph?.nodes.some(
-          (node) => node.nodeId === run.contextWaitStageKey && node.kind === 'capability'
-        ) ? { contextMaterialWait: {
+        run.contextWaitStageKey ? { contextMaterialWait: {
           stageKey: run.contextWaitStageKey, waitRevision: run.waitRevision,
           ...(run.contextWaitLimitBytes ? { limitBytes: run.contextWaitLimitBytes } : {})
         } } : {}),

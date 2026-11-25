@@ -293,7 +293,7 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 **AF-10.3【现行】** 专业 Agent 需要更多内容时，返回**补充请求**，不能自己读取全图。
 
-**AF-10.4【目标】** 溢出策略可声明：`overflow: 'fail' | 'ask-human' | 'summarize'`（缺省 `fail`，与现行行为一致）。`summarize` 必须由一个显式的能力节点完成并留下交付，不能在宿主里隐式调用模型。
+**AF-10.4【现行·BL-40，2026-11-26】** 溢出策略可声明：`overflow: 'fail' | 'ask-human' | 'summarize'`（缺省 `fail`，与现行行为一致）。`summarize` 必须由一个显式的能力节点完成并留下交付，不能在宿主里隐式调用模型。`ask-human` 在等待人工补料后继续：Agent 阶段把精简材料作为阶段上下文；能力节点把材料作为文本输入注入（优先第一个 `text`/`markdown` 输入端口，否则取唯一的单值 `any` 端口），命令以可选 `contextMaterial {targetPortId,text}` 承载，渲染层替代该端口的固定资产引用；补料缺失或端口不可承载时显式失败，不静默忽略。
 
 ---
 

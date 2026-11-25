@@ -338,6 +338,8 @@ export class FlowCommandLedger {
       fail('FLOW_CONTRACT_MISMATCH', 'composite-version')
     this.assertReviewReady(project, command.targetNodeId, command.inputs)
     const incoming = project.edges.filter((edge) => edge.to.nodeId === command.targetNodeId)
+    // BL-40：人工补料端口由 contextMaterial 提供文本值，不再要求固定资产引用。
+    const materialPortId = command.contextMaterial?.targetPortId
     if (
       incoming.some((edge) => {
         const port = ports.find((item) => item.id === edge.to.portId)
@@ -349,7 +351,9 @@ export class FlowCommandLedger {
       }) ||
       incoming.some((edge) => !inputIds.includes(edge.to.portId)) ||
       incoming.some(
-        (edge) => !command.inputs.some((input) => input.targetPortId === edge.to.portId)
+        (edge) =>
+          edge.to.portId !== materialPortId &&
+          !command.inputs.some((input) => input.targetPortId === edge.to.portId)
       ) ||
       command.inputs.some((input) => {
         const edges = incoming.filter((edge) => edge.to.portId === input.targetPortId)
@@ -852,7 +856,11 @@ export class FlowCommandLedger {
         if (!record.inputFingerprint) fail('FLOW_SAVED_RUN_MISMATCH', 'saved-input')
         phase = 'saved-input'
         const resolved = this.resolveInputs(command, project)
-        const expectedSources = Object.fromEntries(
+        const material = command.contextMaterial
+        const expectedSources: Record<
+          string,
+          Array<{ nodeId: string; portId: string; assetId?: string; versionId?: string }>
+        > = Object.fromEntries(
           resolved.map((input) => [
             input.targetPortId,
             input.versions.map((version, index) => ({
@@ -863,20 +871,33 @@ export class FlowCommandLedger {
             }))
           ])
         )
+        // BL-40：人工补料端口在执行时注入的是 human:context 文本，不是固定资产。
+        if (material) {
+          expectedSources[material.targetPortId] = [{ nodeId: 'human:context', portId: 'out-text' }]
+        }
+        const fingerprintSources = [...resolved]
+          .sort((a, b) => a.targetPortId.localeCompare(b.targetPortId))
+          .flatMap((input) =>
+            input.versions.map((version, index) => ({
+              portId: input.targetPortId,
+              nodeId: input.sources![index].nodeId,
+              sourcePortId: input.sources![index].portId,
+              value: version.value
+            }))
+          )
+        if (material) {
+          fingerprintSources.push({
+            portId: material.targetPortId,
+            nodeId: 'human:context',
+            sourcePortId: 'out-text',
+            value: { kind: 'text', text: material.text }
+          })
+        }
         const fingerprint = computeInputFingerprint({
           contractVersion: command.contractVersion,
           config: shape.props.config,
           text: shape.props.text,
-          sources: [...resolved]
-            .sort((a, b) => a.targetPortId.localeCompare(b.targetPortId))
-            .flatMap((input) =>
-              input.versions.map((version, index) => ({
-                portId: input.targetPortId,
-                nodeId: input.sources![index].nodeId,
-                sourcePortId: input.sources![index].portId,
-                value: version.value
-              }))
-            )
+          sources: fingerprintSources
         })
         if (
           canonicalFlowJson(record.inputs) !== canonicalFlowJson(expectedSources) ||

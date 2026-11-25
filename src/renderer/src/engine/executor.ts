@@ -1193,25 +1193,42 @@ async function collectNodeInputs(
   injection?: IterationItemInjection
 ): Promise<ReturnType<typeof collectContractInputs>> {
   if (ctx.command) {
-    return collectContractInputs(node, [], new Map(), {
-      injections: ctx.command.grant.inputs.flatMap((input) =>
-        input.versions.map((version, index) => ({
-          portId: input.targetPortId,
-          packet: {
-            type: version.value.kind,
-            value: version.value,
-            ...(version.value.kind === 'json' ? { schema: { id: 'json.any', version: 1 } } : {}),
-            source: {
-              nodeId: input.sources?.[index]?.nodeId ?? version.ref.sourceNodeId,
-              portId: input.sources?.[index]?.portId ?? version.ref.sourcePortId,
-              runId: ctx.runId,
-              assetId: version.ref.assetId,
-              versionId: version.ref.versionId
-            },
-            createdAt: version.createdAt
+    const fixedInjections = ctx.command.grant.inputs.flatMap((input) =>
+      input.versions.map((version, index) => ({
+        portId: input.targetPortId,
+        packet: {
+          type: version.value.kind,
+          value: version.value,
+          ...(version.value.kind === 'json' ? { schema: { id: 'json.any', version: 1 } } : {}),
+          source: {
+            nodeId: input.sources?.[index]?.nodeId ?? version.ref.sourceNodeId,
+            portId: input.sources?.[index]?.portId ?? version.ref.sourcePortId,
+            runId: ctx.runId,
+            assetId: version.ref.assetId,
+            versionId: version.ref.versionId
+          },
+          createdAt: version.createdAt
+        }
+      }))
+    )
+    // BL-40：能力节点上下文超限时，人工补料的精简文本作为文本输入注入；
+    // 它替代该端口的固定资产值，来源标记为 human:context。
+    const material = ctx.command.grant.command.contextMaterial
+    const materialInjection = material
+      ? [
+          {
+            portId: material.targetPortId,
+            packet: {
+              type: 'text' as const,
+              value: { kind: 'text' as const, text: material.text },
+              source: { nodeId: 'human:context', portId: 'out-text', runId: ctx.runId },
+              createdAt: Date.now()
+            }
           }
-        }))
-      )
+        ]
+      : []
+    return collectContractInputs(node, [], new Map(), {
+      injections: [...fixedInjections, ...materialInjection]
     })
   }
   if (!injection) {

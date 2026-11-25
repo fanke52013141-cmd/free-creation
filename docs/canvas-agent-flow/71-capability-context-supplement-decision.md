@@ -1,6 +1,6 @@
 # BL-40 能力节点上下文补料：现状、缺口与实现选项
 
-日期：2026-11-26（Asia/Shanghai）。状态：**待拍板实现选项**；本文只记录结论与代码事实，未改业务代码。
+日期：2026-11-26（Asia/Shanghai）。状态：**已拍板并实现（选项 A，2026-11-26）**；本文保留决策记录与实现结果。
 
 ## 0. 一句话
 
@@ -38,6 +38,15 @@ Agent 阶段的「上下文超限 → 人工补料 → 继续」已端到端可�
 
 - 明确能力节点只支持 `fail` / `summarize`，`ask-human` 仅适用于 Agent 阶段；改规范与界面提示，BL-40 以「能力节点 ask-human 明确拒绝」收尾。
 - 成本最小、语义最诚实；但用户最初要的是「任何阶段都能补料」。
+
+## 2.1 实现结果（选项 A，2026-11-26）
+
+- `src/shared/agent-flow/commands.ts`：`NodeExecuteCommand` 增加可选 `contextMaterial {targetPortId, text≤64KiB}`。
+- `src/main/agent-flow/coordinator-host.ts`：`dispatchCapability` 接收 run 输入，补料时用替换清单重校验预算、映射文本端口、清等待键；resume 校验放开 capability（仅保留「非超预算等待」拒绝）。
+- `src/main/agent-flow/command-ledger.ts`：补料端口可以不带固定资产输入；提交核对把 `human:context` 计入 expectedSources 与 inputFingerprint。
+- `src/main/agent-flow/coordination-store.ts`：capability 阶段也投影 `contextMaterialWait`，总览表单可复用。
+- `src/renderer/src/engine/executor.ts`：执行时把补料作为 `human:context` 文本输入包注入目标端口。
+- 验收：`test-agent-flow-capability-graph.cjs` 扩展为「超限等待 → 总览提交材料 → 能力节点执行并带材料 → 协调器完成」，并核对运行快照里 `human:context` 清单；`test-agent-flow-overview-visual.cjs`（Agent 路径）回归通过；`test/agent-flow-context-material.test.ts` 4 项命令契约测试通过。
 
 ## 3. 推荐
 

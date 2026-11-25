@@ -37,6 +37,18 @@ const NodeExecuteCommandObjectSchema = z
       .optional(),
     /** AF-03：执行信封（阶段目标/方法/人工意见/返工反馈），公共内容执行器显式消费。 */
     envelope: ExecutionEnvelopeSchema.optional(),
+    /**
+     * BL-40 / AF-10.4：能力节点上下文超限时，人工补料的精简文本。
+     * 只由协调器在「等待补料 → 继续」时写入；渲染层把它作为该输入端口的文本值注入，
+     * 不再走固定资产引用。缺省不出现，旧命令与服务端行为不变。
+     */
+    contextMaterial: z
+      .object({
+        targetPortId: id,
+        text: z.string().trim().min(1).max(65536)
+      })
+      .strict()
+      .optional(),
     scopedHumanTask: z.literal(true).optional(),
     traceId: id,
     spanId: id

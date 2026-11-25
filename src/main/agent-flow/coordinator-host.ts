@@ -490,9 +490,7 @@ export class FlowCoordinatorHost {
       if (run.code === 'FLOW_CONTEXT_OVER_BUDGET' && !input.humanConfirmed)
         throw new AgentRuntimeError('HUMAN_CONFIRMATION_REQUIRED', 'resume')
       const waitingStage = run.contextWaitStageKey
-      if (input.contextMaterial && (run.code !== 'FLOW_CONTEXT_OVER_BUDGET' ||
-          !waitingStage || run.config.graph?.nodes.some((node) =>
-            node.nodeId === waitingStage && node.kind === 'capability')))
+      if (input.contextMaterial && (run.code !== 'FLOW_CONTEXT_OVER_BUDGET' || !waitingStage))
         throw new AgentRuntimeError('FLOW_CONTEXT_MATERIAL_UNEXPECTED', 'resume')
     } else run = this.bind(input)
     const fixed = run!
@@ -1263,7 +1261,7 @@ export class FlowCoordinatorHost {
       const { edgeState } = flowRouteState(
         graph, facts, delivered, loopIterations, isRequiredInput, executionSkipped
       )
-      return this.dispatchCapability(run, next, graph, facts, edgeState, loopIterations, signal)
+      return this.dispatchCapability(run, input, next, graph, facts, edgeState, loopIterations, signal)
     }
     // ②：human-task 图节点停等人工提交（C4 执行器），提交后续跑重新分派应用。
     if (next.kind === 'human-task') {
@@ -1376,6 +1374,7 @@ export class FlowCoordinatorHost {
    */
   private async dispatchCapability(
     run: CoordinationRun,
+    input: FlowAgentRun,
     next: FlowNode,
     graph: FlowGraph,
     facts: StageEntryFacts,
@@ -1414,10 +1413,18 @@ export class FlowCoordinatorHost {
       : null)
     const commandId = `graph:${hash([taskId, 'capability', resumeRequestId])}`
     // ⑥最小必要输入：声明 inputs 时编制 manifest，校验预算/必需缺项，并据选择器筛选上游源。
+    // BL-40：等待补料后的继续把人工精简材料作为文本输入注入；预算用替换清单重新校验。
+    const material =
+      run.contextWaitStageKey === next.nodeId && input.contextMaterial?.trim()
+        ? input.contextMaterial.trim()
+        : undefined
+    let materialPortId: string | undefined
     let contextManifest: ContextManifest | undefined
     let selectedSources: Set<string> | undefined
     if (next.inputs) {
-      contextManifest = buildContextManifest(next.nodeId, next.inputs, facts.deliveries)
+      contextManifest = buildContextManifest(next.nodeId, next.inputs, facts.deliveries, {
+        humanMaterial: material
+      })
       if (next.inputs.overflow === 'ask-human' && contextManifest.budget.exceeded)
         return this.waitForContextBudget(run, contextManifest)
       if (contextManifestBlocking(contextManifest))
@@ -1425,14 +1432,32 @@ export class FlowCoordinatorHost {
           contextManifest.budget.exceeded ? 'FLOW_CONTEXT_OVER_BUDGET' : 'FLOW_CONTEXT_REQUIRED_MISSING',
           'graph-context'
         )
-      selectedSources = new Set(contextManifest.entries.map((entry) => entry.sourceStageKey))
+      if (material) {
+        // 人工补料进入文本类端口；`any` 单值端口同样可承载文本（如 processor 的 in-value）。
+        const inputPortsOfNode = node.ports.filter((port) => port.dir === 'in')
+        materialPortId =
+          inputPortsOfNode.find((port) => port.type === 'text' || port.type === 'markdown')?.id ??
+          inputPortsOfNode.find((port) => port.type === 'any' && port.cardinality === 'one')?.id
+        if (!materialPortId)
+          throw new AgentRuntimeError('FLOW_CONTEXT_MATERIAL_UNSUPPORTED', 'graph-context')
+        // 其余输入仍按原始选择器选取，不被补料替换影响。
+        const selection = buildContextManifest(next.nodeId, next.inputs, facts.deliveries)
+        selectedSources = new Set(selection.entries.map((entry) => entry.sourceStageKey))
+      } else {
+        selectedSources = new Set(contextManifest.entries.map((entry) => entry.sourceStageKey))
+      }
+    }
+    if (material && run.contextWaitStageKey === next.nodeId) {
+      run.contextWaitStageKey = undefined
+      run.contextWaitLimitBytes = undefined
     }
     const inputPorts = node.ports.filter((port) => port.dir === 'in')
     const incoming = graph.edges.filter(
       (edge) =>
         edge.to.nodeId === next.nodeId &&
         edgeState(edge) === 'satisfied' &&
-        (!selectedSources || selectedSources.has(edge.from.nodeId))
+        (!selectedSources || selectedSources.has(edge.from.nodeId)) &&
+        (!materialPortId || edge.to.portId !== materialPortId)
     )
     const inputsByPort = new Map<string, AgentFlowAssetRef[]>()
     for (const edge of incoming) {
@@ -1512,6 +1537,9 @@ export class FlowCoordinatorHost {
         targetNodeId: next.nodeId,
         contractVersion: node.contractVersion,
         inputs,
+        ...(material && materialPortId
+          ? { contextMaterial: { targetPortId: materialPortId, text: material } }
+          : {}),
         expectedSemanticRevision: projectSemanticRevision(file),
         traceId: run.traceId,
         spanId: run.spanId

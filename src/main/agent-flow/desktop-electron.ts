@@ -2413,11 +2413,12 @@ if (
           const delay=()=>new Promise(r=>setTimeout(r,150));
           if(${JSON.stringify(real)}){const v=await window.api.models.validateAgentToolCalling({connectionId:'agent-test-connection',modelDefinitionId:'agent-test-model',allowCost:true});if(!v.ok||v.data.status!=='verified')throw new Error('REAL_MODEL_VALIDATION_FAILED:'+((v.ok?v.data.status:v.error.code)));}
           const graph={schemaVersion:1,graphId:'cg',name:'能力图',goal:'先分析再能力处理',nodes:[{nodeId:'shape:cg-first',title:'分析',participation:'autonomous',kind:'agent',goal:'执行处理并交付',completion:'交付处理结果'},{nodeId:'shape:cg-cap',title:'能力处理',participation:'autonomous',kind:'capability',capability:'text-pass@1',goal:'透传',completion:'交付'}],edges:[{from:{nodeId:'shape:cg-first',portId:'out-text'},to:{nodeId:'shape:cg-cap',portId:'in-value'},kind:'data'}],entry:'shape:cg-first',exits:['shape:cg-cap']};
+          graph.nodes[1].inputs={overflow:'ask-human',budgetBytes:1024,selectors:[{sourceStageKey:'shape:cg-first',path:'text',required:true}]};
           const specialist={schemaVersion:1,role:'specialist',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'node.execute',version:'1'}],allowedNodeIds:['shape:cg-p1'],maxSteps:8,relations:[]};
           const rootConfig={schemaVersion:1,role:'coordinator',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'agent.dispatch',version:'1'}],allowedNodeIds:['shape:cg-first','shape:cg-cap'],maxSteps:8,executionMode:'graph',graph,relations:[{relationId:'state',kind:'observes',sourceNodeId:'shape:cg-root',targetNodeId:'shape:cg-state'}]};
           const stateConfig={schemaVersion:1,initialState:'draft',states:['draft','working','waiting','completed'],transitions:[{from:'draft',event:'flow.started',to:'working'},...['agent.dispatched','agent.completed','human.wait','flow.paused','flow.completed'].map(event=>({from:'working',event,to:event==='flow.completed'?'completed':['human.wait','flow.paused'].includes(event)?'waiting':'working'})),{from:'waiting',event:'human.continue',to:'working'}],relations:[]};
           const nodes=[
-            {id:'shape:cg-source',nodeType:'text',title:'材料',text:'private-cg-material',x:50,y:80},
+            {id:'shape:cg-source',nodeType:'text',title:'材料',text:'private-cg-material '.repeat(200),x:50,y:80},
             {id:'shape:cg-first',nodeType:'agent',title:'分析 Agent',text:'执行 shape:cg-p1 两次并观察真实回执，用第二次 committed 回执的 outputRefs 完成，不等待人。',config:JSON.stringify(specialist),x:450,y:80},
             {id:'shape:cg-p1',nodeType:'processor',title:'分析处理',config:JSON.stringify({operation:'pass'}),x:450,y:650},
             {id:'shape:cg-cap',nodeType:'processor',title:'能力处理',config:JSON.stringify({operation:'pass'}),x:850,y:650},
@@ -2430,7 +2431,16 @@ if (
           await ensureCanvasSaved();await delay();
           const button=document.querySelector('[data-node-id="shape:cg-root"] .node-standard-primary');if(!button||button.disabled)throw new Error('CG_ROOT_BUTTON_UNAVAILABLE');button.click();
           const inspectRoot=()=>window.api.inspectFlowAgent({projectId,nodeId:'shape:cg-root'}).then(value);
-          let root;for(let i=0;i<1800;i++){root=await inspectRoot();if(root?.state==='completed')break;if(root&&['blocked','failed'].includes(root.state))throw new Error(root.code||'CG_ROOT_FAILED');await delay();}
+          let root;for(let i=0;i<600;i++){root=await inspectRoot();if(root?.state==='waiting'&&root.code==='FLOW_CONTEXT_OVER_BUDGET')break;if(root?.state==='completed')break;if(root&&['blocked','failed'].includes(root.state))throw new Error(root.code||'CG_ROOT_FAILED');await delay();}
+          if(!root||root.state!=='waiting'||root.code!=='FLOW_CONTEXT_OVER_BUDGET')throw new Error('CG_CONTEXT_WAIT_MISSING');
+          const panelBtn=document.querySelector('[aria-label="打开流程总览"]');if(!panelBtn)throw new Error('CG_PANEL_BUTTON_MISSING');panelBtn.click();
+          let field;for(let i=0;i<100&&!field;i++){field=document.querySelector('textarea[aria-label="替代上下文材料"]');if(!field)await delay();}
+          if(!field)throw new Error('CG_CONTEXT_FORM_MISSING');
+          const setFieldValue=(el,txt)=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,txt);el.dispatchEvent(new Event('input',{bubbles:true}));};
+          setFieldValue(field,'隔离补料');await delay();
+          const submitButton=[...document.querySelectorAll('.fo-now-cta')].find(button=>button.textContent.trim()==='提交材料并继续');
+          if(!submitButton||submitButton.disabled)throw new Error('CG_CONTEXT_SUBMIT_UNAVAILABLE');submitButton.click();
+          for(let i=0;i<1800;i++){root=await inspectRoot();if(root?.state==='completed')break;if(root&&['blocked','failed'].includes(root.state))throw new Error(root.code||'CG_ROOT_FAILED');await delay();}
           if(root?.state!=='completed')throw new Error('CG_ROOT_TIMEOUT');
           await ensureCanvasSaved();
           const capShape=editor.getShape('shape:cg-cap');
@@ -2439,8 +2449,23 @@ if (
           const capChild=root.children.find(c=>c.nodeId==='shape:cg-cap');
           if(!capChild||capChild.state!=='completed')throw new Error('CG_CAP_CHILD_NOT_COMPLETED');
           if(!capShape.meta.nodeResult)throw new Error('CG_CAP_NO_OUTPUT');
+          if(!String(capShape.meta.nodeResult||'').includes('隔离补料'))throw new Error('CG_CONTEXT_MATERIAL_NOT_INJECTED');
           return {status:'pass',projectId,rootTaskId:root.taskId,capRunStatus:capRun.status,capChildState:capChild.state,checks:['capability graph node executes via the shared node.execute ledger port','graph routing adopts the capability delivery as final output','coordinator completes in graph mode']};
         })()`)
+        {
+          const database = getDb()
+          const stored = database
+            .prepare('SELECT body_json FROM flow_coordination_runs WHERE project_id=?')
+            .get(projectId) as { body_json: string }
+          const fixture = JSON.parse(stored.body_json)
+          const material = fixture.children
+            .find((child: { nodeId: string }) => child.nodeId === 'shape:cg-cap')
+            ?.contextManifest?.entries?.find(
+              (entry: { sourceStageKey: string }) => entry.sourceStageKey === 'human:context'
+            )
+          if (!material || material.value !== '隔离补料')
+            throw new Error('CG_CONTEXT_MATERIAL_NOT_PERSISTED')
+        }
       } else if (humanTaskGraph) {
         report = await active.webContents.executeJavaScript(`(async()=>{
           const projectId=${JSON.stringify(projectId)};
