@@ -14483,6 +14483,18 @@
                       },
                       "requiresManualGate": {
                         "type": "boolean"
+                      },
+                      "onBranchFailure": {
+                        "type": "string",
+                        "enum": [
+                          "fail-fast",
+                          "continue"
+                        ]
+                      },
+                      "maxConcurrency": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 4
                       }
                     },
                     "additionalProperties": false
@@ -15186,6 +15198,18 @@
                           },
                           "requiresManualGate": {
                             "type": "boolean"
+                          },
+                          "onBranchFailure": {
+                            "type": "string",
+                            "enum": [
+                              "fail-fast",
+                              "continue"
+                            ]
+                          },
+                          "maxConcurrency": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 4
                           }
                         },
                         "additionalProperties": false
@@ -15844,6 +15868,18 @@
                   },
                   "requiresManualGate": {
                     "type": "boolean"
+                  },
+                  "onBranchFailure": {
+                    "type": "string",
+                    "enum": [
+                      "fail-fast",
+                      "continue"
+                    ]
+                  },
+                  "maxConcurrency": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4
                   }
                 },
                 "additionalProperties": false
@@ -16544,6 +16580,18 @@
                   },
                   "requiresManualGate": {
                     "type": "boolean"
+                  },
+                  "onBranchFailure": {
+                    "type": "string",
+                    "enum": [
+                      "fail-fast",
+                      "continue"
+                    ]
+                  },
+                  "maxConcurrency": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4
                   }
                 },
                 "additionalProperties": false
@@ -17255,6 +17303,18 @@
                   },
                   "requiresManualGate": {
                     "type": "boolean"
+                  },
+                  "onBranchFailure": {
+                    "type": "string",
+                    "enum": [
+                      "fail-fast",
+                      "continue"
+                    ]
+                  },
+                  "maxConcurrency": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4
                   }
                 },
                 "additionalProperties": false
@@ -17971,6 +18031,18 @@
                   },
                   "requiresManualGate": {
                     "type": "boolean"
+                  },
+                  "onBranchFailure": {
+                    "type": "string",
+                    "enum": [
+                      "fail-fast",
+                      "continue"
+                    ]
+                  },
+                  "maxConcurrency": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4
                   }
                 },
                 "additionalProperties": false
@@ -18942,6 +19014,18 @@
                   },
                   "requiresManualGate": {
                     "type": "boolean"
+                  },
+                  "onBranchFailure": {
+                    "type": "string",
+                    "enum": [
+                      "fail-fast",
+                      "continue"
+                    ]
+                  },
+                  "maxConcurrency": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4
                   }
                 },
                 "additionalProperties": false

@@ -22,6 +22,12 @@ import {
   planCompositeInputBindings,
   preflightCompositeRequiredInputs
 } from '@shared/composite/runtime'
+import {
+  compositeDownstreamOf,
+  compositePredecessors,
+  nextSchedulableNodes,
+  resolveCompositeExecutionPolicy
+} from '@shared/composite/policy'
 import type { ProviderSummary } from '@shared/types'
 import { NodeCardUtil, type NodeCardShape } from '../canvas/NodeCardShape'
 import { CarrierArrowUtil } from '../canvas/CarrierArrowUtil'
@@ -363,20 +369,22 @@ async function execute(
       }
     }
 
-    for (const nodeId of topologicalOrder(manifest)) {
-      if (request.signal?.cancelled) {
-        await finish('cancelled')
-        return { status: 'failed', reason: '节点流运行已取消', stepCount: successfulSteps }
-      }
+    const executionPolicy = resolveCompositeExecutionPolicy(manifest.executionPolicy)
+    const nodeOrder = topologicalOrder(manifest)
+    const nodeTypeById = new Map(manifest.graph.nodes.map((node) => [node.id, node.nodeType]))
+    const predecessors = compositePredecessors(manifest)
+    const settled = new Set<string>()
+    const blocked = new Set<string>()
+    type StepOutcome = 'ok' | 'skipped' | 'failed' | 'waiting'
+    const running = new Map<string, Promise<{ nodeId: string; outcome: StepOutcome; reason?: string }>>()
+    let stopScheduling = false
+    let waitingStepKey: string | null = null
+    let firstFailure: { nodeId: string; reason: string } | null = null
+
+    const runOneNode = async (nodeId: string): Promise<{ outcome: StepOutcome; reason?: string }> => {
       const shapeId = shapeByNode.get(nodeId)
-      if (!shapeId) continue
-      const nodeType = manifest.graph.nodes.find((node) => node.id === nodeId)?.nodeType ?? ''
-      // AF-07：续跑跳过已完成步骤（保护已付费任务，不自动重做）。
-      if (completedSteps.has(nodeId) &&
-          (nodeType !== 'human-task' || request.stepOutputs?.[nodeId]?.humanTask)) {
-        successfulSteps++
-        continue
-      }
+      if (!shapeId) return { outcome: 'ok' }
+      const nodeType = nodeTypeById.get(nodeId) ?? ''
       // AF-07：内部纯人工任务节点——停等人工提交（不再 fail-closed）。
       // 已满足的提交值消费为正式输出；否则开放人工等待并停在 waiting-input，
       // 由外部 humanTask.submit 满足后经 composite.run.resume 续跑。
@@ -384,12 +392,7 @@ async function execute(
         const value = request.humanSubmissions?.[nodeId]
         if (!value) {
           await report(() => window.api.composite.runWait({ runId, stepKey: nodeId, nodeType }))
-          return {
-            status: 'waiting',
-            waitingStepKey: nodeId,
-            reason: `节点流等待人工任务「${nodeId}」提交后续跑`,
-            stepCount: successfulSteps
-          }
+          return { outcome: 'waiting' }
         }
         runEditor.updateShape({
           id: shapeId,
@@ -446,25 +449,95 @@ async function execute(
         })
       )
       if (result.status === 'failed') {
-        failure = { code: 'NODE_FAILED', phase: 'step', nodeId }
-        await finish('failed', {
-          errorCode: failure.code,
-          errorMessage: result.reason ?? `内部节点失败：${nodeId}`,
-          failurePhase: 'step'
-        })
-        return {
-          status: 'failed',
-          reason: result.reason ?? `内部节点失败：${nodeId}`,
-          failure,
-          stepCount: successfulSteps
+        return { outcome: 'failed', reason: result.reason ?? `内部节点失败：${nodeId}` }
+      }
+      if (result.status === 'skipped') return { outcome: 'skipped', reason: result.reason }
+      return { outcome: 'ok' }
+    }
+
+    // AF-07：续跑跳过已完成步骤（保护已付费任务，不自动重做）。
+    for (const nodeId of nodeOrder) {
+      const nodeType = nodeTypeById.get(nodeId) ?? ''
+      if (
+        completedSteps.has(nodeId) &&
+        (nodeType !== 'human-task' || request.stepOutputs?.[nodeId]?.humanTask)
+      ) {
+        settled.add(nodeId)
+        successfulSteps += 1
+      }
+    }
+
+    // NF-8.4 / NF-8.5：按依赖就绪批次调度；maxConcurrency 只作用于互不依赖的节点，
+    // fail-fast 在首个失败后不再认领新节点（已在运行的节点自然结束），
+    // continue 只阻塞失败节点的传递下游，无关分支继续执行，整体仍以失败结束。
+    while (true) {
+      if (request.signal?.cancelled) {
+        await Promise.allSettled([...running.values()])
+        await finish('cancelled')
+        return { status: 'failed', reason: '节点流运行已取消', stepCount: successfulSteps }
+      }
+      if (!stopScheduling) {
+        const slots = executionPolicy.maxConcurrency - running.size
+        const batch =
+          slots > 0
+            ? nextSchedulableNodes(nodeOrder, predecessors, {
+                settled,
+                blocked,
+                running: new Set(running.keys()),
+                limit: slots
+              })
+            : []
+        for (const nodeId of batch) {
+          const task = runOneNode(nodeId)
+            .then((result) => ({ nodeId, ...result }))
+            .catch((error: unknown) => ({
+              nodeId,
+              outcome: 'failed' as StepOutcome,
+              reason: `节点流隔离执行异常：${error instanceof Error ? error.message : String(error)}`
+            }))
+          running.set(nodeId, task)
         }
       }
-      if (result.status === 'skipped') {
-        skippedNotes.push(
-          `内部节点「${nodeType || nodeId}」被跳过${result.reason ? `：${result.reason}` : '（缺少必要输入）'}`
-        )
+      if (running.size === 0) break
+      const done = await Promise.race([...running.values()])
+      running.delete(done.nodeId)
+      if (done.outcome === 'failed') {
+        firstFailure ??= { nodeId: done.nodeId, reason: done.reason ?? `内部节点失败：${done.nodeId}` }
+        failure = { code: 'NODE_FAILED', phase: 'step', nodeId: done.nodeId }
+        if (executionPolicy.onBranchFailure === 'fail-fast') stopScheduling = true
+        else {
+          for (const downstream of compositeDownstreamOf(done.nodeId, predecessors)) blocked.add(downstream)
+        }
+      } else if (done.outcome === 'waiting') {
+        waitingStepKey = done.nodeId
+        stopScheduling = true
+      } else {
+        settled.add(done.nodeId)
+        if (done.outcome === 'skipped') {
+          skippedNotes.push(
+            `内部节点「${nodeTypeById.get(done.nodeId) || done.nodeId}」被跳过${done.reason ? `：${done.reason}` : '（缺少必要输入）'}`
+          )
+        }
+        successfulSteps += 1
       }
-      successfulSteps += 1
+    }
+
+    if (firstFailure) {
+      failure = { code: 'NODE_FAILED', phase: 'step', nodeId: firstFailure.nodeId }
+      await finish('failed', {
+        errorCode: 'NODE_FAILED',
+        errorMessage: firstFailure.reason,
+        failurePhase: 'step'
+      })
+      return { status: 'failed', reason: firstFailure.reason, failure, stepCount: successfulSteps }
+    }
+    if (waitingStepKey) {
+      return {
+        status: 'waiting',
+        waitingStepKey,
+        reason: `节点流等待人工任务「${waitingStepKey}」提交后续跑`,
+        stepCount: successfulSteps
+      }
     }
 
     if (runtimeVersion === 1) {

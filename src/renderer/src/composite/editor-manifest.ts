@@ -146,7 +146,9 @@ export function buildCompositeManifestFromEditor(
     )
     .map((edge) => ({
       from: { nodeId: internalIdByShape.get(edge.from.nodeId)!, portId: edge.from.portId },
-      to: { nodeId: internalIdByShape.get(edge.to.nodeId)!, portId: edge.to.portId }
+      to: { nodeId: internalIdByShape.get(edge.to.nodeId)!, portId: edge.to.portId },
+      // NF-8.3a：扇入顺序必须持久化到 manifest 边的 order，不能因保存重排而丢失。
+      ...(edge.connectOrder !== undefined ? { order: edge.connectOrder } : {})
     }))
 
   const graph = { nodes: graphNodes, edges: graphEdges }

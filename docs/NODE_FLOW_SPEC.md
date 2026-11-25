@@ -206,13 +206,13 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 **NF-8.2【现行】广播并联**：一个公开输入的多个 `targets` 各自获得同一份值；分支之间互不读取彼此的中间状态。
 
 **NF-8.3【现行】扇入**：多条边进入 `many` 输入时，按**连线记录顺序**排列（文本 `\n$$$\n` 合并，JSON 和媒体组成有序数组）。
-- **NF-8.3a【目标】** 扇入顺序必须在 GUI 上**可见、可调整**，并持久化为边的 `order` 字段，不能隐式依赖创建时间。
+- **NF-8.3a【现行·BL-33，2026-11-25】** 扇入顺序必须在 GUI 上**可见、可调整**（节点流编辑页选中节点后的「扇入顺序」↑/↓），并持久化为边的 `order` 字段（画布 `connectOrder` → manifest `order`），不能隐式依赖创建时间。
 
-**NF-8.4【目标·F5】分支失败策略**：`executionPolicy.onBranchFailure: 'fail-fast' | 'continue'`，缺省为 `fail-fast`。
+**NF-8.4【现行·F5 / BL-33，2026-11-25】分支失败策略**：`executionPolicy.onBranchFailure: 'fail-fast' | 'continue'`，缺省为 `fail-fast`。
 - `fail-fast`：任一内部节点失败，就停止认领尚未开始的节点（已经在运行的节点自然结束，不强杀），整体返回 failed。
 - `continue`：其他独立分支继续执行。对于必填输出，只要来源分支失败就整体 failed；可选输出照常投影。
 
-**NF-8.5【目标】内部并发**：`executionPolicy.maxConcurrency`（1–4，缺省 1）。并发只发生在无依赖关系的就绪节点之间，结果聚合顺序与并发无关。
+**NF-8.5【现行·BL-33，2026-11-25】内部并发**：`executionPolicy.maxConcurrency`（1–4，缺省 1）。并发只发生在无依赖关系的就绪节点之间，结果聚合顺序与并发无关。
 
 ---
 
@@ -230,7 +230,7 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 - **NF-9.2a【目标】** 等待状态必须持久化 `waitingFor: { publicPortId | internalNodeId, reason }`；重开应用后可恢复，且不重复执行已完成的内部节点。
 
 **NF-9.3【现行】人工门**：内部节点包含人工发布或审核时，必须设置 `executionPolicy.requiresManualGate: true`，并在能力描述中展示。
-- **NF-9.3a【目标】** 发布校验**自动推断**这个标记：内部图里出现 `manual-publish`、`human-task`、`ai-review` 等节点时，标记必须为 true，否则校验失败。不能依赖作者手填。
+- **NF-9.3a【现行·BL-33，2026-11-25】** 发布校验**自动推断**这个标记：内部图里出现 `manual-publish`、`human-task`、`ai-review` 等节点时，标记必须为 true，否则校验失败。不能依赖作者手填。
 
 ---
 
@@ -331,11 +331,11 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 | 阶段 | 错误码 | 说明 |
 |---|---|---|
 | 发布/草稿 | `VERSION_IMMUTABLE` `VERSION_NOT_NEWER` `DRAFT_REVISION_CONFLICT` `DRAFT_NOT_FOUND` `PUBLISH_INVALID` | `errors.ts` |
-| 发布校验 | `MANIFEST_SCHEMA` `NODE_REF_MISSING` `PORT_MISSING` `PORT_TYPE_MISMATCH` `PORT_CARDINALITY` `DUPLICATE_EDGE` `CYCLE` `INPUT_NO_TARGET` `INPUT_TARGET_MISSING` `INPUT_DUPLICATE_TARGET` `REQUIRED_INPUT_UNBOUND` `OUTPUT_SOURCE_MISSING` `OUTPUT_TYPE_MISMATCH` `NO_BUSINESS_OUTPUT` `SCHEMA_UNREGISTERED` `DEPENDENCY_MISSING` `BUDGET_EXCEEDED` `SELF_RECURSION` `DEPENDENCY_CYCLE` | `validate.ts` |
+| 发布校验 | `MANIFEST_SCHEMA` `NODE_REF_MISSING` `PORT_MISSING` `PORT_TYPE_MISMATCH` `PORT_CARDINALITY` `DUPLICATE_EDGE` `CYCLE` `INPUT_NO_TARGET` `INPUT_TARGET_MISSING` `INPUT_DUPLICATE_TARGET` `REQUIRED_INPUT_UNBOUND` `OUTPUT_SOURCE_MISSING` `OUTPUT_TYPE_MISMATCH` `NO_BUSINESS_OUTPUT` `SCHEMA_UNREGISTERED` `DEPENDENCY_MISSING` `BUDGET_EXCEEDED` `SELF_RECURSION` `DEPENDENCY_CYCLE` `MANUAL_GATE_UNDECLARED` | `validate.ts` |
 | 运行·输入/输出 | `INPUT_REQUIRED` `INPUT_TYPE_UNSUPPORTED` `INPUT_VALUE_INVALID` `OUTPUT_SOURCE_MISSING` `REQUIRED_OUTPUT_MISSING` `OUTPUT_TYPE_MISMATCH` `OUTPUT_VALUE_INVALID` | `runtime.ts` |
 | 运行·预算 | `RECURSIVE_COMPOSITE` `DEPTH_EXCEEDED` `EXPANSION_BUDGET_EXCEEDED` | `runtime.ts` |
 | 引用 | `COMPOSITE_REF_NOT_RESOLVED` | 实例解析 |
-| 【目标】 | `CONFIRMATION_REQUIRED` `SCHEMA_INCOMPATIBLE` `MANUAL_GATE_UNDECLARED` | NF-12.1 / NF-6.6 / NF-9.3a |
+| 【目标】 | `CONFIRMATION_REQUIRED` `SCHEMA_INCOMPATIBLE` | NF-12.1 / NF-6.6 |
 
 ---
 
@@ -377,7 +377,7 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 | ~~媒体固定输入按类型匹配~~ ✅ BL-13 | NF-6.2a | — |
 | ~~JSON Schema 兼容校验~~ ✅ BL-13 | NF-6.6 | — |
 | ~~缺席/跳过三态~~ ✅ BL-14 | NF-9.1 | — |
-| 分支失败策略、内部并发 | NF-8.4 / NF-8.5 | P2 |
-| 人工门自动推断 | NF-9.3a | P2 |
+| ~~分支失败策略、内部并发~~ ✅ BL-33（`executionPolicy.onBranchFailure` / `maxConcurrency`，编辑页「运行策略」） | NF-8.4 / NF-8.5 | — |
+| ~~人工门自动推断~~ ✅ BL-33（`MANUAL_GATE_UNDECLARED`） | NF-9.3a | — |
 | semver major.minor | NF-11.2 | P2 |
 | 键约定统一 | NF-5.3 | P1 |

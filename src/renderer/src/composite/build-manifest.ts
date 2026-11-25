@@ -2,6 +2,7 @@ import type { CanvasEdge, CanvasNode, PortDecl } from '@shared/types'
 import { COMPOSITE_PORT_TYPES, hasCompositeManualGate } from '@shared/composite/manifest'
 import type {
   CompositeDependency,
+  CompositeExecutionPolicy,
   CompositeGraphEdge,
   CompositeGraphNode,
   CompositeInput,
@@ -24,6 +25,8 @@ export interface CompositeBuildOptions {
   edges: readonly CanvasEdge[]
   /** 选区内的画布节点 ID（CanvasNode.id）。 */
   selectedNodeIds: readonly string[]
+  /** NF-8.4 / NF-8.5：调用方（编辑页策略面板）可覆盖分支失败策略与内部并发。 */
+  executionPolicy?: Pick<CompositeExecutionPolicy, 'onBranchFailure' | 'maxConcurrency'>
 }
 
 export type CompositeBuildResult =
@@ -363,6 +366,8 @@ export function buildCompositeManifestFromGraph(
       maxExpandedNodes: 40,
       maxExpandedEdges: 120,
       waitForInput: true,
+      onBranchFailure: options.executionPolicy?.onBranchFailure ?? 'fail-fast',
+      maxConcurrency: options.executionPolicy?.maxConcurrency ?? 1,
       ...(requiresManualGate ? { requiresManualGate: true } : {})
     }
   }

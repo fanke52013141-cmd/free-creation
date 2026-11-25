@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "BL-24 参考音频时长越界文案改为可操作（标明少于下限/超过上限），校验行为不变",
+  "reason": "BL-33 节点流 executionPolicy 新增可选 onBranchFailure/maxConcurrency（加性，旧配置缺省不变），扇入 order 持久化",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",

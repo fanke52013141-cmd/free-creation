@@ -170,7 +170,15 @@ export const compositeExecutionPolicySchema = z
     /** 是否允许运行中暂停等待补输入。 */
     waitForInput: z.boolean().optional(),
     /** 内部节点如含人工发布/审核，必须在能力描述中标记。 */
-    requiresManualGate: z.boolean().optional()
+    requiresManualGate: z.boolean().optional(),
+    /**
+     * 分支失败策略（NF-8.4）：
+     * - fail-fast（缺省）：任一内部节点失败后不再认领新节点，已在运行的节点自然结束；
+     * - continue：无关分支继续执行；失败节点的下游不再调度，整体仍以失败结束。
+     */
+    onBranchFailure: z.enum(['fail-fast', 'continue']).optional(),
+    /** 内部并发（NF-8.5）：只发生在无依赖关系的就绪节点之间，1–4，缺省 1。 */
+    maxConcurrency: z.number().int().min(1).max(4).optional()
   })
   .strict()
 

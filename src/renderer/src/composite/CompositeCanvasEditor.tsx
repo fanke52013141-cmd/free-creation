@@ -179,6 +179,11 @@ export function CompositeCanvasEditor({
   // 节点右键：与主画布同一份节点操作菜单。
   const [nodeMenu, setNodeMenu] = useState<{ x: number; y: number; ids: TLShapeId[] } | null>(null)
   const [showVersions, setShowVersions] = useState(false)
+  /** NF-8.4 / NF-8.5 运行策略编辑面板；null 表示未打开（保存时沿用 base 里的策略）。 */
+  const [policyDraft, setPolicyDraft] = useState<{
+    onBranchFailure: 'fail-fast' | 'continue'
+    maxConcurrency: number
+  } | null>(null)
   // 单击只选中；契约面板由节点 info 按钮显式打开（与主画布 nodePanel store 一致）。
   const panelKind = useNodePanelStore((s) => s.kind)
   const panelShapeId = useNodePanelStore((s) => s.shapeId)
@@ -559,8 +564,21 @@ export function CompositeCanvasEditor({
     })
     const nextIssues = result.issues.map((item) => `${item.path}: ${item.message}`)
     setIssues(nextIssues)
+    const manifest: CompositeManifest = {
+      ...result.manifest,
+      version,
+      ...(policyDraft
+        ? {
+            executionPolicy: {
+              ...result.manifest.executionPolicy,
+              onBranchFailure: policyDraft.onBranchFailure,
+              maxConcurrency: policyDraft.maxConcurrency
+            }
+          }
+        : {})
+    }
     return {
-      manifest: { ...result.manifest, version },
+      manifest,
       issues: nextIssues
     }
   }
@@ -939,6 +957,23 @@ export function CompositeCanvasEditor({
         {/* 动作簇与历史弹层挂在 workspace 层：右侧节点面板开合会改变 stage 宽度，
             若锚定 stage，按钮会在 pointerdown→pointerup 之间位移导致点击落空。 */}
         <div className="nf-action-bar" role="group" aria-label="节点流编辑动作">
+          <button
+            type="button"
+            className="nf-btn ghost"
+            disabled={busy}
+            title="分支失败策略与内部并发（NF-8.4 / NF-8.5）"
+            onClick={() =>
+              setPolicyDraft(
+                (current) =>
+                  current ?? {
+                    onBranchFailure: base?.executionPolicy?.onBranchFailure ?? 'fail-fast',
+                    maxConcurrency: base?.executionPolicy?.maxConcurrency ?? 1
+                  }
+              )
+            }
+          >
+            <Icon name="settings" size={14} /> 运行策略
+          </button>
           {capability && (
             <button
               type="button"
@@ -985,6 +1020,50 @@ export function CompositeCanvasEditor({
             取消
           </button>
         </div>
+        {policyDraft && (
+          <div className="nf-policy-pop" role="dialog" aria-label="运行策略">
+            <header>
+              <strong>运行策略</strong>
+              <button type="button" className="nf-btn ghost" onClick={() => setPolicyDraft(null)}>
+                完成
+              </button>
+            </header>
+            <label>
+              <span>分支失败策略</span>
+              <select
+                value={policyDraft.onBranchFailure}
+                onChange={(event) => {
+                  setPolicyDraft({
+                    ...policyDraft,
+                    onBranchFailure: event.target.value as 'fail-fast' | 'continue'
+                  })
+                  setDirty(true)
+                }}
+              >
+                <option value="fail-fast">fail-fast：任一失败即停止认领新节点</option>
+                <option value="continue">continue：无关分支继续，失败分支下游不调度</option>
+              </select>
+            </label>
+            <label>
+              <span>内部并发</span>
+              <select
+                value={policyDraft.maxConcurrency}
+                onChange={(event) => {
+                  setPolicyDraft({ ...policyDraft, maxConcurrency: Number(event.target.value) })
+                  setDirty(true)
+                }}
+              >
+                {[1, 2, 3, 4].map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                    {value === 1 ? '（串行）' : ' 路'}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p>并发只作用于无依赖关系的就绪节点；结果聚合顺序与完成顺序无关。保存或另存后生效。</p>
+          </div>
+        )}
         {capability && showVersions && (
           <CompositeVersionSheet
             capability={capability}

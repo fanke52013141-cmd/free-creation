@@ -264,7 +264,7 @@ sources:
 | ✅ BL-30 | **spec-lint**：脚本已接入 `npm run verify`，定向检查覆盖元数据、权威声明、手写计数和过期告警。未登记验证日期的规范标记为 `unverified` 并告警。`run-AwaNQQ` 全量门禁通过 | 审查报告 §九 | S |
 | ⬜ BL-31 | NODE_UI_STANDARD v3 单一现行版 + 裁决历史归档；几何、线宽、尺寸的数值由测试读取规范文件比对 | U1 | L |
 | ⬜ BL-32 | 文档归档：仓外方案和报告移入 `source/docs/archive/`；Agent Flow 52 份文档按 AGENT_FLOW_SPEC §20 归档；弹窗规范移入仓库（U5）；L3 UI 条款回写到 PRESENTATION_SPEC（U4） | 审查报告 §九 | M |
-| 🟡 BL-33 | 扇入顺序已持久化并用于执行；直接和嵌套人工门已接入发布预检。待界面调序、分支失败策略与并发 | NF-8.3a / 8.4 / 8.5 / 9.3a | M |
+| ✅ BL-33 | **2026-11-25 完成**：扇入顺序在节点流编辑页可见可调（↑/↓）并持久化为 manifest 边 `order`（修复编辑保存丢失 `connectOrder` 的问题）；`executionPolicy.onBranchFailure`（fail-fast/continue）与 `maxConcurrency`（1–4）落地：schema、编辑页「运行策略」面板、隔离执行调度器（就绪批次、失败分支下游阻塞、无关分支继续、已在运行节点自然结束）；人工门自动推断 `MANUAL_GATE_UNDECLARED` 已有。定向测试 `composite-policy.test.ts` 6 项 + `composite-gui-acceptance` 全绿 | NF-8.3a / 8.4 / 8.5 / 9.3a | M |
 | ✅ BL-34 | 节点流版本号改为 major.minor；单次撤销和写盘失败回滚已通过 Electron 验收，版本契约 14 项定向测试通过；`run-AwaNQQ` 全量门禁通过 | NF-11.2 / 11.5 | M |
 | ✅ BL-35 | V10、V11、V12 已实现；固定顺序编译为线性路由图，共用就绪、Agent 分派和完成处理；`run-AwaNQQ` 全量门禁通过 | AGENT_FLOW_SPEC §2.2 / §7 | M |
 | ✅ BL-36 | 循环媒体归属与节点流执行前重试已通过 Electron 验收；生图、视频和循环自动重放保护已通过定向测试；`run-AwaNQQ` 全量门禁通过（其余异步路径见未覆盖边界） | N7 / N9 | S–M |
