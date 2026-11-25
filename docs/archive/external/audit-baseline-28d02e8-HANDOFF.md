@@ -1,0 +1,603 @@
+> **2026-11-22 最新交接入口**：[规范审查 → 两份新权威规范 → P0 修复](docs/HANDOFF_2026_11_22_SPEC_P0.md)。待办唯一来源见 [BACKLOG](docs/BACKLOG.md)；权威规范见 [AGENT_FLOW_SPEC](docs/AGENT_FLOW_SPEC.md)、[NODE_FLOW_SPEC](docs/NODE_FLOW_SPEC.md)。
+
+> 2026-10-24 本地开发最新交接：[已完成与后续工作](docs/HANDOFF_2026_10_24_LOCAL_DEVELOPMENT.md)。优先阅读该文；本文后续历史记录不能替代最新交付与验证状态。
+>
+> 2026-10-24 本地接续批次：[本地媒体运行中停止、诊断排障闭环与状态机独立执行](docs/LOCAL_MEDIA_STOP_STATE_MACHINE_2026_10_24.md)——P1-A 媒体一致性/运行中停止/保存重开（真实桌面验收）、P1-B 诊断 summary trace/span 配对与 recipe/tts 关联补齐、P2-A 状态机独立执行（人工事件驱动）已交付工作区，未提交/推送。
+
+> 2026-10-19 最新交接：[优化与验收收口](./docs/canvas-agent-flow/HANDOFF_2026_10_19_OPTIMIZATION_CLOSURE.md)。CFG-03、REL-02、REL-03 已收口；144 项主用例 113 通过、18 未执行、12 暂缓、1 阻塞；REL-08 仍未签字。最终快照 verify `run-ubMAld` 退出 0（192 文件/2377 通过/1 跳过），REL-02 最终包 M01/M03/M06/M08 全通过。以下 2026-10-16 及更早内容为历史记录。
+
+# 2026-10-16 R09 时长压力验收（44 包）
+
+2026-10-19 最新同步：[诊断与素材库交接备注](docs/canvas-agent-flow/HANDOFF_2026_10_19_DIAGNOSTICS_SYNC.md)。当前源码诊断修复及45–47包一并交付origin/main；同步前12文件118项通过，45包全量与46/47定向验证范围分别记录。下方“未提交”均为历史分包状态；实际同步以本次提交和远端SHA核对为准。
+
+2026-10-19 最新开发：[47 包素材资产包诊断](docs/canvas-agent-flow/47-library-package-transfer-diagnostics.md)。导入/导出有独立关联、唯一终态、取消与失败阶段；对话框异常返回明确失败，诊断排除路径/原异常。53项定向、Node类型、lint和日志门禁通过。未重复全量/长时压力；原有改动保留，未提交/推送。
+
+2026-10-19 最新开发：[46 包素材分类诊断](docs/canvas-agent-flow/46-library-category-diagnostics.md)。分类列表/保存的操作关联、唯一终态、受控失败阶段和脱敏已补；39项定向、Node类型、lint、日志门禁通过。未重复全量/90分钟压力；保留45包及原有工作区改动，未提交/推送。
+
+2026-10-19 开发接续：[45 包诊断包会话环境](docs/canvas-agent-flow/45-diagnostics-bundle-environment.md)。补齐 R10 导出版本上下文，分离历史事件会话与当前导出会话，保持未知环境显式降级和脱敏；4 项定向通过；完整源码门禁 run-E3y2A7 退出 0（193 文件/2393 通过/1 既有跳过，模型另 2、19 浏览器、生产构建及全部桌面路径通过）；真实关窗 7 场景、R09 四次 renderer 重开、10 对保存终态与脱敏通过。本包保留工作区已有源码诊断修复，未提交/推送。
+
+2026-10-16 最新交付与同步备注：[R09 本地可靠性交接](docs/canvas-agent-flow/HANDOFF_2026_10_16_R09_LOCAL_RELIABILITY_SYNC.md)。41–44 包代码、测试与文档一并交付到 origin/main；90 分钟目标已审计通过（3584 批/28672 轮，累计 6117.524 秒），恢复与三个新进程重开通过。最终完整 verify run-R6OhUK 退出 0：180 文件/2041 通过/1 既有跳过，模型另 2，17 浏览器/构建/26 桌面路径通过，保存诊断 10/10 与脱敏通过。原 7200 秒 runner 强制中断且临时数据未清理，不算两小时通过。真实磁盘/掉电/远端撤回及 R11 边界保持。下方未提交状态和下一步为历史记录，当前以此交接为准。
+
+当前交付 [43 包](docs/canvas-agent-flow/43-r09-project-flush-barrier.md)：图和工作台保存均在轮转前刷盘，失败阶段 `flush-tmp` 复用安全保存诊断；完整 `run-mEnwT0` 退出 0（2032 通过/1 既有跳过，模型另 2，17 浏览器/构建/26 桌面路径）。真实画布四次重开、10/10 保存诊断和脱敏通过，2579 个旧 QA 文件无变化。此前本地改动保留，未提交/推送；物理掉电、真实磁盘、多小时压力、远端撤回及 R11 仍为边界。
+
+2026-10-16 当前接续：[42 包 R09 本地可靠性](./docs/canvas-agent-flow/42-r09-local-reliability.md)。已修复有效备份被损坏主文件覆盖的保存路径，36 轮重复故障与真实画布重开已验收，完整 verify 退出 0（2027 通过/1 既有跳过，模型另 2，17 浏览器/构建/26 桌面路径）；未提交/推送，不标记整个 R09 完成。
+
+> 2026-10-16 当前交接入口：[Agent 线上同步 handoff](./docs/canvas-agent-flow/HANDOFF_2026_10_16_AGENT_ONLINE_SYNC.md)与[R01–R12 总台账](./docs/canvas-agent-flow/38-agent-completion-plan.md)。线上基线 `1bee5f7` 已同步本地，[验证闭环包](./docs/canvas-agent-flow/41-reproducible-verification.md)已完整验收，下一包继续 R09 本地可靠性；本轮改动尚未提交/推送。以下 C0/C1、未接执行、下一步等均为历史快照，不能作为当前 Agent 能力或待办依据。
+
+> 历史文档：本文已过期，仅供历史参考。当前状态以 AGENTS.md、NODE_CONTRACT_SPEC.md、docs/optimization-ledger.md 及源码为准（2026-10-05 标注）。
+
+> Agent Flow 当前唯一设计：[画布原生 Agent Flow](./docs/canvas-agent-flow/README.md)。上帝 Agent 构建 Flow，主 Agent 协调任务和最小输入，专业 Agent 执行；状态机和成果均落在画布节点。节点协同标准见 [节点协同规范](./docs/canvas-agent-flow/05-node-coordination-standard.md)。（2026-11-20 校准：C0–C4/R/AF 系列均已交付，"正式执行尚未接入"为历史状态；能力现状见 49 号文档 §2 支持矩阵。）历史记录中的已下线 Agent/CLI/MCP/headless 路径仅用于追溯，不是待恢复任务。
+
+> 2026-10-12 实施细化：[详细实施方案](./docs/canvas-agent-flow/06-implementation-plan.md)。区分人机协作/纯 AI Agent、纯人工和单次处理；内容统一称资产；明确 Skill/工具、版本化输入输出及 LangGraph + LangChain 分工。先验证 C0，再进入 C1–C4；最初为文档交付；最新模型探测、生产桥审阅与 C1 配置基础见 [交付台账](./docs/canvas-agent-flow/08-development-ledger.md) 和 [审阅记录](./docs/canvas-agent-flow/09-model-probe-and-production-bridge-review.md)。
+
+> 用户已确认并授权开发：[完整确认方案](./docs/canvas-agent-flow/00-approved-plan.md)。首版新增 Agent、状态机、AI 审核；画布承载完整协作与资产，审核按人工/AI/人机协作返工。发布备注与下一步 C0 证据统一记录在[开发台账](./docs/canvas-agent-flow/08-development-ledger.md)，不得以方案确认代替实现验收。
+
+# Canvas Studio 开发交接文档
+
+> 最后更新：2026-09-18
+>
+> 当前分支：`main`。接手前必须执行 `git fetch origin` 与 `git status -sb`，不得依据本文旧哈希判断推送状态。
+>
+> 当前功能与测试基线：以 `main` 最新提交为准；交接时先执行 `git fetch origin` 与 `git status -sb`，不得依据旧哈希判断推送状态。
+>
+> 远程仓库：https://github.com/fanke52013141-cmd/free-creation
+>
+> 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
+
+> **节点 UI 统一 + 媒体/视频缺陷修复 + 语音节点族（2026-09-18）**：按用户 10 张截图反馈完成 A/B/C 三组改动，完整交接见 [docs/HANDOFF_2026_09_18_UI_UNIFICATION_AND_NODE_BATCH.md](./docs/HANDOFF_2026_09_18_UI_UNIFICATION_AND_NODE_BATCH.md)，UI 决定的权威条款见 [docs/NODE_UI_SPEC.md](./docs/NODE_UI_SPEC.md) §16（v1.2）。
+> **①A 组 UI（9 条，全部覆盖旧条款）**：端口圆点改**实色**（删掉磨砂/内阴影/玻璃珠与 5px 色芯）、媒体预览**一律白底 + 可见边框**、运行按钮**常驻并在缺必填输入时置灰**（原因复用 `deriveNodeReadiness`，不引入第二套判断）、已连线无值的输入**整条不渲染**（「等待上游输出」消失）、媒体后续按钮**去图标**（这才是"文字不居中"的真因：8 个按钮塞进 340px 被图标挤出按钮外）、悬浮全貌**统一在上方**且去来源名、拆图**行/列/面积一行** + 序号圆点 `line-height:1` + 追溯线颜色**跟随被产出资产类型**、图片节点去掉格式徽标、命名统一 `修改→P图` / `图片生成视频→生视频` / `取帧·截取·提音→抽帧·截视频·截音频`。
+> **②B 组修复**：**B1 是真实功能阻断**——读用户机器上的 `project.json` 取证发现旧项目的视频节点是 `video`（操作节点）且 `props.mediaPath` 有值、但 `meta.nodeResult` 为空且 `nodeRun=null`（早期版本把产物直接写在 props 上），而 `projectVideoOutputs` 只认结果集合 → 下游抽帧/截视频/截音频/截人声**全部读不到源视频**；`latestResultMediaOutput` 增加**历史兼容回退**（无结果集合**且无运行记录**时才回退，保住"失败运行不暴露旧产物"的既有门禁）。B2 文本拼接 `---` → `$$$`（`\n$$$\n`，无空行），并**收敛掉渲染层 `contracts.ts` 里第二份 `inputText`**（它会让画布预览与执行器拼出不同文本）。B3 P 图产物命名 `（改）原图名` → `（改1）…`（媒体 `NodeValue` 新增可选 `name` 随连线传递）。B4/B5 **核实为原实现已正确**：颜色语义确实写进了 prompt，发给模型确实是两张图（原图 + canvas 绘制的标注图）。B6 cowart **未完成**（本会话无网络检索通道），替代做法是自查出并修复了「标注文字从未进入提示词」这一真实缺口。
+> **③C 组节点**：新增 **视频资产节点**（`video-asset` 从 `INTERNAL` 升级为可新建，与图片节点同构）、**文件节点**（`file`，Excel/Word/PDF/Markdown；二进制不假装能解析，文本类额外输出 `out-text`）、**音色设计节点**（`voice-design`，`trial_audio` 是 hex，已解码落盘为真实资产）；**配音节点改为模型驱动**（`resolvePorts` 按 `config.backend` 派生互斥结构，MiniMax 走完整异步链路 `t2a_async_v2 → 轮询 → files/retrieve → 下载落盘`）；**语音克隆**补齐 `text_validation`/`accuracy`/`clone_prompt` 等并新增 `out-json` 音色档案；豆包 `seed-audio-1.0` 接入（含字幕时间轴）。
+> **④名字收敛为单一来源**：删除 `CanvasEditor.tsx` 的 `paletteLabels` 覆盖表——它曾让同一节点有两个名字（左侧「克隆」/ 卡片「语音克隆」、左侧「数据」/ 卡片「JSON」等）。现在面板文字、tooltip、`aria-label`、新建卡片标题全部取 `spec.label`。
+> **验证基线**：`eslint --no-cache .` **0 error**（126 prettier warning 为既有存量）、`tsc` node/web 均通过、`vitest run` **72 文件 / 864 用例全通过**、`electron-vite build` 通过；另有 Playwright 打运行中 dev server 的真实渲染验收（A 组 25 项 + 新节点 13 项全通过，截图在本地 `artifacts/verify-2026-09-18/`，不提交）。新增回归门禁 `test/node-ui-decisions.test.ts`（16 项）把本轮"删掉某个覆盖"型决定固化。
+> **移交项**：①cowart 调研未完成，需用户提供链接/截图或可用检索通道；②箭头/矩形/涂画承载标注文字（提示词侧已就绪，缺行内输入，待用户确认）；③豆包 `references[]`/`audio_data`/`audio_url`/参考图片未实现（官方文档未给 `references[]` 条目结构，连线时明确报错而非静默忽略）；④MiniMax 复刻参考音频时长 10 秒–5 分钟未强制（无 ffprobe 探测）；⑤tldraw 会拉 `cdn.tldraw.com` 被应用自身 CSP 拦下，浏览器验收里产生 300+ 条控制台噪声，不影响功能但淹没真实错误；⑥本轮全部为本地/浏览器验证，**未做真实供应商端到端出片验收**。
+> **环境坑（本机实测）**：`npm run dev` 会崩在 `isPackaged`——DSH 的 `node` shim 注入了 `ELECTRON_RUN_AS_NODE=1`，需清掉该变量后用真实 node 直接跑 `electron-vite dev`；浏览器验收脚本要用 `localhost`/`[::1]`（dev server 只绑 IPv6）；`eslint --cache` 会掩盖未改动文件里的历史 error（本轮因此暴露并修掉了 `video.tsx` 条件 Hook 与 `CanvasEditor.tsx` `prefer-const` 两个旧 error），建议去掉缓存。
+
+> **生图节点多供应商接入 + F04 沙箱加固（2026-09-17，提交 `e069079`–`177576a`）**：①**F04**（`e069079`）：headless 代码节点 vm 隔离逃逸修复落地——args 以 JSON 文本传入沙箱内重建（构造器链全部留在沙箱 realm）、用户源码由宿主 vm.Script 预编译、`codeGeneration:{strings:false}` 封锁沙箱内动态编译；原复现脚本改写为回归断言（`test/f04-repro.test.ts`，2 用例：逃逸必须被拒、失败不得伪装成功结果）。②**生图多供应商**（`177576a`）：生图节点新增供应商级联选择（ToAPIS 默认优先 / ChatGPT 官方 / OpenRouter / 自定义 relay），四张供应商能力表驱动参数显隐与提交——ToAPIS：13 画幅比例串 + 1k/2k/4k + 参考图 ≤6（上传换 URL 的异步任务驱动）；OpenAI 官方：固定像素 size + quality 固定 low；OpenRouter：chat-completions modalities + 参考图内联；relay 维持旧行为零变化。质量按决策固定 low 不暴露 UI；分辨率跨供应商保留用户意图。`image.generate` 升 4.0.0，configSchema 修正幽灵键 providerId/modelId → modelKey 并新增 providerKey/resolution，`generated/agent-contracts.json` 已同步（幂等验证）。新增测试：能力表四分册 + 跨供应商归一化、三驱动 6 用例（mock fetch/AI SDK/media 仓库）、parseImageGen 新字段用例。**验证基线：`npm run verify` 全绿（eslint、tsc node/web、vitest 985 用例、electron-vite 构建）。** 设计与决策记录见 [docs/IMAGE_PROVIDER_GATEWAY_PLAN.md](./docs/IMAGE_PROVIDER_GATEWAY_PLAN.md)。**移交项：ToAPIS 真实 Key 冒烟验收——任务查询端点候选路径（`/images/tasks/`、`/tasks/`、`/images/generations/`）、上传端点 `/uploads/images`（multipart 字段 `file`）与 `quality` 字段接受度均属实现假设（实现环境无法访问 docs.toapis.com），假设清单与单点修正位置见方案 §12；若 API 拒绝 quality，将 toapis 能力表 `supportsQuality` 置 false 即可。**
+
+> **P1 缺陷修复第一轮（2026-09-15，提交 `b9a825a`–`bb2d175`）**：按审查报告 §7 优先级完成 4 项 P1 修复并已推送远端。①**F01**（`b9a825a`）：`saveProject` 写入事务引入阶段标记，回滚只撤销已落盘变更——此前 tmp 写入或轮转失败会把主文件上唯一有效数据移入 .tmp 后删除（project.json 整体丢失）；新增 `test/agent/save-transaction-rollback.test.ts`（vi.mock node:fs 局部故障注入，5 用例，已验证在未修复代码上必失败）。②**F02/F03**（`12f64dd`）：主进程 saveSync 透传 `expectedGraphVersion`、冲突映射 REVISION_CONFLICT；preload `saveProjectSync` 返回 IpcEnvelope（原丢弃返回值）；`CanvasEditor.beforeunload` 携带乐观锁，冲突时降级一次无锁保存（关窗最后视图胜出），其他失败 `console.error` 不再静默；新增 `test/project-save-sync.test.ts`（6 用例）。③**F11**（`bb2d175`）：`saveProvider` 未提交新密钥时从原始 ProviderRow 逐字节写回 `api_key_ref`——此前 decrypt→encrypt 往返在 safeStorage 暂不可用时把密文永久变成空值；新增 `test/providers-apikey-preserve.test.ts`（7 用例）。**验证基线：全量 vitest 968/968 通过（80 文件，0 失败——此前 18 个 ABI 失败在 `rm -rf node_modules/.vite .vitest` 清缓存后消失）、`tsc` node/web 均通过、eslint 改动文件 0 error 0 warning、electron-vite 生产构建通过。** 本轮环境排障：`.git/refs` 目录两度丢失（stash 被 SIGTERM 中断所致），恢复方式为 `mkdir -p .git/refs/{heads,remotes/origin,tags}` + `git fetch origin main --refetch` 补齐缺失对象；构建若被 `rmSync(out)` 沙箱拦截，先手动删除 `out/` 再跑 `electron-vite build`。
+
+> **代码同步与全库代码审查（2026-09-15，基线 `555a77e`）**：本轮为**只读审查，未修复业务代码**。①同步：本地 104 个提交已推送，服务器 main 与本地 HEAD 均为 `555a77e`；**判断推送状态以 `git ls-remote` 为准**（本机 origin/main 跟踪缓存可能滞留旧值显示 ahead 104）。②审查：确认 11 项问题（P1×8、P2×3），最关键为保存早期失败回滚删有效文件、关窗保存绕过乐观锁覆盖外部修改、同步保存失败信封被 preload 丢弃、headless 代码节点可越过 node:vm 隔离、桌面与 headless 的配置/输出/JSON 往返语义分裂、循环取消后部分结果被 resume 错误复用；完整证据与 7 步修复拆分见 [docs/HANDOFF_2026_09_15_CODE_REVIEW.md](./docs/HANDOFF_2026_09_15_CODE_REVIEW.md)。③验证：typecheck 通过、eslint 0 error/129 prettier warning、生产构建重试通过；全量测试低并发跑出 **950 项 / 932 过 / 18 失败，18 项失败均因 better-sqlite3 ABI（NODE_MODULE_VERSION 140 vs 127）不匹配，不代表业务缺陷**，须修复测试环境 ABI 后复跑。审查材料在本地未跟踪目录 `outputs/code-review-2026-09-15/`（不提交）。**下一轮：按 F01–F08 优先级修复并先写复现测试。**
+
+> **全节点审查启动 + 前 5 节点审查修复（2026-09-12）**：按 [docs/NODE_FULL_AUDIT_TEST_PLAN_2026_09_12.md](./docs/NODE_FULL_AUDIT_TEST_PLAN_2026_09_12.md) 的四通道方案（代码契约 / 浏览器呈现 / 桌面真实运行 / 联合 E2E）启动 23 节点全量审查，本轮完成 **文本、图片、裁剪、拆图、P图** 前 5 个节点的"审查→报告→修复→验证"闭环，报告见 [docs/NODE_FULL_AUDIT_2026_09_12.md](./docs/NODE_FULL_AUDIT_2026_09_12.md）。**共修复 12 项缺陷（P0×1、P1×6、P2×5），全部同日闭环**：①P0-画布全局：`DataEdgeLayer` window 捕获阶段拦截 pointerdown，连线端点恰覆盖端口圆心，导致**有连线的输出端口永远无法再拖出新连线**（所有"一输出扇出多输入"工作流被阻断），修复为对 `.node-card-wrap` 内按下放行（`DataEdgeLayer.tsx`）；②CSS token 双源冲突（header 42/22/28px 三重定义、radius 12/14px），收敛到 `ui-foundation.css` 单源并按悬浮标题形态修订 [docs/NODE_CANVAS_PRESENTATION_SPEC.md](./docs/NODE_CANVAS_PRESENTATION_SPEC.md) §3.1/§3.2（28px）；③落点在非法端口被"磁吸改连"无反馈，新增 `connectionRetargetNotice` toast（`graph.ts` + `CanvasEditor.tsx`）；④顶栏避让漏算悬浮标题 34px（粘贴导入节点被遮挡）；⑤**媒体跨通道断层**：`mediaPath/mediaMime` 此前不随图模型流动（画布→图模型、图模型→画布、headless、就绪校验四层各说各话），统一为 `params.mediaPath/mediaMime` 携带（`graph.ts`/`graph-snapshot-sync.ts`/`workflow-service.ts`）；⑥**5 个能力的 configSchema 全部漂移**（幽灵键 providerId/modelId/cols/fixed-ratio/cropRect 或字段缺失），已按真实配置逐一重写——契约版本 text.source→3、image.source→3、image.crop→2、image.split→2、image.edit→2，全部走破坏性变更门禁并同步 `generated/agent-contracts.json` 与 migration 版本矩阵；⑦拆图节点删除挂载自压缩 effect，恢复 340×260 统一初始尺寸。**新增可复跑审查脚本**：`scripts/audit-{text,image,image-crop,image-split,image-edit}-node.cjs`（Playwright 驱动 `npm run dev:browser`，逐节点九状态断言+截图，产物仅存本地 `artifacts/` 不提交）。**验证基线**：`npm test` 950/950、`npm run verify` 全绿、门禁 293 项全绿、五节点审查断言 20/20+20/20+20/20+18/18+20/20、23 节点空态 0 溢出。**移交项**：①生图节点审查时须修 `providerId/modelId` vs `modelKey` 契约漂移（文本/图片节点审查已两次实锤）；③`providers` 表存在同一组供应商重复 16 次的写入去重缺失；④P图/视频真实供应商调用、透视裁剪桌面端验收留桌面阶段；⑤本机 git 代理 127.0.0.1:7897 未运行，推送需 `-c http.proxy= -c https.proxy=` 直连。**下一节点：生图（image-gen）**。
+
+> **最新审查与 P0 修复（2026-09-11）**：新增 [docs/NODE_DEEP_AUDIT_2026_09_11.md](./docs/NODE_DEEP_AUDIT_2026_09_11.md) 与 `scripts/audit-video-node.cjs`。本轮重新采集 23 个 Active 节点空态截图，并对视频节点执行“未选模型 → 选 H3 → 连接图片 → 手动选择模式”的浏览器证据审查。已完成视频 P0/P1 协议收口：未选模型不再 fallback；接图后自动收敛为模型支持的多参/首帧/首尾帧，文生模式不再残留；MiniMax 与 Seedance 演示 fixture 分离；renderer 与 executor 共用模式解析；连接图片展示缩略图、名称和角色；默认 16:9 / 5 秒 / 稳定分辨率；视频 `configSchema`、配音与语音克隆 `configSchema` 已补齐并提高契约版本。**图片生成与视频生成（视频升至 contract v6）现也与配音/语音克隆一致：用户提示词只写入 `props.text`，`props.config` 只保存模型和固定生成参数；执行器经过回归测试确认不会读取 config 内的旧 prompt。H3 中转网关、Seedance 官方端点和 Seedance 兼容网关的 payload 已各有逐字段 wire fixture，防止角色、素材顺序和参数通道回归。** **这仅代表本地浏览器 UI/连线/提交前约束通过，不代表真实供应商端到端已验收**。下一步是按审查矩阵逐节点完成真实桌面运行、结果入库和保存重开验证。截图产物仅保留本地 `artifacts/`，不提交。
+
+> **本轮节点优化交接（2026-09-11，提交 `7f27d45`–`1ad92b7`）**：生图、视频、配音、语音克隆及文本快捷批量生图已统一遵循“正文在 `props.text`、固定选项在 `props.config`”的节点规范；视频节点升至 contract v6。视频 UI、H3 中转、Seedance 官方和兼容网关均有浏览器/请求体回归；完整验证为 `npm test` **77 文件、950 用例通过**、`npm run typecheck` 通过、Electron 生产构建通过、`npm run test:browser-ui` 通过。线上 `main` 当前头部为 `1ad92b7`。真实供应商调用、成片入库、保存重开和取消仍需在已配置额度环境中单独验收。
+
+> **最新交付（2026-09-09 节点 UI/关系审计与规范收口）**：本轮完成 23 个 Active 节点的隔离浏览器截图审查、端口关系矩阵审查与节点值追踪审查。详细报告见 [docs/NODE_UI_RELATION_AUDIT_2026_09_09.md](./docs/NODE_UI_RELATION_AUDIT_2026_09_09.md)，强制呈现规范见 [docs/NODE_CANVAS_PRESENTATION_SPEC.md](./docs/NODE_CANVAS_PRESENTATION_SPEC.md)，截图脚本见 `scripts/audit-node-ui.cjs`（截图产物仅保留在本地 `artifacts/`，不提交）。
+>
+> 本轮变更：①选区虚线框、四个外置视觉角点和批量连接柄统一使用同一 page→screen 几何，修复缩放/分组后的角点漂移；②新增严格的异构 `ConnectionPlan`，文本+图片框选后可一次创建 `out-text → in-text`、`out-image → in-images` 等真实端口边，类型、Schema、基数、占用和环路均在创建前预检；③所有节点统一显示真实 Arrow binding、端口和 `projectOutputs` 派生的已连接输入摘要；④生图节点改为模型/画幅→弹性提示词→底部生成按钮；⑤图片资产与音频资产删除不被执行器消费的假输入，分别升级至 contract v2/v3，并同步 `generated/agent-contracts.json`；⑥节点类型色条固定在底部 4px。
+>
+> 验证：`npm run verify` 通过（75 个测试文件、939 项测试，Node/Web 类型检查与 Electron 构建通过）；目标关系回归 8 文件/300 项通过；`npm run test:browser-ui` 通过。ESLint 无 error，仅保留项目原有 12 条 Prettier warning；`git diff --check` 通过。
+>
+> 当前后续：P2 统一动态高度收缩/窄屏溢出与分镜文案，P3 增加导入边完整校验、保存重开端到端关系回归、各节点连接态/运行态截图门禁；导演台仍不作为本轮前置。本轮代码提交：`b86483a`。
+
+> **最新交付（2026-09-07 画布媒体交互与图片工作台优化）**：端口改为卡片外侧大号虚线圆环，连线可稳定落到外侧输入端口；运行按钮固定在右上角。分组框及标签随画布缩放同步计算，修复缩放后细长变形。所有节点内媒体统一为**双击预览、单击选中**，并解决 tldraw pointer capture 导致的双击丢失。拆图结果按实际行列完整显示/展开且经计算测试确保无重叠；浏览器演示的裁剪、拆图、生成、资产刷新恢复均可用。节点执行时有明确的生成中状态层；图片修改工作台补齐正确图标、尖头箭头、移动标注/遮罩工具及画笔/遮罩尺寸控制。详细改动、验证和人工验收路径见 [docs/HANDOFF_2026_09_07_CANVAS_MEDIA_INTERACTION.md](./docs/HANDOFF_2026_09_07_CANVAS_MEDIA_INTERACTION.md)。
+
+> **最新交付（2026-09-06 第二批：外部重载竞态修复 + FFmpeg 正式安装）**：修复模型接入审查发现的三个应用侧缺陷——
+> ① **外部修改重载吞节点竞态**：`reloadFromDisk` 现在会在重载前抓取本地 document 快照，把磁盘上没有的
+> shape/binding/asset 记录并入磁盘快照后再加载（合并策略在 `canvas/external-reload.ts`，纯函数含 13 项单测），
+> 相机与选中态也一并恢复；重载 toast 会明确提示保留了多少条未保存内容。**已知取舍**：本地未保存的删除会被
+> 复活——相比丢掉新画内容危害更小。
+> ② **资产「添加到画布」接入避让网格**：`createMediaNodes` 与调色板/右键建节点一致走 `findNodePlacement`，
+> 反复导入不再堆叠在同一坐标。
+> ③ **画布挂载前的建节点请求排队补建**：tldraw 初始化完成前点击调色板不再静默丢弃，挂载后自动补建并 toast 提示。
+> **FFmpeg 正式安装**：官方 7.1.1 full 构建已安装至 `C:\Users\Administrator\AppData\Local\Programs\FFmpeg`（bin 含
+> ffmpeg/ffprobe/ffplay），并写入**用户 PATH**——应用按默认逻辑直接探测 PATH 即可，不再需要 `CANVAS_STUDIO_FFMPEG_PATH`
+> 或便携版（后者已删除）。注意：已运行的进程看不到新 PATH，重启应用/新开终端生效；若未来需要全机安装，把该 bin
+> 提权写入系统 PATH 即可。验证：`npm run verify` 70 文件 869 用例全绿（contract-consistency hook 单独跑 3.9s，
+> 满载偶发超时为既有抖动）；`dist/win-unpacked` 已重新打包。
+
+> **交付（2026-09-06 真实模型接入 + 桌面端逐节点真跑审查）**：接入 TokenDance 网关与 codex2api 图片中转（配置存于本机应用 SQLite，Key 经 safeStorage 加密，不入仓库）。**新增代码**：`main/gateway/audio.ts` 按供应商协议分派 TTS——`specId=minimax` 走 MiniMax T2A v2（`/v1/t2a_v2`，hex 音频解码，OpenAI 默认音色映射 `male-qn-qingse`），其余保持 OpenAI `/audio/speech`；`video-capabilities.ts` 以 `minimax-h3` 前缀识别 H3 家族（含 minimax-h3-max）。**已配置供应商**：TokenDance 文本（`https://tokendance.space/gateway/v1`，glm-5.3-flash/text）、TokenDance MiniMax（`https://tokendance.space/gateway/minimax`，minimax-h3-max/video + minimax-speech-2.8-turbo/audio）、codex2api 图片（`https://www.codex2api.com/v1`，gpt-image-2/image）。**桌面端真跑结论**（Playwright 驱动打包产物 + 真实 Key）：文本/处理/JSON/代码/结构数据/分镜板 ✅ 本地链路；对话/AI 处理 ✅ glm-5.3-flash 真实补全；生图 ✅ gpt-image-2 真实出图；配音 ✅ minimax-speech-2.8-turbo 真实合成（T2A v2 适配器）；提音/人声分离 ✅ 真实 FFmpeg；裁剪/拆分/取帧/截取 ✅ 真实媒体变换；导演台 ✅ 发布链路；图片资产/视频资产 ✅ 真实导入。**受阻项**：视频生成——TokenDance 网关对 `minimax:video_generation_v2` 协议整体未配置价格（`当前模型未配置该请求规格的价格`，h3 与 h3-max 同样），由用户联系 TokenDance 开通后自测；语音克隆——按契约依赖本地 ComfyUI + IndexTTS-2.5（用户将在另一台装有该环境的电脑自测；TokenDance 有 `minimax:voice_clone` 协议，可作后续接入项）；修改(图生图) 的 `/images/edits` 后端已 curl 真实验证，UI 工作台流需桌面人工过一遍。验证：`npm run verify` 全绿；审查脚本与结果存于 `C:/Users/Administrator/canvas-tools/`（不入仓库）。
+
+> **最新交付（2026-09-06 八项审查问题修复批次）**：对 [docs/QA-NODE-AUDIT-2026-09-06.md](./docs/QA-NODE-AUDIT-2026-09-06.md) 的 8 项问题完成 Playwright 实证复核与修复。**修复 4 项真实缺陷**——P1-1 新节点避让网格加入屏幕空间顶栏净空约束（`topbarSafeScreenY`，修复前 5 连建 2 个被 67px 顶栏遮挡致标题按钮不可点）；P1-2 右侧单例收口：`nodePanelStore.openVersion` + `CanvasEditor` 订阅，节点详情请求自动关闭运行中心等侧栏（重复打开同一节点也生效）；P2-2 选中对话节点即自动打开右侧对话面板（与卡片空态文案一致）；P3-2 `DirectorBody` 去掉容器整块 `stopEventPropagation`，预演卡空白区可选中/拖动。**改进 2 项**——P2-1 图片导入加异常兜底 toast（信封消费本就存在）；P2-4 节点级运行缺必填输入时 toast 透出缺失端口明细（记录保持 `failed` 与整图一致）。**证伪 2 项**——P2-3「打开 3D 预演台」与 P3-1 数据节点运行记录在 `e0486d7` 上实测正常，均为 P1-1/P3-2 拦截点击造成的连带误报。回归断言（顶栏避让/运行中心收口/对话选中即开）已并入 `npm run test:browser-ui`，并给该脚本加了 Chrome→Edge→内置 Chromium 的浏览器回退。验证：全部诊断检查 PASS、`npm run test:browser-ui` PASS、`npm run verify` 通过。
+
+> **交付（2026-09-06 全节点浏览器审查 + 优化方案）**：在 ZCode In-app Browser 对 `npm run dev:browser`（工作区 `e0486d7`）完成 23 类节点全量 GUI 审查（截图排版/端口输入输出/连线校验/整图运行 + 运行中心核对）。整体结论：节点创建、空态、端口类型声明、类型/Schema 校验（text→image 被拒并有 toast）、连线渲染、依赖顺序执行、运行中心状态记录全部正常；处理与代码节点在浏览器内真实跑通（success + 输出可用），生图/对话/配音/AI 处理按预期给出稳定的前置错误。**新发现 8 项问题**：P1×2——①新节点级联生成位置 (162,45) 被顶栏遮挡，标题行「运行此节点/节点说明」不可点（13 类节点复现，避让网格未覆盖"卡片 vs 顶栏"场景）；②运行中心打开时节点卡配置按钮/卡片选中被静默忽略（面板不切换无提示）。P2×4——③图片节点「导入图片」零反馈；④对话节点"选中→右侧面板对话"未发生；⑤「打开 3D 预演台」按钮无响应；⑥缺必填输入时节点级运行静默无动作无记录。P3×2——⑦数据(JSON) 节点整图运行无执行记录；⑧预演卡命中热区异常点选不中。逐项复现步骤、修复方案与 2026-09-06 修复批次实证结论见 [docs/QA-NODE-AUDIT-2026-09-06.md](./docs/QA-NODE-AUDIT-2026-09-06.md)。
+
+> **最新交付（2026-09-05 节点关系与媒体前置校验优化，提交 `b9395d3`）**：补充真实的一对多扇出工作流回归（一个文本输出同时驱动两个处理节点），补充 JSON 卡片正文直接手动运行回归，并将 JSON 编辑器接入与文本节点一致的 tldraw 编辑生命周期，避免详情页测试与卡片运行出现两套编辑态。视频取帧/截取/提音与人声分离执行器现在在调用主进程媒体转换前先读取本机 FFmpeg/FFprobe/audio-separator 能力；能力不可用时返回稳定的前置错误，不再启动必然失败的转换任务。`GatewayClient`、renderer gateway 和 headless gateway 已统一暴露能力探测。验证基线为 `npm run verify`：67 个测试文件、852 个用例通过，Node/Web 类型检查和 Electron/Vite 构建通过；浏览器 mock 仍不代表真实媒体生成，桌面端需用真实媒体做最终验收。详见 [docs/QA-NODE-AUDIT-2026-09-05.md](./docs/QA-NODE-AUDIT-2026-09-05.md)。
+
+> **最新交付（2026-09-04 图片节点优化 + Ctrl+滚轮接管排查，已推送至 `origin/main`）**：提交 `454f21b`
+> 完成图片节点四件事——图片资产节点新增可选 `in-image` 输入端口（拆分展开的连线归属）、图片拆分自动
+> 展开为独立图片节点并自动连线（幂等防重复）、拆分按钮移到底部、内容多节点滚动修复；`agent-contracts.json`
+> 已同步。全量 `npm test` 67 文件 847 用例通过。另排查用户反馈「未选中时 Ctrl+滚轮缩放失效」：代码本身正常，
+> 根因是用户运行的是不含接管逻辑的旧 exe（2026-09-03 14:20，早于 `ed38a1f`）；已重新打包
+> `dist/win-unpacked/canvas-studio.exe`（09-04 17:39），Playwright 实测重打包 exe Ctrl+滚轮 100%→173% 生效。
+> 完整覆盖/缺口清单见 [docs/HANDOFF_2026_09_04_IMAGE_NODE_OPTIMIZATION.md](./docs/HANDOFF_2026_09_04_IMAGE_NODE_OPTIMIZATION.md)。
+
+> **最新交付（2026-09-03 文本节点双击输入根因修复，Playwright 实测定位）**：桌面验收发现 `c214d45` 的修复无效。真实根因是 tldraw `useCanvasEvents` 在 pointerdown 时 `setPointerCapture(tl-canvas)`，把 dblclick 的 target 重定向到 `.tl-canvas`，导致双击转发永不命中正文。修复：转发改在 `mousedown(detail===2)` 捕获阶段（target 是 hit-test 原生结果，不受 capture 影响）。Playwright 驱动打包版验证双击/输入/提交/重复进入全链路 ✅，`dist/win-unpacked` 已重新打包。根因链、事件序列证据与遗留缺陷见 [docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md](./docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md)（根因更正节）。
+
+> **历史交付（2026-09-03 Sprint 2 媒体体验）**：以下仅保留媒体功能记录；旧 Agent 方案及其专用交接已退出当前工作区。
+> ① **Sprint 2 媒体体验**——视频节点"重新生成"与来源摘要、供应商能力驱动的配置 UI（`3f8d986`、`8d4039b`）；
+> 全量 `npm run verify` 通过（**847 项用例**），性能基线健康（100/500/1000 节点线性扩展），`dist/win-unpacked` 打包完成。
+> **当前仅剩桌面人工验收**：视频节点功能链路、文本节点双击输入修复冒烟（根因修复见顶部最新条目）、[docs/DESKTOP_ACCEPTANCE_CHECKLIST.md](./docs/DESKTOP_ACCEPTANCE_CHECKLIST.md) 全量门禁。
+
+> **最新修复（2026-09-02 文本节点输入）**：修复文本节点双击进入编辑态后 textarea 无法输入的问题——`textRef` 改为在 `useEffect` 中同步、`enterEditing` 用 `useCallback` 稳定监听器引用、移除会覆盖 draft 的旧副作用；textarea 事件处理仅 `stopPropagation` 不做 `preventDefault`，保证输入可正常聚焦。涉及文件与验证路径见 [docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md](./docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md)。
+
+> **当前交接入口（2026-08-31 P0–P3 优化）**：Sprint 0、Sprint 2、Sprint 3 和导演台安排已完成；P0–P3 协议、交互、生图比例和视频能力优化也已完成，详见 [docs/P0_P3_NODE_CAPABILITY_OPTIMIZATION_2026_08_31.md](./docs/P0_P3_NODE_CAPABILITY_OPTIMIZATION_2026_08_31.md)、[docs/NODE_PROTOCOL_AUDIT_2026_08_31.md](./docs/NODE_PROTOCOL_AUDIT_2026_08_31.md) 与 [docs/NODE_COMPLIANCE_MATRIX.md](./docs/NODE_COMPLIANCE_MATRIX.md)。左侧节点菜单保持未分类版本：单一无框鱼眼图标栏，节点列表沿用原有交互。右键画布的新建节点菜单采用一级分类悬浮二级筛选，分类项带右向箭头，二级节点可直接创建或用于真实连线。UI 整体优化六阶段已由 `f519ac3` 提交并推送。
+
+> **最新修复（2026-08-31 右键菜单紧凑布局）**：右键“新建节点”菜单的主区域已独立为可滚动容器，工作流模板和“添加资源”操作不会再被二级菜单的 `overflow: visible` 影响而跑出边框。主菜单宽度按内容收敛为约 196px（视口自适应，最长操作文本可完整显示），右侧二级菜单保留 276px 独立宽度以容纳端口说明，并补齐浅色主题样式。源码构建、类型检查、ESLint、节点创建/注册测试和 Windows 目录打包均已通过；`dist/win-unpacked` 已更新，可直接用于桌面快捷方式验收。
+
+> **最新修复（2026-08-31 画布视觉收口）**：工具栏图标的说明改为顶部优先展开，避免覆盖相邻图标；节点卡片不再常驻显示“可运行”readiness 标签，状态点和端口提示仍保留完整可访问说明。右键一级菜单不滚动、按最长操作文本自适应宽度，并移除工作流/资源项重复图标；二级菜单按最长节点名收敛宽度，“全部”列表保留滚动能力但隐藏滚动条。`AppSelect` 与画布内原生下拉框统一深浅主题、箭头、焦点与系统选项色彩。新建/拖拽连线采用低噪声虚线；分组显示为中性圆角容器和标题，多选才显示细虚线范围框。`npm run verify` 已通过（54 文件、620 用例）；若桌面应用正在使用，重新打包前必须先关闭 `canvas-studio.exe`，避免覆盖使用中的目录包。
+
+> **桌面打包基线（2026-08-31）**：`electron-builder.yml` 已设为 `asar: false`，并显式复制 `@napi-rs/canvas-win32-x64-msvc` 原生 binding。此前 Windows 环境会生成错位的 asar 索引或遗漏 optional native binding，导致 `canvas-studio.exe` 在加载主入口前退出；目录打包不改变功能和本地数据，且本轮已完成启动校验。打包前仍须先执行 `electron-builder install-app-deps`，保证 `better-sqlite3` 与 Electron ABI 一致。
+
+## 1. 接手前必须知道的边界
+
+- 不做多租户、账号、权限、强制教程或运营后台。
+- 保持现有页面格局；视觉和交互优化必须渐进式进行，不能重做左侧工具栏、顶部栏或画布操作方式。
+- 连线只表示真实的数据依赖：`source.outputs[sourcePortId] -> target.inputs[targetPortId]`。
+- 分组是 tldraw 的画布状态，不是节点；视频剪辑和成片合成应交给剪映等专业工具。
+- 图片资产节点与图片生成节点是两个不同能力；所有导入、粘贴或生成的媒体都必须成为可连接的节点资产。
+- 节点不是复合功能容器。复杂工作流优先由节点连线或工作流模板组成。
+
+开始修改前，按顺序阅读：
+
+1. [README.md](./README.md)：启动、打包和本地数据位置。
+2. [NODE_CONTRACT_SPEC.md](./NODE_CONTRACT_SPEC.md)：强制的节点/端口/Schema/执行规范。
+3. [ROADMAP.md](./ROADMAP.md)：历史阶段记录与产品边界。
+4. 本文：当前状态、交接流程、已知边界和下一步计划。
+
+## 2. 当前完成状态（R0–R7 全部完成、P0–P4、IA-1/IA-2、UI 整体优化）
+
+R0–R7 已全部完成并推送。UI 整体优化六阶段（Dock 鱼眼放大、边框清除、按钮统一、布局重组、节点排版修复、节点分类二级筛选）已完成，并由 `f519ac3` 提交、推送。核心交付如下：
+
+| 阶段    | 已交付内容                                                                                     | 验证结果                                  |
+| ------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| R0      | 统一节点输出投影、执行模式与运行记录；输出不再由中心 `switch` 猜测                             | 注册门禁、投影测试、手动执行测试通过      |
+| R1      | 节点执行器自注册；全局运行器只负责编排、校验、状态与登记                                       | `executor.ts` 无节点类型分发主逻辑        |
+| R2      | 契约、Schema、连线矩阵、执行器和迁移自动化测试                                                 | 14 个测试文件、374 项测试全部通过         |
+| R3      | AI 处理节点、可验证 JSON、剧本到分镜模板、右侧契约/设置/运行记录面板                           | 输出模式与 Schema 均受校验                |
+| R4      | `list.items@1` 和串行迭代节点；导演台节点与手动发布输出                                        | 真实 Electron 中 PNG 帧与 WebM 均成功发布 |
+| P0      | 启动超时/渲染错误边界；修复 `node-card` 快照缺少 `config` 导致的白屏；增加 tldraw 形状迁移定义 | 快照修复测试与生产构建通过                |
+| P1      | 确认框焦点锁定、Esc 取消、焦点恢复；Toast 和契约分页增加可访问语义；项目卡片支持键盘打开       | lint、类型检查通过                        |
+| P1 基准 | 固定演示包、100/500/1000 节点数据层基准、演示包导入与配置内媒体重映射回归                      | `benchmark:canvas` 与导入集成测试通过     |
+| P2      | 顶部栏和侧面板响应式收敛；补齐 `--panel` 主题变量；窄屏下文字、按钮和弹层不溢出                | Web 类型检查、构建通过                    |
+| P2 数据 | `character/scene/shot/prompt` Schema、通用结构数据节点、字段映射、提示词包端口与创作模板       | 25 个测试文件、427 项用例通过             |
+| P3      | 导演台窄屏支持镜头/属性面板切换；时间轴、预演视口和操作栏保留在主工作区                        | 导演台数据测试通过                        |
+| P4      | 补充快照修复、节点状态、创建菜单、运行记录、媒体映射和导入事务测试                             | 全量 23 个测试文件、405 项用例通过        |
+
+### 本轮新增：UI 整体优化六阶段（2026-08-31 第四批）
+
+本轮完成六阶段 UI 优化，基于 `fc78c97`，已由 `f519ac3` 提交并推送。详见 [docs/HANDOFF_2026_08_31_UI_OVERHAUL.md](./docs/HANDOFF_2026_08_31_UI_OVERHAUL.md)：
+
+| 功能                | 状态               | 说明                                                                                                       |
+| ------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Dock 鱼眼放大       | 已开发，待桌面验收 | 余弦曲线算法，`useDockMagnify` hook，零依赖，`requestAnimationFrame` 批处理                                |
+| 边框清除            | 已开发，待桌面验收 | 清除三处 CSS 文件（app.css → ui-foundation.css → ui-surfaces.css）残留背景/边框/阴影                       |
+| 按钮统一 + 布局重组 | 已开发，待桌面验收 | `.dock-btn` 与 `.palette-item` 统一为透明背景；导航簇移至左下角、工具栏移至右下角                          |
+| 节点排版修复        | 已开发，待桌面验收 | aiProcess 无模型时提前 return `NoModelHint`；chat 补模型配置引导                                           |
+| 右键菜单改进        | 已开发，待桌面验收 | 菜单固定 `max-height: 400px` + 滚动；NodeContextMenu 新增"编辑"选项                                        |
+| 节点分类二级筛选    | 已开发，待桌面验收 | `NodeTypeSpec.category` 必填字段；5 分类（素材输入/图像处理/视频处理/音频语音/逻辑流程）；创建菜单分类 Tab |
+
+验证基线：**53 个测试文件、617 项用例全部通过**；`npm run verify`（lint、Node/Web 类型检查、测试、生产构建）通过。桌面端手工冒烟尚未执行。
+
+### 本轮新增：可定制节点分类 Dock（2026-08-31）
+
+| 能力         | 状态               | 说明                                                                                                            |
+| ------------ | ------------------ | --------------------------------------------------------------------------------------------------------------- |
+| 一级分类筛选 | 已开发，待桌面验收 | 左栏固定显示常用/输入/图像/视频/音频/流程 6 个分类；选中后仅在二级抽屉展示该分类的真实可创建节点。              |
+| 拖动排序     | 已开发，待桌面验收 | 原生拖放调整一级分类显示顺序；只调整 `PaletteCategoryId`，不修改节点类型、端口或 `NodeTypeSpec.category`。      |
+| 右键改名     | 已开发，待桌面验收 | 右键分类可修改显示名（最多 16 字）或恢复默认名；分类机器 ID 保持不变。                                          |
+| 本机持久化   | 已开发，待桌面验收 | 通过 `workspace:palette-preferences:*` IPC 保存到主进程 SQLite `settings`；不写入项目快照、工作流模板或导出包。 |
+| 降级保护     | 已开发             | 读取时白名单归一化：损坏、重复、未知或遗漏分类不会导致 Dock 消失，当前全部分类会被补齐。                        |
+
+当前 UI 选择：左侧保留原有单一节点列表和鱼眼交互；分类只用于右键新建节点菜单的快速二级筛选，不改变左侧菜单。
+
+关键文件：`src/shared/palette-preferences.ts`、`src/renderer/src/canvas/palette-categories.ts`、`src/renderer/src/canvas/CanvasEditor.tsx`、`src/main/store/workspace-state.repo.ts`。
+
+本轮验证：Node/Web 类型检查通过；生产构建通过；全量 `vitest run` **54 个测试文件、620 项用例通过**。`eslint` 为 0 error，仍有 37 条既有格式/Hook warnings，未因本功能新增。桌面端请重点手验：分类切换、拖动排序重启后保留、右键改名/恢复默认、二级节点点击与拖入画布、深浅主题。
+
+### 前批：视频节点 v2 重构（2026-08-30 第三批）
+
+本轮将视频处理链路重构为四个独立节点，新增统一媒体时间轴和图片拆分节点，详见 [docs/HANDOFF_2026_08_30_VIDEO_RESTRUCTURE.md](./docs/HANDOFF_2026_08_30_VIDEO_RESTRUCTURE.md)：
+
+| 功能             | 状态               | 说明                                                                                                             |
+| ---------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| 视频节点 v2 重构 | 已开发，待桌面验收 | `video-frame`/`video-clip`/`video-audio` 升级为 contractVersion 2，独立配置类型；删除旧的共享 `VideoRangeConfig` |
+| 独立人声分离节点 | 已开发，待桌面验收 | 新增 `vocal-separate` 节点，从 `video-audio` 解耦；支持快速 FFmpeg 和高质量 AI 双模式；双输出（人声 + 伴奏）     |
+| 统一媒体时间轴   | 已开发，待桌面验收 | `MediaTimeline` 组件：10 帧缩略图、300 点波形、播放/暂停、逐帧导航、循环预览、手动时间码                         |
+| 图片宫格拆分     | 已开发，待桌面验收 | 新增 `image-split` 节点：宫格预览、面积缩放、最大 8x8                                                            |
+| 快捷入口与模板   | 已开发，待桌面验收 | 视频节点下游按钮 + 一键提取人声链路（自动创建并预连线 video-audio → vocal-separate）                             |
+
+验证基线：**45 个测试文件、576 项用例全部通过**；`npx tsc --noEmit` 零错误。
+
+### 前批：功能批量交付（2026-08-30 第二批）
+
+前批一次性交付四个功能方向，已提交于 `33d82e3`，详见 [docs/HANDOFF_2026_08_30_FEATURE_BATCH.md](./docs/HANDOFF_2026_08_30_FEATURE_BATCH.md)：语音克隆节点（`tts`）、视频变换增强（取帧预设 + 人声分离）、3D 预演台升级（contractVersion 1→2）、UI 图标与视觉系统。
+
+### 本轮新增：3D 预演台（`director`）
+
+导演台是 `manual-publish` 节点，不会在“运行工作流”时擅自打开工作区或生成媒体。
+
+- 输入：`in-storyboard`（分镜 JSON）、`in-reference-images`（多张图片；空间建立建议前 1～3 张）、`in-camera-preset`（`previs.camera@1`）。
+- 输出：`out-frame`（PNG 图片）、`out-preview-video`（白模 WebM 运动参考）、`out-camera`（机位 JSON）、`out-project`（`previs.project@2` 工程摘要 JSON）。
+- 已发布的帧/视频才会成为下游的真实输入；损坏的发布记录或只有机位而没有媒体的记录会被视为未发布。
+- 当前预演支持 2D Canvas 与 Three.js 白模视口。编辑视角与拍摄机位已经分离；人物可在 3D 视口中选择并直接移动/旋转，支持 G/R/空格快捷键、起终点关键帧、运镜预设、镜头序列和非阻断的穿模/时长/关键帧预警。
+- “生成空间”当前落地为稳定的本地轻量白模 fallback；外部图片→白模服务必须经可插拔 Provider 适配后才能替换为自动重建，失败不得覆盖已有空间。
+- 视频节点新增可选 `in-reference-video`。预演视频可一键创建真实连线进入该端口；供应商是否接受参考视频以实际响应为准。
+- 媒体导入 IPC 已支持图片和视频缓冲，视频上限为 200 MB；只有 Electron preload 有本地媒体写入能力，浏览器预览页会给出明确提示。
+- 空间生成现采用两层本地策略：`local-whitebox` 为默认的轻量墙体/方块白模；`image-depth` 取首张
+  `in-reference-images` 图片，在 Three.js 视口中以亮度近似深度做 2.5D 视差。后者只保存真实媒体
+  引用，不复制资产、不创建新节点、无额外 API 成本；未来如引入本地 Depth Anything，只替换
+  `src/renderer/src/nodes/previs-space-generator.ts` 的适配器并填充可选 depth 媒体字段。
+
+## 3. 架构地图
+
+```text
+节点 Spec（职责/端口/投影/执行模式）
+        │
+        ├─ Body：卡片上的最小编辑界面
+        ├─ Executor：把已验证输入变成持久化运行结果
+        └─ projectOutputs：持久化状态映射为正式输出端口
+                │
+          executor.ts：拓扑、收集、验证、运行、登记
+                │
+      NodeValuePacket（nodeId + portId + value + runId）
+                │
+          下游端口的真实输入
+```
+
+| 位置                                                | 职责                                                   |
+| --------------------------------------------------- | ------------------------------------------------------ |
+| `src/shared/types/index.ts`                         | `NodeTypeId`、端口类型、执行模式等跨层类型             |
+| `src/shared/node-schemas.ts`                        | 版本化 JSON Schema 的注册与校验                        |
+| `src/renderer/src/nodes/registry.tsx`               | `NodeTypeSpec` 和注册时硬门禁                          |
+| `src/renderer/src/nodes/specs/index.tsx`            | 所有节点 Spec、端口、执行器与投影的注册入口            |
+| `src/renderer/src/nodes/specs/outputProjections.ts` | 每一种节点的持久化状态 → 输出端口映射                  |
+| `src/renderer/src/nodes/nodeValues.ts`              | 统一投影入口与持久化结果解析器                         |
+| `src/renderer/src/engine/executor.ts`               | 拓扑排序、输入收集、契约检查、执行状态、下游数据包登记 |
+| `src/renderer/src/engine/executors/`                | 节点独立执行器；不向全局运行器加特例                   |
+| `src/renderer/src/canvas/graph.ts`                  | 连线创建、类型/Schema/数量/环校验、按端口读取上游值    |
+| `src/renderer/src/canvas/NodeContractPanel.tsx`     | 右侧“概览 / I/O / 设置 / 运行”详情面板                 |
+| `src/renderer/src/canvas/DirectorStudioPanel.tsx`   | 导演台独立全屏预演工作区                               |
+| `src/main/ipc/media.ipc.ts`                         | 本地媒体导入、落盘与安全限制                           |
+
+## 4. 节点清单与可用范围
+
+| 节点     | 主要输入                | 主要输出                           | 当前说明                                            |
+| -------- | ----------------------- | ---------------------------------- | --------------------------------------------------- |
+| 文本     | 多文本（可选）          | `out-text`                         | 可用                                                |
+| 图片资产 | 无                      | `out-image`                        | 导入、粘贴、拖入均应走此节点                        |
+| 生图     | 文本、参考图            | `out-image`                        | 可用；支持尺寸、种子和重新生成                      |
+| 视频资产 | 无                      | `out-video`                        | 可用；依赖已配置视频供应商；支持一键提取人声链路    |
+| 视频取帧 | `in-video`              | `out-image`                        | 可用；首帧/尾帧/手动三种模式；统一时间轴            |
+| 视频截取 | `in-video`              | `out-video`                        | 可用；双游标区间；循环预览；质量模式                |
+| 视频提音 | `in-video`              | `out-audio`                        | 可用；WAV/M4A + 采样率；波形预览                    |
+| 人声分离 | `in-audio`              | `out-vocals` / `out-accompaniment` | 可用；快速 FFmpeg / 高质量 AI 双模式；双输出        |
+| 图片拆分 | `in-image`              | `out-images`                       | 可用；宫格拆分（最大 8x8）；面积缩放                |
+| 音频     | 音频、文本              | `out-audio`                        | 可用；依赖供应商                                    |
+| 语音克隆 | 参考语音、文本          | `out-audio`                        | 可用；依赖本地 ComfyUI + IndexTTS-2.5               |
+| 对话     | 文本                    | `out-markdown`                     | 多轮交互；保留 Markdown 语义                        |
+| AI 处理  | 文本、JSON              | text / markdown / JSON 之一        | 一次性、可复跑的工作流转换                          |
+| 处理     | 动态值                  | `out-value`                        | 通用透传/兜底，不承载业务规则                       |
+| JSON     | 文本、JSON              | `out-json`                         | 结构化编辑与校验                                    |
+| 结构数据 | JSON 上下文、文本上下文 | 所选 Schema 的 `out-json`          | 通用结构编辑/字段映射；不做角色等特例 UI            |
+| 代码     | 文本、JSON、命名参数    | 命名输出端口                       | 本地受限转换；变量名决定端口 ID                     |
+| 分镜板   | 分镜 JSON、兼容文本     | 分镜 JSON、摘要                    | 可用                                                |
+| 迭代     | `list.items@1`          | `out-item`、`out-items`            | P3.1 明确循环体边界；仍为串行、无暂停恢复           |
+| 导演台   | 分镜、参考图、机位      | 帧、预演视频、机位、工程摘要       | 手动发布；已升级为 3D 白模预演（contractVersion 2） |
+| 脚本     | 历史文本                | 分镜 JSON、文本                    | 仅旧项目兼容，禁止新建                              |
+
+当前注册 Schema：
+
+- `json.any@1`
+- `storyboard.shots@1`
+- `list.items@1`
+- `previs.camera@1`
+- `previs.project@2`
+- `character.profile@1`
+- `scene.definition@1`
+- `shot.definition@1`
+- `prompt.bundle@1`
+
+## 5. 新节点接入：强制交接协议
+
+任何新增节点都必须完整通过以下顺序，缺任一步不合并：
+
+1. 先写清职责、输入、输出、错误语义和是否需要手动发布；不要先画 UI。
+2. 在 `NodeTypeId` 中加入稳定类型；端口 ID 一经发布不可随意重命名。
+3. 在 `node-schemas.ts` 注册所有专用 JSON Schema；业务 JSON 不得只声明裸 `json`。
+4. 在 `specs/index.tsx` 注册 `NodeTypeSpec`：端口、`executionMode`、`projectOutputs`、`executor` 和 Body 缺一不可。
+5. 将执行逻辑放入 `engine/executors/<node>.ts`；不要修改 `executor.ts` 增加 `nodeType` 分支。
+6. 将“持久化配置/运行结果 → 端口输出”的逻辑放入 `outputProjections.ts`；运行器和 UI 不得各写一份投影。
+7. Body 只做编辑与展示，不得扫描上游节点类型；读取上游值只能按目标 `portId`。
+8. 确认右侧契约面板能解释端口、连接来源、值预览和运行结果。
+9. 增加注册、Schema、投影、执行器、连线/迁移测试，并更新规范与本文。
+
+若端口或 Schema 有破坏性变化：提高 `contractVersion`，提供迁移或明确拒绝旧项目；绝不能静默猜端口。
+
+## 6. 接手与发布流程
+
+### 开始工作
+
+```powershell
+git fetch origin
+git status -sb
+git log --oneline -5
+pnpm install
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm dev
+```
+
+先确认本地没有无关文件和远程未合并提交，再开始修改。测试素材、API Key、SQLite、媒体和打包输出均不得提交。
+
+### 合并前门禁
+
+```powershell
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+git diff --check
+git status -sb
+```
+
+还必须进行一次与改动相符的真实桌面端冒烟测试。涉及媒体时至少验证：资产落盘、节点输出、连线可用、失败状态不产生旧输出。
+
+### 当前已验证基线
+
+- `npm run verify`：全绿——lint、Node/Web 类型检查、**847 项用例**（含契约快照新鲜度、破坏性变更版本 bump 两道 Agent 契约门禁）、三端生产构建。
+- `pnpm benchmark:canvas`：100/500/1000 节点基线线性扩展健康（构造 2.8→7.4ms）。
+- `git diff --check`：通过。
+- Electron 手工测试：导演台发布链路已验证（PNG 帧与 WebM）；白屏问题已定位为旧 `node-card` 快照缺少 `config`，已修复。
+- 待执行桌面冒烟：视频节点功能链路（重新生成/来源摘要/能力驱动 UI）、文本节点双击输入修复（`c214d45`，5 场景）；全量验收路径见 [docs/DESKTOP_ACCEPTANCE_CHECKLIST.md](./docs/DESKTOP_ACCEPTANCE_CHECKLIST.md)。
+- 构建仍会提示 `db.ts` 同时被动态与静态导入；它不阻断构建，列入后续技术债。
+- 桌面快捷方式 `Canvas Studio.lnk` 指向 `dist/win-unpacked/canvas-studio.exe`；本轮已验证该目标能保持运行。重新打包后必须确认 `resources/app/out/main/index.js` 存在，再通知用户点击快捷方式。
+
+### 最近提交链（2026-09-06 新增批次）
+
+| 提交      | 内容                                                                                                                                                                          |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `9760522` | 外部重载保留未保存内容（`external-reload.ts` 三方合并 + 相机/选中恢复 + 13 项单测）、资产导入接入避让网格、画布挂载前建节点请求排队补建（5 文件 +217/-7）                     |
+| `27abb6c` | HANDOFF：真实模型接入与桌面端逐节点真跑审查结论                                                                                                                               |
+| `aa825f0` | MiniMax T2A v2 语音适配（`audio.ts` 协议分派 + 音色映射）+ H3 家族视频能力识别（`minimax-h3-max`）                                                                            |
+| `3bea819` | QA 八项处置：顶栏避让（P1-1）、面板单例收口（P1-2）、对话选中开面板（P2-2）、预演卡热区（P3-2）、导入异常兜底（P2-1）、运行失败 toast 明细（P2-4）；证伪 P2-3/P3-1 并回写报告 |
+
+### 历史提交链（截至 2026-09-04）
+
+| 提交                | 内容                                                                                                                                                   |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `454f21b`           | 图片节点优化与拆分自动展开：图片资产新增 `in-image` 端口、拆分自动展开为节点+连线、拆分按钮到底部、内容多节点滚动修复 + 契约同步（28 文件 +1007/-229） |
+| `5c69d4a`           | 节点标题行按钮重排与框选实线根修                                                                                                                       |
+| `ed38a1f`           | Ctrl+滚轮缩放接管与节点交互细节修复                                                                                                                    |
+| `3e2995a`           | Agent 契约同步机制：双门禁测试 + CI 显式步骤 + 机制文档（10 文件 +396/-14）                                                                            |
+| `8d4039b`           | Sprint 2：视频节点 capability 驱动配置 UI                                                                                                              |
+| `3f8d986`           | Sprint 2：视频节点重新生成 + 来源摘要                                                                                                                  |
+| `cb54af9`           | 全局 testTimeout 提升至 15s（I/O 密集并行套件）                                                                                                        |
+| `7c85d47`–`0a698c0` | AG-6：故障恢复测试、并发写安全锁、ProjectFileWatcher 双向同步                                                                                          |
+| `a219212`           | Renderer Adapter P3：执行器共享层 + headless vm 沙箱 + 契约唯一来源                                                                                    |
+| `c214d45`           | Agent 生产执行加固（含文本节点双击输入修复）；交接见 [docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md](./docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md)        |
+| `39a32f2`           | 节点契约治理、导入媒体重映射与事务保护、导演台 2D/3D 预演、P0–P4 UI 修复及对应测试                                                                     |
+
+历史批次（视频节点 v2 重构、功能批量交付、IA-2 资产与运行中心等）均已在更早提交中合入 `main`，详情见各自交接文档；提交不包含 API Key、SQLite、本地项目目录、生成媒体或打包产物。
+
+### CR-0 / CR-1 / CR-2（2026-08-29）
+
+以 [CODE_REVIEW_2026_08_29.md](./docs/CODE_REVIEW_2026_08_29.md) 为依据，已完成以下切片；导演台不在本轮改动范围内。
+
+1. **CR-0 节点规范收口**：分镜、代码和聊天 React UI 不再直接调用模型网关。分镜与代码的快捷生成改为明确工作流指引；聊天面板只写入待发送消息，再通过 `runNodeManually → chatExecutor` 执行。文档/摘要/温度等上下文合并也已移入 `chatExecutor`。结构数据节点把插值运行产物写入 `meta.nodeResult`，不再覆写用户模板 `props.text`；输出投影只接受成功运行的结果。运行器投影本轮产物时使用内存中的 success 记录，避免结构化节点在循环子流程中遗漏输出。
+2. **CR-1 API Key 边界**：新增 `ProviderSummary`。渲染进程、preload、设置面板和所有 renderer executor 只接收公开摘要（模型、URL、`hasApiKey`），API Key 仅由主进程仓库解密并供网关使用。编辑现有供应商时 API Key 输入框留空会保留已存密钥；新建供应商仍强制填写。
+3. **CR-2 本地持久化**：工作流模板与历史版本移出 `localStorage`，通过 `workspace:*` IPC 保存至本机 SQLite。模板为本机全局数据；历史快照按项目隔离、最多 30 条、单条限制 8 MB；渲染端会对保存/读取/删除失败给出提示。因当前没有历史项目，不做旧 localStorage 迁移。
+4. **新增防回归测试**：`react-model-boundary` 禁止 UI 绕过 executor；`providers-security` 验证供应商公开列表不包含密钥；`workspace-persistence-boundary` 禁止模板/历史 store 回退到 localStorage。既有循环工作流测试同时覆盖 CR-0 结构化结果在迭代体内的输出回归。
+
+验证：`npm run verify`、`git diff --check` 均通过；全量为 33 个测试文件、460 项用例。提交前仍应做一次桌面端手工冒烟：保存/编辑供应商（留空 Key）、保存/重启后读取模板、保存/回溯/删除历史版本、对话节点发送并检查 nodeRun 和 out-markdown。
+
+**CR-3 / CR-4 / CR-5 完成状态：**
+
+1. **✅ CR-3 数据层卫生**：MIME 已收敛到共享单一来源；SQLite 改为按版本逐项、可模拟测试的 `user_version` 迁移；启动时将残留 `.importing` 移入 `.recovery`，幽灵项目与 `.tmp` 仅报告而不删除。
+2. **✅ CR-4 契约与执行测试**：新增 chat/video/audio mocked gateway、聊天完成、视频轮询/取消回归；迭代暂停恢复、导入重映射和代码动态端口契约已有覆盖。代码节点维持 `contractVersion: 2`，端口由同一 `resolvePorts` 解析；破坏性端口变更不得猜测旧连线。
+3. **✅ CR-5 体验与维护性**：资产面板已拆为独立模块，并继续通过画布文档监听即时刷新来源索引；其余子面板保持独立职责组件；新增 `docs/DESKTOP_ACCEPTANCE_CHECKLIST.md` 作为发布前桌面验收门禁。导演台继续冻结，直至清单通过。
+
+## 7. 当前交接结论与历史计划（2026-08-31 审计修订）
+
+> 以下 Sprint 0–4 是保留的历史计划，不再代表当前待开发范围。本节顶部的“当前验证计划”优先级最高。
+
+### 当前验证计划（唯一后续范围）
+
+Sprint 0–4 开发部分全部完成并推送；Sprint 2 媒体体验（视频重新生成/来源摘要/能力驱动 UI）与 Agent 契约同步机制已于 2026-09-03 合入 `main`。**当前只剩桌面人工验收**，各项状态：
+
+1. 自动门禁：✅ 已完成——`npm run verify` 全绿（847 项用例）、`git diff --check` 通过、`benchmark:canvas` 100/500/1000 节点线性健康、`dist/win-unpacked` 打包完成。
+2. 桌面人工回归：⏳ 进行中——按 [docs/DESKTOP_ACCEPTANCE_CHECKLIST.md](./docs/DESKTOP_ACCEPTANCE_CHECKLIST.md) 验收画布、持久化、供应商、媒体、导入导出与 UI；文本节点双击输入修复（`c214d45`）需完成 5 场景冒烟。
+3. 性能与本地稳定性：⏳ 量化基线已留档（构造 2.8→7.4ms）；保存重开、异常恢复和离线运行检查待桌面执行。
+4. 真实供应商回归：⏳ 以用户本地已配置模型验证图片与视频；视频至少覆盖 Seedance/MiniMax H3 的 16:9、9:16、秒数、失败提示和取消；本轮新增重点为视频节点"重新生成"、来源摘要与能力驱动配置 UI。API Key 不进入日志、项目或仓库。
+5. 导演台验收：⏳ 只验证既有 v2 的重开、手动发布、下游视频参考连线、未发布无输出与导入导出重映射；图片直接建模不在本轮范围。
+
+候选能力（图片模型精确 16:9/9:16 支持、反推提示词、放大、角度控制）已记录在 [docs/NODE_PROTOCOL_AUDIT_2026_08_31.md](./docs/NODE_PROTOCOL_AUDIT_2026_08_31.md)，不自动进入开发队列。
+
+> R0–R7、IA-1、IA-2 已全部完成。以下计划按优先级排列，标注完成度与剩余工作量。
+
+### Sprint 0：UI 优化收尾（立即）
+
+目标：把本轮 UI 优化六阶段提交、验收、推送。
+
+- [ ] 提交 12 个修改文件 + 3 个新增文件，commit message 参照 [docs/HANDOFF_2026_08_31_UI_OVERHAUL.md](./docs/HANDOFF_2026_08_31_UI_OVERHAUL.md)。
+- [ ] 执行桌面端手工冒烟（验收路径见交接单第四节）：边框清除、Dock 放大、布局重组、节点分类 Tab、aiProcess 排版、右键编辑入口。
+- [ ] 推送至远程，更新本节状态标记。
+
+工作量：0.5 人日（含手工验收）。
+
+### Sprint 1：桌面端回归基线（高优先）
+
+目标：补齐自动化测试无法覆盖的桌面端 E2E 回归，为后续发布提供可重复的验收底稿。
+
+| 任务                      | 状态      | 说明                                                                      |
+| ------------------------- | --------- | ------------------------------------------------------------------------- |
+| tldraw 端到端回归         | ⏳ 待执行 | 节点创建、双击编辑、拖动、连线、分组、撤销、保存重开、右键菜单与右侧详情  |
+| 100/500/1000 节点性能基线 | ⏳ 待执行 | `pnpm benchmark:canvas` 生成基线，记录首屏/拖动/保存耗时                  |
+| 批量媒体生成回归          | ⏳ 待执行 | P3.4：以已配置图片模型完成 20-100 项桌面端媒体生成回归（分镜→批量生图）   |
+| 示例项目全链路验收        | ⏳ 待执行 | 四条链路：文本→生图、文本→AI处理→分镜→导演台、分镜→批量生图、视频节点链路 |
+| `db.ts` 导入告警清理      | ⏳ 待评估 | 动/静态导入告警不阻断构建，但应在发布前确认无非预期 chunk 问题            |
+
+验收：所有回归项可重复执行并留档；性能基线有量化数据；批量生成可暂停恢复且失败项可单独重试。
+
+工作量：2-3 人日。
+
+### Sprint 2：媒体资产与供应商体验（中优先）
+
+目标：让真实生成链路更稳定、可追溯、可重试。
+
+- 视频节点补"重新生成"和完整来源摘要（图片已有，视频/音频待补）。
+- 资产库补筛选、按来源跳转、批量导出。
+- 将供应商能力（文本/首帧/尺寸/时长/种子）结构化为驱动描述，UI 根据能力启用或禁用配置。
+- 为异步视频任务补更精确的恢复、取消和错误分类。
+- 严格保持 API Key 只在主进程本地使用，不写入日志、项目导出或模板。
+
+验收：任意媒体能回溯到输入与模型配置；失败任务有明确可操作的恢复路径。
+
+工作量：3-5 人日。
+
+### Sprint 3：导演台体验完善（中优先）
+
+目标：在既有 2D/3D 白模预演基础上提升预演指导价值，不破坏既有 I/O。
+
+> 注：Three.js 白模视口已在前批功能中落地（场景、角色占位、机位变换、焦距和画幅）。本阶段聚焦体验完善而非新引擎。
+
+- 支持从分镜同步镜头，并明确"同步覆盖"与"本地编辑保护"的冲突策略。
+- 增加镜头顺序、参考图分区、相机预设和预演导出设置。
+- 保持 `previs.camera@1`、`previs.project@2` 和现有帧/视频端口稳定。
+- 评估"生成空间"从本地轻量白模升级为真实 Depth Anything 的可行性（仅替换 `previs-space-generator.ts` 适配器）。
+
+验收：同一导演工程可重开、可编辑、可重新发布；旧的 PNG/WebM 下游连线完全兼容。
+
+工作量：3-5 人日。
+
+### Sprint 4：正式发布收尾（发布前必做）
+
+目标：让单用户本地版本可安全升级和迁移。
+
+- 生成 Windows 安装包回归矩阵：新装、升级、旧项目、导入导出和离线使用。
+- 完善备份/修复 UI，而不是只保留 `.bak` 文件。
+- 发布前执行依赖审计并复查 Electron 依赖链风险；`extract-zip@2.0.1` 公告需在 Electron 升级时重点复核。
+- 为每次发布写节点契约变更记录与迁移说明。
+- 发布前执行 [docs/DESKTOP_ACCEPTANCE_CHECKLIST.md](./docs/DESKTOP_ACCEPTANCE_CHECKLIST.md) 全量桌面验收门禁。
+
+工作量：2-3 人日。
+
+### 长期技术债（2026-10-25 审计收口，全部关闭或转为明确边界）
+
+> 2026-10-25 审计结论（审计过程见 [交付台账 §6](docs/LOCAL_MEDIA_STOP_STATE_MACHINE_2026_10_24.md)）：
+
+| 项目                          | 审计结论                                                                                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `NodeCardProps.text` 字段复用 | ✅ 已消除。运行结果统一在 `meta.nodeResult`；生成/视频/语音/处理类节点均按「正文在 `props.text`、参数在 `props.config`」执行。chat/storyboard 的 text 是节点内容数据（对话记录/分镜），属载体语义；唯一配置混存是 legacy `script`（已冻结禁止新建），为旧项目兼容维持原样，不迁移 |
+| 迭代节点并发                  | ✅ 执行器并行池已实现（W2：1–4 有界并发、fail 停止认领、按原始下标有序聚合、取消作废、resume 指纹复用，含真并发测试）。renderer 宿主未声明 `parallelItems` 是设计决策：循环体卡片单实例，UI 虚拟化前并行会互相覆写卡片状态——属能力边界，非未完成清理           |
+| 节点 Schema 细化              | ✅ 已交付（P2 数据批次）。`character.profile@1`、`scene.definition@1`、`shot.definition@1`、`prompt.bundle@1` 均已注册并有专属校验                                        |
+| `db.ts` 动/静态导入           | ✅ 已消除。当前构建 0 告警，renderer 无 db 导入（main/renderer 存储边界已分离），无预期的额外 chunk                                                          |
+
+## 8. 已知边界与风险
+
+1. 导演台已升级为 2D Canvas + Three.js 白模双视口预演（contractVersion 2），但非完整三维导演工具；其价值在于稳定镜头数据与可发布媒体输出。"生成空间"当前为本地轻量白模 fallback，外部图片→白模服务需经可插拔 Provider 适配。
+2. 迭代节点已具备明确的 `out-item` 循环体边界、项级检查点、协作式暂停恢复和"分镜→批量生图"模板，但仍严格串行，不支持可控并发。
+3. `NodeCardProps.text` 仍承担部分节点配置；运行结果已统一写到 `meta.nodeResult`，但配置字段的彻底细分应在 P2 统一做，避免零散迁移。
+4. `pnpm build` 对 `db.ts` 的动态/静态导入会给出 Vite 告警，目前没有功能影响。
+5. API Key 使用 Electron `safeStorage` 加密并兼容旧配置；仍禁止将 Key、授权头、真实模型配置或媒体数据提交到 Git。
+6. 2026-09-06 浏览器全节点审查发现的 8 项 UI/交互缺陷已处置完毕（修复 P1-1/P1-2/P2-2/P3-2，改进 P2-1/P2-4，实证证伪 P2-3/P3-1）；逐项修复说明与 Playwright 实证证据见 [docs/QA-NODE-AUDIT-2026-09-06.md](./docs/QA-NODE-AUDIT-2026-09-06.md)，回归断言在 `npm run test:browser-ui`。桌面端仍应按 `docs/DESKTOP_ACCEPTANCE_CHECKLIST.md` 做最终验收。
+
+## 9. Infinite Atelier 借鉴进度与 IA-2 计划
+
+### IA-1 第三批：媒体结果体验（已完成）
+
+- 图片资产和生图结果卡提供“继续生图”“生成视频”快捷入口；只创建真实节点和真实 `out-image -> in-image` 端口连线，失败时回滚孤立节点。
+- 图片、生图、视频、音频结果卡统一展示来源摘要，并提供定位文件、复制路径和系统打开等本地操作。
+- 四类媒体支持结果集合；重复生成追加最近 12 项候选，`selectedMediaId` 标记当前结果，切换后仍投影到原有 `out-image` / `out-video` / `out-audio` 端口。
+- 支持清空历史候选并保留当前输出；音频结果采用播放器加轻量结果网格。
+- 未新增节点类型、未新增隐藏端口、未改变既有节点契约；媒体仍以独立 `MediaAsset` 保存。
+
+验收：`npm run lint`、`npm run typecheck`、`npm test`、`electron-vite build`、`git diff --check` 全部通过；合并线上更新后当前为 27 个测试文件、450 个用例，并已补充生图执行器的首次写入、重复追加、取消和失败回归。
+
+### IA-2：资产与运行中心（IA-2.0–2.3 已完成）
+
+1. **✅ IA-2.0 数据索引**：已从 `MediaAsset`、`meta.nodeRun` 和 `meta.nodeResult.results` 建立只读索引；包含来源节点、模型摘要、结果集合当前项、最近运行 ID/状态和资产时间，不复制 API Key、路径全文或完整提示词。
+2. **✅ IA-2.1 资产筛选**：资产中心已支持类型、稳定来源 `nodeId`、最近运行状态、时间范围和安全关键词组合筛选；默认按最新资产排序，显示筛选后的数量。
+3. **✅ IA-2.2 来源定位（节点部分）**：资产卡显示来源节点和“当前/历史”结果标记，可通过稳定 shape ID 选中并聚焦来源节点；节点已删除时明确提示且不修改项目数据。本地文件操作继续沿用既有安全 IPC。
+4. **✅ IA-2.3 运行中心**：跨节点读取持久化的 `meta.nodeRun` / `meta.nodeRunHistory`，支持运行状态、节点/运行 ID/端口的安全搜索、定位来源节点和错误摘要；失败记录的重试仍通过统一 `runNodeManually → executor` 路径。资产卡可直接打开准确对应的运行记录。
+   - 每个新媒体结果会写入产生它的 `runId`；索引优先从当前记录或历史记录精确匹配该运行，即使后续一次执行失败，也不会把既有资产误标为失败运行。旧结果没有 `runId` 时安全回退到节点最近记录。
+   - 未新增端口、节点类型或隐式数据流；运行中心只读取既有持久化状态，不保存提示词全文、路径全文或密钥。
+5. **✅ IA-2.4 自动化验收**：图片执行器已覆盖精确 `runId`、重复追加、取消和失败不写入；项目仓库已覆盖保存重开后媒体结果 `runId`、当前运行记录和历史记录不变。下一项只剩 Electron 人工路径：“生成图片 → 重复生成 → 切换结果 → 定位节点 → 查看运行记录 → 失败重试”；完成后再决定是否在音频结果网格中提供同样的运行入口。
+
+本切片新增 `test/media-index.test.ts`、`test/run-index.test.ts`、`test/project-persistence.test.ts`，并补强 `test/media-result-executor.test.ts`；覆盖生成结果集合来源、当前/历史结果、稳定 `nodeId` 筛选、无运行记录资产、安全关键词、跨节点运行记录的去重排序和过滤、连续执行时每个媒体结果保留自身 `runId`，以及保存重开后该溯源记录不丢失。完整门禁通过，当前为 30 个测试文件、456 个用例。IA-2 仍保持本地单用户架构，不引入登录、团队、云端项目或权限系统；导演台真实 3D、图片转模型和供应商级批量候选不作为 IA-2 前置工作。P3.4 的真实桌面端批量媒体回归属于并行验收债务，不阻塞 IA-2 的索引与资产中心开发，但必须在发布前完成。详细借鉴差异与验收表见 [INFINITE_ATELIER_ADOPTION_PLAN.md](./docs/INFINITE_ATELIER_ADOPTION_PLAN.md)。
+
+## 10. 不可提交内容
+
+- `.docx` 原文、临时解析缓存、`node_modules/`、`out/`、安装包、日志。
+- 本地 SQLite、项目目录、生成媒体、截图和性能产物。
+- API Key、Authorization header、真实供应商 Base URL/配置。
+
+每次交接至少应包含：提交哈希、变更摘要、通过的命令、人工验证路径、已知限制和下一步的唯一推荐项。
+
+## 11. 节点流体验对齐批次（2026-11-16）
+
+### 背景与根因
+
+用户走查节点流（composite）保存/编辑/运行链路，发现一批与主画布不一致的行为，逐项定位根因后修复：
+
+1. **保存即插画布**：`WorkflowSaveDialog` 发布后强制在视口中心插入实例（P2 最小闭环遗留）。用户裁决：保存只登记到节点流库并打开面板，需要时点卡片/拖拽添加。
+2. **产物不摆上画布**：`compositeExecutor` 只把公开输出写回自身 meta，未走 `emitArtifact`；内部生图产物落在隔离临时画布被丢弃。修复：公开媒体输出与单节点同一套 `materializeArtifact` 机制落为独立资产节点（带生产关系溯源），headless 未注入回调时兼容。
+3. **点着点着退出编辑**（深层根因）：全屏编辑器状态挂在 `WorkflowPanel` 内，而打开契约面板等动作会收侧栏（`panelTab=null`），外层 `CanvasSidePanel` 返回空 → 编辑器被卸载。修复：`canvasEdit`/`settingsDialog` 状态提升到不随侧栏开关卸载的外层；侧栏 Escape 在全屏编辑期间不连带收侧栏。
+4. **编辑器交互与主画布不一致**：双击空白插入 tldraw 文本框、右键无创建菜单、单击弹契约面板、端口拉不出线。修复：主画布同款 dblclick 捕获桥接（文本 inline 编辑/标题改名/媒体桥接，其余阻止默认）+ 绘制快捷键屏蔽；右键空白=创建菜单、右键节点=节点操作菜单（portal 事件冒泡需 stopPropagation，否则主画布同时弹菜单）；单击只选中，契约面板由 info 按钮经 `useNodePanelStore` 显式打开（`NodeContractPanel` 外部点击收起只允许真正渲染出面板的实例响应，避免空实例误关）；连线完成回调加覆盖槽 `setConnectionFinishOverride`，编辑器注册自己的落点连接（tryConnect/tryConnectFromInput），拉线到空白弹兼容节点菜单并自动接线，`ConnectionLayer`/`PendingConnectionLayer` 跟手引线。
+5. **卡片动作**：编辑节点 / 编辑名称（弹窗精简为仅名称，说明保留原值）/ 复制（新组合名=原名+「副本」，独立 1.0，内容与原流一致）/ 删除。
+6. **提示与配色**：保存/另存为版本反馈统一为窗口顶部提示条（`topNotice` store + `TopNotice`，发布后回到主画布仍可见）；编辑器顶栏与 Windows 标题栏覆盖钮统一纯黑 `#0d0d0d`。
+7. **生图供应商记忆**：`imageGenPreference`（localStorage）记住上次选择的供应商/模型；主画布 `createNodeAt` 与编辑器 `addNode` 新建生图节点时沿用，目录失效回退默认；不回写已有节点。
+8. **回撤悬停显示**：revert `3137c47c`（资产节点按钮悬停显示优化），按钮恢复常显（用户裁决）。
+
+### 提交链
+
+| 提交 | 内容 |
+| --- | --- |
+| `2f7ed9a8` | 回撤资产节点按钮悬停显示优化，恢复常显（7 文件 -129） |
+| `e706bb2d` | 节点流保存只登记到库 + 公开媒体产物落画布为资产节点（含验收脚本同步与输出轮询竞态修复） |
+| C3（本提交） | 卡片复制/编辑名称、编辑器状态提升与交互对齐、顶部提示与纯黑顶栏、生图供应商记忆（含本 HANDOFF 更新） |
+
+### 验证证据
+
+- `typecheck:node` / `typecheck:web` / eslint / `electron-vite build` 通过。
+- 单测 34 项：composite-executor 7（含媒体落资产节点、headless 兼容）、composite-w3-types 19、composite-w3-upgrade 5、image-gen-preference 3。
+- `nf-user-walkthrough` 20 项全绿：含新增断言——单击只选中、info 开面板、右键建节点、双击无输入框/不退出、端口拉线后 CLI 复核草稿边数、复制副本独立 1.0。
+- `composite-gui-acceptance` 14 项全绿（发布/草稿/升级/嵌套运行无回归）。
+- `headless-execute-acceptance` 7 项全绿（无项目执行链）。
+- `composite-desktop-acceptance` 16 项通过（CLI graph.patch 插 composite 实例 → node.execute → run.wait → output.get；引用形态/升级/守卫）。
+
+### 已知边界
+
+- `composite-desktop-acceptance` 媒体腿在隔离环境失败（「生成来源保存失败」），属隔离验收环境问题，与插入/运行链无关；真实环境（已验证图片模型）待复测。
+- 外部 Agent 全链真实演示未做：外部接入层须应用带 `--local-agent-access` 启动（dev 默认不开）。
+- 生图记忆为单测 + 创建路径代码验证，无真实模型 GUI 实测。
+- 验收脚本坑（已修）：运行台账先记完成、输出后投影画布，轮询读输出必须等待期望内容；走查需复制许可证安全目录；卡片动作前确保节点流面板开着。
+
+## 12. 循环扇出与运行可观测性批次（2026-11-16 晚）
+
+### 背景与根因
+
+用户以「2 分镜 → 逐镜提示词 → 逐镜生图」最小闭环走查循环链路，提出：N 项应自上而下等距 N 条分支、生图模块要显示实际使用的优化提示词、运行 tab 要能查看并复制每次运行的完整输入输出、全页面严禁左侧彩色边框标注。逐项定位根因后修复：
+
+1. **子图运行裁掉循环体**：`workflowScope` 只取上游闭包，`out-item` 下游循环体被裁出执行图，iterate 报「未配置循环体」。修复：沿 `out-item` 展开循环体并补齐其上游依赖，迭代到稳定（支持嵌套循环）。
+2. **免费本地节点误触发付费确认**：`code`/`processor` 重跑不产生费用，却计入付费上游确认。修复：`freeLocalTypes` 豁免。
+3. **循环分支不可见/不等距**：新增 `iteration-lanes.ts` 泳道投影——每项一条「提示词→产物」分支，自上而下等距（`ITERATION_LANE_GAP=480`）；泳道是运行投影（溯源 meta），非 DAG 数据边，不参与排序、不被当循环体；重跑前 `clearIterationLanes` 清旧投影。另修排布漂移：循环卡尺寸随进度变化导致每项锚点不一致，改为整轮固定锚点 `ctx.iterationLaneAnchor`。
+4. **运行记录丢正文**：`NodeRunRecord` 原只存状态/耗时/来源端口。修复：新增 `inputValues`/`outputValues` 值快照（`snapshotRunInputs/Outputs`，媒体只存引用、文本/JSON 超 40k 截断标记），所有节点通用；契约面板运行 tab 改为完整历史列表，每条按端口展示完整输入/输出并独立可复制 + 整条记录可复制。
+5. **生图提示词显示位置**：用户裁决提示词应填充进「分镜图」(生图)模块的提示词框，而非给图片资产卡加样式。修复：`image-gen.tsx` 用 `gatherUpstreamText(in-text)` 读取上游优化提示词，连接时只读显示（blur 不写回 `props.text`，避免下次运行重复合并）；撤销图片资产卡的提示词 caption。
+6. **代码节点非法 config 静默隐藏端口**：`graph.patch` 计划阶段对 `code` 节点调用 `codePortConfigErrors` 显式拒绝（`CONFIG_INVALID`），外部 Agent 建链立即报错而非跑空。
+7. **左侧彩色边框全面清除**：运行历史、契约预览、测试结果、能力说明、引用块、流程总览、库错误条等左侧色条移除，状态改用文字/整体边框表达；保留的 `border-left` 均为中性结构分隔线/CSS 三角形/拖拽手柄。
+
+### 提交链
+
+| 提交 | 内容 |
+| --- | --- |
+| C1 | 循环泳道等距排布 + 子图循环体入域 + 免费节点付费豁免 + 运行记录完整可复制 I/O + 契约面板运行 tab + 生图提示词框填充（含面板样式与左侧色条清除） |
+| C2 | 代码节点非法 config 计划阶段显式拒绝（graph-patch + 回归测试） |
+| C3 | 其余页面左侧彩色边框清除 + 本 HANDOFF 更新 |
+
+### 验证证据
+
+- `typecheck:node` / `typecheck:web` / eslint / `electron-vite build` 通过。
+- 单测 88 项全绿：manual-run 23（含子图循环体入域、泳道等距回归）、iterate 38、iterate-cancel-resume 6、iteration-lanes 2、run-record-values 5、graph-patch-plan 14（含代码节点非法 config 拒绝）。
+- 真实重跑（外部 Agent CLI，`--local-agent-access`）：2 分镜 → 2 提示词 → 2 图全部 done；快照实测泳道 `DY=480/DX=0` 严格等距、产物列对齐；运行记录含 `in-json` 输入与 `out-text` 输出全文。
+- GUI 截图确认：分镜图提示词框显示上游优化提示词；图片结果节点无提示词 caption。
+
+### 已知边界
+
+- 泳道头卡提示词取循环体第一个文本输出；若循环体首节点输出 JSON（非文本），头卡保留当前项 JSON。
+- 生图提示词框只读显示取上游「最近一次持久化输出」，循环结束后显示最后一项提示词；逐项历史见泳道头卡与运行 tab。
+- 排查澄清：`graph.get` 的 `limit` 上限 200，传 300 会被 zod 拒绝且 CLI 吞成通用错误（曾误判为桥接卡死）；桥接本身健康。

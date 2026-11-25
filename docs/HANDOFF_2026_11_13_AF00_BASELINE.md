@@ -1,7 +1,7 @@
 # Handoff：Agent Flow 特定任务优化 — AF-00 基线已交付
 
 日期：2026-11-13（Asia/Shanghai）。基线提交：见本文件所在 commit（父提交 `10d932a5`）。
-方案入口：[canvas-agent-flow/README](canvas-agent-flow/README.md) → [48-优化方案](canvas-agent-flow/48-task-specific-flow-optimization-plan-2026-11-13.md) → [49-AF-00 基线与样例](canvas-agent-flow/49-af00-baseline-and-sample-2026-11-13.md)。
+方案入口：[canvas-agent-flow/README](canvas-agent-flow/README.md) → [48-优化方案](canvas-agent-flow/archive/48-task-specific-flow-optimization-plan-2026-11-13.md) → [49-AF-00 基线与样例](canvas-agent-flow/archive/49-af00-baseline-and-sample-2026-11-13.md)。
 
 ## 0. 大白话现状（给非技术读者）
 

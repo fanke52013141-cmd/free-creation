@@ -344,3 +344,13 @@ type SelectionGeometry = {
 ### 回归门禁
 
 scripts/test-browser-node-presentation.cjs 验证标题顺序、单端口居中、两张身份卡对齐、两态网址双击、消息动作集合与正文下方位置；scripts/diagnose-port-concurrency.cjs 继续验证候选出现时溯源线不脱离。
+
+## 2026-11-12 L3 连线与可读性裁决（BL-32 回写，现行）
+
+来源：批次执行计划 L3（已实施完成，原文归档于 `docs/archive/external/AGENT_FLOW_EXECUTION_SPEC_2026_11_12.md`）。以下条款自 2026-11-26 起写进本规范正文；与旧图/旧验收冲突时以本节为准。
+
+1. **端口扇出排序**：同类型组内出现多个锚点时，按对端节点中心 y 排序分配视觉落点；无对端信息的端口保持声明序；端口 id、类型分组与契约不变，只改视觉 Y。
+2. **反向边外弧**：源节点中心 x ≥ 目标节点中心 x 的数据边从上方绕过中间卡片：弧顶 = min(start.y, end.y) − arcLift，arcLift = 60 + |dx| × 0.1（上限 160）；前向边保持原公式不变。rework 关系强制下弧（source bottom → target bottom）。
+3. **控制线按 kind 着色**：`controls` 青、`observes` 灰蓝、`review` 琥珀、`rework` 玫红，统一取 `agent-flow-relations.css` 的主题变量；不新增控件，关系标签保留中文文案。
+4. **hover/选中聚焦**：选中节点时无关边与关系线透明度降为 0.15，相关边保持；纯渲染派生，不落盘、不改 meta。
+5. **角色徽标**：Agent 卡片标题区显示角色 chip：`coordinator`→「主控」、`specialist`→「专业」、`builder`→「搭建」；state-machine/ai-review 不重复加角色徽标。

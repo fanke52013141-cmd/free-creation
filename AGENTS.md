@@ -95,7 +95,7 @@ renderer 的 `emitDiagnosticsEvent` 和 main 的诊断入口。实际验收范�
 
 当前唯一方案入口：[画布原生 Agent Flow](docs/canvas-agent-flow/README.md)（2026-11-20 起含权威文档分类索引；graph 执行模式/循环体等 2026-11-14 后波次的方案文档仍在仓库外，收敛登记见该 README）。
 
-2026-10-12 用户已确认[完整方案](docs/canvas-agent-flow/00-approved-plan.md)并授权按 C0–C4 开发；C1–C4、R 系列与 AF-00～07 均已交付（能力现状以 `docs/canvas-agent-flow/49-af00-baseline-and-sample-2026-11-13.md` §2 支持矩阵与开发台账为准）。首版新增 Agent、状态机、AI 审核三种类型。Agent 职责与人机协作/纯 AI 参与方式独立配置；资产固定版本，审核返工走显式控制关系和有界预算，不形成反向数据环。
+2026-10-12 用户已确认[完整方案](docs/canvas-agent-flow/archive/00-approved-plan.md)并授权按 C0–C4 开发；C1–C4、R 系列与 AF-00～07 均已交付（能力现状以 `docs/canvas-agent-flow/archive/49-af00-baseline-and-sample-2026-11-13.md` §2 支持矩阵与开发台账为准）。首版新增 Agent、状态机、AI 审核三种类型。Agent 职责与人机协作/纯 AI 参与方式独立配置；资产固定版本，审核返工走显式控制关系和有界预算，不形成反向数据环。
 （历史注记：本段曾长期标注"待实施设计"；该状态已失效，实现以测试与验收记录为准。）
 
 1. 上帝 Agent 构建画布中的 Flow；主 Agent 节点协调流程、任务、最小输入和产物；专业 Agent 节点承担复杂执行任务。主 Agent 与专业 Agent 复用 Agent 节点类型，以角色及工具权限区分。

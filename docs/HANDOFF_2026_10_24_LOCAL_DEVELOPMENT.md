@@ -58,7 +58,7 @@
 - 结构化诊断事件、脱敏、健康计数、保留策略、运行中心、诊断ZIP四文件和跨会话环境信息已有实现。
 - `state-machine`当前注册的是配置阶段pending executor，**尚未开放独立执行**。
 
-来源：[Agent剩余总台账](canvas-agent-flow/38-agent-completion-plan.md)、[近期历史交接](canvas-agent-flow/HANDOFF_2026_10_19_DIAGNOSTICS_SYNC.md)。不要将历史R09/R10边界或R11真实供应商未验收删除，也不要依据早期“尚未实现”段落否定已交付能力。
+来源：[Agent剩余总台账](canvas-agent-flow/archive/38-agent-completion-plan.md)、[近期历史交接](canvas-agent-flow/archive/HANDOFF_2026_10_19_DIAGNOSTICS_SYNC.md)。不要将历史R09/R10边界或R11真实供应商未验收删除，也不要依据早期“尚未实现”段落否定已交付能力。
 
 ### 3.4 已完成但暂不扩展的外部接入
 

@@ -7,7 +7,7 @@ baseline-commit: aea3987a (main)
 owner: Canvas Studio 规范组
 supersedes: |
   本文收敛以下文档的「现行条款」，原文降级为档案（见 §20）：
-  docs/canvas-agent-flow/00-approved-plan.md · 01-product.md · 02-architecture.md ·
+  docs/canvas-agent-flow/archive/00-approved-plan.md · 01-product.md · 02-architecture.md ·
   05-node-coordination-standard.md · 07-ai-review-node.md · 10-c1-control-declarations.md ·
   仓外 agent-flow-interpreter-plan-20261114.md · agent-flow-three-form-plan-20261114.md
 machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-host.ts · contracts.json

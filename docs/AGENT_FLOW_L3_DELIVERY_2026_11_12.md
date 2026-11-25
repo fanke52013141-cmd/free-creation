@@ -1,6 +1,6 @@
 # Agent Flow L3 连线治理交付（2026-11-12）
 
-依据：[优化方案](AGENT_FLOW_OPTIMIZATION_PLAN_2026_11_12.md) §1.4-1.5、[实施规格](AGENT_FLOW_EXECUTION_SPEC_2026_11_12.md) 批次 L3。
+依据：[优化方案](AGENT_FLOW_OPTIMIZATION_PLAN_2026_11_12.md) §1.4-1.5、[实施规格](archive/external/AGENT_FLOW_EXECUTION_SPEC_2026_11_12.md) 批次 L3。
 前置批次：L1/L2 布局（未提交）、R1/R2/R3 根因与闭环（未提交）。
 
 > GUI 证据为 Playwright 驱动真实 Electron 的合成事件（非人工点击）；窗口 `[TEST]` 标识、

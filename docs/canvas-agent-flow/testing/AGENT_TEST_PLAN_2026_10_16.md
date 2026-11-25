@@ -400,7 +400,7 @@ I01–I10 任何一项违反立即停止相关有副作用路径，先保留证�
 
 主要依据：
 
-- [最新 R09 交接](../HANDOFF_2026_10_16_R09_LOCAL_RELIABILITY_SYNC.md)、[R01–R12 总台账](../38-agent-completion-plan.md)。交接顶部最新说明优先于历史分包的“未提交/下一步”快照。
+- [最新 R09 交接](../archive/HANDOFF_2026_10_16_R09_LOCAL_RELIABILITY_SYNC.md)、[R01–R12 总台账](../archive/38-agent-completion-plan.md)。交接顶部最新说明优先于历史分包的“未提交/下一步”快照。
 - [节点协调规范](../05-node-coordination-standard.md)、[节点 UI 当前规范](../../NODE_UI_STANDARD.md)、[日志覆盖](../../LOGGING_COVERAGE.md)。设计文档中的旧“尚未实现”状态不能覆盖当前代码与最新交接。
 - `src/shared/agent-flow/node-contracts.ts`、`runtime-contracts.ts`、`builder.ts`、`media-review.ts`、`video-review.ts`。
 - `src/main/agent-flow/` 任务/协调/命令/审核/Skill/资产实现；`src/renderer/src/nodes/specs/` 的 Agent、建图和审核实际控件。

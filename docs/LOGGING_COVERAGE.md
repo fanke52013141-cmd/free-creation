@@ -287,15 +287,15 @@ Vidu 视频生成接入不新增业务事件、不旁路公共执行器：提交
 
 ## 2026-10-19 素材资产包生命周期（47 包）
 
-资产包导入/导出公共 IPC 补 library.transfer.started/completed/cancelled/failed，独立 trace/span 与唯一终态；操作区分 import/export，失败/取消标明 dialog/repository 阶段，错误码为固定 IMPORT_FAILED/EXPORT_FAILED。取消不调用仓库，对话框异常转为受控失败 envelope；原仓库成功/失败结果保持，不新增重试或回滚假记录。固定模板不记录路径、资源ID列表或原异常；logger抛错不改变四类业务结果。新增14项与分类、SQLite/包往返、schema/gateway共53/53通过，Node类型/定向lint/日志门禁通过。尚未真实窗口端到端或设备故障组合验收，其他素材路径仍待逐项迁移。详情及日志模板见 [47 包](canvas-agent-flow/47-library-package-transfer-diagnostics.md)。
+资产包导入/导出公共 IPC 补 library.transfer.started/completed/cancelled/failed，独立 trace/span 与唯一终态；操作区分 import/export，失败/取消标明 dialog/repository 阶段，错误码为固定 IMPORT_FAILED/EXPORT_FAILED。取消不调用仓库，对话框异常转为受控失败 envelope；原仓库成功/失败结果保持，不新增重试或回滚假记录。固定模板不记录路径、资源ID列表或原异常；logger抛错不改变四类业务结果。新增14项与分类、SQLite/包往返、schema/gateway共53/53通过，Node类型/定向lint/日志门禁通过。尚未真实窗口端到端或设备故障组合验收，其他素材路径仍待逐项迁移。详情及日志模板见 [47 包](canvas-agent-flow/archive/47-library-package-transfer-diagnostics.md)。
 
 ## 2026-10-19 素材分类生命周期（46 包）
 
-公共 listCategories/saveCategory IPC 新增 library.category.started/completed/failed，独立 trace/span、唯一终态；仅记录 operation=list/save，失败固定 phase=repository 与 READ_FAILED/SAVE_FAILED。原仓库调用、业务返回和错误提示保持；不记录分类名称/描述/ID/配置或原异常，logger 抛错不改变结果。7 项新增 IPC/service 序列化回归与原 SQLite 持久化、schema/gateway 回归共39/39通过，Node类型、定向lint和日志门禁通过。未验收真实界面点击、设备故障组合及仓库细分错误；其他素材操作仍按路径迁移。详见 [46 包与日志模板](canvas-agent-flow/46-library-category-diagnostics.md)。
+公共 listCategories/saveCategory IPC 新增 library.category.started/completed/failed，独立 trace/span、唯一终态；仅记录 operation=list/save，失败固定 phase=repository 与 READ_FAILED/SAVE_FAILED。原仓库调用、业务返回和错误提示保持；不记录分类名称/描述/ID/配置或原异常，logger 抛错不改变结果。7 项新增 IPC/service 序列化回归与原 SQLite 持久化、schema/gateway 回归共39/39通过，Node类型、定向lint和日志门禁通过。未验收真实界面点击、设备故障组合及仓库细分错误；其他素材操作仍按路径迁移。详见 [46 包与日志模板](canvas-agent-flow/archive/46-library-category-diagnostics.md)。
 
 ## 2026-10-19 诊断包会话环境（45 包）
 
-导出 manifest 新增 sessions/omittedSessions，按范围内真实事件 sessionId 分离历史环境与当前导出环境；仅输出经过白名单和格式校验的版本、平台、架构、packaged/commit。历史记录缺失、损坏、身份不符或读取失败时标明环境未知，不套用当前版本、不阻断导出、不改写旧记录。128 会话上限及历史文件体积预检，避免任意路径与元信息扩散；不新增业务生命周期或补造 trace。实际跨会话 ZIP 四个条目与私密字段排除回归通过，4/4 定向；首次 run-Y3hsMu 遇沙箱 rename EPERM 后停止，正常环境完整源码门禁 run-E3y2A7 退出 0（193 文件/2393 通过/1 既有跳过，模型另 2、19 浏览器、生产构建及全部桌面路径通过）；真实关窗 7 场景、R09 四次 renderer 重开、10 对保存终态与脱敏通过。此前“bundle 未携带环境”的缺口由本包处理，字段完整性及旧记录无法追溯仍为边界。日志检查模板、实现与验证见 [45 包](canvas-agent-flow/45-diagnostics-bundle-environment.md)。
+导出 manifest 新增 sessions/omittedSessions，按范围内真实事件 sessionId 分离历史环境与当前导出环境；仅输出经过白名单和格式校验的版本、平台、架构、packaged/commit。历史记录缺失、损坏、身份不符或读取失败时标明环境未知，不套用当前版本、不阻断导出、不改写旧记录。128 会话上限及历史文件体积预检，避免任意路径与元信息扩散；不新增业务生命周期或补造 trace。实际跨会话 ZIP 四个条目与私密字段排除回归通过，4/4 定向；首次 run-Y3hsMu 遇沙箱 rename EPERM 后停止，正常环境完整源码门禁 run-E3y2A7 退出 0（193 文件/2393 通过/1 既有跳过，模型另 2、19 浏览器、生产构建及全部桌面路径通过）；真实关窗 7 场景、R09 四次 renderer 重开、10 对保存终态与脱敏通过。此前“bundle 未携带环境”的缺口由本包处理，字段完整性及旧记录无法追溯仍为边界。日志检查模板、实现与验证见 [45 包](canvas-agent-flow/archive/45-diagnostics-bundle-environment.md)。
 
 ## 2026-10-19 源码验证：接收回执与历史会话判定
 
@@ -317,105 +317,105 @@ renderer 的 `diagnosticsReporter.ts` 现在验证 diagnostics:event 的成功 e
 
 ## 2026-10-16 R09 时长压力运行器（44 包）
 
-只改开发验收：复用原 task.control/media 事件，每批新进程校验配对与脱敏，八轮仓库故障由安全 phase 断言，真实保存 IPC 日志仍由独立 renderer 门禁负责。用户选定 90 分钟后，隔离运行检查点越过 5400 秒并继续到 6117.524 秒（3584 批/28672 轮）；检查点、任务/下载/锁数量、保留诊断与脱敏通过，最终离线恢复和三个新进程重开通过，证据见 `qa/r09-soak/run-JGSEXB/duration-policy-audit.json` 与 `manual-final-recovery.json`。原 7200 秒 runner 被强制中断，临时夹具清理未完成，不记作两小时通过。仅开发脚本默认时长和验收文档变化，正式业务事件 SDK/IPC 不变；真实保存 IPC 的逐项日志由独立 renderer 门禁负责。最终完整 run-R6OhUK 退出 0（2041 通过/1 既有跳过，模型另 2，17 浏览器/构建/26 桌面路径）；R09 四次 renderer 重开、10 对唯一保存终态及实际诊断脱敏通过。多小时/长驻 renderer/真实掉电/远端撤回边界保持，见 [44 包](canvas-agent-flow/44-r09-duration-soak-runner.md)。
+只改开发验收：复用原 task.control/media 事件，每批新进程校验配对与脱敏，八轮仓库故障由安全 phase 断言，真实保存 IPC 日志仍由独立 renderer 门禁负责。用户选定 90 分钟后，隔离运行检查点越过 5400 秒并继续到 6117.524 秒（3584 批/28672 轮）；检查点、任务/下载/锁数量、保留诊断与脱敏通过，最终离线恢复和三个新进程重开通过，证据见 `qa/r09-soak/run-JGSEXB/duration-policy-audit.json` 与 `manual-final-recovery.json`。原 7200 秒 runner 被强制中断，临时夹具清理未完成，不记作两小时通过。仅开发脚本默认时长和验收文档变化，正式业务事件 SDK/IPC 不变；真实保存 IPC 的逐项日志由独立 renderer 门禁负责。最终完整 run-R6OhUK 退出 0（2041 通过/1 既有跳过，模型另 2，17 浏览器/构建/26 桌面路径）；R09 四次 renderer 重开、10 对唯一保存终态及实际诊断脱敏通过。多小时/长驻 renderer/真实掉电/远端撤回边界保持，见 [44 包](canvas-agent-flow/archive/44-r09-duration-soak-runner.md)。
 
 ## 2026-10-16 R09 临时快照刷盘（43 包）
 
-复用项目图 async/sync 与工作台保存生命周期及 trace/span，仓库仅增加安全错误阶段 `flush-tmp`，不重复写终态。底层原因码允许列表不变，三种 IPC 刷盘故障断言安全 `EIO` 与正文/路径排除；两文件 23 项及强杀 10 项定向通过。实际画布四种故障、四次重开、10/10 保存诊断逐操作配对及 JSONL 脱敏通过。完整门禁 `run-mEnwT0` 退出 0（2032 通过/1 既有跳过，模型另 2，17 浏览器/构建/26 桌面路径），见 [43 包](canvas-agent-flow/43-r09-project-flush-barrier.md)。旧恢复关联缺失、设备掉电与目录元数据耐久边界保持。
+复用项目图 async/sync 与工作台保存生命周期及 trace/span，仓库仅增加安全错误阶段 `flush-tmp`，不重复写终态。底层原因码允许列表不变，三种 IPC 刷盘故障断言安全 `EIO` 与正文/路径排除；两文件 23 项及强杀 10 项定向通过。实际画布四种故障、四次重开、10/10 保存诊断逐操作配对及 JSONL 脱敏通过。完整门禁 `run-mEnwT0` 退出 0（2032 通过/1 既有跳过，模型另 2，17 浏览器/构建/26 桌面路径），见 [43 包](canvas-agent-flow/archive/43-r09-project-flush-barrier.md)。旧恢复关联缺失、设备掉电与目录元数据耐久边界保持。
 
 ## 2026-10-16 R09 有效备份保护与重复存储故障
 
-图保存与工作台配置复用公共项目 IPC 的 `project.save` 生命周期；工作台原缺失的开始/终态已补齐。仓库存储失败携带安全 phase（read-snapshot/write-tmp/rotate-bak/promote-tmp/update-db）、backupUsed、rollbackFailed，IPC 发唯一终态；error=STORAGE_WRITE_FAILED，cause 只保留允许的系统码，排除原异常消息/路径/正文。实际画布最终 9/9 保存逐 trace/span 配对、三阶段失败、工作台失败与脱敏通过，日志 sink 故障不改变结果的 IPC 回归通过；36 轮/6 新进程公共视频核对夹具保持原任务和一次下载、最后离线恢复唯一媒体，强杀与丢记录不补造终态。完整 verify 退出 0（179 文件/2027 通过/1 既有跳过，模型另 2，17 浏览器/构建/26 桌面路径），1225 个旧 QA 文件无变化；最终证据与日志检查模板见 [42 包](canvas-agent-flow/42-r09-local-reliability.md)。物理掉电、真实磁盘损坏/多小时压力、远端撤回与旧恢复 trace 缺失边界保持。
+图保存与工作台配置复用公共项目 IPC 的 `project.save` 生命周期；工作台原缺失的开始/终态已补齐。仓库存储失败携带安全 phase（read-snapshot/write-tmp/rotate-bak/promote-tmp/update-db）、backupUsed、rollbackFailed，IPC 发唯一终态；error=STORAGE_WRITE_FAILED，cause 只保留允许的系统码，排除原异常消息/路径/正文。实际画布最终 9/9 保存逐 trace/span 配对、三阶段失败、工作台失败与脱敏通过，日志 sink 故障不改变结果的 IPC 回归通过；36 轮/6 新进程公共视频核对夹具保持原任务和一次下载、最后离线恢复唯一媒体，强杀与丢记录不补造终态。完整 verify 退出 0（179 文件/2027 通过/1 既有跳过，模型另 2，17 浏览器/构建/26 桌面路径），1225 个旧 QA 文件无变化；最终证据与日志检查模板见 [42 包](canvas-agent-flow/archive/42-r09-local-reliability.md)。物理掉电、真实磁盘损坏/多小时压力、远端撤回与旧恢复 trace 缺失边界保持。
 
 ## 2026-10-16 验证运行器与证据隔离
 
-本轮只修改开发测试脚本和文档，不改变正式节点执行、模型调用、项目保存或诊断 IPC；业务日志影响为“不涉及”。完整门禁的进程输出及退出码写入每次独立的 QA 目录，属于开发验收证据，不替代正式诊断事件。`npm run verify` 完整退出 0（176 文件/2007 通过/1 既有跳过，模型另 2，17 浏览器/构建/25 桌面路径）；原生命周期配对、恢复关联与脱敏断言均通过，25 份桌面报告脱敏均为 true。982 个旧 QA 文件 SHA-256 无变化，证据见[验证闭环包](canvas-agent-flow/41-reproducible-verification.md)。R09/R11、四帧视频语义范围及旧恢复 trace 缺失边界保持。
+本轮只修改开发测试脚本和文档，不改变正式节点执行、模型调用、项目保存或诊断 IPC；业务日志影响为“不涉及”。完整门禁的进程输出及退出码写入每次独立的 QA 目录，属于开发验收证据，不替代正式诊断事件。`npm run verify` 完整退出 0（176 文件/2007 通过/1 既有跳过，模型另 2，17 浏览器/构建/25 桌面路径）；原生命周期配对、恢复关联与脱敏断言均通过，25 份桌面报告脱敏均为 true。982 个旧 QA 文件 SHA-256 无变化，证据见[验证闭环包](canvas-agent-flow/archive/41-reproducible-verification.md)。R09/R11、四帧视频语义范围及旧恢复 trace 缺失边界保持。
 
 ## 2026-10-15 并行媒体调度、停止与恢复（首包已验收）
 
-两路专业任务复用主控/专业/命令、公共 node/workflow、SDK model 与视频任务/媒体/资产/保存生命周期，各路 task/command 独立，主控收集串行。新增整批拒绝只记录安全码与 handoff 阶段，不记录分派目标、输入正文或完成标准。48 定向与两个流程的双进程桌面通过；4 POST started/accepted、2 下载和原任务接回，停止后的 unknown 占用保持。桌面扫描 desktop、同步 model、node/workflow 唯一终态及正文/Key/MP4 排除；异步视频完整终态/trace、既有 task/media 和 save correlationMissing 盲区保留。2026-10-16 最终完整 verify 退出码 0（1953 通过/1 既有跳过，模型另 2，17 浏览器/构建/21 桌面）。最新两 session：desktop 9/9、同步 model 13/13、command 20/20、node 11/11、workflow 11/11 唯一终态配对；save 39/39 仅总数。截图已人工查看，首次参考音频 setup 超时与原断言复核记录保留，详见 [37 包](canvas-agent-flow/37-parallel-media-stop-recovery.md)。
+两路专业任务复用主控/专业/命令、公共 node/workflow、SDK model 与视频任务/媒体/资产/保存生命周期，各路 task/command 独立，主控收集串行。新增整批拒绝只记录安全码与 handoff 阶段，不记录分派目标、输入正文或完成标准。48 定向与两个流程的双进程桌面通过；4 POST started/accepted、2 下载和原任务接回，停止后的 unknown 占用保持。桌面扫描 desktop、同步 model、node/workflow 唯一终态及正文/Key/MP4 排除；异步视频完整终态/trace、既有 task/media 和 save correlationMissing 盲区保留。2026-10-16 最终完整 verify 退出码 0（1953 通过/1 既有跳过，模型另 2，17 浏览器/构建/21 桌面）。最新两 session：desktop 9/9、同步 model 13/13、command 20/20、node 11/11、workflow 11/11 唯一终态配对；save 39/39 仅总数。截图已人工查看，首次参考音频 setup 超时与原断言复核记录保留，详见 [37 包](canvas-agent-flow/archive/37-parallel-media-stop-recovery.md)。
 
 ## 2026-10-15 视频抽帧审核有界自动返工（首包已验收）
 
-复用 agent.desktop/coordination/runtime、review/rework 阶段、command、node/workflow、model/task/media/save/asset 生命周期；新增视频返工意图/每轮单命令拒绝仅用安全枚举和 video-rework 阶段。冻结标准/反馈只进任务与有效供应商提示词，不进诊断。公共手动/命令/成果呈现工作流新增独立 span 并保留 parentSpanId，避免自动审核多次呈现复用父 span。216 定向及最终完整 verify 退出码 0（1940 通过/1 既有跳过，模型另 2；17 浏览器/构建/20 桌面）。最新两 session desktop 9/9、同步 model 15/15、command 23/23、node 13/13、workflow 13/13 唯一终态配对、恢复 trace 与实际正文/Key/媒体字节排除通过；2 次视频异步 POST 仍只有 started/accepted，不计完整请求终态，project.save 35/35 只计总数且 correlationMissing 盲区保持。验收夹具 fetch 已逐文件登记理由，未豁免生产路径。失败修复、日志模板自查与边界见 [36 包](canvas-agent-flow/36-video-review-bounded-rework.md)。没有真实付费媒体/模型或完整媒体 trace 验收。
+复用 agent.desktop/coordination/runtime、review/rework 阶段、command、node/workflow、model/task/media/save/asset 生命周期；新增视频返工意图/每轮单命令拒绝仅用安全枚举和 video-rework 阶段。冻结标准/反馈只进任务与有效供应商提示词，不进诊断。公共手动/命令/成果呈现工作流新增独立 span 并保留 parentSpanId，避免自动审核多次呈现复用父 span。216 定向及最终完整 verify 退出码 0（1940 通过/1 既有跳过，模型另 2；17 浏览器/构建/20 桌面）。最新两 session desktop 9/9、同步 model 15/15、command 23/23、node 13/13、workflow 13/13 唯一终态配对、恢复 trace 与实际正文/Key/媒体字节排除通过；2 次视频异步 POST 仍只有 started/accepted，不计完整请求终态，project.save 35/35 只计总数且 correlationMissing 盲区保持。验收夹具 fetch 已逐文件登记理由，未豁免生产路径。失败修复、日志模板自查与边界见 [36 包](canvas-agent-flow/archive/36-video-review-bounded-rework.md)。没有真实付费媒体/模型或完整媒体 trace 验收。
 
 ## 2026-10-15 视频抽帧画面审核（首包已验收）
 
-复用正式审核 agent.desktop、SDK model.request、公共 node/workflow、固定资产与保存生命周期，不逐帧记重复事件。新增 FLOW_VIDEO_REVIEW_* 安全失败，正式 IPC 终态保持 phase=review，内部采样错误阶段为 video-review-samples；FFmpeg stderr、规则/反馈、路径、JPEG/Data URL、原始响应与凭据排除，桌面扫描新增 JPEG 与 MP4 前缀。18 定向及最终完整 verify 退出码 0（1923 通过/1 既有跳过，模型另 2；17 浏览器/构建/19 桌面）。最新两 session 的 desktop 3/3、model 6/6、command 11/11、node 4/4、workflow 4/4 唯一终态配对和实际脱敏通过；project.save 16/16 仅总数，其既有 correlationMissing 不宣称逐保存配对。首轮隐藏 renderer 退出丢缓冲的夹具问题及修复、日志模板自查和边界见 [35 包](canvas-agent-flow/35-sampled-video-review.md)。供应商视觉决策为隔离协议夹具，无付费模型请求；不外推全视频/音轨理解、远端取消或完整媒体 trace 树。
+复用正式审核 agent.desktop、SDK model.request、公共 node/workflow、固定资产与保存生命周期，不逐帧记重复事件。新增 FLOW_VIDEO_REVIEW_* 安全失败，正式 IPC 终态保持 phase=review，内部采样错误阶段为 video-review-samples；FFmpeg stderr、规则/反馈、路径、JPEG/Data URL、原始响应与凭据排除，桌面扫描新增 JPEG 与 MP4 前缀。18 定向及最终完整 verify 退出码 0（1923 通过/1 既有跳过，模型另 2；17 浏览器/构建/19 桌面）。最新两 session 的 desktop 3/3、model 6/6、command 11/11、node 4/4、workflow 4/4 唯一终态配对和实际脱敏通过；project.save 16/16 仅总数，其既有 correlationMissing 不宣称逐保存配对。首轮隐藏 renderer 退出丢缓冲的夹具问题及修复、日志模板自查和边界见 [35 包](canvas-agent-flow/archive/35-sampled-video-review.md)。供应商视觉决策为隔离协议夹具，无付费模型请求；不外推全视频/音轨理解、远端取消或完整媒体 trace 树。
 
 ## 2026-10-15 单路参考音频（首包已验收）
 
-复用 Agent/协调/命令/公共节点、模型、任务、媒体/资产/保存及 project.transfer 生命周期；新增 ASSET_AUDIO_CHANGED/audio-integrity 安全失败码。固定音频实际文件与编码字节、原任务列表和项目包摘要校验不新增重复终态。日志模板自查、验证证据及未覆盖边界见 [音频参考包](canvas-agent-flow/34-video-audio-reference-adapter.md)，141 定向及完整 verify 退出码 0（1914 通过/1 既有跳过，模型另 2，17 浏览器/构建/18 桌面）；最新两个 session 的 desktop 6/6、coordination 2/2、transfer 2/2、asset 7/7、command 13/13 配对与实际脱敏通过；8 个同步模型请求按 requestId 配对，既有视频异步 POST 仅 started/accepted，后续 task/media 承载结果，完整请求终态/trace 树盲区保持；不外推付费媒体、远端撤回、完整媒体 trace 树或音频导入强杀。
+复用 Agent/协调/命令/公共节点、模型、任务、媒体/资产/保存及 project.transfer 生命周期；新增 ASSET_AUDIO_CHANGED/audio-integrity 安全失败码。固定音频实际文件与编码字节、原任务列表和项目包摘要校验不新增重复终态。日志模板自查、验证证据及未覆盖边界见 [音频参考包](canvas-agent-flow/archive/34-video-audio-reference-adapter.md)，141 定向及完整 verify 退出码 0（1914 通过/1 既有跳过，模型另 2，17 浏览器/构建/18 桌面）；最新两个 session 的 desktop 6/6、coordination 2/2、transfer 2/2、asset 7/7、command 13/13 配对与实际脱敏通过；8 个同步模型请求按 requestId 配对，既有视频异步 POST 仅 started/accepted，后续 task/media 承载结果，完整请求终态/trace 树盲区保持；不外推付费媒体、远端撤回、完整媒体 trace 树或音频导入强杀。
 
 ## 2026-10-15 固定媒体项目包
 
-固定图片/视频的导出验证、临时导入验证、身份与引用重映射及事务回滚复用项目 IPC 的 project.transfer.started/committed/failed 和公共打开/保存事件，不重复终态。新增三个媒体/预览受控错误码，保留 validation-or-transaction 阶段，不记录包内容、文件路径、媒体字节、提示词或凭据。28 定向（含真实 SQLite 写入失败回滚）及完整 verify 退出码 0（1895 通过/1 既有跳过，模型另 2，17 浏览器/构建/17 桌面）；正式 IPC 双进程导入 6 版本与预览通过。最终实际诊断 desktop 6/6、coordination 2/2、transfer 2/2 唯一终态配对及正文/Key/图片/视频内容排除通过，证据见 [33 包交接](canvas-agent-flow/33-fixed-media-project-transfer.md)。旧无摘要视频无法证明历史内容未变；导入中强杀、掉电、超大包流式化与完整媒体 trace 树未验证。
+固定图片/视频的导出验证、临时导入验证、身份与引用重映射及事务回滚复用项目 IPC 的 project.transfer.started/committed/failed 和公共打开/保存事件，不重复终态。新增三个媒体/预览受控错误码，保留 validation-or-transaction 阶段，不记录包内容、文件路径、媒体字节、提示词或凭据。28 定向（含真实 SQLite 写入失败回滚）及完整 verify 退出码 0（1895 通过/1 既有跳过，模型另 2，17 浏览器/构建/17 桌面）；正式 IPC 双进程导入 6 版本与预览通过。最终实际诊断 desktop 6/6、coordination 2/2、transfer 2/2 唯一终态配对及正文/Key/图片/视频内容排除通过，证据见 [33 包交接](canvas-agent-flow/archive/33-fixed-media-project-transfer.md)。旧无摘要视频无法证明历史内容未变；导入中强杀、掉电、超大包流式化与完整媒体 trace 树未验证。
 
 ## 2026-10-15 Agent 单路视频运动参考
 
-普通 video-asset 固定媒体摘要、一路视频参考授权、异步编码字节校验及原任务视频列表匹配复用既有 Agent/协调/命令/节点、任务控制、模型、媒体、资产和保存生命周期；不新增重复终态。视频完整性失败 ASSET_VIDEO_CHANGED/video-integrity，安全 IPC 不带文件内容/路径。92 定向及完整 verify 退出码 0（1883 通过/1 既有跳过，模型另 2，17 浏览器/构建/16 桌面）；真实隐藏 Electron 两进程 1 POST/1 下载/1 任务，实际脱敏/恢复关联与固定成果原生预览通过；完整门禁及独立日志扫描以 [32 包交接](canvas-agent-flow/32-video-motion-reference-adapter.md) 为准。供应商/SDK 为合成夹具，无付费媒体；未外推音频/多路视频/视觉审核、真实撤回或全媒体 trace 覆盖。
+普通 video-asset 固定媒体摘要、一路视频参考授权、异步编码字节校验及原任务视频列表匹配复用既有 Agent/协调/命令/节点、任务控制、模型、媒体、资产和保存生命周期；不新增重复终态。视频完整性失败 ASSET_VIDEO_CHANGED/video-integrity，安全 IPC 不带文件内容/路径。92 定向及完整 verify 退出码 0（1883 通过/1 既有跳过，模型另 2，17 浏览器/构建/16 桌面）；真实隐藏 Electron 两进程 1 POST/1 下载/1 任务，实际脱敏/恢复关联与固定成果原生预览通过；完整门禁及独立日志扫描以 [32 包交接](canvas-agent-flow/archive/32-video-motion-reference-adapter.md) 为准。供应商/SDK 为合成夹具，无付费媒体；未外推音频/多路视频/视觉审核、真实撤回或全媒体 trace 覆盖。
 
 ## 2026-10-15 Agent 视频有序图片参考（首包已验收）
 
 reference 模式复用 video v7/公共 executor/command/task，逐张固定版本、来源与编码字节验证，恢复比较有序参考列表；模型能力不支持或超量拒绝。复用 agent.desktop/coordination、command.operation、node、model.request、task、media/asset/save 事件，不新增重复终态。阶段 input/video-input/saved-input/image-integrity 保留稳定原因；图片、Data URL/Base64、提示词、路径、Key 和原始响应不记录。
 
-83 定向通过；不同编码三图实际隐藏 Electron 双进程通过（1 POST/1 下载/1 视频任务/9 次合成 SDK 决策、固定预览/指针与诊断脱敏，开始/唯一终态和恢复关联通过）。完整 verify 串行退出码 0：171 文件/1874 通过/1 既有跳过，模型另 2，17 浏览器/构建/15 桌面通过。证据 qa/agent-reference-20261015/verify.log 和 qa/agent-video-reference-20261015/desktop/results.json。日志模板和边界见 [图片参考包](canvas-agent-flow/31-video-reference-images-adapter.md)。供应商/SDK 为隔离夹具，无付费媒体或真实计费/撤回验收；视频/音频参考、视频审核和并行不在本包。
+83 定向通过；不同编码三图实际隐藏 Electron 双进程通过（1 POST/1 下载/1 视频任务/9 次合成 SDK 决策、固定预览/指针与诊断脱敏，开始/唯一终态和恢复关联通过）。完整 verify 串行退出码 0：171 文件/1874 通过/1 既有跳过，模型另 2，17 浏览器/构建/15 桌面通过。证据 qa/agent-reference-20261015/verify.log 和 qa/agent-video-reference-20261015/desktop/results.json。日志模板和边界见 [图片参考包](canvas-agent-flow/archive/31-video-reference-images-adapter.md)。供应商/SDK 为隔离夹具，无付费媒体或真实计费/撤回验收；视频/音频参考、视频审核和并行不在本包。
 
 ## 2026-10-15 Agent 首尾帧双图适配
 
-复用 Agent/协调/命令/公共节点、模型请求、任务控制、媒体/资产/保存生命周期；有序双来源校验和两张实际编码字节校验不重复记录终态。失败沿 input/video-input/revision、image-integrity 与原 gateway 诊断，稳定错误码不带图片、提示词、摘要全文或路径。真实隐藏 Electron 两进程 unknown/重开/明确继续通过，1 POST/1 下载/1 视频任务；实际生命周期配对、恢复关联及 private-c3/假 Key/Data URL/PNG Base64 排除通过。最终完整 verify 退出码 0：1867 项通过、1 既有跳过，模型另 2，日志门禁、17 浏览器、构建及 14 组桌面全部通过；证据与此前失败记录见 [30 包交接](canvas-agent-flow/30-video-first-last-frame-adapter.md)。供应商和 SDK 为合成夹具，不代表真实计费/撤回或所有媒体 trace 覆盖。
+复用 Agent/协调/命令/公共节点、模型请求、任务控制、媒体/资产/保存生命周期；有序双来源校验和两张实际编码字节校验不重复记录终态。失败沿 input/video-input/revision、image-integrity 与原 gateway 诊断，稳定错误码不带图片、提示词、摘要全文或路径。真实隐藏 Electron 两进程 unknown/重开/明确继续通过，1 POST/1 下载/1 视频任务；实际生命周期配对、恢复关联及 private-c3/假 Key/Data URL/PNG Base64 排除通过。最终完整 verify 退出码 0：1867 项通过、1 既有跳过，模型另 2，日志门禁、17 浏览器、构建及 14 组桌面全部通过；证据与此前失败记录见 [30 包交接](canvas-agent-flow/archive/30-video-first-last-frame-adapter.md)。供应商和 SDK 为合成夹具，不代表真实计费/撤回或所有媒体 trace 覆盖。
 
 ## 2026-10-15 最终源码同步验收
 
-26–29 包随 [总 handoff](canvas-agent-flow/HANDOFF_2026_10_15_VIDEO_AGENT_SYNC.md) 同步。最终完整 verify 退出码 0：1857 项通过、1 项既有跳过，模型另 2；日志门禁与全部桌面生命周期/脱敏扫描通过。首帧报告 1 POST/1 下载/1 视频任务、固定图片与视频原生交互通过；测试排除 Data URL/PNG Base64/假 Key/提示词。供应商和 SDK 决策仍为隔离夹具，无付费媒体；下方分包是当时记录，不扩大为真实计费或全媒体日志验收。
+26–29 包随 [总 handoff](canvas-agent-flow/archive/HANDOFF_2026_10_15_VIDEO_AGENT_SYNC.md) 同步。最终完整 verify 退出码 0：1857 项通过、1 项既有跳过，模型另 2；日志门禁与全部桌面生命周期/脱敏扫描通过。首帧报告 1 POST/1 下载/1 视频任务、固定图片与视频原生交互通过；测试排除 Data URL/PNG Base64/假 Key/提示词。供应商和 SDK 决策仍为隔离夹具，无付费媒体；下方分包是当时记录，不扩大为真实计费或全媒体日志验收。
 
 ## 2026-10-15 Agent 首帧图片适配
 
-复用 Agent/协调/命令/公共节点、模型请求、task.control、媒体/固定版本/保存生命周期；图片摘要辅助函数不重复记终态，固定输入/版本读取失败沿既有 input、saved-input 与资产 IPC 诊断。新增图片项目边界、索引/内容摘要与发出字节校验，失败稳定代码不带路径/正文；桌面脱敏扫描额外排除 Data URL 与 PNG Base64。实际 unknown/跨进程接回、原生图片/视频预览和完整门禁见 [29 包交接](canvas-agent-flow/29-video-first-frame-adapter.md)。供应商及 SDK 决策为隔离夹具，无付费媒体；不宣称视觉审核或全部媒体调度完成。
+复用 Agent/协调/命令/公共节点、模型请求、task.control、媒体/固定版本/保存生命周期；图片摘要辅助函数不重复记终态，固定输入/版本读取失败沿既有 input、saved-input 与资产 IPC 诊断。新增图片项目边界、索引/内容摘要与发出字节校验，失败稳定代码不带路径/正文；桌面脱敏扫描额外排除 Data URL 与 PNG Base64。实际 unknown/跨进程接回、原生图片/视频预览和完整门禁见 [29 包交接](canvas-agent-flow/archive/29-video-first-frame-adapter.md)。供应商及 SDK 决策为隔离夹具，无付费媒体；不宣称视觉审核或全部媒体调度完成。
 
 ## 2026-10-15 Agent 文生视频适配
 
-复用命令/Agent/协调/模型/公共节点、视频 task.control、下载/媒体、固定版本与保存生命周期；绑定的 command/run/task/版本 ID 用于事实核对，未知结果不依据日志释放。双进程实际诊断扫描开始/唯一终态、恢复关联及假 Key/材料排除，SDK 与供应商为隔离协议夹具，真实视频字节不入诊断。停止传播沿公共 cancel/control，测试本地 media:// 传输职责已登记 allowlist；不豁免秘密/裸 console 或生产独立网络路径。定向 83 项、固定预览实际指针验收、完整门禁及支持/未支持范围见 [视频 Agent 交接](canvas-agent-flow/28-video-agent-adapter.md)。未宣称真实计费、视频内容审核、同步 Agent 远端取消或全媒体调度完成。
+复用命令/Agent/协调/模型/公共节点、视频 task.control、下载/媒体、固定版本与保存生命周期；绑定的 command/run/task/版本 ID 用于事实核对，未知结果不依据日志释放。双进程实际诊断扫描开始/唯一终态、恢复关联及假 Key/材料排除，SDK 与供应商为隔离协议夹具，真实视频字节不入诊断。停止传播沿公共 cancel/control，测试本地 media:// 传输职责已登记 allowlist；不豁免秘密/裸 console 或生产独立网络路径。定向 83 项、固定预览实际指针验收、完整门禁及支持/未支持范围见 [视频 Agent 交接](canvas-agent-flow/archive/28-video-agent-adapter.md)。未宣称真实计费、视频内容审核、同步 Agent 远端取消或全媒体调度完成。
 
 ## 2026-10-14 C4 组合故障验收
 
-复用 task.control、media.download/media.persist；恢复停止失败保留稳定 VIDEO_MATERIALIZATION_STOPPED 原因，不记录私有异常。六条组合场景验证逐 trace/span control 唯一终态、强杀只留下预期的 control/persist 未完成开始、下载配对及假 Key/正文/签名/字节/路径排除；logger 失败仍能提交原成果。项目仓库测试不伪造保存事件，四类真实 renderer 复验负责公共保存生命周期和脱敏。六文件 74 项定向及完整门禁见 [27 包验收](canvas-agent-flow/27-c4-combined-failure-acceptance.md)，失败复现保留。边界：非真实供应商、非视频 UI 全链路、非完整竞争 trace 树或物理掉电验收。
+复用 task.control、media.download/media.persist；恢复停止失败保留稳定 VIDEO_MATERIALIZATION_STOPPED 原因，不记录私有异常。六条组合场景验证逐 trace/span control 唯一终态、强杀只留下预期的 control/persist 未完成开始、下载配对及假 Key/正文/签名/字节/路径排除；logger 失败仍能提交原成果。项目仓库测试不伪造保存事件，四类真实 renderer 复验负责公共保存生命周期和脱敏。六文件 74 项定向及完整门禁见 [27 包验收](canvas-agent-flow/archive/27-c4-combined-failure-acceptance.md)，失败复现保留。边界：非真实供应商、非视频 UI 全链路、非完整竞争 trace 树或物理掉电验收。
 
 ## 2026-10-14 多进程恢复竞争
 
-项目保存与视频物化/核对复用公共 project.save、task.control、下载及 media.persist；process-lock 只负责 SQLite 所有权，不重复终态、不记录 resource/令牌/PID/路径。占用核对保留任务事实，强杀不补造终态。15 项独立进程竞争检查及六文件 73 项回归通过，覆盖旧锁双竞争、死亡/存活/不确定身份、迟到令牌、停止与迁移。原诊断/脱敏与 logger 故障复验、完整门禁见 [26 包接续](canvas-agent-flow/26-c4-recovery-contention.md)。不证明完整竞争 trace 树、掉电或真实供应商取消；历史条目中的跨进程未覆盖为当时状态。
+项目保存与视频物化/核对复用公共 project.save、task.control、下载及 media.persist；process-lock 只负责 SQLite 所有权，不重复终态、不记录 resource/令牌/PID/路径。占用核对保留任务事实，强杀不补造终态。15 项独立进程竞争检查及六文件 73 项回归通过，覆盖旧锁双竞争、死亡/存活/不确定身份、迟到令牌、停止与迁移。原诊断/脱敏与 logger 故障复验、完整门禁见 [26 包接续](canvas-agent-flow/archive/26-c4-recovery-contention.md)。不证明完整竞争 trace 树、掉电或真实供应商取消；历史条目中的跨进程未覆盖为当时状态。
 
 ## 2026-10-14 视频成果强杀恢复
 
-finalizeVideo 复用下载及 media.persist 开始/唯一终态；可信本地回执离线核对新增复用 media.persist 生命周期，同 task/新核对 trace，仅稳定 operation/ID/MIME。SHA-256、字节、路径/源 URL/Key 不进入诊断。强杀 worker 验证恢复终态配对和私有字节排除；原 logger 故障不改变结果测试继续通过。新增 14 真实强杀/冲突，最终七文件 85 定向通过，证据及完整门禁见 [接续记录](canvas-agent-flow/25-c4-video-materialization-recovery.md)。不补造强杀终态，不把日志作为恢复事实；跨进程并发、掉电/长期故障与真实供应商仍未覆盖。
+finalizeVideo 复用下载及 media.persist 开始/唯一终态；可信本地回执离线核对新增复用 media.persist 生命周期，同 task/新核对 trace，仅稳定 operation/ID/MIME。SHA-256、字节、路径/源 URL/Key 不进入诊断。强杀 worker 验证恢复终态配对和私有字节排除；原 logger 故障不改变结果测试继续通过。新增 14 真实强杀/冲突，最终七文件 85 定向通过，证据及完整门禁见 [接续记录](canvas-agent-flow/archive/25-c4-video-materialization-recovery.md)。不补造强杀终态，不把日志作为恢复事实；跨进程并发、掉电/长期故障与真实供应商仍未覆盖。
 
 完整 verify 最终串行通过（167 文件/1812 项/1 既有跳过，模型另 2，日志门禁、17 浏览器、构建与 11 组隐藏桌面）；后增引用/输入绑定和核对 span 另通过 85 定向，完整运行与增量边界分开见该记录。
 
 ## 2026-10-14 供应商核对本地接续
 
-video.ts/controlVideoTask 新增 task.control.started/completed，同 trace/task，固定 operation/state，无正文/Key/URL。video-task-control.ts 仅有界协议 GET，生命周期由调用者负责；allowlist 登记理由，不豁免日志敏感信息。47 定向（新增 27）含真实本地 HTTP + SQLite 的唯一配对、脱敏、logger 故障不改变结果通过。unknown 只完成核对操作，不代表业务成功。停止持久/迟到保护、连接/凭据/ID 拒绝及占用保持见 [接续记录](canvas-agent-flow/24-c4-supplier-reconciliation.md)。真实远端撤回/计费、跨进程物化幂等、掉电/长期故障仍未覆盖，不能宣称全部 C4 完成。完整/增量门禁证据以接续记录为准。
+video.ts/controlVideoTask 新增 task.control.started/completed，同 trace/task，固定 operation/state，无正文/Key/URL。video-task-control.ts 仅有界协议 GET，生命周期由调用者负责；allowlist 登记理由，不豁免日志敏感信息。47 定向（新增 27）含真实本地 HTTP + SQLite 的唯一配对、脱敏、logger 故障不改变结果通过。unknown 只完成核对操作，不代表业务成功。停止持久/迟到保护、连接/凭据/ID 拒绝及占用保持见 [接续记录](canvas-agent-flow/archive/24-c4-supplier-reconciliation.md)。真实远端撤回/计费、跨进程物化幂等、掉电/长期故障仍未覆盖，不能宣称全部 C4 完成。完整/增量门禁证据以接续记录为准。
 
 本包分段 verify 全阶段通过：首轮 166 文件/1795 项/1 既有跳过及模型另 2，日志职责登记后日志门禁、17 浏览器、生产构建及 11 组隐藏桌面通过；最终后增边界/恢复诊断修正另复验 47 定向及两端类型。首轮日志门禁失败记录保留，不能宣称该轮完整串行通过。
 
 ## 2026-10-14 源码同步最终门禁
 
-GLM/C3.3/C4 本批完整 verify 最终串行通过（164 文件、1763 通过、1 既有跳过，模型另 2；日志门禁、17 浏览器、构建与 11 组隐藏桌面），renderer 保存崩溃四组另过独立门禁。证据 qa/c4-import-renderer-20261014/release-verify.log 与 desktop-fixed.log。此项更新先前“分段通过/本轮未重跑全量”的历史状态；未覆盖的 main 保存轮转、物理掉电、供应商查询及媒体/并行保持，不外推全链路。发布交接见 [本次 handoff](canvas-agent-flow/HANDOFF_2026_10_14_C4_RELEASE.md)。
+GLM/C3.3/C4 本批完整 verify 最终串行通过（164 文件、1763 通过、1 既有跳过，模型另 2；日志门禁、17 浏览器、构建与 11 组隐藏桌面），renderer 保存崩溃四组另过独立门禁。证据 qa/c4-import-renderer-20261014/release-verify.log 与 desktop-fixed.log。此项更新先前“分段通过/本轮未重跑全量”的历史状态；未覆盖的 main 保存轮转、物理掉电、供应商查询及媒体/并行保持，不外推全链路。发布交接见 [本次 handoff](canvas-agent-flow/archive/HANDOFF_2026_10_14_C4_RELEASE.md)。
 
 ## 2026-10-14 C4 导入强杀与 renderer 保存中断
 
 启动检查新增 workspace.recovery started/completed/failed，同 trace/span，只记恢复导入/未入库目录/缺文件项目/未处理临时项数量及固定失败 code/phase。替换含绝对路径的旧 health 对象日志。未入库目录保留不自动导入；恢复目录受阻不阻断启动。health 单元验证唯一终态、私有路径排除与 logger 抛错不改变结果。
 
-导入与保存继续复用公共 IPC/仓库事件。29 定向、两端类型、文件 lint、日志门禁和构建通过；四组真实 renderer 崩溃/重开/继续保存通过，实际保存开始/终态分别 2/2、3/3、3/3、3/3，正文排除且零模型请求。证据及日志模板自查见 [C4 导入与 renderer](canvas-agent-flow/22-c4-import-renderer-recovery.md)。本轮未重跑全量 verify，不外推物理掉电、main 轮转强杀、供应商查询或完整崩溃日志时间线。
+导入与保存继续复用公共 IPC/仓库事件。29 定向、两端类型、文件 lint、日志门禁和构建通过；四组真实 renderer 崩溃/重开/继续保存通过，实际保存开始/终态分别 2/2、3/3、3/3、3/3，正文排除且零模型请求。证据及日志模板自查见 [C4 导入与 renderer](canvas-agent-flow/archive/22-c4-import-renderer-recovery.md)。本轮未重跑全量 verify，不外推物理掉电、main 轮转强杀、供应商查询或完整崩溃日志时间线。
 
 ## 2026-10-14 C4 强杀与断网故障矩阵
 
 本批仅新增测试与交接文档，不修改生产执行/请求/保存/诊断路径。真实强杀和本地接受后断网复用 FlowCommandLedger、FlowAssetStore 与 createLedgerToolPort；公共 command.operation、command.recovered、agent.desktop/coordination 的日志职责及首批真实桌面脱敏证据保持。测试 worker 不伪造业务日志或崩溃终态，不把日志当恢复权威。
 
-12 项新增故障案例及相关 61 定向两轮通过，最终证据 qa/c4-fault-matrix-20261014/verified.log；文件 lint、日志旁路门禁通过。输出仅含固定边界、状态、原因、计数与引用，私有材料/Key/原始错误不输出；临时数据、服务与子进程清理。实际物理掉电、完整 renderer 故障/崩溃日志时间线、供应商查询/撤回、导入目录强杀及媒体/并行仍未验证，不能称全链路完成。日志模板自查见 [故障矩阵](canvas-agent-flow/21-c4-crash-network-matrix.md#验证与日志自查)。
+12 项新增故障案例及相关 61 定向两轮通过，最终证据 qa/c4-fault-matrix-20261014/verified.log；文件 lint、日志旁路门禁通过。输出仅含固定边界、状态、原因、计数与引用，私有材料/Key/原始错误不输出；临时数据、服务与子进程清理。实际物理掉电、完整 renderer 故障/崩溃日志时间线、供应商查询/撤回、导入目录强杀及媒体/并行仍未验证，不能称全链路完成。日志模板自查见 [故障矩阵](canvas-agent-flow/archive/21-c4-crash-network-matrix.md#验证与日志自查)。
 
 ## 2026-10-14 GLM 模型接入
 
-- 范围：官方 GLM-5.3/Flash SDK 请求参数策略、目录能力验证预算和新建 Flow 的本地默认模型绑定；交付与证据见 `docs/canvas-agent-flow/18-glm-model-switch.md`。
+- 范围：官方 GLM-5.3/Flash SDK 请求参数策略、目录能力验证预算和新建 Flow 的本地默认模型绑定；交付与证据见 `docs/canvas-agent-flow/archive/18-glm-model-switch.md`。
 - 复用：`model.request` 开始/唯一终态，能力验证 `configuration.validation_completed/failed`；新建配置仍沿公共画布保存。默认绑定读取异常经 `project.canvas_failed / model-defaults` 记录，不记录绑定全文或个人配置。
 - 实证：两个模型的生产 SDK 强制工具与回执往返通过，4 次请求开始/终态配对；诊断扫描无密钥及合成正文。目录文本/Flash 识图验证通过，个人密钥加密落盘；QA 证据没有数据库或凭据。
 - 补验：GLM-5.3 讨论/建图/审核三个实际 SDK 操作通过，另 3 次开始/终态配对且敏感正文/密钥扫描为零；1716 单元、模型另 2 项、日志门禁、17 浏览器、构建及七组隐藏 Electron 按交接记录分段通过。参数装饰器的公共生命周期委托登记在日志允许清单，不新增重复请求终态。
@@ -640,7 +640,7 @@ main 的资产提交/读取/列表记录 asset.operation.started → completed/f
 
 固定资产画布放置记录 asset.placement.started → applied/failed；applied 只表示编辑应用，落盘沿原项目保存链路。消费固定端口沿 runNodeManually/公共 executor，不重复节点终态。
 
-证据：19 定向测试覆盖保存在途合并/失败/冲突、去重/版本/事务回滚、诊断唯一终态及 transport 故障；生产 preload/IPC、project.json、SQLite 隐藏 Electron 双进程读回/回执重放，9 次操作均有开始与唯一终态及 trace/span 关联，诊断文件检查测试正文/假密钥无泄漏。全量 verify 通过（149 文件、1627 通过、1 跳过、17 浏览器门禁及构建后 Electron 测试），记录 qa/canvas-agent-flow/C2/final-verify.log。UI fixture 与生产存储证据分开，见 docs/canvas-agent-flow/11-c2-asset-versions.md 和 qa/canvas-agent-flow/C2。
+证据：19 定向测试覆盖保存在途合并/失败/冲突、去重/版本/事务回滚、诊断唯一终态及 transport 故障；生产 preload/IPC、project.json、SQLite 隐藏 Electron 双进程读回/回执重放，9 次操作均有开始与唯一终态及 trace/span 关联，诊断文件检查测试正文/假密钥无泄漏。全量 verify 通过（149 文件、1627 通过、1 跳过、17 浏览器门禁及构建后 Electron 测试），记录 qa/canvas-agent-flow/C2/final-verify.log。UI fixture 与生产存储证据分开，见 docs/canvas-agent-flow/archive/11-c2-asset-versions.md 和 qa/canvas-agent-flow/C2。
 
 边界：媒体适配、生产命令派发/语义修订/占用、Agent 对等、真实审核 gate、返工、跨项目迁移与未知恢复未完成。资产放置未宣称磁盘提交成功，局部验收不代表全链路日志覆盖。
 
@@ -648,7 +648,7 @@ main 的资产提交/读取/列表记录 asset.operation.started → completed/f
 
 commands.ts/command-intent.ts 仅定义严格意图清单、语义指纹和去重签名；纯函数未接 IPC/任务执行/数据库路径，不改变运行副作用或现有诊断，无需重复补开始/终态。7 项定向测试覆盖意图边界、固定版本/端口顺序、修订和诊断字段分离，新增文件 lint/两端类型检查通过。不得记录 canonical 业务载荷或 Zod 原始错误；未来运行调用点仅记录静态原因与指纹/标识。
 
-持久 pending/占用、派发、公共执行、保存、回执、超时 unknown 与恢复核对尚未接入，阶段事件与实际脱敏按 docs/canvas-agent-flow/12-c2-production-command-bridge.md 随接入验收；本轮不宣称生产桥或全链路日志完成。
+持久 pending/占用、派发、公共执行、保存、回执、超时 unknown 与恢复核对尚未接入，阶段事件与实际脱敏按 docs/canvas-agent-flow/archive/12-c2-production-command-bridge.md 随接入验收；本轮不宣称生产桥或全链路日志完成。
 
 增量最终证据：全量单元回归 150 文件、1634 通过、1 既有跳过，日志门禁通过，记录 qa/canvas-agent-flow/C2/command-intent-unit-suite.log；实际 IPC 诊断落盘仍以 C2.1 双进程验收为准，纯函数不作为新增运行日志验收。
 
@@ -664,7 +664,7 @@ main 重新校验保存的运行/输入来源/固定版本并计算指纹；资�
 
 配置保存新增 canvas.flow_config.started/applied/failed，复用统一 renderer 事件入口与 main 白名单；同 trace/node/project，阶段 validation/apply，失败码 FLOW_CONFIG_INVALID/FLOW_CONFIG_APPLY_FAILED，一次编辑只有一个终态。applied 只代表文档内更新，磁盘保存/撤销/快照恢复沿用公共路径，不重复文件终态。仅允许阶段/原因/标识，不记录目标名称、正文、事件内容或 config；logger/transport 故障不改变编辑。观察/控制 SVG 只派生视图，无逐帧日志或额外持久化图。
 
-定向测试覆盖校验/应用事件、唯一终态与 transport 故障，字段构造无业务内容；完整日志门禁通过。新事件单独桌面落盘人工验收未新增，不宣称全链路完成。生产执行、资产版本、审核 gate、返工/状态推进仍归 C2/C3。具体用户路径与未覆盖边界见 docs/canvas-agent-flow/10-c1-control-declarations.md。
+定向测试覆盖校验/应用事件、唯一终态与 transport 故障，字段构造无业务内容；完整日志门禁通过。新事件单独桌面落盘人工验收未新增，不宣称全链路完成。生产执行、资产版本、审核 gate、返工/状态推进仍归 C2/C3。具体用户路径与未覆盖边界见 docs/canvas-agent-flow/archive/10-c1-control-declarations.md。
 
 
 C2.2 最终验收补记：最新源码 npm run verify 完整通过（153 文件、1660 通过、1 既有跳过，模型另 2 通过、17 浏览器门禁及构建后资产/命令双进程）。实际命令诊断开始/唯一终态、恢复关联及正文/假密钥扫描通过；记录 qa/canvas-agent-flow/C2/bridge-final-verify.log 和 commands/results.json。覆盖仍限本轮确定性路径，不扩大媒体/模型/审核/返工/长期恢复验收范围。
@@ -722,7 +722,7 @@ C3.1b 最终结果：desktop-final-accepted.log 完整 verify 通过（155 文�
 
 上条未覆盖中的主控审核、AI/协作返工及负责节点反馈已接入。新增 `agent.coordination.stage` 只记录固定阶段/原因、当前 request/review/reworkTask/固定版本身份、轮次和数量；开始/唯一终态继续由公共 agent.desktop、agent.coordination、model.request、node/workflow、command/save/asset 负责，不重复终态。人工提交失败复用 project.canvas_failed 的 review-rework-submit 阶段；反馈轮询不逐次记日志。目标、审核标准、反馈、讨论、输入/产物正文、推理、原始模型响应/错误和凭据均排除。
 
-日志模板自查见 [C3.3 返工记录](canvas-agent-flow/19-c33-review-rework.md#实施与日志自查)。47 项定向通过，验证 logger 抛错不改变返工结果、总预算、取消不配合 signal 的模型、迟到无结论、技术失败留 pending 且不自动重发。GLM 建图/审核/三类返工共 69 次真实模型请求、desktop/coordination 开始与唯一终态配对无缺项，实际正文/Key 排除通过；model.request 以 requestId 区分同 span 内请求。最终完整 verify（161 文件/1729 项/1 既有跳过，模型另 2）、17 浏览器脚本、构建、十组 Electron 及协作/人工反馈内部选中/拖动通过。证据 `qa/c33-acceptance-20261014/verify-accepted.log` 与 lifecycle-audit.json；失败记录保留。没有新增重复终态，也不将本地取消称为远端撤回。
+日志模板自查见 [C3.3 返工记录](canvas-agent-flow/archive/19-c33-review-rework.md#实施与日志自查)。47 项定向通过，验证 logger 抛错不改变返工结果、总预算、取消不配合 signal 的模型、迟到无结论、技术失败留 pending 且不自动重发。GLM 建图/审核/三类返工共 69 次真实模型请求、desktop/coordination 开始与唯一终态配对无缺项，实际正文/Key 排除通过；model.request 以 requestId 区分同 span 内请求。最终完整 verify（161 文件/1729 项/1 既有跳过，模型另 2）、17 浏览器脚本、构建、十组 Electron 及协作/人工反馈内部选中/拖动通过。证据 `qa/c33-acceptance-20261014/verify-accepted.log` 与 lifecycle-audit.json；失败记录保留。没有新增重复终态，也不将本地取消称为远端撤回。
 
 未覆盖：真实远端取消、完整崩溃/断网/未知副作用恢复矩阵、模板/引用迁移、媒体/并行任务和所有恢复 trace 层级。当前仅覆盖已适配文本/JSON/确定性处理路径，不宣称全链路完成。
 
@@ -732,13 +732,13 @@ C3.1b 最终结果：desktop-final-accepted.log 完整 verify 通过（155 文�
 
 受影响项目/模板迁移 IPC 增补同 trace 的 transfer started/committed/failed，稳定 operation/phase/code 允许列表，拒绝原始异常、配置、素材路径、正文、API Key 和包内容。导入排除旧执行/审批权威，固定版本完整性/身份和嵌套引用校验，数据库/目录事务失败不显示项目。项目切换按新快照重建编辑器，旧保存迟到不修改新项目状态；加载/保存复用公共入口，不新增重复终态。
 
-82 定向及 8 保存回归通过；verify 各阶段分段通过（162 文件/1743 通过/1 既有跳过，模型另 2；17 浏览器、构建、十组既有 Electron；最后增量类型/lint/日志/构建/C4 Electron）。实际桌面核对零模型增量、真实迁移 IPC 与重新保存通过，desktop 12/12、coordination 3/3、transfer 2/2、model 16/16 开始/终态及实际脱敏通过，前三类逐 trace/span 唯一终态验收。证据见 [C4 接续](canvas-agent-flow/20-c4-recovery-transfer.md) 与 qa/c4-acceptance-20261014/lifecycle-audit.json。失败记录保留，不宣称单次全量串行通过。仍未覆盖远端查询/撤回、媒体/并行恢复和长期跨存储故障注入及全部 trace 层级。
+82 定向及 8 保存回归通过；verify 各阶段分段通过（162 文件/1743 通过/1 既有跳过，模型另 2；17 浏览器、构建、十组既有 Electron；最后增量类型/lint/日志/构建/C4 Electron）。实际桌面核对零模型增量、真实迁移 IPC 与重新保存通过，desktop 12/12、coordination 3/3、transfer 2/2、model 16/16 开始/终态及实际脱敏通过，前三类逐 trace/span 唯一终态验收。证据见 [C4 接续](canvas-agent-flow/archive/20-c4-recovery-transfer.md) 与 qa/c4-acceptance-20261014/lifecycle-audit.json。失败记录保留，不宣称单次全量串行通过。仍未覆盖远端查询/撤回、媒体/并行恢复和长期跨存储故障注入及全部 trace 层级。
 
 ### 2026-10-14 C4 main 保存轮转与遗留锁
 
 新写锁记录 PID，30 秒后仍存活或探测不确定的持有者保持阻断，仅已退出进程允许接管；历史空锁沿用原保护期。复用正式 IPC 的 project.save 开始/唯一终态及冲突/失败事件，不在内部锁函数重复记终态。锁文件只存 PID，不包含正文/配置/凭据；失败通过现有异常传播。
 
-五个文件/数据库同步边界真实进程强杀、两次独立恢复、遗留锁后的版本冲突和明确新编辑通过；9 项新增定向见 `qa/c4-main-save-20261014/directed.log`。强杀不补造不可观察终态，测试不证明完整恢复 trace 或新的桌面日志配对。范围及后续门禁结果见 [保存轮转交接](canvas-agent-flow/23-c4-main-save-crash-recovery.md)。物理掉电、磁盘损坏、多个恢复进程同时争抢遗留锁、远端查询/撤回、长期故障组合仍未覆盖。
+五个文件/数据库同步边界真实进程强杀、两次独立恢复、遗留锁后的版本冲突和明确新编辑通过；9 项新增定向见 `qa/c4-main-save-20261014/directed.log`。强杀不补造不可观察终态，测试不证明完整恢复 trace 或新的桌面日志配对。范围及后续门禁结果见 [保存轮转交接](canvas-agent-flow/archive/23-c4-main-save-crash-recovery.md)。物理掉电、磁盘损坏、多个恢复进程同时争抢遗留锁、远端查询/撤回、长期故障组合仍未覆盖。
 
 构建后另复验四类真实 renderer 保存中断：存活 main 的公共保存诊断 11 开始/11 终态，正文脱敏及无模型请求断言通过，见本包 `renderer.log` 与 `renderer-results.json`。该证据不代替被强杀 main 的不可观察终态或完整恢复 trace 树。
 
@@ -747,7 +747,7 @@ C3.1b 最终结果：desktop-final-accepted.log 完整 verify 通过（155 文�
 
 审核循环跳过人工/协作等待后继续检查其他支路，主控先收集真实完成成果再等待；复用现有 agent.coordination.stage、agent.desktop/runtime、model.request、command、node/workflow、task/media/asset/save 生命周期，不为轮询或跳过等待新增日志。新增隔离 --parallel-review 夹具不进入应用入口，fetch 替身已登记理由，不豁免生产网络或正文/密钥禁令。
 
-6 文件 120 定向通过（qa/parallel-review-directed.log），含等待公平性、身份冲突、停止迟到及命令/强杀/真实抽帧回归；类型/lint/日志旁路门禁通过。真实桌面组合的唯一终态配对、恢复关联、脱敏和完整 verify 尚待运行；不能将本段当作全链路完成证据。既有异步媒体完整 trace、task/media correlationMissing 和保存关联盲区保持；详见 [39 接续](canvas-agent-flow/39-parallel-review-rework.md)。
+6 文件 120 定向通过（qa/parallel-review-directed.log），含等待公平性、身份冲突、停止迟到及命令/强杀/真实抽帧回归；类型/lint/日志旁路门禁通过。真实桌面组合的唯一终态配对、恢复关联、脱敏和完整 verify 尚待运行；不能将本段当作全链路完成证据。既有异步媒体完整 trace、task/media correlationMissing 和保存关联盲区保持；详见 [39 接续](canvas-agent-flow/archive/39-parallel-review-rework.md)。
 
 ## 2026-10-16 Agent 多模态审核、队列与关联补齐
 

@@ -2,7 +2,7 @@
 
 状态：**代码已推送；全量门禁以本文 §3 为准**
 基线：`9f6678e8`（`origin/main`，2026-11-25 17:12 +08:00）
-上一交接：[2026-11-24 BL-11 FlowGraph v2](canvas-agent-flow/HANDOFF_2026_11_24_BL11_FLOWGRAPH_V2.md)
+上一交接：[2026-11-24 BL-11 FlowGraph v2](canvas-agent-flow/archive/HANDOFF_2026_11_24_BL11_FLOWGRAPH_V2.md)
 
 ## 0. 一句话结论
 

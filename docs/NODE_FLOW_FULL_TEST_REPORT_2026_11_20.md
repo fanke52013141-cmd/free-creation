@@ -97,7 +97,7 @@ L4 GUI 验收（13 项）在 11-17 报告中全绿；此后 git 仅有的 6 个�
    - 契约层：`src/shared/agent-flow/runtime-contracts`（`FixedSkill`/`SkillPackageSchema`，SKILL.md + resources 渐进披露模式）；
    - Agent 流侧：`runtime.ts:201-229` 的 `skill` 图节点（load-skill → 上下文 128KiB 上限）+ `src/main/agent-flow/skill-store.ts`；
    - 对话节点侧：`src/shared/engine/skill-agent.ts`（`runSkillAgent` 有界循环：`read_resource`/`complete` JSON 协议，最多 12 步）+ `src/shared/skill-agent.ts`（内置技能：内容分析/内容整理等 5 个）。
-4. **项目自己的决策文档**：`source/docs/canvas-agent-flow/06-implementation-plan.md:64` 明确写了——"先实现自定义 StateGraph 的一个有限循环……**暂不引入 Deep Agents 默认文件系统/子 Agent 执行环境**，避免与现有节点和主 Agent 调度重复。"
+4. **项目自己的决策文档**：`source/docs/canvas-agent-flow/archive/06-implementation-plan.md:64` 明确写了——"先实现自定义 StateGraph 的一个有限循环……**暂不引入 Deep Agents 默认文件系统/子 Agent 执行环境**，避免与现有节点和主 Agent 调度重复。"
 
 事实澄清（供用户校准预期）：
 

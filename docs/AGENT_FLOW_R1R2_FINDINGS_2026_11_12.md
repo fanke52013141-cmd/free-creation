@@ -1,6 +1,6 @@
 # Agent Flow R1/R2 根因结论与闭环验收（2026-11-12）
 
-配套：[端到端验证交接](HANDOFF_2026_11_12_AGENT_FLOW_VERIFICATION.md)、[优化方案](AGENT_FLOW_OPTIMIZATION_PLAN_2026_11_12.md)、[实施规格](AGENT_FLOW_EXECUTION_SPEC_2026_11_12.md)。
+配套：[端到端验证交接](HANDOFF_2026_11_12_AGENT_FLOW_VERIFICATION.md)、[优化方案](AGENT_FLOW_OPTIMIZATION_PLAN_2026_11_12.md)、[实施规格](archive/external/AGENT_FLOW_EXECUTION_SPEC_2026_11_12.md)。
 本文记录本机（Windows，当前 main `8f5c85e0` + L1/L2 布局批次）实测结论，**修正交接文档的核心假设**。
 
 ## 1. 一句话结论

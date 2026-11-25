@@ -1,6 +1,6 @@
 # Agent Flow 能力缺口与可靠性收尾实施方案（C2 / C4 / W4）
 
-日期：2026-11-13。配套：[优化方案](AGENT_FLOW_OPTIMIZATION_PLAN_2026_11_12.md)、[实施规格](AGENT_FLOW_EXECUTION_SPEC_2026_11_12.md)、[交接](HANDOFF_2026_11_13_AGENT_FLOW_OPTIMIZATION.md)。
+日期：2026-11-13。配套：[优化方案](AGENT_FLOW_OPTIMIZATION_PLAN_2026_11_12.md)、[实施规格](archive/external/AGENT_FLOW_EXECUTION_SPEC_2026_11_12.md)、[交接](HANDOFF_2026_11_13_AGENT_FLOW_OPTIMIZATION.md)。
 基线：`main` @ `8e4f81dc` + 未提交 P0 修复（execute-nodes 闭包陈旧 providers，已验收 ok=true，待授权提交）。
 
 > **一句话范围**：C2 用豆包搜索给专家 Agent 补受控联网工具；C4 新增纯人工任务一等节点（先架构评审）；W4 只做 composite 运行失败定位。C1/C3 已完成；C2 原「需供应方决策」已由用户定为豆包搜索。

@@ -247,6 +247,7 @@
 - [`NODE_CONTRACT_SPEC.md`](../NODE_CONTRACT_SPEC.md)：数据端口、输入输出、执行与持久化，优先级高于任何视觉表达。
 - [`NODE_UI_SPEC.md`](./NODE_UI_SPEC.md)：保存前序各轮的决定、实施记录与逐项 UI 行为；布局冲突以本规范为准，未冲突的用户已确认决定继续有效。
 - [`NODE_COMPLIANCE_MATRIX.md`](./NODE_COMPLIANCE_MATRIX.md)：当前可创建节点的协议索引；更新节点集时同步逐节点呈现表。
+- [`UI_MODAL_STANDARD.md`](./UI_MODAL_STANDARD.md)：弹窗层统一规范（BL-32 入仓）；与本文几何冲突时以 §22–§27 为准。
 
 ## 13–21 历史裁决（L3 归档）
 
