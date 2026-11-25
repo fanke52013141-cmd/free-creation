@@ -59,12 +59,18 @@ const paged = z
 export const HISTORY_OPERATIONS = {
   'history.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '分页读取项目历史版本快照目录（名称/时间/节点数/可否外部恢复）；不返回快照正文',
     input: project.extend(paged.shape).strict()
   },
   'history.snapshot.create': {
     effect: 'write',
+    idempotent: false,
+    destructive: false,
+    cost: 'none',
     description:
       '把项目当前已持久化的画布与图数据保存为命名历史版本快照；聊天正文与运行结果不进入快照，未保存的画布编辑不在其中（GUI 历史坞的快照捕获内存状态）',
     input: project
@@ -76,29 +82,44 @@ export const HISTORY_OPERATIONS = {
   },
   'history.snapshot.delete': {
     effect: 'delete',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: '删除历史版本快照；当前画布与项目内容不受影响',
     input: project.extend({ snapshotId }).strict()
   },
   'history.restore.precheck': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取历史版本恢复影响（当前/目标节点与连线数、媒体可用性）与占用阻塞项；无阻塞且快照含可恢复图数据时签发短期确认令牌',
     input: project.extend({ snapshotId }).strict()
   },
   'history.restore': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '凭预检令牌把历史版本恢复为项目正式内容（先保存恢复前检查点，再走正式保存机制）；生效前失败保持原图，令牌过期或事实漂移需重新预检',
     input: project.extend({ snapshotId, impactToken: impactToken.optional() }).strict()
   },
   'history.recovery.precheck': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取关窗冲突恢复副本的事实与阻塞项（是否存在/版本/节点数）。**不传 decision 时只读事实**（无需先做决定）；传入 use/discard 且无阻塞时额外签发短期确认令牌供 resolve 使用',
     input: project.extend({ decision: z.enum(['use', 'discard']).optional() }).strict()
   },
   'history.recovery.resolve': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '凭预检令牌裁决恢复副本：use=经正式保存把副本落盘并移除副本；discard=丢弃副本、保留磁盘版本。与 GUI 打开项目时的裁决调用同一 repo 服务',
     input: project

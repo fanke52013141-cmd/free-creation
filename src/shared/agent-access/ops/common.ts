@@ -55,6 +55,9 @@ export const savedMetadata = z.object({ meta: metadata, saved: z.literal(true) }
 /** 业务族在 Registry 中登记的形态：effect + 描述 + 严格输入 Schema。 */
 export type AccessOperationSpec = {
   readonly effect: 'read' | 'write' | 'export' | 'delete' | 'execute'
+  readonly idempotent: boolean
+  readonly destructive: boolean
+  readonly cost: 'none' | 'possible' | 'certain'
   readonly description: string
   readonly input: z.ZodType
 }

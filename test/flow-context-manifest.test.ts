@@ -116,6 +116,41 @@ describe('AF-02 ContextManifest 编制器', () => {
     expect(overRequired.entries).toHaveLength(1) // 必需内容保留，不截断
   })
 
+  it('可选项先声明时，仍为必需项预留预算并按必需来源去重', () => {
+    const inputs = StageInputsSchema.parse({
+      budgetBytes: 1024,
+      selectors: [
+        { sourceStageKey: 'organize', path: 'optional', required: false },
+        { sourceStageKey: 'organize', path: 'duplicate', required: false },
+        { sourceStageKey: 'organize', path: 'required', required: true }
+      ]
+    })
+    const required = 'r'.repeat(700)
+    const manifest = buildContextManifest('write', inputs, jsonDelivery({
+      optional: 'o'.repeat(500), duplicate: required, required
+    }))
+    expect(manifest.entries.map((entry) => [entry.path, entry.required])).toEqual([['required', true]])
+    expect(manifest.dropped.map((entry) => entry.path)).toEqual(['optional'])
+    expect(manifest.budget).toMatchObject({ usedBytes: 702, exceeded: false })
+  })
+
+  it('超限时只使用已交付且符合预算的显式摘要', () => {
+    const inputs = StageInputsSchema.parse({
+      budgetBytes: 1024,
+      overflow: 'summarize',
+      summarySelector: { sourceStageKey: 'summary', path: 'brief' },
+      selectors: [{ sourceStageKey: 'organize', path: 'required' }]
+    })
+    const originals = jsonDelivery({ required: 'r'.repeat(2000) })
+    const summary = jsonDelivery({ brief: '摘要' }).map((fact) => ({
+      ...fact, stageKey: 'summary'
+    }))
+    expect(contextManifestBlocking(buildContextManifest('write', inputs, originals))).toBe(true)
+    const manifest = buildContextManifest('write', inputs, [...originals, ...summary])
+    expect(contextManifestBlocking(manifest)).toBe(false)
+    expect(manifest.entries).toMatchObject([{ sourceStageKey: 'summary', value: '摘要' }])
+  })
+
   it('模型容量与声明预算取较小值', () => {
     const manifest = buildContextManifest(
       'write',

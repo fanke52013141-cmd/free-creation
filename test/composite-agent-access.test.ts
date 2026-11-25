@@ -1,4 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { LocalAccessService } from '../src/main/agent-access/service'
+import { publishCompositeVersion } from '../src/main/store/composite.repo'
+import { createCompositeRun, finishCompositeRun, recordCompositeRunStep } from '../src/main/store/composite-run.repo'
+import { closeDb } from '../src/main/store/db'
 import { ACCESS_OPERATIONS } from '../src/shared/agent-access/registry'
 import { COMPOSITE_OPERATIONS, COMPOSITE_OUTPUTS } from '../src/shared/agent-access/ops/composite'
 import { validateCompositeManifest } from '../src/shared/composite/validate'
@@ -104,6 +112,62 @@ function manifest(): CompositeManifest {
 }
 
 describe('组合能力 Agent 契约（P1 对等）', () => {
+  it('节点流重试保留执行前失败的标量输入，并拒绝重放已执行的远端步骤', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'canvas-composite-retry-'))
+    const priorDirectory = process.env.CANVAS_DATA_DIR
+    process.env.CANVAS_DATA_DIR = directory
+    const calls: unknown[] = []
+    try {
+      const { record } = await publishCompositeVersion(manifest())
+      const service = new LocalAccessService({
+        instanceId: 'composite-retry-test',
+        appVersion: 'test',
+        exportDirectory: join(directory, 'exports'),
+        activeProjectId: () => null,
+        desktop: {
+          async run(request) {
+            calls.push(request)
+            return {}
+          },
+          async ask() { return { authorized: false, code: 'NOT_USED' } }
+        }
+      })
+      for (const runId of ['before-execution', 'after-submission']) {
+        createCompositeRun({
+          id: runId,
+          projectId: 'headless-test',
+          capabilityId: record.manifest.capabilityId,
+          capabilityVersion: record.manifest.version,
+          contentHash: record.contentHash,
+          inputValues: { requirements: '原始文本' }
+        })
+        if (runId === 'after-submission')
+          recordCompositeRunStep({ runId, stepKey: 'n3', nodeType: 'image-gen', status: 'failed' })
+        finishCompositeRun({ runId, status: 'failed', failurePhase: 'input' })
+      }
+      const retry = (runId: string) => service.dispatch({
+        apiVersion: 1,
+        operationVersion: 1,
+        operationId: 'composite.run.retry',
+        requestId: runId,
+        idempotencyKey: `${Date.now()}:${randomUUID()}`,
+        expectedDataStoreId: service.dataStoreId,
+        input: { runId }
+      })
+      const allowed = await retry('before-execution')
+      expect(allowed.error).toBeUndefined()
+      expect(calls).toMatchObject([{ compositeInputs: [{ portId: 'requirements', value: '原始文本' }] }])
+      const rejected = await retry('after-submission')
+      expect(rejected.error?.code).toBe('RUN_RETRY_REQUIRES_RECONCILIATION')
+      expect(calls).toHaveLength(1)
+    } finally {
+      closeDb()
+      if (priorDirectory === undefined) delete process.env.CANVAS_DATA_DIR
+      else process.env.CANVAS_DATA_DIR = priorDirectory
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
   it('composite.* 二十项操作全部进入统一 Registry，输入输出成对', () => {
     expect(Object.keys(COMPOSITE_OPERATIONS)).toHaveLength(20)
     expect(COMPOSITE_OPERATIONS).toHaveProperty('composite.upgrade.apply')

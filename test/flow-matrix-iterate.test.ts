@@ -335,9 +335,22 @@ describe('D · 循环 iterate 流', () => {
   }, 30000)
 
   it('D13 typed 列表项注入图片端口：循环驱动 image-crop', async () => {
+    const owned = {
+      ...mediaEnvelopeOk('m-img-1', 'projects/p-d13/media/img-1.png', 'image/png').data,
+      kind: 'image'
+    }
+    const foreign = mediaEnvelopeOk('m-img-2', 'projects/other/media/img-2.png', 'image/png').data
+    const cropped: string[] = []
     const restore = installWindowApi({
+      listMedia: async (projectId: string) => {
+        expect(projectId).toBe('p-d13')
+        return { ok: true, data: [owned] }
+      },
       getLocalMediaCapabilities: async () => localCapabilitiesOk(),
-      cropImage: async () => mediaEnvelopeOk('crop-loop-1', 'D:/t/crop-loop-1.png', 'image/png'),
+      cropImage: async ({ sourceMediaId }: { sourceMediaId: string }) => {
+        cropped.push(sourceMediaId)
+        return mediaEnvelopeOk('crop-loop-1', 'D:/t/crop-loop-1.png', 'image/png')
+      },
       deleteMedia: async () => undefined
     })
     try {
@@ -351,7 +364,14 @@ describe('D · 循环 iterate 流', () => {
                 id: 'img-1',
                 kind: 'image',
                 mediaId: 'm-img-1',
-                mediaPath: 'D:/t/img-1.png',
+                mediaPath: owned.path,
+                mime: 'image/png'
+              },
+              {
+                id: 'img-2',
+                kind: 'image',
+                mediaId: foreign.id,
+                mediaPath: foreign.path,
                 mime: 'image/png'
               }
             ]),
@@ -373,7 +393,8 @@ describe('D · 循环 iterate 流', () => {
       const loop = runStateOf(node('loop'))
       expect(loop.run).toBe('success')
       const items = iterateItems(node('loop')) ?? []
-      expect(items).toHaveLength(1)
+      expect(items.map((item) => item.status)).toEqual(['done', 'failed'])
+      expect(cropped).toEqual([owned.id])
       expect(JSON.stringify(items[0]?.outputs?.['crop'] ?? {})).toContain('crop-loop-1')
     } finally {
       restore()

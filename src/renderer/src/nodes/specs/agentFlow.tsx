@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { NODE_UI } from '../../canvas/node-ui-tokens'
 import { useEditor, useValue } from 'tldraw'
 import type { PortDecl, PortType } from '@shared/types'
+import { MAX_REWORKS } from '@shared/agent-flow/rework-limit'
 import {
   AgentNodeConfigSchema,
   ReviewNodeConfigSchema,
@@ -70,6 +71,14 @@ function configOf(shape: NodeBodyProps['shape']): Record<string, unknown> {
   return (
     parsedConfigOf(shape) ?? (defaults[shape.props.nodeType as FlowType] as Record<string, unknown>)
   )
+}
+function savedReworkLimitExceedsMaximum(raw: string): boolean {
+  try {
+    const limit: unknown = JSON.parse(raw)?.maxReworks
+    return typeof limit === 'number' && limit > MAX_REWORKS
+  } catch {
+    return false
+  }
 }
 function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
@@ -1318,7 +1327,10 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
               <option value="stop">停止分支</option>
             </AppSelect>
           </label>
-          {numberField('最多返工次数', 'maxReworks', 0, 10)}
+          {numberField('最多返工次数', 'maxReworks', 0, MAX_REWORKS)}
+          {savedReworkLimitExceedsMaximum(shape.props.config) && (
+            <p className="contract-settings-hint">旧配置最多按 {MAX_REWORKS} 次返工执行。保存后更新为有效上限。</p>
+          )}
           <FlowNodeSelect
             label="负责修订的节点"
             value={String(draft.responsibleNodeId ?? '')}

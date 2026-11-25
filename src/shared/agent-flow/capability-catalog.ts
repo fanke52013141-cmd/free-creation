@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { GENERATED_NODE_CONTRACTS } from '../agent-access/generated/node-contracts.generated'
 import type { NodeContractRecord } from '../agent-access/node-contracts'
 import type { CompositeVersionRecord } from '../composite/types'
+import { hasCompositeManualGate } from '../composite/manifest'
 import type { FlowParticipation } from './flow-graph'
 
 /**
@@ -342,7 +343,7 @@ export function participationRank(participation: FlowParticipation): number {
 function compositeParticipation(record: CompositeVersionRecord): 'autonomous' | 'collaborative' {
   const policy = record.manifest.executionPolicy
   if (policy?.requiresManualGate || policy?.waitForInput) return 'collaborative'
-  return record.manifest.graph.nodes.some((node) => node.nodeType === 'human-task')
+  return hasCompositeManualGate(record.manifest.graph)
     ? 'collaborative'
     : 'autonomous'
 }

@@ -8,6 +8,8 @@ import type { ProviderConfig } from '../src/shared/types'
 import { DEFAULT_TTS_CONFIG } from '../src/shared/tts'
 
 const h = vi.hoisted(() => ({ queue: [] as Array<{ body: unknown; init?: number }> }))
+const probe = vi.hoisted(() => vi.fn())
+vi.mock('../src/main/media/media-probe', () => ({ probeMedia: probe }))
 
 const provider: ProviderConfig = {
   id: 'p-minimax',
@@ -27,17 +29,18 @@ function reply(body: unknown) {
   h.queue.push({ body })
 }
 
-async function clone(): Promise<string> {
+async function clone(mime = 'audio/mpeg', bytes = 1024): Promise<string> {
   const { cloneMiniMaxVoice } = await import('../src/main/gateway/voice')
   return cloneMiniMaxVoice({
     providerId: provider.id,
-    reference: { buf: Buffer.alloc(1024, 1), mime: 'audio/mpeg', fileName: 'ref.mp3' },
+    reference: { buf: Buffer.alloc(bytes, 1), mime, fileName: 'ref.mp3', absPath: 'ref.mp3' },
     config: { ...DEFAULT_TTS_CONFIG, backend: 'minimax', providerId: provider.id }
   })
 }
 
 beforeEach(() => {
   h.queue = []
+  probe.mockReset().mockResolvedValue({ ok: true, meta: { hasAudio: true, durationMs: 10000 } })
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => {
@@ -52,6 +55,19 @@ beforeEach(() => {
 })
 
 describe('cloneMiniMaxVoice 对回执的判定', () => {
+  it.each([['video/mp4', 1024], ['audio/mpeg', 20 * 1024 * 1024 + 1]])(
+    '在探测或联网前拒绝 MIME %s 或文件大小 %s',
+    async (mime, bytes) => {
+      await expect(clone(mime, bytes)).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+      expect(probe).not.toHaveBeenCalled()
+      expect(fetch).not.toHaveBeenCalled()
+    }
+  )
+  it.each([9999, 300001, null])('参考音频时长 %s 在联网之前被拒绝', async (durationMs) => {
+    probe.mockResolvedValue({ ok: true, meta: { hasAudio: true, durationMs } })
+    await expect(clone()).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+    expect(fetch).not.toHaveBeenCalled()
+  })
   it('真跑成功回执：base_resp 0 且 input_sensitive false 时返回登记的 voice_id', async () => {
     reply({
       file: { file_id: 443402596741599, purpose: 'voice_clone' },

@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   parseStateMachineInstance,
+  projectFlowPhase,
   parseStateMachinePending,
   stateMachineExecutor,
   stateMachineFlowState,
@@ -12,6 +13,20 @@ import { projectStateMachineOutputs } from '@shared/agent-flow/agent-outputs'
 import { DEFAULT_STATE_NODE_CONFIG } from '@shared/agent-flow/node-contracts'
 import { validateNodeSchema } from '@shared/node-schemas'
 import type { NodeExecutionContext } from '@shared/engine/executor-types'
+
+it('projects authoritative flow stages across revision gaps and ignores late events', () => {
+  const states = ['idle', 'running', 'reviewing', 'completed']
+  const start = { taskId: 't1', stateNodeId: 'shape:state', event: 'flow.started', eventId: 'e1', phase: 'running', revision: 2 }
+  const running = projectFlowPhase(null, states, 'idle', start)
+  const completed = projectFlowPhase(running, states, 'idle', {
+    ...start, phase: 'completed', revision: 8, event: 'flow.completed', eventId: 'e8'
+  })
+  expect(completed?.state).toBe('completed')
+  expect(projectFlowPhase(completed, states, 'idle', { ...start, phase: 'reviewing', revision: 5 })).toBeNull()
+  const restarted = projectFlowPhase(completed, states, 'idle', { ...start, taskId: 't2', eventId: 'new' })
+  expect(restarted).toMatchObject({ taskId: 't2', state: 'running' })
+  expect(restarted?.history).toHaveLength(1)
+})
 
 const CONFIG = JSON.stringify({
   ...DEFAULT_STATE_NODE_CONFIG,

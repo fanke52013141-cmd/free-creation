@@ -138,3 +138,14 @@ it('projects router outcomes and excludes command reconciliation from the human 
   expect(byNode.get('shape:review')).toMatchObject({ state: 'skipped', needsYou: false })
   expect(byNode.get('shape:down')).toMatchObject({ state: 'stalled', needsYou: false })
 })
+
+it('shows what requires human action and retains a separate stalled step', () => {
+  const run = overview({ stalledNodeIds: ['shape:down'], reviews: [] })
+  const steps = deriveFlowSteps(run)
+  expect(deriveNow(run, steps)).toMatchObject({ nodeId: 'shape:org', tone: 'human' })
+  expect(steps.find((step) => step.nodeId === 'shape:down')?.state).toBe('stalled')
+  const noHuman = overview({ children: [], reviews: [], stalledNodeIds: ['shape:down'], state: 'failed' })
+  expect(deriveNow(noHuman, deriveFlowSteps(noHuman))).toMatchObject({
+    nodeId: 'shape:down', title: expect.stringContaining('流程停滞'), action: 'locate'
+  })
+})

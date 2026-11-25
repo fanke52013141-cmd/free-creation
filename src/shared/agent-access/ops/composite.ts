@@ -41,6 +41,9 @@ const validationIssue = z
 export const COMPOSITE_OPERATIONS = {
   'composite.search': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '按名称/ID/标签搜索已发布的组合能力；返回摘要与固定版本，不含内部图',
     input: z
       .object({
@@ -52,16 +55,25 @@ export const COMPOSITE_OPERATIONS = {
   },
   'composite.get': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '读取指定组合固定版本的 manifest（公开输入输出、依赖、执行策略）；不传版本取最新',
     input: z.object({ capabilityId, version: semver.optional() }).strict()
   },
   'composite.draft.get': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '读取组合草稿（含 revision）；不存在时返回 null',
     input: z.object({ capabilityId }).strict()
   },
   'composite.draft.save': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '创建/更新组合草稿；允许未接完的图并返回问题；expectedRevision 用于乐观并发，冲突返回 DRAFT_REVISION_CONFLICT 且保留草稿',
     input: z
@@ -70,12 +82,18 @@ export const COMPOSITE_OPERATIONS = {
   },
   'composite.validate': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '按 GUI 同一规则校验组合 manifest：端口、映射、类型、基数、必填来源、DAG、依赖与预算',
     input: z.object({ manifest }).strict()
   },
   'composite.publish': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '发布不可变组合版本：同版本同摘要幂等；同版本异摘要返回 VERSION_IMMUTABLE；新版本必须递增，可带 expectedRevision 校验草稿未被他人改动',
     input: z
@@ -87,6 +105,9 @@ export const COMPOSITE_OPERATIONS = {
   },
   'composite.upgrade.preview': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '按项目内已绑定实例的实际连线预检升级：比较端口 ID/类型/Schema/必填/基数，返回阻断项及受影响节点与边',
     input: z
@@ -99,6 +120,9 @@ export const COMPOSITE_OPERATIONS = {
   },
   'composite.upgrade.apply': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '把画布上的节点流实例升级到指定已发布版本：先运行同一升级预检，阻断则拒绝且原实例不变；通过后以固定版本引用原子更新实例并保留兼容连线',
     input: z
@@ -112,16 +136,25 @@ export const COMPOSITE_OPERATIONS = {
   },
   'composite.version.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '列出某个组合能力的全部已发布版本（名称/摘要/发布时间），供切换与历史查看',
     input: z.object({ capabilityId: z.string().min(1).max(120) }).strict()
   },
   'composite.run.get': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '读取一次组合运行的状态与内部步骤（固定版本、产物归属、失败原因）',
     input: z.object({ runId: z.string().min(1).max(120) }).strict()
   },
   'composite.run.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '列出项目最近的组合运行（状态/能力/版本/时间）',
     input: z
       .object({
@@ -132,6 +165,9 @@ export const COMPOSITE_OPERATIONS = {
   },
   'composite.execute': {
     effect: 'execute',
+    idempotent: false,
+    destructive: true,
+    cost: 'possible',
     description:
       'headless 执行已发布节点流：不依赖项目/画布。inputs 按公开输入端口的完整端口 ID 喂值（portId 写 `in-<公开输入id>`，如 in-copy）；返回 runId，终态与输出经 composite.run.get / composite.execute.wait 读取。' +
       '**键约定**：outputs / outputValues 以裸公开输出 id 为键（如 polished），而 outputPorts 摘要与画布端口才带 out- 前缀（out-polished）；resubmit 提交值同样用裸 id。' +
@@ -147,6 +183,9 @@ export const COMPOSITE_OPERATIONS = {
   },
   'composite.execute.wait': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '阻塞等待 headless 运行到达终态：返回状态/公开输出/失败原因；超时返回当前状态。outputs 以裸公开输出 id 为键（不带 out- 前缀），outputPorts 摘要才是 out-<id>',
     input: z
@@ -158,6 +197,9 @@ export const COMPOSITE_OPERATIONS = {
   },
   'composite.run.retry': {
     effect: 'execute',
+    idempotent: false,
+    destructive: true,
+    cost: 'possible',
     description:
       '受控重试失败的 headless 运行：仅 failed/interrupted 可重试，按原固定版本与原公开输入复跑（输入未记录则拒绝）；同一根运行重试上限 3 次；返回新 runId，终态经 composite.run.get 读取',
     input: z.object({ runId: z.string().min(1).max(120) }).strict()
@@ -165,6 +207,9 @@ export const COMPOSITE_OPERATIONS = {
   // AF-07：含人工等待的节点流——提交人工结果并续跑（父子运行/外部续接）。
   'composite.run.submitHuman': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '向等待人工的节点流运行提交某内部人工任务节点的结果（满足开放人工等待）；仅 waiting-input 且该节点有开放等待时接受；提交值经续跑消费为正式输出，不伪造自动成功',
     input: z
@@ -177,12 +222,18 @@ export const COMPOSITE_OPERATIONS = {
   },
   'composite.run.resume': {
     effect: 'execute',
+    idempotent: false,
+    destructive: true,
+    cost: 'possible',
     description:
       '续跑等待人工的节点流运行：消费已满足的人工提交，跳过已完成步骤（保护已付费任务），从等待节点继续；仅 waiting-input 可续跑；返回 runId，终态经 composite.run.get 读取',
     input: z.object({ runId: z.string().min(1).max(120) }).strict()
   },
   'composite.run.resubmit': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '人工补交失败 headless 运行的公开输出：仅 failed/interrupted 可补交，须一次性补齐全部公开输出端口（text/markdown/json；媒体补交暂不支持）；补交后运行 completed 但 manualSubmission=true 如实标记，不伪造自动成功',
     input: z
@@ -212,17 +263,26 @@ export const COMPOSITE_OPERATIONS = {
   },
   'composite.archive': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: '归档/恢复组合能力；归档后默认搜索不可见，已引用版本仍可读取',
     input: z.object({ capabilityId, archived: z.boolean().optional() }).strict()
   },
   'composite.references': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '删除前引用检查：列出各项目画布上绑定该能力的实例（含固定版本）与其他节点流发布版本的嵌套依赖；归档不阻断引用',
     input: z.object({ capabilityId }).strict()
   },
   'composite.delete': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '物理删除节点流（发布版本+草稿+能力行）。先做同一引用检查，存在画布实例或嵌套引用时返回 CAPABILITY_IN_USE 且不改动数据',
     input: z.object({ capabilityId }).strict()

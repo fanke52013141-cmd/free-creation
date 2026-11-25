@@ -3,11 +3,12 @@
 // 只断言「发出去的请求体」与「对返回值的解码」，不 mock 整个主进程：
 // 请求体是纯函数，返回值解码走可单独调用的解析函数，因此这里的失败都能
 // 精确定位到某个字段，而不是「网关挂了」。
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   buildMiniMaxAsyncTtsBody,
   buildVolcSpeechBody,
-  effectiveSpeechVoiceId
+  effectiveSpeechVoiceId,
+  generateMiniMaxAsyncAudioBuffer
 } from '../src/main/gateway/audio'
 import { buildVoiceCloneBody, buildVoiceDesignBody } from '../src/main/gateway/voice'
 import { parseSpeechConfig } from '../src/shared/speech'
@@ -27,6 +28,28 @@ const speechConfig = (patch: Record<string, unknown> = {}) =>
   parseSpeechConfig(JSON.stringify(patch))
 
 describe('MiniMax 异步语音合成 t2a_async_v2', () => {
+  it('远端受理后即使查询失败，也只提交一次并查询原任务 ID', async () => {
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(Response.json({ task_id: 'speech-task-1', file_id: 'future-file' }))
+      .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
+    vi.stubGlobal('fetch', upstream)
+    try {
+      await expect(generateMiniMaxAsyncAudioBuffer(
+        {
+          id: 'test', name: 'test', specId: 'minimax', baseURL: 'https://provider.invalid',
+          apiKey: 'test-key', models: [], createdAt: 0
+        },
+        { modelId: 'speech-2.8-hd', text: '测试', voiceId: '', config: speechConfig() }
+      )).rejects.toThrow('MiniMax 查询语音合成任务失败')
+      expect(upstream.mock.calls.map(([url, init]) => [url, init.method ?? 'GET'])).toEqual([
+        ['https://provider.invalid/v1/t2a_async_v2', 'POST'],
+        ['https://provider.invalid/v1/query/t2a_async_query_v2?task_id=speech-task-1', 'GET']
+      ])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('发送完整的 voice_setting / audio_setting 参数面', () => {
     const body = buildMiniMaxAsyncTtsBody(
       { modelId: 'speech-2.8-hd', text: '  你好世界  ', voiceId: 'CanvasVoice_2026' },

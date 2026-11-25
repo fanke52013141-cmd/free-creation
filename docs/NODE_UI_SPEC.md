@@ -1,5 +1,9 @@
 # 节点 UI 统一规范（历史决定记录）
 
+> status: historical
+> last-verified: unverified
+
+
 > **现行布局规范：** 请先读 [`NODE_UI_STANDARD.md`](./NODE_UI_STANDARD.md)。本文保留早期提案、已落地实施记录和逐项用户决定，部分旧章节记录的是尚未实施的方案；若与现行布局规范冲突，以 `NODE_UI_STANDARD.md` 为准。本文中未冲突且已确认的具体视觉决定仍然有效。
 
 > 状态：v1.2（2026-09-18），用户第二轮截图反馈已落地（见 §16）。

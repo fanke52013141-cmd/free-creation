@@ -208,6 +208,18 @@ function ok(res, label) {
     check('发布只进节点流库（画布无自动实例），点击卡片添加 1.0 实例')
     const inner10 = ok(await cli(dir, ['composite', 'get'], { capabilityId: 'gui-copy-polish', version: '1.0' }), 'GET_10')
     if (inner10.manifest.runtimeVersion !== 2) throw new Error('RUNTIME_VERSION_NOT_2')
+    const invalid = structuredClone(inner10.manifest)
+    invalid.outputs[0].schema = { type: 'string' }
+    const guiValidation = await page.evaluate(
+      (manifest) => window.api.composite.validate({ manifest }), invalid
+    )
+    const cliValidation = ok(await cli(dir, ['composite', 'validate'], { manifest: invalid }), 'CLI_VALIDATE')
+    if (!guiValidation.ok ||
+        !guiValidation.data.issues.some((issue) => issue.code === 'INLINE_SCHEMA_REMOVED') ||
+        JSON.stringify(guiValidation.data) !== JSON.stringify(cliValidation)) {
+      throw new Error(`GUI_CLI_PUBLICATION_VALIDATION_DIFFERS:${JSON.stringify(guiValidation)}`)
+    }
+    check('桌面发布预检和 CLI 对内联 Schema 返回相同错误')
     check('GUI 右键保存节点→组合节点→发布「文案整理」1.0（runtimeVersion=2）')
 
     // ── 3. GUI 运行 1.0 实例 ──
@@ -429,6 +441,47 @@ function ok(res, label) {
     if (!upgradedText.includes('草稿修改')) throw new Error(`UPGRADED_OUTPUT_WRONG:${upgradedText}`)
     await shot('upgraded-instance-run')
     check('GUI 右键升级节点流：预检通过→确认升级→实例按 2.0 运行（引用形态）')
+    // Undo immediately after an upgrade so later execution writes cannot occupy the top entry.
+    await innerInstance().click({ button: 'right' })
+    await page.click('.node-context-menu button:has-text("升级节点流")')
+    await upgradeDialog.locator('select[aria-label="目标版本"]').selectOption('1.0')
+    await upgradeDialog.locator('.composite-modal-pass').waitFor()
+    await upgradeDialog.getByRole('button', { name: '确认升级' }).click()
+    await upgradeDialog.waitFor({ state: 'detached' })
+    const switched = ok(await cli(dir, ['node', 'get'], {
+      projectId, nodeId: instanceNode.nodeId
+    }), 'READ_VERSION_BEFORE_UNDO')
+    if (switched.node.config?.version !== '1.0')
+      throw new Error('VERSION_SWITCH_WAS_NOT_SAVED_BEFORE_UNDO')
+    await page.keyboard.press('Control+z')
+    await page.keyboard.press('Control+s')
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const detail = ok(await cli(dir, ['node', 'get'], { projectId, nodeId: instanceNode.nodeId }), 'UNDO_UPGRADE')
+      if (detail.node.config?.version === '2.0') break
+      if (attempt === 11) throw new Error('UPGRADE_UNDO_DID_NOT_RESTORE_VERSION')
+      await sleep(500)
+    }
+    check('GUI 节点流版本切换一次撤销后，已保存的固定版本恢复')
+
+    await innerInstance().click({ button: 'right' })
+    await page.click('.node-context-menu button:has-text("升级节点流")')
+    await upgradeDialog.locator('select[aria-label="目标版本"]').selectOption('1.0')
+    await upgradeDialog.locator('.composite-modal-pass').waitFor()
+    const blockedTemp = path.join(dir, 'projects', projectId, 'project.json.tmp')
+    await fsp.mkdir(blockedTemp)
+    try {
+      await upgradeDialog.getByRole('button', { name: '确认升级' }).click()
+      await upgradeDialog.getByText('升级未保存，已恢复画布中的原版本。请重试。').waitFor()
+      const unchanged = ok(await cli(dir, ['node', 'get'], {
+        projectId, nodeId: instanceNode.nodeId
+      }), 'READ_AFTER_FAILED_UPGRADE')
+      if (unchanged.node.config?.version !== '2.0')
+        throw new Error('FAILED_UPGRADE_CHANGED_PERSISTED_VERSION')
+    } finally {
+      await fsp.rmdir(blockedTemp)
+    }
+    await upgradeDialog.getByRole('button', { name: '取消', exact: true }).click()
+    check('GUI 保存失败后自动恢复画布原版本，磁盘固定版本不变')
 
     // ── 10. 保存/取消语义（第三轮裁决：取消即退出，无二次确认）──
     // 保存草稿 → 取消关闭 → 草稿持久化。
@@ -454,6 +507,36 @@ function ok(res, label) {
     const draftJson = JSON.stringify(draftDiscard.manifest)
     if (draftJson.includes('将被放弃') || !draftJson.includes('临时保存')) throw new Error('CANCEL_CHANGED_DRAFT')
     check('GUI 保存持久化草稿、取消即退出且不保存未存修改（无二次确认，CLI 复核）')
+
+    const requiredManifest = {
+      ...breaking30,
+      capabilityId: 'gui-required-input',
+      name: '必填输入验收',
+      version: '1.0'
+    }
+    ok(await cli(dir, ['composite', 'publish'], { manifest: requiredManifest }), 'PUBLISH_REQUIRED')
+    const { graphVersion } = ok(await cli(dir, ['graph', 'get'], { projectId }), 'GRAPH_REQUIRED')
+    ok(await cli(dir, ['graph', 'patch'], {
+      projectId,
+      expectedGraphVersion: graphVersion,
+      ops: [{
+        action: 'node.create', nodeType: 'composite', title: requiredManifest.name,
+        x: 90, y: 90, config: { manifest: requiredManifest }
+      }]
+    }), 'INSERT_REQUIRED')
+    const requiredCard = compositeCards().filter({ hasText: requiredManifest.name })
+    await runCard(requiredCard)
+    const inputDialog = page.getByRole('dialog', { name: '补充运行输入' })
+    await inputDialog.waitFor({ timeout: 10000 })
+    if (!await inputDialog.getByRole('button', { name: '开始运行' }).isDisabled())
+      throw new Error('GUI_MISSING_REQUIRED_INPUT_NOT_BLOCKED')
+    await inputDialog.getByRole('button', { name: '取消运行' }).click()
+    const runsAfterCancel = ok(await cli(dir, ['composite', 'run', 'list'], {
+      projectId, limit: 50
+    }), 'RUNS_AFTER_REQUIRED_CANCEL')
+    if (runsAfterCancel.some((run) => run.capabilityId === requiredManifest.capabilityId))
+      throw new Error('GUI_REQUIRED_INPUT_CREATED_RUN')
+    check('GUI 缺必填输入时禁用开始运行，取消后无节点流运行记录')
 
     receipt.outputs.innerVersions = ok(await cli(dir, ['composite', 'version', 'list'], { capabilityId: 'gui-copy-polish' }), 'VERSION_LIST').map((v) => v.version)
     console.log(JSON.stringify({ ok: true, ...receipt }, null, 2))

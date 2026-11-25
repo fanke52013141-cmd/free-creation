@@ -424,6 +424,8 @@ export function installBrowserMock(): void {
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持音频提取' } }),
     soundAdjust: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持声音调整' } }),
+    silenceTrim: () =>
+      Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持去气口处理' } }),
     probeVideo: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持视频探测' } }),
     generateVideoThumbnails: () =>
@@ -468,7 +470,8 @@ export function installBrowserMock(): void {
         data: {
           ffmpeg: { available: false, message: '浏览器演示不检测本机工具' },
           ffprobe: { available: false, message: '浏览器演示不检测本机工具' },
-          audioSeparator: { available: false, message: '浏览器演示不检测本机工具' }
+          audioSeparator: { available: false, message: '浏览器演示不检测本机工具' },
+          sileroVad: { available: false, message: '浏览器演示不检测本机工具' }
         }
       }),
     getVideoEngineStatus: () =>

@@ -159,6 +159,7 @@ A1.4首包接续：[查询交付台账](08-a1-4-read-only-queries.md)。`library
 | `timeline@1`      | 轨道线    | A2 读写；仅手动执行          | 未适配（无 target） | 成片可作为固定资产/审核输入（`out-video` 走本地媒体固化）；Agent 自动调度未声明，`flowTargetContract` 返回 null → 运行期显式 `FLOW_TYPE_UNSUPPORTED`/`AGENT_TARGET_UNSUPPORTED` |
 | `audio@3`         | 音频      | A2 读写；媒体接入 A3         | 无               | 仅媒体 ID 与安全摘要                                                   |
 | `sound-adjust@1`  | 声音调整  | A2 读写；A3 媒体处理         | 无               | exclusiveGroup 输入与媒体输出校验                                      |
+| `silence-trim@1`  | 去气口    | A2 读写；A3 媒体处理         | 无               | 单音频输入必填；silence/vad 引擎参数钳制；整段皆气口显式失败            |
 | `file@2`          | 文件      | A2 读写；受控接入 A3         | 无               | MIME/大小/路径白名单；不解析任意可执行文件                             |
 | `speech@4`        | 语音合成  | A2 读写；A3 模型任务         | 支持 target      | 文本/音色/参考音频固定；异步任务与媒体资产                             |
 | `tts@4`           | 语音克隆  | A2 读写；A3 模型任务         | 支持 target      | 参考音频与配置校验；输出 JSON 版本固定                                 |

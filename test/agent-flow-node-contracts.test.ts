@@ -3,11 +3,22 @@ import {
   AgentNodeConfigSchema,
   StateMachineNodeConfigSchema,
   ReviewDecisionSchema,
+  ReviewNodeConfigSchema,
   DEFAULT_AGENT_NODE_CONFIG,
   DEFAULT_REVIEW_NODE_CONFIG,
   DEFAULT_STATE_NODE_CONFIG,
   matchesReviewApproval
 } from '../src/shared/agent-flow/node-contracts'
+import { MAX_REWORKS, ReworkLimitSchema } from '../src/shared/agent-flow/rework-limit'
+
+it('uses the same default and cap, preserving zero and clamping historical review cards', () => {
+  expect(DEFAULT_REVIEW_NODE_CONFIG.maxReworks).toBe(MAX_REWORKS)
+  expect(ReworkLimitSchema.parse(undefined)).toBe(MAX_REWORKS)
+  expect(ReworkLimitSchema.safeParse(MAX_REWORKS + 1).success).toBe(false)
+  expect(ReviewNodeConfigSchema.parse({ ...DEFAULT_REVIEW_NODE_CONFIG, maxReworks: 0 }).maxReworks).toBe(0)
+  expect(ReviewNodeConfigSchema.parse({ ...DEFAULT_REVIEW_NODE_CONFIG, maxReworks: 10 }).maxReworks).toBe(MAX_REWORKS)
+  expect(ReviewNodeConfigSchema.parse({ ...DEFAULT_REVIEW_NODE_CONFIG, maxReworks: undefined }).maxReworks).toBe(MAX_REWORKS)
+})
 
 const subject = {
   assetId: 'asset',

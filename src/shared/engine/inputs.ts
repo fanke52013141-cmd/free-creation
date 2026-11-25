@@ -2,7 +2,7 @@
 //
 // buildOutputPackets / collectContractInputs 依赖 renderer 注册表（getNodeType），
 // 留在 renderer 层。这里只保留执行器直接使用的类型安全和提取函数。
-import type { PortType } from '../types'
+import type { MediaAsset, PortType } from '../types'
 import type { NodeValue } from './values'
 import { TEXT_MERGE_SEPARATOR } from './helpers'
 import type { DirectorCamera } from '../director-data'
@@ -18,6 +18,11 @@ export interface NodeValuePacket {
 
 export type ContractOutputs = Partial<Record<string, NodeValuePacket>>
 export type ContractInputMap = ReadonlyMap<string, readonly NodeValuePacket[]>
+
+export interface AbsentNodeValuePacket {
+  source: Pick<NodeValuePacket['source'], 'nodeId' | 'portId'>
+  absent: { reason: 'optional-not-produced' | 'skipped' | 'not-run' }
+}
 
 /** 运行器在动态作用域内注入的输入包（目前由 iterate.out-item 使用）。 */
 export interface ContractInputInjection {
@@ -64,7 +69,8 @@ export function inputValue(inputs: ContractInputMap, portId: string): NodeValue 
  */
 export function iterationItemValue(
   item: Record<string, unknown>,
-  targetType?: PortType
+  targetType?: PortType,
+  catalog?: { projectId: string; assets: ReadonlyArray<Pick<MediaAsset, 'id' | 'kind' | 'path' | 'mime'>> }
 ): NodeValue {
   const kind = item.kind
   if (targetType === 'camera') {
@@ -89,12 +95,18 @@ export function iterationItemValue(
     typeof item.mime === 'string' &&
     item.mime.length > 0
   ) {
-    return {
-      kind,
-      mediaId: item.mediaId,
-      mediaPath: item.mediaPath,
-      mime: item.mime,
-      ...(typeof item.name === 'string' ? { name: item.name } : {})
+    const asset = catalog?.assets.find(
+      (entry) => entry.id === item.mediaId && entry.kind === kind &&
+        entry.path === item.mediaPath && entry.mime === item.mime
+    )
+    if (asset && catalog) {
+      const prefix = `projects/${catalog.projectId}/media/`
+      const filename = asset.path.slice(prefix.length)
+      if (asset.path.startsWith(prefix) && /^[\w.-]+$/.test(filename) &&
+          filename !== '.' && filename !== '..') {
+        return { kind, mediaId: asset.id, mediaPath: asset.path, mime: asset.mime,
+          ...(typeof item.name === 'string' ? { name: item.name } : {}) }
+      }
     }
   }
   return { kind: 'json', data: item }

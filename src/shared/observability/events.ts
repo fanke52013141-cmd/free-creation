@@ -528,6 +528,18 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     def('media.video_thumbnails.started', 'info', 'main/ipc/media.ipc.ts', { count: 'int' }),
     def('media.video_thumbnails.completed', 'info', 'main/ipc/media.ipc.ts', { count: 'int' }),
     def('media.video_thumbnails.failed', 'error', 'main/ipc/media.ipc.ts', { phase: 'short' }),
+    // media.silence_trim.*：去气口节点本地变换（检测引擎与裁剪统计；不含路径与音频内容）。
+    // 节点终态仍由公共执行器 node.completed/failed/cancelled 独占，这里不重复记。
+    def('media.silence_trim.started', 'info', 'main/ipc/media.ipc.ts', { engine: 'short' }),
+    def('media.silence_trim.completed', 'info', 'main/ipc/media.ipc.ts', {
+      engine: 'short',
+      gapCount: 'int',
+      removedMs: 'int'
+    }),
+    def('media.silence_trim.failed', 'error', 'main/ipc/media.ipc.ts', {
+      engine: 'short',
+      phase: 'short'
+    }),
     def('media.buffer_import.started', 'info', 'main/ipc/media.ipc.ts', {
       byteSize: 'int',
       mime: 'short'

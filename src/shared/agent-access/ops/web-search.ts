@@ -14,6 +14,9 @@ import { z } from 'zod'
 export const WEB_SEARCH_OPERATIONS = {
   'webSearch.run': {
     effect: 'execute',
+    idempotent: false,
+    destructive: true,
+    cost: 'possible',
     description:
       '受控联网搜索（豆包 web_search，官方真实端点）：必须同时显式 confirmNetwork=true 与 confirmCost=true 才执行，否则拒绝且不发任何请求；密钥由 main 从设备密钥库读取（well-known 连接 doubao-search），外部不提供密钥或地址；返回标题/链接/摘要等结构化结果，不含请求报文或密钥',
     input: z

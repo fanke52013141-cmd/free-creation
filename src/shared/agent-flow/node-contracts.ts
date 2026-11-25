@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { MAX_REWORKS, SavedReviewReworkLimitSchema } from './rework-limit'
 import { VideoReviewEvidenceSchema } from './video-review'
 import { FlowStagesSchema, HandoffNoteSchema } from './stage-contracts'
 import { FlowGraphSchema } from './flow-graph'
@@ -112,7 +113,7 @@ export const ReviewNodeConfigSchema = z
     reviewMode: z.enum(['text-json', 'sampled-video', 'image', 'audio', 'audio-video']).optional(),
     modelDefinitionId: id.optional(),
     rejectPolicy: z.enum(['rework', 'stop']),
-    maxReworks: z.number().int().min(0).max(10),
+    maxReworks: SavedReviewReworkLimitSchema,
     responsibleNodeId: id.optional(),
     subjectSources: z.array(z.object({ nodeId: id, portId: id }).strict()).max(128),
     gatedNodeIds: z.array(id).max(128),
@@ -316,7 +317,7 @@ export const DEFAULT_REVIEW_NODE_CONFIG = ReviewNodeConfigSchema.parse({
   schemaVersion: 1,
   rulesVersion: 'rules-1',
   rejectPolicy: 'rework',
-  maxReworks: 3,
+  maxReworks: MAX_REWORKS,
   subjectSources: [],
   gatedNodeIds: [],
   relations: []

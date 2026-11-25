@@ -19,6 +19,9 @@ const tags = z.array(z.string().trim().min(1).max(40)).max(20)
 export const LIBRARY_CAPTURE_OPERATIONS = {
   'library.captureProjectMedia': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '把项目里已登记的受控媒体采集为资源库资源（复制文件入库，生成来源随之迁移）；媒体必须属于该项目，外部只提供 mediaId 与可选文案，不提供路径；素材缺失/超限如实失败',
     input: z
@@ -33,6 +36,9 @@ export const LIBRARY_CAPTURE_OPERATIONS = {
   },
   'library.captureProjectNodes': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '把项目中选定的画布节点快照采集为一份独立版本化资源；每个节点的 nodeId 必须真实存在于该项目、nodeType 必须与持久化数据一致、引用的 mediaId 必须属于该项目，外部不能提交伪造的节点或跨项目媒体',
     input: z

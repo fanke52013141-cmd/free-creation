@@ -1,6 +1,6 @@
 import { DesktopAccessError } from './desktop'
 import type { CompositeManifest } from '../../shared/composite/manifest'
-import { validateCompositeManifest } from '../../shared/composite/validate'
+import { validateCompositeManifest, validateCompositePublication } from '../../shared/composite/validate'
 import { CompositePublishError } from '../../shared/composite/errors'
 import { readCompositeManifest } from '../../shared/composite/outputs'
 import { compositeRuntimeVersion } from '../../shared/composite/manifest'
@@ -266,7 +266,9 @@ export async function runCompositeOperation(
       }
     }
     case 'composite.validate': {
-      return validateCompositeManifest(input.manifest)
+      return validateCompositePublication(input.manifest, {
+        getCapability: (id, version) => getCompositeVersion(id, version)?.manifest ?? null
+      })
     }
     case 'composite.publish': {
       const manifest = validManifest(input.manifest)

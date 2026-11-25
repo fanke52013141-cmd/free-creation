@@ -24,6 +24,7 @@ export type IconName =
   | 'audio'
   | 'video-audio'
   | 'sound-adjust'
+  | 'silence-trim'
   | 'speech'
   | 'voice-clone'
   | 'voice-design'
@@ -707,6 +708,14 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <rect x="3.5" y="6.8" width="5" height="2.4" rx="1.2" />
       <rect x="9.5" y="13.8" width="5" height="2.4" rx="1.2" />
       <rect x="15.5" y="9.8" width="5" height="2.4" rx="1.2" />
+    </>
+  ),
+  // 去气口：两侧声波条 + 中间一道剪断叉口，表达“把句间气口剪掉”
+  'silence-trim': (
+    <>
+      <path d="M4 9.5v5M7 7v10M10 5v14" />
+      <path d="M17 5v14M20 7v10" />
+      <path d="M12.3 9.4l2.4 5.2M14.7 9.4l-2.4 5.2" />
     </>
   ),
   // 语音合成：麦克风 + 两条发射弧；与录音控件 mic 的区别写进 UI_ICON_SYSTEM 语义字典

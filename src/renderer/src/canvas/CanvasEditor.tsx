@@ -19,6 +19,7 @@ import type { ProjectMeta, MediaAsset, NodeTypeId } from '@shared/types'
 import type { WorkspaceProfile } from '@shared/workspace-profile'
 import {
   parseStateMachineInstance,
+  projectFlowPhase,
   projectTrustedStateMachineEvent
 } from '@shared/engine/executors/agentFlow'
 import { StateMachineNodeConfigSchema } from '@shared/agent-flow/node-contracts'
@@ -491,13 +492,20 @@ export function CanvasEditor({
           }
         })()
       )
-      if (!instance || !configParsed.success) return
-      const next = projectTrustedStateMachineEvent(instance, configParsed.data.transitions, {
-        eventId: projection.eventId,
-        event: projection.event,
-        expectedRevision: projection.expectedRevision,
-        source: 'agent'
-      })
+      if (!configParsed.success) return
+      const next = projection.phaseProjection
+        ? projectFlowPhase(instance, configParsed.data.states, configParsed.data.initialState, {
+            ...projection.phaseProjection,
+            stateNodeId: projection.stateNodeId,
+            event: projection.event,
+            eventId: projection.eventId
+          })
+        : instance && projectTrustedStateMachineEvent(instance, configParsed.data.transitions, {
+            eventId: projection.eventId,
+            event: projection.event,
+            expectedRevision: projection.expectedRevision,
+            source: 'agent'
+          })
       if (!next) return
       editorInstance.updateShape({
         id: projection.stateNodeId as TLShapeId,

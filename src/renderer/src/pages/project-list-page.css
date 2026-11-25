@@ -202,6 +202,12 @@
   transform: scale(0.985);
 }
 
+.project-home-empty-action {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+
 .project-home-create-row {
   display: flex;
   flex-wrap: wrap;

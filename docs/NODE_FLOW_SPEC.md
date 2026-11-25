@@ -138,15 +138,15 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 **NF-6.1【现行】结构**：内部节点 ID 唯一；边引用的节点存在；端口存在且方向为 `out → in`；没有重复边；单值（`one`）输入端口最多一条内部入边（`PORT_CARDINALITY`）；DAG（`CYCLE`）。
 
 **NF-6.2【现行】必填满足**：每个必填内部输入端口，必须满足以下之一：有内部入边；被公开输入绑定；节点契约认可的固定输入（文本节点非空正文满足 `in-text`；带 `mediaRefs` 的资产节点满足媒体输入）。否则报 `REQUIRED_INPUT_UNBOUND`。
-- **NF-6.2a【目标·F4】** 媒体固定输入必须**按端口类型匹配** `mediaRefs[].mime`。现行实现是「任意媒体引用满足任意媒体端口」，图片引用也会被当作满足音频必填。
+- **NF-6.2a【现行·BL-13】** 图片、视频和音频固定输入按端口类型匹配 `mediaRefs[].mime`。文件端口可接受任意文件 MIME。
 
 **NF-6.3【现行】公开映射**：公开输入必须映射到存在的输入端口，同一个内部目标不能被两个公开输入占用（`INPUT_DUPLICATE_TARGET`），JSON 公开输入必须有 `schemaRef`；公开输出必须来自存在的输出端口，类型匹配（`OUTPUT_TYPE_MISMATCH`），多值来源不能声明为单值公开输出。
 
-**NF-6.4【目标·F2】端口兼容判定只能有一个函数**：节点流内部边、公开映射、画布连线、FlowGraph 数据边，**必须共用** `portPairCompatible`（connection-matrix 真值表）。现行节点流使用独立的 `portsCompatible`，只允许「同类型或 any」，与画布规则不一致（画布允许 `text↔markdown`、`iteration→json/camera/媒体`）。结果是：在画布上能连通的图，封装成节点流以后会被拒绝。
+**NF-6.4【现行·BL-12】端口兼容判定共用** `portPairCompatible`。节点流内部边、公开映射、画布连线和 FlowGraph 数据边采用相同的方向性类型与 Schema 规则。节点流发布还检查映射基数。
 
-**NF-6.5【目标·F2】端口类型枚举与 PortType 全集一致**：`COMPOSITE_PORT_TYPES` 必须包含 `iteration` 和 `camera`，或者在规范中明确「含这两种端口的节点不能进入节点流」，并在封装入口给出明确错误。不能出现端口快照 schema 静默拒绝的情况。
+**NF-6.5【现行·BL-12】节点流封装的端口范围**：含 `iteration` 或 `camera` 端口的节点暂不支持封装为节点流。封装入口会指出节点和端口类型。
 
-**NF-6.6【目标·F3】JSON Schema 兼容**：内部数据边和公开输出，必须按 `NODE_CONTRACT_SPEC §5` 第 4 步比较 `schemaRef` 是否兼容。现行实现只对公开 JSON 输入要求声明 schemaRef，内部边不比较。
+**NF-6.6【现行·BL-13】JSON Schema 兼容**：内部数据边和公开端口映射按 `NODE_CONTRACT_SPEC §5` 第 4 步比较 `schemaRef`。新发布只接受 Schema 引用。已发布快照保留历史字段以维持版本摘要。
 
 **NF-6.7【现行】预算（发布期）**：内部节点数、边数不超过 `executionPolicy.maxExpandedNodes/Edges`；注入 resolver 后，递归检查嵌套依赖的深度、展开节点总数和依赖环（`DEPENDENCY_CYCLE`）。
 
@@ -174,7 +174,7 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 - `INPUT_VALUE_INVALID`：单值端口收到多份值；
 - `INPUT_TYPE_UNSUPPORTED`：值的种类与声明类型不符，或者该种类暂不支持接入。
 
-**NF-7.5【目标·N5】必填输入在运行前预检**：所有入口（画布运行、headless、Agent Flow 调度）都必须在**执行任何内部节点之前**完成 NF-7.4 检查，不允许出现「必填输入没给 → 内部节点被跳过 → 最后报 `REQUIRED_OUTPUT_MISSING`」这种误导性路径（11-20 节点流测试报告中的高频踩坑点）。
+**NF-7.5【现行·BL-13】必填输入在运行前预检**：画布、headless 和 Agent Flow 调度必须在任何内部节点执行前完成输入检查。画布补输入表单在必填值缺失时禁用开始。直接执行缺少必填值时返回 `INPUT_REQUIRED`。
 
 ### 7.3 执行
 
@@ -218,7 +218,7 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 
 ## 9. 缺席、跳过与等待
 
-**NF-9.1【目标·N5】三种「无值」必须可区分**，并且沿数据边传播：
+**NF-9.1【现行·BL-14】三种「无值」沿数据边传播**：
 
 | 缺席原因 | 含义 | 下游行为 |
 |---|---|---|
@@ -253,9 +253,9 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 
 ## 11. 版本、升级与兼容
 
-**NF-11.1【现行】** 版本只能前进，不能原地修改；当前只允许主版本号（`1.0`、`2.0`……）。
+**NF-11.1【现行】** 版本只能前进，不能原地修改。新发布使用 `major.minor`，历史三段版本仍可读取。
 
-**NF-11.2【目标】语义化版本**：改为 `major.minor`：
+**NF-11.2【现行 · BL-34】语义化版本**使用 `major.minor`：
 - minor：只做向后兼容的变化，即新增**可选**公开输入、新增公开输出、内部实现变化但公开契约不变。已绑定的实例可以一键升级。
 - major：任何会被 NF-11.3 判为 breaking 的变化。
 
@@ -270,7 +270,7 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 
 **NF-11.4【现行】** 升级预检和升级应用三入口一致（`composite.upgrade.preview / apply`）；阻断项定位到具体的外层节点和边。
 
-**NF-11.5【目标】** 升级应用必须是**单个撤销步**，失败时整体回滚；升级不会重跑已经计费的任务。
+**NF-11.5【现行 · BL-34】** 桌面升级应用占**单个撤销步**，保存失败时回滚画布变更。升级不会重跑已经计费的任务。
 
 ---
 
@@ -283,7 +283,7 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 **NF-12.2【目标】** 能力描述（`composite.get`、`capability.list`、FlowGraph 能力菜单）必须展示 `cost: none | possible | certain` 和 `network: none | required`，这两个值**由 dependencies 自动派生**。
 
 **NF-12.3【现行】** 重试只针对「提交前/提交失败」；提交成功后的失败不自动重提，按运行台账核对（与 `NODE_CONTRACT_SPEC §4.1 W1` 的 video 规则一致）。
-- **NF-12.3a【目标·N9】** image-gen 等所有远端异步生成节点，统一适用这条规则。
+- **NF-12.3a【部分现行 · BL-36】** image-gen 的单次网关调用合并提交、取回和保存，执行器不会自动重发。视频由主进程对明确限流拒绝退避重试，执行器不会重放提交。循环项发起可能计费的媒体请求后，停止整项自动重试。节点流账本对可能产生副作用且已进入执行的旧运行要求先核对交付；重试只直接放行执行前输入失败或白名单内的本地节点流。
 
 ---
 
@@ -320,7 +320,7 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 
 **NF-14.2【现行】** 三入口共用同一份业务实现和同一组稳定错误码；IPC 与 Agent 接入只映射 code，不解析中文 message。
 
-**NF-14.3【目标】** 每个操作在 OperationSpec 中逐项声明 `idempotent`、`destructive`、`cost`；MCP 注解由这些声明**派生**（例如 `delete`、`execute` 不得声明为幂等）。
+**NF-14.3【现行 · BL-37】** 每个操作在 OperationSpec 中逐项声明 `idempotent`、`destructive`、`cost`。MCP 从声明派生标准注解，在工具说明中提示可能产生的费用。能力目录同时返回机器可读的三个字段。请求级幂等键仍适用于写入请求。
 
 ---
 
@@ -370,13 +370,13 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 | 差距 | 条款 | 优先级 |
 |---|---|---|
 | ~~节点流不可被 Agent Flow 编排~~ ✅ BL-10（capabilityRef + 能力目录；最小输入编制/真实端口随 BL-11/12） | NF-1.4 / NF-13.* | P1 |
-| ~~端口兼容判定与画布分裂~~ ✅ BL-11（`port-compatibility.ts` 单一实现；`iteration/camera` 类型枚举待 BL-12） | NF-6.4 / NF-6.5 | P1 |
+| ~~端口兼容判定与画布分裂~~ ✅ BL-12（共用 `portPairCompatible`，封装明确拒绝 `iteration/camera` 端口） | NF-6.4 / NF-6.5 | — |
 | ~~发布期/运行期预算缺省不一致~~ ✅ BL-08 | NF-10.2 | — |
 | headless 计费确认门（修复提交已丢失） | NF-12.1 | **P0** |
-| 必填输入运行前预检 | NF-7.5 | P1 |
-| 媒体固定输入按类型匹配 | NF-6.2a | P1 |
-| JSON Schema 兼容校验 | NF-6.6 | P1 |
-| 缺席/跳过三态 | NF-9.1 | P1 |
+| ~~必填输入运行前预检~~ ✅ BL-13 | NF-7.5 | — |
+| ~~媒体固定输入按类型匹配~~ ✅ BL-13 | NF-6.2a | — |
+| ~~JSON Schema 兼容校验~~ ✅ BL-13 | NF-6.6 | — |
+| ~~缺席/跳过三态~~ ✅ BL-14 | NF-9.1 | — |
 | 分支失败策略、内部并发 | NF-8.4 / NF-8.5 | P2 |
 | 人工门自动推断 | NF-9.3a | P2 |
 | semver major.minor | NF-11.2 | P2 |

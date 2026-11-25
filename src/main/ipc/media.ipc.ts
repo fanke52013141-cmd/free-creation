@@ -20,6 +20,7 @@ import type {
   VoiceCloneResult,
   VideoAudioTransformInput,
   SoundAdjustTransformInput,
+  SilenceTrimTransformInput,
   VideoClipTransformInput,
   VideoFrameTransformInput,
   VideoProbeInput,
@@ -68,6 +69,7 @@ import {
   generateAudioWaveform,
   getLocalMediaCapabilities
 } from '../media/video-transform'
+import { transformSilenceTrim } from '../media/silence-trim'
 import {
   cancelVideoConversion,
   convertVideoClay,
@@ -567,6 +569,67 @@ export function registerMediaIpc(): void {
         () => transformSoundAdjust(input),
         'SOUND_ADJUST_FAILED'
       )
+    }
+  )
+  /** 去气口：检测并剪掉音频中的静音/呼吸气口，输出独立新音频资产。
+   * 取消终态由公共执行器 node.cancelled 独占；这里只记 started/completed/failed。 */
+  ipcMain.handle(
+    IPC.media.silenceTrim,
+    async (_e, input: SilenceTrimTransformInput): Promise<IpcEnvelope<MediaAsset>> => {
+      const engine = input?.config?.engine === 'vad' ? 'vad' : 'silence'
+      const context = { traceId: newTraceId(), spanId: newSpanId(), projectId: input?.projectId }
+      const startedAt = Date.now()
+      emitGatewayEvent('media.silence_trim.started', '去气口处理开始', context, {
+        attributes: { engine }
+      })
+      if (!input?.projectId || !input.sourceMediaId || !input.config) {
+        emitGatewayEvent('media.silence_trim.failed', '去气口参数无效', context, {
+          status: 'failed',
+          phase: 'input',
+          attributes: { engine }
+        })
+        return err('INVALID_INPUT', '缺少去气口参数')
+      }
+      try {
+        const outcome = await runCancellableTransform(
+          input,
+          () => transformSilenceTrim(input),
+          'SILENCE_TRIM_FAILED'
+        )
+        if (!outcome.ok) {
+          // 取消走公共执行器 node.cancelled 终态，不重复记 failed。
+          if (outcome.error.code !== MEDIA_TRANSFORM_CANCELLED) {
+            emitGatewayEvent('media.silence_trim.failed', '去气口处理失败', context, {
+              status: 'failed',
+              phase: 'transform',
+              durationMs: Date.now() - startedAt,
+              attributes: { engine }
+            })
+          }
+          return outcome
+        }
+        emitGatewayEvent('media.silence_trim.completed', '去气口处理完成', context, {
+          status: 'success',
+          durationMs: Date.now() - startedAt,
+          attributes: {
+            engine,
+            gapCount: outcome.data.gapCount,
+            removedMs: outcome.data.removedMs
+          }
+        })
+        return ok(outcome.data.asset)
+      } catch (error) {
+        emitGatewayEvent('media.silence_trim.failed', '去气口处理失败', context, {
+          status: 'failed',
+          phase: 'transform',
+          durationMs: Date.now() - startedAt,
+          attributes: { engine }
+        })
+        return err(
+          'SILENCE_TRIM_FAILED',
+          error instanceof Error ? error.message : String(error)
+        )
+      }
     }
   )
   /** 时间轴缩略图：均匀采样指定数量的帧，返回 base64 JPEG data URL 数组。 */

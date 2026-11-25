@@ -58,7 +58,7 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 | 模式 | 现状 | 规范定位 |
 |---|---|---|
 | `graph` | 【现行】FlowGraph + 声明式路由，不调用主控模型 | **标准模式**。需要可复现、可审计、需人参与的流程必须使用它 |
-| `fixed-order` | 【现行】声明阶段线性推进 | `graph` 的线性特例。**【目标】** 统一编译为 graph，阶段契约（stages）作为 graph 的一种写法保留 |
+| `fixed-order` | 【现行 · BL-35】声明阶段编译为线性路由图 | 与 `graph` 共用就绪、完成判定和单节点 Agent 分派。阶段契约（stages）保留进入条件、人工采用、输入编制和固定方法。 |
 | `model`（缺省，旧语义） | 【现行】主控模型每轮输出 dispatch/finish/wait | **探索模式**：只用于草案和原型；不得作为交付流程模板发布；UI 上必须标注「模型调度、不可复现」 |
 
 **AF-2.1【目标·A2】** 「主 Agent」在全局只有一个含义：**流程的控制宿主**（持有控制范围、预算、状态和运行总览）。在 `graph` 模式下，主 Agent 不调用模型；在 `model` 模式下，主 Agent 的模型决策同样只能输出受约束的控制命令（`CoordinationDecision`），不能执行业务能力。
@@ -205,8 +205,8 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 | V7 | ~~汇合推断~~：已由 AF-8.3b 的新 `all` 语义取代——XOR 汇合用缺省 `all` 即可，无需报错 | 【现行 · BL-03，作废原条款】 |
 | V8 | 数据边端口存在，且按 `portPairCompatible` 类型兼容、Schema 兼容 | 【目标·G8】 |
 | V9 | kind 和能力在运行准入白名单内（与 AF-6.2 同源）：`NODE_KIND_UNSUPPORTED` / `CAPABILITY_UNKNOWN` | 【现行 · BL-05】 |
-| V10 | 预算交叉检查：`maxSteps ≥ 可执行节点数 + Σ(loop.maxIterations × body 大小)`，否则报错或给出建议值 | 【目标·G9】 |
-| V11 | `required` 输入 selector 引用的源节点，在每条到达本节点的路径上都可能已交付（避免「分支没走 → 必需输入永远缺失」） | 【目标】 |
+| V10 | 预算交叉检查：`maxSteps ≥ 可执行节点数 + Σ(loop.maxIterations × body 大小)`。单节点循环按大小 1 计算。预算不足时返回 `STEP_BUDGET_INSUFFICIENT` 及所需步数。 | 【现行 · BL-35】 |
+| V11 | `required` 输入 selector 的源节点必须先于使用节点出现在从入口到达该节点的所有拓扑路径上。可绕过源节点或引用自身时返回 `REQUIRED_SELECTOR_UNREACHABLE`。 | 【现行 · BL-35】 |
 | V12 | 错误码语义准确：未知能力用 `CAPABILITY_UNKNOWN`，不复用 `UNREACHABLE_NODE` | 【现行 · BL-05】 |
 | V13–V15 | 角色声明与归属规则（见 §16.1） | 【目标·A4】 |
 
@@ -356,7 +356,7 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 | 预算 | 层级 | 缺省值 | 状态 |
 |---|---|---|---|
-| `budgets.maxSteps` | 流程 | 12（≤64） | 【现行】；V10 交叉检查【目标】 |
+| `budgets.maxSteps` | 流程 | 12（≤64） | 【现行】；V10 交叉检查见 §7 |
 | `budgets.maxActiveMs` | 流程 | 10 分钟 | 【现行】 |
 | `budgets.maxLoopIterations` | 流程 | 8 | 【现行】 |
 | 每任务决策轮数、工具次数、时长 | 专业 Agent | 12 轮 / 20 次 / 10 分钟（视频另设） | 【现行】 |

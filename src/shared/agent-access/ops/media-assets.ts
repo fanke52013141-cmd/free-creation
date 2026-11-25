@@ -36,12 +36,18 @@ const recipeDto = z
 export const MEDIA_ASSET_OPERATIONS = {
   'media.getRecipe': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取某个项目媒体的生成来源（产物谱系）：生产者节点、运行ID、操作与参数摘要；媒体不属于该项目或没有来源时如实返回 found=false，不伪造谱系。生成来源只能由执行器写入，外部不可写',
     input: z.object({ projectId: identifier, mediaId }).strict()
   },
   'media.batchExport': {
     effect: 'export',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '把项目媒体（可指定 mediaIds，省略=全部）批量导出到受控导出目录下的新子目录：同名文件自动加序号后缀、绝不覆盖已有文件；逐项回执成功/失败文件名，不用总数掩盖个别失败',
     input: z

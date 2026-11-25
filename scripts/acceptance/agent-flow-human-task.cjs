@@ -116,7 +116,9 @@ async function runNode(dir, projectId, nodeId) {
     ok(await cli(dir, ['project', 'open'], { projectId }), 'OPEN')
     const batch = await patchWithRetry(dir, projectId, [
       { action: 'node.create', ref: 'h1', nodeType: 'human-task', title: '人工审核', x: 200, y: 100,
-        config: { schemaVersion: 1, outputType: 'text', instructions: '请人工填写审核结论。' } }
+        config: { schemaVersion: 1, outputType: 'text', humanRole: 'editor', instructions: '请人工填写审核结论。' } },
+      { action: 'node.create', ref: 'h2', nodeType: 'human-task', title: 'Reviewer inbox fixture', x: 800, y: 900,
+        config: { schemaVersion: 1, outputType: 'text', humanRole: 'reviewer' } }
     ], 'BATCH')
     const h1 = Object.fromEntries(batch.created.map((c) => [c.ref, c.nodeId])).h1
     check('创建 human-task 一等节点（text 输出）')
@@ -128,6 +130,10 @@ async function runNode(dir, projectId, nodeId) {
     assert(view.status === 'pending' && view.revision === 1, `未提交停等（status=${view.status}, revision=${view.revision}）`)
     const out0 = ok(await cli(dir, ['output', 'get'], { projectId, nodeId: h1 }), 'OUT0')
     assert(!(out0.outputs || []).some((o) => o.portId === 'out-text'), '未提交不产生公开输出（不伪造成功）')
+    await page.getByRole('button', { name: '打开待你处理收件箱' }).click()
+    const roleFilter = page.getByLabel('查看角色')
+    await roleFilter.selectOption('reviewer')
+    assert(await roleFilter.inputValue() === 'reviewer', '收件箱已切换到 reviewer 角色')
 
     // 外部提交（与 GUI 同一 pending 写入）→ 运行 → 正式交付。
     // BL-01：外部提交会先弹人工确认，必须由人在窗口里点「允许提交」；这里扮演人。
@@ -154,6 +160,10 @@ async function runNode(dir, projectId, nodeId) {
     view = ok(await cli(dir, ['humanTask', 'get'], { projectId, nodeId: h1 }), 'GET2')
     receipt.outputs.afterSubmit = view
     assert(view.status === 'completed' && view.revision === 2, `提交后运行完成（status=${view.status}, revision=${view.revision}）`)
+    const file = JSON.parse(fs.readFileSync(path.join(dir, 'projects', projectId, 'project.json'), 'utf8'))
+    const { actor } = JSON.parse(file.tldrawSnapshot.store[h1].meta.humanTask)
+    assert(actor?.kind === 'user' && actor.roleId === 'editor', '提交记录归属节点声明的 editor 角色')
+    receipt.outputs.humanActor = actor
     const out1 = ok(await cli(dir, ['output', 'get'], { projectId, nodeId: h1 }), 'OUT1')
     const textOut = (out1.outputs || []).find((o) => o.portId === 'out-text' && o.kind === 'text')
     receipt.outputs.deliveredText = textOut?.text

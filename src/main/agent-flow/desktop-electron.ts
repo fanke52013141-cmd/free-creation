@@ -1,3 +1,5 @@
+import { deriveFlowPhaseStateMachine } from '../../shared/agent-flow/flow-graph-compiler'
+import { IPC } from '../../shared/contracts'
 // Isolated, hidden desktop acceptance; never imported by the application.
 import { app, BrowserWindow, dialog, protocol, net } from 'electron'
 import { execFile } from 'node:child_process'
@@ -402,7 +404,13 @@ if (
       registerFlowAssetsIpc(() => active)
       registerFlowCommandsIpc(
         () => active,
-        (desktop) => registerFlowAgentsIpc(() => active, desktop)
+        (desktop) => registerFlowAgentsIpc(
+          () => active,
+          desktop,
+          endToEndGraph
+            ? (projection) => active.webContents.send(IPC.flowAgents.stateProjection, projection)
+            : undefined
+        )
       )
       stage = 'setup-load'
       await active.loadURL(process.env.CANVAS_AGENT_RENDERER_URL || 'http://127.0.0.1:5199')
@@ -2612,7 +2620,7 @@ if (
           const graph={schemaVersion:1,graphId:'e2e',name:'垂类贯穿图',goal:'材料→分析→协作整理→审核→返工→最终资产',nodes:[{nodeId:'shape:e2-analysis',title:'分析',participation:'autonomous',kind:'agent',goal:'分析材料',completion:'交付分析'},{nodeId:'shape:e2-org',title:'协作整理',participation:'collaborative',kind:'agent',goal:'协作整理并交付',completion:'交付整理成果',decisions:{allowed:['approve','edit','reject','respond']}},{nodeId:'shape:e2-review',title:'审核',participation:'autonomous',kind:'review',goal:'审核交付',completion:'审核通过',review:{criteria:'必须以交付：开头',rejectPolicy:'rework',maxReworks:1}},{nodeId:'shape:e2-down',title:'最终资产',participation:'autonomous',kind:'agent',goal:'产出最终资产',completion:'交付最终资产'}],edges:[{from:{nodeId:'shape:e2-analysis',portId:'out-text'},to:{nodeId:'shape:e2-org',portId:'in-text'},kind:'data'},{from:{nodeId:'shape:e2-org',portId:'out-text'},to:{nodeId:'shape:e2-review',portId:'in-text'},kind:'data'},{from:{nodeId:'shape:e2-review',portId:'out-text'},to:{nodeId:'shape:e2-down',portId:'in-text'},kind:'data'}],entry:'shape:e2-analysis',exits:['shape:e2-down']};
           const specialist=(targets,mode)=>({schemaVersion:1,role:'specialist',interactionMode:mode,modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'node.execute',version:'1'}],allowedNodeIds:targets,maxSteps:12,relations:[]});
           const rootConfig={schemaVersion:1,role:'coordinator',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'agent.dispatch',version:'1'},{id:'review.execute',version:'1'}],allowedNodeIds:['shape:e2-analysis','shape:e2-org','shape:e2-review','shape:e2-down'],maxSteps:32,executionMode:'graph',graph,relations:[{relationId:'state',kind:'observes',sourceNodeId:'shape:e2-main',targetNodeId:'shape:e2-state'}]};
-          const stateConfig={schemaVersion:1,initialState:'draft',states:['draft','working','waiting','completed'],transitions:[{from:'draft',event:'flow.started',to:'working'},...['agent.dispatched','agent.completed','human.wait','flow.paused','flow.completed','review.started','review.passed','review.rejected','rework.created'].map(event=>({from:'working',event,to:event==='flow.completed'?'completed':['human.wait','flow.paused'].includes(event)?'waiting':'working'})),{from:'waiting',event:'human.continue',to:'working'}],relations:[]};
+          const stateConfig=${JSON.stringify({schemaVersion:1,initialState:'idle',...deriveFlowPhaseStateMachine(),relations:[]})};
           const nodes=[
             {id:'shape:e2-material',nodeType:'text',title:'材料',text:'private-e2-material',x:50,y:80},
             {id:'shape:e2-analysis',nodeType:'agent',title:'分析 Agent',text:'严格执行 shape:e2-ap 两次并交付第二次唯一固定成果。',config:JSON.stringify(specialist(['shape:e2-ap'],'autonomous')),x:350,y:80},
@@ -2662,6 +2670,18 @@ if (
           const rootId='shape:e2-main';
           const reworkInput={projectId,nodeId:rootId,stageKey:'shape:e2-review'};
           const before=value(await window.api.flowRunOverview({projectId,nodeId:rootId})).overview;
+          let canvasPhase;
+          for(let i=0;i<100;i++){
+            canvasPhase=JSON.parse(editor.getShape('shape:e2-state').meta.stateMachine||'null');
+            if(canvasPhase?.state==='completed')break;
+            await delay();
+          }
+          for(const [event,state] of [['flow.started','running'],['human.wait','waiting-human'],['review.started','reviewing'],['flow.completed','completed']]){
+            if(!before.events.some(item=>item.event===event&&item.state===state))
+              throw new Error('E2_FLOW_STAGE_MISSING:'+event+':'+state);
+            if(!canvasPhase?.history.some(item=>item.event===event&&item.to===state))
+              throw new Error('E2_CANVAS_STAGE_MISSING:'+event+':'+state);
+          }
           const impact=value(await window.api.flowAgentStageReworkPreview(reworkInput));
           const impacted=impact?.willRerunStages.map((stage)=>stage.nodeId);
           if(!impact?.canRework||JSON.stringify(impacted)!==JSON.stringify(['shape:e2-review','shape:e2-down'])||impact.keptDeliveries!==2)
@@ -2715,11 +2735,14 @@ if (
           const delay=()=>new Promise(r=>setTimeout(r,150));
           const inspectNode=(nodeId)=>window.api.inspectFlowAgent({projectId,nodeId}).then(value);
           const graph={schemaVersion:1,graphId:'fov',name:'垂类内容生产线',goal:'材料→分析→协作整理→审核→返工→最终资产',nodes:[{nodeId:'shape:e2-analysis',title:'分析 Agent',participation:'autonomous',kind:'agent',goal:'分析材料',completion:'交付分析'},{nodeId:'shape:e2-org',title:'协作整理 Agent',participation:'collaborative',kind:'agent',goal:'协作整理并交付',completion:'交付整理成果',decisions:{allowed:['approve','edit','reject','respond']}},{nodeId:'shape:e2-review',title:'AI 审核',participation:'autonomous',kind:'review',goal:'审核交付',completion:'审核通过',review:{criteria:'必须以交付：开头',rejectPolicy:'rework',maxReworks:1}},{nodeId:'shape:e2-down',title:'最终资产 Agent',participation:'autonomous',kind:'agent',goal:'产出最终资产',completion:'交付最终资产'}],edges:[{from:{nodeId:'shape:e2-analysis',portId:'out-text'},to:{nodeId:'shape:e2-org',portId:'in-text'},kind:'data'},{from:{nodeId:'shape:e2-org',portId:'out-text'},to:{nodeId:'shape:e2-review',portId:'in-text'},kind:'data'},{from:{nodeId:'shape:e2-review',portId:'out-text'},to:{nodeId:'shape:e2-down',portId:'in-text'},kind:'data'}],entry:'shape:e2-analysis',exits:['shape:e2-down']};
+          graph.nodes[1].inputs={overflow:'ask-human',budgetBytes:1024,selectors:[
+            {sourceStageKey:'shape:e2-analysis',path:'text',required:true}
+          ]};
           const specialist=(targets,mode)=>({schemaVersion:1,role:'specialist',interactionMode:mode,modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'node.execute',version:'1'}],allowedNodeIds:targets,maxSteps:12,relations:[]});
           const rootConfig={schemaVersion:1,role:'coordinator',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'agent.dispatch',version:'1'},{id:'review.execute',version:'1'}],allowedNodeIds:['shape:e2-analysis','shape:e2-org','shape:e2-review','shape:e2-down'],maxSteps:32,executionMode:'graph',graph,relations:[{relationId:'state',kind:'observes',sourceNodeId:'shape:e2-main',targetNodeId:'shape:e2-state'}]};
           const stateConfig={schemaVersion:1,initialState:'draft',states:['draft','working','waiting','completed'],transitions:[{from:'draft',event:'flow.started',to:'working'},...['agent.dispatched','agent.completed','human.wait','flow.paused','flow.completed','review.started','review.passed','review.rejected','rework.created'].map(event=>({from:'working',event,to:event==='flow.completed'?'completed':['human.wait','flow.paused'].includes(event)?'waiting':'working'})),{from:'waiting',event:'human.continue',to:'working'}],relations:[]};
           const nodes=[
-            {id:'shape:e2-material',nodeType:'text',title:'材料',text:'private-e2-material',x:50,y:80},
+            {id:'shape:e2-material',nodeType:'text',title:'材料',text:'private-e2-material '.repeat(90),x:50,y:80},
             {id:'shape:e2-analysis',nodeType:'agent',title:'分析 Agent',text:'严格执行 shape:e2-ap 两次并交付第二次唯一固定成果。',config:JSON.stringify(specialist(['shape:e2-ap'],'autonomous')),x:350,y:80},
             {id:'shape:e2-ap',nodeType:'processor',title:'分析处理',config:JSON.stringify({operation:'pass'}),x:350,y:650},
             {id:'shape:e2-org',nodeType:'agent',title:'协作整理 Agent',text:'普通任务严格执行 shape:e2-orgp 两次，两次后 wait_for_human。humanAccepted=true 后交付。若输入有 rework 则严格执行 shape:e2-repair 两次，两次后 wait_for_human，humanAccepted=true 后交付。',config:JSON.stringify(specialist(['shape:e2-orgp','shape:e2-repair'],'collaborative')),x:650,y:80},
@@ -2736,13 +2759,30 @@ if (
           for(const [from,to,port] of [['shape:e2-material','shape:e2-analysis','in-text'],['shape:e2-material','shape:e2-ap','in-value'],['shape:e2-analysis','shape:e2-org','in-text'],['shape:e2-material','shape:e2-orgp','in-value'],['shape:e2-material','shape:e2-repair','in-value'],['shape:e2-org','shape:e2-review','in-text'],['shape:e2-org','shape:e2-down','in-text'],['shape:e2-org','shape:e2-downp','in-value']])if(!createEdge(editor,{shapeId:from,portId:'out-text'},{shapeId:to,portId:port}))throw new Error('FOV_EDGE_MISSING');
           await ensureCanvasSaved();await delay();
           const button=document.querySelector('[data-node-id="shape:e2-main"] .node-standard-primary');if(!button||button.disabled)throw new Error('FOV_ROOT_BUTTON_UNAVAILABLE');button.click();
-          let waiting=null;for(let i=0;i<1200;i++){const t=await inspectNode('shape:e2-org');if(t?.state==='waiting'){waiting=t;break;}if(t&&['blocked','failed'].includes(t.state))throw new Error(t.code||'FOV_FAILED');await delay();}
-          if(!waiting)throw new Error('FOV_WAIT_TIMEOUT');
+          let overflow=null;for(let i=0;i<300;i++){const t=await inspectNode('shape:e2-main');if(t?.state==='waiting'&&t.code==='FLOW_CONTEXT_OVER_BUDGET'){overflow=t;break;}if(t&&['blocked','failed'].includes(t.state))throw new Error(t.code||'FOV_FAILED');await delay();}
+          if(!overflow||await inspectNode('shape:e2-org'))throw new Error('FOV_CONTEXT_WAIT_MISSING');
           const panelBtn=document.querySelector('[aria-label="打开流程总览"]');if(!panelBtn)throw new Error('FOV_PANEL_BUTTON_MISSING');panelBtn.click();
+          let field;for(let i=0;i<100&&!field;i++){field=document.querySelector('textarea[aria-label="替代上下文材料"]');if(!field)await delay();}
+          const submit=()=>[...document.querySelectorAll('.fo-now-cta')].find(button=>button.textContent.trim()==='提交材料并继续');
+          if(!field||!submit()?.disabled)throw new Error('FOV_CONTEXT_FORM_MISSING');
+          const changeMaterial=(text)=>{
+            Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(field,text);
+            field.dispatchEvent(new Event('input',{bubbles:true}));
+          };
+          changeMaterial('超'.repeat(400));
+          await delay();
+          if(!submit()?.disabled||!document.querySelector('.fo-now [role="status"]')?.textContent.includes('1024'))
+            throw new Error('FOV_CONTEXT_FORM_OVERSIZE_NOT_BLOCKED');
+          changeMaterial('隔离验收材料');
+          await delay();
+          if(submit()?.disabled!==false)throw new Error('FOV_CONTEXT_FORM_NOT_ENABLED');
+          submit().click();
+          let waiting=null;for(let i=0;i<300;i++){const t=await inspectNode('shape:e2-org');if(t?.state==='waiting'){waiting=t;break;}if(t&&['blocked','failed'].includes(t.state))throw new Error(t.code||'FOV_FAILED');await delay();}
+          if(!waiting)throw new Error('FOV_CONTEXT_SUBMISSION_DID_NOT_DISPATCH');
           let rendered=false;for(let i=0;i<200;i++){const el=document.querySelector('.flow-overview .fo-step');if(el&&document.querySelectorAll('.flow-overview .fo-step').length>=4){rendered=true;break;}await delay();}
           if(!rendered)throw new Error('FOV_PANEL_RENDER_TIMEOUT');
           await delay();
-          return {status:'pass',projectId,steps:document.querySelectorAll('.flow-overview .fo-step').length,now:document.querySelector('.fo-now-title')?.textContent||'',checks:['flow overview panel renders live graph steps','waiting-human NOW banner visible']};
+          return {status:'pass',projectId,steps:document.querySelectorAll('.flow-overview .fo-step').length,now:document.querySelector('.fo-now-title')?.textContent||'',checks:['flow overview panel renders live graph steps','waiting-human NOW banner visible'],contextForm:{rendered:true,emptyDisabled:true,nonemptyEnabled:true,dispatched:true}};
         })()`)
         await active.webContents.executeJavaScript('new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)))')
         active.webContents.invalidate()
@@ -2754,6 +2794,13 @@ if (
         const stored = database.prepare('SELECT task_id, body_json FROM flow_coordination_runs WHERE project_id=?')
           .get(projectId) as { task_id: string; body_json: string }
         const fixture = JSON.parse(stored.body_json)
+        const materialDelivery = fixture.children.find(
+          (child: { nodeId: string }) => child.nodeId === 'shape:e2-org'
+        )?.contextManifest?.entries
+        if (materialDelivery?.length !== 1 ||
+            materialDelivery[0].sourceStageKey !== 'human:context' ||
+            materialDelivery[0].value !== '隔离验收材料')
+          throw new Error('FOV_CONTEXT_MATERIAL_NOT_PERSISTED')
         const states = [
           'completed', 'running', 'waiting-human', 'waiting-execution', 'waiting-reconcile',
           'review-pending', 'review-passed', 'rejected', 'blocked', 'failed',
@@ -2813,11 +2860,11 @@ if (
           });
         })()`)
         const files: string[] = []
-        for (const [from, to] of [[0, 4], [5, 9], [11, 15], [16, 17]]) {
-          const name = 'flow-overview-states-' + from + '-' + to + '.png'
+        for (const state of states) {
+          const name = 'flow-overview-state-' + state + '.png'
           await active.webContents.executeJavaScript(`(async()=>{
-            const first=document.querySelector('.fo-step.is-'+${JSON.stringify(states[from])});
-            first.scrollIntoView({block:'start'});
+            const row=document.querySelector('.fo-step.is-'+${JSON.stringify(state)});
+            row.scrollIntoView({block:'center'});
             await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));
           })()`)
           writeFileSync(join(directory, name), (await active.webContents.capturePage()).toPNG())

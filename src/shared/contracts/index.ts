@@ -14,6 +14,7 @@ import type { TtsConfig } from '../tts'
 import type { SpeechConfig } from '../speech'
 import type { VoiceDesignConfig } from '../voice-design'
 import type { SoundAdjustConfig } from '../sound-adjust'
+import type { SilenceTrimConfig } from '../silence-trim'
 import type {
   VideoFrameConfig,
   VideoClipConfig,
@@ -135,6 +136,8 @@ export const IPC = {
     videoClip: 'media:video-clip',
     videoAudio: 'media:video-audio',
     soundAdjust: 'media:sound-adjust',
+    /** 去气口：静音/呼吸气口检测与裁剪，输出新音频资产。 */
+    silenceTrim: 'media:silence-trim',
     videoProbe: 'media:video-probe',
     /** 时间线合成：多段视频/图片/音频按起始毫秒合成为一条 MP4。 */
     timelineCompose: 'media:timeline-compose',
@@ -680,6 +683,11 @@ export interface SoundAdjustTransformInput extends VideoTransformSourceInput {
   config: SoundAdjustConfig
 }
 
+/** 去气口：只处理音频；engine 等参数在 SilenceTrimConfig。 */
+export interface SilenceTrimTransformInput extends VideoTransformSourceInput {
+  config: SilenceTrimConfig
+}
+
 /** 只读取当前项目内视频的元信息，供时间轴精确显示；不产生媒体资产。 */
 export interface VideoProbeInput extends VideoTransformSourceInput {}
 
@@ -793,6 +801,8 @@ export interface LocalMediaCapabilities {
   ffmpeg: LocalToolCapability
   ffprobe: LocalToolCapability
   audioSeparator: LocalToolCapability
+  /** 去气口 vad 引擎：ONNX 运行时可加载且 silero_vad.onnx 模型文件存在。 */
+  sileroVad: LocalToolCapability
 }
 
 /** State of the app-managed local CUDA runtime used by the video conversion nodes. */

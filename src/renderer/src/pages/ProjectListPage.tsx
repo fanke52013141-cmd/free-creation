@@ -386,7 +386,13 @@ export function ProjectListPage(): React.JSX.Element {
         <main className="project-home-workspace">
           <div className="project-home-grid">
             {!loading && projects.length === 0 && !creating && (
-              <div className="project-home-empty">还没有项目，点击右上角新建一个开始创作</div>
+              <div className="project-home-empty project-home-empty-action">
+                <span>还没有项目</span>
+                <button type="button" className="project-home-button project-home-button-primary"
+                  onClick={() => setCreating(true)}>
+                  <Icon name="add" size={15} /> 创建第一个项目
+                </button>
+              </div>
             )}
             {projects.map((p) => (
               <article

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ReworkLimitSchema } from './rework-limit'
 import { StageConditionSchema, StageInputsSchema, type StageCondition } from './stage-contracts'
 import { canonicalFlowJson } from './semantic-revision'
 import {
@@ -97,7 +98,7 @@ export const FlowNodeSchema = z
       .object({
         criteria: z.string().min(1).max(4096),
         rejectPolicy: z.enum(['rework', 'stop']).default('rework'),
-        maxReworks: z.number().int().min(0).max(3).default(1)
+        maxReworks: ReworkLimitSchema
       })
       .strict()
       .optional(),
@@ -168,7 +169,7 @@ export interface LoopBodyInfo {
   exits: ReadonlySet<string>
 }
 
-export function loopBodyInfo(graph: FlowGraph): Map<string, LoopBodyInfo> {
+export function loopBodyInfo(graph: Pick<FlowGraph, 'nodes' | 'edges' | 'exits'>): Map<string, LoopBodyInfo> {
   const result = new Map<string, LoopBodyInfo>()
   for (const node of graph.nodes) {
     const bodyIds = node.loop?.body
@@ -268,6 +269,13 @@ export const FlowGraphSchema = z
         context.addIssue({ code: 'custom', path: ['edges', index], message: 'An otherwise edge must not declare a condition' })
     })
     for (const node of graph.nodes) {
+      const summary = node.inputs?.summarySelector
+      if (summary && !graph.nodes.some(
+        (source) => source.nodeId === summary.sourceStageKey && source.kind === 'capability'
+      ))
+        context.addIssue({
+          code: 'custom', message: `Summary selector on ${node.nodeId} must reference a capability node`
+        })
       for (const selector of node.inputs?.selectors ?? [])
         if (!nodeIds.has(selector.sourceStageKey))
           context.addIssue({
@@ -308,6 +316,8 @@ export type FlowGraphErrorCode =
   | 'UNREACHABLE_NODE'
   | 'EXIT_UNREACHABLE'
   | 'LOOP_BUDGET_EXCEEDED'
+  | 'STEP_BUDGET_INSUFFICIENT'
+  | 'REQUIRED_SELECTOR_UNREACHABLE'
   | 'ENTRY_IS_EXIT'
   | 'LOOP_BODY_UNSUPPORTED'
   | 'LOOP_BODY_INVALID'
@@ -374,13 +384,14 @@ function stronglyConnectedComponents(adj: Map<string, string[]>): string[][] {
   return components
 }
 
-function reachable(adj: Map<string, string[]>, start: string): Set<string> {
+function reachable(adj: Map<string, string[]>, start: string, excluded?: string): Set<string> {
+  if (start === excluded) return new Set()
   const seen = new Set<string>([start])
   const queue = [start]
   while (queue.length) {
     const v = queue.shift()!
     for (const w of adj.get(v) ?? [])
-      if (!seen.has(w)) {
+      if (w !== excluded && !seen.has(w)) {
         seen.add(w)
         queue.push(w)
       }
@@ -695,6 +706,43 @@ export function validateFlowGraph(
   for (const exit of graph.exits)
     if (!fromEntry.has(exit))
       errors.push({ code: 'EXIT_UNREACHABLE', nodeId: exit, message: `Exit ${exit} is not reachable from entry` })
+
+  // V11: a required source must precede its consumer on every path from entry.
+  const reachableWithoutSource = new Map<string, Set<string>>()
+  for (const node of graph.nodes) {
+    if (!fromEntry.has(node.nodeId)) continue
+    for (const selector of [
+      ...(node.inputs?.selectors ?? []),
+      ...(node.inputs?.summarySelector ? [node.inputs.summarySelector] : [])
+    ]) {
+      if (!selector.required) continue
+      const source = selector.sourceStageKey
+      let bypass = reachableWithoutSource.get(source)
+      if (!bypass) {
+        bypass = reachable(adj, graph.entry, source)
+        reachableWithoutSource.set(source, bypass)
+      }
+      if (source === node.nodeId || bypass.has(node.nodeId))
+        errors.push({
+          code: 'REQUIRED_SELECTOR_UNREACHABLE',
+          nodeId: node.nodeId,
+          message: `Required selector source ${source} is not delivered before ${node.nodeId} on every path`
+        })
+    }
+  }
+
+  // V10：为基础执行以及所有声明的循环轮次预留步数。
+  const baseSteps = graph.nodes.filter((node) => isDispatchableFlowNodeKind(node.kind)).length
+  let loopSteps = 0
+  for (const node of graph.nodes)
+    if (node.loop)
+      loopSteps += node.loop.maxIterations * (bodies.get(node.nodeId)?.body.size ?? 1)
+  const requiredSteps = baseSteps + loopSteps
+  if (graph.budgets.maxSteps < requiredSteps)
+    errors.push({
+      code: 'STEP_BUDGET_INSUFFICIENT',
+      message: `maxSteps ${graph.budgets.maxSteps} must be at least ${requiredSteps}`
+    })
 
   // 循环预算。
   for (const node of graph.nodes)

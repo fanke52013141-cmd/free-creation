@@ -164,6 +164,7 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
   const [overview, setOverview] = useState<FlowRunOverview | null>(null)
   const [canvasVersion, setCanvasVersion] = useState<FlowRunOverview['canvasVersion']>()
   const [continuing, setContinuing] = useState(false)
+  const [materialDraft, setMaterialDraft] = useState({ key: '', text: '' })
   const [loaded, setLoaded] = useState(false)
   const selectedRef = useRef<string | null>(null)
   useEffect(() => {
@@ -237,6 +238,13 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
 
   const steps = useMemo(() => (overview ? deriveFlowSteps(overview) : []), [overview])
   const now = useMemo(() => (overview ? deriveNow(overview, steps) : null), [overview, steps])
+  const materialWait = overview?.contextMaterialWait
+  const materialKey = materialWait
+    ? JSON.stringify([overview.taskId, materialWait.waitRevision, materialWait.stageKey])
+    : ''
+  const materialText = materialKey && materialDraft.key === materialKey ? materialDraft.text : ''
+  const materialBytes = new TextEncoder().encode(JSON.stringify(materialText)).byteLength
+  const materialTooLarge = Boolean(materialWait?.limitBytes && materialBytes > materialWait.limitBytes)
   const progress = useMemo(() => flowProgress(steps), [steps])
   const events = useMemo(() => (overview ? [...overview.events].reverse().slice(0, 8) : []), [overview])
 
@@ -319,6 +327,7 @@ ${impact.staleDeliveries.length} 份交付移入历史，保留 ${impact.keptDel
 
   const continueFlow = async (): Promise<void> => {
     if (!editor || !selected || continuing || overview?.state !== 'waiting') return
+    if (materialKey && (!materialText.trim() || materialTooLarge)) return
     const nodeId = selected as TLShapeId
     const expectedTaskId = overview.taskId
     setContinuing(true)
@@ -327,6 +336,8 @@ ${impact.staleDeliveries.length} 份交付移入历史，保留 ${impact.keptDel
       const current = await window.api.inspectFlowAgent({ projectId, nodeId })
       if (!current.ok || current.data?.state !== 'waiting' ||
           current.data.taskId !== expectedTaskId || selectedRef.current !== nodeId ||
+          (materialWait && (current.data.code !== 'FLOW_CONTEXT_OVER_BUDGET' ||
+            current.data.waitRevision !== materialWait.waitRevision)) ||
           !editor.getShape(nodeId)) {
         toast('流程状态已变化，请查看最新进度')
         return
@@ -336,7 +347,13 @@ ${impact.staleDeliveries.length} 份交付移入历史，保留 ${impact.keptDel
         type: 'node-card',
         meta: { agentTask: JSON.stringify(current.data) }
       })
-      const result = await runNodeManually(editor, projectId, useGatewayStore.getState().providers, nodeId)
+      const result = await runNodeManually(
+        editor, projectId, useGatewayStore.getState().providers, nodeId,
+        undefined, undefined, undefined, undefined,
+        materialKey ? {
+          taskId: current.data.taskId, waitRevision: current.data.waitRevision, text: materialText
+        } : undefined
+      )
       if (result.status === 'failed') toast(result.reason ?? '继续流程失败')
     } catch {
       toast('继续流程失败，请查看运行状态')
@@ -467,10 +484,26 @@ ${impact.staleDeliveries.length} 份交付移入历史，保留 ${impact.keptDel
               <span className="fo-now-title">{now.title}</span>
             </div>
             {now.detail && <p className="fo-now-detail">{now.detail}</p>}
+            {materialKey && (
+              <textarea
+                aria-label="替代上下文材料"
+                className="fo-context-material"
+                placeholder="请输入精简后的材料"
+                maxLength={4096}
+                value={materialText}
+                disabled={continuing}
+                onChange={(event) => setMaterialDraft({ key: materialKey, text: event.target.value })}
+              />
+            )}
+            {materialTooLarge && (
+              <p className="fo-now-detail" role="status">
+                材料为 {materialBytes} 字节，当前上限为 {materialWait?.limitBytes} 字节。
+              </p>
+            )}
           </div>
           {overview.state === 'waiting' && !overview.paused && (
-            <button type="button" className="fo-now-cta" disabled={continuing} onClick={() => void continueFlow()}>
-              {continuing ? '正在继续' : '继续流程'}
+            <button type="button" className="fo-now-cta" disabled={continuing || materialTooLarge || Boolean(materialKey && !materialText.trim())} onClick={() => void continueFlow()}>
+              {continuing ? '正在继续' : materialKey ? '提交材料并继续' : '继续流程'}
             </button>
           )}
           {now.action && now.nodeId && (
@@ -546,6 +579,8 @@ ${impact.staleDeliveries.length} 份交付移入历史，保留 ${impact.keptDel
                       <span className="fo-chip fo-event-source">
                         {event.actorSource === 'system' ? '系统'
                           : event.actorSource === 'agent:external' ? '外部 Agent'
+                          : event.actorSource?.startsWith('agent:external:')
+                            ? `外部 Agent · ${event.actorSource.slice('agent:external:'.length)}`
                           : event.actorSource?.startsWith('user:')
                             ? overview.graph?.roles?.find((role) => `user:${role.roleId}` === event.actorSource)?.name
                               ?? (event.actorSource === 'user:owner' ? '我' : event.actorSource.slice(5))

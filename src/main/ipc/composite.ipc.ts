@@ -10,7 +10,7 @@ import type {
   CompositeSearchInput,
   CompositeVersionRecord
 } from '../../shared/composite/types'
-import { validateCompositeManifest } from '../../shared/composite/validate'
+import { validateCompositePublication } from '../../shared/composite/validate'
 import type { CompositeValidationResult } from '../../shared/composite/validate'
 import {
   archiveCompositeCapability,
@@ -269,7 +269,9 @@ export function registerCompositeIpc(): void {
     IPC.composite.validate,
     (_event, input: { manifest: unknown }): IpcEnvelope<CompositeValidationResult> => {
       try {
-        return ok(validateCompositeManifest(input?.manifest))
+        return ok(validateCompositePublication(input?.manifest, {
+          getCapability: (id, version) => getCompositeVersion(id, version)?.manifest ?? null
+        }))
       } catch (error) {
         return failure(error)
       }

@@ -34,12 +34,16 @@ import {
   type StageEntryFacts
 } from '../../shared/agent-flow/stage-contracts'
 import {
+  compileFixedOrderRouting,
   graphReworkNodes,
   nextReadyNodes,
   isFlowComplete,
   loopNeedsAnotherIteration,
-  loopExitConditionSatisfied
+  loopExitConditionSatisfied,
+  flowRouteState
 } from '../../shared/agent-flow/flow-graph-router'
+import { FlowAssetError } from '../../shared/agent-flow/assets'
+import { readCompositeInstanceManifest } from '../../shared/composite/outputs'
 import {
   isDispatchableFlowNodeKind,
   loopBodyInfo,
@@ -123,13 +127,17 @@ export class FlowCoordinatorHost {
       stateNodeId: string,
       event: string,
       expectedRevision: number,
-      eventId: string
+      eventId: string,
+      phaseProjection?: import('../../shared/agent-flow/desktop-tasks').FlowPhaseProjection
     ) => Promise<void>
   ) {
     this.store = new CoordinationStore(db)
     this.reports = new FlowReviewStore(db)
     this.assets = new FlowAssetStore(db, open)
-    this.reviews = new CoordinatorReviews(db, open, specialists, publish, (run) => this.check(run))
+    this.reviews = new CoordinatorReviews(
+      db, open, specialists, publish, (run) => this.check(run),
+      (run, eventId, event) => this.emitTrustedEvent(run, eventId, event, run.revision)
+    )
   }
   /**
    * O1：可信事件 choke point。先推进协调器权威 run.phase（store.event：修订 CAS + 迁移合法性，
@@ -168,7 +176,11 @@ export class FlowCoordinatorHost {
       run.stateNodeId,
       event,
       canvasRevision,
-      eventId
+      eventId,
+      run.config.executionMode === 'graph' && run.stateConfig.initialState === 'idle' &&
+        run.stateConfig.states.includes('reviewing') && run.stateConfig.states.includes('waiting-human')
+        ? { taskId: run.taskId, phase: run.phase, revision: run.revision }
+        : undefined
     ).catch(() => {
       emitGatewayEvent(
         'agent.coordination.state_projection_skipped',
@@ -204,6 +216,7 @@ export class FlowCoordinatorHost {
   private waitReason(run: CoordinationRun): FlowAgentView['waitReason'] {
     if (run.state !== 'waiting') return undefined
     if (run.paused) return 'paused'
+    if (run.code === 'FLOW_CONTEXT_OVER_BUDGET') return 'human'
     if (run.children.some((child) => ['ready', 'running', 'queued'].includes(child.state)))
       return 'active-child'
     if ((run.reviews ?? []).some((review) => review.state === 'pending')) return 'pending-review'
@@ -284,6 +297,9 @@ export class FlowCoordinatorHost {
     }
     run.state = 'cancelled'
     run.code = 'AGENT_CANCELLED'
+    if (run.stateConfig.transitions.some((edge) => edge.from === run.phase && edge.event === 'flow.stopped')) {
+      this.emitTrustedEvent(run, `${run.taskId}:stopped`, 'flow.stopped', run.revision)
+    }
     this.store.save(run)
     this.store.release(run)
     return this.view(run)
@@ -471,6 +487,13 @@ export class FlowCoordinatorHost {
       )
         throw new AgentRuntimeError('RESUME_CONFLICT', 'resume')
       this.check(run)
+      if (run.code === 'FLOW_CONTEXT_OVER_BUDGET' && !input.humanConfirmed)
+        throw new AgentRuntimeError('HUMAN_CONFIRMATION_REQUIRED', 'resume')
+      const waitingStage = run.contextWaitStageKey
+      if (input.contextMaterial && (run.code !== 'FLOW_CONTEXT_OVER_BUDGET' ||
+          !waitingStage || run.config.graph?.nodes.some((node) =>
+            node.nodeId === waitingStage && node.kind === 'capability')))
+        throw new AgentRuntimeError('FLOW_CONTEXT_MATERIAL_UNEXPECTED', 'resume')
     } else run = this.bind(input)
     const fixed = run!
     if (this.active.has(fixed.taskId))
@@ -491,12 +514,15 @@ export class FlowCoordinatorHost {
       const event = input.action === 'start' ? 'flow.started' : 'human.continue'
       const actorSource = input.humanConfirmed || input.runOrigin !== 'external'
         ? `user:${fixed.config.humanRole ?? 'owner'}` as const
-        : 'agent:external'
+        : input.externalClientId
+          ? `agent:external:${input.externalClientId}` as const
+          : 'agent:external'
       this.emitTrustedEvent(
         fixed, input.eventId ?? `${fixed.taskId}:start`, event, fixed.revision, actorSource,
         input.action === 'continue' ? input.expectedWaitRevision : undefined
       )
       fixed.state = 'running'
+      if (fixed.code === 'FLOW_CONTEXT_OVER_BUDGET') fixed.code = undefined
       fixed.paused = false
       fixed.traceId = input.traceId
       fixed.spanId = input.spanId
@@ -531,6 +557,9 @@ export class FlowCoordinatorHost {
       if (current.state !== 'cancelled') {
         current.state = 'blocked'
         current.code = error instanceof AgentRuntimeError ? error.code : 'FLOW_COORDINATION_FAILED'
+        if (current.stateConfig.transitions.some((edge) => edge.from === current.phase && edge.event === 'flow.failed')) {
+          this.emitTrustedEvent(current, `${current.taskId}:failed:${current.revision}`, 'flow.failed', current.revision)
+        }
         this.store.save(current)
       }
       emitGatewayEvent('agent.coordination.failed', '主 Agent 协调未确认', context, {
@@ -913,32 +942,26 @@ export class FlowCoordinatorHost {
       )
       return this.wait(run, 'human.wait')
     }
-    const dispatched = new Set(run.children.map((child) => child.nodeId))
-    const next = stages.find((stage) => !dispatched.has(stage.nodeId))
-    if (!next) {
-      // 所有阶段已分派：此处只剩全部完成的收尾（未完成子任务已在 step 前段处理/抛错）。
-      const last = stages[stages.length - 1]!
-      const finalChild = run.children.find((child) => child.nodeId === last.nodeId)!
+    const graph = compileFixedOrderRouting(stages)
+    const delivered = new Set(
+      run.children.filter((child) => child.state === 'completed').map((child) => child.nodeId)
+    )
+    const route = nextReadyNodes(graph, facts, delivered)
+    const next = stages.find((stage) => stage.nodeId === route.ready[0])
+    if (isFlowComplete(graph, facts, delivered)) {
+      const finalChild = run.children.find((child) => graph.exits.includes(child.nodeId))
       if (
         run.children.length !== run.childIds.length ||
         run.children.some((child) => child.state !== 'completed') ||
         run.reviews?.some((review) => review.state !== 'passed') ||
         (run.stageDeliveries ?? []).some((record) => record.stale) ||
-        !finalChild.outputs.length
+        !finalChild?.outputs.length
       )
         throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'stage-delivery')
-      this.assets.resolveInputs(run.projectId, finalChild.outputs)
-      run.outputs = finalChild.outputs
-      this.emitTrustedEvent(
-        run,
-        `${run.taskId}:completed${run.reworkRound ? `:${run.reworkRound}` : ''}`,
-        'flow.completed',
-        run.revision
-      )
-      run.state = 'completed'
-      this.store.save(run)
-      return false
+      return this.completeRoutedFlow(run, finalChild.outputs)
     }
+    if (!next || run.children.some((child) => child.nodeId === next.nodeId))
+      throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'stage-delivery')
     if (run.decisions + (run.controlSteps ?? 0) >= run.config.maxSteps)
       throw new AgentRuntimeError('AGENT_BUDGET_EXHAUSTED', 'coordination')
     const entry = evaluateStageEntry(next, facts)
@@ -973,7 +996,11 @@ export class FlowCoordinatorHost {
     // AF-02：声明式输入编制——只取规定内容；必需缺项/超预算阻断，不静默截断。
     let contextManifest: ContextManifest | undefined
     if (next.inputs) {
-      contextManifest = buildContextManifest(next.stageKey, next.inputs, facts.deliveries)
+      contextManifest = buildContextManifest(next.stageKey, next.inputs, facts.deliveries, {
+        humanMaterial: run.contextWaitStageKey === next.stageKey ? input.contextMaterial : undefined
+      })
+      if (next.inputs.overflow === 'ask-human' && contextManifest.budget.exceeded)
+        return this.waitForContextBudget(run, contextManifest)
       const diag = {
         projectId: run.projectId,
         nodeId: run.nodeId,
@@ -1007,57 +1034,24 @@ export class FlowCoordinatorHost {
         }
       })
     }
-    const candidate = this.specialists.describeAssignment(
-      {
-        ...input,
-        nodeId: next.nodeId,
-        action: 'start',
-        requestId: hash([run.taskId, next.nodeId, ...(run.reworkRound ? [run.reworkRound] : [])])
-      },
-      true
-    )
-    const candidates = new Map<string, AgentTaskSnapshot>([[next.nodeId, candidate]])
-    run.decisions++
-    this.store.save(run)
-    emitGatewayEvent(
-      'agent.coordination.stage_dispatched',
-      '按声明顺序分派阶段',
-      {
-        projectId: run.projectId,
-        nodeId: run.nodeId,
-        taskId: run.taskId,
-        traceId: run.traceId,
-        spanId: run.spanId
-      },
-      {
-        attributes: {
-          stageKey: next.stageKey,
-          carrierNodeId: next.nodeId,
-          inputCount: candidate.directInputs.length
-        }
-      }
-    )
-    // 阶段目标/完成条件逐字来自声明配置；固定输入来自准入候选，不由模型补写。
-    // AF-03：执行信封（阶段目标/固定方法/输出要求）随子任务下发，公共内容执行器消费。
-    const envelope = composeExecutionEnvelope({
-      stageGoal: next.goal,
-      methodInstructions: next.method?.instructions,
-      outputRequirements: next.completion
+    return this.dispatchRoutedAgent(run, input, next, signal, contextManifest, {
+      stageKey: next.stageKey,
+      methodInstructions: next.method?.instructions
     })
-    return this.dispatchDecision(
+  }
+
+  private completeRoutedFlow(run: CoordinationRun, outputs: AgentFlowAssetRef[]): false {
+    this.assets.resolveInputs(run.projectId, outputs)
+    run.outputs = outputs
+    this.emitTrustedEvent(
       run,
-      {
-        kind: 'dispatch',
-        nodeId: next.nodeId,
-        goal: next.goal,
-        completion: next.completion,
-        inputs: candidate.directInputs
-      },
-      candidates,
-      signal,
-      contextManifest ? new Map([[next.nodeId, contextManifest]]) : undefined,
-      envelope ? new Map([[next.nodeId, envelope]]) : undefined
+      `${run.taskId}:completed${run.reworkRound ? `:${run.reworkRound}` : ''}`,
+      'flow.completed',
+      run.revision
     )
+    run.state = 'completed'
+    this.store.save(run)
+    return false
   }
 
   /**
@@ -1071,6 +1065,19 @@ export class FlowCoordinatorHost {
     signal: AbortSignal
   ): Promise<boolean> {
     const graph = run.config.graph!
+    const file = this.check(run)
+    const nodeById = new Map(file.nodes.map((node) => [node.id, node]))
+    const isRequiredInput = (nodeId: string, portId: string): boolean => {
+      const node = nodeById.get(nodeId)
+      if (!node?.ports.some((port) => port.dir === 'in' && port.id === portId && port.required)) {
+        return false
+      }
+      if (node.type !== 'composite') return true
+      const manifest = readCompositeInstanceManifest(shape(file, nodeId))
+      return !manifest?.inputs.some((port) =>
+        `in-${port.id}` === portId && port.defaultValue !== undefined
+      )
+    }
     this.recordStageDeliveries(run)
     const bodies = loopBodyInfo(graph)
     const loopIterations = { ...(run.loopIterations ?? {}) }
@@ -1086,10 +1093,19 @@ export class FlowCoordinatorHost {
       delivered = this.roundScopedDelivered(run, bodies, loopIterations)
       facts = this.graphFacts(run, { bodies, loopIterations })
     }
-    const route = nextReadyNodes(graph, facts, delivered, loopIterations)
+    const executionSkipped = new Set(run.children
+      .filter((child) => {
+        if (child.state !== 'skipped') return false
+        const body = [...bodies.values()].find((info) => info.body.has(child.nodeId))
+        return !body || (child.round ?? 1) === (loopIterations[body.carrierId] ?? 1)
+      })
+      .map((child) => child.nodeId))
+    const route = nextReadyNodes(
+      graph, facts, delivered, loopIterations, isRequiredInput, executionSkipped
+    )
     run.skippedNodeIds = route.skipped
     run.stalledNodeIds = undefined
-    if (isFlowComplete(graph, facts, delivered, loopIterations)) {
+    if (isFlowComplete(graph, facts, delivered, loopIterations, isRequiredInput, executionSkipped)) {
       // 出口可能是审核节点（交付物=被审核通过的固定版本）或普通子节点。
       const exitReview = (run.reviews ?? []).find(
         (review) => graph.exits.includes(review.nodeId) && review.state === 'passed' && review.decision
@@ -1102,17 +1118,7 @@ export class FlowCoordinatorHost {
         )
       const exitOutputs = exitReview?.decision?.subjects ?? exitChild?.outputs
       if (!exitOutputs) throw new AgentRuntimeError('FLOW_CHILD_BLOCKED', 'graph-complete')
-      this.assets.resolveInputs(run.projectId, exitOutputs)
-      run.outputs = exitOutputs
-      this.emitTrustedEvent(
-        run,
-        `${run.taskId}:completed${run.reworkRound ? `:${run.reworkRound}` : ''}`,
-        'flow.completed',
-        run.revision
-      )
-      run.state = 'completed'
-      this.store.save(run)
-      return false
+      return this.completeRoutedFlow(run, exitOutputs)
     }
     const { ready } = route
     // BL-04 运行期兜底：多值交付同时命中多个互斥分支时拒绝推进（不猜走哪条）。
@@ -1187,6 +1193,7 @@ export class FlowCoordinatorHost {
     if (
       readyAgents.length >= 2 &&
       readyAgents.length <= 4 &&
+      readyAgents.every((node) => node.inputs?.overflow !== 'ask-human') &&
       readyAgents.length === readyDispatchable.length
     ) {
       const candidates = new Map<string, AgentTaskSnapshot>()
@@ -1253,7 +1260,10 @@ export class FlowCoordinatorHost {
     }
     // ②：capability 图节点直接执行（复用 node.execute 账本端口），不经 agent 分派。
     if (next.kind === 'capability') {
-      return this.dispatchCapability(run, next, graph, facts, loopIterations, signal)
+      const { edgeState } = flowRouteState(
+        graph, facts, delivered, loopIterations, isRequiredInput, executionSkipped
+      )
+      return this.dispatchCapability(run, next, graph, facts, edgeState, loopIterations, signal)
     }
     // ②：human-task 图节点停等人工提交（C4 执行器），提交后续跑重新分派应用。
     if (next.kind === 'human-task') {
@@ -1261,7 +1271,11 @@ export class FlowCoordinatorHost {
     }
     let contextManifest: ContextManifest | undefined
     if (next.inputs) {
-      contextManifest = buildContextManifest(next.nodeId, next.inputs, facts.deliveries)
+      contextManifest = buildContextManifest(next.nodeId, next.inputs, facts.deliveries, {
+        humanMaterial: run.contextWaitStageKey === next.nodeId ? input.contextMaterial : undefined
+      })
+      if (next.inputs.overflow === 'ask-human' && contextManifest.budget.exceeded)
+        return this.waitForContextBudget(run, contextManifest)
       if (contextManifestBlocking(contextManifest))
         throw new AgentRuntimeError(
           contextManifest.budget.exceeded ? 'FLOW_CONTEXT_OVER_BUDGET' : 'FLOW_CONTEXT_REQUIRED_MISSING',
@@ -1278,18 +1292,35 @@ export class FlowCoordinatorHost {
     }
     const nextBody = bodyOf.get(next.nodeId)
     const nextRound = nextBody ? (loopIterations[nextBody.carrierId] ?? 1) : undefined
+    return this.dispatchRoutedAgent(run, input, next, signal, contextManifest, {
+      loopRound: nextRound ?? loopIterations[next.nodeId]
+    })
+  }
+
+  private dispatchRoutedAgent(
+    run: CoordinationRun,
+    input: FlowAgentRun,
+    next: Pick<FlowNode, 'nodeId' | 'goal' | 'completion'>,
+    signal: AbortSignal,
+    contextManifest: ContextManifest | undefined,
+    options: { stageKey?: string; methodInstructions?: string; loopRound?: number }
+  ): Promise<boolean> {
+    if (run.contextWaitStageKey === (options.stageKey ?? next.nodeId)) {
+      run.contextWaitStageKey = undefined
+      run.contextWaitLimitBytes = undefined
+    }
+    const assignmentInput = { ...input }
+    delete assignmentInput.contextMaterial
     const candidate = this.specialists.describeAssignment(
       {
-        ...input,
+        ...assignmentInput,
         nodeId: next.nodeId,
         action: 'start',
         requestId: hash([
           run.taskId,
           next.nodeId,
           ...(run.reworkRound ? [run.reworkRound] : []),
-          ...(nextRound ?? loopIterations[next.nodeId]
-            ? [`loop:${nextRound ?? loopIterations[next.nodeId]}`]
-            : [])
+          ...(options.loopRound ? [`loop:${options.loopRound}`] : [])
         ])
       },
       true
@@ -1298,8 +1329,8 @@ export class FlowCoordinatorHost {
     run.decisions++
     this.store.save(run)
     emitGatewayEvent(
-      'agent.coordination.graph_dispatched',
-      '按声明式图路由分派节点',
+      options.stageKey ? 'agent.coordination.stage_dispatched' : 'agent.coordination.graph_dispatched',
+      options.stageKey ? '按声明顺序分派阶段' : '按声明式图路由分派节点',
       {
         projectId: run.projectId,
         nodeId: run.nodeId,
@@ -1307,10 +1338,17 @@ export class FlowCoordinatorHost {
         traceId: run.traceId,
         spanId: run.spanId
       },
-      { attributes: { carrierNodeId: next.nodeId, inputCount: candidate.directInputs.length } }
+      {
+        attributes: {
+          ...(options.stageKey ? { stageKey: options.stageKey } : {}),
+          carrierNodeId: next.nodeId,
+          inputCount: candidate.directInputs.length
+        }
+      }
     )
     const envelope = composeExecutionEnvelope({
       stageGoal: next.goal,
+      methodInstructions: options.methodInstructions,
       outputRequirements: next.completion
     })
     return this.dispatchDecision(
@@ -1341,6 +1379,7 @@ export class FlowCoordinatorHost {
     next: FlowNode,
     graph: FlowGraph,
     facts: StageEntryFacts,
+    edgeState: ReturnType<typeof flowRouteState>['edgeState'],
     loopIterations: Record<string, number>,
     signal: AbortSignal
   ): Promise<boolean> {
@@ -1379,17 +1418,20 @@ export class FlowCoordinatorHost {
     let selectedSources: Set<string> | undefined
     if (next.inputs) {
       contextManifest = buildContextManifest(next.nodeId, next.inputs, facts.deliveries)
+      if (next.inputs.overflow === 'ask-human' && contextManifest.budget.exceeded)
+        return this.waitForContextBudget(run, contextManifest)
       if (contextManifestBlocking(contextManifest))
         throw new AgentRuntimeError(
           contextManifest.budget.exceeded ? 'FLOW_CONTEXT_OVER_BUDGET' : 'FLOW_CONTEXT_REQUIRED_MISSING',
           'graph-context'
         )
-      selectedSources = new Set(next.inputs.selectors.map((selector) => selector.sourceStageKey))
+      selectedSources = new Set(contextManifest.entries.map((entry) => entry.sourceStageKey))
     }
     const inputPorts = node.ports.filter((port) => port.dir === 'in')
     const incoming = graph.edges.filter(
       (edge) =>
         edge.to.nodeId === next.nodeId &&
+        edgeState(edge) === 'satisfied' &&
         (!selectedSources || selectedSources.has(edge.from.nodeId))
     )
     const inputsByPort = new Map<string, AgentFlowAssetRef[]>()
@@ -1403,17 +1445,28 @@ export class FlowCoordinatorHost {
       if (!port) throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'graph-capability')
       // 与 agent bind 的 freeze 同一机制：assets.submit 生成 sourceNodeId=上游节点的固定引用，
       // 与画布边 from 一致，账本输入源校验通过（raw 子任务 outputRefs 指向底层处理器，源不符）。
-      const ref = upstream.outputs.find(
+      let ref = upstream.outputs.find(
         (output) => output.sourceNodeId === edge.from.nodeId && output.sourcePortId === edge.from.portId
-      ) ?? this.assets.submit({
-        projectId: run.projectId,
-        nodeId: edge.from.nodeId,
-        portId: edge.from.portId,
-        submissionId: `cap-input:${hash([taskId, edge.from.nodeId, edge.from.portId, edge.to.portId])}`,
-        expectedGraphVersion: file.meta.graphVersion,
-        traceId: run.traceId,
-        spanId: run.spanId
-      }).ref
+      )
+      if (!ref) {
+        try {
+          ref = this.assets.submit({
+            projectId: run.projectId,
+            nodeId: edge.from.nodeId,
+            portId: edge.from.portId,
+            submissionId: `cap-input:${hash([taskId, edge.from.nodeId, edge.from.portId, edge.to.portId])}`,
+            expectedGraphVersion: file.meta.graphVersion,
+            traceId: run.traceId,
+            spanId: run.spanId
+          }).ref
+        } catch (error) {
+          const sourcePort = file.nodes.find((item) => item.id === edge.from.nodeId)
+            ?.ports.find((item) => item.dir === 'out' && item.id === edge.from.portId)
+          if (sourcePort?.required === false && error instanceof FlowAssetError &&
+              error.code === 'ASSET_OUTPUT_UNAVAILABLE') continue
+          throw error
+        }
+      }
       inputsByPort.set(port.id, [...(inputsByPort.get(port.id) ?? []), ref])
     }
     const inputs = [...inputsByPort].map(([targetPortId, assets]) => ({ targetPortId, assets }))
@@ -1477,6 +1530,11 @@ export class FlowCoordinatorHost {
       }
     }
     delete child.compositeWait
+    if (receipt.state === 'skipped' && receipt.code === 'FLOW_EXECUTION_SKIPPED') {
+      child.state = 'skipped'
+      this.store.save(run)
+      return true
+    }
     if (receipt.state !== 'committed') {
       child.state = 'blocked'
       this.store.save(run)
@@ -2351,6 +2409,17 @@ export class FlowCoordinatorHost {
         })
     }
   }
+  private waitForContextBudget(run: CoordinationRun, manifest: ContextManifest): false {
+    run.code = 'FLOW_CONTEXT_OVER_BUDGET'
+    run.contextWaitStageKey = manifest.stageKey
+    run.contextWaitLimitBytes = manifest.budget.limitBytes
+    emitGatewayEvent('agent.coordination.stage_context_blocked', '阶段输入超限，等待人工处理', {
+      projectId: run.projectId, nodeId: run.nodeId, taskId: run.taskId,
+      traceId: run.traceId, spanId: run.spanId
+    }, { status: 'skipped', attributes: { stageKey: manifest.stageKey, code: 'CONTEXT_OVER_BUDGET' } })
+    return this.wait(run, 'human.wait')
+  }
+
   private wait(run: CoordinationRun, event: string): false {
     this.emitTrustedEvent(run, `${run.taskId}:wait:${run.waitRevision + 1}`, event, run.revision)
     run.state = 'waiting'

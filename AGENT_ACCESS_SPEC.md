@@ -1,5 +1,9 @@
 # 本地外部 Agent 接入规范（评审草案 v0.1）
 
+> status: draft
+> last-verified: unverified
+
+
 2026-11-07 接续：用户要求全软件GUI业务能力通过CLI与MCP等价调用。新增的
 [一致性规范](AGENT_PARITY_SPEC.md)、[完整开发计划](docs/local-agent-access/15-gui-cli-mcp-parity-plan.md)
 与[节点动作表](docs/local-agent-access/16-node-action-coverage.md)是当前完整目标及后续维护要求。

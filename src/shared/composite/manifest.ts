@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { GENERATED_NODE_CONTRACTS } from '../agent-access/generated/node-contracts.generated'
 import type { PortCardinality, PortType } from '../types'
 
 /**
@@ -73,7 +74,7 @@ export const compositePortSchema = z
     required: z.boolean(),
     cardinality: compositeCardinalitySchema,
     description: z.string().trim().max(300).optional(),
-    /** JSON Schema 片段；复杂类型用它约束 GUI 控件与 CLI/MCP 值。 */
+    /** 历史版本的字段。读取时保留原值以维持已发布版本摘要，新发布只接受 schemaRef。 */
     schema: z.record(z.string(), z.unknown()).optional(),
     /** 项目 PortDecl 的 JSON 结构引用（JSON 端口必须命中 node-schemas 白名单）。 */
     schemaRef: z.object({ id: z.string().min(1).max(80), version: z.number().int().positive() }).strict().optional(),
@@ -145,7 +146,8 @@ export const compositeGraphNodeSchema = z
 export const compositeGraphEdgeSchema = z
   .object({
     from: compositeTargetSchema,
-    to: compositeTargetSchema
+    to: compositeTargetSchema,
+    order: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional()
   })
   .strict()
 
@@ -184,7 +186,7 @@ export const compositeManifestSchema = z
       .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/, 'capabilityId 只能包含字母/数字/._-'),
     version: z
       .string()
-      .regex(/^\d+\.0(\.0)?$/, '版本必须为主版本整数（例如 1.0、2.0、3.0）'),
+      .regex(/^\d+\.\d+(?:\.0)?$/, '版本必须为 major.minor（历史 major.minor.0 仍可读取）'),
     name: z.string().trim().min(1).max(120),
     description: z.string().trim().max(600).optional(),
     tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
@@ -211,6 +213,17 @@ export type CompositeGraphNode = z.infer<typeof compositeGraphNodeSchema>
 export type CompositeGraphEdge = z.infer<typeof compositeGraphEdgeSchema>
 export type CompositeDependency = z.infer<typeof compositeDependencySchema>
 export type CompositeExecutionPolicy = z.infer<typeof compositeExecutionPolicySchema>
+
+const manualPublishNodeTypes = new Set<string>(
+  GENERATED_NODE_CONTRACTS.filter((node) => node.executionMode === 'manual-publish')
+    .map((node) => node.typeId)
+)
+
+export function hasCompositeManualGate(graph: CompositeManifest['graph']): boolean {
+  return graph.nodes.some(({ nodeType }) =>
+    nodeType === 'human-task' || nodeType === 'ai-review' || manualPublishNodeTypes.has(nodeType)
+  )
+}
 export type CompositeManifest = z.infer<typeof compositeManifestSchema>
 
 /** 解析运行语义版本；历史 manifest 缺省按 1 处理。 */

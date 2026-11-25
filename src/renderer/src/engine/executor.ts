@@ -26,6 +26,7 @@ import {
   portsOf
 } from './contracts'
 import type { NodeExecutionContext, NodeExecutionResult, SubflowRequest } from './executor-types'
+import { readStoredNodeRunStatus } from '@shared/engine/run-status'
 import type { NodeMetaPatch } from '@shared/engine/executor-types'
 import { inputText, iterationItemValue } from '@shared/engine/inputs'
 import { mergedPrompt } from '@shared/engine/helpers'
@@ -109,6 +110,7 @@ interface RunControl {
 }
 
 interface WorkflowContext {
+  contextMaterial?: NodeExecutionContext['contextMaterial']
   workflowInputs?: WorkflowInputOptions
   usedWorkflowInputs?: Set<string>
   controlledRequestId?: string
@@ -121,6 +123,7 @@ interface WorkflowContext {
   graph: { nodes: CanvasNode[]; edges: CanvasEdge[] }
   /** 运行期累积的输出登记：nodeId -> 端口输出数据包。 */
   outputs: Map<string, ContractOutputs>
+  skippedNodes: Set<string>
   /**
    * 循环体首次进入时冻结的用户输入。执行器可以把解析后的值写回 props.text，
    * 但每个 item 必须从同一份正文/固定配置重新计算，不能继承上一项的替换结果。
@@ -136,6 +139,7 @@ interface WorkflowContext {
   batch?: { batchId: string; itemId?: string }
   /** 当前循环项的独立 runId：并发隔离时资源占用/排队键加此维度，避免各项互踩。 */
   itemRunId?: string
+  onRemoteSubmission?: () => void
   /** 影子隔离时的真实编辑器引用：运行历史（按项 runId 去重、追加安全）仍写真实卡供资产回溯。 */
   realEditor?: Editor
   /** 当前循环项的画布泳道（runSubflowForIterate 创建）；产物落点与提示词注入读它。 */
@@ -955,6 +959,7 @@ async function invokeExecutor(
     .filter((e) => e.from.nodeId === node.id)
     .map((e) => ({ nodeId: e.to.nodeId, fromPortId: e.from.portId, toPortId: e.to.portId }))
   const nodeCtx: NodeExecutionContext = {
+    contextMaterial: ctx.contextMaterial,
     resolveHumanTaskMedia: async (kind, mediaId) => {
       const response = await window.api.listMedia(ctx.projectId)
       const media = response.ok
@@ -998,7 +1003,37 @@ async function invokeExecutor(
       record.target = target
       writeRunRecord(ctx.editor, id, record)
     },
-    gateway: recipeGateway(rendererGateway, (request) => {
+    gateway: recipeGateway({
+      ...rendererGateway,
+      imageGenerate: (request) => {
+        ctx.onRemoteSubmission?.()
+        return rendererGateway.imageGenerate(request)
+      },
+      imageEdit: (request) => {
+        ctx.onRemoteSubmission?.()
+        return rendererGateway.imageEdit(request)
+      },
+      videoSubmit: (request) => {
+        ctx.onRemoteSubmission?.()
+        return rendererGateway.videoSubmit(request)
+      },
+      audioGenerate: (request) => {
+        ctx.onRemoteSubmission?.()
+        return rendererGateway.audioGenerate(request)
+      },
+      speechGenerate: (request) => {
+        ctx.onRemoteSubmission?.()
+        return rendererGateway.speechGenerate(request)
+      },
+      ttsGenerate: (request) => {
+        ctx.onRemoteSubmission?.()
+        return rendererGateway.ttsGenerate(request)
+      },
+      voiceDesign: (request) => {
+        ctx.onRemoteSubmission?.()
+        return rendererGateway.voiceDesign(request)
+      }
+    }, (request) => {
       submittedRecipe = request
     }),
     runCode: (source, args) => runCodeTransform(source, args),
@@ -1152,13 +1187,11 @@ interface IterationItemInjection {
   targetPortId: string
 }
 
-function collectNodeInputs(
+async function collectNodeInputs(
   ctx: WorkflowContext,
   node: CanvasNode,
   injection?: IterationItemInjection
-): { value: ReturnType<typeof collectContractInputs>['value']; errors: string[] } {
-  const spec = getNodeType(node.type)
-  if (!spec) return { value: new Map(), errors: [`未知节点类型：${node.type}`] }
+): Promise<ReturnType<typeof collectContractInputs>> {
   if (ctx.command) {
     return collectContractInputs(node, [], new Map(), {
       injections: ctx.command.grant.inputs.flatMap((input) =>
@@ -1181,7 +1214,12 @@ function collectNodeInputs(
       )
     })
   }
-  if (!injection) return collectContractInputs(node, ctx.graph.edges, ctx.outputs)
+  if (!injection) {
+    return collectContractInputs(node, ctx.graph.edges, ctx.outputs, {
+      skippedNodes: ctx.skippedNodes,
+      deferRequiredInputs: node.type === 'composite'
+    })
+  }
   const controlEdges = ctx.graph.edges.filter(
     (edge) =>
       edge.from.nodeId === injection.iterationNodeId &&
@@ -1192,8 +1230,19 @@ function collectNodeInputs(
   const targetType =
     node.ports.find((port) => port.dir === 'in' && port.id === injection.targetPortId)?.type ??
     getNodeType(node.type)?.ports.in.find((port) => port.id === injection.targetPortId)?.type
-  const value = iterationItemValue(injection.item, targetType)
+  const { kind, mediaId } = injection.item
+  const mediaCandidate = typeof mediaId === 'string' &&
+    (kind === 'image' || kind === 'video' || kind === 'audio' || kind === 'file') &&
+    (targetType === kind || targetType === 'any' || targetType === undefined)
+  const media = mediaCandidate ? await window.api.listMedia(ctx.projectId) : undefined
+  const value = iterationItemValue(
+    injection.item,
+    targetType,
+    media?.ok ? { projectId: ctx.projectId, assets: media.data } : undefined
+  )
   return collectContractInputs(node, ctx.graph.edges, ctx.outputs, {
+    skippedNodes: ctx.skippedNodes,
+    deferRequiredInputs: node.type === 'composite',
     ignoreEdgeIds: controlEdges.map((edge) => edge.id),
     injections: [
       {
@@ -1316,6 +1365,7 @@ async function executeNodeOnce(
       }
       if (!available.ok) {
         ctx.outputs.delete(node.id)
+        ctx.skippedNodes.add(node.id)
         setExec(ctx.editor, node.id as TLShapeId, node.exec.status)
         return {
           status: 'skipped',
@@ -1383,7 +1433,7 @@ async function executeNodeUnscheduled(
     return { status: 'skipped', reason: '已取消' }
   }
   try {
-    let collected = collectNodeInputs(ctx, node, injection)
+    let collected = await collectNodeInputs(ctx, node, injection)
     let temporaryText: string | undefined
     let temporaryMedia: Partial<NodeCardProps> | undefined
     const workflowInputs = ctx.workflowInputs
@@ -1479,7 +1529,11 @@ async function executeNodeUnscheduled(
         })
       }
       if (injections.length > 0) {
-        collected = collectContractInputs(node, ctx.graph.edges, ctx.outputs, { injections })
+        collected = collectContractInputs(node, ctx.graph.edges, ctx.outputs, {
+          injections,
+          skippedNodes: ctx.skippedNodes,
+          deferRequiredInputs: node.type === 'composite'
+        })
         recordRunTrace(
           ctx,
           node,
@@ -1525,8 +1579,18 @@ async function executeNodeUnscheduled(
         attributes: { portCount: Object.keys(record.inputs).length }
       }
     )
+    // 当前尝试接管输出，输入校验失败也不能沿用上一次的输出。
+    ctx.outputs.delete(node.id)
+    ctx.skippedNodes.delete(node.id)
     if (collected.errors.length > 0) {
       throw new Error(`输入契约校验失败：${collected.errors.join('；')}`)
+    }
+    if (collected.skippedRequiredPorts.length > 0) {
+      const reason = `必需输入的上游已跳过：${collected.skippedRequiredPorts.join('、')}`
+      ctx.skippedNodes.add(node.id)
+      setExec(editor, shapeId, 'idle')
+      finishRunRecord(ctx, node, shapeId, record, 'skipped', { error: { phase: 'input', reason } })
+      return { status: 'skipped', reason, diagnosticPhase: 'input' }
     }
     try {
       const workload = await captureRunWorkload(shape, collected.value, ctx.projectId)
@@ -1537,8 +1601,6 @@ async function executeNodeUnscheduled(
     } catch {
       // Missing metadata must not stop generation.
     }
-    // 本次执行接管该节点的输出；失败或跳过时不能让本轮继续消费上一次结果。
-    ctx.outputs.delete(node.id)
     // Preparation may await main or media metadata. Stop must be checked again
     // before admitting any executor effect, even when metadata collection failed.
     if (ctx.token.cancelled) return finishCancelled()
@@ -1777,6 +1839,7 @@ async function executeNodeUnscheduled(
         }
       })
     } else {
+      ctx.skippedNodes.add(node.id)
       setExec(editor, shapeId, 'idle')
       if (result.reason) {
         recordRunTrace(
@@ -1858,6 +1921,7 @@ function resetSubflowRunState(ctx: WorkflowContext, nodeIds: string[]): void {
       })
     }
     ctx.outputs.delete(nodeId)
+    ctx.skippedNodes.delete(nodeId)
   }
   if (updates.length > 0) ctx.editor.updateShapes(updates)
 }
@@ -1900,6 +1964,10 @@ async function runSubflowForIterate(
   // L01：批次关联用稳定 batchId + itemId（有则用），不用数组位置冒充身份。
   const itemCtx: WorkflowContext = {
     ...ctx,
+    onRemoteSubmission: () => {
+      request.onRemoteSubmission?.()
+      ctx.onRemoteSubmission?.()
+    },
     ...(request.itemRunId ? { runId: request.itemRunId, itemRunId: request.itemRunId } : {}),
     batch: {
       batchId: `iter-${request.iterationNodeId ?? 'iterate'}-${ctx.runId}`,
@@ -1970,6 +2038,7 @@ async function runSubflowForIterate(
     itemCtx.realEditor = ctx.editor
     itemCtx.editor = createShadowEditor(ctx.editor, new Map(), new Set(nodeIds))
     itemCtx.outputs = new Map(ctx.outputs)
+    itemCtx.skippedNodes = new Set(ctx.skippedNodes)
   }
   // 首项落位前把循环体定义节点收拢成「循环体 · 模板」组合框置于循环上方（虚线关联），
   // 本体一份紧凑模具，过程项实例链从循环右侧扇出，让出中心行（奇数项中间分支对齐循环）。
@@ -2105,7 +2174,9 @@ function seedPersistedOutputs(ctx: WorkflowContext): void {
     // The projection owns document/run/pinned visibility. A second status gate
     // here would incorrectly mute a fixed output after an unsuccessful retry.
     const projected = buildOutputPackets(node, projectNodeOutputs(shape), ctx.runId)
-    if (projected.errors.length === 0 && Object.keys(projected.value).length > 0) {
+    const status = readStoredNodeRunStatus(shape.meta?.nodeRun)
+    if (projected.errors.length === 0 &&
+        (Object.keys(projected.value).length > 0 || status === 'success')) {
       if (shape.meta?.flowAssetRef && readPinnedOutputs(shape.meta.pinnedOutput)) {
         let raw: unknown
         try {
@@ -2124,6 +2195,8 @@ function seedPersistedOutputs(ctx: WorkflowContext): void {
           }
       }
       ctx.outputs.set(node.id, projected.value)
+    } else if (status === 'skipped') {
+      ctx.skippedNodes.add(node.id)
     }
   }
 }
@@ -2142,7 +2215,8 @@ export async function runNodeManually(
   command?: NodeCommandRunOptions,
   publication?: import('@shared/agent-flow/coordination').AgentPublication,
   compositeRunContext?: import('@shared/engine/composite-run-contract').CompositeRunContext,
-  inputOptions?: WorkflowInputOptions
+  inputOptions?: WorkflowInputOptions,
+  contextMaterial?: NodeExecutionContext['contextMaterial']
 ): Promise<NodeExecutionResult> {
   if (hasNodeTask(projectId, nodeId) || nodeTests.has(nodeId))
     return { status: 'skipped', reason: '当前节点已在运行或排队' }
@@ -2194,6 +2268,7 @@ export async function runNodeManually(
     token,
     graph,
     outputs: new Map<string, ContractOutputs>(),
+    skippedNodes: new Set<string>(),
     subflowBaseInputs: new Map(),
     runId: command?.grant.runId ?? publication?.taskId ?? crypto.randomUUID(),
     traceId: command?.grant.command.traceId ?? publication?.traceId ?? newTraceId(),
@@ -2204,6 +2279,7 @@ export async function runNodeManually(
     taskId: command?.grant.command.taskId,
     isolated: true,
     compositeRunContext,
+    contextMaterial,
     workflowInputs: inputOptions
   }
   emitWorkflowEvent('workflow.started', '手动运行单个节点', ctx)
@@ -2444,6 +2520,7 @@ export async function runWorkflow(
       token,
       graph,
       outputs: new Map<string, ContractOutputs>(),
+      skippedNodes: new Set<string>(),
       subflowBaseInputs: new Map(),
       runId: crypto.randomUUID(),
       traceId: newTraceId(),
@@ -2596,6 +2673,7 @@ export async function runWorkflowForNodes(
       token,
       graph,
       outputs: new Map<string, ContractOutputs>(),
+      skippedNodes: new Set<string>(),
       subflowBaseInputs: new Map(),
       runId: crypto.randomUUID(),
       traceId: newTraceId(),

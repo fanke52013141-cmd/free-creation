@@ -47,6 +47,8 @@ import {
   SpeechSettings,
   SoundAdjustBody,
   SoundAdjustSettings,
+  SilenceTrimBody,
+  SilenceTrimSettings,
   VoiceDesignBody,
   VideoBody,
   VideoAudioBody,
@@ -67,6 +69,7 @@ import { ChatSettings } from './bodies/chat'
 import { aiProcessExecutor } from '../../engine/executors/aiProcess'
 import { speechExecutor } from '../../engine/executors/speech'
 import { soundAdjustExecutor } from '../../engine/executors/soundAdjust'
+import { silenceTrimExecutor } from '../../engine/executors/silenceTrim'
 import { voiceDesignExecutor } from '../../engine/executors/voiceDesign'
 import { ttsExecutor } from '../../engine/executors/tts'
 import { chatExecutor } from '../../engine/executors/chat'
@@ -124,6 +127,7 @@ import {
   projectTtsOutputs,
   projectSpeechOutputs,
   projectSoundAdjustOutputs,
+  projectSilenceTrimOutputs,
   projectVoiceDesignOutputs,
   projectVideoOutputs,
   projectVideoAssetOutputs,
@@ -709,6 +713,24 @@ export function registerBaseNodeTypes(): void {
     executor: soundAdjustExecutor,
     SettingsPanel: SoundAdjustSettings,
     Body: SoundAdjustBody
+  })
+  registerNodeType({
+    type: 'silence-trim',
+    contractVersion: 1,
+    label: '去气口',
+    icon: 'silence-trim',
+    color: NODE_ACCENTS['silence-trim'],
+    defaultSize: { w: NODE_UI.width, h: NODE_UI.height.default },
+    description: '检测并剪掉音频中的静音与呼吸气口，输出更紧凑的新音频。',
+    category: 'audio',
+    ports: {
+      in: [input('in-audio', '源音频', 'audio', '连接一段需要去气口的音频。', { required: true })],
+      out: [output('out-audio', '去气口音频', 'audio', '剪掉气口后生成的新音频资产。')]
+    },
+    projectOutputs: projectSilenceTrimOutputs,
+    executor: silenceTrimExecutor,
+    SettingsPanel: SilenceTrimSettings,
+    Body: SilenceTrimBody
   })
   registerNodeType({
     type: 'file',

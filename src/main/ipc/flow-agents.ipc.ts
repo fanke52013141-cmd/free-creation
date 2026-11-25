@@ -51,6 +51,7 @@ export function registerFlowAgentsIpc(
     event: string
     expectedRevision: number
     eventId: string
+    phaseProjection?: import('../../shared/agent-flow/desktop-tasks').FlowPhaseProjection
   }) => void
 ): FlowAgentDesktopHost {
   registerSkillLibraryIpc(window)
@@ -303,8 +304,8 @@ export function registerFlowAgentsIpc(
         throw new AgentRuntimeError('FLOW_PUBLICATION_UNCONFIRMED', 'publication')
       },
       (projectId, nodeId) => review.cancel(projectId, nodeId),
-      async (projectId, stateNodeId, event, expectedRevision, eventId) => {
-        sendStateProjection?.({ projectId, stateNodeId, event, expectedRevision, eventId })
+      async (projectId, stateNodeId, event, expectedRevision, eventId, phaseProjection) => {
+        sendStateProjection?.({ projectId, stateNodeId, event, expectedRevision, eventId, phaseProjection })
       }
     )
   )

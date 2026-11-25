@@ -55,6 +55,7 @@ export const NODE_ACCENTS = {
   timeline: '#239AD3',
   audio: '#E7CBFA',
   'sound-adjust': '#AEA0F4',
+  'silence-trim': '#B455D6',
   'vocal-separate': '#B17DB5',
   speech: '#C084FC',
   tts: '#9269E4',

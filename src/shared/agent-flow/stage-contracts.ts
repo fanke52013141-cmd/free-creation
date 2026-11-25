@@ -70,6 +70,8 @@ export type ContextSelector = z.infer<typeof ContextSelectorSchema>
 export const StageInputsSchema = z
   .object({
     selectors: z.array(ContextSelectorSchema).min(1).max(32),
+    overflow: z.enum(['fail', 'ask-human', 'summarize']).optional(),
+    summarySelector: ContextSelectorSchema.optional(),
     /** 阶段输入预算（字节）；与模型容量取较小值由宿主负责，此处为声明上限。 */
     budgetBytes: z.number().int().min(1024).max(1048576).default(131072)
   })
@@ -78,6 +80,12 @@ export const StageInputsSchema = z
     const keys = inputs.selectors.map((s) => JSON.stringify([s.sourceStageKey, s.path]))
     if (new Set(keys).size !== keys.length)
       context.addIssue({ code: 'custom', message: 'Duplicate context selectors' })
+    if ((inputs.overflow === 'summarize') !== Boolean(inputs.summarySelector) ||
+        inputs.summarySelector?.required === false)
+      context.addIssue({
+        code: 'custom', path: ['summarySelector'],
+        message: 'Summarize requires exactly one required summary selector'
+      })
   })
 export type StageInputs = z.infer<typeof StageInputsSchema>
 
@@ -210,7 +218,10 @@ export const FlowStagesSchema = z
             code: 'custom',
             message: 'Entry conditions must reference declared stages'
           })
-      for (const selector of stage.inputs?.selectors ?? [])
+      for (const selector of [
+        ...(stage.inputs?.selectors ?? []),
+        ...(stage.inputs?.summarySelector ? [stage.inputs.summarySelector] : [])
+      ])
         if (!keys.has(selector.sourceStageKey))
           context.addIssue({
             code: 'custom',

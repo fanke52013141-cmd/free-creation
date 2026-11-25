@@ -42,6 +42,9 @@ const secretSummary = z
 export const MODEL_ADMIN_OPERATIONS = {
   'model.connection.save': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '创建或更新模型供应商连接；可选写入 API Key（写入设备绑定密钥库，明文不回传、不进日志）。连接协议/地址/头或密钥发生变化会清除该连接的模型验证与功能绑定，回执如实标记',
     input: z
@@ -59,18 +62,27 @@ export const MODEL_ADMIN_OPERATIONS = {
   },
   'model.credential.status': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '查询某个连接是否已保存 API Key：只返回是否存在与不可逆指纹，不返回明文、不返回端点或请求头',
     input: z.object({ connectionId }).strict()
   },
   'model.connection.delete': {
     effect: 'delete',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '删除模型供应商连接及其下所有模型定义（连带清理验证与功能绑定）；连接不存在如实 NOT_FOUND',
     input: z.object({ connectionId }).strict()
   },
   'model.definition.save': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '创建或更新模型定义（必须绑定既有连接，能力声明非空）；不涉及凭据；能力变化会清除对应验证与绑定',
     input: z
@@ -87,18 +99,27 @@ export const MODEL_ADMIN_OPERATIONS = {
   },
   'model.definition.delete': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '删除单个模型定义（连带清理其验证、工具调用验证与功能绑定）；不存在如实 NOT_FOUND',
     input: z.object({ id: definitionId }).strict()
   },
   'model.definition.deleteMany': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '批量删除模型定义（与 GUI 多选删除同一 deleteModels）；不存在的 ID 计入 notFound 而不是让整批失败，回执逐项可核对',
     input: z.object({ modelDefinitionIds: z.array(definitionId).min(1).max(100) }).strict()
   },
   'model.binding.save': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '保存功能默认绑定（featureKey + 连接 + 模型定义 + 操作）。**只有该模型该操作已通过验证才成立**：外部无法自行验证模型，因此未验证一律拒绝，不伪造"已绑定可用"',
     input: z

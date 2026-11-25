@@ -128,8 +128,8 @@ function fixture(
   }
 }
 describe('fixed-version AI review and bounded manual rework', () => {
-  it.each([0, 1, 10])('REV-07 bounds maxReworks=%i and does not charge duplicate negative reports', async (maxReworks) => {
-    const f = fixture({ maxReworks, verdict: { passed: false, feedback: 'fixed negative fixture', issues: [] } })
+  it.each([[0, 0], [1, 1], [10, 3]])('REV-07 configured limit %i enforces %i reworks without duplicate charges', async (savedLimit, maxReworks) => {
+    const f = fixture({ maxReworks: savedLimit, verdict: { passed: false, feedback: 'fixed negative fixture', issues: [] } })
     const records: string[] = []
     for (let round = 0; round <= maxReworks; round++) {
       f.store.text.props.text = 'isolated review version ' + round

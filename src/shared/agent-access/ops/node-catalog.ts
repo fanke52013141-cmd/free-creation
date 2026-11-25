@@ -29,6 +29,9 @@ const portContract = z
 export const NODE_CATALOG_OPERATIONS = {
   'node.type.get': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取某类节点的契约：契约版本、端口（输入/输出、类型、必填、基数、Schema）、初始配置、执行方式、输出真值来源与是否需要动态端口二次读取；不需要创建实例',
     input: z.object({ typeId: z.enum(ACTIVE_NODE_TYPE_IDS) }).strict()

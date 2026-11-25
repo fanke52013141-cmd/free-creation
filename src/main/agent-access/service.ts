@@ -1041,7 +1041,8 @@ export class LocalAccessService {
         // 外部不新建宿主、不自造运行身份；start/continue 先走与 IPC 入口相同的模型工具调用预检。
         result = await runFlowAgentRunOperation(operationId, input, {
           activeProjectId: this.options.activeProjectId,
-          desktop: this.options.desktop
+          desktop: this.options.desktop,
+          clientId: request.clientId
         })
       } else if (operationId === 'flowStateMachine.submitEvent') {
         // C3：状态机人工事件——与 GUI 提交事件按钮同一 meta.stateMachinePending 写入，
@@ -1852,6 +1853,22 @@ export class LocalAccessService {
    * （与 GUI 按钮同一写入）；main 核对落盘事实。完成状态由运行时执行器校验，
    * 外部不能直接改完成状态——满足「模型文字不能直接赋予成功状态」的协同门槛。
    */
+  private restoreCompositeInputs(values: Record<string, unknown>): Array<{ portId: string; value: unknown }> {
+    return Object.entries(values).map(([portId, value]) => {
+      if (value === null || typeof value !== 'object' ||
+          (!(('kind' in value) && value.kind === 'media') && !('mediaPath' in value))) {
+        return { portId, value }
+      }
+      const mediaId = 'mediaId' in value && typeof value.mediaId === 'string' ? value.mediaId : ''
+      const asset = getMediaAsset(mediaId)
+      if (!asset) throw new AccessFailure('NOT_FOUND', 'precheck', `media:${mediaId}`)
+      return {
+        portId,
+        value: { kind: asset.kind, mediaId: asset.id, mediaPath: asset.path, mime: asset.mime }
+      }
+    })
+  }
+
   /** W4 受控重试：仅 failed/interrupted 的 headless 运行可按原固定版本与原公开输入复跑；
    * 同一根运行重试上限 3 次；输入未记录（M32 前的旧运行）明确拒绝，不伪造输入。 */
   private async executeCompositeRunRetry(input: Record<string, unknown>): Promise<unknown> {
@@ -1889,20 +1906,7 @@ export class LocalAccessService {
     if (!existing.inputValues)
       throw new AccessFailure('INPUTS_NOT_RECORDED', 'precheck', 'run predates input persistence')
     // 媒体输入按 mediaId 重新解析（资产可能已清理）；非媒体值按原样复跑。
-    const resolvedInputs: Array<{ portId: string; value: unknown }> = []
-    for (const [portId, raw] of Object.entries(existing.inputValues)) {
-      const value = raw as { kind?: string; mediaId?: string }
-      if (value?.kind === 'media' || (value && 'mediaPath' in (value as object))) {
-        const asset = getMediaAsset(String(value.mediaId ?? ''))
-        if (!asset) throw new AccessFailure('NOT_FOUND', 'precheck', `media:${value.mediaId}`)
-        resolvedInputs.push({
-          portId,
-          value: { kind: asset.kind, mediaId: asset.id, mediaPath: asset.path, mime: asset.mime }
-        })
-      } else {
-        resolvedInputs.push({ portId, value: raw })
-      }
-    }
+    const resolvedInputs = this.restoreCompositeInputs(existing.inputValues)
     const newRunId = randomUUID()
     try {
       await this.options.desktop.run({
@@ -1987,24 +1991,14 @@ export class LocalAccessService {
     if (!validation.ok) throw new AccessFailure('STORAGE_INCONSISTENT', 'read', 'manifest-invalid')
     // 已完成步骤（completed）跳过重跑；其输出回放供下游消费。
     const steps = getCompositeRun(runId)?.steps ?? []
-    const completedSteps = steps.filter((s) => s.status === 'completed').map((s) => s.stepKey)
     const stepOutputs = getCompositeStepOutputs(runId)
+    const completedSteps = steps
+      .filter((step) => step.status === 'completed' ||
+        (step.status === 'skipped' && stepOutputs[step.stepKey]))
+      .map((step) => step.stepKey)
     // 已满足的人工等待 → 提交值（按节点），续跑消费为正式输出。
     const humanSubmissions = getSatisfiedHumanSubmissions(runId)
-    const resolvedInputs: Array<{ portId: string; value: unknown }> = []
-    for (const [portId, raw] of Object.entries(existing.inputValues ?? {})) {
-      const value = raw as { kind?: string; mediaId?: string }
-      if (value?.kind === 'media' || (value && 'mediaPath' in (value as object))) {
-        const asset = getMediaAsset(String(value.mediaId ?? ''))
-        if (!asset) throw new AccessFailure('NOT_FOUND', 'precheck', `media:${value.mediaId}`)
-        resolvedInputs.push({
-          portId,
-          value: { kind: asset.kind, mediaId: asset.id, mediaPath: asset.path, mime: asset.mime }
-        })
-      } else {
-        resolvedInputs.push({ portId, value: raw })
-      }
-    }
+    const resolvedInputs = this.restoreCompositeInputs(existing.inputValues ?? {})
     try {
       await this.options.desktop.run({
         action: 'execute-composite-headless',

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { z } from 'zod'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
@@ -54,7 +54,8 @@ async function main(): Promise<void> {
       server.setRequestHandler(ListToolsRequestSchema, async () => ({
         tools: Object.entries(ACCESS_OPERATIONS).map(([id, spec]) => ({
           name: id.replaceAll('.', '_'),
-          description: spec.description,
+          description: spec.cost === 'none' ? spec.description :
+            `${spec.description}（费用：${{ possible: '可能产生费用', certain: '会产生费用' }[spec.cost]}）`,
           inputSchema: z.toJSONSchema(toolInputSchema(id as AccessOperationId)) as {
             type: 'object'
             [key: string]: unknown
@@ -65,12 +66,8 @@ async function main(): Promise<void> {
           },
           annotations: {
             readOnlyHint: spec.effect === 'read',
-            destructiveHint: spec.effect !== 'read',
-            // 2026-11-20 规范审查：idempotentHint 必须如实声明——只有只读操作天然幂等；
-            // 写/删/执行类操作的重复调用会产生新副作用（如重复执行、NOT_FOUND），
-            // 其幂等性来自请求级 idempotencyKey（重复提交同一 key 返回同一结果），
-            // 不能向 MCP 客户端虚报操作级幂等。
-            idempotentHint: spec.effect === 'read',
+            destructiveHint: spec.destructive,
+            idempotentHint: spec.idempotent,
             openWorldHint: false
           }
         }))
@@ -117,10 +114,15 @@ async function main(): Promise<void> {
             (path + ': ' + (issue?.message ?? 'invalid')).slice(0, 200)
           )
         }
+        const clientName = server.getClientVersion()?.name
+        const clientId = clientName
+          ? `mcp-${createHash('sha256').update(clientName).digest('hex').slice(0, 16)}`
+          : 'mcp'
         const response = await callLocalOperation(
           id,
           parsed.data as { input: unknown; requestId?: string; idempotencyKey?: string },
-          dataDirectory
+          dataDirectory,
+          clientId
         )
         return {
           isError: response.status !== 'completed',

@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "generatedFrom": {
-    "ipcChannels": 204,
+    "ipcChannels": 205,
     "canvasActions": 50,
     "externalOperations": 192
   },
   "totals": {
-    "actions": 254,
+    "actions": 255,
     "byPhase": {
-      "external": 209,
+      "external": 210,
       "excluded": 37,
       "F9": 8
     }
@@ -609,6 +609,18 @@
         "output.get"
       ],
       "note": "F5/F4 路由：GUI 该动作就是「声音调整」节点执行，外部等价路径为 node.execute（执行该类型节点）+ output.get 读取正式产物；本地确定性执行，已由真实桌面里程碑逐动作验收"
+    },
+    "ipc.media.silenceTrim": {
+      "label": "去气口",
+      "channel": "media:silence-trim",
+      "gui": "silence-trim 节点执行",
+      "phase": "external",
+      "nodeType": "silence-trim",
+      "external": [
+        "node.execute",
+        "output.get"
+      ],
+      "note": "与 sound-adjust 同构：GUI 该动作就是「去气口」节点执行，外部等价路径为 node.execute + output.get；本地确定性执行，服务级测试见 test/silence-trim-node.test.ts 与 test/silence-trim-media.test.ts"
     },
     "ipc.media.videoProbe": {
       "label": "视频探测",

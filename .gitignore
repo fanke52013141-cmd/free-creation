@@ -4,6 +4,8 @@ dist
 out
 .DS_Store
 .eslintcache
+# ZCode 工具会话缓存（任务历史/日志），不随仓库分发。
+.zcode/
 *.log*
 .docx_review/
 *.docx

@@ -5,7 +5,8 @@ import type {
   CompositeVersionRecord
 } from '../../shared/composite/types'
 import { compositeContentHash, parseCompositeManifest } from '../../shared/composite/manifest'
-import { validateCompositeManifest } from '../../shared/composite/validate'
+import { validateCompositePublication } from '../../shared/composite/validate'
+import { planCompositeUpgrade } from '../../shared/composite/upgrade'
 import { CompositePublishError, compositeErrorCode } from '../../shared/composite/errors'
 import { newSpanId, newTraceId } from '../../shared/observability'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
@@ -89,7 +90,7 @@ function assertPublishManifest(value: unknown): CompositeManifest {
       return null
     }
   }
-  const result = validateCompositeManifest(value, {
+  const result = validateCompositePublication(value, {
     getCapability,
     hasCapability: (capabilityId, version) => getCapability(capabilityId, version) !== null
   })
@@ -349,6 +350,26 @@ export async function publishCompositeVersion(
           latestVersion: capability.latest_version
         }
       )
+    }
+
+    if (capability?.latest_version &&
+        compareSemver(manifest.version.split('.')[0], capability.latest_version.split('.')[0]) === 0) {
+      const previous = getCompositeVersion(manifest.capabilityId, capability.latest_version)
+      if (previous) {
+        const { impact } = planCompositeUpgrade(previous.manifest, manifest, [])
+        if (impact.removedInputs.length || impact.removedOutputs.length ||
+            impact.typeChanged.length || impact.schemaChanged.length ||
+            impact.cardinalityChanged.length || impact.requiredChanged.length ||
+            impact.addedRequiredInputs.length) {
+          const message = '公开端口存在不兼容变更，请递增主版本号'
+          throw new CompositePublishError('PUBLISH_INVALID', message, {
+            capabilityId: manifest.capabilityId,
+            version: manifest.version,
+            latestVersion: capability.latest_version,
+            issues: [{ code: 'MAJOR_VERSION_REQUIRED', path: 'version', message }]
+          })
+        }
+      }
     }
 
     const transaction = db.transaction(() => {

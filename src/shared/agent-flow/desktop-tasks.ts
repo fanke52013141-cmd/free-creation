@@ -3,6 +3,12 @@ import { HandoffNoteSchema } from './stage-contracts'
 import type { FlowAssetValue } from './assets'
 import { SkillBindingSchema } from './runtime-contracts'
 import { AgentFlowAssetRefSchema as importedAssetRef } from './node-contracts'
+
+export interface FlowPhaseProjection {
+  taskId: string
+  phase: string
+  revision: number
+}
 const id = z
   .string()
   .min(1)
@@ -24,10 +30,18 @@ export const FlowAgentRunSchema = FlowAgentQuerySchema.extend({
    * 缺省表示没有人工确认证据——人工等待的继续必须被拒，不能默认当作"人已采用"。
    */
   humanConfirmed: z.enum(['gui', 'desktop-confirm']).optional(),
-  runOrigin: z.literal('external').optional()
+  contextMaterial: HandoffNoteSchema.optional(),
+  runOrigin: z.literal('external').optional(),
+  externalClientId: z.string().regex(/^(?:cli|mcp(?:-[a-f0-9]{16})?)$/).optional()
 })
   .strict()
   .superRefine((input, context) => {
+    if (input.contextMaterial && (input.action !== 'continue' || !input.humanConfirmed))
+      context.addIssue({
+        code: 'custom', path: ['contextMaterial'], message: 'Context material requires a confirmed continuation'
+      })
+    if (input.externalClientId && input.runOrigin !== 'external')
+      context.addIssue({ code: 'custom', path: ['externalClientId'], message: 'External origin required' })
     if (
       ['continue', 'reconcile', 'restore'].includes(input.action) &&
       (!input.expectedTaskId ||

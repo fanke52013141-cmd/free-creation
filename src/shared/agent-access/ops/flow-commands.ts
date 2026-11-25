@@ -62,30 +62,45 @@ const flowCommandReceipt = z
 export const FLOW_COMMANDS_OPERATIONS = {
   'flow.command.lookup': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '按项目与 commandId 读取既有 Flow 命令的账本回执（状态/运行/输出版本引用）；只读事实，不创建、不结算、不改写命令',
     input: project.extend({ commandId }).strict()
   },
   'flow.command.availability': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '核对节点当前是否可执行：复用账本同一占用、协调控制范围与审核门禁；只读检查，不占用、不执行。不可用时返回与 GUI 相同的稳定拒绝码',
     input: project.extend({ nodeId }).strict()
   },
   'flow.command.reconcile': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '按已保存运行事实核对既有 Flow 命令并结算账本回执；只有运行记录的 runId/命令/租约/输入指纹全部一致时才推进状态，无法确认时保持 pending/unknown 并回传稳定原因，绝不把 unknown 报成成功；需要幂等键',
     input: project.extend({ commandId }).strict()
   },
   'flow.command.check': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '只读核对既有 Flow 命令：读取账本回执，并在回滚事务内用同一账本结算规则预演"现在结算会得到什么状态"（不落账、不改写命令、不产生输出版本）；无法结算时回传稳定原因，供 reconcile 决定是否提交',
     input: project.extend({ commandId }).strict()
   },
   'flow.command.dispatch': {
     effect: 'execute',
+    idempotent: false,
+    destructive: true,
+    cost: 'possible',
     description:
       '把一条外部派发请求交给当前活动画布执行：main 生成命令/任务/运行身份并先保存画布，按已保存图计算语义版本，账本记录 principal=external 后经既有渲染器 grant 通道执行；受理只表示已交给渲染器，最终状态用 lookup/check 读、reconcile 结算；付费目标必须 confirmPaidTarget=true',
     input: project
@@ -100,6 +115,9 @@ export const FLOW_COMMANDS_OPERATIONS = {
   },
   'flow.command.abort': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '放弃一条外部派发且**从未准入**的 Flow 命令（principal=external、admitted=0、pending/unknown）；已准入或已终态一律拒绝，绝不改写已执行事实；需要幂等键',
     input: project.extend({ commandId }).strict()

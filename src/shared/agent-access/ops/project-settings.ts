@@ -33,12 +33,18 @@ const workspaceProfileDto = z
 export const PROJECT_SETTINGS_OPERATIONS = {
   'project.nodeVisibility.get': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取项目已保存的节点可见集（预设/可见类型/节点集版本）与当前可创建类型；旧项目从未保存过配置时如实表达"全部可创建节点可见"，不伪造 general 预设',
     input: project
   },
   'project.nodeVisibility.set': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '替换项目的节点可见集（决定调色板里出现哪些节点）；只接受当前可创建类型 ID，未知/重复/空集合显式拒绝；经项目正式保存机制落盘，重开项目后生效',
     input: project

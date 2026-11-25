@@ -484,6 +484,7 @@ export const LOCAL_ENGINE_SOURCE_LABELS: Readonly<Record<string, string>> = {
   'local:ffmpeg-clip': '本地截视频',
   'local:ffmpeg-audio': '本地提取音频',
   'local:ffmpeg-sound-adjust': '本地声音调整',
+  'local:silence-trim': '本地去气口',
   'local:vocal-extraction': '本地提取人声',
   'local:ffmpeg-timeline': '本地轨道线合成',
   'local:indextts': '本地 IndexTTS 2.5',

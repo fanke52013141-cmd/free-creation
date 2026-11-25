@@ -201,3 +201,32 @@ it('AI 处理只有 JSON 输入也可运行；声音调整恰好一种媒体', (
     }).kind
   ).toBe('ready')
 })
+
+it('去气口：必填音频输入缺失时阻塞，接上可用音频后放行', () => {
+  const base = {
+    executionMode: 'auto' as const,
+    exec: 'idle',
+    text: '',
+    outputs: {},
+    inputs: [
+      {
+        id: 'in-audio',
+        name: '源音频',
+        type: 'audio' as const,
+        dir: 'in' as const,
+        cardinality: 'one' as const,
+        required: true
+      }
+    ],
+    incomingCounts: new Map<string, number>()
+  }
+  expect(deriveNodeReadiness({ ...base, nodeType: 'silence-trim' }).kind).toBe('blocked')
+  expect(
+    deriveNodeReadiness({
+      ...base,
+      nodeType: 'silence-trim',
+      incomingCounts: new Map([['in-audio', 1]]),
+      availableInputCounts: new Map([['in-audio', 1]])
+    }).kind
+  ).toBe('ready')
+})

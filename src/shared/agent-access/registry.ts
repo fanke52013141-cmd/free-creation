@@ -9,6 +9,7 @@ import {
 } from './node-actions'
 import { validateNodeContractSnapshot } from './node-contracts'
 export { nodeAccessDirectory } from './node-actions'
+import type { AccessOperationSpec } from './ops/common'
 import {
   bindings,
   empty,
@@ -69,11 +70,17 @@ export const ACCESS_KEY_TTL_MS = 30 * 24 * 60 * 60 * 1000
 export const ACCESS_OPERATIONS = {
   'skill.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '分页查询已安装技能的名称、固定版本和摘要，不返回指令正文',
     input: page
   },
   'skill.install': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '安装本机 SKILL.md、JSON 技能包或扁平技能目录；name 为独立技能名称；仅支持指令与文本参考，不执行脚本',
     input: z
@@ -82,6 +89,9 @@ export const ACCESS_OPERATIONS = {
   },
   'chat.skill.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '分页查询项目已保存的 AI 对话节点及其绑定技能版本；活动画布的未保存修改不在结果中',
     input: project
       .extend({
@@ -92,6 +102,9 @@ export const ACCESS_OPERATIONS = {
   },
   'chat.skill.bind': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '替换当前打开的 AI 对话节点的完整技能集合（空数组为清空），经桌面保存；必须使用已安装的固定版本，不启动对话',
     input: revision
@@ -100,17 +113,26 @@ export const ACCESS_OPERATIONS = {
   },
   'node.library.save': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '以独立 name 将指定 AI 对话节点和固定版本技能保存到节点库；排除聊天记录、附件与运行结果',
     input: revision.extend({ nodeId, name: z.string().trim().min(1).max(120) }).strict()
   },
   'node.library.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '分页查询节点库条目摘要，不返回配置正文',
     input: page
   },
   'graph.get': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取画布节点/连线/分组的版本化视图（分页）；config 与正文经 node.get 显式读取；latest 视图仅限当前打开项目',
     input: project
@@ -123,12 +145,18 @@ export const ACCESS_OPERATIONS = {
   },
   'node.get': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取单个已保存节点的类型、契约版本、配置、正文、端口与连线引用；运行事实与结果经 run/output 族查询',
     input: project.extend({ nodeId }).strict()
   },
   'graph.patch': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '向当前打开项目提交一批类型化画布编辑（建/改/删节点与连线）；整体校验后原子应用并保存；返回ID映射与保存版本。autoLayout=true 时应用后在同一撤销步内智能整理坐标',
     input: revision
@@ -137,6 +165,9 @@ export const ACCESS_OPERATIONS = {
   },
   'graph.layout': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '对当前打开项目按拓扑分层/角色泳道/网格重排节点坐标（与 GUI 智能整理同一算法）；只改位置不改配置，单撤销步并保存',
     input: revision
@@ -148,12 +179,18 @@ export const ACCESS_OPERATIONS = {
   },
   'node.runPlan': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '预检当前打开画布的目标节点及上游闭包，列出可确定的缺失输入及端口类型。只读，不调用模型。',
     input: project.extend({ nodeIds: z.array(nodeId).min(1).max(NODE_EXECUTE_MAX_NODES) }).strict()
   },
   'node.execute': {
     effect: 'execute',
+    idempotent: false,
+    destructive: true,
+    cost: 'possible',
     description:
       '向当前打开项目提交节点执行（single=仅该节点读取已持久化上游；subgraph=所选节点及其上游闭包）；subgraph 可传 inputs 补齐缺失端口（媒体使用项目 mediaId）；返回持久任务ID，最终状态以 run.get 为准',
     input: revision
@@ -167,6 +204,9 @@ export const ACCESS_OPERATIONS = {
   },
   'run.wait': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '等待任务到达终态或超时；返回任务当前状态，不自动重放或取消任务',
     input: project
       .extend({
@@ -177,18 +217,27 @@ export const ACCESS_OPERATIONS = {
   },
   'run.cancel': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '请求取消当前打开项目上的在途任务；取消请求与取消确认分开，最终状态以 run.get 为准',
     input: project.extend({ taskId: z.string().regex(/^[a-zA-Z0-9_:-]{1,160}$/) }).strict()
   },
   'output.get': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取节点最近一次正式输出投影（确定性文本/JSON/processor/媒体引用等已登记类型）；运行事实来自真实运行记录，不可伪造',
     input: project.extend({ nodeId }).strict()
   },
   'media.import': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '把本机文件登记为项目受控媒体（复制入库、去敏索引）；返回受控 mediaId 供节点引用，不接收二进制报文',
     input: project
@@ -200,6 +249,9 @@ export const ACCESS_OPERATIONS = {
   },
   'media.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '分页读取项目受控媒体摘要（kind/mime/尺寸/相对引用路径），不返回绝对路径或文件正文',
     input: project
@@ -211,18 +263,27 @@ export const ACCESS_OPERATIONS = {
   },
   'media.delete': {
     effect: 'delete',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '删除项目受控媒体（磁盘文件+索引）；mediaId 必须属于指定项目；回执含保存图中引用计数，不校验引用为空（与 GUI 面板删除同一规则）',
     input: project.extend({ mediaId: z.string().regex(/^[a-zA-Z0-9_-]{1,40}$/) }).strict()
   },
   'chat.read': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取对话节点的会话目录（含活动会话标记与模型配置摘要）；消息正文经 chat.messages 显式读取',
     input: project.extend({ nodeId }).strict()
   },
   'chat.messages': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '分页读取指定会话的消息正文（role/content/意图/附件引用）；助手回复是模型真实输出，不可伪造',
     input: project
@@ -236,11 +297,17 @@ export const ACCESS_OPERATIONS = {
   },
   'model.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '分页读取本地模型ID、启用状态与能力验证状态；不联网探测，不返回凭据、地址或配置',
     input: page
   },
   'library.search': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '分页检索资源库摘要；不返回组件正文、媒体路径或资源包',
     input: z
       .object({
@@ -256,6 +323,9 @@ export const ACCESS_OPERATIONS = {
   },
   'library.create_resource': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '创建单图图片资源（一张图片+名称）；图片取自本机已存在的文件路径，不接收网络地址、二进制报文或额外组件',
     input: z
@@ -269,28 +339,50 @@ export const ACCESS_OPERATIONS = {
   },
   'run.get': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '按项目和taskId读取持久化内部Agent任务基础状态；不含命令、模型媒体任务、正文或控制操作',
     input: project.extend({ taskId: z.string().regex(/^[a-zA-Z0-9_:-]{1,160}$/) }).strict()
   },
   'diagnostics.summary': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '读取诊断存储健康计数；不返回事件正文或诊断包，不代表任务执行成功',
     input: empty
   },
-  'app.status': { effect: 'read', description: '读取本地应用版本与实例身份', input: empty },
+  'app.status': {
+    effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
+    description: '读取本地应用版本与实例身份',
+    input: empty
+  },
   'capability.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '读取当前已开放操作及其输入契约',
     input: empty
   },
   'node.type.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '读取节点接入状态；本包不开放节点操作',
     input: empty
   },
   'project.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '分页读取项目摘要',
     input: z
       .object({
@@ -301,46 +393,73 @@ export const ACCESS_OPERATIONS = {
   },
   'project.get': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '读取已保存项目摘要与内容数量，不返回原始快照',
     input: project
   },
   'project.create': {
     effect: 'write',
+    idempotent: false,
+    destructive: false,
+    cost: 'none',
     description: '幂等新建空项目',
     input: z.object({ name: z.string().trim().min(1).max(200) }).strict()
   },
   'project.open': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: '保存当前画布后在桌面打开项目；等待画布就绪',
     input: project
   },
   'project.update': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: '按版本修改项目名称；活动画布先保存并同步版本',
     input: revision.extend({ name: z.string().trim().min(1).max(200) }).strict()
   },
   'project.rename': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: '按已保存版本修改项目名称；活动画布经保存握手同步',
     input: revision.extend({ name: z.string().trim().min(1).max(200) }).strict()
   },
   'project.save': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: '保存当前权威内容；活动画布等待最新编辑落盘，不接收客户端快照',
     input: revision
   },
   'project.clone': {
     effect: 'write',
+    idempotent: false,
+    destructive: false,
+    cost: 'none',
     description: '固定源版本复制项目（媒体ID/引用重映射）；活动源画布先保存，克隆不继承运行任务',
     input: revision.extend({ name: z.string().trim().min(1).max(120) }).strict()
   },
   'project.delete.precheck': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '读取删除影响摘要与占用阻塞项，无阻塞时签发短期确认令牌',
     input: project
   },
   'project.delete': {
     effect: 'delete',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: '凭预检令牌硬删除项目；拒绝活动画布、运行/未知占用，令牌过期或事实漂移需重新预检',
     input: z
       .object({
@@ -351,6 +470,9 @@ export const ACCESS_OPERATIONS = {
   },
   'project.export': {
     effect: 'export',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: '活动画布先保存最新编辑，再导出完整项目到受控目录，不覆盖文件',
     input: revision
       .extend({ fileName: z.string().regex(/^[a-zA-Z0-9_-]{1,100}\.canvasbundle$/) })
@@ -380,7 +502,7 @@ export const ACCESS_OPERATIONS = {
   ...PROVIDER_ADMIN_OPERATIONS,
   ...KEY_PACKAGE_OPERATIONS,
   ...PUBLISH_OPERATIONS
-} as const
+} as const satisfies Record<string, AccessOperationSpec>
 export type AccessOperationId = keyof typeof ACCESS_OPERATIONS
 
 // 包传输类导入按明确能力范围判定，不用名称子串一票否决（一致性计划 F1 要求）。
@@ -404,6 +526,7 @@ export const AccessRequestSchema = z
     operationId: z.string().min(1).max(80),
     requestId: identifier,
     expectedDataStoreId: z.string().uuid(),
+    clientId: z.string().regex(/^(?:cli|mcp(?:-[a-f0-9]{16})?)$/).optional(),
     idempotencyKey: z
       .string()
       .regex(/^\d{13}:[a-f0-9-]{36}$/)
@@ -981,6 +1104,7 @@ export const NODE_ACCESS_DECLARATIONS = [
   'timeline',
   'audio',
   'sound-adjust',
+  'silence-trim',
   'file',
   'speech',
   'tts',
@@ -1040,6 +1164,9 @@ export function operationDirectory(): unknown[] {
     operationId,
     operationVersion: 1,
     effect: spec.effect,
+    idempotent: spec.idempotent,
+    destructive: spec.destructive,
+    cost: spec.cost,
     description: spec.description,
     /** 前置条件（需要先满足什么），供 Agent 自描述规划。 */
     requires: OPERATION_REQUIREMENTS[operationId as AccessOperationId] ?? [],

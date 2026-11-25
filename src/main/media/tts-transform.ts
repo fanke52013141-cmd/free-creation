@@ -131,6 +131,7 @@ async function transformMiniMaxTts(input: TtsGenerateInput): Promise<VoiceCloneR
   const voiceId = await cloneMiniMaxVoice({
     providerId: provider.id,
     reference: {
+      absPath: reference.abs,
       buf: reference.buf,
       mime: reference.mime,
       fileName: `canvas_clone_${randomUUID().slice(0, 12)}${extname(reference.path) || '.wav'}`

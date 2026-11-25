@@ -63,6 +63,7 @@ import type {
   VideoClipTransformInput,
   VideoAudioTransformInput,
   SoundAdjustTransformInput,
+  SilenceTrimTransformInput,
   TimelineComposeInput,
   IndexTtsRuntimeInfo,
   IndexTtsSynthesizeInput,
@@ -246,6 +247,7 @@ const api = {
       event: string
       expectedRevision: number
       eventId: string
+      phaseProjection?: import('../shared/agent-flow/desktop-tasks').FlowPhaseProjection
     }) => void
   ): (() => void) => {
     const handler = (
@@ -256,6 +258,7 @@ const api = {
         event: string
         expectedRevision: number
         eventId: string
+        phaseProjection?: import('../shared/agent-flow/desktop-tasks').FlowPhaseProjection
       }
     ): void => listener(projection)
     ipcRenderer.on(IPC.flowAgents.stateProjection, handler)
@@ -539,6 +542,8 @@ const api = {
     ipcRenderer.invoke(IPC.media.videoAudio, input),
   soundAdjust: (input: SoundAdjustTransformInput): Promise<IpcEnvelope<MediaAsset>> =>
     ipcRenderer.invoke(IPC.media.soundAdjust, input),
+  silenceTrim: (input: SilenceTrimTransformInput): Promise<IpcEnvelope<MediaAsset>> =>
+    ipcRenderer.invoke(IPC.media.silenceTrim, input),
   composeTimeline: (input: TimelineComposeInput): Promise<IpcEnvelope<MediaAsset>> =>
     ipcRenderer.invoke(IPC.media.timelineCompose, input),
   probeMediaMetadata: (

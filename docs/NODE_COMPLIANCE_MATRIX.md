@@ -2,7 +2,7 @@
 
 > 审计基线：`f519ac3` · 2026-08-31。详细审计、连线关系和参考项目差异见 [NODE_PROTOCOL_AUDIT_2026_08_31.md](./NODE_PROTOCOL_AUDIT_2026_08_31.md)。
 
-本表是当前 **33 个可创建节点** 的发布前协议索引；下表共 35 行 = 33 个可创建节点 + 2 个历史节点行（`video-audio`、`vocal-separate`，结论「退役」）。`composite`（节点流）为内部创建节点，只登记在「历史节点」表，不进入创建菜单。新增或修改节点前必须同步更新本表、`NODE_CONTRACT_SPEC.md`、契约快照与连线测试；历史节点仅为兼容读取，不进入创建菜单。表中「版本 / 端口 id」以及明确写出的端口类型、基数和 Schema 由 `test/compliance-matrix-doc.test.ts` 与注册契约逐行比对；「33 个可创建节点」计数、退役行结论与「历史节点」表也由该测试校验，写错、漏行或计数漂移会直接让测试变红。
+本表是当前 **34 个可创建节点** 的发布前协议索引；下表共 36 行 = 34 个可创建节点 + 2 个历史节点行（`video-audio`、`vocal-separate`，结论「退役」）。`composite`（节点流）为内部创建节点，只登记在「历史节点」表，不进入创建菜单。新增或修改节点前必须同步更新本表、`NODE_CONTRACT_SPEC.md`、契约快照与连线测试；历史节点仅为兼容读取，不进入创建菜单。表中「版本 / 端口 id」以及明确写出的端口类型、基数和 Schema 由 `test/compliance-matrix-doc.test.ts` 与注册契约逐行比对；「34 个可创建节点」计数、退役行结论与「历史节点」表也由该测试校验，写错、漏行或计数漂移会直接让测试变红。
 
 | 节点                      | 版本 | 输入端口（类型 / 基数）                                         | 输出端口（类型 / Schema）                                       | 执行与投影                               | 结论 |
 | ------------------------- | ---- | --------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------- | ---- |
@@ -24,6 +24,7 @@
 | 人声分离 `vocal-separate` | 4    | `in-audio` audio / one / 必填                                   | `out-audio` audio（人声；伴奏另建独立音频资产节点）             | 历史兼容，不新建                         | 退役 |
 | 音频资产 `audio`          | 3    | 无                                                              | `out-audio` audio                                               | executor + projectOutputs                | 通过 |
 | 声音调整 `sound-adjust`   | 1    | `in-audio` audio / one；`in-video` video / one（二选一）        | `out-audio` audio（可选）；`out-video` video（可选）            | executor + projectOutputs                | 通过 |
+| 去气口 `silence-trim`     | 1    | `in-audio` audio / one / 必填                                   | `out-audio` audio                                               | executor + projectOutputs                | 通过 |
 | 文件 `file`               | 2    | 无                                                              | `out-file` file；`out-text` text（可选）                        | executor + projectOutputs                | 通过 |
 | 语音合成 `speech`         | 4    | 文本 many；参考输入随供应商动态生成                             | 语音 audio；火山可选字幕时间轴                                  | executor + projectOutputs + resolvePorts | 通过 |
 | 声音克隆 `tts`            | 4    | `in-audio` audio / one                                          | `out-json` json `voice.profile@1`                               | executor + projectOutputs                | 通过 |

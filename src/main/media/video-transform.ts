@@ -6,6 +6,7 @@ import { getDb } from '../store/db'
 import { deleteMedia, getMediaAbsPath, saveFileAsset } from '../store/media.repo'
 import { trackMediaJob } from './cancellation'
 import { probeMedia } from './media-probe'
+import { sileroVadAvailable } from './vad-silero'
 import type {
   AudioWaveformInput,
   AudioWaveformResult,
@@ -70,7 +71,8 @@ export async function getLocalMediaCapabilities(): Promise<LocalMediaCapabilitie
       audioSeparatorBinary,
       ['--version'],
       '未找到本机 audio-separator。请安装并加入 PATH，或设置 CANVAS_STUDIO_AUDIO_SEPARATOR_PATH。'
-    )
+    ),
+    sileroVad: await sileroVadAvailable()
   }
 }
 
@@ -487,7 +489,8 @@ async function resolveVideoSource(projectId: string, mediaId: string): Promise<V
   return { path }
 }
 
-async function resolveAudioSource(projectId: string, mediaId: string): Promise<AudioSource> {
+/** 音频资产 → 绝对路径（项目归属校验 + 路径穿越防护）；供去气口等纯音频变换复用。 */
+export async function resolveAudioSource(projectId: string, mediaId: string): Promise<AudioSource> {
   if (!projectId || !mediaId) throw new Error('缺少项目或源音频')
   const prefix = `projects/${projectId}/media/`
   const row = getDb()
@@ -506,7 +509,8 @@ async function resolveAudioSource(projectId: string, mediaId: string): Promise<A
 
 // ── FFmpeg / 外部进程 ──
 
-async function runToAsset(
+/** ffmpeg 参数 → 校验产物非空 → saveFileAsset 登记为独立资产；临时目录由调用方或本函数清理。 */
+export async function runToAsset(
   projectId: string,
   outputName: string,
   ext: string,

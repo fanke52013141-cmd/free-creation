@@ -14,6 +14,7 @@ const MEDIA_REQUESTS = new Set([
   'clipVideo',
   'extractVideoAudio',
   'soundAdjust',
+  'silenceTrim',
   'separateVocals',
   'convertVideoDepth',
   'convertVideoClay'

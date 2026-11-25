@@ -60,7 +60,7 @@ export const STATE_META: Record<FlowStepState, { label: string; glyph: string; c
   'waiting-execution': { label: '等待执行结果', glyph: '◷', color: '#fbbf24' },
   'waiting-tool': { label: '等待工具结果', glyph: '⚙', color: '#fbbf24' },
   'waiting-host': { label: '等待宿主恢复', glyph: '↻', color: '#fbbf24' },
-  skipped: { label: '分支已跳过', glyph: '↷', color: '#737f8e' },
+  skipped: { label: '已跳过', glyph: '↷', color: '#737f8e' },
   stalled: { label: '流程停滞', glyph: '!', color: '#ff6b6b' },
   cancelled: { label: '已取消', glyph: '×', color: '#737f8e' },
   'review-pending': { label: '审核中', glyph: '●', color: '#00AEBD' },
@@ -71,6 +71,13 @@ export const STATE_META: Record<FlowStepState, { label: string; glyph: string; c
   gated: { label: '门禁拦截', glyph: '🔒', color: '#737f8e' },
   stale: { label: '旧交付已过期', glyph: '↻', color: '#a8916b' },
   idle: { label: '待执行', glyph: '○', color: '#6b7280' }
+}
+
+const WAIT_DETAILS: Partial<Record<FlowStepState, string>> = {
+  'waiting-reconcile': '执行结果尚未确认，请先核对运行记录再继续。',
+  'waiting-execution': '已派发，正在等待执行结果。',
+  'waiting-tool': '工具调用仍在等待结果。',
+  'waiting-host': '等待执行宿主恢复后继续。'
 }
 
 /** 依据边做拓扑排序（Kahn），保持声明顺序作为并列节点的稳定次序。 */
@@ -163,11 +170,15 @@ export function deriveFlowSteps(overview: FlowRunOverview): FlowStep[] {
       else state = 'idle'
       detail = child.compositeWait
         ? `等待提交子流程步骤「${child.compositeWait.stepKey}」的结果`
-        : child.goal
+        : WAIT_DETAILS[state] ?? child.goal
+      if (child.state === 'skipped') {
+        state = 'skipped'
+        detail = '本次执行回执为已跳过'
+      }
     }
     if (state === 'idle' && overview.skippedNodeIds?.includes(nodeId)) {
       state = 'skipped'
-      detail = '当前分支条件未满足'
+      detail = '分支条件未满足或必填依赖已跳过'
     }
     if (state === 'idle' && overview.stalledNodeIds?.includes(nodeId)) {
       state = 'stalled'
@@ -203,6 +214,18 @@ export function flowProgress(steps: FlowStep[]): { done: number; total: number; 
 
 /** "当前"横幅：最该被用户看到的一件事（人工阻塞 > 审核返工 > 执行中 > 完成/失败）。 */
 export function deriveNow(overview: FlowRunOverview, steps: FlowStep[]): FlowNow {
+  if (overview.state === 'waiting' && overview.contextMaterialWait) {
+    const stage = steps.find((step) =>
+      step.nodeId === overview.contextMaterialWait?.stageKey
+    )
+    return {
+      nodeId: stage?.nodeId ?? null,
+      action: null,
+      title: stage ? `${stage.title} · 上下文超限` : '上下文超限',
+      detail: '请提交符合原预算的精简材料，流程将从当前阶段继续。',
+      tone: 'human'
+    }
+  }
   const human = steps.find((step) => step.needsYou)
   if (human) {
     return {
@@ -228,13 +251,23 @@ export function deriveNow(overview: FlowRunOverview, steps: FlowStep[]): FlowNow
     return {
       nodeId: running.nodeId,
       title: `${running.title} · ${STATE_META[running.state].label}`,
-      detail: '',
+      detail: WAIT_DETAILS[running.state] ?? '',
       tone: 'running',
       action: 'locate'
     }
   }
   if (overview.state === 'completed') {
     return { nodeId: null, title: '流程已完成', detail: '', tone: 'done', action: null }
+  }
+  const stalled = steps.find((step) => step.state === 'stalled')
+  if (stalled) {
+    return {
+      nodeId: stalled.nodeId,
+      title: `${stalled.title} · ${STATE_META.stalled.label}`,
+      detail: stalled.detail ?? '请检查上游交付与分支条件。',
+      tone: 'failed',
+      action: 'locate'
+    }
   }
   if (overview.code === 'AGENT_SESSION_LOST') {
     return { nodeId: overview.nodeId, title: '等待宿主恢复', detail: '执行会话已中断，请检查恢复选项。', tone: 'failed', action: 'locate' }

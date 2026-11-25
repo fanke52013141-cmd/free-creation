@@ -18,6 +18,7 @@ export const CONFIG_NODE_TYPES = new Set([
   'video-clay',
   'video-audio',
   'sound-adjust',
+  'silence-trim',
   'vocal-separate',
   'speech',
   'tts',

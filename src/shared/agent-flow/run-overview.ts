@@ -18,6 +18,7 @@ export interface FlowRunOverview {
   goal: string
   paused: boolean
   code?: string
+  contextMaterialWait?: { stageKey: string; waitRevision: number; limitBytes?: number }
   executionMode: 'model' | 'fixed-order' | 'graph'
   sourceGraph?: import('./flow-definition').FlowGraphSource
   canvasVersion?: { buildId: string; diverged: boolean; sourceGraph?: import('./flow-definition').FlowGraphSource }

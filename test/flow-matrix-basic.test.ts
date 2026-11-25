@@ -304,6 +304,56 @@ describe('A · 单节点冒烟 · 模型节点（桩网关）', () => {
     }
   })
 
+  it('生图网关返回远端任务失败后，即使配置重试也只提交一次', async () => {
+    let submissions = 0
+    const restore = installWindowApi({
+      gateway: {
+        ...makeChatGatewayApi().gateway,
+        imageGenerate: async () => {
+          submissions++
+          return { ok: false, error: { code: 'IMAGE_FAILED', message: 'Generation failed' } }
+        }
+      },
+      ...fullModelCatalogApi()
+    })
+    try {
+      const flow = buildFlowEditor([{
+        id: 'n1', nodeType: 'image-gen', text: '生成一张测试图',
+        config: JSON.stringify({ retry: { maxRetries: 2, backoffMs: 500 } })
+      }])
+      await runWorkflow(flow.editor, 'p-a18-retry', stubProviders())
+      expect(runStateOf(flow.node('n1')).run).toBe('failed')
+      expect(submissions).toBe(1)
+    } finally {
+      restore()
+    }
+  })
+
+  it('视频提交回执超时，不由执行器按旧配置重复提交', async () => {
+    let submissions = 0
+    const restore = installWindowApi({
+      gateway: {
+        ...makeChatGatewayApi().gateway,
+        videoSubmit: async () => {
+          submissions++
+          return { ok: false, error: { code: 'TASK_OUTCOME_UNKNOWN', message: 'timeout' } }
+        }
+      },
+      ...fullModelCatalogApi()
+    })
+    try {
+      const flow = buildFlowEditor([{
+        id: 'n1', nodeType: 'video', text: '生成一段测试视频',
+        config: JSON.stringify({ retry: { maxRetries: 2, backoffMs: 500 } })
+      }])
+      await runWorkflow(flow.editor, 'p-a19-unknown', stubProviders())
+      expect(runStateOf(flow.node('n1')).run).toBe('failed')
+      expect(submissions).toBe(1)
+    } finally {
+      restore()
+    }
+  })
+
   it('A19 video 提交→轮询→完成 → done 产出视频引用', async () => {
     let polled = 0
     const restore = installWindowApi({
@@ -914,17 +964,17 @@ describe('C · 失败/跳过语义', () => {
     expect(sink.reason ?? '').toMatch(/上游|未产生|输入/)
   })
 
-  it('C2 上游 skipped（空文本）→ 下游显式失败而非挂死', async () => {
+  it('C2 上游跳过后，可选输入的下游可以使用固定值', async () => {
     const { editor, node } = buildFlowEditor(
       [
         { id: 'empty', nodeType: 'text', text: '' },
-        { id: 'sink', nodeType: 'processor', config: { operation: 'pass', fallback: '' } }
+        { id: 'sink', nodeType: 'processor', config: { operation: 'pass', fallback: '本地默认值' } }
       ],
       [{ from: 'empty', to: 'sink', fromPort: 'out-text', toPort: 'in-value' }]
     )
     await runWorkflow(editor, 'p-c2', [])
     expect(runStateOf(node('empty')).run).toBe('skipped')
-    expect(runStateOf(node('sink')).run).toBe('failed')
+    expect(runStateOf(node('sink')).run).toBe('success')
   })
 
   it('C3 一坏一好分支：坏分支不拖死好分支', async () => {

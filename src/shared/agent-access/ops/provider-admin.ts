@@ -18,6 +18,9 @@ const fileName = z.string().regex(/^[a-zA-Z0-9_-]{1,100}\.[a-z]{2,10}$/)
 export const PROVIDER_ADMIN_OPERATIONS = {
   'provider.save': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '新建或更新供应商连接（与 GUI 设置页同一 saveProvider）：id 缺省=新建；更新时 apiKey 留空表示保留已保存密钥；回执只给 id/名称/协议/模型数/是否有密钥，**不回显密钥**',
     input: z
@@ -36,17 +39,26 @@ export const PROVIDER_ADMIN_OPERATIONS = {
   },
   'provider.delete': {
     effect: 'delete',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: '删除已保存的供应商连接；不存在时如实 NOT_FOUND，不静默成功',
     input: z.object({ id: identifier }).strict()
   },
   'provider.probe': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '对**已保存**的供应商做连通性探测（复用 GUI 同一 probeProvider）：只做免费/只读探测，不发起计费调用；必须显式 confirmNetwork=true；外部只给 providerId，密钥由 main 读取',
     input: z.object({ providerId: identifier, confirmNetwork: z.boolean().optional() }).strict()
   },
   'provider.package.import': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     // 人工决定：返回前等人在 GUI 点「允许导入」。
     interactive: true,
     description:
@@ -55,6 +67,9 @@ export const PROVIDER_ADMIN_OPERATIONS = {
   },
   'provider.package.importProviders': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     // 人工决定：返回前等人在 GUI 点「允许导入」。
     interactive: true,
     description:
@@ -63,17 +78,26 @@ export const PROVIDER_ADMIN_OPERATIONS = {
   },
   'dreamina.logout': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: '清除本机即梦 CLI 登录态，切换账号前使用；需 confirmLogout=true',
     input: z.object({ confirmLogout: z.boolean().optional() }).strict()
   },
   'dreamina.login.start': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '发起即梦（Dreamina）设备流登录：返回需要在浏览器打开的验证地址与用户码；若本机已有有效登录则直接返回 already。**不伪造登录状态**，登录必须由人完成；需 confirmNetwork=true',
     input: z.object({ confirmNetwork: z.boolean().optional() }).strict()
   },
   'dreamina.login.check': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '查询即梦设备流登录结果（pending/success/expired/failed）；只如实反映本机 CLI 的真实状态，成功与否由人是否真的在浏览器完成授权决定；需 confirmNetwork=true',
     input: z.object({ deviceCode: z.string().min(1).max(400), confirmNetwork: z.boolean().optional() }).strict()

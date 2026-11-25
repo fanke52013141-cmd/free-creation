@@ -1,5 +1,5 @@
 import type { CanvasEdge, CanvasNode, PortDecl } from '@shared/types'
-import { COMPOSITE_PORT_TYPES } from '@shared/composite/manifest'
+import { COMPOSITE_PORT_TYPES, hasCompositeManualGate } from '@shared/composite/manifest'
 import type {
   CompositeDependency,
   CompositeGraphEdge,
@@ -92,6 +92,17 @@ export function buildCompositeManifestFromGraph(
   if (nodes.length === 0) {
     return { ok: false, issues: [{ path: 'graph.nodes', message: '至少选择一个节点' }] }
   }
+  for (const node of nodes) {
+    for (const port of node.ports) {
+      if (port.type === 'iteration' || port.type === 'camera') {
+        issues.push({
+          path: `graph.nodes.${node.id}.ports.${port.id}`,
+          message: `节点「${node.title}」的 ${port.type} 端口暂不支持封装为节点流`
+        })
+      }
+    }
+  }
+  if (issues.length > 0) return { ok: false, issues }
   const nodeById = new Map(nodes.map((node) => [node.id, node]))
   const internalIds = new Map<string, string>()
   nodes.forEach((node, index) => internalIds.set(node.id, `n${index + 1}`))
@@ -141,7 +152,8 @@ export function buildCompositeManifestFromGraph(
       }
       internalEdges.push({
         from: { nodeId: fromInternal, portId: edge.from.portId },
-        to: { nodeId: toInternal, portId: edge.to.portId }
+        to: { nodeId: toInternal, portId: edge.to.portId },
+        ...(edge.connectOrder !== undefined ? { order: edge.connectOrder } : {})
       })
       continue
     }
@@ -313,6 +325,7 @@ export function buildCompositeManifestFromGraph(
 
   // 嵌套节点流：公开契约里登记固定 capabilityId@version，发布/运行都按快照解析，
   // 不能因为内层发布了新版本就静默改用最新版。
+  let requiresManualGate = hasCompositeManualGate({ nodes: graphNodes, edges: internalEdges })
   for (const node of nodes) {
     if (node.type !== 'composite') continue
     const nested = parseNestedCompositeManifest(node)
@@ -328,6 +341,8 @@ export function buildCompositeManifestFromGraph(
       id: nested.capabilityId,
       version: nested.version
     })
+    if (nested.executionPolicy?.requiresManualGate || hasCompositeManualGate(nested.graph))
+      requiresManualGate = true
   }
 
   const manifest: CompositeManifest = {
@@ -347,7 +362,8 @@ export function buildCompositeManifestFromGraph(
       maxDepth: 5,
       maxExpandedNodes: 40,
       maxExpandedEdges: 120,
-      waitForInput: true
+      waitForInput: true,
+      ...(requiresManualGate ? { requiresManualGate: true } : {})
     }
   }
   const parsed = parseCompositeManifest(manifest)

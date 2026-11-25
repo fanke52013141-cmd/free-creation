@@ -1909,6 +1909,22 @@ describe('O4-P3 graph mode execution（声明式图路由，mock 模型）', () 
     expect(f.byId.second.meta.nodeResult).toBeTruthy()
   })
 
+  it.each(['first', 'second'])('BL-05: accepts generated graph with third node connected to %s', async (parent) => {
+    const graph = FlowGraphSchema.parse({
+      ...seqGraph,
+      nodes: [...seqGraph.nodes, graphNode('third')],
+      edges: [...seqGraph.edges, {
+        from: { nodeId: parent, portId: 'out-text' },
+        to: { nodeId: 'third', portId: 'in-text' }
+      }],
+      exits: parent === 'first' ? ['second', 'third'] : ['third']
+    })
+    const f = fixture({ graph, thirdAgent: true, parallel: true })
+    expect((await f.host.run(input)).task.state).toBe('completed')
+    expect(f.count().modelCalls).toBe(0)
+    expect(f.count().executions).toBe(6)
+  })
+
   it('从图中间返工时保留独立分支，旧交付留在历史', async () => {
     const graph = FlowGraphSchema.parse({
       ...seqGraph,

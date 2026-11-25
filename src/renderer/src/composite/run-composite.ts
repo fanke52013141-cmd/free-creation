@@ -19,7 +19,8 @@ import {
   checkCompositeRunBudget,
   collectCompositeOutputs,
   compositeOutputSummary,
-  planCompositeInputBindings
+  planCompositeInputBindings,
+  preflightCompositeRequiredInputs
 } from '@shared/composite/runtime'
 import type { ProviderSummary } from '@shared/types'
 import { NodeCardUtil, type NodeCardShape } from '../canvas/NodeCardShape'
@@ -159,6 +160,18 @@ async function execute(
         stepCount: 0
       }
     }
+    const planned = runtimeVersion === 1
+      ? { bindings: [], issues: preflightCompositeRequiredInputs(manifest, request.inputs) }
+      : planCompositeInputBindings(manifest, request.inputs)
+    if (planned.issues.length > 0) {
+      failure = findRunFailure(planned.issues)
+      await finish('failed', {
+        errorCode: failure.code,
+        errorMessage: planned.issues.map((issue) => issue.message).join('；').slice(0, 500),
+        failurePhase: failure.phase
+      })
+      return { status: 'failed', reason: planned.issues[0]!.message, failure, stepCount: 0 }
+    }
     // W3：引用形态的内部组合节点必须先解析固定版本快照并缓存到 meta，
     // 否则 resolvePorts 推导不出公开端口，内部连线与输入绑定会失败。
     // 与主画布 graph.patch 的 meta.compositeManifest 缓存同口径。
@@ -246,24 +259,6 @@ async function execute(
         return { status: 'failed', reason: legacy, failure, stepCount: 0 }
       }
     } else {
-      const planned = planCompositeInputBindings(manifest, request.inputs)
-      if (planned.issues.length > 0) {
-        failure = findRunFailure(planned.issues)
-        await finish('failed', {
-          errorCode: failure.code,
-          errorMessage: planned.issues
-            .map((issue) => issue.message)
-            .join('；')
-            .slice(0, 500),
-          failurePhase: failure.phase
-        })
-        return {
-          status: 'failed',
-          reason: planned.issues[0]!.message,
-          failure,
-          stepCount: 0
-        }
-      }
       for (const binding of planned.bindings) {
         const targetId = shapeByNode.get(binding.target.nodeId)
         const targetShape = targetId ? runEditor.getShape<NodeCardShape>(targetId) : undefined
@@ -328,7 +323,8 @@ async function execute(
           runEditor,
           { shapeId: from, portId: edge.from.portId },
           { shapeId: to, portId: edge.to.portId },
-          false
+          false,
+          edge.order
         )
       ) {
         failure = {
@@ -419,8 +415,8 @@ async function execute(
         undefined,
         runContext
       )
-      // AF-07：持久化已完成节点的运行结果（供人工等待续跑回放，跳过重跑）。
-      if (result.status !== 'failed' && result.status !== 'skipped') {
+      // 续跑回放完成或跳过的事实，避免重跑后改变下游看到的缺席原因。
+      if (!request.signal?.cancelled && result.status !== 'failed') {
         const meta = runEditor.getShape<NodeCardShape>(shapeId)?.meta as
           Record<string, unknown> | undefined
         const checkpoint = await window.api.composite.runStepOutput({

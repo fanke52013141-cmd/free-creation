@@ -48,12 +48,13 @@ export function currentTextResult(shape: NodeShape): string | null {
 }
 
 /** 操作节点卡内结果区：只取本次成功运行的最近一条媒体结果（props 不再持久化 mediaPath）。 */
-export function latestSuccessMediaResult(shape: NodeShape): MediaResultItem | null {
+export function selectedSuccessMediaResult(shape: NodeShape): MediaResultItem | null {
   if (readStoredNodeRunStatus(shape.meta?.nodeRun) !== 'success') return null
   const collection = parseMediaResultCollection(
     typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
   )
-  return collection?.results.at(-1) ?? null
+  return collection?.results.find((item) => item.mediaId === collection.selectedMediaId) ??
+    collection?.results.at(-1) ?? null
 }
 export const projectTextOutputs = (shape: NodeShape): RawNodeOutputs => {
   const result = currentTextResult(shape)
@@ -96,6 +97,7 @@ export const DETERMINISTIC_PROJECTIONS = {
   'video-frame': projectVideoFrameOutputsShared,
   'video-clip': projectVideoClipOutputs,
   'sound-adjust': projectSoundAdjustOutputs,
+  'silence-trim': projectSilenceTrimOutputs,
   'video-depth': projectVideoAiOutputsShared,
   'video-clay': projectVideoAiOutputsShared,
   // F6：网址节点是纯文档数据（website.link@1），投影与 GUI 同一 readWebsiteLink。
@@ -254,6 +256,22 @@ export function projectSoundAdjustOutputs(shape: NodeShape): RawNodeOutputs {
   return {
     [portId]: {
       kind,
+      mediaId: result.mediaId,
+      mediaPath: result.mediaPath,
+      mime: result.mime,
+      ...(shape.props.title ? { name: shape.props.title } : {})
+    }
+  }
+}
+
+/** 去气口只处理音频；取最近一次成功运行的音频产物投给 out-audio。 */
+export function projectSilenceTrimOutputs(shape: NodeShape): RawNodeOutputs {
+  const result = parseMediaResultCollection(shape.meta?.nodeResult ?? '')?.results.at(-1)
+  if (!result) return {}
+  if (!result.mime.startsWith('audio/')) return {}
+  return {
+    'out-audio': {
+      kind: 'audio',
       mediaId: result.mediaId,
       mediaPath: result.mediaPath,
       mime: result.mime,

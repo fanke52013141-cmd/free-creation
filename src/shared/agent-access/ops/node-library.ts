@@ -30,6 +30,9 @@ const insertCoord = z.number().finite().min(-100000).max(100000)
 export const NODE_LIBRARY_OPERATIONS = {
   'node.library.compose': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '把项目中选中的多个节点及它们之间的连线保存为节点库组合条目（含媒体引用记录）；排除聊天历史、附件与运行结果',
     input: revision
@@ -41,11 +44,17 @@ export const NODE_LIBRARY_OPERATIONS = {
   },
   'node.library.update': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: '重命名节点库条目；条目内容与画布不受影响',
     input: z.object({ entryId, name: z.string().trim().min(1).max(120) }).strict()
   },
   'node.library.replace': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '用当前项目画布上选中的节点及其连线原位覆盖节点库条目的内容（同 GUI「编辑节点」保存路径）；条目名称与画布不受影响，媒体引用随内容重新记录',
     input: revision
@@ -57,17 +66,26 @@ export const NODE_LIBRARY_OPERATIONS = {
   },
   'node.library.delete': {
     effect: 'delete',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: '删除节点库条目；画布上已经插入的节点不受影响',
     input: z.object({ entryId }).strict()
   },
   'node.library.get': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取节点库条目详情（节点类型/标题/尺寸/正文与配置存在性/媒体引用/连线拓扑）；不返回配置与正文内容',
     input: z.object({ entryId }).strict()
   },
   'node.library.search': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '按条目名称、节点标题、节点类型与节点文本过滤节点库条目（分页）；返回条目摘要',
     input: z
       .object({
@@ -80,6 +98,9 @@ export const NODE_LIBRARY_OPERATIONS = {
   },
   'node.library.insert': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '把节点库条目实例化到指定项目画布（须先 project.open 到当前画布）：重映射节点 ID、连线与媒体引用，经权威宿主落盘；外部输入只携带媒体 ID',
     input: revision

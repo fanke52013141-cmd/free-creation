@@ -1,5 +1,9 @@
 # GUI、CLI、MCP 业务能力一致性规范
 
+> status: active
+> last-verified: unverified
+
+
 版本：1.0。日期：2026-11-07。适用：Canvas Studio 本地单用户应用。
 
 本规范落实用户提出的目标：**人通过 GUI 能完成的业务操作，外部 Agent 应能通过 CLI 和 MCP 完成，并获得同样的保存结果、正式产物和错误语义。**

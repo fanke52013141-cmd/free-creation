@@ -46,54 +46,81 @@ const validationStatus = z.enum([
 export const SETTINGS_OPERATIONS = {
   'model.connection.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '分页读取本机模型供应商连接的去敏摘要（ID/名称/协议/启用状态/时间）；字段白名单投影，不返回地址、鉴权头、密钥密文或密钥引用，不联网探测',
     input: page
   },
   'model.definition.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '分页读取模型定义（可按 connectionId 过滤）的能力声明与验证状态；不返回能力控制参数、元数据、验证原文或密钥材料，不联网探测',
     input: page.extend({ connectionId: targetId.optional() }).strict()
   },
   'model.binding.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '分页读取已启用的默认功能绑定（featureKey → 连接/模型/能力）；执行参数 overrides 与模型元数据不返回',
     input: page
   },
   'model.binding.resolve': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '按 featureKey（可选显式 provider::model 目标）解析实际执行会用的 provider/model；复用 GUI 同一解析服务（含能力验证与密钥存在性检查），只返回去敏目标，不发起任何供应商请求',
     input: z.object({ featureKey, operation: modelOperation, modelKey: modelKey.optional() }).strict()
   },
   'environment.local': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '只读探测本机媒体工具（FFmpeg/FFprobe/audio-separator）与本地推理环境（Python/GPU/IndexTTS）就绪状态；不安装、不下载、不联网，缺依赖如实报告不可用',
     input: empty
   },
   'environment.videoEngine.status': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '只读读取视频引擎（本地 CUDA 推理环境，video-depth/video-clay 使用）的安装与就绪状态；不触发安装、下载或任何模型调用',
     input: empty
   },
   'environment.videoEngine.install': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '启动本地视频推理环境安装（联网下载 CUDA/PyTorch 依赖与校验后的模型权重并写入应用数据目录，需要本机 Python 3.12）；必须显式 confirmInstall=true，否则拒绝且不启动任何下载；只受理启动，不等待安装完成，进度与就绪经 environment.videoEngine.status 读取',
     input: z.object({ confirmInstall: z.boolean().default(false) }).strict()
   },
   'workspace.palettePreferences.get': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取调色板（一级分类 Dock）的本机偏好：分类显示顺序与名称覆盖；这是纯界面业务偏好，不含项目数据、不含密钥',
     input: empty
   },
   'workspace.palettePreferences.save': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '保存调色板偏好（分类显示顺序 + 可选名称覆盖）。与 GUI 调色板设置同一归一化：忽略未知分类、自动去重、缺失分类补默认顺序；幂等，同幂等键重放不产生第二次写入',
     input: z

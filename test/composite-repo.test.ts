@@ -140,6 +140,15 @@ describe('组合能力存储（P1）', () => {
     expect(getCompositeVersion('character-design', '1.0')?.manifest.name).toBe('人物设计')
 
     // 新版本必须大于当前最新。
+    await expect(publishCompositeVersion(manifest({ version: '1.1' }))).resolves.toMatchObject({
+      record: { version: '1.1' }
+    })
+    const breaking = manifest({ version: '1.2' })
+    breaking.outputs[0].required = !breaking.outputs[0].required
+    await expect(publishCompositeVersion(breaking)).rejects.toMatchObject({
+      code: 'PUBLISH_INVALID',
+      details: { issues: [expect.objectContaining({ code: 'MAJOR_VERSION_REQUIRED' })] }
+    })
     await expect(publishCompositeVersion(manifest({ version: '2.0' }))).resolves.toMatchObject({
       created: true
     })

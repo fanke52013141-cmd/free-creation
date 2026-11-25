@@ -12187,6 +12187,57 @@ select:focus-visible {
   background: color-mix(in srgb, var(--brand) 24%, transparent);
 }
 
+/* ── 去气口节点配置（与声音调整同一布局骨架，容器间距由全局 .node-settings 提供）── */
+.silence-trim-settings-label {
+  color: var(--txt);
+  font-size: 12px;
+}
+.silence-trim-mode {
+  display: flex;
+  gap: 6px;
+}
+.silence-trim-mode button {
+  flex: 1;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+}
+.silence-trim-mode button.active {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 14%, transparent);
+  color: var(--txt);
+}
+.silence-trim-settings .settings-field {
+  color: var(--txt);
+  font-size: 12px;
+}
+.silence-trim-settings .contract-settings-hint {
+  margin: 0;
+}
+.silence-trim-error {
+  margin: 0;
+  color: var(--red);
+  font-size: 12px;
+}
+.silence-trim-save {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  border: 1px solid color-mix(in srgb, var(--brand) 55%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--brand) 14%, transparent);
+  color: var(--txt);
+  cursor: pointer;
+}
+.silence-trim-save:hover {
+  background: color-mix(in srgb, var(--brand) 24%, transparent);
+}
+
 /* ── P1-3 历史版本面板 ── */
 .history-panel {
   display: flex;

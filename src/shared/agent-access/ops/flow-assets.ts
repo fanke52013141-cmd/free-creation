@@ -48,6 +48,9 @@ const sha256 = z.string().regex(/^[a-f0-9]{64}$/)
 export const FLOW_ASSETS_OPERATIONS = {
   'flowAsset.submit': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '把项目已保存画布上某节点端口的结果固化为固定资产版本（幂等 submissionId）；活动画布先经桌面保存屏障，节点有未核对命令时拒绝，不接收外部提供的取值',
     input: project
@@ -60,11 +63,17 @@ export const FLOW_ASSETS_OPERATIONS = {
   },
   'flowAsset.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '按节点端口列出固定资产版本摘要（序号/画布版本/摘要值），不返回取值正文；最多 100 条',
     input: project.extend({ nodeId, portId }).strict()
   },
   'flowAsset.read': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取固定资产版本摘要与固定取值（文本/JSON 上限 20k 字符或 100k 编码字符，超出如实拒绝）；媒体只返回受控 mediaId 与相对引用，不返回绝对路径或字节',
     input: project.extend({ versionId: flowId }).strict()

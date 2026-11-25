@@ -23,6 +23,9 @@ const providerDto = z
 export const PROVIDER_OPERATIONS = {
   'provider.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '分页读取供应商目录（新目录优先，旧 providers 表保留为遗留档案）；只返回 id/名称/协议/模型数/是否有密钥/是否遗留，不返回地址、鉴权头或密钥材料，不联网探测',
     input: z
@@ -35,12 +38,18 @@ export const PROVIDER_OPERATIONS = {
   },
   'provider.listExecutable': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '只读读取**节点执行实际可用**的供应商目录（已验证接管的目录档案）；与 GUI 节点模型选择器同一来源，不返回地址或密钥，不联网探测',
     input: z.object({}).strict()
   },
   'provider.exportableConnections': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取"可导出为凭据包"的连接清单（用于凭据包导出前的选择）；只返回连接 id/名称/协议与模型数，不返回任何密钥材料或地址',
     input: z.object({}).strict()

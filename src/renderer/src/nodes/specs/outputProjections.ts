@@ -261,6 +261,24 @@ export const projectSoundAdjustOutputs = (shape: NodeCardShape): RawNodeOutputs 
   }
 }
 
+/** 去气口只处理音频；仅投影本次最新音频产物到 out-audio。 */
+export const projectSilenceTrimOutputs = (shape: NodeCardShape): RawNodeOutputs => {
+  const result = parseMediaResultCollection(
+    typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
+  )?.results.at(-1)
+  if (!result) return {}
+  if (!result.mime.startsWith('audio/')) return {}
+  return {
+    'out-audio': {
+      kind: 'audio',
+      mediaId: result.mediaId,
+      mediaPath: result.mediaPath,
+      mime: result.mime,
+      ...(shape.props.title ? { name: shape.props.title } : {})
+    }
+  }
+}
+
 export { projectVideoAssetOutputs } from '@shared/engine/deterministic-projections'
 
 /**

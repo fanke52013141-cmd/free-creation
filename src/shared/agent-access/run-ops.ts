@@ -82,6 +82,7 @@ export const DETERMINISTIC_OUTPUT_SOURCES: Record<string, 'document' | 'run' | '
   'video-frame': 'run',
   'video-clip': 'run',
   'sound-adjust': 'run',
+  'silence-trim': 'run',
   'video-depth': 'run',
   'video-clay': 'run',
   website: 'document',

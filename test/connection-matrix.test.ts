@@ -14,6 +14,18 @@ beforeAll(() => {
   registerAllNodeTypes()
 })
 
+it('快照覆盖所有注册节点默认端口的连线兼容结果', () => {
+  const nodes = [...allNodeTypes()].sort((a, b) => a.type.localeCompare(b.type))
+  const inputs = nodes.flatMap((node) =>
+    node.ports.in.map((port) => ({ key: `${node.type}.${port.id}`, port }))
+  )
+  const outputs = nodes.flatMap((node) => node.ports.out.map((port) => [
+    `${node.type}.${port.id}`,
+    inputs.filter((input) => portPairCompatible(port, input.port)).map((input) => input.key).join(' ')
+  ]))
+  expect({ inputs: inputs.map((input) => input.key), outputs: Object.fromEntries(outputs) }).toMatchSnapshot()
+})
+
 /** 判断从 fromType 的某输出端口到 toType 的某输入端口是否允许连线（类型+Schema）。 */
 function canConnect(
   fromType: NodeTypeId,
@@ -30,6 +42,15 @@ function canConnect(
 }
 
 describe('标准连线 · 允许的组合', () => {
+  it('去气口只接受音频输入，产物继续接音频消费端口', () => {
+    expect(canConnect('audio', 'out-audio', 'silence-trim', 'in-audio')).toBe(true)
+    expect(canConnect('sound-adjust', 'out-audio', 'silence-trim', 'in-audio')).toBe(true)
+    expect(canConnect('speech', 'out-audio', 'silence-trim', 'in-audio')).toBe(true)
+    expect(canConnect('silence-trim', 'out-audio', 'speech', 'in-audio')).toBe(true)
+    expect(canConnect('silence-trim', 'out-audio', 'silence-trim', 'in-audio')).toBe(true)
+    expect(canConnect('video-asset', 'out-video', 'silence-trim', 'in-audio')).toBe(false)
+    expect(canConnect('silence-trim', 'out-audio', 'sound-adjust', 'in-video')).toBe(false)
+  })
   it('声音调整只接受对应媒体端口，并把同类产物继续接给下游', () => {
     expect(canConnect('audio', 'out-audio', 'sound-adjust', 'in-audio')).toBe(true)
     expect(canConnect('video-asset', 'out-video', 'sound-adjust', 'in-video')).toBe(true)

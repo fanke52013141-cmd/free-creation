@@ -14,6 +14,9 @@ import { identifier } from './common'
 export const PROVIDER_NETWORK_OPERATIONS = {
   'provider.testConnection': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '测试已保存供应商连接是否可用（向供应商 /models 发一次请求）；必须显式 confirmNetwork=true 才执行，否则拒绝且不发任何请求；外部只给供应商 id，密钥与地址由 main 从设备密钥库读取；回执只给可用性与模型数量',
     input: z
@@ -25,6 +28,9 @@ export const PROVIDER_NETWORK_OPERATIONS = {
   },
   'model.validate': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'possible',
     description:
       '对某个模型定义做真实能力验证（会向供应商发起真实请求、**可能产生费用**）；必须同时显式 confirmNetwork=true 与 confirmCost=true 才执行，否则拒绝且不发任何请求；外部只给连接与模型定义 id，不提供密钥',
     input: z
@@ -39,12 +45,18 @@ export const PROVIDER_NETWORK_OPERATIONS = {
   },
   'model.discover': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '拉取某个已保存连接在供应商侧的可用模型列表（与 GUI「拉取可用模型」同一实现：同一端点绑定校验、同一诊断事件）；会向供应商发请求，必须显式 confirmNetwork=true 才执行；外部只给 connectionId，不提供密钥或地址',
     input: z.object({ connectionId: identifier, confirmNetwork: z.boolean().optional() }).strict()
   },
   'model.validateAgentToolCalling': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'possible',
     description:
       '验证某个文本模型是否支持 Agent 强制结构化工具调用与工具结果往返（与 GUI「验证 Agent 工具调用」同一实现）；会向供应商发真实请求、**可能产生费用**，必须同时显式 confirmNetwork=true 与 confirmCost=true；结果写入该模型的工具调用验证快照',
     input: z

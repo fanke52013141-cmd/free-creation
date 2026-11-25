@@ -43,6 +43,8 @@ export interface CoordinationRun {
   decisions: number
   paused: boolean
   code?: string
+  contextWaitStageKey?: string
+  contextWaitLimitBytes?: number
   traceId: string
   spanId: string
   children: Array<{
@@ -215,7 +217,8 @@ export class CoordinationStore {
         (t) => t.from === run.phase && t.event === event
       )
       const graphReworkPhase = event === 'flow.rework' && run.config.executionMode === 'graph'
-        ? run.stateConfig.transitions.find((transition) => transition.event === 'human.continue')?.from
+        ? run.stateConfig.transitions.find((transition) => transition.event === 'flow.rework')?.to ??
+          run.stateConfig.transitions.find((transition) => transition.event === 'human.continue')?.from
         : undefined
       const phase = next?.to ?? graphReworkPhase
       if (!phase) throw new AgentRuntimeError('FLOW_STATE_TRANSITION_DENIED', 'state')
@@ -334,6 +337,13 @@ export class CoordinationStore {
       goal: run.goal,
       paused: run.paused,
       ...(run.code ? { code: run.code } : {}),
+      ...(run.state === 'waiting' && run.code === 'FLOW_CONTEXT_OVER_BUDGET' &&
+        run.contextWaitStageKey && !run.config.graph?.nodes.some(
+          (node) => node.nodeId === run.contextWaitStageKey && node.kind === 'capability'
+        ) ? { contextMaterialWait: {
+          stageKey: run.contextWaitStageKey, waitRevision: run.waitRevision,
+          ...(run.contextWaitLimitBytes ? { limitBytes: run.contextWaitLimitBytes } : {})
+        } } : {}),
       executionMode: (run.config.executionMode ?? 'model') as 'model' | 'fixed-order' | 'graph',
       ...(graphView ? { graph: graphView } : {}),
       ...(run.sourceGraph ? { sourceGraph: run.sourceGraph } : {}),

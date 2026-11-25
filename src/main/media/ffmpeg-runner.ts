@@ -51,6 +51,12 @@ export interface RunProcessOptions {
   /** 需要实时读取 stdout（FFmpeg 的 -progress pipe:1 走这里）。 */
   onStdout?: (chunk: string) => void
   /**
+   * 需要实时读取 stderr。silencedetect 这类检测滤镜把结果打印在 info 级 stderr，
+   * 而本模块的失败通道只保留尾部 4000 字符，检测结果必须经此回调逐块解析。
+   * 回调抛错会中断读取并按普通失败收尾。
+   */
+  onStderr?: (chunk: string) => void
+  /**
    * stdout 是否累积后作为返回值。
    * 默认：没有 onStdout 时累积（调用方通常就是要返回值，如 ffprobe 探测）；
    * 提供 onStdout 时默认不累积（进度流会很大，不保留）。
@@ -96,8 +102,10 @@ export function runProcess(
       options.onStdout?.(text)
     })
     child.stderr.on('data', (chunk: Buffer) => {
+      const text = chunk.toString()
+      options.onStderr?.(text)
       // 只保留尾部，避免长任务把内存吃穿；完整日志不属于产品能力。
-      stderr = `${stderr}${chunk.toString()}`.slice(-4000)
+      stderr = `${stderr}${text}`.slice(-4000)
     })
     child.once('error', (error) => {
       const code = (error as NodeJS.ErrnoException).code

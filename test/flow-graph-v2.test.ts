@@ -245,6 +245,10 @@ describe('BL-11 FlowGraph v2：params / 真实端口 / 子图循环', () => {
       ['c']
     )
     expect(validateFlowGraph(v2)).toEqual({ ok: true })
+    expect(validateFlowGraph({ ...v2, budgets: { ...v2.budgets, maxSteps: 8 } })).toEqual({
+      ok: false,
+      errors: [{ code: 'STEP_BUDGET_INSUFFICIENT', message: 'maxSteps 8 must be at least 9' }]
+    })
     const compiled = compileFlowGraph(v2)
     const carrier = compiled.nodes.find((node) => node.id === 'shape:a')!
     expect(JSON.parse(carrier.config)).toBeTruthy()

@@ -92,6 +92,8 @@ export interface SubflowRequest {
   itemCount?: number
   itemId?: string
   itemRunId?: string
+  /** 一旦子流程发起可能计费的请求，禁止整项自动重放。 */
+  onRemoteSubmission?: () => void
   iterationNodeId?: string
   itemTargets?: Array<{ nodeId: string; portId: string }>
 }
@@ -134,6 +136,8 @@ export interface NodeDiagnosticsContext {
  * 直接调用 main/gateway 模块的实现。
  */
 export interface NodeExecutionContext {
+  /** Desktop form submission scoped to the observed coordinator wait. */
+  contextMaterial?: { taskId: string; waitRevision: number; text: string }
   node: CanvasNode
   shape: NodeShape
   inputs: ContractInputMap

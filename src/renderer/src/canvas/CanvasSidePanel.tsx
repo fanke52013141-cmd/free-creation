@@ -991,7 +991,7 @@ function TasksPanel({
           <strong>{item.title}</strong>
           <small>
             {item.kind === 'stalled'
-              ? '流程告警'
+              ? '流程停滞'
               : item.kind === 'human-task'
               ? '人工任务'
               : item.kind === 'coordinator'

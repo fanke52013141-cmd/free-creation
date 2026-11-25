@@ -8,6 +8,8 @@ const fsp = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
+const { Client } = require('@modelcontextprotocol/sdk/client/index.js')
+const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio.js')
 
 const root = path.resolve(__dirname, '..', '..')
 const key = () => `${Date.now()}:${randomUUID()}`
@@ -74,6 +76,9 @@ const manifest = {
     app = await _electron.launch({ executablePath: require('electron'), args: [root, '--local-agent-access'], env: launchEnv })
     const page = await app.firstWindow()
     await page.waitForLoadState()
+    await app.evaluate(({ BrowserWindow }) => {
+      for (const window of BrowserWindow.getAllWindows()) window.setTitle('[TEST] 节点流输入预检')
+    })
     for (let i = 0; i < 100; i++) {
       if (fs.existsSync(path.join(dir, 'agent-access/connection.json'))) break
       await sleep(200)
@@ -123,7 +128,70 @@ const manifest = {
     const execNoInput = ok(await cli(dir, ['composite', 'execute'], { capabilityId: 'headless-copy', confirmCost: true }), 'EXEC_NOINPUT')
     const waitedNoInput = ok(await cli(dir, ['composite', 'execute', 'wait'], { runId: execNoInput.runId, timeoutMs: 30000 }), 'WAIT_NOINPUT')
     if (waitedNoInput.status !== 'failed') throw new Error(`NOINPUT_SHOULD_FAIL:${JSON.stringify(waitedNoInput)}`)
-    check('缺必填输入 → 运行 failed（输入契约守卫）')
+    const missing = ok(await cli(dir, ['composite', 'run', 'get'], {
+      runId: execNoInput.runId
+    }), 'GET_NOINPUT')
+    if (missing.run.errorCode !== 'INPUT_REQUIRED' ||
+        missing.run.failurePhase !== 'input' || missing.steps.length !== 0) {
+      throw new Error(`CLI_REQUIRED_INPUT_PREFLIGHT:${JSON.stringify(missing)}`)
+    }
+    check('CLI 缺必填输入返回 INPUT_REQUIRED，内部步骤未启动')
+
+    const retried = ok(await cli(dir, ['composite', 'run', 'retry'], {
+      runId: execNoInput.runId
+    }), 'RETRY_BEFORE_EXECUTION')
+    if (retried.retryOf !== execNoInput.runId || retried.runId === execNoInput.runId)
+      throw new Error(`RETRY_CHAIN_INVALID:${JSON.stringify(retried)}`)
+    await ok(await cli(dir, ['composite', 'execute', 'wait'], {
+      runId: retried.runId, timeoutMs: 30000
+    }), 'WAIT_RETRY')
+    const retryRun = ok(await cli(dir, ['composite', 'run', 'get'], {
+      runId: retried.runId
+    }), 'GET_RETRY')
+    if (retryRun.run.errorCode !== 'INPUT_REQUIRED' || retryRun.steps.length !== 0)
+      throw new Error(`RETRY_PREFLIGHT_BYPASSED:${JSON.stringify(retryRun)}`)
+    check('执行前失败可重试并关联原运行，重试仍须通过必填输入预检')
+
+    const transport = new StdioClientTransport({
+      command: require('electron'),
+      args: [path.join(root, 'out/main/local-agent.js'), 'mcp', 'serve', '--stdio', '--data-dir', dir],
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      stderr: 'pipe'
+    })
+    const mcp = new Client({ name: 'composite-input-preflight', version: '1.0.0' })
+    try {
+      await mcp.connect(transport)
+      const invoke = async (name, input) => {
+        const reply = await mcp.callTool({ name, arguments: { input, idempotencyKey: key() } })
+        if (!reply.structuredContent?.data || reply.structuredContent.error) {
+          throw new Error(`${name}:${JSON.stringify(reply.structuredContent)}`)
+        }
+        return reply.structuredContent.data
+      }
+      const { runId } = await invoke('composite_execute', {
+        capabilityId: manifest.capabilityId, confirmCost: true
+      })
+      await invoke('composite_execute_wait', { runId, timeoutMs: 30000 })
+      const result = await invoke('composite_run_get', { runId })
+      if (result.run.errorCode !== 'INPUT_REQUIRED' ||
+          result.run.failurePhase !== 'input' || result.steps.length !== 0) {
+        throw new Error(`MCP_REQUIRED_INPUT_PREFLIGHT:${JSON.stringify(result)}`)
+      }
+      check('MCP 缺必填输入返回相同错误和阶段，内部步骤未启动')
+      const invalid = structuredClone(manifest)
+      invalid.inputs[0].schema = { type: 'string' }
+      const cliValidation = ok(await cli(dir, ['composite', 'validate'], {
+        manifest: invalid
+      }), 'CLI_VALIDATE')
+      const mcpValidation = await invoke('composite_validate', { manifest: invalid })
+      if (!cliValidation.issues.some((issue) => issue.code === 'INLINE_SCHEMA_REMOVED') ||
+          JSON.stringify(cliValidation) !== JSON.stringify(mcpValidation)) {
+        throw new Error(`CLI_MCP_PUBLICATION_VALIDATION_DIFFERS:${JSON.stringify(mcpValidation)}`)
+      }
+      check('CLI 与 MCP 对内联 Schema 返回相同的发布预检结果')
+    } finally {
+      await mcp.close().catch(() => undefined)
+    }
 
     console.log(JSON.stringify({ ok: true, checks, outputs: { runId: exec.runId, outputText: outText } }, null, 2))
   } catch (error) {

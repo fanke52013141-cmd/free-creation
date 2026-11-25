@@ -66,6 +66,7 @@ function multiManifest(patch: Partial<CompositeManifest> = {}): CompositeManifes
         type: 'json',
         required: true,
         cardinality: 'one',
+        schemaRef: { id: 'json.any', version: 1 },
         source: { nodeId: 'n3', portId: 'out-json' }
       },
       {
@@ -118,7 +119,10 @@ function multiManifest(patch: Partial<CompositeManifest> = {}): CompositeManifes
           w: 340,
           h: 260,
           ports: [
-            { id: 'out-json', name: 'JSON', dir: 'out', type: 'json', required: true, cardinality: 'one' }
+            {
+              id: 'out-json', name: 'JSON', dir: 'out', type: 'json', required: true,
+              cardinality: 'one', schemaRef: { id: 'json.any', version: 1 }
+            }
           ]
         }
       ],

@@ -28,6 +28,9 @@ const publishRequestInput = project
 export const PUBLISH_OPERATIONS = {
   'director.publish.prepare': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '在当前打开的导演台节点上申请发布（frame=静帧 PNG，video=WebM 预演）；只创建待人工授权的请求，不渲染、不改变画布，授权与拒绝由 GUI 中的人决定',
     input: revision
@@ -40,12 +43,18 @@ export const PUBLISH_OPERATIONS = {
   },
   'director.publish.status': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取一次发布申请的授权与执行状态（待授权/已授权/已拒绝/已过期/执行中/已完成/失败）；完成态返回正式产物媒体引用',
     input: project.extend({ publishRequestId: publishRequestIdSchema }).strict()
   },
   'director.publish.continue': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '人工授权后执行发布：用与 GUI 相同的发布服务渲染并写入节点正式结果；未授权、已拒绝或已过期一律拒绝，不重放、不重复发布',
     input: publishRequestInput

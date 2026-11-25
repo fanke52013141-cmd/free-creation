@@ -31,7 +31,8 @@ export function defaultDataDirectory(): string {
 export async function callLocalOperation(
   operationId: AccessOperationId,
   args: { input: unknown; requestId?: string; idempotencyKey?: string },
-  dataDirectory = defaultDataDirectory()
+  dataDirectory = defaultDataDirectory(),
+  clientId = 'cli'
 ): Promise<AccessResponse> {
   const requestId = args.requestId ?? randomUUID()
   const failure = (code: string, unknown = false): AccessResponse => ({
@@ -57,6 +58,7 @@ export async function callLocalOperation(
     operationId,
     requestId,
     expectedDataStoreId: descriptor.dataStoreId,
+    clientId,
     ...args
   }
   const payload =

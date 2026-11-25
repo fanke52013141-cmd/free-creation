@@ -119,7 +119,7 @@ function taskView(state: string): Record<string, unknown> {
   }
 }
 
-function call(operationId: string, input: unknown = {}, idempotencyKey?: string) {
+function call(operationId: string, input: unknown = {}, idempotencyKey?: string, clientId?: string) {
   return service.dispatch({
     apiVersion: 1,
     operationVersion: 1,
@@ -127,6 +127,7 @@ function call(operationId: string, input: unknown = {}, idempotencyKey?: string)
     input,
     requestId: randomUUID(),
     expectedDataStoreId: service.dataStoreId,
+    ...(clientId ? { clientId } : {}),
     ...(idempotencyKey ? { idempotencyKey } : {})
   })
 }
@@ -196,20 +197,21 @@ describe('flowAgent 运行控制', () => {
     expect(port.prechecks).toEqual([])
   })
 
-  it('start 先做模型工具调用预检，再用 main 生成的身份调用同一宿主', async () => {
+  it.each(['cli', 'mcp-0123456789abcdef'])('start 保留 %s 来源，运行身份仍由 main 生成', async (clientId) => {
     const project = createProject('运行-启动')
     active = project.id
     const port = publishFakePort()
-    const response = await write('flowAgent.run', {
+    const response = await call('flowAgent.run', {
       projectId: project.id,
       nodeId: 'shape:agent-1',
       action: 'start'
-    })
+    }, key(), clientId)
     expect(response.status, JSON.stringify(response.error)).toBe('completed')
     expect(port.prechecks).toEqual([{ projectId: project.id, nodeId: 'shape:agent-1' }])
     expect(port.runs).toHaveLength(1)
     const raw = port.runs[0] as Record<string, unknown>
     expect(raw.action).toBe('start')
+    expect(raw).toMatchObject({ runOrigin: 'external', externalClientId: clientId })
     // 外部没有传身份：三个 ID 都由 main 生成（UUID），不能是调用方给的值。
     for (const field of ['requestId', 'traceId', 'spanId']) {
       expect(String(raw[field])).toMatch(/^[a-f0-9-]{36}$/)

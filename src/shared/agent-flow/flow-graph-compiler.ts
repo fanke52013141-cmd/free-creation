@@ -154,26 +154,36 @@ function compileNode(
   return { ...base, type: 'state-machine', config: JSON.stringify(config), contractVersion: 1 }
 }
 
-/** 派生基础状态机（顺序语义）：idle + 各节点状态 + completed；边→完成事件迁移。
- *  条件/循环的精确状态机推导属 P3+；此处保证结构合法（过 StateMachineNodeConfigSchema）。 */
-function deriveStateMachine(graph: FlowGraph): {
+/** 节点、分支和轮次留在子任务账本里，流程状态只描述整体阶段。 */
+export function deriveFlowPhaseStateMachine(): {
   states: string[]
   transitions: Array<{ from: string; event: string; to: string }>
 } {
-  const running = graph.entry
-  const waiting = 'waiting'
-  const states = ['idle', ...graph.nodes.map((node) => node.nodeId), waiting, 'completed']
-  const transitions = [
-    { from: 'idle', event: 'flow.started', to: running },
-    ...['agent.dispatched', 'agent.completed', 'review.started', 'review.passed',
-      'review.rejected', 'rework.created'].map((event) => ({ from: running, event, to: running })),
-    { from: running, event: 'human.wait', to: waiting },
-    { from: running, event: 'flow.paused', to: waiting },
-    { from: running, event: 'flow.completed', to: 'completed' },
-    { from: waiting, event: 'human.continue', to: running },
-    ...[running, waiting, 'completed'].map((from) => ({ from, event: 'flow.rework', to: waiting }))
-  ]
-  return { states, transitions }
+  const active = ['running', 'waiting-human', 'reviewing', 'paused']
+  return {
+    states: ['idle', ...active, 'completed', 'failed', 'stopped'],
+    transitions: [
+      { from: 'idle', event: 'flow.started', to: 'running' },
+      ...active.flatMap((from) => [
+        { from, event: 'agent.dispatched', to: from },
+        { from, event: 'agent.completed', to: from },
+        { from, event: 'rework.created', to: from },
+        { from, event: 'review.started', to: 'reviewing' },
+        { from, event: 'review.passed', to: 'running' },
+        { from, event: 'review.rejected', to: 'running' },
+        { from, event: 'human.wait', to: 'waiting-human' },
+        { from, event: 'flow.paused', to: 'paused' },
+        { from, event: 'flow.completed', to: 'completed' },
+        { from, event: 'flow.failed', to: 'failed' },
+        { from, event: 'flow.stopped', to: 'stopped' },
+        { from, event: 'flow.rework', to: 'waiting-human' }
+      ]),
+      { from: 'waiting-human', event: 'human.continue', to: 'running' },
+      { from: 'paused', event: 'human.continue', to: 'running' },
+      { from: 'completed', event: 'flow.rework', to: 'waiting-human' },
+      { from: 'failed', event: 'flow.rework', to: 'waiting-human' }
+    ]
+  }
 }
 
 /**
@@ -209,6 +219,10 @@ function toCanvasGraph(graph: FlowGraph): FlowGraph {
         ? {
             inputs: {
               ...node.inputs,
+              ...(node.inputs.summarySelector ? { summarySelector: {
+                ...node.inputs.summarySelector,
+                sourceStageKey: canvasNodeId(node.inputs.summarySelector.sourceStageKey)
+              } } : {}),
               selectors: node.inputs.selectors.map((selector) => ({
                 ...selector,
                 sourceStageKey: canvasNodeId(selector.sourceStageKey)
@@ -289,7 +303,7 @@ export function compileFlowGraph(
       }))
     ]
   })
-  const sm = deriveStateMachine(mapped)
+  const sm = deriveFlowPhaseStateMachine()
   const stateConfig = StateMachineNodeConfigSchema.parse({
     schemaVersion: 1,
     initialState: 'idle',

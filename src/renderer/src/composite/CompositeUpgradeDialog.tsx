@@ -4,7 +4,7 @@ import type { CompositeManifest } from '@shared/composite/manifest'
 import type { CompositeUpgradePreviewResult } from '@shared/composite/upgrade'
 import type { CompositeVersionRecord } from '@shared/composite/types'
 import { readCompositeInstanceManifest } from '@shared/composite/outputs'
-import { markUndoPoint } from '../canvas/history'
+import { ensureCanvasSaved } from '../canvas/flow-asset-actions'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
 import { toast } from '../stores/toast'
 import { ModalShell } from '../components/ModalShell'
@@ -36,6 +36,8 @@ export function CompositeUpgradeDialog({
   const current = shape ? readCompositeInstanceManifest(shape) : null
   const [versions, setVersions] = useState<CompositeVersionRecord[]>([])
   const [targetVersion, setTargetVersion] = useState('')
+  const [applying, setApplying] = useState(false)
+  const [applyError, setApplyError] = useState('')
   // 预检结果带请求键：切换目标版本/清空选择时按派生值失效，
   // 不在 effect 内同步 setState（避免级联渲染），也不会残留上一次的 busy。
   const [result, setResult] = useState<{
@@ -50,9 +52,11 @@ export function CompositeUpgradeDialog({
     void window.api.composite.versionList(current.capabilityId).then((list) => {
       if (list.ok) {
         setVersions(list.data)
-        const newer = list.data.find(
-          (record) => Number.parseInt(record.version, 10) > Number.parseInt(current.version, 10)
-        )
+        const [major, minor] = current.version.split('.').map(Number)
+        const newer = list.data.find(({ version }) => {
+          const [candidateMajor, candidateMinor] = version.split('.').map(Number)
+          return candidateMajor > major || (candidateMajor === major && candidateMinor > minor)
+        })
         if (newer) setTargetVersion(newer.version)
       }
     })
@@ -61,10 +65,10 @@ export function CompositeUpgradeDialog({
   const requestKey =
     current && targetVersion ? `${current.capabilityId}@${current.version}->${targetVersion}` : ''
   const active = result && result.key === requestKey ? result : null
-  const busy = requestKey !== '' && active === null
+  const busy = applying || (requestKey !== '' && active === null)
   const preview = active?.preview ?? null
   const targetRecord = active?.record ?? null
-  const error = active?.error ?? ''
+  const error = applyError || active?.error || ''
 
   useEffect(() => {
     if (!current || !targetVersion) return
@@ -146,23 +150,35 @@ export function CompositeUpgradeDialog({
     )
   }
 
-  const apply = (): void => {
-    if (!preview?.ok || !targetRecord) return
+  const apply = async (): Promise<void> => {
+    if (!preview?.ok || !targetRecord || applying) return
+    setApplying(true)
+    setApplyError('')
     const next: CompositeManifest = targetRecord.manifest
-    markUndoPoint(editor, 'composite-upgrade')
+    const mark = editor.markHistoryStoppingPoint('composite-upgrade')
     const existingMeta = (editor.getShape(shapeId)?.meta as Record<string, unknown>) ?? {}
-    editor.updateShape({
-      id: shapeId,
-      type: 'node-card',
-      props: {
-        config: JSON.stringify({
-          capabilityId: next.capabilityId,
-          version: next.version,
-          contentHash: targetRecord.contentHash
-        })
-      },
-      meta: { ...existingMeta, compositeManifest: next }
-    } as never)
+    try {
+      editor.updateShape({
+        id: shapeId,
+        type: 'node-card',
+        props: {
+          config: JSON.stringify({
+            capabilityId: next.capabilityId,
+            version: next.version,
+            contentHash: targetRecord.contentHash
+          })
+        },
+        meta: { ...existingMeta, compositeManifest: next }
+      } as never)
+      await ensureCanvasSaved()
+    } catch {
+      editor.bailToMark(mark)
+      await ensureCanvasSaved().catch(() => undefined)
+      setApplyError('升级未保存，已恢复画布中的原版本。请重试。')
+      return
+    } finally {
+      setApplying(false)
+    }
     toast(`已升级到 v${versionLabel(next.version)}，原有连线全部保留`)
     onClose()
   }
@@ -186,7 +202,7 @@ export function CompositeUpgradeDialog({
             className={modalBtn('primary')}
             disabled={busy || !preview?.ok || !targetRecord}
             title={preview?.ok ? '升级后现有连线会保留' : '有问题需要先处理，暂时不能升级'}
-            onClick={apply}
+            onClick={() => void apply()}
           >
             {busy ? '正在检查…' : '确认升级'}
           </button>
@@ -213,7 +229,10 @@ export function CompositeUpgradeDialog({
               aria-label="目标版本"
               value={targetVersion}
               disabled={busy}
-              onChange={(event) => setTargetVersion(event.target.value)}
+              onChange={(event) => {
+                setApplyError('')
+                setTargetVersion(event.target.value)
+              }}
             >
               <option value="">选择版本</option>
               {versions.map((record) => (

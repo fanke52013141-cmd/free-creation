@@ -290,7 +290,7 @@ async function runSoak(options, { signal, onCheckpoint } = {}) {
       bundle: true,
       platform: 'node',
       format: 'cjs',
-      external: ['better-sqlite3', 'electron'],
+      external: ['better-sqlite3', 'electron', 'onnxruntime-node'],
       alias: { '@shared': resolve('src/shared') },
       logLevel: 'silent'
     })

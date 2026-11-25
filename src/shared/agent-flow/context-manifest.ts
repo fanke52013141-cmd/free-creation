@@ -52,6 +52,8 @@ function outputRoot(output: StageDeliveryFact['outputs'][number]): {
 export interface ContextBuildOptions {
   /** 模型容量扣除输出/框架预留后的可用字节；与声明预算取较小值。 */
   modelCapacityBytes?: number
+  /** Material supplied through a confirmed request for this waiting stage. */
+  humanMaterial?: string
 }
 
 /**
@@ -68,9 +70,7 @@ export function buildContextManifest(
   const entries: ContextManifestEntry[] = []
   const missing: z.infer<typeof ContextMissingSchema>[] = []
   const dropped: z.infer<typeof ContextMissingSchema>[] = []
-  const seen = new Set<string>()
-  let usedBytes = 0
-  let requiredBytes = 0
+  const candidatesByHash = new Map<string, ContextManifestEntry>()
   for (const selector of inputs.selectors) {
     const fact = deliveries.find((delivery) => delivery.stageKey === selector.sourceStageKey)
     if (!fact) {
@@ -92,9 +92,8 @@ export function buildContextManifest(
       resolvedAny = true
       const value = resolved.value
       const contentHash = sha256(canonicalFlowJson(value))
-      // 内容级去重保序：同一内容（不论来源路径）只保留一份，首次出现的元数据为准。
-      if (seen.has(contentHash)) continue
-      seen.add(contentHash)
+      const prior = candidatesByHash.get(contentHash)
+      if (prior && (prior.required || !selector.required)) continue
       const bytes = Buffer.byteLength(JSON.stringify(value ?? null), 'utf8')
       const entry: ContextManifestEntry = {
         sourceStageKey: selector.sourceStageKey,
@@ -106,22 +105,7 @@ export function buildContextManifest(
         ...(selector.purpose ? { purpose: selector.purpose } : {}),
         contentHash
       }
-      if (selector.required) {
-        // 必需内容不静默截断：先纳入，超限标记 exceeded 由宿主停止。
-        entries.push(entry)
-        usedBytes += bytes
-        requiredBytes += bytes
-      } else if (usedBytes + bytes <= limitBytes) {
-        entries.push(entry)
-        usedBytes += bytes
-      } else {
-        dropped.push({
-          sourceStageKey: selector.sourceStageKey,
-          path: selector.path,
-          required: false,
-          code: 'FIELD_MISSING'
-        })
-      }
+      candidatesByHash.set(contentHash, entry)
     }
     if (!resolvedAny)
       missing.push({
@@ -131,7 +115,44 @@ export function buildContextManifest(
         code: 'FIELD_MISSING'
       })
   }
+  // Reserve the entire required budget before admitting optional selectors.
+  const requiredBytes = [...candidatesByHash.values()].reduce(
+    (total, entry) => total + (entry.required ? entry.bytes : 0), 0
+  )
+  let usedBytes = requiredBytes
+  for (const entry of candidatesByHash.values()) {
+    if (entry.required) {
+      entries.push(entry)
+    } else if (usedBytes + entry.bytes <= limitBytes) {
+      entries.push(entry)
+      usedBytes += entry.bytes
+    } else {
+      dropped.push({
+        sourceStageKey: entry.sourceStageKey, path: entry.path, required: false, code: 'FIELD_MISSING'
+      })
+    }
+  }
   const exceeded = requiredBytes > limitBytes
+  if (exceeded && inputs.overflow === 'ask-human' && options.humanMaterial?.trim() &&
+      !missing.some((entry) => entry.required)) {
+    const replacement = buildContextManifest(stageKey, {
+      selectors: [{ sourceStageKey: 'human:context', path: 'text', required: true }],
+      budgetBytes: inputs.budgetBytes
+    }, [{
+      stageKey: 'human:context', nodeId: stageKey, humanDecided: true,
+      outputs: [{ kind: 'text', text: options.humanMaterial }]
+    }], { modelCapacityBytes: options.modelCapacityBytes })
+    if (!contextManifestBlocking(replacement)) return replacement
+  }
+  if (exceeded && inputs.overflow === 'summarize' && inputs.summarySelector &&
+      !missing.some((entry) => entry.required)) {
+    const summary = buildContextManifest(stageKey, {
+      selectors: [inputs.summarySelector], budgetBytes: inputs.budgetBytes
+    }, deliveries, options)
+    if (!contextManifestBlocking(summary) &&
+        summary.entries.every((entry) => entry.kind === 'text' || entry.kind === 'markdown' || entry.kind === 'json'))
+      return summary
+  }
   const manifestHash = sha256(
     canonicalFlowJson({
       stageKey,

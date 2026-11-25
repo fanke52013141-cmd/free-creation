@@ -25,6 +25,7 @@ export const ACTIVE_NODE_TYPE_IDS = [
   'timeline',
   'audio',
   'sound-adjust',
+  'silence-trim',
   'file',
   'speech',
   'tts',

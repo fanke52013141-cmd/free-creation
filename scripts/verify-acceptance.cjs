@@ -17,6 +17,7 @@ const { join } = require('node:path')
 
 const root = process.cwd()
 const ALL = [
+  { name: 'node-combos', script: 'scripts/test-node-combos.cjs', timeout: 10 * 60_000 },
   { name: 'protocol', script: 'scripts/mcp-acceptance.cjs', timeout: 15 * 60_000 },
   { name: 'family1', script: 'scripts/mcp-acceptance-family1-project-graph.cjs', timeout: 20 * 60_000 },
   { name: 'families-2-3-7-8', script: 'scripts/mcp-acceptance-families-2-3-7-8.cjs', timeout: 20 * 60_000 },

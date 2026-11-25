@@ -161,3 +161,17 @@
 - 仍有 1 项失败：`f9-remaining-doable` 的 `provider.package.import 确认后仍要求文件存在` 返回 `KEYS_SERVICE_UNAVAILABLE`。当前开发/验收环境没有可用密钥服务（未激活或 dev bypass），属环境约束，未伪造通过；
 - 已删除早期未落盘的 `2026111012501` 索引行和不完整全量批次 `2026111023512`，避免死链。
 
+| f9-remaining-doable | 2026112507085 | 步骤 17 / 通过 17 / 失败 0 | [f9-remaining-doable-2026112507085.json](f9-remaining-doable-2026112507085.json) |
+| families-02-03-07-08 | 2026112507085 | 步骤 24 / 通过 24 / 失败 0 | [families-02-03-07-08-2026112507085.json](families-02-03-07-08-2026112507085.json) |
+| families-04-05-06-09 | 2026112507085 | 步骤 47 / 通过 47 / 失败 0 | [families-04-05-06-09-2026112507085.json](families-04-05-06-09-2026112507085.json) |
+| families-gap-fill | 2026112507085 | 步骤 12 / 通过 12 / 失败 0 | [families-gap-fill-2026112507085.json](families-gap-fill-2026112507085.json) |
+| family-01-project-graph | 2026112507085 | 步骤 25 / 通过 25 / 失败 0 | [family-01-project-graph-2026112507085.json](family-01-project-graph-2026112507085.json) |
+| installed-vertical-slice | 2026112507085 | 步骤 9 / 通过 0 | [installed-vertical-slice-2026112507085.json](installed-vertical-slice-2026112507085.json) |
+| mcp-acceptance | 2026112507085 | 步骤 90 / 通过 90 / 失败 0 | [mcp-acceptance-2026112507085.json](mcp-acceptance-2026112507085.json) |
+| mcp-sse-transport | 2026112507085 | 步骤 4 / 通过 4 / 失败 0 | [mcp-sse-transport-2026112507085.json](mcp-sse-transport-2026112507085.json) |
+| milestone-a-b-c | 2026112507085 | 步骤 49 / 通过 0 | [milestone-a-b-c-2026112507085.json](milestone-a-b-c-2026112507085.json) |
+| optimizations-abc | 2026112507085 | 步骤 9 / 通过 9 / 失败 0 | [optimizations-abc-2026112507085.json](optimizations-abc-2026112507085.json) |
+| parity-gaps | 2026112507085 | 步骤 57 / 通过 57 / 失败 0 | [parity-gaps-2026112507085.json](parity-gaps-2026112507085.json) |
+| parity-gaps-prefix-b | 2026112507085 | 步骤 10 / 通过 9 / 失败 1 | [parity-gaps-prefix-b-2026112507085.json](parity-gaps-prefix-b-2026112507085.json) |
+| parity-gaps-prefix-c | 2026112507085 | 步骤 12 / 通过 12 / 失败 0 | [parity-gaps-prefix-c-2026112507085.json](parity-gaps-prefix-c-2026112507085.json) |
+| vertical-slice | 2026112507085 | 步骤 13 / 通过 0 | [vertical-slice-2026112507085.json](vertical-slice-2026112507085.json) |

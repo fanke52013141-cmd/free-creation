@@ -27,8 +27,8 @@ describe('循环当前项注入与 any 口的契约覆盖', () => {
         }
       }
     }
-    // 43 = 可创建节点；契约全集含 2 条历史节点（script / video-audio）为 45。
-    expect(count).toBe(43)
+    // 44 = 可创建节点；契约全集含 2 条历史节点（script / video-audio）为 46。
+    expect(count).toBe(44)
     const inputTypes = [...new Set([...targets].map((entry) => entry.split(':')[1]))].sort()
     expect(inputTypes).toEqual(['any', 'audio', 'camera', 'file', 'image', 'json', 'video'])
     // 方向规则：iteration 不可能出现在输入端（历史 bug 就是把参数写反）。
@@ -37,7 +37,7 @@ describe('循环当前项注入与 any 口的契约覆盖', () => {
     }
   })
 
-  it('any 口唯一：只有数据处理 in-value 接受任意类型（52 条可创建节点透传边）', () => {
+  it('any 口唯一：只有数据处理 in-value 接受任意类型（53 条可创建节点透传边）', () => {
     const anyInputs = allNodeTypes().flatMap((spec) =>
       spec.ports.in.filter((port) => port.type === 'any').map((port) => `${spec.type}.${port.id}`)
     )
@@ -50,8 +50,8 @@ describe('循环当前项注入与 any 口的契约覆盖', () => {
         if (portPairCompatible(out, anyPort!)) pairs += 1
       }
     }
-    // 52 条包含人工任务新增的图片和视频交付端口。
-    expect(pairs).toBe(52)
+    // 53 条包含人工任务新增的图片和视频交付端口与去气口的音频端口。
+    expect(pairs).toBe(53)
   })
 })
 

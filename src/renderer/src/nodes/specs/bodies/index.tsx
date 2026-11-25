@@ -23,6 +23,7 @@ export {
 export { VocalSeparateBody, VocalSeparateSettings } from './vocal-separate'
 export { AudioBody } from './audio'
 export { SoundAdjustBody, SoundAdjustSettings } from './sound-adjust'
+export { SilenceTrimBody, SilenceTrimSettings } from './silence-trim'
 export { FileBody } from './file'
 export { TtsBody } from './tts'
 export { SpeechBody, SpeechSettings } from './speech'

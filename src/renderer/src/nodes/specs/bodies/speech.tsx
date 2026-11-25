@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../registry'
-import { latestSuccessMediaResult } from '@shared/engine/deterministic-projections'
+import { selectedSuccessMediaResult } from '@shared/engine/deterministic-projections'
 import { toast } from '../../../stores/toast'
 import { countIncomingConnections } from '../../../canvas/graph'
 import { markUndoPoint } from '../../../canvas/history'
@@ -87,8 +87,8 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
   const loadProviders = useGatewayStore((s) => s.load)
   const config = parseSpeechConfig(readNodeConfig(shape))
   // 操作节点不持久化 mediaPath：卡内结果区读本次成功运行的 nodeResult。
-  const resultMedia = latestSuccessMediaResult(shape)
-  const outputMediaPath = shape.props.mediaPath || resultMedia?.mediaPath || ''
+  const resultMedia = selectedSuccessMediaResult(shape)
+  const outputMediaPath = resultMedia?.mediaPath ?? ''
   const [draft, setDraft] = useState(shape.props.text)
   const [busy, setBusy] = useState(false)
   const [playing, setPlaying] = useState(false)

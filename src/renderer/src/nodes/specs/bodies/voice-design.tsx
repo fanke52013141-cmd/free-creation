@@ -7,11 +7,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
-import { latestSuccessMediaResult } from '@shared/engine/deterministic-projections'
+import { selectedSuccessMediaResult } from '@shared/engine/deterministic-projections'
+import { featureKeyOf, resolveFeatureOption } from '@shared/engine/models'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
+import { rendererGateway } from '../../../engine/rendererGateway'
 import { guiWorkflowInputOptions } from '../../../stores/workflowInput'
 import { useAppStore } from '../../../stores/app'
 import { AppSelect } from '../../../components/AppSelect'
@@ -46,13 +48,36 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
   const editor = useEditor()
   const project = useAppStore((s) => s.currentProject)
   const providers = useGatewayStore((s) => s.providers)
+  const bindings = useGatewayStore((s) => s.modelBindings)
   const providersLoaded = useGatewayStore((s) => s.loaded)
   const loadProviders = useGatewayStore((s) => s.load)
   const config = parseVoiceDesignConfig(readNodeConfig(shape))
   const [draft, setDraft] = useState(shape.props.text)
   const [busy, setBusy] = useState(false)
   const [playing, setPlaying] = useState(false)
+  const [resolvedBinding, setResolvedBinding] = useState<{
+    featureKey: string
+    selectedModelKey?: string
+    providers: typeof providers
+    bindings: typeof bindings
+    available: boolean
+  }>()
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const featureKey = featureKeyOf(config, 'voice.design')
+  const selectedModelKey = config.providerId && config.modelId
+    ? `${config.providerId}::${config.modelId}`
+    : undefined
+
+  useEffect(() => {
+    if (!providersLoaded) return
+    let current = true
+    const resolved = (available: boolean): void => {
+      if (current) setResolvedBinding({ featureKey, selectedModelKey, providers, bindings, available })
+    }
+    void resolveFeatureOption(rendererGateway, providers, featureKey, 'voice.design', selectedModelKey)
+      .then((option) => resolved(option?.provider.specId === 'minimax'), () => resolved(false))
+    return () => { current = false }
+  }, [providersLoaded, providers, bindings, featureKey, selectedModelKey])
 
   // voice_design 的请求体没有 model 字段；这里按供应商选择 MiniMax 账号，
   // 内部取一个已配置的音频模型用于模型网关的 voice.design 能力路由。
@@ -66,8 +91,8 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
   })
   const voiceId = designedVoiceId(shape)
   // 操作节点不持久化 mediaPath：卡内结果区读本次成功运行的 nodeResult。
-  const resultMedia = latestSuccessMediaResult(shape)
-  const outputMediaPath = shape.props.mediaPath || resultMedia?.mediaPath || ''
+  const resultMedia = selectedSuccessMediaResult(shape)
+  const outputMediaPath = resultMedia?.mediaPath ?? ''
 
   useEffect(() => {
     if (!providersLoaded) void loadProviders()
@@ -147,9 +172,11 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
   const canGenerate =
     Boolean(draft.trim()) &&
     Boolean(config.previewText.trim()) &&
-    minimaxProviders.some(
-      (item) => item.provider.id === config.providerId && item.model.id === config.modelId
-    )
+    resolvedBinding?.featureKey === featureKey &&
+    resolvedBinding.selectedModelKey === selectedModelKey &&
+    resolvedBinding.providers === providers &&
+    resolvedBinding.bindings === bindings &&
+    resolvedBinding.available
 
   return (
     <div className="node-tts node-voice-design">

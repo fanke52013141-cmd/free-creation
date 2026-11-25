@@ -20,6 +20,7 @@ import { imageGenExecutor } from './imageGen'
 import { imageEditExecutor } from './imageEdit'
 import { audioExecutor } from './audio'
 import { soundAdjustExecutor } from './soundAdjust'
+import { silenceTrimExecutor } from './silenceTrim'
 import { speechExecutor } from './speech'
 import { voiceDesignExecutor } from './voiceDesign'
 import { ttsExecutor } from './tts'
@@ -50,6 +51,7 @@ export const EXECUTOR_REGISTRY: Record<string, NodeExecutor> = {
   'image-gen': imageGenExecutor,
   audio: audioExecutor,
   'sound-adjust': soundAdjustExecutor,
+  'silence-trim': silenceTrimExecutor,
   video: videoExecutor,
   // ── 图像处理 ──
   'image-crop': imageCropExecutor,
@@ -101,6 +103,7 @@ export { imageGenExecutor, parseImageGen } from './imageGen'
 export { imageEditExecutor } from './imageEdit'
 export { audioExecutor } from './audio'
 export { soundAdjustExecutor } from './soundAdjust'
+export { silenceTrimExecutor } from './silenceTrim'
 export { speechExecutor } from './speech'
 export { voiceDesignExecutor } from './voiceDesign'
 export { ttsExecutor } from './tts'

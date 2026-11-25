@@ -6,6 +6,30 @@ import {
   type FlowStage
 } from './stage-contracts'
 
+type RoutingGraph = Pick<FlowGraph, 'entry' | 'exits' | 'nodes' | 'edges'>
+
+/** 编译固定阶段的顺序依赖。阶段进入条件与输入仍使用原有的阶段标识。 */
+export function compileFixedOrderRouting(stages: readonly FlowStage[]): RoutingGraph {
+  const nodes: FlowNode[] = stages.map((stage) => ({
+    nodeId: stage.nodeId,
+    title: stage.stageKey,
+    kind: 'agent',
+    participation: stage.requireHumanDecision ? 'collaborative' : 'autonomous',
+    goal: stage.goal,
+    completion: stage.completion
+  }))
+  return {
+    nodes,
+    entry: stages[0]!.nodeId,
+    exits: [stages[stages.length - 1]!.nodeId],
+    edges: stages.slice(1).map((stage, index) => ({
+      kind: 'data',
+      from: { nodeId: stages[index]!.nodeId, portId: 'out-text' },
+      to: { nodeId: stage.nodeId, portId: 'in-text' }
+    }))
+  }
+}
+
 /**
  * O4-P3/P4 声明式图路由器（纯函数）。
  *
@@ -33,7 +57,8 @@ export interface FlowRouteResult {
   ambiguous: string[]
 }
 
-type EdgeState = 'satisfied' | 'dead' | 'pending'
+type EdgeState = 'satisfied' | 'absent' | 'dead' | 'pending'
+type RequiredInput = (nodeId: string, portId: string) => boolean
 
 /** 复用 AF-01 条件解释器：把条件当作一个伪阶段的 entry 求值（全满足才 true）。 */
 function conditionsSatisfied(conditions: StageCondition[], facts: StageEntryFacts): boolean {
@@ -86,6 +111,8 @@ export function graphReworkNodes(
   for (const node of graph.nodes) {
     for (const selector of node.inputs?.selectors ?? [])
       connect(selector.sourceStageKey, node.nodeId)
+    if (node.inputs?.summarySelector)
+      connect(node.inputs.summarySelector.sourceStageKey, node.nodeId)
     for (const condition of node.loop?.exitCondition ?? [])
       connect(conditionRef(condition), node.nodeId)
   }
@@ -121,7 +148,7 @@ const hasCondition = (edge: FlowEdge): boolean => (edge.condition?.length ?? 0) 
  * 未 settled 的循环节点仍可重复分派，其下游边不触发。
  */
 export function settledNodes(
-  graph: FlowGraph,
+  graph: RoutingGraph,
   facts: StageEntryFacts,
   delivered: ReadonlySet<string>,
   loopIterations: Readonly<Record<string, number>> = {}
@@ -149,13 +176,16 @@ export interface FlowRouteState {
 
 /** BL-03：落定/跳过状态的不动点计算（图已无环；对未校验的环图也有界终止）。 */
 export function flowRouteState(
-  graph: FlowGraph,
+  graph: RoutingGraph,
   facts: StageEntryFacts,
   delivered: ReadonlySet<string>,
-  loopIterations: Readonly<Record<string, number>> = {}
+  loopIterations: Readonly<Record<string, number>> = {},
+  isRequiredInput?: RequiredInput,
+  executionSkipped: ReadonlySet<string> = new Set()
 ): FlowRouteState {
   const settled = settledNodes(graph, facts, delivered, loopIterations)
-  const skipped = new Set<string>()
+  const skipped = new Set(executionSkipped)
+  const skippedInputs = new Set(executionSkipped)
   const bodies = loopBodyInfo(graph)
   const carrierOf = new Map<string, string>()
   for (const [carrierId, info] of bodies)
@@ -163,7 +193,11 @@ export function flowRouteState(
   const resolved = (nodeId: string): boolean => settled.has(nodeId) || skipped.has(nodeId)
   const edgeState = (edge: FlowEdge): EdgeState => {
     const from = edge.from.nodeId
-    if (skipped.has(from)) return 'dead'
+    if (skipped.has(from)) {
+      if (skippedInputs.has(from) && !hasCondition(edge) && !edge.otherwise &&
+          !isRequiredInput?.(edge.to.nodeId, edge.to.portId)) return 'absent'
+      return 'dead'
+    }
     // BL-11：同一循环体内的边按「本轮已交付」判定——循环载体要等退出条件才 settled，
     // 但 body 内的下游必须在本轮立即就绪，否则每轮都会停滞。
     const fromCarrier = carrierOf.get(from)
@@ -192,8 +226,19 @@ export function flowRouteState(
     for (const node of graph.nodes) {
       if (node.nodeId === graph.entry || resolved(node.nodeId) || delivered.has(node.nodeId)) continue
       const incoming = graph.edges.filter((edge) => edge.to.nodeId === node.nodeId)
-      if (incoming.length > 0 && incoming.every((edge) => edgeState(edge) === 'dead')) {
+      const lostRequiredInput = incoming.some((edge) =>
+        !hasCondition(edge) &&
+        !edge.otherwise &&
+        skipped.has(edge.from.nodeId) &&
+        isRequiredInput?.(node.nodeId, edge.to.portId) &&
+        incoming.every((alternate) =>
+          alternate.to.portId !== edge.to.portId || edgeState(alternate) === 'dead'
+        )
+      )
+      if (lostRequiredInput ||
+          (incoming.length > 0 && incoming.every((edge) => edgeState(edge) === 'dead'))) {
         skipped.add(node.nodeId)
+        if (lostRequiredInput) skippedInputs.add(node.nodeId)
         changed = true
       }
     }
@@ -208,12 +253,16 @@ export function flowRouteState(
  * - 已 settled / skipped 节点不再分派；未 settled 的已交付循环节点可重复分派。
  */
 export function nextReadyNodes(
-  graph: FlowGraph,
+  graph: RoutingGraph,
   facts: StageEntryFacts,
   delivered: ReadonlySet<string>,
-  loopIterations: Readonly<Record<string, number>> = {}
+  loopIterations: Readonly<Record<string, number>> = {},
+  isRequiredInput?: RequiredInput,
+  executionSkipped?: ReadonlySet<string>
 ): FlowRouteResult {
-  const { settled, skipped, edgeState } = flowRouteState(graph, facts, delivered, loopIterations)
+  const { settled, skipped, edgeState } = flowRouteState(
+    graph, facts, delivered, loopIterations, isRequiredInput, executionSkipped
+  )
   const bodies = loopBodyInfo(graph)
   const ready: string[] = []
   const blocked: Array<{ nodeId: string; reason: string }> = []
@@ -226,7 +275,10 @@ export function nextReadyNodes(
       const external = graph.edges.filter(
         (edge) => edge.to.nodeId === node.nodeId && !body.body.has(edge.from.nodeId)
       )
-      const externalReady = external.every((edge) => edgeState(edge) === 'satisfied')
+      const externalReady = external.every((edge) => {
+        const state = edgeState(edge)
+        return state === 'satisfied' || state === 'absent'
+      })
       if (externalReady && !delivered.has(node.nodeId)) ready.push(node.nodeId)
       else if (!externalReady)
         blocked.push({
@@ -246,7 +298,7 @@ export function nextReadyNodes(
       continue
     }
     const states = incoming.map(edgeState)
-    const anySatisfied = states.includes('satisfied')
+    const anySatisfied = states.includes('satisfied') || states.includes('absent')
     const anyPending = states.includes('pending')
     const joinPolicy = node.joinPolicy ?? 'all'
     const isReady = joinPolicy === 'any' ? anySatisfied : anySatisfied && !anyPending
@@ -275,12 +327,16 @@ export function nextReadyNodes(
 
 /** 流程完成 = 全部出口已落定（交付或跳过）且至少一个出口交付（循环出口须满足退出条件或达上限）。 */
 export function isFlowComplete(
-  graph: FlowGraph,
+  graph: RoutingGraph,
   facts: StageEntryFacts,
   delivered: ReadonlySet<string>,
-  loopIterations: Readonly<Record<string, number>> = {}
+  loopIterations: Readonly<Record<string, number>> = {},
+  isRequiredInput?: RequiredInput,
+  executionSkipped?: ReadonlySet<string>
 ): boolean {
-  const { settled, skipped } = flowRouteState(graph, facts, delivered, loopIterations)
+  const { settled, skipped } = flowRouteState(
+    graph, facts, delivered, loopIterations, isRequiredInput, executionSkipped
+  )
   return (
     graph.exits.every((exit) => settled.has(exit) || skipped.has(exit)) &&
     graph.exits.some((exit) => settled.has(exit))

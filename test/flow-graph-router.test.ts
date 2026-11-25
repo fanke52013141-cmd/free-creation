@@ -77,6 +77,33 @@ describe('O4-P3 条件分支路由', () => {
 
 describe('O4-P3 汇合路由', () => {
   const edges = [dataEdge('a', 'b'), dataEdge('a', 'c'), dataEdge('b', 'd'), dataEdge('c', 'd')]
+  it('BL-14：跳过传播到依赖独立必填端口的下游，同端口替代来源仍可运行', () => {
+    const requiredEdge = dataEdge('b', 'd')
+    requiredEdge.to.portId = 'in-required'
+    const alternate = dataEdge('c', 'd')
+    const nodes = [node('a'), node('b'), node('c'), node('d')]
+    const upstream = [dataEdge('a', 'b', eq('a', 'no')), dataEdge('a', 'c')]
+    const delivered = new Set(['a', 'c'])
+    const currentFacts = facts([delivery('a', 'yes'), delivery('c', '值')])
+    const required = (id: string, port: string): boolean => id === 'd' && port === 'in-required'
+    const run = () => nextReadyNodes(
+      graph(nodes, [...upstream, requiredEdge, alternate], 'a', ['d']),
+      currentFacts, delivered, {}, required
+    )
+    expect(run().skipped).toEqual(['b', 'd'])
+    alternate.to.portId = 'in-required'
+    expect(run().ready).toEqual(['d'])
+  })
+  it('BL-14：执行回执跳过后，只有可选输入的下游仍然就绪', () => {
+    const g = graph([node('a'), node('b')], [dataEdge('a', 'b')], 'a', ['b'])
+    const skipped = new Set(['a'])
+    const route = nextReadyNodes(g, facts([]), new Set(), {}, () => false, skipped)
+    expect(route.skipped).toEqual(['a'])
+    expect(route.ready).toEqual(['b'])
+    const required = nextReadyNodes(g, facts([]), new Set(), {}, () => true, skipped)
+    expect(required.skipped).toEqual(['a', 'b'])
+    expect(required.ready).toEqual([])
+  })
   it('join=any：任一分支交付即汇合就绪', () => {
     const g = graph([node('a'), node('b'), node('c'), node('d', { joinPolicy: 'any' })], edges, 'a', ['d'])
     const result = nextReadyNodes(g, facts([delivery('a', 'x'), delivery('b', 'y')]), new Set(['a', 'b']))
@@ -267,6 +294,21 @@ describe('BL-04 otherwise 边与多值歧义', () => {
 
 
 describe('图模式返工影响范围', () => {
+  it('摘要来源返工会使依赖该摘要的阶段和下游一起失效', () => {
+    const g = graph(
+      [node('entry'), node('summary', { kind: 'capability', capability: 'processor@1' }), node('consumer', {
+        inputs: {
+          overflow: 'summarize', budgetBytes: 1024,
+          selectors: [{ sourceStageKey: 'entry', path: 'text', required: true }],
+          summarySelector: { sourceStageKey: 'summary', path: 'text', required: true }
+        }
+      }), node('exit')],
+      [dataEdge('entry', 'summary'), dataEdge('entry', 'consumer'), dataEdge('consumer', 'exit')],
+      'entry', ['summary', 'exit']
+    )
+    expect([...graphReworkNodes(g, 'summary')]).toEqual(['summary', 'consumer', 'exit'])
+  })
+
   it('只重做修改点及其下游，交汇处重新使用独立分支的成果', () => {
     const g = graph(
       ['entry', 'date', 'design', 'copy', 'poster'].map((id) => node(id)),

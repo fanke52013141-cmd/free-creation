@@ -4,7 +4,7 @@ import {
   NodePrimaryButton
 } from '../../../canvas/NodePresentation'
 // 视频节点 Body（路线图 R6：bodies.tsx 拆分）
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor, useValue } from 'tldraw'
 import type { VideoGenerationMode, VideoGenParams } from '@shared/types'
 import {
@@ -219,11 +219,20 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     if (!loaded) void loadProviders()
   }, [loaded, loadProviders])
 
+  const notifiedModeChange = useRef('')
   // 连接素材或切换模型后，修复不再有效的已保存模式。共享解析器也用于 executor，
   // 因而不会出现 UI 显示一种模式、提交时采用另一种模式的分歧。
   useEffect(() => {
-    if (!mode || data.mode === mode) return
+    if (!mode || data.mode === mode) {
+      notifiedModeChange.current = ''
+      return
+    }
     if (capabilities) {
+      const transition = `${data.mode}:${mode}`
+      if (data.mode && notifiedModeChange.current !== transition) {
+        notifiedModeChange.current = transition
+        toast(`视频模式自动调整为「${MODE_LABELS[mode]}」`)
+      }
       editor.updateShape({
         id: shape.id,
         type: 'node-card',
@@ -261,6 +270,8 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         }).mode
       : undefined
     const nextFrames = nextMode === 'first-frame' || nextMode === 'first-last-frame'
+    if (data.mode && nextMode && data.mode !== nextMode)
+      toast(`视频模式自动调整为「${MODE_LABELS[nextMode]}」`)
     update({
       ...data,
       modelKey,

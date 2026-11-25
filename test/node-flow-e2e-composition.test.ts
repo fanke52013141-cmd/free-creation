@@ -452,6 +452,26 @@ describe('P3 · 并行组合（广播 + 分支隔离 + 扇入）', () => {
     expect(outcome.stepCount).toBe(3)
   })
 
+  it('显式扇入顺序覆盖节点流边的声明顺序', async () => {
+    const manifest = parallelManifest()
+    const [first, second] = manifest.graph.edges
+    first.order = 2
+    second.order = 1
+    manifest.graph.nodes.find((node) => node.id === first.from.nodeId)!.text = '左分支'
+    manifest.graph.nodes.find((node) => node.id === second.from.nodeId)!.text = '右分支'
+    const ledger = installLedger()
+    try {
+      const outcome = await runFlow(manifest, inputMap([['msg', [textValue('共享')]]]), ledger)
+      expect(outcome.status).toBe('done')
+      const output = outcome.outputs?.merged
+      expect(output?.kind).toBe('text')
+      if (output?.kind !== 'text') throw new Error('缺少合并输出')
+      expect(output.text.indexOf('右分支')).toBeLessThan(output.text.indexOf('左分支'))
+    } finally {
+      ledger.restore()
+    }
+  })
+
   it('分支文本各自合并外部输入与自身正文（虚拟上游语义）', async () => {
     const manifest = parallelManifest()
     // 给分支节点写上自己的正文：汇聚结果应是「外部输入 + 自身正文」的合并。

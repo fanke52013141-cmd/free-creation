@@ -24,6 +24,7 @@ export const GENERAL_WORKSPACE_NODE_TYPES = [
   'timeline',
   'audio',
   'sound-adjust',
+  'silence-trim',
   'speech',
   'tts',
   'storyboard',
@@ -81,10 +82,12 @@ export function defaultWorkspaceProfile(): WorkspaceProfile {
  * 「更新后节点面板里根本找不到新节点」。这里按版本号一次性把新节点补进已保存配置；
  * 之后用户再主动隐藏，版本号已到位，不会被反复加回来。
  */
-export const WORKSPACE_NODE_SET_REVISION = 2
+export const WORKSPACE_NODE_SET_REVISION = 3
 
 const NODES_ADDED_BY_REVISION: Record<number, readonly string[]> = {
-  2: ['timeline']
+  2: ['timeline'],
+  // 2026-11-25 去气口节点：老项目保存的预设随版本补入。
+  3: ['silence-trim']
 }
 
 /** `null` means a legacy project: show every currently creatable node. */
@@ -110,6 +113,7 @@ export function normalizeWorkspaceProfile(value: unknown): WorkspaceProfile | nu
     for (const type of [
       'website',
       'sound-adjust',
+      'silence-trim',
       'agent',
       'ai-review',
       'state-machine',
@@ -125,6 +129,7 @@ export function normalizeWorkspaceProfile(value: unknown): WorkspaceProfile | nu
       if (!ids.includes(type)) ids.push(type)
   } else if (presetId === 'audio' || presetId === 'video') {
     if (!ids.includes('sound-adjust')) ids.push('sound-adjust')
+    if (!ids.includes('silence-trim')) ids.push('silence-trim')
   }
   // 按节点集版本补齐新节点（含 custom）：老配置里没有版本号时按 0 处理。
   const revision = typeof raw.nodeSetRevision === 'number' ? raw.nodeSetRevision : 0

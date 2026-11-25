@@ -150,6 +150,14 @@ describe('local Agent vertical slice', () => {
     try {
       await client.connect(transport)
       const tools = await client.listTools()
+      const tool = (name: string) => tools.tools.find((entry) => entry.name === name)
+      expect(tool('project_create')?.annotations).toMatchObject({
+        readOnlyHint: false, destructiveHint: false, idempotentHint: false
+      })
+      expect(tool('project_delete')?.annotations).toMatchObject({
+        readOnlyHint: false, destructiveHint: true, idempotentHint: false
+      })
+      expect(tool('node_execute')?.description).toContain('可能产生费用')
       for (const name of [
         'skill_install',
         'skill_list',
@@ -789,7 +797,7 @@ describe('local Agent vertical slice', () => {
     expect(validateAccessRegistry(['text'], ['text', 'text'])).toContain('DUPLICATE_NODE')
     // F9：节点目录不再是"一律 planned"，而是逐节点 N1–N8 状态 + 可复核证据。
     const directory = nodeAccessDirectory()
-    expect(directory).toHaveLength(33)
+    expect(directory).toHaveLength(34)
     for (const node of directory) {
       expect(node.actions).toHaveLength(8)
       for (const action of node.actions) {

@@ -207,6 +207,16 @@ const NODE_TABLE: Record<string, Overrides> = {
     family: 'media',
     desktop: { N5: `${M} §adjust（2× 倍速，产物时长实测）`, N6: `${M} §adjust（MIME 路由端口投影）` }
   },
+  'silence-trim': {
+    contractVersion: 1,
+    family: 'media',
+    extra: {
+      N5: C(
+        'test/silence-trim-node.test.ts（executor/投影）+ test/silence-trim-media.test.ts（真实 ffmpeg 气口裁剪、ffprobe 独立核验）；桌面实测待办'
+      ),
+      N6: C('test/silence-trim-node.test.ts（out-audio 单端口投影与失败不泄漏）')
+    }
+  },
   timeline: {
     contractVersion: 1,
     family: 'media',

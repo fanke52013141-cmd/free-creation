@@ -102,6 +102,65 @@ describe('O4-P1 合法图通过', () => {
 })
 
 describe('O4-P1 拓扑/预算拒绝', () => {
+  it('V11：汇合节点不能要求只在一条分支交付的输入', () => {
+    const selector = { sourceStageKey: 'b', path: 'text', required: true }
+    const g = graph(
+      [node('a'), node('b'), node('c'), node('d', {
+        inputs: { selectors: [selector], budgetBytes: 4096 }
+      })],
+      [
+        {
+          ...dataEdge('a', 'b'),
+          condition: [{ kind: 'output-field', stageKey: 'a', path: 'text', op: 'exists' }]
+        },
+        { ...dataEdge('a', 'c'), otherwise: true },
+        dataEdge('b', 'd'),
+        dataEdge('c', 'd')
+      ],
+      'a',
+      ['d']
+    )
+    expect(validateFlowGraph(g)).toMatchObject({
+      ok: false,
+      errors: [{ code: 'REQUIRED_SELECTOR_UNREACHABLE', nodeId: 'd' }]
+    })
+    g.nodes[3].inputs!.selectors[0].required = false
+    expect(validateFlowGraph(g)).toEqual({ ok: true })
+    g.nodes[3].inputs!.selectors[0] = { ...selector, sourceStageKey: 'a' }
+    expect(validateFlowGraph(g)).toEqual({ ok: true })
+    g.nodes[3].inputs!.selectors[0] = { ...selector, sourceStageKey: 'd' }
+    expect(validateFlowGraph(g)).toMatchObject({
+      ok: false,
+      errors: [{ code: 'REQUIRED_SELECTOR_UNREACHABLE', nodeId: 'd' }]
+    })
+  })
+
+  it('V10：步数预算必须覆盖基础执行和声明的循环轮次', () => {
+    const g = graph(
+      [
+        node('a'),
+        node('b', {
+          loop: {
+            maxIterations: 3,
+            exitCondition: [{ kind: 'output-field', stageKey: 'b', path: 'text', op: 'exists' }]
+          }
+        })
+      ],
+      [dataEdge('a', 'b')],
+      'a',
+      ['b'],
+      { maxSteps: 4 }
+    )
+    expect(validateFlowGraph(g)).toEqual({
+      ok: false,
+      errors: [{
+        code: 'STEP_BUDGET_INSUFFICIENT',
+        message: 'maxSteps 4 must be at least 5'
+      }]
+    })
+    expect(validateFlowGraph({ ...g, budgets: { ...g.budgets, maxSteps: 5 } })).toEqual({ ok: true })
+  })
+
   it('无界环（无 loop 载体）拒绝', () => {
     const g = graph([node('a'), node('b')], [dataEdge('a', 'b'), dataEdge('b', 'a')], 'a', ['b'])
     const result = validateFlowGraph(g)

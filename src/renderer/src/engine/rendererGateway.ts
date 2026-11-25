@@ -57,6 +57,7 @@ export const rendererGateway: GatewayClient = {
   clipVideo: (input) => window.api.clipVideo(input),
   extractVideoAudio: (input) => window.api.extractVideoAudio(input),
   soundAdjust: (input) => window.api.soundAdjust(input),
+  silenceTrim: (input) => window.api.silenceTrim(input),
   composeTimeline: (input) => window.api.composeTimeline(input),
   probeMediaMetadata: (input) => window.api.probeMediaMetadata(input),
   separateVocals: (input) => window.api.separateVocals(input),

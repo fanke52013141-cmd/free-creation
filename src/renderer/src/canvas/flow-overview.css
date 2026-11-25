@@ -80,6 +80,18 @@
 .fo-now.is-failed .fo-now-icon { color: #ff6b6b; background: rgba(255, 107, 107, 0.15); border-color: rgba(255, 107, 107, 0.6); }
 .fo-now-ping { position: absolute; top: -3px; right: -3px; width: 7px; height: 7px; border-radius: 50%; background: #E0A458; animation: fo-pulse 1.8s infinite; }
 .fo-now-text { flex: 1; min-width: 0; }
+.fo-context-material {
+  width: 100%;
+  min-height: 64px;
+  margin-top: 8px;
+  padding: 6px 8px;
+  font: inherit;
+  color: inherit;
+  background: var(--surface, transparent);
+  border: 1px solid var(--line, #58606b);
+  border-radius: 5px;
+  resize: vertical;
+}
 .fo-now-title-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .fo-now-tag { font-size: 9px; font-weight: 700; letter-spacing: 0.05em; padding: 1px 5px; border-radius: 2px; background: #E0A458; color: #141414; }
 .fo-now.is-running .fo-now-tag { background: #42b9f5; }

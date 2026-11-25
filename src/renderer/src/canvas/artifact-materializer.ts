@@ -8,6 +8,52 @@ import { readNodeConfig } from '@shared/engine/node-config'
 import { assetNodeTypeFor } from './asset-node-type'
 import type { NodeValue } from '@shared/engine/values'
 
+/** Keep the normal layout when visible, otherwise choose the nearest free viewport slot. */
+function visibleArtifactPosition(
+  editor: Editor,
+  preferred: { x: number; y: number },
+  { w, h }: { w: number; h: number }
+): { x: number; y: number } {
+  const viewport = editor.getViewportPageBounds?.()
+  if (!viewport) return preferred
+  const margin = 24
+  const left = viewport.x + margin
+  const top = viewport.y + margin
+  const right = viewport.x + viewport.w - margin - w
+  const bottom = viewport.y + viewport.h - margin - h
+  if (right < left || bottom < top) return preferred
+  if (preferred.x >= left && preferred.x <= right && preferred.y >= top && preferred.y <= bottom)
+    return preferred
+
+  const occupied = editor.getCurrentPageShapes()
+    .filter((shape) => shape.type === 'node-card')
+    .map((shape) => editor.getShapePageBounds(shape.id))
+    .filter((bounds) => bounds && bounds.x < right + w && bounds.x + bounds.w > left &&
+      bounds.y < bottom + h && bounds.y + bounds.h > top)
+  const xs = [left, right, Math.max(left, Math.min(right, preferred.x))]
+  const ys = [top, bottom, Math.max(top, Math.min(bottom, preferred.y))]
+  for (const bounds of occupied) {
+    if (!bounds) continue
+    xs.push(bounds.x - w - margin, bounds.x + bounds.w + margin)
+    ys.push(bounds.y - h - margin, bounds.y + bounds.h + margin)
+  }
+  let nearest = preferred
+  let distance = Infinity
+  for (const x of xs) {
+    if (x < left || x > right) continue
+    for (const y of ys) {
+      if (y < top || y > bottom) continue
+      const offset = (x - preferred.x) ** 2 + (y - preferred.y) ** 2
+      if (offset >= distance || occupied.some((bounds) => bounds &&
+        x < bounds.x + bounds.w && x + w > bounds.x &&
+        y < bounds.y + bounds.h && y + h > bounds.y)) continue
+      nearest = { x, y }
+      distance = offset
+    }
+  }
+  return nearest
+}
+
 /** Document results use the same provenance relation as media; no implicit DAG edges. */
 export function materializeDocumentArtifact(
   editor: Editor,
@@ -28,11 +74,14 @@ export function materializeDocumentArtifact(
     .filter(
       (shape) => shape.type === 'node-card' && shape.meta.artifactProducerId === producer.id
     ).length
+  const position = visibleArtifactPosition(editor, {
+    x: producer.x + producer.props.w + 100 + (siblings % 3) * (spec.defaultSize.w + 80),
+    y: producer.y + Math.floor(siblings / 3) * (spec.defaultSize.h + 80)
+  }, spec.defaultSize)
   editor.createShape({
     id: createShapeId(),
     type: 'node-card',
-    x: producer.x + producer.props.w + 100 + (siblings % 3) * (spec.defaultSize.w + 80),
-    y: producer.y + Math.floor(siblings / 3) * (spec.defaultSize.h + 80),
+    ...position,
     props: {
       nodeType,
       title: `${producer.props.title || 'AI 处理'} · ${value.kind === 'json' ? 'JSON' : '文本'}结果`,
@@ -91,10 +140,10 @@ export function materializeArtifact(
   // 悬浮标题向上伸出 34px，行间距预留足够空间（80px）确保上一张卡片底部与下一张卡片顶部标题不拥挤
   const gapY = 80
   const id = createShapeId()
-  const position = options?.position ?? {
+  const position = options?.position ?? visibleArtifactPosition(editor, {
     x: producer.x + producer.props.w + 100 + column * (spec.defaultSize.w + gapX),
     y: producer.y + row * (spec.defaultSize.h + gapY)
-  }
+  }, spec.defaultSize)
   editor.createShape({
     id,
     type: 'node-card',

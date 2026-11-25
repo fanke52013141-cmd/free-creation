@@ -1,12 +1,17 @@
 import type { CompositeManifest, CompositeManifestIssue } from './manifest'
-import { parseCompositeManifest } from './manifest'
+import { hasCompositeManualGate, parseCompositeManifest } from './manifest'
 import { resolveCompositeBudget } from './budget'
+import { portCompatible, portPairCompatible } from '../port-compatibility'
 
 export type CompositeValidationCode =
   | 'MANIFEST_SCHEMA'
   | 'NODE_REF_MISSING'
   | 'PORT_MISSING'
   | 'PORT_TYPE_MISMATCH'
+  | 'SCHEMA_INCOMPATIBLE'
+  | 'INLINE_SCHEMA_REMOVED'
+  | 'VERSION_FORMAT_INVALID'
+  | 'MANUAL_GATE_UNDECLARED'
   | 'PORT_CARDINALITY'
   | 'DUPLICATE_EDGE'
   | 'CYCLE'
@@ -33,13 +38,19 @@ export interface CompositeValidationResult {
 }
 
 export interface CompositeValidationDeps {
+  publication?: boolean
   /** 已发布能力的依赖是否存在（递归检查）；不注入时按 manifest 内声明判定。 */
   hasCapability?: (capabilityId: string, version: string) => boolean
   /** 解析固定版本 manifest，用于嵌套深度/依赖环校验。 */
   getCapability?: (capabilityId: string, version: string) => CompositeManifest | null
 }
 
-const ANY_PORT = 'any'
+export function validateCompositePublication(
+  value: unknown,
+  deps: CompositeValidationDeps = {}
+): CompositeValidationResult {
+  return validateCompositeManifest(value, { ...deps, publication: true })
+}
 
 function issue(
   code: CompositeValidationCode,
@@ -49,15 +60,26 @@ function issue(
   return { code, path, message }
 }
 
-function portsCompatible(
-  sourceType: string,
-  targetType: string,
-  sourceCardinality: 'one' | 'many',
-  targetCardinality: 'one' | 'many'
-): boolean {
-  if (!(sourceType === targetType || sourceType === ANY_PORT || targetType === ANY_PORT)) return false
-  if (sourceCardinality === 'many' && targetCardinality === 'one') return false
-  return true
+type ConnectionPort = Pick<CompositeManifest['inputs'][number], 'type' | 'schemaRef' | 'cardinality'>
+
+function connectionIssue(
+  source: ConnectionPort,
+  target: ConnectionPort,
+  path: string,
+  typeCode: 'PORT_TYPE_MISMATCH' | 'OUTPUT_TYPE_MISMATCH'
+): CompositeValidationIssue | undefined {
+  if (!portPairCompatible(
+    { type: source.type, schema: source.schemaRef },
+    { type: target.type, schema: target.schemaRef }
+  )) {
+    return portCompatible(source.type, target.type)
+      ? issue('SCHEMA_INCOMPATIBLE', path, '端口的 Schema 引用不兼容')
+      : issue(typeCode, path, `端口类型不兼容：${source.type} -> ${target.type}`)
+  }
+  if (source.cardinality === 'many' && target.cardinality === 'one') {
+    return issue('PORT_CARDINALITY', path, '多值来源不能连接到单值端口')
+  }
+  return undefined
 }
 
 /**
@@ -79,6 +101,23 @@ export function validateCompositeManifest(
   }
   const manifest = parsed.manifest
   const issues: CompositeValidationIssue[] = []
+  let requiresManualGate = hasCompositeManualGate(manifest.graph)
+  if (deps.publication) {
+    if (!/^\d+\.\d+$/.test(manifest.version)) {
+      issues.push(issue('VERSION_FORMAT_INVALID', 'version', '新发布版本必须使用 major.minor'))
+    }
+    for (const direction of ['inputs', 'outputs'] as const) {
+      for (const [index, port] of manifest[direction].entries()) {
+        if (port.schema !== undefined) {
+          issues.push(issue(
+            'INLINE_SCHEMA_REMOVED',
+            `${direction}[${index}].schema`,
+            '公开端口仅支持 schemaRef，请删除内联 Schema'
+          ))
+        }
+      }
+    }
+  }
   const nodeById = new Map(manifest.graph.nodes.map((node) => [node.id, node]))
   const portOf = (
     nodeId: string,
@@ -105,15 +144,8 @@ export function validateCompositeManifest(
       issues.push(issue('PORT_MISSING', path, '连线方向必须是 out -> in'))
       continue
     }
-    if (!portsCompatible(fromPort.type, toPort.type, fromPort.cardinality, toPort.cardinality)) {
-      issues.push(
-        issue(
-          'PORT_TYPE_MISMATCH',
-          path,
-          `端口类型不兼容：${fromPort.type}(${fromPort.cardinality}) -> ${toPort.type}(${toPort.cardinality})`
-        )
-      )
-    }
+    const incompatibility = connectionIssue(fromPort, toPort, path, 'PORT_TYPE_MISMATCH')
+    if (incompatibility) issues.push(incompatibility)
     const key = `${edge.from.nodeId}:${edge.from.portId}->${edge.to.nodeId}:${edge.to.portId}`
     if (seenEdges.has(key)) issues.push(issue('DUPLICATE_EDGE', path, '重复连线'))
     seenEdges.add(key)
@@ -139,15 +171,8 @@ export function validateCompositeManifest(
         continue
       }
       if (port.dir !== 'in') issues.push(issue('INPUT_TARGET_MISSING', path, '公开输入只能映射到输入端口'))
-      if (!portsCompatible(input.type, port.type, input.cardinality, port.cardinality)) {
-        issues.push(
-          issue(
-            'PORT_TYPE_MISMATCH',
-            path,
-            `公开输入 ${input.type} 与目标端口 ${port.type} 不兼容`
-          )
-        )
-      }
+      const incompatibility = connectionIssue(input, port, path, 'PORT_TYPE_MISMATCH')
+      if (incompatibility) issues.push(incompatibility)
       const targetKey = `${target.nodeId}:${target.portId}`
       if (usedTargets.has(targetKey))
         issues.push(issue('INPUT_DUPLICATE_TARGET', path, `目标端口 ${targetKey} 被多个公开输入占用`))
@@ -179,11 +204,8 @@ export function validateCompositeManifest(
       continue
     }
     if (port.dir !== 'out') issues.push(issue('OUTPUT_SOURCE_MISSING', path, '公开输出必须来自输出端口'))
-    if (port.type !== output.type && output.type !== ANY_PORT && port.type !== ANY_PORT) {
-      issues.push(issue('OUTPUT_TYPE_MISMATCH', path, `公开输出 ${output.type} 与来源 ${port.type} 不匹配`))
-    }
-    if (port.cardinality === 'many' && output.cardinality === 'one')
-      issues.push(issue('PORT_CARDINALITY', path, '多值来源不能声明为单值公开输出'))
+    const incompatibility = connectionIssue(port, output, path, 'OUTPUT_TYPE_MISMATCH')
+    if (incompatibility) issues.push(incompatibility)
   }
 
   // 依赖：固定节点版本、能力递归、预算
@@ -251,11 +273,16 @@ export function validateCompositeManifest(
           issues.push(issue('DEPENDENCY_MISSING', 'dependencies', `依赖组合 ${dependency.id}@${dependency.version} 不存在`))
           continue
         }
+        if (nested.executionPolicy?.requiresManualGate || hasCompositeManualGate(nested.graph))
+          requiresManualGate = true
         walk(nested, depth + 1, [...path, dependency.id], counter)
       }
     }
     walk(manifest, 1, [manifest.capabilityId], { nodes: 0 })
   }
+  if (deps.publication && requiresManualGate && manifest.executionPolicy?.requiresManualGate !== true)
+    issues.push(issue('MANUAL_GATE_UNDECLARED', 'executionPolicy.requiresManualGate',
+      '内部或固定版本依赖包含人工门，发布时必须声明'))
 
   const { maxExpandedNodes: budgetNodes, maxExpandedEdges: budgetEdges } = resolveCompositeBudget(
     manifest.executionPolicy
@@ -277,12 +304,13 @@ function hasContractFixedInput(
   port: NonNullable<CompositeManifest['graph']['nodes'][number]['ports']>[number]
 ): boolean {
   if (node.nodeType === 'text' && port.id === 'in-text' && (node.text ?? '').trim()) return true
-  if (
-    (port.type === 'image' || port.type === 'video' || port.type === 'audio' || port.type === 'file') &&
-    (node.mediaRefs?.length ?? 0) > 0
-  )
-    return true
-  return false
+  return node.mediaRefs?.some(({ mime }) => {
+    if (port.type === 'file') return true
+    if (port.type === 'image' || port.type === 'video' || port.type === 'audio') {
+      return mime.toLowerCase().startsWith(`${port.type}/`)
+    }
+    return false
+  }) ?? false
 }
 
 function hasCycle(manifest: CompositeManifest): boolean {

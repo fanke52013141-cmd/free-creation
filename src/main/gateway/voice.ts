@@ -7,6 +7,10 @@ import type { ProviderConfig } from '../../shared/types'
 import { randomUUID } from 'crypto'
 import {
   DEFAULT_TTS_CONFIG,
+  MINIMAX_CLONE_MAX_BYTES,
+  MINIMAX_CLONE_MAX_SECONDS,
+  MINIMAX_CLONE_MIMES,
+  MINIMAX_CLONE_MIN_SECONDS,
   MINIMAX_VOICE_CLONE_MODELS,
   isValidMiniMaxVoiceId,
   normalizeMiniMaxVoiceId,
@@ -16,6 +20,7 @@ import {
 import { VOICE_DESIGN_PREVIEW_LIMIT } from '../../shared/voice-design'
 import { isSpeechLanguageBoostSupported } from '../../shared/speech'
 import { saveBufferAsset } from '../store/media.repo'
+import { probeMedia } from '../media/media-probe'
 import { getProvider } from './providers.repo'
 import { GatewayError } from './factory'
 import {
@@ -100,7 +105,7 @@ export async function uploadMiniMaxFile(
 
 export interface CloneVoiceRequest {
   providerId: string
-  reference: { buf: Buffer; mime: string; fileName: string }
+  reference: { buf: Buffer; mime: string; fileName: string; absPath: string }
   /** 可选的克隆提示音及其原文（clone_prompt）。 */
   prompt?: { buf: Buffer; mime: string; fileName: string; text: string } | null
   config: TtsConfig
@@ -168,6 +173,17 @@ export function buildVoiceDesignBody(
  * 两种输出的语义不被混为一谈。
  */
 export async function cloneMiniMaxVoice(request: CloneVoiceRequest): Promise<string> {
+  const reference = request.reference
+  if (!MINIMAX_CLONE_MIMES.includes(reference.mime.toLowerCase()))
+    throw new GatewayError('INVALID_INPUT', 'MiniMax 复刻参考音频仅支持 mp3、m4a 或 wav')
+  if (reference.buf.length > MINIMAX_CLONE_MAX_BYTES)
+    throw new GatewayError('INVALID_INPUT', 'MiniMax 复刻参考音频不能超过 20MB')
+  const probe = await probeMedia(reference.absPath)
+  if (!probe.ok || !probe.meta.hasAudio || !probe.meta.durationMs)
+    throw new GatewayError('INVALID_INPUT', '无法检测参考音频时长，请确认文件可播放且 FFprobe 可用')
+  const seconds = probe.meta.durationMs / 1000
+  if (seconds < MINIMAX_CLONE_MIN_SECONDS || seconds > MINIMAX_CLONE_MAX_SECONDS)
+    throw new GatewayError('INVALID_INPUT', `参考音频需 10 秒～5 分钟，当前约 ${seconds.toFixed(1)} 秒`)
   const provider = await requireMiniMax(request.providerId)
   const config = request.config
   const base = provider.baseURL.replace(/\/+$/, '')

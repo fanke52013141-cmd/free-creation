@@ -25,7 +25,7 @@ const FULL_NODE_GROUPS = {
     'storyboard',
     'director'
   ],
-  audio: ['speech', 'audio', 'tts', 'voice-design', 'sound-adjust'],
+  audio: ['speech', 'audio', 'tts', 'voice-design', 'sound-adjust', 'silence-trim'],
   ai: ['agent', 'ai-process', 'chat', 'ai-review', 'state-machine', 'human-task'],
   data: ['processor', 'json', 'structured', 'iterate', 'code']
 } as const satisfies Record<PaletteCategoryId, readonly string[]>
@@ -38,7 +38,7 @@ const DISTRIBUTION_NODE_GROUPS = {
   input: ['text', 'file', 'website'],
   image: ['image-gen', 'image', 'image-edit', 'image-crop', 'image-split'],
   video: ['video', 'video-asset', 'video-clip', 'video-frame', 'timeline', 'storyboard'],
-  audio: ['speech', 'audio', 'sound-adjust'],
+  audio: ['speech', 'audio', 'sound-adjust', 'silence-trim'],
   ai: ['ai-process', 'chat'],
   data: [] as readonly string[]
 } satisfies Record<PaletteCategoryId, readonly string[]>

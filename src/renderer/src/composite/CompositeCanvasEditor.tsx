@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { createShapeId, Tldraw, type Editor, type TLShapeId } from 'tldraw'
+import { createShapeId, Tldraw, useValue, type Editor, type TLShapeId } from 'tldraw'
 import type { CompositeCapabilitySummary } from '@shared/composite/types'
 import type { CompositeManifest } from '@shared/composite/manifest'
+import type { CanvasEdge } from '@shared/types'
 import { flowInitialConfig } from '@shared/agent-flow/model-defaults'
 import { DEFAULT_PALETTE_CATEGORY_ORDER } from '@shared/palette-menu-order'
 import type { PaletteCategoryId } from '@shared/palette-preferences'
@@ -9,6 +10,7 @@ import { NodeCardUtil, type NodeCardShape } from '../canvas/NodeCardShape'
 import { CarrierArrowUtil } from '../canvas/CarrierArrowUtil'
 import { BackdropShapeUtil } from '../canvas/BackdropShape'
 import { createEdge, deriveGraph, tryConnect, tryConnectFromInput } from '../canvas/graph'
+import { markUndoPoint } from '../canvas/history'
 import { NodeContractPanel } from '../canvas/NodeContractPanel'
 import { NodeContextMenu } from '../canvas/NodeContextMenu'
 import { addNodeLibraryEntry } from '../canvas/node-library'
@@ -29,6 +31,7 @@ import { useNodePanelStore } from '../stores/nodePanel'
 import { imageGenInitialConfig } from '../stores/imageGenPreference'
 import type { ConnectionFrom } from '../stores/connection'
 import { toast } from '../stores/toast'
+
 import { templatePayloadFromGraph, useWorkflowStore, type WorkflowTemplate } from '../stores/workflow'
 import { topNotice } from '../stores/topNotice'
 import { buildCompositeManifestFromEditor } from './editor-manifest'
@@ -93,6 +96,64 @@ function versionLabel(version: string): string {
  * - 节点库条目共用这一页（2026-11-23 用户裁决：节点流的编辑都用专门页面，不在主画布上铺开改）：
  *   没有「历史版本」「另存为新版本」，保存即原位覆盖条目。
  */
+function CompositeFanInOrder({ editor, disabled }: { editor: Editor; disabled: boolean }): React.JSX.Element | null {
+  const selection = useValue('节点流扇入顺序', () => {
+    const ids = editor.getSelectedShapeIds()
+    if (ids.length !== 1) return null
+    const { nodes, edges } = deriveGraph(editor)
+    const target = nodes.find((node) => node.id === ids[0])
+    if (!target) return null
+    const groups = target.ports.filter((port) => port.dir === 'in' && port.cardinality === 'many')
+      .map((port) => ({
+        port,
+        incoming: edges.filter((edge) => edge.to.nodeId === target.id && edge.to.portId === port.id)
+          .sort((a, b) => (a.connectOrder ?? Infinity) - (b.connectOrder ?? Infinity) || 0)
+      }))
+      .filter(({ incoming }) => incoming.length > 1)
+    return { nodes, groups }
+  }, [editor])
+  if (!selection?.groups.length) return null
+
+  const move = (incoming: CanvasEdge[], index: number, offset: number): void => {
+    const reordered = [...incoming]
+    const destination = index + offset
+    ;[reordered[index], reordered[destination]] = [reordered[destination], reordered[index]]
+    markUndoPoint(editor, 'composite-fan-in-order')
+    editor.run(() => {
+      for (const [order, edge] of reordered.entries()) {
+        const shape = editor.getShape(edge.id as TLShapeId)
+        if (shape?.type === 'arrow')
+          editor.updateShape({ id: shape.id, type: 'arrow', meta: { ...shape.meta, connectOrder: order + 1 } })
+      }
+    })
+  }
+
+  return (
+    <aside className="composite-fan-in scrollbar-hidden" aria-label="扇入顺序">
+      {selection.groups.map(({ port, incoming }) => (
+        <section key={port.id} aria-label={port.name}>
+          <strong>{port.name}输入顺序</strong>
+          <ol>
+            {incoming.map((edge, index) => {
+              const source = selection.nodes.find((node) => node.id === edge.from.nodeId)
+              const title = source?.title || edge.from.portId
+              return (
+                <li key={edge.id}>
+                  <span title={title}>{title}</span>
+                  <button type="button" disabled={disabled || index === 0}
+                    aria-label={`${title}上移`} onClick={() => move(incoming, index, -1)}>↑</button>
+                  <button type="button" disabled={disabled || index === incoming.length - 1}
+                    aria-label={`${title}下移`} onClick={() => move(incoming, index, 1)}>↓</button>
+                </li>
+              )
+            })}
+          </ol>
+        </section>
+      ))}
+    </aside>
+  )
+}
+
 export function CompositeCanvasEditor({
   target,
   projectId,
@@ -214,7 +275,8 @@ export function CompositeCanvasEditor({
           instance,
           { shapeId: from, portId: edge.from.portId },
           { shapeId: to, portId: edge.to.portId },
-          false
+          false,
+          edge.order
         )
       }
     }
@@ -731,6 +793,7 @@ export function CompositeCanvasEditor({
             }}
           />
           {editor && <DataEdgeLayer editor={editor} interactive={false} />}
+          {editor && <CompositeFanInOrder editor={editor} disabled={busy} />}
           <ConnectionLayer />
 
           {/* 左侧节点面板：与主画布同一套 Dock 分类 + 展开列表。 */}

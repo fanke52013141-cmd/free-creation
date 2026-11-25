@@ -96,11 +96,17 @@ const variablesInput = z.record(
 export const LIBRARY_OPERATIONS = {
   'library.resource.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '分页检索资源库摘要（分类/文件夹/集合/类型/归档过滤）；不返回组件正文与媒体路径',
     input: listInput
   },
   'library.resource.get': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取单个资源详情：组件摘要（角色/类型/哈希/引用）、全部修订与项目使用记录；正文需显式 includeText',
     input: z
@@ -113,6 +119,9 @@ export const LIBRARY_OPERATIONS = {
   },
   'library.resource.preview_files': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '物化前预检所选组件的资源文件是否存在（与 GUI 复用文件预检同一服务），不复制文件',
     input: z
       .object({
@@ -124,6 +133,9 @@ export const LIBRARY_OPERATIONS = {
   },
   'library.resource.create': {
     effect: 'write',
+    idempotent: false,
+    destructive: false,
+    cost: 'none',
     description:
       '创建任意类型资源（文本/图片/音频/视频/文件/JSON 组件，可带分类/标签/集合/文件夹）；媒体组件只接受本机已存在文件路径作为导入请求',
     input: z
@@ -142,6 +154,9 @@ export const LIBRARY_OPERATIONS = {
   },
   'library.resource.publish': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '在指定基础版本上发布新修订（标题/描述/标签/分类/集合同步更新）；components 省略时复用基础版本全部组件',
     input: z
@@ -162,12 +177,18 @@ export const LIBRARY_OPERATIONS = {
   },
   'library.resource.delete': {
     effect: 'delete',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '彻底删除一个资源（全部修订/组件/标签/集合与文件夹归属/使用记录，随后清理无引用 blob）；与 GUI 删除同一服务',
     input: z.object({ resourceId: resourceIdSchema }).strict()
   },
   'library.resource.delete_many': {
     effect: 'delete',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: '批量彻底删除资源，逐项回执（单项不存在返回 NOT_FOUND，不静默跳过，不影响其它项）',
     input: z
       .object({ resourceIds: z.array(resourceIdSchema).min(1).max(LIBRARY_MAX_BATCH) })
@@ -175,17 +196,26 @@ export const LIBRARY_OPERATIONS = {
   },
   'library.resource.archive': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '归档/取消归档资源（可逆的「隐藏」标记）：归档后默认检索不返回，includeArchived 可查回；不删除内容',
     input: z.object({ resourceId: resourceIdSchema, archived: z.boolean() }).strict()
   },
   'library.resource.set_folder': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: '把资源归入某个资源库文件夹（folderId=null 表示移到资源库根目录）',
     input: z.object({ resourceId: resourceIdSchema, folderId: folderIdSchema.nullable() }).strict()
   },
   'library.resource.set_collections': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: '替换资源的完整收藏集归属（空数组为清空）；收藏集 ID 必须存在',
     input: z
       .object({ resourceId: resourceIdSchema, collectionIds: z.array(collectionIdSchema).max(50) })
@@ -193,11 +223,17 @@ export const LIBRARY_OPERATIONS = {
   },
   'library.folder.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '读取资源库文件夹目录（含上级与资源数量）',
     input: empty
   },
   'library.folder.create': {
     effect: 'write',
+    idempotent: false,
+    destructive: false,
+    cost: 'none',
     description: '新建资源库文件夹；同一上级下不允许重名',
     input: z
       .object({ name: z.string().trim().min(1).max(100), parentId: folderIdSchema.optional() })
@@ -205,21 +241,33 @@ export const LIBRARY_OPERATIONS = {
   },
   'library.folder.rename': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: '重命名资源库文件夹；同一上级下不允许重名',
     input: z.object({ folderId: folderIdSchema, name: z.string().trim().min(1).max(100) }).strict()
   },
   'library.folder.delete': {
     effect: 'delete',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: '删除资源库文件夹；子文件夹与资源上移到上级目录，不删除任何资源',
     input: z.object({ folderId: folderIdSchema }).strict()
   },
   'library.collection.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '读取收藏集目录（含资源数量）',
     input: empty
   },
   'library.collection.create': {
     effect: 'write',
+    idempotent: false,
+    destructive: false,
+    cost: 'none',
     description: '新建收藏集；名称全局唯一',
     input: z
       .object({
@@ -230,16 +278,25 @@ export const LIBRARY_OPERATIONS = {
   },
   'library.category.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '读取资源分类蓝图目录（含槽位定义，创建资源时用于 metadata.librarySlotId 映射）',
     input: empty
   },
   'library.category.save': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: '按基础版本保存一个新的分类蓝图版本（版本必须为基础版本 +1，防覆盖）',
     input: z.object({ category: categorySchema, baseVersion: z.number().int().min(0) }).strict()
   },
   'library.resource.materialize': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '把指定资源版本的所选组件物化到当前打开画布：复制资源文件为项目受控媒体，再经桌面握手创建节点并正式保存；返回逐组件节点映射',
     input: z
@@ -257,6 +314,9 @@ export const LIBRARY_OPERATIONS = {
   },
   'library.materialization.discard': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '补偿性清理一次资源物化复制出的项目媒体（按 usageId 与项目归属核对）；已存在引用或跨项目一律拒绝删除',
     input: z.object({ projectId: identifier, usageId: identifier }).strict()

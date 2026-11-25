@@ -312,6 +312,22 @@ describe('iterate 执行器 · 失败策略', () => {
     expect(items[2].status).toBe('skipped')
   })
 
+  it('retry：子流程提交远端请求后，无输出也不会重跑该项', async () => {
+    let calls = 0
+    const { ctx, result } = makeCtx({
+      text: JSON.stringify({ onFailure: 'retry', maxRetries: 2 }),
+      list: [{ id: 'a' }],
+      runSubflow: async (request) => {
+        calls += 1
+        request.onRemoteSubmission?.()
+        return noOutput()
+      }
+    })
+    await iterateExecutor(ctx)
+    expect(calls).toBe(1)
+    expect(JSON.parse(result.value as string).items[0].status).toBe('failed')
+  })
+
   it('retry：失败重试后成功', async () => {
     let calls = 0
     const { ctx, result } = makeCtx({
@@ -975,6 +991,27 @@ describe('iterate 执行器 · W2 并发', () => {
     expect(parsed.items[0].status).toBe('done')
     const rest = parsed.items.slice(1).map((entry: { status: string }) => entry.status)
     expect(rest.every((s: string) => s === 'skipped' || s === 'pending')).toBe(true)
+    const continueItem = vi.fn(async ({ item }: { item: Record<string, unknown> }) => ({
+      body: {
+        'out-text': {
+          value: item.id,
+          type: 'text',
+          source: { nodeId: 'b', portId: 'p', runId: 'resume' },
+          createdAt: 0
+        }
+      }
+    }) as SubflowOutput)
+    const resumed = makeCtx({
+      text: JSON.stringify({ runMode: 'resume' }),
+      list: parsed.items.map((entry: { item: Record<string, unknown> }) => entry.item),
+      previousResult: result.value ?? '',
+      runSubflow: continueItem
+    })
+    await iterateExecutor(resumed.ctx)
+    expect(continueItem.mock.calls.map(([request]) => request.item.id)).toEqual(['b', 'c'])
+    expect(JSON.parse(resumed.result.value as string).items.map(
+      (entry: { status: string }) => entry.status
+    )).toEqual(['reused', 'done', 'done'])
   }, 20000)
 
   // —— 上面四个用例共享的驱动 ——

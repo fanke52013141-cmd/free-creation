@@ -126,18 +126,11 @@ export function planCompositeInputBindings(
   inputs: ContractInputMap
 ): CompositeInputPlan {
   const bindings: CompositeInputBinding[] = []
-  const issues: CompositeRuntimeIssue[] = []
+  const issues = preflightCompositeRequiredInputs(manifest, inputs)
   for (const input of manifest.inputs) {
     const packets = inputs.get(`in-${input.id}`) ?? []
     if (packets.length === 0) {
       // 可选空值：不接虚拟上游，内部节点使用自身正文/默认配置。
-      if (input.required && input.defaultValue === undefined) {
-        issues.push(
-          issue('INPUT_REQUIRED', 'input', `缺少必需输入「${input.label}」（${input.id}）`, {
-            publicPortId: input.id
-          })
-        )
-      }
       continue
     }
     if (input.cardinality === 'one' && packets.length > 1) {
@@ -189,6 +182,24 @@ export function planCompositeInputBindings(
     }
   }
   return { bindings, issues }
+}
+
+/** Historical and current runtimes use the same public required-input rules. */
+export function preflightCompositeRequiredInputs(
+  manifest: CompositeManifest,
+  inputs: ContractInputMap
+): CompositeRuntimeIssue[] {
+  return manifest.inputs
+    .filter((input) =>
+      input.required &&
+      input.defaultValue === undefined &&
+      !inputs.get(`in-${input.id}`)?.length
+    )
+    .map((input) =>
+      issue('INPUT_REQUIRED', 'input', `缺少必需输入「${input.label}」（${input.id}）`, {
+        publicPortId: input.id
+      })
+    )
 }
 
 /**

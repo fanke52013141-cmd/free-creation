@@ -9,7 +9,8 @@ import type {
   NodeValuePacket,
   ContractOutputs,
   ContractInputMap,
-  ContractInputInjection
+  ContractInputInjection,
+  AbsentNodeValuePacket
 } from '@shared/engine/inputs'
 export type {
   NodeValuePacket,
@@ -108,8 +109,12 @@ export function buildOutputPackets(
 
 /**
  * 只按边的 target portId 填充输入；不再按节点类型或上游标题猜测数据含义。
- * 已连接但上游没有产生对应输出也会明确报错，避免静默使用旧值或固定值。
  */
+export interface CollectedContractInputs extends ContractResult<ContractInputMap> {
+  absentInputs: ReadonlyMap<string, readonly AbsentNodeValuePacket[]>
+  skippedRequiredPorts: readonly string[]
+}
+
 export function collectContractInputs(
   node: CanvasNode,
   edges: CanvasEdge[],
@@ -117,10 +122,16 @@ export function collectContractInputs(
   options: {
     ignoreEdgeIds?: readonly string[]
     injections?: readonly ContractInputInjection[]
+    skippedNodes?: ReadonlySet<string>
+    deferRequiredInputs?: boolean
   } = {}
-): ContractResult<ContractInputMap> {
+): CollectedContractInputs {
+  const absentInputs = new Map<string, AbsentNodeValuePacket[]>()
+  const skippedRequiredPorts: string[] = []
   const spec = getNodeType(node.type)
-  if (!spec) return { value: new Map(), errors: [`未知节点类型：${node.type}`] }
+  if (!spec) {
+    return { value: new Map(), errors: [`未知节点类型：${node.type}`], absentInputs, skippedRequiredPorts }
+  }
 
   const errors: string[] = []
   const mutable = new Map<string, NodeValuePacket[]>()
@@ -183,9 +194,20 @@ export function collectContractInputs(
       errors.push(`连线 ${edge.id} 指向不存在的输入端口：${edge.to.portId}`)
       continue
     }
-    const packet = outputs.get(edge.from.nodeId)?.[edge.from.portId]
+    const upstream = outputs.get(edge.from.nodeId)
+    const packet = upstream?.[edge.from.portId]
     if (!packet) {
-      errors.push(`连线 ${edge.id} 的上游未产生 ${edge.from.portId} 输出`)
+      const reason = options.skippedNodes?.has(edge.from.nodeId)
+        ? 'skipped'
+        : upstream
+          ? 'optional-not-produced'
+          : 'not-run'
+      const absent = absentInputs.get(target.id) ?? []
+      absent.push({ source: edge.from, absent: { reason } })
+      absentInputs.set(target.id, absent)
+      if (reason === 'not-run') {
+        errors.push(`连线 ${edge.id} 的上游尚未运行或产物已过期，请先运行上游`)
+      }
       continue
     }
     appendPacket(target, packet)
@@ -215,8 +237,13 @@ export function collectContractInputs(
   }
   for (const port of resolved.in) {
     const count = mutable.get(port.id)?.length ?? 0
-    if (port.required && count === 0 && !fixedSatisfied.has(port.id))
-      errors.push(`缺少必需输入：${describePort(port)}`)
+    if (port.required && count === 0 && !fixedSatisfied.has(port.id)) {
+      if (absentInputs.get(port.id)?.some((packet) => packet.absent.reason === 'skipped')) {
+        skippedRequiredPorts.push(port.id)
+      } else if (!options.deferRequiredInputs) {
+        errors.push(`缺少必需输入：${describePort(port)}`)
+      }
+    }
     if (port.cardinality === 'one' && count > 1) {
       errors.push(`${describePort(port)} 是单值输入，但收到 ${count} 条连线`)
     }
@@ -228,5 +255,5 @@ export function collectContractInputs(
       new Map([...mutable].map(([id, packets]) => [id, packets.length]))
     )
   )
-  return { value: mutable, errors }
+  return { value: mutable, errors, absentInputs, skippedRequiredPorts }
 }

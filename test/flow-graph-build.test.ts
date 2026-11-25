@@ -74,6 +74,48 @@ function fixture(existingIds: string[] = []) {
 }
 
 describe('P5 flowGraph.propose（外部建图提案）', () => {
+  it('BL-05: rejects incompatible ports before saving a proposal', async () => {
+    const f = fixture()
+    const graph = {
+      ...seqGraph,
+      nodes: [
+        seqGraph.nodes[0],
+        { ...seqGraph.nodes[1], kind: 'capability', capabilityRef: { kind: 'node', id: 'video', version: '7' } }
+      ],
+      edges: [{ ...seqGraph.edges[0], to: { nodeId: 'b', portId: 'in-images' } }]
+    }
+    await expect(f.host.proposeGraph({ projectId: 'p', graph, requestId: 'bad-port' }))
+      .rejects.toThrow('PORT_TYPE_MISMATCH')
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_builds').get()).toEqual({ n: 0 })
+    expect(f.modelCalls()).toBe(0)
+  })
+  it('BL-05: generated connected DAGs pass proposal and retain all data edges', async () => {
+    const f = fixture()
+    let seed = 5105
+    const choose = (length: number): number => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+      return seed % length
+    }
+    for (let sample = 0; sample < 24; sample++) {
+      const nodes = Array.from({ length: 2 + choose(7) }, (_, index) => ({
+        ...seqGraph.nodes[0], nodeId: `n${index}`
+      }))
+      const edges = nodes.slice(1).map((target, index) => ({
+        from: { nodeId: nodes[choose(index + 1)].nodeId, portId: 'out-text' },
+        to: { nodeId: target.nodeId, portId: 'in-text' },
+        kind: 'data' as const
+      }))
+      const exits = nodes.filter(({ nodeId }) => !edges.some(({ from }) => from.nodeId === nodeId))
+        .map(({ nodeId }) => nodeId)
+      const preview = await f.host.proposeGraph({
+        projectId: 'p', requestId: `generated-${sample}`,
+        graph: { ...seqGraph, nodes, edges, entry: nodes[0].nodeId, exits }
+      })
+      expect(preview.state).toBe('preview')
+      expect(preview.edges).toHaveLength(edges.length)
+    }
+    expect(f.modelCalls()).toBe(0)
+  })
   it('合法图持久化预览：source=graph，锚点=coordinator，节点带布局，coordinator 走 graph 模式', async () => {
     const f = fixture()
     const preview = await f.host.proposeGraph({ projectId: 'p', graph: seqGraph, requestId: 'r1' })

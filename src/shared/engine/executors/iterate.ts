@@ -269,6 +269,7 @@ async function runItem(
   for (;;) {
     if (ctx.signal.cancelled) return { item, status: 'skipped', error: '已取消', ...base }
     let output: Record<string, unknown> | undefined
+    let remoteSubmitted = false
     try {
       const targets = (ctx.outgoing ?? []).filter((edge) => edge.fromPortId === 'out-item')
       output = (await ctx.runSubflow?.({
@@ -278,6 +279,7 @@ async function runItem(
         itemCount: total,
         itemId: source.itemId,
         itemRunId,
+        onRemoteSubmission: () => { remoteSubmitted = true },
         iterationNodeId: ctx.node.id,
         itemTargets: targets.map((edge) => ({ nodeId: edge.nodeId, portId: edge.toPortId }))
       })) as Record<string, unknown> | undefined
@@ -287,7 +289,7 @@ async function runItem(
       // 残缺产物当 done 复用（F08）。
       if (ctx.signal.cancelled) return { item, status: 'skipped', error: '已取消', ...base }
       const msg = e instanceof Error ? e.message : String(e)
-      if (config.onFailure === 'retry' && retries < config.maxRetries) {
+      if (!remoteSubmitted && config.onFailure === 'retry' && retries < config.maxRetries) {
         retries += 1
         continue
       }
@@ -299,7 +301,7 @@ async function runItem(
     if (!outputEmpty(output)) {
       return { item, status: 'done', outputs: collectAllOutputs(output), runId: itemRunId, ...base }
     }
-    if (config.onFailure === 'retry' && retries < config.maxRetries) {
+    if (!remoteSubmitted && config.onFailure === 'retry' && retries < config.maxRetries) {
       retries += 1
       continue
     }

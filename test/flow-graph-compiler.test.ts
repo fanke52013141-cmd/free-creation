@@ -56,7 +56,17 @@ describe('O4-P2 编译器', () => {
 
     const sm = compiled.nodes.find((n) => n.id === compiled.stateNodeId)!
     const smConfig = StateMachineNodeConfigSchema.parse(JSON.parse(sm.config))
-    expect(smConfig.states).toEqual(expect.arrayContaining(['idle', canvasNodeId('a'), canvasNodeId('b'), 'completed']))
+    expect(smConfig.states).toEqual([
+      'idle', 'running', 'waiting-human', 'reviewing', 'paused', 'completed', 'failed', 'stopped'
+    ])
+    expect(smConfig.transitions).toEqual(expect.arrayContaining([
+      { from: 'running', event: 'agent.completed', to: 'running' },
+      { from: 'running', event: 'review.started', to: 'reviewing' },
+      { from: 'reviewing', event: 'review.passed', to: 'running' },
+      { from: 'running', event: 'human.wait', to: 'waiting-human' },
+      { from: 'waiting-human', event: 'flow.stopped', to: 'stopped' },
+      { from: 'reviewing', event: 'flow.failed', to: 'failed' }
+    ]))
 
     expect(compiled.edges).toEqual([
       { from: { nodeId: canvasNodeId('a'), portId: 'out-text' }, to: { nodeId: canvasNodeId('b'), portId: 'in-text' } }

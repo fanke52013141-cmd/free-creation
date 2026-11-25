@@ -741,6 +741,47 @@ export const GENERATED_NODE_CONTRACTS: NodeContractRecord[] = [
     }
   },
   {
+    "typeId": "silence-trim",
+    "contractVersion": 1,
+    "label": "去气口",
+    "description": "检测并剪掉音频中的静音与呼吸气口，输出更紧凑的新音频。",
+    "category": "audio",
+    "creatable": true,
+    "defaultSize": {
+      "w": 340,
+      "h": 300
+    },
+    "sizePolicy": "standard",
+    "executionMode": "auto",
+    "outputSource": "run",
+    "initialConfig": null,
+    "dynamicPorts": false,
+    "ports": {
+      "in": [
+        {
+          "id": "in-audio",
+          "dir": "in",
+          "type": "audio",
+          "required": true,
+          "cardinality": "one",
+          "name": "源音频",
+          "description": "连接一段需要去气口的音频。"
+        }
+      ],
+      "out": [
+        {
+          "id": "out-audio",
+          "dir": "out",
+          "type": "audio",
+          "required": true,
+          "cardinality": "one",
+          "name": "去气口音频",
+          "description": "剪掉气口后生成的新音频资产。"
+        }
+      ]
+    }
+  },
+  {
     "typeId": "file",
     "contractVersion": 2,
     "label": "文件",

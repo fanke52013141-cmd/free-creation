@@ -1,8 +1,8 @@
 ---
 title: Canvas Studio 待开发清单（BACKLOG）
 status: living            # 常更新文档；每完成一项就勾选，并附上提交 hash
-last-updated: 2026-11-24
-baseline-commit: f0e9b994 (main)
+last-updated: 2026-11-25
+baseline-commit: bb58d391 (main)
 sources:
   - docs/SPEC_DEEP_REVIEW_2026_11_22.md（审查报告，编号 A*/G*/N*/F*/U*）
   - docs/NODE_FLOW_SPEC.md 附录 A（NF-*）
@@ -82,10 +82,10 @@ sources:
 - **实现**：`conditionsExclusive` 做声明式互斥判定；新增 `otherwise` 边（原计划叫 else，为避开关键字改名）。多值交付同时命中多个分支时，运行期报 `FLOW_BRANCH_AMBIGUOUS` 兜底。
 - **验收**：[x] 两条都可能为真的条件出边，校验时拒绝，错误码 `CONDITION_NOT_EXCLUSIVE`；[x] 有 `otherwise` 的图可以通过，非法 otherwise 报 `OTHERWISE_INVALID`；[x] 路由测试覆盖 otherwise 两个方向和多值歧义
 
-### 🟡 BL-05 校验即准入 · S–M（control 边删除、kind 白名单、能力目录 ✅ `28d02e81`；数据边端口类型校验转入 BL-11）
+### ✅ BL-05 校验即准入 · S–M
 - **来源**：G4 / G6 / G8 · AF-6.2 / V8 / V9
 - **范围**：
-  - 校验、编译、运行准入共用同一份 kind 白名单（目前 `state-machine` 能通过校验，但会被准入拒绝）。
+  - 校验、编译、运行准入共用同一份 kind 白名单。
   - 数据边的端口存在性和类型，用 `portPairCompatible` 统一校验。
   - **删除 FlowGraph 的 `control` 边**（2026-11-22 已拍板）：
     - `FlowEdgeSchema.kind` 收窄为只允许 `'data'`（字段保留为可选，缺省 `'data'`，兼容旧 JSON）；收到 `'control'` 时校验报错 `FLOW_EDGE_KIND_REMOVED`，并给出边的下标
@@ -94,7 +94,7 @@ sources:
     - 画布上的控制关系（`controls / observes / review-gate / rework`，即 `AgentFlowRelation`）**不受影响**；它们保存在节点 config 中，由编译器生成，和 FlowGraph 边是两回事
     - 影响面：全仓 test、scripts、示例里**没有**使用 `kind:'control'` 的 FlowGraph。用户库 `flow_definitions` 里已发布的定义可能含有这类边，读取时按上面的错误码明确拒绝，并提示重新发布，不做静默丢弃
 - **说明**：FlowGraph v1 只携带 portId、不携带端口类型，`portPairCompatible` 又在 renderer 里，main 侧拿不到类型；端口校验只有在 v2 的显式端口（BL-11）里才能做，因此转入 BL-11。
-- **验收**：[x] 种类和能力：validate、compile、准入共用 `FLOW_GRAPH_DISPATCHABLE_KINDS` / `FLOW_GRAPH_CAPABILITY_IDS`；编译映射的键类型与能力目录在类型层一一对应；[ ] 属性测试（随机生成合法图 → 准入必过）留到 BL-11 一并做；[ ] 端口不兼容的图在 propose 阶段被拒绝 → BL-11；[x] 含 `kind:'control'` 的图在 schema 解析层返回 `FLOW_EDGE_KIND_REMOVED`（propose、validate、读取已发布定义都经同一个 schema）；[x] 源码中已不再出现对 FlowGraph 边 kind 的过滤
+- **验收**：[x] 种类和能力：validate、compile、准入共用 `FLOW_GRAPH_DISPATCHABLE_KINDS` / `FLOW_GRAPH_CAPABILITY_IDS`；编译映射的键类型与能力目录在类型层一一对应；[x] 固定种子生成的 24 个有向无环图均通过提案，顺序图与分叉图通过协调器运行；[x] 类型不兼容的图在 propose 阶段返回 `PORT_TYPE_MISMATCH`，无预览写入；[x] 含 `kind:'control'` 的图在 schema 解析层返回 `FLOW_EDGE_KIND_REMOVED`（propose、validate、读取已发布定义都经同一个 schema）；[x] 源码中已不再出现对 FlowGraph 边 kind 的过滤
 
 ### ✅ BL-06 零输出节点也算交付 · S（`28d02e81`，已推送）
 - **来源**：G5 · AF-8.1a
@@ -155,28 +155,28 @@ sources:
 
 ### B. 节点流规范落地
 
-### ⬜ BL-12 端口兼容判定统一 + 补全类型 · M
+### ✅ BL-12 端口兼容判定统一 + 明确封装边界 · M
 - **来源**：F2 · NF-6.4 / NF-6.5
 - **范围**：节点流内部统一使用 `portPairCompatible`；`COMPOSITE_PORT_TYPES` 补上 `iteration / camera`，或者在封装入口明确拒绝。
-- **验收**：[ ] 遍历 connection-matrix 真值表，节点流判定结果与画布完全一致；[ ] 包含 iterate 的流封装有确定、可解释的结果（审查附录中待确认的第 1 项）
+- **验收**：[x] 封装支持的端口组合逐项与画布兼容判定比对；[x] `iteration`、`camera` 在封装入口给出明确错误。
 
-### ⬜ BL-13 节点流校验补强 · M
+### ✅ BL-13 节点流校验补强 · M
 - **来源**：F3 / F4 / N5 · NF-6.2a / NF-6.6 / NF-7.5
 - **范围**：
   - 内部边和公开输出做 JSON Schema 兼容校验。
   - 媒体固定输入按 mime 类型匹配。
   - 必填输入在所有入口都在运行前预检，消除「莫名的 REQUIRED_OUTPUT_MISSING」。
   - 删除自由格式的 `schema` 片段，只保留 schemaRef。
-- **验收**：[ ] 每条规则各有一个正例和一个反例；[ ] 缺少必填输入时，任何内部节点都不会执行，并返回 `INPUT_REQUIRED`
+- **验收**：[x] 校验回归和三入口预检通过；[x] 缺少必填输入时，不启动内部节点，直接运行返回 `INPUT_REQUIRED`。
 
-### ⬜ BL-14 缺席三态：未产出 / 已跳过 / 未运行 · M
+### ✅ BL-14 缺席三态：未产出 / 已跳过 / 未运行 · M
 - **来源**：N5 / N6 · NF-9.1 · NODE_CONTRACT_SPEC 补节
 - **范围**：数据包收集层表达 `absent.reason`，并按规则向下游传播；手动画布、节点流、Agent Flow 使用同一套语义。可以与 BL-03 的 skipped 共用实现。
-- **验收**：[ ] 下游能区分三种原因；[ ] 依赖必填输入的下游会随之 skipped
+- **验收**：[x] 输入收集区分三种原因；[x] 跳过会传播到没有替代来源的必填依赖。完整 `npm run verify` 通过，记录见 `qa/verification/run-Uk1PZn/verify.log`。
 
 ### C. Agent Flow 规范落地
 
-### ⬜ BL-15 角色化单用户 · M
+### ✅ BL-15 角色化单用户 · M
 - **来源**：A4（已决策：只做方案 A）· AF-16.*
 - **范围**：
   - FlowGraph 新增 `roles[]`，节点新增 `humanRole`，加校验规则 V13–V15。
@@ -186,34 +186,38 @@ sources:
   - 增加「以某角色查看」筛选器。
   - 交接说明 `handoffNote`：只有在 selector 里用 `$handoff` 声明时，才进入模型上下文。
   - 运行总览中事件的 source 细化为 `user:<roleId> / agent:<nodeId> / agent:external:<clientId> / system`。
-- **验收**：[ ] 人工或协作节点缺少角色时，校验拒绝；[ ] 切换视图不改变人工决定的归属；[ ] handoffNote 没有 selector 时不进入模型上下文；[ ] 旧图按隐式的 `owner` 角色兼容
+- **验收**：[x] 显式角色图的人工或协作节点缺少角色时拒绝；[x] 真实 Electron 验收切换收件箱角色后，提交仍记录节点声明的角色；[x] 交接说明只由显式 selector 选择；[x] 旧图按隐式 `owner` 兼容。外部事件来源保留 CLI 标识或 MCP 客户端名称摘要。桌面证据见 `qa/agent-flow-human-task/receipt.json`。
 
-### ⬜ BL-16 统一状态全集表 + 人机协作 UI 章节 · M
+### 🟡 BL-16 统一状态全集表 + 人机协作 UI 章节 · M
 - **来源**：U2 / U3 · AGENT_FLOW_SPEC §18
 - **范围**：
   - 在 UI 规范中新增两章：一张状态表覆盖手动节点、节点流、Agent Flow 的全部状态（含 skipped/stale/stalled/需核对，以及 waiting 的等人/等工具/等宿主）；另一章写收件箱、协作面板、运行总览、角色标签、交接说明的展示位置。
   - 按规范实现样式。
+- **实现**：`docs/NODE_UI_STANDARD.md` §25「运行状态」按手动节点 / 节点流 / Agent Flow 三列覆盖 18 种步骤状态；§26「人机协作界面」写明收件箱按角色分组、停滞提示置顶、当前卡片优先、交接说明与事件来源。
 - **依赖**：BL-03、BL-15
-- **验收**：[ ] 浏览器门禁截图覆盖每一种状态；[ ] 「颜色不能单独承载状态」检查通过
+- **验收**：[x] Electron 总览状态夹具逐一截图（`qa/agent-flow-overview-visual/desktop/execute-report.json` 的 `fixtureStates` 为 18 态，`stateScreenshots` 18 张 + `flow-inbox-stalled.png`）；[x] 每种状态均有独立可读标签和图形标记（同报告 label + glyph）；[x] 收件箱角色筛选不隐藏置顶的停滞提示（同报告 `inbox.pinned: true`、`filteredRole: writer`）。
+- **剩余**：本批全量门禁（并入 B 组收尾，无新增界面工作）。
 
-### ⬜ BL-17 FlowGraph 与画布往返（diverged） · M
+### ✅ BL-17 FlowGraph 与画布往返（diverged） · M
 - **来源**：A3 · AF-5.4
-- **验收**：[ ] 落画布之后修改被控节点，运行总览显示 `diverged`；[ ] 下次运行时要求在「反向导出新版本」和「放弃修改」之间二选一，不能静默按旧 IR 运行
+- **验收**：[x] 修改被控节点后总览提示差异并拦截启动；[x] 桌面验收覆盖恢复原定义及发布新版本。反向导出只接受重新编译后可复现的改动。见 `scripts/acceptance/agent-flow-human-task.cjs`。
 
 ### ⬜ BL-18 状态机改为流程阶段机 · M
 - **来源**：A5 · AF-12.3a
-- **需拍板**：用阶段 FSM，还是带并行区域的 statechart（建议用阶段 FSM）。
+- **已选方案**：阶段 FSM。流程记录整体阶段，子任务记录节点进度。
 - **验收**：[ ] 并行 fork、循环、条件分支下，状态机显示都如实；[ ] 节点级进度只出现在子任务上
 
-### ⬜ BL-19 返工上限统一 · S
+### 🟡 BL-19 返工上限统一 · S
 - **来源**：A7 · AF-13.4
 - **范围**：FlowGraph、ReviewNodeConfig、默认值三处统一为 0–3、缺省 3，共用一个常量。
-- **验收**：[ ] 常量单一来源的测试；[ ] 旧配置 >3 时按 3 截断，并给出提示
+- **实现**：`src/shared/agent-flow/rework-limit.ts` 的 `MAX_REWORKS = 3` 是唯一常量；`ReworkLimitSchema`（0–3、缺省 3）供 FlowGraph 与 builder 使用，新输入超过 3 直接拒绝；`SavedReviewReworkLimitSchema`（读 0–10，`min(3)` 截断、缺省 3）兼容历史审核卡；`agentFlow.tsx` 对超限旧配置显示「旧配置最多按 3 次返工执行。保存后更新为有效上限。」
+- **验收**：[x] 常量单一来源的测试（`test/agent-flow-node-contracts.test.ts` 直接引用 `MAX_REWORKS`，覆盖缺省、越界拒绝、历史 10→3）；[x] 旧配置 >3 时按 3 截断，并给出提示（schema 截断 + 设置面板提示）。
+- **剩余**：本批全量门禁。
 
-### ⬜ BL-20 人工提交媒体结果 · M
+### ✅ BL-20 人工提交媒体结果 · M
 - **来源**：AF-9.2a
-- **需拍板**：(a) human-task 增加媒体结果类型；(b) 用「资产节点 + human-task 引用」的模板实现。
-- **验收**：[ ] 人在图上上传图片作为交付，下游可以按固定版本引用
+- **实现**：human-task 支持图片和视频结果类型。
+- **验收**：[x] 打包版验证图片与视频提交、续跑和公开输出。下游固定引用使用项目媒体 ID，并检查项目归属、MIME 与摘要。见 [日志覆盖](LOGGING_COVERAGE.md#2026-11-24-人工图片和视频交付)。
 
 ### ⬜ BL-21 执行者 × 决策者两维 · M
 - **来源**：AF-9.3
@@ -223,21 +227,23 @@ sources:
 
 ### D. 规范与组合测试遗留
 
-### ⬜ BL-22 NODE_CONTRACT_SPEC 修订 · M
+### 🟡 BL-22 NODE_CONTRACT_SPEC 修订 · M
 - **来源**：N1–N11
 - **范围**：
   - 文档拆为正文 + `CHANGELOG`；尺寸数值改为引用 `STANDARD_NODE_SIZE`。
   - 视频参考上限改为由能力描述驱动。
   - `cardinality` 拆为 `fanIn / valueShape`（先只改文档，代码改造另立项）。
   - 补充 skip / stale / 缺席语义；修正编号重复，以及 NodeValuePacket 签名、代码入口清单。
-- **验收**：[ ] 正文里没有带日期的变更段落；[ ] spec-lint（BL-30）通过
+- **实现**：变更历史移入 `docs/CHANGELOG-node-contract.md`，正文不再保留带日期段落；§1 原则 8 与 §3 示例引用 `STANDARD_NODE_SIZE`；§4.3 写明 `fanIn` / `valueShape` 与现行 `PortDecl.cardinality` 的映射；新增 §4.5 AI 失败重试、§4.6 `outputSource`、§6.1 已连接端口的缺席原因（`skipped` / `not-run` / `optional-not-produced`）；§8.2 参考视频段数上限改为「所选模型能力描述 + `src/shared/video-capabilities.ts`」；§6 的 `NodeValuePacket` 签名与 `src/shared/engine/inputs.ts` 一致，顶部代码入口清单保留，章节编号无重复。
+- **验收**：[x] 正文里没有带日期的变更段落；[x] `npm run verify:specs` 通过（其余规范缺 `last-verified` 的告警属 BL-30 范围）。
+- **剩余**：本批全量门禁。
 
-### ⬜ BL-23 操作节点卡内「死结果区」 · S–M
+### 🟡 BL-23 操作节点卡内「死结果区」 · S–M
 - **来源**：组合测试 U-1 / U-2（推荐方案 b）
 - **范围**：speech / voice-design / image-edit 的 Body 改为从 `meta.nodeResult` 集合读取当前选中项，与 `MediaResultGrid` 同源。
-- **验收**：[ ] 运行后卡片内可以试听或回看本次结果；[ ] 不再依赖 `props.mediaPath`
+- **验收**：[x] 浏览器验收确认配音与音色设计的播放请求及图片编辑预览指向选中结果；[x] 三种节点统一读取 `meta.nodeResult`。定向测试覆盖选中项、旧集合回退和失败结果过滤。完整桌面门禁待确认。
 
-### ⬜ BL-24 MiniMax 克隆参考音频约束放到主进程 · S
+### 🟡 BL-24 MiniMax 克隆参考音频约束放到主进程 · S
 - **来源**：组合测试 T-4
 - **范围**：在 `cloneMiniMaxVoice` 入口校验：时长 10 秒–5 分钟、大小 ≤20MB、MIME 在白名单内；连线输入和上传输入两种来源都要覆盖。
 - **验收**：[ ] 不合规的音频在请求供应商之前就被拒绝，并返回可操作的提示文案
@@ -248,17 +254,17 @@ sources:
 
 | ID | 事项 | 来源 | 规模 |
 |---|---|---|---|
-| ⬜ BL-30 | **spec-lint**：每份规范的头部必须有 status / last-verified；「当前权威」最多出现一次；禁止裸计数；超过 14 天未验证就告警 | 审查报告 §九 | S |
+| 🟡 BL-30 | **spec-lint**：脚本已接入 `npm run verify`，定向检查覆盖元数据、权威声明、手写计数和过期告警。未登记验证日期的规范标记为 `unverified` 并告警。全量门禁待确认 | 审查报告 §九 | S |
 | ⬜ BL-31 | NODE_UI_STANDARD v3 单一现行版 + 裁决历史归档；几何、线宽、尺寸的数值由测试读取规范文件比对 | U1 | L |
 | ⬜ BL-32 | 文档归档：仓外方案和报告移入 `source/docs/archive/`；Agent Flow 52 份文档按 AGENT_FLOW_SPEC §20 归档；弹窗规范移入仓库（U5）；L3 UI 条款回写到 PRESENTATION_SPEC（U4） | 审查报告 §九 | M |
-| ⬜ BL-33 | 节点流：分支失败策略 `onBranchFailure`、内部并发 `maxConcurrency`、人工门自动推断、扇入顺序可见可调 | NF-8.3a / 8.4 / 8.5 / 9.3a | M |
-| ⬜ BL-34 | 节点流版本号改为 major.minor；升级应用只占一个撤销步，失败时回滚 | NF-11.2 / 11.5 | M |
-| ⬜ BL-35 | 固定顺序模式统一编译成图模式；预算交叉检查 V10；错误码 `CAPABILITY_UNKNOWN`（V12）；selector 可达性检查 V11 | AGENT_FLOW_SPEC §2.2 / §7 | M |
-| ⬜ BL-36 | 安全与计费：循环项还原媒体时，校验媒体归属和路径（N7）；所有远端异步生成节点只在「提交前或提交失败」时重试（N9 / NF-12.3a） | N7 / N9 | S–M |
-| 🟡 BL-37 | MCP 注解从 OperationSpec 里的 `idempotent / destructive / cost` 声明派生（`ccd5057` 已改为 `idempotentHint = 只读`，这是过渡做法；按操作逐项声明仍待完成） | 审查报告 §七 · NF-14.3 | S |
-| ⬜ BL-38 | 体验修复：音色设计按钮的可用状态与功能绑定一致（U-3）；循环体为空时提前提示（F-1）；产物节点放在视口内（U-5） | 组合测试 | S–M |
-| ⬜ BL-39 | ROADMAP R4：批处理中止后，提供「只继续未完成项」入口 | ROADMAP R4 | M |
-| ⬜ BL-40 | ContextManifest 溢出策略 `overflow: fail \| ask-human \| summarize` | AF-10.4 | M |
+| 🟡 BL-33 | 扇入顺序已持久化并用于执行；直接和嵌套人工门已接入发布预检。待界面调序、分支失败策略与并发 | NF-8.3a / 8.4 / 8.5 / 9.3a | M |
+| 🟡 BL-34 | 节点流版本号改为 major.minor；单次撤销和写盘失败回滚已通过 Electron 验收，版本契约 14 项定向测试通过，待全量门禁 | NF-11.2 / 11.5 | M |
+| 🟡 BL-35 | V10、V11、V12 已实现；固定顺序编译为线性路由图，共用就绪、Agent 分派和完成处理，待全量验收 | AGENT_FLOW_SPEC §2.2 / §7 | M |
+| 🟡 BL-36 | 循环媒体归属与节点流执行前重试已通过 Electron 验收；生图、视频和循环自动重放保护已通过定向测试，待全量门禁及其余异步路径复核 | N7 / N9 | S–M |
+| 🟡 BL-37 | 192 个操作逐项声明 `idempotent / destructive / cost`；能力目录和 MCP 工具从声明派生，待全量验收 | 审查报告 §七 · NF-14.3 | S |
+| 🟡 BL-38 | 音色设计绑定、空循环体提示、右边缘产物落位已通过浏览器验收（U-3、F-1、U-5）；待全量门禁 | 组合测试 | S–M |
+| 🟡 BL-39 | 循环卡片提供「只继续未完成项」，中止后续跑回归覆盖已完成项复用，待全量门禁 | ROADMAP R4 | M |
+| 🟡 BL-40 | 已支持默认失败、显式摘要回退和 Agent 阶段的桌面补料入口；待完成能力节点补料和桌面端到端验收 | AF-10.4 | M |
 | ✅ BL-41 | 外围浏览器脚本修复并纳入 `test:optimization-ui` 门禁（node-ui / panel-sync / media-import） | 2026-11-24 | S |
 
 ---
@@ -267,8 +273,8 @@ sources:
 
 | ID | 事项 | 来源 |
 |---|---|---|
-| ⬜ BL-50 | 首页入口更醒目；视频模式被自动改写时给一次轻提示 | 组合测试 U-4 |
-| ⬜ BL-51 | 组合测试脚本转为正式的 `scripts/test-node-combos.cjs`，纳入大版本发布门禁；连接矩阵导出改为快照测试 | 组合测试 P3-7 |
+| 🟡 BL-50 | 空项目首页增加直接创建入口；视频模式自动改写提示一次，浏览器通过，待全量门禁 | 组合测试 U-4 |
+| 🟡 BL-51 | 节点组合回归与默认端口连接矩阵快照已接入完整发布验收；选跑 `node-combos` 通过 229 项，待全量门禁 | 组合测试 P3-7 |
 | ⬜ BL-52 | 配置 Vidu Token 后，复跑组合 8，完成真实出片验收 | 组合测试 P3-8 |
 
 ---
@@ -279,8 +285,6 @@ sources:
 |---|---|---|
 | ~~`135cbef8` 被撤回是否是有意为之~~ | BL-00 | ✅ 误提交，不恢复 |
 | ~~`control` 边：删除，还是实现为「仅顺序依赖」~~ | BL-05 | ✅ 2026-11-22 已决定：删除 |
-| 状态机：阶段 FSM 还是 statechart | BL-18 | 阶段 FSM |
-| 人工媒体交付：human-task 扩展类型，还是资产节点模板 | BL-20 | (a) 扩展类型 |
 | 节点流 headless 输出键：带前缀还是裸 id | NF-5.3 | 统一带前缀 |
 
 ## 待补用例确认（来自审查报告附录）

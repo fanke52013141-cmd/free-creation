@@ -16,6 +16,9 @@ const fileName = z.string().regex(/^[a-zA-Z0-9_-]{1,100}\.[a-z]{2,10}$/)
 export const KEY_PACKAGE_OPERATIONS = {
   'provider.package.export': {
     effect: 'export',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '把选定的供应商连接导出为凭据包（.cskeys）到受控导出目录（复用 GUI 同一 exportProviders 与加密格式）：需要解封密码；回执给文件名/sha256/字节数/连接数，不回传包正文',
     input: z
@@ -29,6 +32,9 @@ export const KEY_PACKAGE_OPERATIONS = {
   },
   'provider.package.seal': {
     effect: 'export',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '把选定的已保存连接封成凭据包（.cskeys）写入受控导出目录：需要解封密码与接收设备的凭证文件名（服务端从受控目录读取，不接受任意路径）；回执给文件名/sha256/字节数/包ID/连接数/到期时间，不回传包正文',
     input: z
@@ -42,6 +48,9 @@ export const KEY_PACKAGE_OPERATIONS = {
   },
   'provider.package.preview': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '预览受控目录内的凭据包（只读，不解密落库）：需要解封密码；返回包 ID/签发设备摘要/到期/连接清单/是否已导入，不含任何密钥材料',
     input: z.object({ fileName, password }).strict()

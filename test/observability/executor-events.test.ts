@@ -528,7 +528,7 @@ describe('A01 · 3 节点顺序运行共享根 trace', () => {
     }
   })
 
-  it('上游跳过导致下游契约失败：node.failed 带 INPUT_INVALID；跳过节点自带原因（A02）', async () => {
+  it('上游跳过后，可选输入下游没有固定值时保留自身跳过终态（A02）', async () => {
     const a = node('shape:source', 'processor', '') // 无输入无固定值 → skipped
     const b = node('shape:target', 'processor', '')
     const { editor, events } = setupEditor(
@@ -545,18 +545,15 @@ describe('A01 · 3 节点顺序运行共享根 trace', () => {
     await drainDiagnosticsEvents()
 
     const skipped = events.filter((event) => event.event === 'node.skipped')
-    expect(skipped).toHaveLength(1)
-    expect(skipped[0].status).toBe('skipped')
-    expect(skipped[0].nodeType).toBe('processor')
+    expect(skipped).toHaveLength(2)
+    expect(skipped.every((event) => event.status === 'skipped' && event.nodeType === 'processor')).toBe(true)
 
     const failed = events.filter((event) => event.event === 'node.failed')
-    expect(failed).toHaveLength(1)
-    expect(failed[0].status).toBe('failed')
-    expect(failed[0].error?.code).toBe('INPUT_INVALID')
+    expect(failed).toHaveLength(0)
 
     // 失败根因可按阶段定位：无伪造的请求/能力事件。
     expect(events.some((event) => event.event.startsWith('model.request'))).toBe(false)
-    expect(events.some((event) => event.event === 'workflow.failed')).toBe(true)
+    expect(events.some((event) => event.event === 'workflow.completed')).toBe(true)
   })
 
   it('敏感 fixture（假密钥/假提示词）不会进入任何事件输出（A15）', async () => {

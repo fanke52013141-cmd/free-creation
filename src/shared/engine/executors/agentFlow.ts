@@ -46,6 +46,10 @@ export const agentExecutor: NodeExecutor = async (ctx) => {
       return null
     }
   })()
+  const material = ctx.contextMaterial
+  if (material && (task?.state !== 'waiting' || task.code !== 'FLOW_CONTEXT_OVER_BUDGET' ||
+      task.taskId !== material.taskId || task.waitRevision !== material.waitRevision))
+    return { status: 'failed', reason: '补充材料对应的流程等待状态已变化', diagnosticPhase: 'input' }
   const input = {
     projectId: ctx.projectId,
     nodeId: ctx.node.id,
@@ -65,6 +69,7 @@ export const agentExecutor: NodeExecutor = async (ctx) => {
           ? ('continue' as const)
           : ('start' as const),
     ...(task ? { expectedTaskId: task.taskId } : {}),
+    ...(material ? { contextMaterial: material.text, humanConfirmed: 'gui' as const } : {}),
     ...(['waiting', 'blocked'].includes(task?.state)
       ? { eventId: ctx.runId ?? crypto.randomUUID(), expectedWaitRevision: task.waitRevision }
       : {})
@@ -180,6 +185,40 @@ export interface StateMachinePendingEvent {
 }
 
 const STATE_MACHINE_MAX_HISTORY = 200
+
+export function projectFlowPhase(
+  instance: StateMachineInstance | null,
+  states: readonly string[],
+  initialState: string,
+  projection: import('../../agent-flow/desktop-tasks').FlowPhaseProjection & {
+    stateNodeId: string
+    event: string
+    eventId: string
+  }
+): StateMachineInstance | null {
+  const sameTask = instance?.taskId === projection.taskId ? instance : null
+  if (!states.includes(projection.phase) ||
+      (sameTask && sameTask.revision >= projection.revision) ||
+      (instance && !sameTask && projection.event !== 'flow.started')) return null
+  const entry: StateMachineInstance['history'][number] = {
+    eventId: projection.eventId,
+    event: projection.event,
+    from: sameTask?.state ?? initialState,
+    to: projection.phase,
+    revision: projection.revision,
+    at: Date.now(),
+    source: 'agent'
+  }
+  return {
+    schemaVersion: 1,
+    taskId: projection.taskId,
+    stateNodeId: projection.stateNodeId,
+    state: projection.phase,
+    revision: projection.revision,
+    lastEventId: projection.eventId,
+    history: [...(sameTask?.history ?? []), entry].slice(-STATE_MACHINE_MAX_HISTORY)
+  }
+}
 
 export function parseStateMachineInstance(raw: unknown): StateMachineInstance | null {
   if (typeof raw !== 'string' || !raw.trim()) return null

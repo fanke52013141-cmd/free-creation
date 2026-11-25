@@ -28,7 +28,8 @@ export function capabilityFailure(key: LocalCapabilityKey, reason: string): stri
   const labels: Record<LocalCapabilityKey, string> = {
     ffmpeg: 'FFmpeg',
     ffprobe: 'FFprobe',
-    audioSeparator: '人声分离工具'
+    audioSeparator: '人声分离工具',
+    sileroVad: 'Silero VAD 模型'
   }
   return `${labels[key]}能力不可用：${reason}`
 }

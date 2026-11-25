@@ -33,7 +33,7 @@ import { ModalShell } from '../../../components/ModalShell'
 import { AppSelect } from '../../../components/AppSelect'
 import './image-edit-model-row.css'
 import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../registry'
-import { latestSuccessMediaResult } from '@shared/engine/deterministic-projections'
+import { selectedSuccessMediaResult } from '@shared/engine/deterministic-projections'
 import {
   clearSelectedMediaHistory,
   ImageContinuationActions,
@@ -82,8 +82,8 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
   const [draft, setDraft] = useState('')
   const instruction = parseImageEditConfig(readNodeConfig(shape)).instruction
   // 操作节点不持久化 mediaPath：卡内结果区读本次成功运行的 nodeResult。
-  const resultMedia = latestSuccessMediaResult(shape)
-  const outputMediaPath = shape.props.mediaPath || resultMedia?.mediaPath || ''
+  const resultMedia = selectedSuccessMediaResult(shape)
+  const outputMediaPath = resultMedia?.mediaPath ?? ''
 
   // 卸载时清理 tldraw 编辑态，防止键盘事件被画布扣留。
   useEffect(() => {

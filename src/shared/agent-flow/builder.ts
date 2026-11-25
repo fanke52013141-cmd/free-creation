@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ReworkLimitSchema } from './rework-limit'
 import { planCapabilityCatalog, planCapabilitySurface } from './capability-catalog'
 
 /**
@@ -20,7 +21,7 @@ const buildReview = z
   .object({
     criteria: z.string().trim().min(1).max(4096),
     rejectPolicy: z.enum(['rework', 'stop']).default('rework'),
-    maxReworks: z.number().int().min(0).max(3).default(1)
+    maxReworks: ReworkLimitSchema
   })
   .strict()
 

@@ -104,6 +104,25 @@ function reserveLoopbackPort() {
     try { await copyFile(join(directory, 'flow-overview.png'), join(evidence, 'flow-overview.png')) } catch { /* screenshot optional */ }
     for (const file of report.report?.stateScreenshots ?? []) await copyFile(join(directory, file), join(evidence, file))
     if (exit.code !== 0 || report.status !== 'pass') throw new Error(`FOV_ACCEPTANCE_FAILED: code=${exit.code} report=${JSON.stringify(report).slice(0, 400)}`)
+    const contextForm = report.report.contextForm
+    if (!contextForm?.rendered || !contextForm.emptyDisabled || !contextForm.nonemptyEnabled || !contextForm.dispatched)
+      throw new Error('FOV_CONTEXT_FORM_EVIDENCE_MISSING')
+    const labels = new Map(report.report.fixtureStates.map(({ state, label }) => [state, label]))
+    for (const state of labels.keys()) {
+      if (!report.report.stateScreenshots.includes(`flow-overview-state-${state}.png`))
+        throw new Error(`FOV_STATE_SCREENSHOT_MISSING:${state}`)
+    }
+    for (const [state, label] of [
+      ['waiting-human', '等待人工'],
+      ['waiting-tool', '等待工具结果'],
+      ['waiting-host', '等待宿主恢复'],
+      ['waiting-reconcile', '等待核对'],
+      ['skipped', '已跳过'],
+      ['stale', '旧交付已过期'],
+      ['stalled', '流程停滞']
+    ]) {
+      if (labels.get(state) !== label) throw new Error(`FOV_STATE_LABEL_MISMATCH:${state}:${labels.get(state)}`)
+    }
     console.log(`Flow overview visual captured: ${evidence}`)
   } finally {
     server.kill()

@@ -150,7 +150,8 @@ export class CoordinatorReviews {
     private readonly open: (id: string) => ProjectFile | null,
     private readonly specialists: FlowAgentDesktopHost,
     private readonly publish: (grant: AgentPublication, signal: AbortSignal) => Promise<void>,
-    private readonly check: (run: CoordinationRun) => ProjectFile
+    private readonly check: (run: CoordinationRun) => ProjectFile,
+    private readonly recordEvent?: (run: CoordinationRun, eventId: string, event: string) => void
   ) {
     this.store = new CoordinationStore(db)
     this.reports = new FlowReviewStore(db)
@@ -163,7 +164,9 @@ export class CoordinatorReviews {
     this.store.save(run)
   }
   private event(run: CoordinationRun, cycle: CoordinationReview, event: string): void {
-    this.store.event(run, `${cycle.requestId}:${event}`, event, run.revision)
+    const eventId = `${cycle.requestId}:${event}`
+    if (this.recordEvent) this.recordEvent(run, eventId, event)
+    else this.store.event(run, eventId, event, run.revision)
     emitGatewayEvent(
       'agent.coordination.stage',
       '审核返工控制阶段',

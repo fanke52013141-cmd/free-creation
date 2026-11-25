@@ -268,6 +268,9 @@ const flowDefinitionDto = FlowDefinitionSchema
 export const FLOW_AGENTS_OPERATIONS = {
   'flowAgent.inspect': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取已保存 Agent Flow 任务的观察视图（状态/等待/决策与工具计数/审核反馈）；只读账本事实，不判定会话存活、不触发会话恢复、不改写任务状态',
     input: project.extend({ nodeId }).strict()
@@ -276,6 +279,9 @@ export const FLOW_AGENTS_OPERATIONS = {
   // 与 GUI 阶段详情同一宿主方法，不另写编制器。
   'flowStage.context.preview': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '预览固定顺序主控某阶段的输入编制清单（当前已交付事实下会采用的字段/片段、缺项、预算）；只读，默认不含正文，includeBody=true 才返回内容；无运行或无阶段输入声明返回 null',
     input: project
@@ -286,6 +292,9 @@ export const FLOW_AGENTS_OPERATIONS = {
 // 供 GUI 确认弹窗与外部预检使用；不修改任何运行事实。
   'flowStage.reworkPreview': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '预览固定顺序阶段或图模式节点局部返工的影响：将重跑的阶段（该阶段及下游）、将被标为过期并移入历史的既有交付、保留的交付数量、受影响未完成子任务数与当前是否可返工；只读，不修改运行事实',
     input: project.extend({ nodeId, stageKey: flowId }).strict()
@@ -294,6 +303,9 @@ export const FLOW_AGENTS_OPERATIONS = {
   // 旧交付保留为历史，下游标过期；有界轮次；在途命令未结算时拒绝。与 GUI 同一宿主方法。
   'flowStage.rework': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '对固定顺序阶段或图模式节点执行局部返工。图模式使用节点 ID 作为 stageKey，按数据、条件和审核依赖确定影响范围。确认后由主控继续执行，旧交付留存，未结算命令阻止返工。',
     input: project.extend({ nodeId, stageKey: flowId }).strict()
@@ -301,6 +313,9 @@ export const FLOW_AGENTS_OPERATIONS = {
   // AF-06：流程定义版本（与运行分离）。定义为固定顺序主控的可复用快照，不可变。
   'flowDefinition.publish': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '从固定顺序主控的已保存配置发布一个不可变流程定义版本（阶段/方法/输入/进入条件快照，版本递增）；只存定义内容，不存运行正文/产物；非固定顺序如实拒绝',
     input: project
@@ -309,11 +324,17 @@ export const FLOW_AGENTS_OPERATIONS = {
   },
   'flowDefinition.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '列出项目各流程定义的最新版本（只读定义快照，不含运行产物）',
     input: project
   },
   'flowDefinition.get': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '读取某流程定义指定版本（缺省最新）；不存在返回 null',
     input: project
       .extend({ definitionId: flowId, version: z.number().int().positive().optional() })
@@ -321,6 +342,9 @@ export const FLOW_AGENTS_OPERATIONS = {
   },
   'flowDefinition.diff': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '差异预览：比较同一流程定义两个版本的名称/目标/阶段增删改及变更字段（只读）',
     input: project
       .extend({
@@ -332,46 +356,70 @@ export const FLOW_AGENTS_OPERATIONS = {
   },
   'flowRun.overview': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       'O3：读取某协调运行的一次流程运行统一总览（状态/阶段/修订/子任务 + 可回放事件时间线，事件来源 user/agent 归因）；只读投影，权威仍是命令账本与运行实例；不存在返回 null',
     input: project.extend({ nodeId: flowId }).strict()
   },
   'flowGraph.validate': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       'O4-P5：静态校验外部生成的 FlowGraph（引用/参与合法性/环须有界/可达/预算），返回 ok 与稳定错误码；只读，不写画布、不执行',
     input: z.object({ graph: FlowGraphSchema }).strict()
   },
   'flowGraph.compile': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       'O4-P5：把 FlowGraph 编译为画布图预览（节点配置+边+派生状态机，与建图预览同构）；只读预览不写画布；非法图返回 ok=false 与错误',
     input: z.object({ graph: FlowGraphSchema }).strict()
   },
   'flowGraph.propose': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       'P5：外部已生成 FlowGraph 的建图提案——校验+编译+持久化预览（flow_builds source=graph，锚点=编译 coordinator）；不调模型、不写画布；同图同 requestId 幂等返回同 buildId；落画布须人在 GUI 确认（flowGraph.confirm），外部不能自确认',
     input: project.extend({ graph: FlowGraphSchema, requestId: flowId.optional() }).strict()
   },
   'flowGraph.preview': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       'P5：读取外部建图预览（最近一次或指定 buildId）；只读，不调模型不改画布；已保存图含预览节点时自动 promote committed',
     input: project.extend({ buildId: flowId.optional() }).strict()
   },
   'flowGraph.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: 'P5：列出本项目的外部建图预览（含 preview/committed/discarded）；只读',
     input: project
   },
   'flowGraph.discard': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description: 'P5：取消外部建图预览（置 discarded）；已 committed 的预览幂等返回 committed，不可取消',
     input: project.extend({ buildId: flowId }).strict()
   },
   'flowGraph.confirm': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     // 人工决定：返回前等人在 GUI 点「允许落画布」，CLI 不能按 15s 默认超时放弃。
     interactive: true,
     description:
@@ -380,6 +428,9 @@ export const FLOW_AGENTS_OPERATIONS = {
   },
   'flowGraph.proposeFromDefinition': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '④P6：从图定义版本创建运行——读定义的 FlowGraph→经建图提案管线（校验/编译/持久化预览）；落画布仍须人工确认（flowGraph.confirm），不改模板',
     input: project
@@ -392,6 +443,9 @@ export const FLOW_AGENTS_OPERATIONS = {
   },
   'flowGraphDefinition.publish': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '④P6：发布 FlowGraph 定义版本（不可变快照，与运行分离）；校验图→contentHash→版本递增；同内容也允许新版本以便评测',
     input: project
@@ -400,11 +454,17 @@ export const FLOW_AGENTS_OPERATIONS = {
   },
   'flowGraphDefinition.list': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '④P6：列出本项目的图定义（每个 definitionId 的最新版本）；只读',
     input: project
   },
   'flowGraphDefinition.get': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '④P6：读取图定义（指定版本或最新）；只读',
     input: project
       .extend({ definitionId: flowId, version: z.number().int().positive().optional() })
@@ -412,6 +472,9 @@ export const FLOW_AGENTS_OPERATIONS = {
   },
   'flowGraphDefinition.diff': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description: '④P6：比较两个图定义版本的名称/总目标/节点（增删改）/数据边（增删）；只读纯函数',
     input: project
       .extend({
@@ -423,12 +486,18 @@ export const FLOW_AGENTS_OPERATIONS = {
   },
   'flowAgent.catalog': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取当前打开画布的 Agent 能力目录（可用文本模型、受控工具、固定版本技能摘要、可编排能力：节点能力 + 已发布节点流，含端口/参与形态/成本/网络/可调度性与不可调度原因）；要求项目已在桌面打开，不返回技能指令正文',
     input: project
   },
   'flowAgent.collaboration': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取指定 Agent 任务的协作记录（目标/消息/固定输入/候选成果）；只读，不接受外部代替人填写意见、选择或继续',
     input: project.extend({ nodeId }).strict()
@@ -438,6 +507,9 @@ export const FLOW_AGENTS_OPERATIONS = {
   // discuss/revise 会真实调用模型，因此先走与 IPC 入口同一的工具调用预检。
   'flowAgent.cooperate': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     // submit / accepted=true 是人工决定：返回前等人在 GUI 点「允许」。
     interactive: true,
     description:
@@ -463,6 +535,9 @@ export const FLOW_AGENTS_OPERATIONS = {
   // 预检失败发生在任何模型请求之前（付费路径不会被偷偷触发）。
   'flowAgent.run': {
     effect: 'execute',
+    idempotent: false,
+    destructive: true,
+    cost: 'possible',
     // action=continue 命中人工等待时，返回前等人在 GUI 点「允许继续」。
     interactive: true,
     description:
@@ -479,12 +554,18 @@ export const FLOW_AGENTS_OPERATIONS = {
   },
   'flowAgent.pause': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '请求暂停当前打开的 Agent 任务（下一次安全点生效）；任务不存在如实返回 NOT_FOUND，不伪造暂停结果',
     input: project.extend({ nodeId }).strict()
   },
   'flowAgent.stop': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '停止当前打开的 Agent 任务（与 GUI 停止按钮同一宿主方法）；调用后的终态仍以 flowAgent.inspect 读取的账本事实为准',
     input: project.extend({ nodeId }).strict()
@@ -492,18 +573,27 @@ export const FLOW_AGENTS_OPERATIONS = {
   // F8 收官：建图预览/提交（FlowBuilderHost，启动时创建的同一个实例）。
   'flowAgent.build.inspect': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取 Flow 建图预览（最近一次或指定 buildId）：buildId/状态/计划步骤/节点身份与几何；只读已持久化预览，不调用模型、不修改画布；要求目标项目已在桌面打开',
     input: project.extend({ nodeId, buildId: flowId.optional() }).strict()
   },
   'flowAgent.build.propose': {
     effect: 'execute',
+    idempotent: false,
+    destructive: true,
+    cost: 'possible',
     description:
       '在 builder 角色的 Agent 节点上提交建图目标，由同一桌面宿主的模型端口生成预览并持久化（不落画布）；需要已验证工具调用能力的模型，模型预检失败时零模型请求；request/trace/span 由 main 生成，外部不能自造',
     input: project.extend({ nodeId }).strict()
   },
   'flowAgent.build.commit': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     // 人工决定：返回前等人在 GUI 点「允许落画布」。
     interactive: true,
     description:
@@ -513,6 +603,9 @@ export const FLOW_AGENTS_OPERATIONS = {
   // F8 收官：模型审核（FlowReviewHost，同一实例）。审核结论由模型产生，外部只能提交与读取。
   'flowAgent.review': {
     effect: 'execute',
+    idempotent: false,
+    destructive: true,
+    cost: 'possible',
     description:
       '在 ai-review 节点上提交一次模型审核并读取报告（与 GUI 同一 FlowReviewHost 与同一证据/预算规则）；审核结论由模型产生，外部不能改写为通过；需要已验证工具调用能力的模型，模型预检失败时零模型请求；request/trace/span 由 main 生成',
     input: project.extend({ nodeId }).strict()
@@ -521,6 +614,9 @@ export const FLOW_AGENTS_OPERATIONS = {
   // 运行节点时由 stateMachineExecutor 校验修订与迁移并推进）；外部不能直接改状态。
   'flowStateMachine.submitEvent': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '向状态机节点提交一个人工事件（与 GUI 提交事件按钮同一待处理写入）；携带观察到的 expectedRevision，过期提交拒绝；事件合法性与迁移在运行节点时由同一执行器校验；要求目标项目已在桌面打开',
     input: project
@@ -534,6 +630,9 @@ export const FLOW_AGENTS_OPERATIONS = {
   },
   'flowStateMachine.get': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取状态机节点的当前阶段/修订/合法出边事件与待处理提交（只读持久化事实；未运行时按配置初始阶段与修订 1 返回）',
     input: project.extend({ nodeId }).strict()
@@ -542,6 +641,9 @@ export const FLOW_AGENTS_OPERATIONS = {
   // 运行节点时由 humanTaskExecutor 校验修订/去重并交付）；外部不能直接改完成状态。
   'humanTask.submit': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     // 人工决定：返回前等人在 GUI 点「允许提交」。
     interactive: true,
     description:
@@ -558,6 +660,9 @@ export const FLOW_AGENTS_OPERATIONS = {
   },
   'humanTask.get': {
     effect: 'read',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
     description:
       '读取人工任务节点的当前状态/修订/已交付结果与待处理提交（只读持久化事实；未运行时按 pending 修订 1 返回）',
     input: project.extend({ nodeId }).strict()
@@ -721,6 +826,11 @@ export const FLOW_AGENTS_OUTPUTS = {
           goal: z.string().max(16384),
           paused: z.boolean(),
           code: z.string().max(120).optional(),
+          contextMaterialWait: z.object({
+            stageKey: flowId,
+            waitRevision: z.number().int().nonnegative(),
+            limitBytes: z.number().int().positive().optional()
+          }).strict().optional(),
           executionMode: z.enum(['model', 'fixed-order', 'graph']).optional(),
           sourceGraph: z.object({
             definitionId: flowId, version: z.number().int().positive(), contentHash: z.string().max(80)

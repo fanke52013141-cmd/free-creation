@@ -367,11 +367,11 @@ async function waitForOutputs(dir, projectId, nodeId, predicate, label, timeoutM
     // ── W3：JSON 与多输出逐类运行 ──
     const jsonManifest = {
       schemaVersion: 1, runtimeVersion: 2, capabilityId: 'json-pass', version: '1.0', name: 'JSON直通',
-      inputs: [], outputs: [{ id: 'data', label: '数据', type: 'json', required: true, cardinality: 'one', source: { nodeId: 'j1', portId: 'out-json' } }],
+      inputs: [], outputs: [{ id: 'data', label: '数据', type: 'json', schemaRef: { id: 'json.any', version: 1 }, required: true, cardinality: 'one', source: { nodeId: 'j1', portId: 'out-json' } }],
       graph: { nodes: [{ id: 'j1', nodeType: 'json', contractVersion: 1, title: 'JSON', dx: 0, dy: 0, w: 340, h: 300, text: '{"a":1}',
         ports: [
           { id: 'in-json', name: 'JSON', dir: 'in', type: 'json', required: false, cardinality: 'one' },
-          { id: 'out-json', name: 'JSON', dir: 'out', type: 'json', required: true, cardinality: 'one' }
+          { id: 'out-json', name: 'JSON', dir: 'out', type: 'json', schemaRef: { id: 'json.any', version: 1 }, required: true, cardinality: 'one' }
         ] }], edges: [] },
       dependencies: [{ kind: 'node', id: 'json', contractVersion: 1 }]
     }
@@ -510,6 +510,56 @@ async function waitForOutputs(dir, projectId, nodeId, predicate, label, timeoutM
     // （node.get 契约不返回 meta，不在此读取不存在的字段。）
     receipt.outputs.mediaOutput = mediaOut
     receipt.checks.push('CLI 媒体资产节点流运行：output.get 投影含可下游消费的图片产物（nodeExtra 来源）')
+
+    const otherProject = ok2(await cli(dir, ['project', 'create'], {
+      name: '[TEST] 循环媒体归属对照'
+    }), 'ITERATE_OTHER_PROJECT').meta.id
+    const imported = await page.evaluate(async (projectIds) => {
+      const canvas = document.createElement('canvas')
+      canvas.width = canvas.height = 16
+      const context = canvas.getContext('2d')
+      context.fillStyle = '#c84'
+      context.fillRect(0, 0, 16, 16)
+      const png = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
+      const data = new Uint8Array(await png.arrayBuffer())
+      return await Promise.all(projectIds.map((projectId) => window.api.importMediaBuffer({
+        projectId, mime: 'image/png', name: 'iterate-source.png', data
+      })))
+    }, [projectId, otherProject])
+    if (imported.some((result) => !result.ok))
+      throw new Error(`ITERATE_IMPORT:${JSON.stringify(imported)}`)
+    const items = imported.map(({ data }) => ({
+      kind: 'image', mediaId: data.id, mediaPath: data.path, mime: data.mime
+    }))
+    const iteratePatch = await patchWithRetry(dir, projectId, [
+      { action: 'node.create', ref: 'list', nodeType: 'structured', x: 0, y: 900,
+        text: JSON.stringify(items), config: { schema: { id: 'list.items', version: 1 } } },
+      { action: 'node.create', ref: 'loop', nodeType: 'iterate', x: 420, y: 900,
+        config: { concurrency: 1 } },
+      { action: 'node.create', ref: 'crop', nodeType: 'image-crop', x: 840, y: 900,
+        config: { mode: 'rect', rect: { x: 0, y: 0, w: 1, h: 1 } } },
+      { action: 'edge.create', from: { nodeId: 'list', portId: 'out-json' },
+        to: { nodeId: 'loop', portId: 'in-list' } },
+      { action: 'edge.create', from: { nodeId: 'loop', portId: 'out-item' },
+        to: { nodeId: 'crop', portId: 'in-image' } }
+    ], 'ITERATE_MEDIA_PATCH')
+    const inventory = () => page.evaluate((id) => window.api.listMedia(id), projectId)
+    const beforeCrop = await inventory()
+    for (const { nodeId } of iteratePatch.created.slice(0, 2)) {
+      const run = await withVersionRetry(dir, projectId, 'EXEC_ITERATE_MEDIA', (graphVersion) =>
+        cli(dir, ['node', 'execute'], {
+          projectId, expectedGraphVersion: graphVersion, nodeIds: [nodeId], mode: 'single'
+        })
+      )
+      const result = ok2(await cli(dir, ['run', 'wait'], {
+        projectId, taskId: run.taskId, timeoutMs: 30000
+      }), 'WAIT_ITERATE_MEDIA')
+      if (result.state !== 'completed') throw new Error(`ITERATE_MEDIA_RUN:${JSON.stringify(result)}`)
+    }
+    const afterCrop = await inventory()
+    if (!beforeCrop.ok || !afterCrop.ok || afterCrop.data.length !== beforeCrop.data.length + 1)
+      throw new Error(`ITERATE_MEDIA_CROP_COUNT:${beforeCrop.data?.length}→${afterCrop.data?.length}`)
+    receipt.checks.push('真实项目媒体索引和裁剪：循环中的同项目图片产出一张新图，跨项目图片未产出')
 
     // ── W3：引用保护（画布实例 + 嵌套引用阻断删除；归档不影响绑定实例）──
     const refs = ok2(await cli(dir, ['composite', 'references'], { capabilityId: 'copy-polish' }), 'REFERENCES')

@@ -163,6 +163,31 @@
 }
 .composite-canvas-workspace { display: flex; flex: 1; min-height: 0; position: relative; }
 .composite-canvas-stage { flex: 1; position: relative; min-width: 0; }
+.composite-fan-in {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+  width: min(260px, 42%);
+  max-height: 40%;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--line, #414652);
+  border-radius: 8px;
+  background: var(--surface, #20232a);
+  color: var(--text, #f1f3f7);
+}
+.composite-fan-in ol { margin: 6px 0; padding-left: 24px; }
+.composite-fan-in li { margin: 4px 0; }
+.composite-fan-in li span {
+  display: inline-block;
+  width: calc(100% - 58px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.composite-fan-in button { width: 26px; margin-left: 3px; }
 .composite-canvas-stage .tl-container { position: absolute; inset: 0; }
 /* 与主画布一致：纯色背景，去掉全局 .tl-background 的点阵（用户裁决 2026-11-11）。 */
 .composite-canvas-stage .tl-background {

@@ -544,6 +544,42 @@ describe('AF-02 fixed-order context manifest', () => {
     expect(f.count().executions).toBe(2)
   })
 
+  it('ask-human 超预算时持久等待，且未确认的续跑不会分派下游', async () => {
+    const f = fixture({
+      firstJson: { evidence: 'r'.repeat(5000) },
+      stages: writeStages({
+        selectors: [{ sourceStageKey: 'organize', path: 'evidence' }],
+        budgetBytes: 1024,
+        overflow: 'ask-human'
+      })
+    })
+    const { task } = await f.host.run(input)
+    expect(task).toMatchObject({ state: 'waiting', waitKind: 'human', code: 'FLOW_CONTEXT_OVER_BUDGET' })
+    const { CoordinationStore } = await import('../src/main/agent-flow/coordination-store')
+    expect(new CoordinationStore(f.db).overview('p', 'main')?.contextMaterialWait)
+      .toEqual({ stageKey: 'write', waitRevision: task.waitRevision, limitBytes: 1024 })
+    const resume = {
+      ...input, action: 'continue' as const, eventId: 'budget-continue',
+      expectedTaskId: task.taskId, expectedWaitRevision: task.waitRevision
+    }
+    await expect(f.host.run(resume)).rejects.toMatchObject({ code: 'HUMAN_CONFIRMATION_REQUIRED' })
+    const confirmed = await f.host.run({ ...resume, humanConfirmed: 'gui' })
+    expect(confirmed.task).toMatchObject({ state: 'waiting', code: 'FLOW_CONTEXT_OVER_BUDGET' })
+    expect(f.count().executions).toBe(2)
+    const repaired = await f.host.run({
+      ...resume,
+      eventId: 'budget-material',
+      expectedWaitRevision: confirmed.task.waitRevision,
+      humanConfirmed: 'gui',
+      contextMaterial: '人工缩短后的材料'
+    })
+    expect(repaired.task.state).toBe('completed')
+    const write = snapshotsOf(f).find((snapshot) => snapshot.agentNodeId === 'second')
+    expect(write.contextManifest.entries).toMatchObject([
+      { sourceStageKey: 'human:context', value: '人工缩短后的材料' }
+    ])
+  })
+
   it('可选内容超预算被丢弃，必需内容保留，流程继续', async () => {
     const f = fixture({
       firstJson: { evidence: 'r'.repeat(100), optional: 'o'.repeat(5000) },

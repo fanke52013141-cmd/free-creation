@@ -79,12 +79,22 @@ function outputsMap(nodeId: string, outs: ContractOutputs): Map<string, Contract
 }
 
 describe('collectContractInputs · 缺失与无效输入', () => {
-  it('已连接但上游未产生输出 → 报错（不静默使用旧值）', () => {
+  it('区分上游未运行、已跳过和成功但没有可选输出', () => {
     const target = makeNode('t', 'text')
     const edge = makeEdge('e1', 'upstream', 'out-text', 't', 'in-text')
-    // 上游 outputs 为空：没有产生 out-text
     const result = collectContractInputs(target, [edge], new Map())
-    expect(result.errors.some((e) => e.includes('未产生'))).toBe(true)
+    expect(result.errors.some((e) => e.includes('请先运行上游'))).toBe(true)
+    expect(result.absentInputs.get('in-text')).toEqual([
+      { source: edge.from, absent: { reason: 'not-run' } }
+    ])
+    const optional = collectContractInputs(target, [edge], outputsMap('upstream', {}))
+    expect(optional.errors).toEqual([])
+    expect(optional.absentInputs.get('in-text')?.[0].absent.reason).toBe('optional-not-produced')
+    const skipped = collectContractInputs(target, [edge], new Map(), {
+      skippedNodes: new Set(['upstream'])
+    })
+    expect(skipped.errors).toEqual([])
+    expect(skipped.absentInputs.get('in-text')?.[0].absent.reason).toBe('skipped')
   })
 
   it('连线指向不存在的输入端口 → 报错', () => {
@@ -128,6 +138,19 @@ describe('collectContractInputs · 缺失与无效输入', () => {
       const target = makeNode('t', 'test-required')
       const result = collectContractInputs(target, [], new Map())
       expect(result.errors.some((e) => e.includes('in-required') && e.includes('必需'))).toBe(true)
+      expect(collectContractInputs(target, [], new Map(), {
+        deferRequiredInputs: true
+      }).errors).toEqual([])
+      const edge = makeEdge('e-required', 'upstream', 'out-text', 't', 'in-required')
+      const skipped = collectContractInputs(target, [edge], new Map(), {
+        skippedNodes: new Set(['upstream'])
+      })
+      expect(skipped.errors).toEqual([])
+      expect(skipped.skippedRequiredPorts).toEqual(['in-required'])
+      const blocked = collectContractInputs(target, [edge], new Map(), {
+        deferRequiredInputs: true
+      })
+      expect(blocked.errors).toEqual([expect.stringContaining('请先运行上游')])
     } finally {
       unregisterNodeType('test-required')
     }
@@ -406,6 +429,23 @@ describe('collectContractInputs · 成功路径', () => {
     expect(media[0].mediaId).toBe('m1')
   })
 
+  const iterationMediaCatalog = {
+    projectId: 'p1',
+    assets: [{ id: 'm1', kind: 'image' as const, path: 'projects/p1/media/tile.png', mime: 'image/png' }]
+  }
+
+  it('循环项只将当前项目索引中的规范媒体路径还原为资产', () => {
+    const indexed = iterationMediaCatalog.assets[0]
+    for (const path of ['projects/other/media/tile.png', 'projects/p1/media/../tile.png',
+      'projects/p1/media/..\\tile.png', 'projects/p1/media/tile%2fpng']) {
+      const item = { kind: indexed.kind, mediaId: indexed.id, mime: indexed.mime, mediaPath: path }
+      expect(iterationItemValue(item, 'any', {
+        projectId: 'p1', assets: [{ ...indexed, path }]
+      })).toEqual({ kind: 'json', data: item })
+    }
+    const item = { kind: indexed.kind, mediaId: 'unknown', mime: indexed.mime, mediaPath: indexed.path }
+    expect(iterationItemValue(item, 'any', iterationMediaCatalog)).toEqual({ kind: 'json', data: item })
+  })
   it('循环媒体列表项还原为类型化资产值；普通对象保留为 JSON', () => {
     expect(
       iterationItemValue(
@@ -413,15 +453,16 @@ describe('collectContractInputs · 成功路径', () => {
           id: 'tile-1',
           kind: 'image',
           mediaId: 'm1',
-          mediaPath: '/assets/tile.png',
+          mediaPath: 'projects/p1/media/tile.png',
           mime: 'image/png'
         },
-        'image'
+        'image',
+        iterationMediaCatalog
       )
     ).toEqual({
       kind: 'image',
       mediaId: 'm1',
-      mediaPath: '/assets/tile.png',
+      mediaPath: 'projects/p1/media/tile.png',
       mime: 'image/png'
     })
     const item = { id: 'row-1', title: '镜头一' }
@@ -430,16 +471,16 @@ describe('collectContractInputs · 成功路径', () => {
       id: 'tile-1',
       kind: 'image',
       mediaId: 'm1',
-      mediaPath: '/assets/tile.png',
+      mediaPath: 'projects/p1/media/tile.png',
       mime: 'image/png'
     }
     expect(iterationItemValue(assetItem, 'json')).toEqual({ kind: 'json', data: assetItem })
     expect(iterationItemValue(assetItem, 'audio')).toEqual({ kind: 'json', data: assetItem })
     expect(
-      iterationItemValue({ kind: 'image', mediaId: 'm2', mediaPath: '/assets/tile.png', mime: '' })
+      iterationItemValue({ kind: 'image', mediaId: 'm2', mediaPath: 'projects/p1/media/tile.png', mime: '' })
     ).toEqual({
       kind: 'json',
-      data: { kind: 'image', mediaId: 'm2', mediaPath: '/assets/tile.png', mime: '' }
+      data: { kind: 'image', mediaId: 'm2', mediaPath: 'projects/p1/media/tile.png', mime: '' }
     })
     const camera = {
       x: 0,
@@ -461,10 +502,10 @@ describe('collectContractInputs · 成功路径', () => {
       id: 'tile-1',
       kind: 'image',
       mediaId: 'm1',
-      mediaPath: '/assets/tile.png',
+      mediaPath: 'projects/p1/media/tile.png',
       mime: 'image/png'
     }
-    const value = iterationItemValue(item, 'image')
+    const value = iterationItemValue(item, 'image', iterationMediaCatalog)
     const result = collectContractInputs(target, [], new Map(), {
       injections: [
         {
@@ -480,7 +521,7 @@ describe('collectContractInputs · 成功路径', () => {
     })
     expect(result.errors).toEqual([])
     expect(inputMedia(result.value, 'in-images', 'image')).toMatchObject([
-      { mediaId: 'm1', mediaPath: '/assets/tile.png' }
+      { mediaId: 'm1', mediaPath: 'projects/p1/media/tile.png' }
     ])
   })
 })

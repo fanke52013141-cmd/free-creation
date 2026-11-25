@@ -22,24 +22,36 @@ const count = z.number().int().nonnegative()
 export const TRANSFER_OPERATIONS = {
   'project.import': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '导入受控导出目录内的完整项目包（.canvasbundle）：先写暂存目录，校验版本/媒体哈希与凭据剥离，媒体ID与相对路径全量重映射后才提交为新项目；失败清理暂存与半个项目',
     input: z.object({ filePath: packagePath }).strict()
   },
   'project.importStructure': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '导入受控导出目录内的画布结构包（.canvasflow）为新项目：节点/连线/分组与快照经公共清洗后落库，不含媒体文件、运行结果与聊天正文；失败回滚新项目',
     input: z.object({ filePath: packagePath }).strict()
   },
   'library.import': {
     effect: 'write',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '导入受控导出目录内的资源包（.canvaslib）：校验清单格式/版本/逐文件大小与 sha256 后经事务登记为新资源；同一内容包按包哈希拒绝重复导入',
     input: z.object({ filePath: packagePath }).strict()
   },
   'library.export': {
     effect: 'export',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '把资源库资源导出为受控导出目录内的资源包（.canvaslib）：临时文件→fsync→排他落位，不覆盖已有文件；返回路径、sha256 与字节数',
     input: z
@@ -52,6 +64,9 @@ export const TRANSFER_OPERATIONS = {
   },
   'project.exportStructure': {
     effect: 'export',
+    idempotent: false,
+    destructive: true,
+    cost: 'none',
     description:
       '把项目**已保存**的画布结构导出为受控导出目录内的结构包（.canvasflow）：节点/连线/分组与画布快照经公共清洗（不含媒体文件、运行结果、聊天正文），临时文件→fsync→排他落位不覆盖已有文件；返回文件名、sha256、字节数与节点数',
     input: z

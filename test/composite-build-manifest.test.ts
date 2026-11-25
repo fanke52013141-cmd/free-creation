@@ -91,6 +91,29 @@ function fixture(): { nodes: CanvasNode[]; edges: CanvasEdge[] } {
   }
 }
 
+it.each(['iteration', 'camera'] as const)('封装时明确指出不支持的 %s 端口', (type) => {
+  const unsupported = node({
+    id: 'shape:unsupported',
+    type: 'text',
+    ports: [port({ id: 'out-unsupported', dir: 'out', type })]
+  })
+  const built = buildCompositeManifestFromGraph({
+    capabilityId: 'unsupported-port',
+    name: '端口验收',
+    version: '1.0',
+    nodes: [unsupported],
+    edges: [],
+    selectedNodeIds: [unsupported.id]
+  })
+  expect(built).toEqual({
+    ok: false,
+    issues: [{
+      path: 'graph.nodes.shape:unsupported.ports.out-unsupported',
+      message: expect.stringContaining(type)
+    }]
+  })
+})
+
 describe('组合草稿边界提取（P1）', () => {
   it('人物设计：外部输入→人物要求文本→AI→生图，公开输出为图片', () => {
     const { nodes, edges } = fixture()

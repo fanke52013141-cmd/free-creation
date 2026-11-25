@@ -3,9 +3,10 @@
 // 界面上必须先能看出「有没有列表、有没有循环体」：这两项缺一即整节点跳过，
 // 只给配置下拉而不给连线状态，用户就只能靠猜。
 import { useRef, useState } from 'react'
-import { stopEventPropagation, useEditor } from 'tldraw'
+import { stopEventPropagation, useEditor, useValue } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
 import { readNodeConfig } from '../../../canvas/node-persistence'
+import { deriveGraph } from '../../../canvas/graph'
 import { AppSelect } from '../../../components/AppSelect'
 import { NumberStepper } from '../../../components/NumberStepper'
 import { NodePrimaryButton } from '../../../canvas/NodePresentation'
@@ -87,6 +88,11 @@ function progressLabel(progress: IterateProgress): string {
 
 export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
+  const hasBody = useValue('循环体连线', () =>
+    deriveGraph(editor).edges.some(
+      (edge) => edge.from.nodeId === shape.id && edge.from.portId === 'out-item'
+    ), [editor, shape.id])
+  const missingBodyHint = '请从“当前项”端口连接循环体的第一个节点'
   // 循环节点内容可能超出卡片高度：滚轮落在节点上时在节点内滚动，而非缩放/平移画布。
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const data = parseIterate(readNodeConfig(shape))
@@ -106,7 +112,7 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const providers = useGatewayStore((s) => s.providers)
   const [busy, setBusy] = useState(false)
   const run = async (): Promise<void> => {
-    if (!project || busy) return
+    if (!project || busy || !hasBody) return
     setBusy(true)
     try {
       await runNodeManually(
@@ -132,7 +138,7 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const resultItems = result?.items ?? []
   const hasFailed = resultItems.some((item) => item?.status === 'failed')
   const hasUnfinished = resultItems.some(
-    (item) => item && item.status !== 'done' && item.status !== 'reused'
+    (item) => item?.status !== 'done' && item?.status !== 'reused'
   )
 
   return (
@@ -255,10 +261,11 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
           {shape.props.exec === 'running' ? '正在按顺序处理…' : summaryFromResults(result.items)}
         </p>
       )}
-      <NodePrimaryButton disabled={busy} onClick={() => void run()}>
+      {!hasBody && <p className="iterate-summary" role="status">{missingBodyHint}</p>}
+      <NodePrimaryButton disabled={busy || !hasBody} title={!hasBody ? missingBodyHint : undefined} onClick={() => void run()}>
         {busy ? '运行中…' : '运行循环'}
       </NodePrimaryButton>
-      {result && !busy && (hasFailed || hasUnfinished) && (
+      {hasBody && result && !busy && (hasFailed || hasUnfinished) && (
         <div className="iterate-recovery">
           {hasUnfinished && (
             <button
@@ -267,7 +274,7 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
               title="续跑未完成项，已完成项不重复付费"
               onClick={() => void runWithMode('resume')}
             >
-              继续生成
+              只继续未完成项
             </button>
           )}
           {hasFailed && (

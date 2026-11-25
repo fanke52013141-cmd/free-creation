@@ -33,6 +33,7 @@ export const FLOW_AGENT_RUN_OPERATION_IDS: ReadonlySet<AccessOperationId> = new 
 
 export interface FlowAgentRunContext {
   activeProjectId: () => string | null
+  clientId?: string
   /** BL-01：外部触发的人工决定必须在 GUI 由人确认；缺桌面时 fail-closed。 */
   desktop?: AccessDesktop | null
 }
@@ -125,7 +126,12 @@ export async function runFlowAgentRunOperation(
     }
     let reply: unknown
     try {
-      reply = await port.run({ ...parsed.data, runOrigin: 'external', ...(humanConfirmed ? { humanConfirmed } : {}) })
+      reply = await port.run({
+        ...parsed.data,
+        runOrigin: 'external',
+        ...(context.clientId ? { externalClientId: context.clientId } : {}),
+        ...(humanConfirmed ? { humanConfirmed } : {})
+      })
     } catch (error) {
       fail(error)
     }

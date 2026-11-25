@@ -29,6 +29,7 @@ import type {
   VideoClipTransformInput,
   VideoAudioTransformInput,
   SoundAdjustTransformInput,
+  SilenceTrimTransformInput,
   VocalSeparateInput,
   VocalSeparationResult,
   TtsGenerateInput,
@@ -111,6 +112,8 @@ export interface GatewayClient {
   clipVideo(input: VideoClipTransformInput): Promise<IpcEnvelope<MediaAsset>>
   extractVideoAudio(input: VideoAudioTransformInput): Promise<IpcEnvelope<MediaAsset>>
   soundAdjust(input: SoundAdjustTransformInput): Promise<IpcEnvelope<MediaAsset>>
+  /** 去气口：检测并剪掉音频中的静音/呼吸气口，生成新音频资产。 */
+  silenceTrim(input: SilenceTrimTransformInput): Promise<IpcEnvelope<MediaAsset>>
   /** 时间线合成：把多段视频/图片/音频按时间线合成为一条 MP4 资产。 */
   composeTimeline?(input: TimelineComposeInput): Promise<IpcEnvelope<MediaAsset>>
   /** 时间线素材元数据（时长/宽高/音轨）；只读探测，未接线时调用方按未知时长处理。 */
