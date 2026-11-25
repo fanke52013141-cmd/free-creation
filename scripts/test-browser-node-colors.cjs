@@ -149,7 +149,7 @@ function contrast(a, b) {
     await page.locator('.node-menu-category-item').filter({ hasText: '声音创作' }).hover()
     await page.waitForSelector('.node-menu-submenu .item-icon')
     evidence.entries.createMenu = await page.locator('.node-menu-submenu .node-menu-item').evaluateAll((items) => items.map((el) => ({ label: el.textContent.trim(), color: getComputedStyle(el.querySelector('.item-icon')).color })))
-    assert.equal(evidence.entries.createMenu.length, 5)
+    assert.equal(evidence.entries.createMenu.length, 6)
     for (const item of evidence.entries.createMenu) rgb(item.color).forEach((channel, i) => assert.ok(Math.abs(channel - rgb(nodes.find((node) => item.label.startsWith(node.label)).color)[i]) < 1))
     await page.screenshot({ path: `${output}/create-menu.png` })
     fs.writeFileSync(`${output}/evidence.json`, JSON.stringify(evidence, null, 2))
