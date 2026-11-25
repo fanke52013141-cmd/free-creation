@@ -271,7 +271,7 @@ sources:
 | ✅ BL-37 | 192 个操作逐项声明 `idempotent / destructive / cost`；能力目录和 MCP 工具从声明派生；`run-AwaNQQ` 全量验收通过 | 审查报告 §七 · NF-14.3 | S |
 | ✅ BL-38 | 音色设计绑定、空循环体提示、右边缘产物落位已通过浏览器验收（U-3、F-1、U-5）；`run-AwaNQQ` 全量门禁通过 | 组合测试 | S–M |
 | ✅ BL-39 | 循环卡片提供「只继续未完成项」，中止后续跑回归覆盖已完成项复用；`run-AwaNQQ` 全量门禁通过 | ROADMAP R4 | M |
-| 🟡 BL-40 | 已支持默认失败、显式摘要回退和 Agent 阶段的桌面补料入口；待完成能力节点补料和桌面端到端验收 | AF-10.4 | M |
+| 🟡 BL-40 | 已支持默认失败、显式摘要回退和 Agent 阶段的桌面补料入口；能力节点补料缺口已定位并给出实现选项，**待拍板 A/B/C**（见 [71 决策记录](canvas-agent-flow/71-capability-context-supplement-decision.md)）：`dispatchCapability` 未消费 `humanMaterial`、store 投影排除 capability、`node.execute` 无自由文本通道 | AF-10.4 | M |
 | ✅ BL-41 | 外围浏览器脚本修复并纳入 `test:optimization-ui` 门禁（node-ui / panel-sync / media-import） | 2026-11-24 | S |
 
 ---
