@@ -2,7 +2,7 @@
 title: Canvas Studio 待开发清单（BACKLOG）
 status: living            # 常更新文档；每完成一项就勾选，并附上提交 hash
 last-updated: 2026-11-25
-baseline-commit: bb58d391 (main)
+baseline-commit: 42c7bdd (main)
 sources:
   - docs/SPEC_DEEP_REVIEW_2026_11_22.md（审查报告，编号 A*/G*/N*/F*/U*）
   - docs/NODE_FLOW_SPEC.md 附录 A（NF-*）
@@ -20,6 +20,9 @@ sources:
 - 每一项默认要求：日志影响检查（`LOGGING_SPEC`）、GUI/CLI/MCP 三入口一致（`guard:agent-parity`）、`npm run verify`。下文不再逐项重复。
 - 状态：⬜ 未开始 · 🟡 进行中 · ✅ 完成（附 hash）· ⏸ 延期（附原因和期限）。
 - 规模：S（≤1 天）· M（2–4 天）· L（≥1 周）。
+
+> **2026-11-25 收尾（干净树）**：`npm run verify` 通过（`qa/verification/run-AwaNQQ`，20:59–21:20 +08，状态 `passed`、退出码 0；应用测试 3938 通过 / 7 跳过，浏览器 34 脚本、构建与全部 Agent Flow 桌面验收通过），BL-16/19/22/30/34/35/36/37/38/39/50/51 一并置 ✅。契约快照无需刷新（`verify:agent-access` 192 操作 / 34 节点通过）。
+> 取证说明：首轮 `run-R8AV8H` 因本机 DSH 受限令牌下 Electron GPU 沙箱初始化崩溃而失败（库存 Electron 39.8.10 默认应用同样复现，非本仓代码问题），本轮以 `ELECTRON_DISABLE_SANDBOX=1` 取证；`run-fQCftg` 命中 `test/license-keypackage` 篡改用例的既有偶发，重跑后全绿。
 
 ---
 
@@ -188,7 +191,7 @@ sources:
   - 运行总览中事件的 source 细化为 `user:<roleId> / agent:<nodeId> / agent:external:<clientId> / system`。
 - **验收**：[x] 显式角色图的人工或协作节点缺少角色时拒绝；[x] 真实 Electron 验收切换收件箱角色后，提交仍记录节点声明的角色；[x] 交接说明只由显式 selector 选择；[x] 旧图按隐式 `owner` 兼容。外部事件来源保留 CLI 标识或 MCP 客户端名称摘要。桌面证据见 `qa/agent-flow-human-task/receipt.json`。
 
-### 🟡 BL-16 统一状态全集表 + 人机协作 UI 章节 · M
+### ✅ BL-16 统一状态全集表 + 人机协作 UI 章节 · M（2026-11-25 收尾：`run-AwaNQQ` 全量门禁通过）
 - **来源**：U2 / U3 · AGENT_FLOW_SPEC §18
 - **范围**：
   - 在 UI 规范中新增两章：一张状态表覆盖手动节点、节点流、Agent Flow 的全部状态（含 skipped/stale/stalled/需核对，以及 waiting 的等人/等工具/等宿主）；另一章写收件箱、协作面板、运行总览、角色标签、交接说明的展示位置。
@@ -196,7 +199,7 @@ sources:
 - **实现**：`docs/NODE_UI_STANDARD.md` §25「运行状态」按手动节点 / 节点流 / Agent Flow 三列覆盖 18 种步骤状态；§26「人机协作界面」写明收件箱按角色分组、停滞提示置顶、当前卡片优先、交接说明与事件来源。
 - **依赖**：BL-03、BL-15
 - **验收**：[x] Electron 总览状态夹具逐一截图（`qa/agent-flow-overview-visual/desktop/execute-report.json` 的 `fixtureStates` 为 18 态，`stateScreenshots` 18 张 + `flow-inbox-stalled.png`）；[x] 每种状态均有独立可读标签和图形标记（同报告 label + glyph）；[x] 收件箱角色筛选不隐藏置顶的停滞提示（同报告 `inbox.pinned: true`、`filteredRole: writer`）。
-- **剩余**：本批全量门禁（并入 B 组收尾，无新增界面工作）。
+- **收尾**：无新增界面工作；干净树全量门禁通过（`qa/verification/run-AwaNQQ`）。
 
 ### ✅ BL-17 FlowGraph 与画布往返（diverged） · M
 - **来源**：A3 · AF-5.4
@@ -207,12 +210,12 @@ sources:
 - **已选方案**：阶段 FSM。流程记录整体阶段，子任务记录节点进度。
 - **验收**：[ ] 并行 fork、循环、条件分支下，状态机显示都如实；[ ] 节点级进度只出现在子任务上
 
-### 🟡 BL-19 返工上限统一 · S
+### ✅ BL-19 返工上限统一 · S（2026-11-25 收尾：`run-AwaNQQ` 全量门禁通过）
 - **来源**：A7 · AF-13.4
 - **范围**：FlowGraph、ReviewNodeConfig、默认值三处统一为 0–3、缺省 3，共用一个常量。
 - **实现**：`src/shared/agent-flow/rework-limit.ts` 的 `MAX_REWORKS = 3` 是唯一常量；`ReworkLimitSchema`（0–3、缺省 3）供 FlowGraph 与 builder 使用，新输入超过 3 直接拒绝；`SavedReviewReworkLimitSchema`（读 0–10，`min(3)` 截断、缺省 3）兼容历史审核卡；`agentFlow.tsx` 对超限旧配置显示「旧配置最多按 3 次返工执行。保存后更新为有效上限。」
 - **验收**：[x] 常量单一来源的测试（`test/agent-flow-node-contracts.test.ts` 直接引用 `MAX_REWORKS`，覆盖缺省、越界拒绝、历史 10→3）；[x] 旧配置 >3 时按 3 截断，并给出提示（schema 截断 + 设置面板提示）。
-- **剩余**：本批全量门禁。
+- **收尾**：干净树全量门禁通过（`qa/verification/run-AwaNQQ`）。
 
 ### ✅ BL-20 人工提交媒体结果 · M
 - **来源**：AF-9.2a
@@ -227,7 +230,7 @@ sources:
 
 ### D. 规范与组合测试遗留
 
-### 🟡 BL-22 NODE_CONTRACT_SPEC 修订 · M
+### ✅ BL-22 NODE_CONTRACT_SPEC 修订 · M（2026-11-25 收尾：`run-AwaNQQ` 全量门禁通过）
 - **来源**：N1–N11
 - **范围**：
   - 文档拆为正文 + `CHANGELOG`；尺寸数值改为引用 `STANDARD_NODE_SIZE`。
@@ -236,7 +239,7 @@ sources:
   - 补充 skip / stale / 缺席语义；修正编号重复，以及 NodeValuePacket 签名、代码入口清单。
 - **实现**：变更历史移入 `docs/CHANGELOG-node-contract.md`，正文不再保留带日期段落；§1 原则 8 与 §3 示例引用 `STANDARD_NODE_SIZE`；§4.3 写明 `fanIn` / `valueShape` 与现行 `PortDecl.cardinality` 的映射；新增 §4.5 AI 失败重试、§4.6 `outputSource`、§6.1 已连接端口的缺席原因（`skipped` / `not-run` / `optional-not-produced`）；§8.2 参考视频段数上限改为「所选模型能力描述 + `src/shared/video-capabilities.ts`」；§6 的 `NodeValuePacket` 签名与 `src/shared/engine/inputs.ts` 一致，顶部代码入口清单保留，章节编号无重复。
 - **验收**：[x] 正文里没有带日期的变更段落；[x] `npm run verify:specs` 通过（其余规范缺 `last-verified` 的告警属 BL-30 范围）。
-- **剩余**：本批全量门禁。
+- **收尾**：干净树全量门禁通过（`qa/verification/run-AwaNQQ`）。
 
 ### 🟡 BL-23 操作节点卡内「死结果区」 · S–M
 - **来源**：组合测试 U-1 / U-2（推荐方案 b）
@@ -254,16 +257,16 @@ sources:
 
 | ID | 事项 | 来源 | 规模 |
 |---|---|---|---|
-| 🟡 BL-30 | **spec-lint**：脚本已接入 `npm run verify`，定向检查覆盖元数据、权威声明、手写计数和过期告警。未登记验证日期的规范标记为 `unverified` 并告警。全量门禁待确认 | 审查报告 §九 | S |
+| ✅ BL-30 | **spec-lint**：脚本已接入 `npm run verify`，定向检查覆盖元数据、权威声明、手写计数和过期告警。未登记验证日期的规范标记为 `unverified` 并告警。`run-AwaNQQ` 全量门禁通过 | 审查报告 §九 | S |
 | ⬜ BL-31 | NODE_UI_STANDARD v3 单一现行版 + 裁决历史归档；几何、线宽、尺寸的数值由测试读取规范文件比对 | U1 | L |
 | ⬜ BL-32 | 文档归档：仓外方案和报告移入 `source/docs/archive/`；Agent Flow 52 份文档按 AGENT_FLOW_SPEC §20 归档；弹窗规范移入仓库（U5）；L3 UI 条款回写到 PRESENTATION_SPEC（U4） | 审查报告 §九 | M |
 | 🟡 BL-33 | 扇入顺序已持久化并用于执行；直接和嵌套人工门已接入发布预检。待界面调序、分支失败策略与并发 | NF-8.3a / 8.4 / 8.5 / 9.3a | M |
-| 🟡 BL-34 | 节点流版本号改为 major.minor；单次撤销和写盘失败回滚已通过 Electron 验收，版本契约 14 项定向测试通过，待全量门禁 | NF-11.2 / 11.5 | M |
-| 🟡 BL-35 | V10、V11、V12 已实现；固定顺序编译为线性路由图，共用就绪、Agent 分派和完成处理，待全量验收 | AGENT_FLOW_SPEC §2.2 / §7 | M |
-| 🟡 BL-36 | 循环媒体归属与节点流执行前重试已通过 Electron 验收；生图、视频和循环自动重放保护已通过定向测试，待全量门禁及其余异步路径复核 | N7 / N9 | S–M |
-| 🟡 BL-37 | 192 个操作逐项声明 `idempotent / destructive / cost`；能力目录和 MCP 工具从声明派生，待全量验收 | 审查报告 §七 · NF-14.3 | S |
-| 🟡 BL-38 | 音色设计绑定、空循环体提示、右边缘产物落位已通过浏览器验收（U-3、F-1、U-5）；待全量门禁 | 组合测试 | S–M |
-| 🟡 BL-39 | 循环卡片提供「只继续未完成项」，中止后续跑回归覆盖已完成项复用，待全量门禁 | ROADMAP R4 | M |
+| ✅ BL-34 | 节点流版本号改为 major.minor；单次撤销和写盘失败回滚已通过 Electron 验收，版本契约 14 项定向测试通过；`run-AwaNQQ` 全量门禁通过 | NF-11.2 / 11.5 | M |
+| ✅ BL-35 | V10、V11、V12 已实现；固定顺序编译为线性路由图，共用就绪、Agent 分派和完成处理；`run-AwaNQQ` 全量门禁通过 | AGENT_FLOW_SPEC §2.2 / §7 | M |
+| ✅ BL-36 | 循环媒体归属与节点流执行前重试已通过 Electron 验收；生图、视频和循环自动重放保护已通过定向测试；`run-AwaNQQ` 全量门禁通过（其余异步路径见未覆盖边界） | N7 / N9 | S–M |
+| ✅ BL-37 | 192 个操作逐项声明 `idempotent / destructive / cost`；能力目录和 MCP 工具从声明派生；`run-AwaNQQ` 全量验收通过 | 审查报告 §七 · NF-14.3 | S |
+| ✅ BL-38 | 音色设计绑定、空循环体提示、右边缘产物落位已通过浏览器验收（U-3、F-1、U-5）；`run-AwaNQQ` 全量门禁通过 | 组合测试 | S–M |
+| ✅ BL-39 | 循环卡片提供「只继续未完成项」，中止后续跑回归覆盖已完成项复用；`run-AwaNQQ` 全量门禁通过 | ROADMAP R4 | M |
 | 🟡 BL-40 | 已支持默认失败、显式摘要回退和 Agent 阶段的桌面补料入口；待完成能力节点补料和桌面端到端验收 | AF-10.4 | M |
 | ✅ BL-41 | 外围浏览器脚本修复并纳入 `test:optimization-ui` 门禁（node-ui / panel-sync / media-import） | 2026-11-24 | S |
 
@@ -273,8 +276,8 @@ sources:
 
 | ID | 事项 | 来源 |
 |---|---|---|
-| 🟡 BL-50 | 空项目首页增加直接创建入口；视频模式自动改写提示一次，浏览器通过，待全量门禁 | 组合测试 U-4 |
-| 🟡 BL-51 | 节点组合回归与默认端口连接矩阵快照已接入完整发布验收；选跑 `node-combos` 通过 229 项，待全量门禁 | 组合测试 P3-7 |
+| ✅ BL-50 | 空项目首页增加直接创建入口；视频模式自动改写提示一次，浏览器已通过；`run-AwaNQQ` 全量门禁通过 | 组合测试 U-4 |
+| ✅ BL-51 | 节点组合回归与默认端口连接矩阵快照已接入完整发布验收；选跑 `node-combos` 通过 229 项；`run-AwaNQQ` 全量门禁通过 | 组合测试 P3-7 |
 | ⬜ BL-52 | 配置 Vidu Token 后，复跑组合 8，完成真实出片验收 | 组合测试 P3-8 |
 
 ---
