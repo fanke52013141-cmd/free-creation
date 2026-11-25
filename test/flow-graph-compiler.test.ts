@@ -226,3 +226,88 @@ describe('BL-03 编译重映射：条件与最小输入里的节点引用', () =
   })
 })
 
+
+describe('BL-18 流程阶段机（AF-12.3a 冻结：阶段 FSM）', () => {
+  const PHASES = ['idle', 'running', 'waiting-human', 'reviewing', 'paused', 'completed', 'failed', 'stopped']
+  const phaseGraphs: Array<[string, FlowGraph]> = [
+    [
+      '并行 fork',
+      graph([node('a'), node('b'), node('c')], [dataEdge('a', 'b'), dataEdge('a', 'c')], 'a', ['b', 'c'])
+    ],
+    [
+      '循环',
+      graph(
+        [
+          node('a'),
+          node('b', {
+            loop: {
+              maxIterations: 2,
+              exitCondition: [
+                { kind: 'output-field', stageKey: 'b', path: 'text', op: 'exists' }
+              ]
+            }
+          })
+        ],
+        [dataEdge('a', 'b')],
+        'a',
+        ['b']
+      )
+    ],
+    [
+      '条件分支 + otherwise',
+      graph(
+        [node('a'), node('b'), node('c')],
+        [
+          {
+            ...dataEdge('a', 'b'),
+            condition: [{ kind: 'output-field', stageKey: 'a', path: 'text', op: 'exists' }]
+          },
+          { ...dataEdge('a', 'c'), otherwise: true }
+        ],
+        'a',
+        ['b', 'c']
+      )
+    ]
+  ]
+
+  it.each(phaseGraphs)('%s：编译出的状态机只包含流程阶段，不含节点级状态', (_label, flowGraph) => {
+    const compiled = compileFlowGraph(flowGraph)
+    const stateNode = compiled.nodes.find((n) => n.id === compiled.stateNodeId)!
+    const config = StateMachineNodeConfigSchema.parse(JSON.parse(stateNode.config))
+    expect(config.states).toEqual(PHASES)
+    const serialized = JSON.stringify(config)
+    for (const flowNode of flowGraph.nodes) {
+      expect(config.states).not.toContain(flowNode.nodeId)
+      expect(config.transitions.some((t) => t.from === flowNode.nodeId || t.to === flowNode.nodeId)).toBe(false)
+      expect(serialized).not.toContain(`shape:${flowNode.nodeId}`)
+    }
+    const declared = new Set(config.states)
+    for (const transition of config.transitions) {
+      expect(declared.has(transition.from)).toBe(true)
+      expect(declared.has(transition.to)).toBe(true)
+      expect(transition.event).toMatch(/^(flow|agent|human|review|rework)\./)
+    }
+  })
+
+  it('阶段迁移覆盖协调器实际会发出的事件（续跑/人工等待/返工/停止）', () => {
+    const compiled = compileFlowGraph(
+      graph([node('a'), node('b')], [dataEdge('a', 'b')], 'a', ['b'])
+    )
+    const stateNode = compiled.nodes.find((n) => n.id === compiled.stateNodeId)!
+    const config = StateMachineNodeConfigSchema.parse(JSON.parse(stateNode.config))
+    const transitions = config.transitions
+    for (const event of [
+      'flow.started',
+      'human.continue',
+      'human.wait',
+      'agent.dispatched',
+      'agent.completed',
+      'flow.rework',
+      'flow.completed',
+      'flow.failed',
+      'flow.stopped'
+    ]) {
+      expect(transitions.some((t) => t.event === event)).toBe(true)
+    }
+  })
+})

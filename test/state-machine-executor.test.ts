@@ -10,6 +10,7 @@ import {
   type StateMachineInstance
 } from '@shared/engine/executors/agentFlow'
 import { projectStateMachineOutputs } from '@shared/agent-flow/agent-outputs'
+import { deriveFlowPhaseStateMachine } from '@shared/agent-flow/flow-graph-compiler'
 import { DEFAULT_STATE_NODE_CONFIG } from '@shared/agent-flow/node-contracts'
 import { validateNodeSchema } from '@shared/node-schemas'
 import type { NodeExecutionContext } from '@shared/engine/executor-types'
@@ -338,4 +339,45 @@ describe('状态机独立执行（P2-A）', () => {
     } as any)
     expect(outputs['out-state']).toMatchObject({ kind: 'json', data: { state: 'working' } })
   })
+})
+
+
+it('BL-18：阶段投影只记录流程阶段，节点级进度不写入阶段机', () => {
+  const { states } = deriveFlowPhaseStateMachine()
+  let instance: StateMachineInstance | null = null
+  const project = (phase: string, event: string, revision: number): void => {
+    instance = projectFlowPhase(instance, states, 'idle', {
+      taskId: 'task-phase',
+      stateNodeId: 'shape:state',
+      event,
+      eventId: `event-${revision}`,
+      phase,
+      revision
+    })
+  }
+  project('running', 'flow.started', 1)
+  expect(instance?.state).toBe('running')
+  // 并行 fork：多个子任务分派/完成不改变流程阶段。
+  project('running', 'agent.dispatched', 2)
+  project('running', 'agent.dispatched', 3)
+  project('running', 'agent.completed', 4)
+  expect(instance?.state).toBe('running')
+  // 任一分支持等人：流程阶段如实进入 waiting-human（节点进度留在子任务）。
+  project('waiting-human', 'human.wait', 5)
+  expect(instance?.state).toBe('waiting-human')
+  // 继续后进入循环/条件分支的重复迭代：阶段仍是 running。
+  project('running', 'human.continue', 6)
+  project('running', 'agent.dispatched', 7)
+  project('running', 'agent.completed', 8)
+  expect(instance?.state).toBe('running')
+  // 全部出口交付后完成。
+  project('completed', 'flow.completed', 9)
+  expect(instance?.state).toBe('completed')
+  // 历史只含阶段迁移，不含任何节点级状态。
+  const history = (instance as StateMachineInstance | null)?.history ?? []
+  expect(history.length).toBeGreaterThan(0)
+  for (const entry of history) {
+    expect(states).toContain(entry.from)
+    expect(states).toContain(entry.to)
+  }
 })

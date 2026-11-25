@@ -207,10 +207,11 @@ sources:
 - **来源**：A3 · AF-5.4
 - **验收**：[x] 修改被控节点后总览提示差异并拦截启动；[x] 桌面验收覆盖恢复原定义及发布新版本。反向导出只接受重新编译后可复现的改动。见 `scripts/acceptance/agent-flow-human-task.cjs`。
 
-### ⬜ BL-18 状态机改为流程阶段机 · M
+### ✅ BL-18 状态机改为流程阶段机 · M（2026-11-26 完成）
 - **来源**：A5 · AF-12.3a
 - **已选方案**：阶段 FSM。流程记录整体阶段，子任务记录节点进度。
-- **验收**：[ ] 并行 fork、循环、条件分支下，状态机显示都如实；[ ] 节点级进度只出现在子任务上
+- **实现**：编译期 `deriveFlowPhaseStateMachine()` 生成唯一阶段配置（idle/running/waiting-human/reviewing/paused/completed/failed/stopped），不再按节点或数据边派生；阶段取自协调器真实 `run.phase`，`projectFlowPhase` 只投影流程阶段。并行 fork、循环迭代、条件分支下阶段由运行事实驱动；节点级进度只出现在子任务（state-machine 配置无节点 ID）。
+- **验收**：[x] 并行 fork、循环、条件分支下，状态机显示都如实（编译期阶段机测试 + 阶段投影测试：多子任务分派/完成不改阶段、任一分支持等人进入 waiting-human、继续/迭代回 running、完成进 completed）；[x] 节点级进度只出现在子任务上（states/transitions 不含节点 ID，历史只含阶段迁移）。规范 AF-12.3a 冻结为【现行】。
 
 ### ✅ BL-19 返工上限统一 · S（2026-11-25 收尾：`run-AwaNQQ` 全量门禁通过）
 - **来源**：A7 · AF-13.4

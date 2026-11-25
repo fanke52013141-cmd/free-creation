@@ -324,7 +324,7 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 **AF-12.3【现行】** 每个控制范围绑定一个状态机节点（`observes` 关系）；状态只通过可信事件迁移（`emitTrustedEvent`），并做事件去重和 revision 校验；用户可以提交人工事件（`flowStateMachine.submitEvent`），合法性由执行器校验；不允许直接 setState。
 
-**AF-12.3a【目标·A5】状态机只记录「流程阶段」**：`idle → running ⇄ waiting-human / reviewing → completed | failed | stopped`。节点级进度由各子任务的状态承载。现行 graph 编译器把「每个节点一个状态、每条数据边一个迁移」派生成平面 FSM，在并行 fork、循环自重复和条件分支下都无法如实表示，必须改为阶段状态机（或支持并行区域的 statechart，二选一并在此冻结）。
+**AF-12.3a【现行·BL-18，2026-11-26 冻结：阶段 FSM】** 状态机只记录「流程阶段」：`idle → running ⇄ waiting-human / reviewing → completed | failed | stopped`（另含 `paused`）。节点级进度只由各子任务状态承载，不进入阶段机的 states/transitions。编译期由 `deriveFlowPhaseStateMachine()` 生成唯一阶段配置；并行 fork、循环迭代与条件分支下，阶段取自协调器真实 `run.phase`，不按节点或数据边派生（不再采用 per-node 平面 FSM，也不引入并行 region statechart）。
 
 ---
 
@@ -511,7 +511,7 @@ FlowNode {
 | 节点流作为能力、能力目录生成 | §4.4 / NODE_FLOW_SPEC §13 | P1 |
 | params 与显式端口 | §4.4 | P1 |
 | FlowGraph 与画布往返（diverged） | AF-5.4 | P1 |
-| 状态机改为阶段状态机 | AF-12.3a | P1 |
+| ~~状态机改为阶段状态机~~ ✅ BL-18（阶段 FSM 冻结，编译期唯一配置） | AF-12.3a | — |
 | 返工上限统一 | AF-13.4 | P1 |
 | 人工媒体交付 | AF-9.2a | P1 |
 | 角色化单用户：roles / humanRole / actor 记录 / 收件箱按角色分组 / 交接说明 | §16 | P1（已决策：只做方案 A） |
