@@ -21,7 +21,7 @@ sources:
 - 状态：⬜ 未开始 · 🟡 进行中 · ✅ 完成（附 hash）· ⏸ 延期（附原因和期限）。
 - 规模：S（≤1 天）· M（2–4 天）· L（≥1 周）。
 
-> **2026-11-25 收尾（干净树）**：`npm run verify` 通过（`qa/verification/run-AwaNQQ`，20:59–21:20 +08，状态 `passed`、退出码 0；应用测试 3938 通过 / 7 跳过，浏览器 34 脚本、构建与全部 Agent Flow 桌面验收通过），BL-16/19/22/30/34/35/36/37/38/39/50/51 一并置 ✅。契约快照无需刷新（`verify:agent-access` 192 操作 / 34 节点通过）。
+> **2026-11-25 收尾（干净树）**：`npm run verify` 通过（`qa/verification/run-AwaNQQ`，20:59–21:20 +08，状态 `passed`、退出码 0；应用测试 3938 通过 / 7 跳过，浏览器 34 脚本、构建与全部 Agent Flow 桌面验收通过），BL-16/19/22/30/34/35/36/37/38/39/50/51 一并置 ✅。契约快照无需刷新（`verify:agent-access` 192 操作 / 34 节点通过）；收尾提交 `418ab05`。
 > 取证说明：首轮 `run-R8AV8H` 因本机 DSH 受限令牌下 Electron GPU 沙箱初始化崩溃而失败（库存 Electron 39.8.10 默认应用同样复现，非本仓代码问题），本轮以 `ELECTRON_DISABLE_SANDBOX=1` 取证；`run-fQCftg` 命中 `test/license-keypackage` 篡改用例的既有偶发，重跑后全绿。
 
 ---
