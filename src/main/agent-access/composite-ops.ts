@@ -307,6 +307,17 @@ export async function runCompositeOperation(
     case 'composite.run.get': {
       const record = getCompositeRun(String(input.runId ?? ''))
       if (!record) throw new DesktopAccessError('NOT_FOUND', false, 'composite-run')
+      const run = record.run
+      // NF-5.3 冻结（2026-11-26）：headless 输出统一 out-<id>；存储保持裸 id，仅在读取投影时加前缀。
+      if (run && run.outputValues) {
+        const outputValues = Object.fromEntries(
+          Object.entries(run.outputValues).map(([id, value]) => [
+            `out-${String(id).replace(/^out-/, '')}`,
+            value
+          ])
+        )
+        return { ...record, run: { ...run, outputValues } }
+      }
       return record
     }
     case 'composite.run.list': {

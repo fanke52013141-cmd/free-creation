@@ -567,7 +567,17 @@ export class LocalAccessService {
         result = {
           runId,
           status: record.status,
-          ...(record.outputValues ? { outputs: record.outputValues } : {}),
+          ...(record.outputValues
+            ? {
+                // NF-5.3 冻结（2026-11-26）：headless outputs 统一带 out- 前缀，与画布/摘要/预检一致。
+                outputs: Object.fromEntries(
+                  Object.entries(record.outputValues).map(([id, value]) => [
+                    `out-${String(id).replace(/^out-/, '')}`,
+                    value
+                  ])
+                )
+              }
+            : {}),
           ...(record.errorMessage ? { reason: record.errorMessage } : {}),
           // W4：人工补交/重试链事实如实暴露（不伪造自动成功）。
           ...(record.manualSubmission ? { manualSubmission: true } : {}),
@@ -2034,13 +2044,18 @@ export class LocalAccessService {
       throw new AccessFailure('RUN_NOT_RESUBMITTABLE', 'precheck', `status:${existing.status}`)
     const record = getCompositeVersion(existing.capabilityId, existing.capabilityVersion)
     if (!record) throw new AccessFailure('VERSION_NOT_PUBLISHED', 'precheck', 'published-version')
-    const outputs = (input.outputs ?? []) as Array<{
+    const outputs = ((input.outputs ?? []) as Array<{
       portId: string
       value: { kind: 'text' | 'markdown' | 'json'; text?: string; data?: unknown }
-    }>
+    }>).map((entry) => ({
+      ...entry,
+      // NF-5.3：统一 out-<id>；兼容历史裸 id 输入（读取时归一化）。
+      portId: String(entry.portId ?? '').replace(/^out-/, '')
+    }))
     const declared = record.manifest.outputs
     const submittedIds = outputs.map((entry) => entry.portId)
     if (
+      submittedIds.some((portId) => !portId) ||
       new Set(submittedIds).size !== submittedIds.length ||
       submittedIds.length !== declared.length ||
       declared.some((port) => !submittedIds.includes(port.id))
@@ -2069,7 +2084,7 @@ export class LocalAccessService {
       outputValues
     })
     if (!changed) throw new AccessFailure('RUN_NOT_RESUBMITTABLE', 'precheck', 'state-race')
-    return { runId, status: 'completed', manualSubmission: true, outputPorts: submittedIds }
+    return { runId, status: 'completed', manualSubmission: true, outputPorts: submittedIds.map((id) => `out-${id}`) }
   }
 
   private async executeHumanTaskSubmit(

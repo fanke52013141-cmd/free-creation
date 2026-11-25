@@ -207,6 +207,110 @@ describe('组合能力 Agent 契约（P1 对等）', () => {
     const description = COMPOSITE_OPERATIONS['composite.execute'].description ?? ''
     expect(description).toContain('in-<公开输入id>')
     expect(description).toContain('confirmCost')
-    expect(description).toContain('裸公开输出 id')
+    expect(description).toContain('out-<公开输出id>')
+    expect(description).toContain('out-polished')
+  })
+
+  it('NF-5.3：headless outputs 以 out- 前缀暴露，resubmit 接受 out- 并归一化', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'canvas-composite-keys-'))
+    const priorDirectory = process.env.CANVAS_DATA_DIR
+    process.env.CANVAS_DATA_DIR = directory
+    try {
+      const textManifest = manifest()
+      textManifest.capabilityId = 'copy-polish-keys'
+      textManifest.name = '润色稿'
+      textManifest.outputs = [
+        {
+          id: 'polished',
+          label: '润色稿',
+          type: 'text',
+          required: true,
+          cardinality: 'one',
+          source: { nodeId: 'n1', portId: 'out-text' }
+        }
+      ]
+      textManifest.graph = {
+        nodes: [textManifest.graph.nodes[0]],
+        edges: []
+      }
+      textManifest.dependencies = [{ kind: 'node', id: 'text', contractVersion: 1 }]
+      const { record } = await publishCompositeVersion(textManifest)
+      const service = new LocalAccessService({
+        instanceId: 'composite-keys-test',
+        appVersion: 'test',
+        exportDirectory: join(directory, 'exports'),
+        activeProjectId: () => null,
+        desktop: {
+          async run() {
+            return {}
+          },
+          async ask() {
+            return { authorized: false, code: 'NOT_USED' }
+          }
+        }
+      })
+      const dispatch = (operationId: string, input: Record<string, unknown>) =>
+        service.dispatch({
+          apiVersion: 1,
+          operationVersion: 1,
+          operationId,
+          requestId: randomUUID(),
+          idempotencyKey: `${Date.now()}:${randomUUID()}`,
+          expectedDataStoreId: service.dataStoreId,
+          input
+        })
+      const createRun = (runId: string) =>
+        createCompositeRun({
+          id: runId,
+          projectId: 'headless-keys',
+          capabilityId: record.manifest.capabilityId,
+          capabilityVersion: record.manifest.version,
+          contentHash: record.contentHash,
+          inputValues: { requirements: '原始文本' }
+        })
+
+      // execute.wait：输出键统一带 out- 前缀。
+      const completedId = randomUUID()
+      createRun(completedId)
+      finishCompositeRun({
+        runId: completedId,
+        status: 'completed',
+        outputPorts: [{ portId: 'polished', kind: 'text' }],
+        outputValues: { polished: { kind: 'text', text: '自动润色' } }
+      })
+      const waited = await dispatch('composite.execute.wait', { runId: completedId, timeoutMs: 100 })
+      expect(waited.error).toBeUndefined()
+      expect((waited.data as { outputs: Record<string, unknown> }).outputs).toEqual({
+        'out-polished': { kind: 'text', text: '自动润色' }
+      })
+
+      // composite.run.get：读取投影同样带前缀（存储仍为裸 id）。
+      const got = await dispatch('composite.run.get', { runId: completedId })
+      expect(got.error).toBeUndefined()
+      expect((got.data as { run: { outputValues: Record<string, unknown> } }).run.outputValues).toEqual({
+        'out-polished': { kind: 'text', text: '自动润色' }
+      })
+
+      // resubmit：提交值用 out-<id>，返回的 outputPorts 同样带前缀。
+      for (const [portId, text] of [
+        ['out-polished', '人工补交'],
+        ['polished', '历史裸 id 补交']
+      ] as const) {
+        const failedId = randomUUID()
+        createRun(failedId)
+        finishCompositeRun({ runId: failedId, status: 'failed', failurePhase: 'step' })
+        const submitted = await dispatch('composite.run.resubmit', {
+          runId: failedId,
+          outputs: [{ portId, value: { kind: 'text', text } }]
+        })
+        expect(submitted.error).toBeUndefined()
+        expect((submitted.data as { outputPorts: string[] }).outputPorts).toEqual(['out-polished'])
+      }
+    } finally {
+      closeDb()
+      if (priorDirectory === undefined) delete process.env.CANVAS_DATA_DIR
+      else process.env.CANVAS_DATA_DIR = priorDirectory
+      rmSync(directory, { recursive: true, force: true })
+    }
   })
 })

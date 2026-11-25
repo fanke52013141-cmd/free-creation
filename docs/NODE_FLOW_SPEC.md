@@ -123,9 +123,9 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 
 **NF-5.2【现行】** 实例端口 ID 固定为 `in-<公开输入 id>` 和 `out-<公开输出 id>`。
 
-**NF-5.3【目标·C-❌2】键约定（三入口必须一致）**：
-- 画布连线、`outputPorts`、升级预检、`run.resubmit` 一律使用**带前缀**的实例端口 ID；
-- headless 结果里的 `outputs` 对象改为同样带前缀，或者在 Schema 的 description 中写死「outputs 的键 = 裸公开 id」。二选一，冻结前必须确定；建议统一带前缀。
+**NF-5.3【现行·2026-11-26 冻结】键约定（三入口必须一致）**：
+- 画布连线、`outputPorts`、升级预检、`run.resubmit` 一律使用**带前缀**的实例端口 ID（`in-<公开输入id>` / `out-<公开输出id>`）；
+- headless 结果里的 `outputs` / `outputValues` 同样带前缀（`out-<公开输出id>`），与画布一致；`resubmit` 提交值使用 `out-<id>`，读取历史裸 id 时归一化后接受（仅兼容旧运行，不再作为新约定）。
 
 **NF-5.4【目标】** 自动推导不能表达的边界（如需要公开第二个输出），**不能靠手动挑选**，只能通过调整内部图实现，例如增加一个汇集节点。这一条是 NF-5.1 的直接推论，写明是为了防止将来有人绕过推导规则。
 
@@ -380,4 +380,4 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 | ~~分支失败策略、内部并发~~ ✅ BL-33（`executionPolicy.onBranchFailure` / `maxConcurrency`，编辑页「运行策略」） | NF-8.4 / NF-8.5 | — |
 | ~~人工门自动推断~~ ✅ BL-33（`MANUAL_GATE_UNDECLARED`） | NF-9.3a | — |
 | semver major.minor | NF-11.2 | P2 |
-| 键约定统一 | NF-5.3 | P1 |
+| ~~键约定统一~~ ✅ 2026-11-26 冻结：headless outputs 统一 `out-<id>`（兼容旧裸 id 读取） | NF-5.3 | — |

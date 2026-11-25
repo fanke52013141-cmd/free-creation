@@ -114,7 +114,7 @@ const manifest = {
     // 4. 等待终态 + 读取输出
     const waited = ok(await cli(dir, ['composite', 'execute', 'wait'], { runId: exec.runId, timeoutMs: 60000 }), 'WAIT')
     if (waited.status !== 'completed') throw new Error(`WAIT_NOT_COMPLETED:${JSON.stringify(waited)}`)
-    const outText = waited.outputs?.polished?.text
+    const outText = waited.outputs?.['out-polished']?.text
     if (typeof outText !== 'string' || !outText.includes('外部输入文本'))
       throw new Error(`OUTPUT_WRONG:${JSON.stringify(waited.outputs)}`)
     check(`composite.execute.wait 终态 completed，输出含外部输入（${outText.slice(0, 30)}…）`)

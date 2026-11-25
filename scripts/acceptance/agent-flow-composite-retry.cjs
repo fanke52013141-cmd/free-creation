@@ -149,19 +149,19 @@ function compositeManifest() {
 
     // ── 人工补交：全量公开端口 + 类型校验 + manualSubmission 如实标记 ──
     const badPorts = await cli(dir, ['composite', 'run', 'resubmit'], {
-      runId: rootRunId, outputs: [{ portId: 'wrong-port', value: { kind: 'text', text: 'x' } }]
+      runId: rootRunId, outputs: [{ portId: 'out-wrong-port', value: { kind: 'text', text: 'x' } }]
     })
     assert(errCode(badPorts) === 'OUTPUT_PORTS_MISMATCH', '补交端口不匹配拒绝 OUTPUT_PORTS_MISMATCH')
     const MANUAL_TEXT = '人工补交结论：内容核实无误，同意交付。'
     const resubmit = ok(await cli(dir, ['composite', 'run', 'resubmit'], {
-      runId: rootRunId, outputs: [{ portId: 'polished', value: { kind: 'text', text: MANUAL_TEXT } }]
+      runId: rootRunId, outputs: [{ portId: 'out-polished', value: { kind: 'text', text: MANUAL_TEXT } }]
     }), 'RESUBMIT')
     assert(resubmit.status === 'completed' && resubmit.manualSubmission === true, '补交后 completed 且 manualSubmission=true')
     const afterWait = await waitTerminal(rootRunId)
     assert(afterWait.status === 'completed' && afterWait.manualSubmission === true, 'execute.wait 如实暴露人工补交标记')
-    assert(afterWait.outputs?.polished?.text === MANUAL_TEXT, '补交输出可经 execute.wait 读取')
+    assert(afterWait.outputs?.['out-polished']?.text === MANUAL_TEXT, '补交输出可经 execute.wait 读取')
     const again = await cli(dir, ['composite', 'run', 'resubmit'], {
-      runId: rootRunId, outputs: [{ portId: 'polished', value: { kind: 'text', text: '再次补交' } }]
+      runId: rootRunId, outputs: [{ portId: 'out-polished', value: { kind: 'text', text: '再次补交' } }]
     })
     assert(errCode(again) === 'RUN_NOT_RESUBMITTABLE', '已完成运行不可重复补交 RUN_NOT_RESUBMITTABLE')
     const retryCompleted = await cli(dir, ['composite', 'run', 'retry'], { runId: rootRunId })

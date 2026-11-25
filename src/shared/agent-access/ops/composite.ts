@@ -170,7 +170,7 @@ export const COMPOSITE_OPERATIONS = {
     cost: 'possible',
     description:
       'headless 执行已发布节点流：不依赖项目/画布。inputs 按公开输入端口的完整端口 ID 喂值（portId 写 `in-<公开输入id>`，如 in-copy）；返回 runId，终态与输出经 composite.run.get / composite.execute.wait 读取。' +
-      '**键约定**：outputs / outputValues 以裸公开输出 id 为键（如 polished），而 outputPorts 摘要与画布端口才带 out- 前缀（out-polished）；resubmit 提交值同样用裸 id。' +
+      '**键约定**：outputs / outputValues 以带前缀的公开输出端口为键（out-<公开输出id>，如 out-polished），与画布连线、outputPorts 摘要、升级预检一致；resubmit 提交值同样使用 out-<id>（读取时兼容历史裸 id）。' +
       '**计费**：运行会真实执行流内模型/联网节点，必须显式 confirmCost=true 才发起（否则 COST_CONFIRM_REQUIRED，不启动任何运行）',
     input: z
       .object({
@@ -187,7 +187,7 @@ export const COMPOSITE_OPERATIONS = {
     destructive: false,
     cost: 'none',
     description:
-      '阻塞等待 headless 运行到达终态：返回状态/公开输出/失败原因；超时返回当前状态。outputs 以裸公开输出 id 为键（不带 out- 前缀），outputPorts 摘要才是 out-<id>',
+      '阻塞等待 headless 运行到达终态：返回状态/公开输出/失败原因；超时返回当前状态。outputs 以带前缀的公开输出端口为键（out-<id>，与画布一致）',
     input: z
       .object({
         runId: z.string().min(1).max(120),
@@ -235,7 +235,7 @@ export const COMPOSITE_OPERATIONS = {
     destructive: true,
     cost: 'none',
     description:
-      '人工补交失败 headless 运行的公开输出：仅 failed/interrupted 可补交，须一次性补齐全部公开输出端口（text/markdown/json；媒体补交暂不支持）；补交后运行 completed 但 manualSubmission=true 如实标记，不伪造自动成功',
+      '人工补交失败 headless 运行的公开输出：仅 failed/interrupted 可补交，须一次性补齐全部公开输出端口（portId 用 out-<公开输出id>，兼容历史裸 id；text/markdown/json；媒体补交暂不支持）；补交后运行 completed 但 manualSubmission=true 如实标记，不伪造自动成功',
     input: z
       .object({
         runId: z.string().min(1).max(120),
