@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "去气口节点卡片主按钮改为直接运行、补 local:silence-trim 人话标签与计数文档同步；仅受保护源码哈希刷新，契约 Schema 无变化，向后兼容",
+  "reason": "BL-24 参考音频时长越界文案改为可操作（标明少于下限/超过上限），校验行为不变",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "4436ff27b93f633c5ce7ec0221dcd2f0ca7da8efa7734ddc410862e615533fdc",
@@ -105,7 +105,7 @@
     "src/main/gateway/video-task-control.ts": "3743ef6f805d49f019ea119d605f3c313171a3cc729646711cfce1207cea9e5c",
     "src/main/gateway/video.ts": "1548840bc8209bb938f5d321e9125ba907f38d24bca7b8a505452e677c77e07c",
     "src/main/gateway/vidu-cli.ts": "538811f90db795e3b76316b2eba85dd2dcfb48375df4ebd3daceab6e87538b5e",
-    "src/main/gateway/voice.ts": "773c2e4e1bd2e1e62a6dad016aa906290e44efeaeb33e81f81cc1d79fc902c93",
+    "src/main/gateway/voice.ts": "27be0a3d58366a2465163bb52019fa412680c8dc47748508b60f3fefc3c1f7aa",
     "src/main/index.ts": "3313894add8e56412cfa8f68686053089c1bf14ed105b0d7644cf0d30475b655",
     "src/main/ipc/flow-agents.ipc.ts": "0aa69cde1d481d012d5650a4e2aa89e80f145a37d9dbf033d49babe89b1e62d3",
     "src/main/ipc/gateway.ipc.ts": "f96bf1d9583a6e6e4f38235ea0c61ca3fc601294e16ef3f225f77bf4d7aff6c6",
@@ -125,7 +125,7 @@
     "src/main/media/tar-audio.ts": "91e697c3fb9876ad975a2ff06985febbc21da47c3f954f1a750d5cb4a129cb85",
     "src/main/media/text-decode.ts": "91425315281d19389c0faa5d2736aaed8acec6cadc4dd7a6ecdae80c8316c7c1",
     "src/main/media/timeline-compose.ts": "30a975c0993fedc9e03cfccf3b1478d14510062c2c1c79ca4afaec92131fcdb1",
-    "src/main/media/tts-transform.ts": "c22957e44e5ff13ed70b831953e9a9bc71a133920d21ee905ed77b599ef30c7c",
+    "src/main/media/tts-transform.ts": "5ce85939a3a272221330f2d2f3a89070eb944e855cc72dadf5a7f18b4de7b810",
     "src/main/media/vad-silero.ts": "fc8939d787c6ea31c2f7dea779edd91a759027b76bd8520a1af8dd62fe99201a",
     "src/main/media/video-conversion.ts": "a3c72f727b150310974e77f7c3d63de83539aebac3653f7c3ad62dce803a8e05",
     "src/main/media/video-transform.ts": "0b49e4680e477871f7714bd7d4364454bcfef52bec2bbc4dc10eb097357c761b",

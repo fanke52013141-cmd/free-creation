@@ -32,7 +32,7 @@ async function cli(dir, args, input) {
       windowsHide: true
     })
     let out = '', err = ''
-    const timer = setTimeout(() => { child.kill(); reject(new Error('CLI_TIMEOUT')) }, 90000)
+    const timer = setTimeout(() => { child.kill(); reject(new Error('CLI_TIMEOUT')) }, 240000)
     child.stdout.on('data', (c) => (out += c))
     child.stderr.on('data', (c) => (err = (err + c).slice(-1000)))
     child.once('error', reject)
@@ -190,17 +190,23 @@ async function patchWithRetry(dir, projectId, ops, label) {
     // ── 人工提交（外部 op，与 GUI 同一 pending 写入）──
     const htState = ok(await cli(dir, ['humanTask', 'get'], { projectId, nodeId: byRef.ht }), 'HT_GET')
     const revision = htState.instance?.revision ?? htState.revision ?? 1
-    ok(await cli(dir, ['humanTask', 'submit'], {
+    const submitPending = cli(dir, ['humanTask', 'submit'], {
       projectId, nodeId: byRef.ht, expectedRevision: revision,
       value: { kind: 'text', text: HUMAN_RESULT }
-    }), 'HT_SUBMIT')
+    })
+    // BL-01：外部提交会先弹人工确认，必须由人在窗口里点「允许提交」（这里扮演人）。
+    await page.getByRole('button', { name: '允许提交', exact: true }).click({ timeout: 60000 })
+    ok(await submitPending, 'HT_SUBMIT')
     check(`人工经 humanTask.submit 提交结果（修订 ${revision}）`)
 
     // ── 继续专家：再执行消费 pending → committed → finish_task ──
-    const cont = await cli(dir, ['flowAgent', 'run'], {
+    const contPending = cli(dir, ['flowAgent', 'run'], {
       projectId, nodeId: byRef.s1, action: 'continue', eventId: randomUUID(),
       expectedTaskId: specialist.taskId, expectedWaitRevision: specialist.waitRevision
     })
+    // BL-01：人工等待中的 continue 也走人工确认，点「允许继续」后再等运行结果。
+    await page.getByRole('button', { name: '允许继续', exact: true }).click({ timeout: 60000 })
+    const cont = await contPending
     if (cont.response?.error) throw new Error(`CONTINUE_FAILED:${JSON.stringify(cont.response).slice(0, 400)}`)
     let dbOut = null
     let lastCoordContinueRevision = -1
@@ -218,10 +224,12 @@ async function patchWithRetry(dir, projectId, ops, label) {
         coordTask?.waitRevision !== lastCoordContinueRevision
       ) {
         lastCoordContinueRevision = coordTask.waitRevision
-        const wake = await cli(dir, ['flowAgent', 'run'], {
+        const wakePending = cli(dir, ['flowAgent', 'run'], {
           projectId, nodeId: byRef.coord, action: 'continue', eventId: randomUUID(),
           expectedTaskId: coordTask.taskId, expectedWaitRevision: coordTask.waitRevision
         })
+        await page.getByRole('button', { name: '允许继续', exact: true }).click({ timeout: 60000 })
+        const wake = await wakePending
         console.log('[coord.continue]', JSON.stringify(wake.response).slice(0, 200))
       }
       dbOut = await queryDb().catch(() => null)

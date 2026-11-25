@@ -58,6 +58,8 @@ sources:
   - [ ] 持久草稿队列（人离开时外部提交可稍后采用）：后续增强，未排期
 - **待决定**：`flowStateMachine.submitEvent`（状态机人工事件）和 `composite.run.submitHuman`（节点流运行中补人工输入）这次没有纳入，原因是前者不在 AF-17.2 名单里，后者需要支持无桌面的 headless 场景。要不要纳入，请拍板。
 - **⚠️ 需要同步更新的真机验收脚本**：以下脚本通过外部接口调用了这些操作，需要加一步「点允许」才能跑通——`scripts/acceptance/agent-flow-human-task.cjs`（**2026-11-24 已修好**：点「允许提交」+ AF-07 等待/续跑）、`agent-flow-human-task-dispatch.cjs`、`scripts/mcp-acceptance.cjs`、`mcp-acceptance-families-4-5-6-9.cjs`、`mcp-acceptance-gap-fill.cjs`、`mcp-acceptance-optimizations.cjs`、`test-agent-graph-milestone.cjs`、`audit-business-actions.cjs`（其余 7 个仍待补）。
+  - **2026-11-25 复核**：7 个脚本里只有 `agent-flow-human-task-dispatch.cjs` 真正命中人工确认（`humanTask.submit` 与两处 `flowAgent.run(continue)` 在人工等待时都会弹窗）；已补「允许提交 / 允许继续」点击并把单次 CLI 超时提到 240s。其余 6 个不触发确认门（`cooperate` 用 `note`、`build.commit` 在门禁前被 `FLOW_BUILD_MISSING` 拒绝等），**无需改代码**，已按顺序复跑全绿：`audit-business-actions` / `mcp-acceptance-optimizations`（9/9）/ `mcp-acceptance-gap-fill`（12/12）/ `mcp-acceptance`（34/34）/ `mcp-acceptance-families-4-5-6-9`（47/47）/ `test-agent-graph-milestone`。
+  - **唯一未复跑**：`agent-flow-human-task-dispatch.cjs` 需 `CANVAS_TEST_API_KEY`（智谱 `glm-5.3-flash` 小额计费）；本机未配置该环境变量，改动已通过语法检查，待有 key 时复跑。
 
 ### ✅ BL-02 task-bind 工具白名单回归 · S（随 BL-00 合入 `5cb530c`）
 - **来源**：AF-3.2a（如果 BL-00 合入成功，这一项随之关闭，只需复核）
@@ -241,15 +243,17 @@ sources:
 - **验收**：[x] 正文里没有带日期的变更段落；[x] `npm run verify:specs` 通过（其余规范缺 `last-verified` 的告警属 BL-30 范围）。
 - **收尾**：干净树全量门禁通过（`qa/verification/run-AwaNQQ`）。
 
-### 🟡 BL-23 操作节点卡内「死结果区」 · S–M
+### ✅ BL-23 操作节点卡内「死结果区」 · S–M（2026-11-25 桌面确认：`scripts/acceptance/node-result-area-desktop.cjs`）
 - **来源**：组合测试 U-1 / U-2（推荐方案 b）
 - **范围**：speech / voice-design / image-edit 的 Body 改为从 `meta.nodeResult` 集合读取当前选中项，与 `MediaResultGrid` 同源。
-- **验收**：[x] 浏览器验收确认配音与音色设计的播放请求及图片编辑预览指向选中结果；[x] 三种节点统一读取 `meta.nodeResult`。定向测试覆盖选中项、旧集合回退和失败结果过滤。完整桌面门禁待确认。
+- **验收**：[x] 浏览器验收确认配音与音色设计的播放请求及图片编辑预览指向选中结果；[x] 三种节点统一读取 `meta.nodeResult`。定向测试覆盖选中项、旧集合回退和失败结果过滤。
+- **桌面确认（2026-11-25）**：新增 `scripts/acceptance/node-result-area-desktop.cjs`（Electron + vite 渲染层，无模型调用）11 项检查通过：三张卡片结果区展示 2 条、选中高亮唯一、配音/音色设计点播放的是选中项（非最近一条）、图片编辑预览指向选中项、无 `selectedMediaId` 的旧集合回退渲染、失败运行不展示结果区。证据 `qa/node-result-area-desktop/receipt.json` 与 `shots/result-area-desktop.png`。
 
-### 🟡 BL-24 MiniMax 克隆参考音频约束放到主进程 · S
+### ✅ BL-24 MiniMax 克隆参考音频约束放到主进程 · S（2026-11-25 定向测试通过）
 - **来源**：组合测试 T-4
 - **范围**：在 `cloneMiniMaxVoice` 入口校验：时长 10 秒–5 分钟、大小 ≤20MB、MIME 在白名单内；连线输入和上传输入两种来源都要覆盖。
-- **验收**：[ ] 不合规的音频在请求供应商之前就被拒绝，并返回可操作的提示文案
+- **验收**：[x] 不合规的音频在请求供应商之前就被拒绝，并返回可操作的提示文案
+- **实现与证据**：约束已在 `src/main/media/tts-transform.ts` 与 `src/main/gateway/voice.ts` 双层前置（MIME/大小零 ffprobe 零网络；时长仅本地 ffprobe）。新增 `test/tts-clone-bl24-gate.test.ts`（11 项）：MIME 非白名单、>20MB、9 秒/6 分钟越界均在克隆/网络前拒绝；10 秒与 300 秒边界放行；ffprobe 不可用时跳过本地检查；连线与上传两种来源共用同一 `referenceAudioId` 准入且不回退 `refMediaId`；阶段事件为 `reference-audio` + `error` + `voice.clone` 且不泄漏路径。顺带修正文案：越界时向下取一位并标明「（少于下限）/（超过上限）」，避免 9999ms 显示成「10.0 秒」。真实供应商未在定向测试中调用。
 
 ---
 

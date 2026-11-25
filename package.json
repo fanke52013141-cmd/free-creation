@@ -117,6 +117,7 @@
     "verify:daily:fast": "node scripts/daily-gate.cjs --fast",
     "acceptance:composite-desktop": "node scripts/acceptance/composite-desktop-acceptance.cjs",
     "acceptance:composite-gui": "node scripts/acceptance/composite-gui-acceptance.cjs",
+    "acceptance:node-result-area-desktop": "node scripts/acceptance/node-result-area-desktop.cjs",
     "acceptance:agent-flow-layout": "node scripts/acceptance/agent-flow-layout.cjs",
     "acceptance:agent-flow-closed-loop": "node scripts/acceptance/agent-flow-closed-loop.cjs",
     "acceptance:agent-flow-edges": "node scripts/acceptance/agent-flow-edges-walkthrough.cjs",

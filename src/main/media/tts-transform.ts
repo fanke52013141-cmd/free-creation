@@ -10,6 +10,7 @@ import {
   MINIMAX_CLONE_PROMPT_MAX_SECONDS,
   MINIMAX_CLONE_MIN_SECONDS,
   MINIMAX_VOICE_CLONE_MODELS,
+  formatReferenceAudioDurationIssue,
   isValidMiniMaxVoiceId
 } from '../../shared/tts'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
@@ -96,7 +97,7 @@ async function transformMiniMaxTts(input: TtsGenerateInput): Promise<VoiceCloneR
     if (seconds < MINIMAX_CLONE_MIN_SECONDS || seconds > MINIMAX_CLONE_MAX_SECONDS) {
       throw new GatewayError(
         'INVALID_INPUT',
-        `参考音频需 ${MINIMAX_CLONE_MIN_SECONDS} 秒～${MINIMAX_CLONE_MAX_SECONDS / 60} 分钟，当前约 ${seconds.toFixed(1)} 秒`
+        formatReferenceAudioDurationIssue(seconds)
       )
     }
   }

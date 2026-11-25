@@ -76,6 +76,16 @@ export const MINIMAX_CLONE_PROMPT_MAX_SECONDS = 8
 export const MINIMAX_CLONE_RETENTION_DAYS = 7
 
 /**
+ * 复刻参考音频时长越界的可操作文案（渲染层提示与主进程校验共用）。
+ * 9999ms 若按 toFixed(1) 会显示成「10.0 秒」而与下界混淆；这里向下取一位并标明方向。
+ */
+export function formatReferenceAudioDurationIssue(seconds: number): string {
+  const shown = Math.floor(Math.max(0, seconds) * 10) / 10
+  const direction = seconds < MINIMAX_CLONE_MIN_SECONDS ? '少于下限' : '超过上限'
+  return `参考音频需 ${MINIMAX_CLONE_MIN_SECONDS} 秒～${MINIMAX_CLONE_MAX_SECONDS / 60} 分钟，当前约 ${shown.toFixed(1)} 秒（${direction}）`
+}
+
+/**
  * 云端真正会落盘的格式取值域。UI 下拉与 `parseTtsConfig` 共用这一份，
  * 避免出现「下拉里根本没有、却仍是当前值」的格式。
  */

@@ -12,6 +12,7 @@ import {
   MINIMAX_CLONE_MIMES,
   MINIMAX_CLONE_MIN_SECONDS,
   MINIMAX_VOICE_CLONE_MODELS,
+  formatReferenceAudioDurationIssue,
   isValidMiniMaxVoiceId,
   normalizeMiniMaxVoiceId,
   TTS_LANGUAGE_BOOSTS,
@@ -183,7 +184,7 @@ export async function cloneMiniMaxVoice(request: CloneVoiceRequest): Promise<str
     throw new GatewayError('INVALID_INPUT', '无法检测参考音频时长，请确认文件可播放且 FFprobe 可用')
   const seconds = probe.meta.durationMs / 1000
   if (seconds < MINIMAX_CLONE_MIN_SECONDS || seconds > MINIMAX_CLONE_MAX_SECONDS)
-    throw new GatewayError('INVALID_INPUT', `参考音频需 10 秒～5 分钟，当前约 ${seconds.toFixed(1)} 秒`)
+    throw new GatewayError('INVALID_INPUT', formatReferenceAudioDurationIssue(seconds))
   const provider = await requireMiniMax(request.providerId)
   const config = request.config
   const base = provider.baseURL.replace(/\/+$/, '')
