@@ -47,6 +47,7 @@ import { readCompositeInstanceManifest } from '../../shared/composite/outputs'
 import {
   isDispatchableFlowNodeKind,
   loopBodyInfo,
+  resolveFlowNodeDimensions,
   type LoopBodyInfo,
   type FlowNode,
   type FlowGraph
@@ -1063,6 +1064,19 @@ export class FlowCoordinatorHost {
     signal: AbortSignal
   ): Promise<boolean> {
     const graph = run.config.graph!
+    // BL-21：capability 的「AI 产出、人采用」——人工点击继续即采用上一份交付。
+    if (run.code === 'HUMAN_ADOPTION_REQUIRED') {
+      if (!input.humanConfirmed)
+        throw new AgentRuntimeError('HUMAN_CONFIRMATION_REQUIRED', 'graph-adoption')
+      const adopted = run.children.find((child) => child.adoptionPending)
+      if (adopted) {
+        adopted.state = 'completed'
+        delete adopted.adoptionPending
+        run.code = undefined
+        this.emitTrustedEvent(run, `${adopted.taskId}:adopted`, 'agent.completed', run.revision)
+        this.store.save(run)
+      }
+    }
     const file = this.check(run)
     const nodeById = new Map(file.nodes.map((node) => [node.id, node]))
     const isRequiredInput = (nodeId: string, portId: string): boolean => {
@@ -1568,8 +1582,16 @@ export class FlowCoordinatorHost {
       this.store.save(run)
       throw new AgentRuntimeError(receipt.code ?? 'FLOW_CHILD_BLOCKED', 'graph-capability')
     }
-    child.state = 'completed'
     child.outputs = receipt.outputRefs
+    // BL-21：AI 产出、人采用——交付先挂起，人工在总览「继续」后放行下游。
+    if (resolveFlowNodeDimensions(next).decider === 'human') {
+      child.state = 'waiting'
+      child.adoptionPending = true
+      run.code = 'HUMAN_ADOPTION_REQUIRED'
+      this.store.save(run)
+      return this.wait(run, 'human.wait')
+    }
+    child.state = 'completed'
     this.store.save(run)
     this.emitTrustedEvent(run, `${taskId}:completed`, 'agent.completed', run.revision)
     return true

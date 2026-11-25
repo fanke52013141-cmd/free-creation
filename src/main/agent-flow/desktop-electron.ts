@@ -2412,7 +2412,7 @@ if (
           const value=(reply)=>{if(!reply.ok)throw new Error(reply.error.code);return reply.data};
           const delay=()=>new Promise(r=>setTimeout(r,150));
           if(${JSON.stringify(real)}){const v=await window.api.models.validateAgentToolCalling({connectionId:'agent-test-connection',modelDefinitionId:'agent-test-model',allowCost:true});if(!v.ok||v.data.status!=='verified')throw new Error('REAL_MODEL_VALIDATION_FAILED:'+((v.ok?v.data.status:v.error.code)));}
-          const graph={schemaVersion:1,graphId:'cg',name:'能力图',goal:'先分析再能力处理',nodes:[{nodeId:'shape:cg-first',title:'分析',participation:'autonomous',kind:'agent',goal:'执行处理并交付',completion:'交付处理结果'},{nodeId:'shape:cg-cap',title:'能力处理',participation:'autonomous',kind:'capability',capability:'text-pass@1',goal:'透传',completion:'交付'}],edges:[{from:{nodeId:'shape:cg-first',portId:'out-text'},to:{nodeId:'shape:cg-cap',portId:'in-value'},kind:'data'}],entry:'shape:cg-first',exits:['shape:cg-cap']};
+          const graph={schemaVersion:1,graphId:'cg',name:'能力图',goal:'先分析再能力处理',nodes:[{nodeId:'shape:cg-first',title:'分析',participation:'autonomous',kind:'agent',goal:'执行处理并交付',completion:'交付处理结果'},{nodeId:'shape:cg-cap',title:'能力处理',participation:'autonomous',kind:'capability',capability:'text-pass@1',decider:'human',goal:'透传',completion:'交付'}],edges:[{from:{nodeId:'shape:cg-first',portId:'out-text'},to:{nodeId:'shape:cg-cap',portId:'in-value'},kind:'data'}],entry:'shape:cg-first',exits:['shape:cg-cap']};
           graph.nodes[1].inputs={overflow:'ask-human',budgetBytes:1024,selectors:[{sourceStageKey:'shape:cg-first',path:'text',required:true}]};
           const specialist={schemaVersion:1,role:'specialist',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'node.execute',version:'1'}],allowedNodeIds:['shape:cg-p1'],maxSteps:8,relations:[]};
           const rootConfig={schemaVersion:1,role:'coordinator',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'agent.dispatch',version:'1'}],allowedNodeIds:['shape:cg-first','shape:cg-cap'],maxSteps:8,executionMode:'graph',graph,relations:[{relationId:'state',kind:'observes',sourceNodeId:'shape:cg-root',targetNodeId:'shape:cg-state'}]};
@@ -2440,6 +2440,19 @@ if (
           setFieldValue(field,'隔离补料');await delay();
           const submitButton=[...document.querySelectorAll('.fo-now-cta')].find(button=>button.textContent.trim()==='提交材料并继续');
           if(!submitButton||submitButton.disabled)throw new Error('CG_CONTEXT_SUBMIT_UNAVAILABLE');submitButton.click();
+          // BL-21：capability 声明 decider:'human'——AI 产出先等待人工采用，再放行下游。
+          let adoptionWait=null;
+          for(let i=0;i<600;i++){root=await inspectRoot();if(root?.state==='waiting'&&root.code==='HUMAN_ADOPTION_REQUIRED'){adoptionWait=root;break}if(root?.state==='completed')break;if(root&&['blocked','failed'].includes(root.state))throw new Error(root.code||'CG_ROOT_FAILED');await delay();}
+          if(!adoptionWait)throw new Error('CG_ADOPTION_WAIT_MISSING');
+          const waitingChild=(root.children||[]).find(child=>child.nodeId==='shape:cg-cap');
+          if(waitingChild?.state!=='waiting')throw new Error('CG_ADOPTION_CHILD_NOT_WAITING:'+JSON.stringify(waitingChild));
+          const openOverview=()=>{const button=document.querySelector('[aria-label="打开流程总览"]');if(button)button.click();};
+          let adoptButton=null;
+          for(let i=0;i<200&&!adoptButton;i++){
+            adoptButton=[...document.querySelectorAll('.fo-now-cta')].find(button=>button.textContent.trim()==='继续流程'&&!button.disabled);
+            if(!adoptButton){if(i%10===0)openOverview();await delay();}
+          }
+          if(!adoptButton)throw new Error('CG_ADOPTION_BUTTON_UNAVAILABLE');adoptButton.click();
           for(let i=0;i<1800;i++){root=await inspectRoot();if(root?.state==='completed')break;if(root&&['blocked','failed'].includes(root.state))throw new Error(root.code||'CG_ROOT_FAILED');await delay();}
           if(root?.state!=='completed')throw new Error('CG_ROOT_TIMEOUT');
           await ensureCanvasSaved();
@@ -2450,7 +2463,7 @@ if (
           if(!capChild||capChild.state!=='completed')throw new Error('CG_CAP_CHILD_NOT_COMPLETED');
           if(!capShape.meta.nodeResult)throw new Error('CG_CAP_NO_OUTPUT');
           if(!String(capShape.meta.nodeResult||'').includes('隔离补料'))throw new Error('CG_CONTEXT_MATERIAL_NOT_INJECTED');
-          return {status:'pass',projectId,rootTaskId:root.taskId,capRunStatus:capRun.status,capChildState:capChild.state,checks:['capability graph node executes via the shared node.execute ledger port','graph routing adopts the capability delivery as final output','coordinator completes in graph mode']};
+          return {status:'pass',projectId,rootTaskId:root.taskId,capRunStatus:capRun.status,capChildState:capChild.state,checks:['capability graph node executes via the shared node.execute ledger port','capability AI output waits for human adoption before downstream','human continuation adopts the fixed delivery and resumes routing','graph routing adopts the capability delivery as final output','coordinator completes in graph mode']};
         })()`)
         {
           const database = getDb()

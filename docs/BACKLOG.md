@@ -225,11 +225,12 @@ sources:
 - **实现**：human-task 支持图片和视频结果类型。
 - **验收**：[x] 打包版验证图片与视频提交、续跑和公开输出。下游固定引用使用项目媒体 ID，并检查项目归属、MIME 与摘要。见 [日志覆盖](LOGGING_COVERAGE.md#2026-11-24-人工图片和视频交付)。
 
-### ⬜ BL-21 执行者 × 决策者两维 · M
+### ✅ BL-21 执行者 × 决策者两维 · M（2026-11-26 完成）
 - **来源**：AF-9.3
 - **范围**：participation 拆分为 `executor × decider`，原有三种取值映射到新模型。重点是让「AI 产出、人采用」不再需要额外包一层 Agent。
 - **依赖**：BL-11
-- **验收**：[ ] capability 节点可以配置 `decider: human`；[ ] 旧图自动映射，行为不变
+- **实现**：`FlowNode` 新增可选 `executor`（ai/human/mixed）与 `decider`（none/human/ai-review），缺省按 participation 映射（autonomous→ai×none、collaborative→mixed×human、human-task→human×none、review→ai×ai-review），旧图行为不变；capability 缺省 ai×none，可显式 `decider:'human'`。协调器在能力交付后置为「待采用」（`HUMAN_ADOPTION_REQUIRED`，子任务 waiting），人工在流程总览继续即采用并放行下游；外部未确认继续被拒绝。渲染器宿主继续统一带可信人工标记（同时服务 BL-40 补料）。
+- **验收**：[x] capability 节点可以配置 `decider: human`（schema/解析 + 桌面能力图验收：执行→待采用→人工继续→协调完成）；[x] 旧图自动映射，行为不变（旧字段缺省映射测试 + 既有套件回归）。规范 AF-9.3 冻结为【现行】。
 
 ### D. 规范与组合测试遗留
 

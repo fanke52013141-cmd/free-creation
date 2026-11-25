@@ -1217,3 +1217,4 @@ GUI 节点流面板条目卡片移除「运行」按钮（运行走画布既有�
 - 运行策略（NF-8.4 / NF-8.5）：onBranchFailure 与 maxConcurrency 只改变调度批次与失败后的认领范围，不新增事件；失败仍以 composite.run.step failed + ailureNodeId/PortId 记账，跳过仍记 skipped，正常/续跑路径不变。并发只调度无依赖就绪节点，结果收集顺序按 manifest 声明，与完成顺序无关。
 - 能力节点补料（AF-10.4 / BL-40，2026-11-26）：上下文超限等待沿用阶段输入阻塞事件与持久等待状态；提交后 
 ode.execute 的可选 contextMaterial 只携带端口与精简文本，执行时作为 human:context 文本输入注入并替代该端口固定资产，账本提交把该来源计入输入指纹与来源清单。不新增诊断事件；正文只留在命令/运行快照，不进总览或诊断。能力图桌面验收覆盖超限等待→表单提交→执行→完成。
+- BL-21 执行者×决策者（2026-11-26）：capability 显式 decider human 的「待采用」沿用 human.wait / agent.completed 与 run.code=HUMAN_ADOPTION_REQUIRED，子任务如实 waiting；人工继续采用后发 agent.completed（`taskId:adopted`）并恢复路由。不新增诊断事件，输出正文不入日志；外部未确认继续按 HUMAN_CONFIRMATION_REQUIRED 拒绝。

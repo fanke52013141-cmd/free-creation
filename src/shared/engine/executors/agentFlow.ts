@@ -50,26 +50,29 @@ export const agentExecutor: NodeExecutor = async (ctx) => {
   if (material && (task?.state !== 'waiting' || task.code !== 'FLOW_CONTEXT_OVER_BUDGET' ||
       task.taskId !== material.taskId || task.waitRevision !== material.waitRevision))
     return { status: 'failed', reason: '补充材料对应的流程等待状态已变化', diagnosticPhase: 'input' }
+  const action =
+    task?.state === 'blocked' ||
+    (task?.state === 'waiting' &&
+      task.waitKind === 'reconcile' &&
+      config.data.role === 'specialist' &&
+      !['FLOW_COMMAND_FACTS_VERIFIED', 'FLOW_VIDEO_RECONCILE_READY'].includes(task.code))
+      ? task?.recoveryAction === 'restore'
+        ? ('restore' as const)
+        : ('reconcile' as const)
+      : task?.state === 'waiting' && ctx.runId !== task.taskId
+        ? ('continue' as const)
+        : ('start' as const)
   const input = {
     projectId: ctx.projectId,
     nodeId: ctx.node.id,
     requestId: ctx.runId ?? crypto.randomUUID(),
     traceId: ctx.diagnostics?.traceId ?? newTraceId(),
     spanId: ctx.diagnostics?.spanId ?? newSpanId(),
-    action:
-      task?.state === 'blocked' ||
-      (task?.state === 'waiting' &&
-        task.waitKind === 'reconcile' &&
-        config.data.role === 'specialist' &&
-        !['FLOW_COMMAND_FACTS_VERIFIED', 'FLOW_VIDEO_RECONCILE_READY'].includes(task.code))
-        ? task?.recoveryAction === 'restore'
-          ? ('restore' as const)
-          : ('reconcile' as const)
-        : task?.state === 'waiting' && ctx.runId !== task.taskId
-          ? ('continue' as const)
-          : ('start' as const),
+    action,
     ...(task ? { expectedTaskId: task.taskId } : {}),
-    ...(material ? { contextMaterial: material.text, humanConfirmed: 'gui' as const } : {}),
+    ...(material ? { contextMaterial: material.text } : {}),
+    // 渲染器宿主发起的继续本身就是人的操作（BL-21 人采用 / BL-40 补料都依赖该可信标记）。
+    ...(action === 'continue' ? { humanConfirmed: 'gui' as const } : {}),
     ...(['waiting', 'blocked'].includes(task?.state)
       ? { eventId: ctx.runId ?? crypto.randomUUID(), expectedWaitRevision: task.waitRevision }
       : {})

@@ -47,6 +47,16 @@ export const FlowNodeKindSchema = z.enum([
 export type FlowNodeKind = z.infer<typeof FlowNodeKindSchema>
 
 /**
+ * BL-21 / AF-9.3：执行者 × 决策者两维（替代一维 participation 的语义来源）。
+ * - 旧图只有 participation 时按 `resolveFlowNodeDimensions` 自动映射，行为不变；
+ * - capability 可显式声明 `decider: 'human'`（AI 产出、人采用），无需再包一层 Agent。
+ */
+export const FlowExecutorSchema = z.enum(['ai', 'human', 'mixed'])
+export type FlowExecutor = z.infer<typeof FlowExecutorSchema>
+export const FlowDeciderSchema = z.enum(['none', 'human', 'ai-review'])
+export type FlowDecider = z.infer<typeof FlowDeciderSchema>
+
+/**
  * BL-05 / AF-6.2「校验即准入」：图模式**可分派**的节点种类唯一来源。
  * validateFlowGraph（GUI/CLI/MCP 校验与预览）、compileFlowGraph、coordinator-host 运行准入
  * 共用这份常量——校验通过的图，运行准入不会再因种类被拒。
@@ -71,6 +81,9 @@ export const FlowNodeSchema = z
     nodeId: id,
     title: z.string().trim().min(1).max(120),
     participation: FlowParticipationSchema,
+    /** BL-21：执行者与决策者可显式声明；缺省按参与方式自动映射（旧图行为不变）。 */
+    executor: FlowExecutorSchema.optional(),
+    decider: FlowDeciderSchema.optional(),
     humanRole: id.optional(),
     kind: FlowNodeKindSchema,
     humanOutputType: z.enum(['text', 'json', 'image', 'video']).optional(),
@@ -153,8 +166,54 @@ export const FlowNodeSchema = z
       context.addIssue({ code: 'custom', message: 'only capability nodes may declare params' })
     if (node.kind === 'review' && !node.review)
       context.addIssue({ code: 'custom', message: 'review node requires review config' })
+    // BL-21：显式 executor/decider 必须与该节点的法律组合一致；缺省按参与方式映射。
+    const dimensions = resolveFlowNodeDimensions(node)
+    if (node.kind === 'capability') {
+      if (dimensions.executor !== 'ai')
+        context.addIssue({ code: 'custom', message: 'capability node executor must be ai' })
+      if (dimensions.decider === 'ai-review')
+        context.addIssue({ code: 'custom', message: 'capability node cannot decide by ai-review' })
+    } else if (node.kind === 'review') {
+      if (dimensions.executor !== 'ai' || dimensions.decider !== 'ai-review')
+        context.addIssue({ code: 'custom', message: 'review node must be ai executor with ai-review decider' })
+    } else if (node.kind === 'human-task') {
+      if (dimensions.executor !== 'human' || dimensions.decider !== 'none')
+        context.addIssue({ code: 'custom', message: 'human-task node must be human executor without decider' })
+    } else if (node.kind === 'agent') {
+      const expectedExecutor = node.participation === 'collaborative' ? 'mixed' : 'ai'
+      const expectedDecider = node.participation === 'collaborative' ? 'human' : 'none'
+      if (dimensions.executor !== expectedExecutor || dimensions.decider !== expectedDecider)
+        context.addIssue({
+          code: 'custom',
+          message: 'agent node executor/decider must match its participation'
+        })
+    }
   })
 export type FlowNode = z.infer<typeof FlowNodeSchema>
+
+/**
+ * BL-21：解析执行者/决策者。旧图没有显式字段时按 participation 映射，
+ * 保证历史 FlowGraph 的运行行为不变；capability 的显式 `decider: human`
+ * 表示「AI 产出、人采用」，由协调器在交付前等待人工采用。
+ */
+export function resolveFlowNodeDimensions(
+  node: Pick<FlowNode, 'participation' | 'kind' | 'executor' | 'decider'>
+): { executor: FlowExecutor; decider: FlowDecider } {
+  const fallback: { executor: FlowExecutor; decider: FlowDecider } =
+    node.kind === 'review'
+      ? { executor: 'ai', decider: 'ai-review' }
+      : node.kind === 'human-task' || node.participation === 'human'
+        ? { executor: 'human', decider: 'none' }
+        : node.kind === 'capability'
+          ? { executor: 'ai', decider: 'none' }
+          : node.participation === 'collaborative'
+            ? { executor: 'mixed', decider: 'human' }
+            : { executor: 'ai', decider: 'none' }
+  return {
+    executor: node.executor ?? fallback.executor,
+    decider: node.decider ?? fallback.decider
+  }
+}
 
 /** 统一读取能力引用：新字段优先，旧 `capability: id@version` 视为 node 能力。 */
 export function flowNodeCapabilityRef(node: FlowNode): CapabilityRef | null {

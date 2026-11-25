@@ -270,13 +270,15 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 **AF-9.2【现行·限制】** human-task 的结果类型只有 `text | json`。
 - **AF-9.2a【目标】** 人独立完成的媒体工作（上传或修改图片、音频、视频）怎么接入目前没有定义。规范要求二选一：(a) human-task 增加媒体结果类型，提交时引用项目媒体库中的资产；(b) 明确规定「人工媒体交付 = 资产节点 + human-task 引用该资产」，并给出编译模板。
 
-**AF-9.3【目标·A4】执行者 × 决策者两维**（替代一维的 participation）：
+**AF-9.3【现行·BL-21，2026-11-26 冻结：执行者 × 决策者两维】**（替代一维 participation；旧图缺省自动映射，行为不变）：
 
 | executor ＼ decider | none | human | ai-review |
 |---|---|---|---|
 | ai | 纯 AI | AI 产出，人采用（最常见的人+AI） | AI 产出，AI 审核 |
 | human | 纯人工 | 以角色 X 产出，再切换到角色 Y 复核（同一个本机用户，见 §16） | 人产出，AI 审核 |
 | mixed | — | 节点内对话协作，人最终决定 | — |
+
+旧图映射（缺省）：`autonomous → ai × none`、`collaborative → mixed × human`、`human-task → human × none`、`review → ai × ai-review`；显式声明必须与该节点合法组合一致。**capability 节点缺省 `ai × none`，可显式声明 `decider: 'human'`（AI 产出、人采用）**：能力执行产出交付后先挂起为「待采用」，人工在流程总览点「继续」即采用并放行下游；未采用不会伪造完成，外部 Agent 不能代替该人工采用。
 
 ---
 
@@ -515,6 +517,6 @@ FlowNode {
 | 返工上限统一 | AF-13.4 | P1 |
 | 人工媒体交付 | AF-9.2a | P1 |
 | 角色化单用户：roles / humanRole / actor 记录 / 收件箱按角色分组 / 交接说明 | §16 | P1（已决策：只做方案 A） |
-| 执行者 × 决策者两维 | AF-9.3 | P1 |
+| ~~执行者 × 决策者两维~~ ✅ BL-21（executor/decider 冻结；capability 可 decider human） | AF-9.3 | — |
 | 预算交叉检查、错误码语义 | V10 / V12 | P2 |
 | fixed-order 统一编译为 graph | §2.2 | P2 |

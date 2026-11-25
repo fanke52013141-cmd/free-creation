@@ -26435,6 +26435,22 @@
                         "human"
                       ]
                     },
+                    "executor": {
+                      "type": "string",
+                      "enum": [
+                        "ai",
+                        "human",
+                        "mixed"
+                      ]
+                    },
+                    "decider": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "human",
+                        "ai-review"
+                      ]
+                    },
                     "humanRole": {
                       "type": "string",
                       "minLength": 1,
@@ -27420,6 +27436,22 @@
                         "autonomous",
                         "collaborative",
                         "human"
+                      ]
+                    },
+                    "executor": {
+                      "type": "string",
+                      "enum": [
+                        "ai",
+                        "human",
+                        "mixed"
+                      ]
+                    },
+                    "decider": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "human",
+                        "ai-review"
                       ]
                     },
                     "humanRole": {
@@ -28554,6 +28586,22 @@
                         "autonomous",
                         "collaborative",
                         "human"
+                      ]
+                    },
+                    "executor": {
+                      "type": "string",
+                      "enum": [
+                        "ai",
+                        "human",
+                        "mixed"
+                      ]
+                    },
+                    "decider": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "human",
+                        "ai-review"
                       ]
                     },
                     "humanRole": {
@@ -31298,6 +31346,22 @@
                         "human"
                       ]
                     },
+                    "executor": {
+                      "type": "string",
+                      "enum": [
+                        "ai",
+                        "human",
+                        "mixed"
+                      ]
+                    },
+                    "decider": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "human",
+                        "ai-review"
+                      ]
+                    },
                     "humanRole": {
                       "type": "string",
                       "minLength": 1,
@@ -32217,6 +32281,22 @@
                                 "autonomous",
                                 "collaborative",
                                 "human"
+                              ]
+                            },
+                            "executor": {
+                              "type": "string",
+                              "enum": [
+                                "ai",
+                                "human",
+                                "mixed"
+                              ]
+                            },
+                            "decider": {
+                              "type": "string",
+                              "enum": [
+                                "none",
+                                "human",
+                                "ai-review"
                               ]
                             },
                             "humanRole": {
@@ -33241,6 +33321,22 @@
                                   "autonomous",
                                   "collaborative",
                                   "human"
+                                ]
+                              },
+                              "executor": {
+                                "type": "string",
+                                "enum": [
+                                  "ai",
+                                  "human",
+                                  "mixed"
+                                ]
+                              },
+                              "decider": {
+                                "type": "string",
+                                "enum": [
+                                  "none",
+                                  "human",
+                                  "ai-review"
                                 ]
                               },
                               "humanRole": {
@@ -34277,6 +34373,22 @@
                                     "autonomous",
                                     "collaborative",
                                     "human"
+                                  ]
+                                },
+                                "executor": {
+                                  "type": "string",
+                                  "enum": [
+                                    "ai",
+                                    "human",
+                                    "mixed"
+                                  ]
+                                },
+                                "decider": {
+                                  "type": "string",
+                                  "enum": [
+                                    "none",
+                                    "human",
+                                    "ai-review"
                                   ]
                                 },
                                 "humanRole": {

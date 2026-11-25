@@ -58,6 +58,8 @@ export interface CoordinationRun {
     outputs: FlowAgentReply['refs']
     /** BL-11：v2 子图循环体的轮次（缺省=1；非循环节点不写）。 */
     compositeWait?: { runId: string; stepKey: string }
+    /** BL-21：capability 的「AI 产出、人采用」——交付已生成、等待人工采用。 */
+    adoptionPending?: boolean
     round?: number
     contextManifest?: import('../../shared/agent-flow/stage-contracts').ContextManifest
     executionEnvelope?: import('../../shared/agent-flow/execution-envelope').ExecutionEnvelope
