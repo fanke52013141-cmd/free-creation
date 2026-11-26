@@ -91,6 +91,13 @@ function ProgressRing({ percent }: { percent: number }): React.JSX.Element {
   )
 }
 
+const BOARD_LANES = ['人工', 'AI', '人机协作'] as const
+
+function boardLane(step: FlowStep): number {
+  if (step.kind === 'human-task' || step.participation === 'human') return 0
+  return step.participation === 'collaborative' ? 2 : 1
+}
+
 function StepCard({
   step,
   onLocate,
@@ -105,9 +112,6 @@ function StepCard({
   const attention = step.needsYou
   return (
     <div className={`fo-step ${attention ? 'is-attention' : ''} is-${step.state}`}>
-      <div className="fo-step-spine" style={{ borderColor: meta.color, color: meta.color }}>
-        <span className="fo-step-glyph">{meta.glyph}</span>
-      </div>
       <button
         type="button"
         className="fo-step-card"
@@ -119,11 +123,8 @@ function StepCard({
             <Icon name={KIND_ICON[step.kind] ?? 'agent'} size={12} />
           </span>
           <span className="fo-step-title">{step.title}</span>
-          <span className="fo-chip fo-role" style={{ color, borderColor: `${color}55` }}>
-            {step.roleLabel}{step.humanRole ? ` · ${step.humanRole.name}` : ''}
-          </span>
-          <span className="fo-spacer" />
-          {attention && <span className="fo-chip fo-needs-you">需要你</span>}
+          <span className="fo-board-role">{BOARD_LANES[boardLane(step)]}</span>
+          {step.humanRole && <span className="fo-board-owner">{step.humanRole.name}</span>}
           <span className="fo-state" style={{ color: meta.color, borderColor: `${meta.color}55`, background: `${meta.color}14` }}>
             <span className={`fo-state-glyph ${step.state === 'running' ? 'is-pulse' : ''}`}>{meta.glyph}</span>
             {meta.label}
@@ -238,6 +239,30 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
 
   const steps = useMemo(() => (overview ? deriveFlowSteps(overview) : []), [overview])
   const now = useMemo(() => (overview ? deriveNow(overview, steps) : null), [overview, steps])
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const currentStepRef = useRef<HTMLDivElement>(null)
+  const positionedFlow = useRef<string | null>(null)
+  const [offscreenStep, setOffscreenStep] = useState<{ nodeId: string; element: HTMLElement } | null>(null)
+  const currentNodeId = steps.some((step) => step.nodeId === now?.nodeId) ? now?.nodeId : undefined
+
+  useEffect(() => {
+    const body = bodyRef.current
+    const current = currentStepRef.current
+    if (!body || !current || !selected || !currentNodeId) return
+    const observer = new IntersectionObserver(([entry]) => {
+      setOffscreenStep(entry.isIntersecting ? null : { nodeId: currentNodeId, element: current })
+    }, { root: body })
+    observer.observe(current)
+    if (positionedFlow.current !== selected) {
+      positionedFlow.current = selected
+      const viewport = body.getBoundingClientRect()
+      const item = current.getBoundingClientRect()
+      if (item.top < viewport.top || item.bottom > viewport.bottom) {
+        body.scrollTop += item.top - viewport.top - 48
+      }
+    }
+    return () => observer.disconnect()
+  }, [selected, currentNodeId])
   const materialWait = overview?.contextMaterialWait
   const materialKey = materialWait
     ? JSON.stringify([overview.taskId, materialWait.waitRevision, materialWait.stageKey])
@@ -441,6 +466,49 @@ ${impact.staleDeliveries.length} 份交付移入历史，保留 ${impact.keptDel
     )
   }
 
+  const currentAction = now && (
+    <div className={`fo-now is-${now.tone}`}>
+      <div className="fo-now-text">
+        {!currentNodeId && <div className="fo-now-title">{now.title}</div>}
+        {now.detail && now.detail !== steps.find((step) => step.nodeId === currentNodeId)?.detail && (
+          <p className="fo-now-detail">{now.detail}</p>
+        )}
+        {materialKey && (
+          <textarea
+            aria-label="替代上下文材料"
+            className="fo-context-material"
+            placeholder="请输入精简后的材料"
+            maxLength={4096}
+            value={materialText}
+            disabled={continuing}
+            onChange={(event) => setMaterialDraft({ key: materialKey, text: event.target.value })}
+          />
+        )}
+        {materialTooLarge && (
+          <p className="fo-now-detail" role="status">
+            材料为 {materialBytes} 字节，当前上限为 {materialWait?.limitBytes} 字节。
+          </p>
+        )}
+      </div>
+      <div className="fo-now-actions">
+        {overview.state === 'waiting' && !overview.paused && (
+          <button type="button" className="fo-now-cta" disabled={continuing || materialTooLarge || Boolean(materialKey && !materialText.trim())} onClick={() => void continueFlow()}>
+            {continuing ? '正在继续' : materialKey ? '提交材料并继续' : '继续流程'}
+          </button>
+        )}
+        {now.action && now.nodeId && (
+          <button
+            type="button"
+            className={`fo-now-cta ${overview.state === 'waiting' && !overview.paused ? 'fo-now-cta-secondary' : ''}`}
+            onClick={() => (now.action === 'collaborate' ? collaborate(now.nodeId!) : locate(now.nodeId!))}
+          >
+            {now.action === 'collaborate' ? '去处理' : '定位'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+
   return (
     <div className="flow-overview">
       <header className="fo-header">
@@ -472,93 +540,58 @@ ${impact.staleDeliveries.length} 份交付移入历史，保留 ${impact.keptDel
         </div>
       </header>
 
-      {now && (
-        <div className={`fo-now is-${now.tone}`}>
-          <div className="fo-now-icon">
-            <Icon name={now.tone === 'human' ? 'edit' : now.tone === 'review' ? 'ai-review' : 'agent'} size={13} />
-            {now.tone === 'human' && <span className="fo-now-ping" />}
-          </div>
-          <div className="fo-now-text">
-            <div className="fo-now-title-row">
-              <span className="fo-now-tag">{now.tone === 'human' ? '需要你' : '当前'}</span>
-              <span className="fo-now-title">{now.title}</span>
-            </div>
-            {now.detail && <p className="fo-now-detail">{now.detail}</p>}
-            {materialKey && (
-              <textarea
-                aria-label="替代上下文材料"
-                className="fo-context-material"
-                placeholder="请输入精简后的材料"
-                maxLength={4096}
-                value={materialText}
-                disabled={continuing}
-                onChange={(event) => setMaterialDraft({ key: materialKey, text: event.target.value })}
-              />
-            )}
-            {materialTooLarge && (
-              <p className="fo-now-detail" role="status">
-                材料为 {materialBytes} 字节，当前上限为 {materialWait?.limitBytes} 字节。
-              </p>
-            )}
-          </div>
-          {overview.state === 'waiting' && !overview.paused && (
-            <button type="button" className="fo-now-cta" disabled={continuing || materialTooLarge || Boolean(materialKey && !materialText.trim())} onClick={() => void continueFlow()}>
-              {continuing ? '正在继续' : materialKey ? '提交材料并继续' : '继续流程'}
-            </button>
-          )}
-          {now.action && now.nodeId && (
-            <button
-              type="button"
-              className="fo-now-cta"
-              onClick={() => (now.action === 'collaborate' ? collaborate(now.nodeId!) : locate(now.nodeId!))}
-            >
-              {now.action === 'collaborate' ? '去处理' : '定位'}
-              <Icon name="target" size={12} />
-            </button>
-          )}
+      {!currentNodeId && currentAction}
+      {offscreenStep && offscreenStep.nodeId === currentNodeId && (
+        <div className="fo-current-shortcut">
+          <span>{now?.title}</span>
+          <button type="button" className="fo-btn" onClick={() => offscreenStep.element.scrollIntoView({ block: 'start' })}>
+            回到当前步骤
+          </button>
         </div>
       )}
 
-      <div className="fo-body">
+      <div className="fo-body" ref={bodyRef}>
         <section className="fo-section">
           <div className="fo-section-head">
             <span className="fo-section-title">
-              <Icon name="state-machine" size={13} /> 流执行图谱
+              <Icon name="state-machine" size={13} /> 流程步骤
             </span>
             <span className="fo-section-meta">{steps.length} 节点</span>
           </div>
-          <div className="fo-map">
-            <div className="fo-map-spine" />
-            {steps.map((step, index) => (
-              <div key={step.nodeId} className="fo-map-item">
-                <StepCard
-                  step={step}
-                  onLocate={locate}
-                  onRework={overview.executionMode === 'graph' &&
-                    ['waiting', 'blocked', 'completed'].includes(overview.state) &&
-                    ['completed', 'review-passed'].includes(step.state)
-                    ? () => void rework(step)
-                    : undefined}
-                />
-                {step.kind === 'review' && index < steps.length - 1 && (
-                  <div className={`fo-gate ${step.state === 'review-passed' ? 'is-open' : ''}`}>
-                    <Icon name="ai-review" size={11} />
-                    <span>门禁 · {step.state === 'review-passed' ? '已放行' : '拦截中'}</span>
-                    <span className="fo-gate-line" />
+          <div className="fo-board">
+              {steps.map((step, index) => (
+                <div
+                  key={step.nodeId}
+                  className="fo-board-column"
+                  ref={step.nodeId === currentNodeId ? currentStepRef : undefined}
+                >
+                  <h2
+                    className={`fo-board-heading ${step.nodeId === currentNodeId ? 'fo-now-title' : ''}`}
+                    aria-current={step.nodeId === currentNodeId ? 'step' : undefined}
+                  >
+                    <span>{String(index + 1).padStart(2, '0')}</span> {step.title}
+                  </h2>
+                  <div className="fo-board-task">
+                    <StepCard
+                      step={step}
+                      onLocate={locate}
+                      onRework={overview.executionMode === 'graph' &&
+                        ['waiting', 'blocked', 'completed'].includes(overview.state) &&
+                        ['completed', 'review-passed'].includes(step.state)
+                        ? () => void rework(step)
+                        : undefined}
+                    />
+                    {step.nodeId === currentNodeId && currentAction}
+                    {step.kind === 'review' && index < steps.length - 1 && (
+                      <div className={`fo-gate ${step.state === 'review-passed' ? 'is-open' : ''}`}>
+                        <Icon name="ai-review" size={11} />
+                        <span>{step.state === 'review-passed' ? '已放行' : '待放行'}</span>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                </div>
+              ))}
           </div>
-        </section>
-
-        <section className="fo-legend">
-          {(['completed', 'running', 'waiting-human', 'rejected', 'idle'] as const).map((state) => (
-            <span key={state} className="fo-legend-item">
-              <span style={{ color: STATE_META[state].color }}>{STATE_META[state].glyph}</span>
-              {STATE_META[state].label}
-            </span>
-          ))}
         </section>
 
         <section className="fo-section">
