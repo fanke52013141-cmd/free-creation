@@ -26,10 +26,10 @@ sources:
 
 ## 2026-11-26 外部审查修复工作区记录（已提交）
 
-- **范围**：Agent Flow 运行准入、条件分支输入、并行波次、停止/迟到提交、命令签名、总预算、human-task 状态、视频固定上限、定义发布/diff、恢复与 scope；外部 Agent 的密钥来源绑定、媒体路径边界、节点执行版本、超时、GUI 占用、错误脱敏、CLI/MCP 契约；CI/门禁与规范文档收敛。
+- **范围**：Agent Flow 运行准入、条件分支输入、并行波次、停止/迟到提交、命令签名、总预算、human-task 状态、视频固定上限、定义发布/diff、恢复与 scope；外部 Agent 的密钥来源绑定、媒体路径边界、节点执行版本、超时、GUI 占用、错误脱敏、CLI/MCP 契约；人工决定门禁补齐 `composite.run.submitHuman` / `composite.run.resubmit` / `flowStateMachine.submitEvent`；CI/门禁与规范文档收敛。
 - **机器契约**：`provider.package.export` 因未满足人工确认与显式连接范围要求从公开 Registry 移除；当前操作数以 `docs/local-agent-access/generated/contracts.json` / `capability.list` 为准。
-- **仓库清理**：C0 保留为测试专用并补充 [README](<src/main/agent-flow/c0/README.md>)；42 个无入口一次性脚本已删除（58,182 行），盘点与决策见 [仓库清理记录](<docs/canvas-agent-flow/audits/repo-cleanup-2026-11-26.md>)。清理后全量单测 4043 项通过 / 7 跳过，C0 16/16、门禁与文档回归 86/86 通过。
-- **验证**：`npm test` 358 文件通过 / 2 跳过，4042 项通过 / 7 跳过；最终运行时定向 223 项与外部 committed scope 1 项通过；`npm run typecheck`、`npm run lint`、`CANVAS_OWNER=1 npm run build`、`guard:agent-parity`、`verify:specs`、`verify:logging`、`git diff --check` 均通过；`verify:acceptance:fast` 2/2 批次通过（protocol 34/34、optimizations 9/9），族 2/3/7/8 24/24、族 4/5/6/9 47/47 通过。
+- **仓库清理**：C0 保留为测试专用并补充 [README](<src/main/agent-flow/c0/README.md>)；42 个无入口一次性脚本已删除（58,182 行），盘点与决策见 [仓库清理记录](<docs/canvas-agent-flow/audits/repo-cleanup-2026-11-26.md>)。清理后全量单测 4048 项通过 / 7 跳过，C0 16/16、门禁与文档回归 86/86 通过。
+- **验证**：`npm test` 360 文件通过 / 2 跳过，4048 项通过 / 7 跳过；人工门禁回归 27 项通过；`npm run typecheck`、`npm run lint`、`CANVAS_OWNER=1 npm run build`、`guard:agent-parity`、`verify:specs`、`verify:logging`、`git diff --check` 均通过；`verify:acceptance:fast` 2/2 批次通过（protocol 34/34、optimizations 9/9），族 2/3/7/8 24/24、族 4/5/6/9 47/47 通过；`agent-flow-state-machine.cjs` 7/7 通过（含真实 GUI 人工确认）。
 - **边界**：未发起真实付费模型；未完成真实 GUI 鼠标端到端、Windows 打包版与干净 GitHub runner 实跑；code sandbox 专项审计、Windows named pipe 最小 ACL、SSE token 移出 query 仍待后续；`loop.body` 内 review 当前明确拒绝；R09/R11/R12 仍未闭环。
 
 ---
@@ -51,11 +51,11 @@ sources:
 - **来源**：审查报告 A6 · AF-1.5 / AF-5.3 / AF-17.2
 - **范围**：
   - 在 OperationSpec 里新增动作级别：`read | propose | control | human-decision`。
-  - `flowGraph.confirm`、`flowAgent.build.commit`、`humanTask.submit`、协作采用/拒绝、人工复审，从外部入口调用时**只写入草稿**，返回 `awaiting-human`。
+  - `flowGraph.confirm`、`flowAgent.build.commit`、`humanTask.submit`、`composite.run.submitHuman`、`composite.run.resubmit`、`flowStateMachine.submitEvent`、协作采用/拒绝、人工复审，从外部入口调用时必须在副作用前经桌面人工确认；拒绝/超时/无桌面均零副作用。
   - GUI 弹出待采用提示，由人点击后生效。
   - 草稿标注 `author: agent:external:<clientId>`。
 - **代码位置**：`src/shared/agent-access/ops/flow-agents.ts`、`src/main/agent-access/flow-agents-ops.ts`、`src/renderer/src/canvas/CanvasEditor.tsx:1806-1855`、`flow-build-actions.ts`
-- **实际实现（与原计划的差异）**：没有做持久草稿队列，复用了已有的 `desktop.ask` + `confirm-sensitive` 交互确认通道（不占用写入槽、只有 renderer 回复通道能确认）。新增 `src/main/agent-access/human-decision.ts`，在 4 个操作的**副作用之前**调用：`flowGraph.confirm`、`flowAgent.build.commit`、`humanTask.submit`、`flowAgent.cooperate`（action=submit 或 accepted=true；note/discuss/revise 属交流，不打扰人）。确认框会说明节点和内容摘要（摘要只用于确认框，不进日志）。拒绝、5 分钟超时、无桌面分别返回 `HUMAN_DENIED` / `HUMAN_DECISION_TIMEOUT` / `DESKTOP_UNAVAILABLE`，都是生效前失败；迟到的允许不生效。
+- **实际实现（与原计划的差异）**：没有做持久草稿队列，复用了已有的 `desktop.ask` + `confirm-sensitive` 交互确认通道（不占用写入槽、只有 renderer 回复通道能确认）。新增 `src/main/agent-access/human-decision.ts`，在操作的**副作用之前**调用：`flowGraph.confirm`、`flowAgent.build.commit`、`humanTask.submit`、`composite.run.submitHuman`、`composite.run.resubmit`、`flowStateMachine.submitEvent`、`flowAgent.cooperate`（action=submit 或 accepted=true；note/discuss/revise 属交流，不打扰人）。确认框会说明节点和内容摘要（摘要只用于确认框，不进日志）。拒绝、5 分钟超时、无桌面分别返回 `HUMAN_DENIED` / `HUMAN_DECISION_TIMEOUT` / `DESKTOP_UNAVAILABLE`，都是生效前失败；迟到的允许不生效。
 - **验收**：
   - [x] 外部调用时先弹确认；人拒绝或超时时不调用 desktop.run 或 port.cooperate（单测：build-access 2 例、cooperate-access 4 例）
   - [x] 允许后走原有的同一实现（commitFlowGraph / commitFlowBuild / human-task-submit / cooperate），撤销步语义不变
@@ -64,8 +64,8 @@ sources:
   - [x] 人工决定未生效的唯一终态事件 `agent.human_decision.rejected`（白名单 + 覆盖率 + 单测）
   - [x] 真机 `agent-flow-human-task.cjs` 12 项全过（含点「允许提交」与节点流等待→提交→续跑→公开输出）
   - [ ] 持久草稿队列（人离开时外部提交可稍后采用）：后续增强，未排期
-- **待决定**：`flowStateMachine.submitEvent`（状态机人工事件）和 `composite.run.submitHuman`（节点流运行中补人工输入）这次没有纳入，原因是前者不在 AF-17.2 名单里，后者需要支持无桌面的 headless 场景。要不要纳入，请拍板。
-- **⚠️ 需要同步更新的真机验收脚本**：以下脚本通过外部接口调用了这些操作，需要加一步「点允许」才能跑通——`scripts/acceptance/agent-flow-human-task.cjs`（**2026-11-24 已修好**：点「允许提交」+ AF-07 等待/续跑）、`agent-flow-human-task-dispatch.cjs`、`scripts/mcp-acceptance.cjs`、`mcp-acceptance-families-4-5-6-9.cjs`、`mcp-acceptance-gap-fill.cjs`、`mcp-acceptance-optimizations.cjs`、`test-agent-graph-milestone.cjs`、`audit-business-actions.cjs`（其余 7 个仍待补）。
+- **2026-11-26 已纳入**：`flowStateMachine.submitEvent`、`composite.run.submitHuman`、`composite.run.resubmit` 已统一接入桌面人工确认；未确认/拒绝/超时均零副作用，无桌面返回 `DESKTOP_UNAVAILABLE`。回归见 `test/local-agent-human-gates.test.ts`。
+- **⚠️ 需要同步更新的真机验收脚本**：以下脚本通过外部接口调用了这些操作，需要加一步「点允许」才能跑通——`scripts/acceptance/agent-flow-human-task.cjs`（**2026-11-24 已修好**：点「允许提交」+ AF-07 等待/续跑）、`agent-flow-human-task-dispatch.cjs`、`scripts/mcp-acceptance.cjs`、`mcp-acceptance-families-4-5-6-9.cjs`、`mcp-acceptance-gap-fill.cjs`、`mcp-acceptance-optimizations.cjs`、`test-agent-graph-milestone.cjs`、`audit-business-actions.cjs`（其余脚本按 2026-11-25 复核不触发确认门，无需改代码）。
   - **2026-11-25 复核**：7 个脚本里只有 `agent-flow-human-task-dispatch.cjs` 真正命中人工确认（`humanTask.submit` 与两处 `flowAgent.run(continue)` 在人工等待时都会弹窗）；已补「允许提交 / 允许继续」点击并把单次 CLI 超时提到 240s。其余 6 个不触发确认门（`cooperate` 用 `note`、`build.commit` 在门禁前被 `FLOW_BUILD_MISSING` 拒绝等），**无需改代码**，已按顺序复跑全绿：`audit-business-actions` / `mcp-acceptance-optimizations`（9/9）/ `mcp-acceptance-gap-fill`（12/12）/ `mcp-acceptance`（34/34）/ `mcp-acceptance-families-4-5-6-9`（47/47）/ `test-agent-graph-milestone`。
   - **唯一未复跑**：`agent-flow-human-task-dispatch.cjs` 需 `CANVAS_TEST_API_KEY`（智谱 `glm-5.3-flash` 小额计费）；本机未配置该环境变量，改动已通过语法检查，待有 key 时复跑。
 

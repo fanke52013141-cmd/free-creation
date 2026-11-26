@@ -12,8 +12,8 @@
 
 **2026-11-26 规范审查校准（重要）**：
 - **操作清单的机器真值**是 [`docs/local-agent-access/generated/contracts.json`](docs/local-agent-access/generated/contracts.json)，运行时枚举以 `capability.list` 为准，由 `check-agent-access` 门禁把守；本文不手写当前操作数或节点数。
-- **headless 节点流六操作已登记进 Registry 并有验收**（2026-11-12 起）：`composite.execute`（含 `confirmCost` 计费确认门）、`composite.execute.wait`、`composite.run.retry`、`composite.run.submitHuman`、`composite.run.resume`、`composite.run.resubmit`。键约定：inputs 按完整公开端口 ID（`in-<id>`）喂值；outputs / outputValues / resubmit 统一以 **`out-<id>`** 为键，旧裸 id 仅读取兼容。执行语义不经过 `graph.patch + node.execute`（无项目、无画布实例）。
-- **已实现的外部主路径**包括：`project.import` / `project.importStructure` / `library.import` / `library.export`、统一 Registry / Dispatcher、CLI 与 MCP stdio/SSE 传输、`graph.patch`、`node.execute`、`flowStateMachine.submitEvent` / `flowStateMachine.get`。应用 REST HTTP API 仍未实现，也不是本目标前提。
+- **headless 节点流六操作已登记进 Registry 并有验收**（2026-11-12 起）：`composite.execute`（含 `confirmCost` 计费确认门）、`composite.execute.wait`、`composite.run.retry`、`composite.run.submitHuman`、`composite.run.resume`、`composite.run.resubmit`。键约定：inputs 按完整公开端口 ID（`in-<id>`）喂值；outputs / outputValues / resubmit 统一以 **`out-<id>`** 为键，旧裸 id 仅读取兼容。执行语义不经过 `graph.patch + node.execute`；其中 `composite.run.submitHuman` / `composite.run.resubmit` 属于人工决定，要求目标项目在桌面打开并人工确认，其余 headless 操作仍可无画布实例。
+- **已实现的外部主路径**包括：`project.import` / `project.importStructure` / `library.import` / `library.export`、统一 Registry / Dispatcher、CLI 与 MCP stdio/SSE 传输、`graph.patch`、`node.execute`、`flowStateMachine.submitEvent`（外部人工事件需桌面确认）/ `flowStateMachine.get`。应用 REST HTTP API 仍未实现，也不是本目标前提。
 - **MCP 注解口径**：`readOnlyHint/destructiveHint/idempotentHint` 按 effect 如实声明（只有只读操作幂等；写操作幂等性来自请求级 idempotencyKey）。
 - 本文“仍待开发”的历史段落不能覆盖后续交付；当前可调用集合与限制以机器契约、交付台账和实际测试为准。
 

@@ -226,7 +226,7 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 | `skipped` | 上游被跳过（如可选输入为空、循环体为空） | 下游如果有**必填**输入依赖它，自身也 skipped；全部可选则照常执行 |
 | `not-run` | 上游尚未运行或已过期 | 不允许执行，提示先运行上游 |
 
-**NF-9.2【现行】等待输入**：`executionPolicy.waitForInput: true` 时，运行过程中可以暂停，等待补输入；通过 `composite.run.submitHuman` 和 `composite.run.resume` 继续。
+**NF-9.2【现行】等待输入**：`executionPolicy.waitForInput: true` 时，运行过程中可以暂停，等待补输入；通过 `composite.run.submitHuman` 和 `composite.run.resume` 继续。外部 `composite.run.submitHuman` 属于人工决定，必须经桌面人工确认后才满足等待。
 - **NF-9.2a【目标】** 等待状态必须持久化 `waitingFor: { publicPortId | internalNodeId, reason }`；重开应用后可恢复，且不重复执行已完成的内部节点。
 
 **NF-9.3【现行】人工门**：内部节点包含人工发布或审核时，必须设置 `executionPolicy.requiresManualGate: true`，并在能力描述中展示。

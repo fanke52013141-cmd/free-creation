@@ -210,8 +210,10 @@ export const COMPOSITE_OPERATIONS = {
     idempotent: false,
     destructive: true,
     cost: 'none',
+    // 人工决定：返回前等人在 GUI 点「允许提交」。
+    interactive: true,
     description:
-      '向等待人工的节点流运行提交某内部人工任务节点的结果（满足开放人工等待）；仅 waiting-input 且该节点有开放等待时接受；提交值经续跑消费为正式输出，不伪造自动成功',
+      '向等待人工的节点流运行提交某内部人工任务节点的结果（满足开放人工等待）；仅 waiting-input 且该节点有开放等待时接受；提交值经续跑消费为正式输出，不伪造自动成功；BL-01：这是人工决定，外部调用会在桌面弹出确认，只有人点允许才生效，拒绝/超时/无桌面分别返回 HUMAN_DENIED / HUMAN_DECISION_TIMEOUT / DESKTOP_UNAVAILABLE（均零副作用）',
     input: z
       .object({
         runId: z.string().min(1).max(120),
@@ -234,8 +236,10 @@ export const COMPOSITE_OPERATIONS = {
     idempotent: false,
     destructive: true,
     cost: 'none',
+    // 人工决定：外部补交正式输出前必须由人在 GUI 确认。
+    interactive: true,
     description:
-      '人工补交失败 headless 运行的公开输出：仅 failed/interrupted 可补交，须一次性补齐全部公开输出端口（portId 用 out-<公开输出id>，兼容历史裸 id；text/markdown/json；媒体补交暂不支持）；补交后运行 completed 但 manualSubmission=true 如实标记，不伪造自动成功',
+      '人工补交失败 headless 运行的公开输出：仅 failed/interrupted 可补交，须一次性补齐全部公开输出端口（portId 用 out-<公开输出id>，兼容历史裸 id；text/markdown/json；媒体补交暂不支持）；补交后运行 completed 但 manualSubmission=true 如实标记，不伪造自动成功；BL-01：这是人工决定，外部调用会在桌面弹出确认，只有人点允许才生效，拒绝/超时/无桌面分别返回 HUMAN_DENIED / HUMAN_DECISION_TIMEOUT / DESKTOP_UNAVAILABLE（均零副作用）',
     input: z
       .object({
         runId: z.string().min(1).max(120),

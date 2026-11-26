@@ -13,6 +13,9 @@ export { HUMAN_DECISION_TIMEOUT_MS }
  * - `flowGraph.confirm`        外部建图落画布
  * - `flowAgent.build.commit`   builder 建图落画布
  * - `humanTask.submit`         代人提交人工任务结果
+ * - `composite.run.submitHuman` 代人提交节点流内部人工任务结果
+ * - `composite.run.resubmit`   代人补交节点流正式输出
+ * - `flowStateMachine.submitEvent` 代人提交状态机人工事件
  * - `flowAgent.cooperate`      协作节点的人工决定（action=submit 或 accepted=true）
  * - `flowAgent.run`            人工等待中的任务继续（action=continue）
  *

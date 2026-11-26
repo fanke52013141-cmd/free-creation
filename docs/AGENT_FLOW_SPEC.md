@@ -458,9 +458,9 @@ FlowNode {
 | 只读 | catalog / inspect / preview / list / get | 允许 |
 | 提案 | `flowGraph.propose`、`flowAgent.build.propose`、草稿提交 | 允许 |
 | 运行控制 | `flowAgent.run / pause / stop` | 允许（受计费确认门约束） |
-| **人工决定** | `flowGraph.confirm`、`flowAgent.build.commit`、`humanTask.submit`、协作采用/拒绝、人工复审 | **禁止直接生效**：外部调用先请求桌面人工确认，人点允许后才执行原动作；拒绝、超时、无桌面均在生效前失败 |
+| **人工决定** | `flowGraph.confirm`、`flowAgent.build.commit`、`humanTask.submit`、`composite.run.submitHuman`、`composite.run.resubmit`、`flowStateMachine.submitEvent`、协作采用/拒绝、人工复审 | **禁止直接生效**：外部调用先请求桌面人工确认，人点允许后才执行原动作；拒绝、超时、无桌面均在生效前失败 |
 
-**【现行 · BL-01】** 实时确认覆盖 `flowGraph.confirm`、`flowAgent.build.commit`、`humanTask.submit`、`flowAgent.cooperate`（action=submit 或 accepted=true）。没有做持久草稿队列，因此不存在离线后再采用的 `awaiting-human` 状态。`flowStateMachine.submitEvent` 与 `composite.run.submitHuman` 暂未纳入，待定（见 BACKLOG BL-01 备注）。
+**【现行 · BL-01】** 实时确认覆盖 `flowGraph.confirm`、`flowAgent.build.commit`、`humanTask.submit`、`composite.run.submitHuman`、`composite.run.resubmit`、`flowStateMachine.submitEvent`、`flowAgent.cooperate`（action=submit 或 accepted=true）。没有做持久草稿队列，因此不存在离线后再采用的 `awaiting-human` 状态。
 
 **AF-17.3【现行 · BL-15】** 外部 Agent 身份进入审计：每个外部调用都记录 `clientId`，运行总览事件归属为 `agent:external:<clientId>`；CLI 使用固定 `cli` 标识，MCP 使用客户端名称的固定长度摘要，不记录原始名称、密钥或请求正文。
 
@@ -511,7 +511,7 @@ FlowNode {
 
 | 项目 | 当前状态 | 边界 |
 |---|---|---|
-| 外部 Agent 人工决定实时确认 | ✅ BL-01 | 未做持久草稿队列；`flowStateMachine.submitEvent` / `composite.run.submitHuman` 未纳入 |
+| 外部 Agent 人工决定实时确认 | ✅ BL-01 | 未做持久草稿队列；已覆盖状态机人工事件、节点流人工提交与人工补交 |
 | task-bind 工具白名单 | ✅ BL-02 | 与桌面共用 `node.execute@1` + 可选 `web.search@1` |
 | 死路径、汇合、停滞、条件互斥、零输出交付 | ✅ BL-03/04/06 | 停滞用 `blocked + FLOW_STALLED`，不新增状态枚举 |
 | 校验即准入、control 边删除、真实端口 | ✅ BL-05/BL-11/2026-11-26 修复 | 只证明静态与运行准入一致，不证明真实模型/GUI/安装包成功 |

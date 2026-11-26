@@ -619,8 +619,10 @@ export const FLOW_AGENTS_OPERATIONS = {
     idempotent: false,
     destructive: true,
     cost: 'none',
+    // 人工决定：外部代拟人工事件前必须由人在 GUI 确认。
+    interactive: true,
     description:
-      '向状态机节点提交一个人工事件（与 GUI 提交事件按钮同一待处理写入）；携带观察到的 expectedRevision，过期提交拒绝；事件合法性与迁移在运行节点时由同一执行器校验；要求目标项目已在桌面打开',
+      '向状态机节点提交一个人工事件（与 GUI 提交事件按钮同一待处理写入）；携带观察到的 expectedRevision，过期提交拒绝；事件合法性与迁移在运行节点时由同一执行器校验；要求目标项目已在桌面打开；BL-01：这是人工决定，外部调用会在桌面弹出确认，只有人点允许才生效，拒绝/超时/无桌面分别返回 HUMAN_DENIED / HUMAN_DECISION_TIMEOUT / DESKTOP_UNAVAILABLE（均零副作用）',
     input: project
       .extend({
         nodeId,

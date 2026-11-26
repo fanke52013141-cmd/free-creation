@@ -19,8 +19,8 @@
 - **统一契约与入口**：Operation Registry、main Dispatcher、CLI 与 MCP stdio/SSE 适配均已实现；三者派生同一操作目录。应用 REST HTTP API 仍未实现，也不是本目标前提。
 - **项目与传输**：项目查询、新建、打开、元数据修改、保存、重命名、复制、预检删除、导出，以及 `project.import` / `project.importStructure` / `library.import` / `library.export` 已实现。包路径、重映射、凭据剥离、事务与失败边界见[包传输台账](./24-transfer-delivery.md)。
 - **画布与节点**：`graph.get` / `graph.patch` / `graph.validate`、节点创建/读取/更新/删除/连线、`node.execute`、运行查询/等待/取消/核对、输出读取与布局操作已接入；逐节点、逐动作的可用性仍以机器契约和验收记录为准。
-- **Agent Flow 与状态机**：`flowAgent.*`、`flowGraph.*`、`flowGraphDefinition.*`、`humanTask.*` 已接入；`flowStateMachine.submitEvent` / `flowStateMachine.get` 已实现，外部事件与 GUI 提交按钮写入同一待处理事件，不能直接设置状态。
-- **headless 节点流**：`composite.execute` 等独立路径已实现，不依赖项目或画布实例；`inputs` 使用 `in-<id>`，`outputs` / `outputValues` / `resubmit` 使用 `out-<id>`，旧裸 id 仅读取兼容。
+- **Agent Flow 与状态机**：`flowAgent.*`、`flowGraph.*`、`flowGraphDefinition.*`、`humanTask.*` 已接入；`flowStateMachine.submitEvent` / `flowStateMachine.get` 已实现，外部事件与 GUI 提交按钮写入同一待处理事件，不能直接设置状态；外部人工事件需桌面确认。
+- **headless 节点流**：`composite.execute` 等独立路径已实现，不依赖项目或画布实例；`inputs` 使用 `in-<id>`，`outputs` / `outputValues` / `resubmit` 使用 `out-<id>`，旧裸 id 仅读取兼容。`composite.run.submitHuman` / `composite.run.resubmit` 属于人工决定，需目标项目在桌面打开并人工确认。
 
 ## 交付与证据
 

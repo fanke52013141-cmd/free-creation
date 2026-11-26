@@ -519,16 +519,19 @@
 | LOG-01～03 | 已修复 | access/coordination trace 贯通、cancelled 唯一终态、人工拒绝事件关联 |
 | CI-01～05 | 已修复 | 60 分钟超时、完整历史、干净 CI 授权、铁律/快速验收入门禁、保护范围与 fail-closed |
 | DOC-01～15 | 已修复 | 权威入口、49 号降级、headless 键、计数、现行状态、R 系列口径、断链与元数据收敛 |
-| CODE-01～03 | 部分收敛 | 过期注释/测试名随文档与代码修复清理；旧 C0 与无入口临时脚本仍保留，未纳入本次删除 |
+| CODE-01～03 | 部分收敛 | 过期注释/测试名随文档与代码修复清理；C0 保留为测试专用，42 个无入口临时脚本已删除 |
+
+后续补充修复：`composite.run.submitHuman`、`composite.run.resubmit`、`flowStateMachine.submitEvent` 已纳入统一人工决定门禁；拒绝/超时/无桌面均在副作用前失败，回归见 `test/local-agent-human-gates.test.ts`。
 
 ### 验证证据
 
-- `npm test`：**358 passed / 2 skipped；4042 passed / 7 skipped**。
-- 最终运行时定向：**5 文件 / 223 项通过**；新增外部 committed scope 回归 **1 项通过**。
+- `npm test`：**360 passed / 2 skipped；4048 passed / 7 skipped**。
+- 最终运行时定向：**5 文件 / 223 项通过**；新增外部 committed scope 回归 **1 项通过**；人工门禁回归 **27 项通过**。
 - `npm run typecheck`、`npm run lint`、`npm run build`：通过。
 - `guard:agent-parity`、`verify:specs`、`verify:logging`、`git diff --check`：通过。
 - `CANVAS_OWNER=1 npm run verify:acceptance:fast`：**2/2 批次通过**（protocol 34/34、optimizations 9/9）。
 - 额外验收：族 2/3/7/8 **24/24**、族 4/5/6/9 **47/47** 通过；覆盖收紧后的受控 `media.import` 与机器契约节点数。
+- 人工门禁验收：`agent-flow-state-machine.cjs` **7/7** 通过，包含真实 GUI 点击「允许提交」后状态机推进。
 - 首轮全量测试发现的 esbuild 别名与旧图夹具问题已修复，9 个失败文件复跑 **105 项全通过**后再次全量通过。
 
 ### 仍未覆盖的边界

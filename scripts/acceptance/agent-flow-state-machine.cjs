@@ -93,6 +93,13 @@ const ok = (res, label) => {
     const sm = patched.created[0].nodeId
     check('CLI 建状态机节点（draft→working→completed）')
 
+    // BL-01：外部人工事件必须先由人在 GUI 点「允许提交」；这里用真实窗口扮演人。
+    const submitWithHuman = async (input) => {
+      const pending = cli(dir, ['flowStateMachine', 'submitEvent'], input)
+      await page.getByRole('button', { name: '允许提交', exact: true }).click({ timeout: 60000 })
+      return pending
+    }
+
     // ── 1. 初始读取：draft / 修订 1 / 合法事件 flow.started ──
     const initial = ok(await cli(dir, ['flowStateMachine', 'get'], { projectId, nodeId: sm }), 'GET_INITIAL')
     if (initial.state !== 'draft' || initial.revision !== 1 || !initial.legalEvents.includes('flow.started'))
@@ -101,7 +108,7 @@ const ok = (res, label) => {
     check('flowStateMachine.get 初始：draft/修订1/合法事件 flow.started')
 
     // ── 2. 外部提交 flow.started（修订 1）→ 运行推进 ──
-    const sub1 = ok(await cli(dir, ['flowStateMachine', 'submitEvent'], {
+    const sub1 = ok(await submitWithHuman({
       projectId, nodeId: sm, event: 'flow.started', expectedRevision: 1
     }), 'SUBMIT_1')
     if (sub1.pending !== true || sub1.revision !== 1) throw new Error(`SUBMIT1_WRONG:${JSON.stringify(sub1)}`)
@@ -128,7 +135,7 @@ const ok = (res, label) => {
     check('output.get 投影 out-state（working/修订2，flow.state@1）')
 
     // ── 4. 过期修订拒绝 ──
-    const stale = await cli(dir, ['flowStateMachine', 'submitEvent'], {
+    const stale = await submitWithHuman({
       projectId, nodeId: sm, event: 'flow.completed', expectedRevision: 1
     })
     if (stale.response?.error?.code !== 'STATE_MACHINE_REVISION_CONFLICT')
@@ -136,7 +143,7 @@ const ok = (res, label) => {
     check('过期修订提交被 STATE_MACHINE_REVISION_CONFLICT 拒绝')
 
     // ── 5. 非法事件：运行時执行器拒绝（外部不能直接改状态）──
-    ok(await cli(dir, ['flowStateMachine', 'submitEvent'], {
+    ok(await submitWithHuman({
       projectId, nodeId: sm, event: 'flow.completed', expectedRevision: 2
     }), 'SUBMIT_2')
     await runNode()

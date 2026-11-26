@@ -239,13 +239,13 @@ describe('组合能力 Agent 契约（P1 对等）', () => {
         instanceId: 'composite-keys-test',
         appVersion: 'test',
         exportDirectory: join(directory, 'exports'),
-        activeProjectId: () => null,
+        activeProjectId: () => 'headless-keys',
         desktop: {
           async run() {
             return {}
           },
           async ask() {
-            return { authorized: false, code: 'NOT_USED' }
+            return { authorized: true }
           }
         }
       })

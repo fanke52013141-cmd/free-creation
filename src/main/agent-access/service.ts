@@ -609,9 +609,17 @@ export class LocalAccessService {
       } else if (operationId === 'composite.run.retry') {
         result = await this.executeCompositeRunRetry(input)
       } else if (operationId === 'composite.run.resubmit') {
-        result = this.executeCompositeRunResubmit(input)
+        result = await this.executeCompositeRunResubmit(input, {
+          requestId: request.requestId,
+          traceId: base.traceId,
+          spanId
+        })
       } else if (operationId === 'composite.run.submitHuman') {
-        result = this.executeCompositeSubmitHuman(input)
+        result = await this.executeCompositeSubmitHuman(input, {
+          requestId: request.requestId,
+          traceId: base.traceId,
+          spanId
+        })
       } else if (operationId === 'composite.run.resume') {
         result = await this.executeCompositeRunResume(input)
       } else if (operationId === 'run.cancel') {
@@ -1070,7 +1078,11 @@ export class LocalAccessService {
       } else if (operationId === 'flowStateMachine.submitEvent') {
         // C3：状态机人工事件——与 GUI 提交事件按钮同一 meta.stateMachinePending 写入，
         // 经渲染器权威动作（修订核对 + 保存屏障）；迁移合法性仍由运行时的同一执行器校验。
-        result = await this.executeStateMachineEvent(id!, active, input)
+        result = await this.executeStateMachineEvent(id!, active, input, {
+          requestId: request.requestId,
+          traceId: base.traceId,
+          spanId
+        })
       } else if (operationId === 'flowStateMachine.get') {
         result = this.readStateMachine(id!, input)
       } else if (operationId === 'humanTask.submit') {
@@ -1752,9 +1764,10 @@ export class LocalAccessService {
   private async executeStateMachineEvent(
     id: string,
     activeId: string | null | undefined,
-    input: Record<string, unknown>
+    input: Record<string, unknown>,
+    diagnostics: { requestId: string; traceId: string; spanId: string }
   ): Promise<unknown> {
-    if (id !== activeId || !this.options.desktop)
+    if (id !== activeId)
       throw new AccessFailure(
         'ACTIVE_PROJECT_REQUIRED',
         'desktop-ownership',
@@ -1767,6 +1780,22 @@ export class LocalAccessService {
     if (!node) throw new AccessFailure('NODE_NOT_FOUND', 'precheck', nodeId.slice(0, 60))
     if (node.type !== 'state-machine')
       throw new AccessFailure('INVALID_INPUT', 'precheck', 'state-machine-node-required')
+    // BL-01 / AF-1.5：外部代拟人工事件也必须由人在 GUI 亲眼确认后才写入 pending。
+    const decision = await requestHumanDecision({
+      operation: 'flowStateMachine.submitEvent',
+      desktop: this.options.desktop,
+      projectId: id,
+      activeProjectId: activeId ?? null,
+      prompt: {
+        title: '外部 Agent 请求代你提交状态机事件',
+        message: `外部 Agent 想向状态机节点「${node.title}」提交人工事件「${String(input.event ?? '')}」。只有你点「允许提交」才会写入待处理事件。`,
+        confirmText: '允许提交'
+      },
+      diagnostics
+    })
+    if (!decision.ok) throw new AccessFailure(decision.code, 'human-decision', decision.detail)
+    if (!this.options.desktop)
+      throw new AccessFailure('DESKTOP_UNAVAILABLE', 'human-decision', 'desktop host is not available')
     const reply = await this.options.desktop.run(
       {
         action: 'state-machine-event',
@@ -1964,7 +1993,10 @@ export class LocalAccessService {
   }
 
   /** AF-07：向等待人工的节点流提交某内部人工任务结果（满足开放人工等待）。 */
-  private executeCompositeSubmitHuman(input: Record<string, unknown>): unknown {
+  private async executeCompositeSubmitHuman(
+    input: Record<string, unknown>,
+    diagnostics: { requestId: string; traceId: string; spanId: string }
+  ): Promise<unknown> {
     const runId = String(input.runId ?? '')
     const nodeId = String(input.nodeId ?? '')
     const existing = getCompositeRun(runId)?.run
@@ -1985,6 +2017,20 @@ export class LocalAccessService {
     if ((value.kind === 'image' || value.kind === 'video') &&
         !listMedia(existing.projectId).some((asset) => asset.id === value.mediaId && asset.kind === value.kind))
       throw new AccessFailure('INVALID_INPUT', 'precheck', 'human-task-project-media-required')
+    // BL-01 / AF-1.5：节点流内部人工任务的结果也只能由人交付。
+    const decision = await requestHumanDecision({
+      operation: 'composite.run.submitHuman',
+      desktop: this.options.desktop,
+      projectId: existing.projectId,
+      activeProjectId: this.options.activeProjectId(),
+      prompt: {
+        title: '外部 Agent 请求代你提交节点流人工结果',
+        message: `外部 Agent 想为节点流「${version.manifest.name}」的运行 ${runId} 提交人工节点「${node.title}」的结果。只有你点「允许提交」才会生效。\\n\\n内容：${previewValue(value)}`,
+        confirmText: '允许提交'
+      },
+      diagnostics
+    })
+    if (!decision.ok) throw new AccessFailure(decision.code, 'human-decision', decision.detail)
     const satisfied = satisfyCompositeRunWait({
       requestId: wait.requestId,
       revision: wait.revision,
@@ -2054,7 +2100,10 @@ export class LocalAccessService {
 
   /** W4 人工补交：仅 failed/interrupted 可补交；须一次性补齐全部公开输出端口，
    * 类型与端口声明兼容；补交后 completed 但 manualSubmission=true 如实标记。 */
-  private executeCompositeRunResubmit(input: Record<string, unknown>): unknown {
+  private async executeCompositeRunResubmit(
+    input: Record<string, unknown>,
+    diagnostics: { requestId: string; traceId: string; spanId: string }
+  ): Promise<unknown> {
     const runId = String(input.runId ?? '')
     const existing = getCompositeRun(runId)?.run
     if (!existing) throw new AccessFailure('NOT_FOUND', 'read', 'composite-run')
@@ -2093,6 +2142,20 @@ export class LocalAccessService {
         throw new AccessFailure('OUTPUT_TYPE_INVALID', 'precheck', `${entry.portId}:${port.type}`)
       outputValues[entry.portId] = entry.value
     }
+    // BL-01 / AF-1.5：外部补交正式输出是人工决定，必须人在 GUI 亲眼允许后才落库。
+    const decision = await requestHumanDecision({
+      operation: 'composite.run.resubmit',
+      desktop: this.options.desktop,
+      projectId: existing.projectId,
+      activeProjectId: this.options.activeProjectId(),
+      prompt: {
+        title: '外部 Agent 请求补交节点流输出',
+        message: `外部 Agent 想为节点流「${record.manifest.name}」的运行 ${runId} 补交正式输出。只有你点「允许补交」才会生效。\\n\\n输出：${previewValue(outputValues)}`,
+        confirmText: '允许补交'
+      },
+      diagnostics
+    })
+    if (!decision.ok) throw new AccessFailure(decision.code, 'human-decision', decision.detail)
     const changed = resubmitCompositeRun({
       runId,
       outputPorts: declared.map((port) => ({
