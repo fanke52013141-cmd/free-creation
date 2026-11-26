@@ -284,7 +284,7 @@ sources:
 |---|---|---|
 | ✅ BL-50 | 空项目首页增加直接创建入口；视频模式自动改写提示一次，浏览器已通过；`run-AwaNQQ` 全量门禁通过 | 组合测试 U-4 |
 | ✅ BL-51 | 节点组合回归与默认端口连接矩阵快照已接入完整发布验收；选跑 `node-combos` 通过 229 项；`run-AwaNQQ` 全量门禁通过 | 组合测试 P3-7 |
-| ⬜ BL-52 | 配置 Vidu Token 后，复跑组合 8，完成真实出片验收 | 组合测试 P3-8 |
+| ✅ BL-52 | **2026-11-26 完成（真实 Vidu 出片）**：用用户提供的 Vidu Token 在隔离数据目录启动桌面宿主，经 `provider.save`/`model.connection.save`/`model.definition.save`/`model.validate`/`model.binding.save` 完成 Vidu Q3（3.2）真实验证（验证任务 `3568669916450355`，1s/1080p 首尾帧真实生成成功），再以 CLI 等价组合 8 路径跑画布视频节点：`node.execute` → `run-mwwsukzg-ddef5c73` completed → `output.get` 返回 `out-video` 引用；成片 **1920×1080 / h264 / 4.04s / 2,048,808 bytes**（ffprobe 实测），证据 `qa/bl52-vidu-combo8/{receipt.json,ffprobe.json,vidu-q3-4s-1080p.mp4}`。Token 仅存本机隔离数据目录（safeStorage 加密），未入 git；临时数据已清理 | 组合测试 P3-8 | S |
 
 ---
 
