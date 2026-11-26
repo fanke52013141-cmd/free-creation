@@ -35,8 +35,8 @@ export const FLOW_AGENT_BUILD_OPERATION_IDS: ReadonlySet<AccessOperationId> = ne
 export interface FlowAgentBuildContext {
   activeProjectId: () => string | null
   desktop: AccessDesktop | null | undefined
-  /** agent.access 的 trace/span，用于模型请求与诊断关联。 */
-  diagnostics: { traceId: string; spanId: string }
+  /** agent.access 的请求/诊断身份，用于模型请求与诊断关联。 */
+  diagnostics: { requestId: string; traceId: string; spanId: string }
 }
 
 /** 准入前失败：明确错误码、无副作用（service 映射为 failed）。 */
@@ -258,6 +258,7 @@ async function commitBuild(
   const decision = await requestHumanDecision({
     operation: 'flowAgent.build.commit',
     desktop: context.desktop,
+    diagnostics: context.diagnostics,
     projectId,
     activeProjectId: context.activeProjectId(),
     prompt: {

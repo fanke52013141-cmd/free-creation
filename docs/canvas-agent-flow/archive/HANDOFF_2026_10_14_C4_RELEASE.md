@@ -30,7 +30,7 @@
 
 ## 日志覆盖
 
-恢复复用 agent.desktop/coordination、model.request、公共 command/node/save/asset 生命周期；transfer 与 workspace 检查补齐开始/唯一终态、稳定失败阶段和关联。实际桌面诊断已验证终态配对与材料/Key 排除，logger 抛错不改变业务结果。崩溃不补造不可观察终态，日志不是恢复权威。完整覆盖及未覆盖项见 [LOGGING_COVERAGE](../LOGGING_COVERAGE.md)。
+恢复复用 agent.desktop/coordination、model.request、公共 command/node/save/asset 生命周期；transfer 与 workspace 检查补齐开始/唯一终态、稳定失败阶段和关联。实际桌面诊断已验证终态配对与材料/Key 排除，logger 抛错不改变业务结果。崩溃不补造不可观察终态，日志不是恢复权威。完整覆盖及未覆盖项见 [LOGGING_COVERAGE](../../LOGGING_COVERAGE.md)。
 
 ## 接手后的下一步
 

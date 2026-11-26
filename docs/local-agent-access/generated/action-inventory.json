@@ -3,13 +3,13 @@
   "generatedFrom": {
     "ipcChannels": 205,
     "canvasActions": 50,
-    "externalOperations": 192
+    "externalOperations": 191
   },
   "totals": {
     "actions": 255,
     "byPhase": {
-      "external": 210,
-      "excluded": 37,
+      "external": 209,
+      "excluded": 38,
       "F9": 8
     }
   },
@@ -2125,11 +2125,9 @@
       "label": "供应商导出",
       "channel": "gateway:providers:export",
       "gui": "模型设置",
-      "phase": "external",
-      "external": [
-        "provider.package.export"
-      ],
-      "note": "F9：把选定连接导出为凭据包（.cskeys）到**受控导出目录**（复用 GUI 同一 exportProviders 与同一加密格式）；需要解封密码；回执给文件名/sha256/字节数/连接数，不回传包正文；不覆盖已有文件"
+      "phase": "excluded",
+      "external": [],
+      "note": "F9：外部凭据批量导出尚未满足人工确认与显式连接范围要求，暂不开放；GUI 导出能力保留，不得以 provider.package.export 旁路"
     },
     "ipc.gateway.importProviders": {
       "label": "供应商导入",

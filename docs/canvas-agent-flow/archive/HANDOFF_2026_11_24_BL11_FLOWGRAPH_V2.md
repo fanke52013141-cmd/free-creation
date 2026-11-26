@@ -58,7 +58,7 @@ FlowGraph 从「通用端口 + 单载体循环」升级为可编排真实能力�
 
 ## 4. 唯一下一步
 
-按 [BACKLOG](../BACKLOG.md)：**BL-12 端口兼容判定统一 + 补全类型**（`COMPOSITE_PORT_TYPES` 补 `iteration/camera` 或封装入口明确拒绝；connection-matrix 真值表与节点流一致）→ BL-13/14（Schema 兼容、媒体 mime、必填预检、缺席三态）。
+按 [BACKLOG](../../BACKLOG.md)：**BL-12 端口兼容判定统一 + 补全类型**（`COMPOSITE_PORT_TYPES` 补 `iteration/camera` 或封装入口明确拒绝；connection-matrix 真值表与节点流一致）→ BL-13/14（Schema 兼容、媒体 mime、必填预检、缺席三态）。
 
 ## 5. 复跑命令
 

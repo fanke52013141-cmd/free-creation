@@ -96,6 +96,31 @@ afterEach(() => {
   rmSync(directory, { recursive: true, force: true })
 })
 
+describe('凭据包公开契约', () => {
+  it('不暴露未实现人工门禁的 provider.package.export 幽灵操作', async () => {
+    const response = await service.dispatch({
+      apiVersion: 1,
+      operationVersion: 1,
+      operationId: 'provider.package.export',
+      input: { fileName: 'all.cskeys', password: 'pw' },
+      requestId: randomUUID(),
+      expectedDataStoreId: service.dataStoreId,
+      idempotencyKey: key()
+    })
+    expect(response.status).toBe('failed')
+    expect(response.error?.code).toBe('UNSUPPORTED_OPERATION')
+    const capability = await service.dispatch({
+      apiVersion: 1,
+      operationVersion: 1,
+      operationId: 'capability.list',
+      input: {},
+      requestId: randomUUID(),
+      expectedDataStoreId: service.dataStoreId
+    })
+    expect(JSON.stringify(capability.data)).not.toContain('provider.package.export')
+  })
+})
+
 describe('凭据包服务未发布', () => {
   it('如实拒绝且不写任何文件', async () => {
     resetKeysPackageAccessPortForTest()

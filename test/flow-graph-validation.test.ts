@@ -37,6 +37,11 @@ const graph = (
     ...(budgets ? { budgets } : {})
   })
 
+const validateFlowGraphTopology = (
+  value: FlowGraph,
+  options: Parameters<typeof validateFlowGraph>[1] = {}
+) => validateFlowGraph(value, { ...options, requireRuntime: false })
+
 const dataEdge = (from: string, to: string): FlowGraph['edges'][number] => ({
   from: { nodeId: from, portId: 'out-text' },
   to: { nodeId: to, portId: 'in-text' },
@@ -46,7 +51,7 @@ const dataEdge = (from: string, to: string): FlowGraph['edges'][number] => ({
 describe('O4-P1 合法图通过', () => {
   it('顺序图', () => {
     const g = graph([node('a'), node('b')], [dataEdge('a', 'b')], 'a', ['b'])
-    expect(validateFlowGraph(g)).toEqual({ ok: true })
+    expect(validateFlowGraphTopology(g)).toEqual({ ok: true })
   })
 
   it('条件分支图', () => {
@@ -62,7 +67,7 @@ describe('O4-P1 合法图通过', () => {
       'a',
       ['d']
     )
-    expect(validateFlowGraph(g)).toEqual({ ok: true })
+    expect(validateFlowGraphTopology(g)).toEqual({ ok: true })
   })
 
   it('有界循环图（单节点 loop 声明，不画回边）', () => {
@@ -80,7 +85,7 @@ describe('O4-P1 合法图通过', () => {
       'a',
       ['b']
     )
-    expect(validateFlowGraph(g)).toEqual({ ok: true })
+    expect(validateFlowGraphTopology(g)).toEqual({ ok: true })
   })
 
   it('人机协作 + 纯人节点混合图', () => {
@@ -97,7 +102,7 @@ describe('O4-P1 合法图通过', () => {
       'a',
       ['c']
     )
-    expect(validateFlowGraph(g)).toEqual({ ok: true })
+    expect(validateFlowGraphTopology(g)).toEqual({ ok: true })
   })
 })
 
@@ -120,16 +125,16 @@ describe('O4-P1 拓扑/预算拒绝', () => {
       'a',
       ['d']
     )
-    expect(validateFlowGraph(g)).toMatchObject({
+    expect(validateFlowGraphTopology(g)).toMatchObject({
       ok: false,
       errors: [{ code: 'REQUIRED_SELECTOR_UNREACHABLE', nodeId: 'd' }]
     })
     g.nodes[3].inputs!.selectors[0].required = false
-    expect(validateFlowGraph(g)).toEqual({ ok: true })
+    expect(validateFlowGraphTopology(g)).toEqual({ ok: true })
     g.nodes[3].inputs!.selectors[0] = { ...selector, sourceStageKey: 'a' }
-    expect(validateFlowGraph(g)).toEqual({ ok: true })
+    expect(validateFlowGraphTopology(g)).toEqual({ ok: true })
     g.nodes[3].inputs!.selectors[0] = { ...selector, sourceStageKey: 'd' }
-    expect(validateFlowGraph(g)).toMatchObject({
+    expect(validateFlowGraphTopology(g)).toMatchObject({
       ok: false,
       errors: [{ code: 'REQUIRED_SELECTOR_UNREACHABLE', nodeId: 'd' }]
     })
@@ -149,35 +154,35 @@ describe('O4-P1 拓扑/预算拒绝', () => {
       [dataEdge('a', 'b')],
       'a',
       ['b'],
-      { maxSteps: 4 }
+      { maxSteps: 3 }
     )
-    expect(validateFlowGraph(g)).toEqual({
+    expect(validateFlowGraphTopology(g)).toEqual({
       ok: false,
       errors: [{
         code: 'STEP_BUDGET_INSUFFICIENT',
-        message: 'maxSteps 4 must be at least 5'
+        message: 'maxSteps 3 must be at least 4'
       }]
     })
-    expect(validateFlowGraph({ ...g, budgets: { ...g.budgets, maxSteps: 5 } })).toEqual({ ok: true })
+    expect(validateFlowGraphTopology({ ...g, budgets: { ...g.budgets, maxSteps: 4 } })).toEqual({ ok: true })
   })
 
   it('无界环（无 loop 载体）拒绝', () => {
     const g = graph([node('a'), node('b')], [dataEdge('a', 'b'), dataEdge('b', 'a')], 'a', ['b'])
-    const result = validateFlowGraph(g)
+    const result = validateFlowGraphTopology(g)
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.errors.some((e) => e.code === 'CYCLE_WITHOUT_LOOP')).toBe(true)
   })
 
   it('孤岛节点拒绝', () => {
     const g = graph([node('a'), node('b'), node('c')], [dataEdge('a', 'b')], 'a', ['b'])
-    const result = validateFlowGraph(g)
+    const result = validateFlowGraphTopology(g)
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.errors.some((e) => e.code === 'UNREACHABLE_NODE' && e.nodeId === 'c')).toBe(true)
   })
 
   it('出口不可达拒绝', () => {
     const g = graph([node('a'), node('b'), node('c')], [dataEdge('a', 'b')], 'a', ['c'])
-    const result = validateFlowGraph(g)
+    const result = validateFlowGraphTopology(g)
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.errors.some((e) => e.code === 'EXIT_UNREACHABLE')).toBe(true)
   })
@@ -198,7 +203,7 @@ describe('O4-P1 拓扑/预算拒绝', () => {
       ['b'],
       { maxLoopIterations: 8 }
     )
-    const result = validateFlowGraph(g)
+    const result = validateFlowGraphTopology(g)
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.errors.some((e) => e.code === 'LOOP_BUDGET_EXCEEDED')).toBe(true)
   })
@@ -219,7 +224,7 @@ describe('O4-P1 拓扑/预算拒绝', () => {
       'a',
       ['c']
     )
-    const result = validateFlowGraph(g)
+    const result = validateFlowGraphTopology(g)
     expect(result.ok).toBe(false)
     if (!result.ok) {
       expect(result.errors.some((e) => e.code === 'LOOP_BODY_UNSUPPORTED' && e.nodeId === 'b')).toBe(true)
@@ -242,14 +247,14 @@ describe('O4-P1 拓扑/预算拒绝', () => {
       'a',
       ['b']
     )
-    const result = validateFlowGraph(g)
+    const result = validateFlowGraphTopology(g)
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.errors.some((e) => e.code === 'LOOP_BODY_UNSUPPORTED')).toBe(true)
   })
 
   it('入口即出口拒绝', () => {
     const g = graph([node('a')], [], 'a', ['a'])
-    const result = validateFlowGraph(g)
+    const result = validateFlowGraphTopology(g)
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.errors.some((e) => e.code === 'ENTRY_IS_EXIT')).toBe(true)
   })
@@ -263,7 +268,7 @@ describe('BL-05 校验即准入：种类白名单与能力目录', () => {
       'a',
       ['b']
     )
-    const result = validateFlowGraph(g)
+    const result = validateFlowGraphTopology(g)
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.errors.some((e) => e.code === 'NODE_KIND_UNSUPPORTED' && e.nodeId === 'b')).toBe(true)
   })
@@ -274,7 +279,7 @@ describe('BL-05 校验即准入：种类白名单与能力目录', () => {
       'a',
       ['b']
     )
-    const result = validateFlowGraph(g)
+    const result = validateFlowGraphTopology(g)
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.errors.some((e) => e.code === 'CAPABILITY_UNKNOWN' && e.nodeId === 'a')).toBe(true)
   })
@@ -300,7 +305,7 @@ describe('BL-05 校验即准入：种类白名单与能力目录', () => {
       'a',
       ['c']
     )
-    expect(validateFlowGraph(g)).toEqual({ ok: true })
+    expect(validateFlowGraphTopology(g)).toEqual({ ok: true })
   })
 })
 
@@ -312,7 +317,7 @@ describe('BL-04 同源条件出边互斥', () => {
   const branch = (edges: FlowGraph['edges']) =>
     graph([node('a'), node('b'), node('c')], edges, 'a', ['b', 'c'])
   const codes = (g: FlowGraph) => {
-    const result = validateFlowGraph(g)
+    const result = validateFlowGraphTopology(g)
     return result.ok ? [] : result.errors.map((e) => e.code)
   }
   it('可能同时成立的条件拒绝 CONDITION_NOT_EXCLUSIVE', () => {
@@ -444,13 +449,13 @@ it('validates declared human roles while accepting legacy owner graphs', () => {
     ['b']
   )
   const roles = [{ roleId: 'writer', name: 'Writer' }]
-  expect(validateFlowGraph(base)).toEqual({ ok: true })
-  expect(validateFlowGraph({ ...base, roles })).toMatchObject({
+  expect(validateFlowGraphTopology(base)).toEqual({ ok: true })
+  expect(validateFlowGraphTopology({ ...base, roles })).toMatchObject({
     ok: false, errors: expect.arrayContaining([{ code: 'HUMAN_ROLE_REQUIRED', nodeId: 'a', message: expect.any(String) }])
   })
   const assigned = { ...base, roles, nodes: [{ ...base.nodes[0], humanRole: 'writer' }, base.nodes[1]] }
-  expect(validateFlowGraph(assigned)).toEqual({ ok: true })
-  expect(validateFlowGraph({ ...assigned, roles: [...roles, ...roles] })).toMatchObject({
+  expect(validateFlowGraphTopology(assigned)).toEqual({ ok: true })
+  expect(validateFlowGraphTopology({ ...assigned, roles: [...roles, ...roles] })).toMatchObject({
     ok: false, errors: expect.arrayContaining([{ code: 'HUMAN_ROLE_DUPLICATE', message: expect.any(String) }])
   })
 })

@@ -2,7 +2,7 @@
 
 日期：2026-10-12。确认范围：用户已确认产品方向，并授权发布方案和启动第一步开发。状态：方案确认；应用能力按交付台账逐项验收，不能把确认当作实现。
 
-本文是统一阅读入口；细节由 [实施方案](06-implementation-plan.md)、[AI 审核](07-ai-review-node.md) 和 [节点协同规范](05-node-coordination-standard.md) 补充。与早期方案表述冲突时，以本文及对应最新细化为准。历史撤回实现不作为底座。
+本文是历史方案入口；细节由 [实施方案](06-implementation-plan.md)、[AI 审核](../07-ai-review-node.md) 和 [节点协同规范](../05-node-coordination-standard.md) 补充。当前规范见 [AGENT_FLOW_SPEC](../../AGENT_FLOW_SPEC.md)。与早期方案表述冲突时，以本文及对应最新细化为准。历史撤回实现不作为底座。
 
 ## 1. 产品与协作空间
 

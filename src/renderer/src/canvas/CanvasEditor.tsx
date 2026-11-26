@@ -73,6 +73,7 @@ import { parseDirectorProject } from '../nodes/director-data'
 import { readNodeConfig } from './node-persistence'
 import { publishDirectorOutput } from './director-frame'
 import { toGraphView } from '@shared/agent-access/graph-ops'
+import { GUI_LOCAL_RUN_TASK_PREFIX } from '@shared/agent-access/desktop'
 import type { AiProcessConfig } from '../engine/executors/aiProcess'
 import { markUndoPoint } from './history'
 import { collapseSelection } from './stack-collapse'
@@ -553,6 +554,31 @@ export function CanvasEditor({
       useEngineStore.getState().register(null)
     }
   }, [project.id, providers])
+
+  // EXT-04：把 GUI 本地运行占用同步给 main。复用既有 task-report 通道，不新增 preload/IPC。
+  // 外部 graph.patch / export / open 在 main 准入时据此 fail-closed；运行终态仍由公共执行器记录。
+  useEffect(() => {
+    const taskId = `${GUI_LOCAL_RUN_TASK_PREFIX}${project.id}`
+    let busy = useEngineStore.getState().phase !== 'idle'
+    const report = (next: boolean): void => {
+      window.api.reportLocalAgentTask?.({
+        taskId,
+        projectId: project.id,
+        status: next ? 'running' : 'completed'
+      })
+    }
+    report(busy)
+    const unsubscribe = useEngineStore.subscribe((state) => {
+      const next = state.phase !== 'idle'
+      if (next === busy) return
+      busy = next
+      report(next)
+    })
+    return () => {
+      unsubscribe()
+      report(false)
+    }
+  }, [project.id])
 
   // 调试钩子：本地验收脚本据此确定性地选择/读取画布状态（不参与业务逻辑）。
   useEffect(() => {
@@ -1901,6 +1927,7 @@ export function CanvasEditor({
                   projectId: project.id,
                   ok: false,
                   validated: true,
+                  graphVersion: graphVersionRef.current,
                   errorCode: code,
                   ...(detail ? { errorDetail: detail.slice(0, 300) } : {})
                 })
@@ -1914,6 +1941,13 @@ export function CanvasEditor({
               }
               if (useEngineStore.getState().phase !== 'idle') {
                 replyFail('ENGINE_BUSY')
+                return
+              }
+              if (graphVersionRef.current !== request.expectedGraphVersion) {
+                replyFail(
+                  'REVISION_CONFLICT',
+                  `expected ${request.expectedGraphVersion}, current ${graphVersionRef.current}`
+                )
                 return
               }
               const executeGraph = deriveGraph(editor)

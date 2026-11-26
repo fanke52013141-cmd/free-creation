@@ -14,7 +14,7 @@ import {
   type FlowGraphDefinition,
   type GraphDefinitionDiff
 } from '../../shared/agent-flow/flow-definition'
-import { FlowGraphSchema, type FlowGraph } from '../../shared/agent-flow/flow-graph'
+import { FlowGraphSchema, validateFlowGraph, type FlowGraph } from '../../shared/agent-flow/flow-graph'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 
@@ -145,6 +145,9 @@ export class FlowDefinitionStore {
     if (!this.open(input.projectId))
       throw new AgentRuntimeError('FLOW_PROJECT_INACTIVE', 'definition')
     const graph = FlowGraphSchema.parse(input.graph)
+    const validation = validateFlowGraph(graph)
+    if (!validation.ok)
+      throw new AgentRuntimeError(validation.errors[0]?.code ?? 'FLOW_GRAPH_INVALID', 'definition')
     const content = graphDefinitionContent({ name: input.name, graph })
     const contentHash = sha256(canonicalFlowJson(content))
     const last = this.db

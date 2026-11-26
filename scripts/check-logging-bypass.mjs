@@ -33,7 +33,7 @@ const isExcluded = (path) =>
 
 const CONSOLE_RULE = /\bconsole\.(log|error|warn|info|debug)\s*\(/
 const ELECTRON_LOG_IMPORT_RULE = /from\s+['"]electron-log(\/[a-z]+)?['"]/
-const NETWORK_RULE = /\b(?:fetch|axios|XMLHttpRequest)\b|\bhttps?\.request\b/
+const NETWORK_RULE = /\bfetch\s*\(|\baxios(?:\.|\s*\()|\bXMLHttpRequest\b|\bhttps?\.request\b/
 const DIAGNOSTICS_RULE = /(shared\/observability|diagnostics\/gateway-events|emitGatewayEvent|emitDomainEvent)/
 
 /** 把 unified diff 拆成 { path, addedLines }。 */
@@ -61,20 +61,40 @@ if (diffFile) {
 } else {
   const git = (args_) => {
     try {
-      return execFileSync('git', args_, { cwd: root, encoding: 'utf8' })
+      return execFileSync('git', args_, {
+        cwd: root,
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024
+      })
     } catch {
       return null
     }
   }
-  // 基线：优先 origin/main 的 merge-base，其次 HEAD~1；再没有就当作无变更。
+  const failClosed = (message) => {
+    console.error(`logging gate failed: ${message}`)
+    console.error('处理：请在完整 Git 历史中运行（CI checkout 设置 fetch-depth: 0），或显式提供 --diff-file。')
+    process.exit(1)
+  }
+  const shallow = git(['rev-parse', '--is-shallow-repository'])
+  if (shallow !== null && shallow.trim() === 'true') {
+    failClosed('检测到浅克隆，无法保证增量基线完整')
+  }
+  // 基线：优先 origin/main 的 merge-base，否则使用 HEAD^；两者都不可用时必须失败。
   let base = null
   const mergeBase = git(['merge-base', 'origin/main', 'HEAD'])
-  if (mergeBase) base = mergeBase.trim()
-  else base = 'HEAD~1'
-  diffText = git(['diff', '-U0', base]) ?? ''
+  if (mergeBase && mergeBase.trim()) base = mergeBase.trim()
+  else {
+    const parent = git(['rev-parse', '--verify', 'HEAD^'])
+    if (!parent || !parent.trim()) failClosed('无法取得比较基线（origin/main merge-base 与 HEAD^ 均不可用）')
+    base = parent.trim()
+  }
+  const diff = git(['diff', '-U0', base])
+  if (diff === null) failClosed(`无法读取相对基线 ${base} 的 diff`)
+  diffText = diff
   // 未跟踪的新文件：整文件都算「新增行」。
   const untracked = git(['ls-files', '--others', '--exclude-standard'])
-  for (const file of (untracked ?? '').split('\n').filter(Boolean)) {
+  if (untracked === null) failClosed('无法枚举未跟踪文件')
+  for (const file of untracked.split('\n').filter(Boolean)) {
     if (!/\.(ts|tsx|mjs|js|cjs)$/.test(file)) continue
     try {
       const content = readFileSync(join(root, file), 'utf8')

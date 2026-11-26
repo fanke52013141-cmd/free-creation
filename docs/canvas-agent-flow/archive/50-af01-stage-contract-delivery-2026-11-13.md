@@ -1,6 +1,6 @@
 # AF-01 阶段与输出契约 — 交付备注
 
-日期：2026-11-13（Asia/Shanghai）。状态：**已实施并验收（确定性宿主测试 + 真实桌面三入口定义一致性）**。方案入口：[48-优化方案](48-task-specific-flow-optimization-plan-2026-11-13.md) §10 AF-01。
+日期：2026-11-13（Asia/Shanghai）。状态：**已实施；确定性宿主测试与真实桌面三入口定义一致性通过**。这不等于完整 `npm run verify`、真实 GUI 鼠标共创或真实模型固定顺序长任务验收。方案入口：[48-优化方案](48-task-specific-flow-optimization-plan-2026-11-13.md) §10 AF-01。
 
 ## 1. 交付范围（对照 AF-01 退出条件）
 

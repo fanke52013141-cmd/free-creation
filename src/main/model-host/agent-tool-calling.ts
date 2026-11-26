@@ -63,7 +63,12 @@ export async function validateAgentToolCallingOnHost(
       throw new Error('模型连接地址无效，请检查模型设置')
     }
     const local = ['localhost', '127.0.0.1', '[::1]'].includes(address.hostname)
-    const secret = await host.readSecret(connectionId)
+    let secret: string | null
+    try {
+      secret = await host.readSecretForRequest(connectionId, connection.baseUrl)
+    } catch {
+      throw new Error('模型密钥与当前端点不匹配，请在模型设置中重新保存')
+    }
     if (!secret && !local) throw new Error('模型密钥不可用，请在模型设置中重新保存')
     const revisions = host.getAgentToolCallingRevisions(connectionId, modelDefinitionId)
     if (!revisions) throw new Error('模型连接或模型定义已更改，请重新验证')

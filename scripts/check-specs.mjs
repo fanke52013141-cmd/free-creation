@@ -19,20 +19,31 @@ for (const directory of ['.', 'docs']) {
       process.stderr.write(`${path} ${message}\n`)
       failed = true
     }
-    if (!header.some((line) => /^(?:> )?status: (active|historical|draft|review|frozen)(?:\s+#.*)?$/.test(line))) {
-      report('缺少合法的 status')
-    }
+    const status = header
+      .map((line) => /^(?:> )?status: (active|historical|draft|review|frozen)(?:\s+#.*)?$/.exec(line))
+      .find(Boolean)?.[1]
+    if (!status) report('缺少合法的 status')
     const verified = header.find((line) => /^(?:> )?last-verified: /.test(line))
       ?.replace(/^(?:> )?last-verified: /, '')
     const timestamp = Date.parse(verified ?? '')
-    if (verified === 'unverified') {
-      process.stderr.write(`${path} 尚未登记验证日期\n`)
-    } else if (!verified || !/^\d{4}-\d{2}-\d{2}$/.test(verified) ||
-        !Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== verified ||
-        verified > today) {
-      report('缺少合法的 last-verified')
+    const invalidTimestamp =
+      !verified ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(verified) ||
+      !Number.isFinite(timestamp) ||
+      new Date(timestamp).toISOString().slice(0, 10) !== verified ||
+      verified > today
+    if (status === 'active') {
+      if (verified === 'unverified') report('active 规范必须登记 last-verified 日期')
+      else if (invalidTimestamp) report('缺少合法的 last-verified')
+      else if (Date.parse(today) - timestamp > 14 * dayMs) {
+        report(`距上次验证超过 14 天（${verified}）`)
+      }
+    } else if (verified === 'unverified') {
+      process.stderr.write(`${path} 尚未登记验证日期（${status ?? 'unknown'} 仅警告）\n`)
+    } else if (invalidTimestamp) {
+      process.stderr.write(`${path} last-verified 无效（${status ?? 'unknown'} 仅警告）\n`)
     } else if (Date.parse(today) - timestamp > 14 * dayMs) {
-      process.stderr.write(`${path} 距上次验证超过 14 天（${verified}）\n`)
+      process.stderr.write(`${path} 距上次验证超过 14 天（${verified}，${status ?? 'unknown'} 仅警告）\n`)
     }
     if (lines.join('\n').split('当前权威').length > 2) {
       report('只能有一处当前权威声明')

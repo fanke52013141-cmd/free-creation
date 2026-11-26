@@ -50,6 +50,15 @@ const NodeExecuteCommandObjectSchema = z
       .strict()
       .optional(),
     scopedHumanTask: z.literal(true).optional(),
+    /** Parent coordinator lifetime. Late capability/human results must not commit after stop. */
+    parentCoordinatorTaskId: id.optional(),
+    /** Absolute parent deadline (epoch ms); the child may not outlive the coordinator budget. */
+    parentDeadlineAt: z.number().int().positive().optional(),
+    /**
+     * O4-P3/AF-02: canvas edge ids selected by the declarative router. When present,
+     * the ledger validates only this routed subset instead of every painted inbound edge.
+     */
+    routedInputEdgeIds: z.array(id).max(256).optional(),
     traceId: id,
     spanId: id
   })

@@ -31,6 +31,8 @@ export const FlowAgentRunSchema = FlowAgentQuerySchema.extend({
    */
   humanConfirmed: z.enum(['gui', 'desktop-confirm']).optional(),
   contextMaterial: HandoffNoteSchema.optional(),
+  /** O4-P3/AF-02: router-selected canvas inbound edges for this assignment. */
+  routedInputEdgeIds: z.array(id).max(256).optional(),
   runOrigin: z.literal('external').optional(),
   externalClientId: z.string().regex(/^(?:cli|mcp(?:-[a-f0-9]{16})?)$/).optional()
 })

@@ -1,4 +1,4 @@
-import { graphCanvasVersion } from '../agent-flow/graph-canvas-version'
+import { graphCanvasScopeHash, graphCanvasVersion } from '../agent-flow/graph-canvas-version'
 // F8（一）flowAgents 族：把 GUI「Agent Flow 面板」的**观察**动作开放给外部 CLI/MCP。
 //
 // 设计口径（详见 docs/local-agent-access/28-flow-agents-delivery.md）：
@@ -21,7 +21,7 @@ import { supportsSampledVideoReview } from '../../shared/agent-flow/video-review
 import { supportsReviewAudioInput } from '../../shared/agent-flow/media-review'
 import { FlowAgentDesktopHost } from '../agent-flow/desktop-host'
 import { FlowCommandLedger } from '../agent-flow/command-ledger'
-import { CoordinationStore } from '../agent-flow/coordination-store'
+import { CoordinationStore, type CoordinationRun } from '../agent-flow/coordination-store'
 import { FlowGraphSchema, validateFlowGraph } from '../../shared/agent-flow/flow-graph'
 import {
   buildCapabilityCatalog,
@@ -73,8 +73,8 @@ export const FLOW_AGENT_OPERATION_IDS: ReadonlySet<AccessOperationId> = new Set(
 
 export interface FlowAgentOperationContext {
   activeProjectId: () => string | null
-  /** agent.access 的 trace/span，供 dispatch 生命周期事件与后续核对关联。 */
-  diagnostics: { traceId: string; spanId: string }
+  /** agent.access 的请求/诊断身份，供 dispatch 生命周期事件与后续核对关联。 */
+  diagnostics: { requestId: string; traceId: string; spanId: string }
   /** P5.3：confirm 落画布经渲染器权威动作需要 desktop 通道（service 已注入）。 */
   desktop?: AccessDesktop | null
 }
@@ -98,6 +98,8 @@ interface TaskRow {
   task_id: string
   state: FlowAgentView['state']
   wait_kind: 'human' | 'reconcile' | null
+  wait_reason: FlowAgentView['waitReason'] | null
+  children_json: string | null
   wait_revision: number
   decisions: number
   tools: number
@@ -111,6 +113,8 @@ function latestTask(projectId: string, nodeId: string): TaskRow | undefined {
   return getDb()
     .prepare(
       `SELECT task_id, state, wait_kind, wait_revision, decisions, tools, code,
+              json_extract(snapshot_json,'$.waitReason') AS wait_reason,
+              json_extract(snapshot_json,'$.children') AS children_json,
               json_extract(snapshot_json,'$.parentTaskId') AS parent,
               json_extract(snapshot_json,'$.coordinatorTaskId') AS coordinator
          FROM flow_agent_tasks
@@ -153,6 +157,16 @@ function taskDto(view: FlowAgentView): Record<string, unknown> {
     taskId: view.taskId,
     state: view.state,
     waitKind: view.waitKind,
+    ...(view.waitReason ? { waitReason: view.waitReason } : {}),
+    ...(view.children
+      ? {
+          children: view.children.slice(0, 128).map((child) => ({
+            nodeId: child.nodeId,
+            taskId: child.taskId,
+            state: child.state
+          }))
+        }
+      : {}),
     waitRevision: view.waitRevision,
     decisions: view.decisions,
     tools: view.tools,
@@ -177,6 +191,26 @@ function taskDto(view: FlowAgentView): Record<string, unknown> {
   }
 }
 
+function taskChildren(raw: string | null): FlowAgentView['children'] {
+  if (!raw) return undefined
+  try {
+    const value = JSON.parse(raw) as unknown
+    if (!Array.isArray(value)) return undefined
+    return value
+      .filter(
+        (child): child is { nodeId: string; taskId: string; state: string } =>
+          !!child &&
+          typeof child === 'object' &&
+          typeof (child as { nodeId?: unknown }).nodeId === 'string' &&
+          typeof (child as { taskId?: unknown }).taskId === 'string' &&
+          typeof (child as { state?: unknown }).state === 'string'
+      )
+      .slice(0, 128)
+  } catch {
+    return undefined
+  }
+}
+
 function projectFile(projectId: string): NonNullable<ReturnType<typeof openProject>> {
   const file = openProject(projectId)
   if (!file) refuse('NOT_FOUND', 'read')
@@ -190,15 +224,35 @@ function projectFile(projectId: string): NonNullable<ReturnType<typeof openProje
  * 因此"预检看到的状态"与"宿主读取的状态"不会漂移，不会出现外部把运行中任务
  * 误判为丢失的竞态。预检命中宿主会写账本的分支时直接返回账本事实。
  */
+/** 与 coordinator-host 的 waitReason 判定同源；外部只读投影不能把在途子任务误报为人工待办。 */
+function coordinationWaitReason(run: CoordinationRun): FlowAgentView['waitReason'] {
+  if (run.state !== 'waiting') return undefined
+  if (run.paused) return 'paused'
+  if (run.code === 'FLOW_CONTEXT_OVER_BUDGET') return 'human'
+  if (run.children.some((child) => ['ready', 'running', 'queued'].includes(child.state)))
+    return 'active-child'
+  if ((run.reviews ?? []).some((review) => review.state === 'pending')) return 'pending-review'
+  if (run.children.some((child) => child.state === 'waiting')) return 'human'
+  const undecided = (run.config.stages ?? []).some((stage) => {
+    if (!stage.requireHumanDecision) return false
+    const delivery = (run.stageDeliveries ?? []).find((item) => item.stageKey === stage.stageKey)
+    return Boolean(delivery && !delivery.humanDecided)
+  })
+  if (undecided) return 'human'
+  return 'blocked'
+}
+
 /** C4：协调运行只读投影——与桌面 coordinator.view 同字段口径，但零写副作用。 */
 function inspectCoordinationReadOnly(projectId: string, nodeId: string): FlowAgentView | null {
   const db = getDb()
   const run = new CoordinationStore(db).latest(projectId, nodeId)
   if (!run) return null
+  const waitReason = coordinationWaitReason(run)
   return {
     taskId: run.taskId,
     state: run.state,
-    waitKind: run.state === 'waiting' ? 'human' : null,
+    waitKind: waitReason === 'human' ? 'human' : null,
+    ...(waitReason ? { waitReason } : {}),
     waitRevision: run.waitRevision,
     decisions: run.decisions,
     tools: run.children.length,
@@ -268,6 +322,10 @@ function inspectFlowAgent(
         taskId: latest.task_id,
         state: latest.state,
         waitKind: latest.wait_kind,
+        ...(latest.wait_reason ? { waitReason: latest.wait_reason } : {}),
+        ...(taskChildren(latest.children_json)
+          ? { children: taskChildren(latest.children_json) }
+          : {}),
         waitRevision: latest.wait_revision,
         decisions: latest.decisions,
         tools: latest.tools,
@@ -395,6 +453,7 @@ async function cooperateFlowAgent(
     const decision = await requestHumanDecision({
       operation: 'flowAgent.cooperate',
       desktop: context.desktop,
+      diagnostics: context.diagnostics,
       projectId,
       activeProjectId: context.activeProjectId(),
       prompt: {
@@ -702,11 +761,18 @@ function compileFlowGraphOp(input: Record<string, unknown>): unknown {
       ]
     }
   try {
+    const compiled = compileFlowGraph(parsed.data, {
+      catalog: buildCapabilityCatalog(listAllCompositeVersions())
+    })
     return {
       ok: true,
-      compiled: compileFlowGraph(parsed.data, {
-        catalog: buildCapabilityCatalog(listAllCompositeVersions())
-      }),
+      // 公共契约只暴露画布编译产物；runtimeErrors/runnable 是内部运行准入事实。
+      compiled: {
+        nodes: compiled.nodes,
+        edges: compiled.edges,
+        coordinatorNodeId: compiled.coordinatorNodeId,
+        stateNodeId: compiled.stateNodeId
+      },
       errors: []
     }
   } catch (error) {
@@ -833,6 +899,8 @@ async function confirmGraphOp(
     const file = openProject(projectId)
     const missing = preview.nodes.filter((node) => !file?.nodes.some((item) => item.id === node.id))
     if (missing.length > 0) refuse('STORAGE_INCONSISTENT', missing[0].id)
+    if (!file || !preview.committedScopeHash || graphCanvasScopeHash(file, preview) !== preview.committedScopeHash)
+      refuse('FLOW_CANVAS_DIVERGED', 'committed graph scope has changed')
     return {
       projectId,
       graphVersion: graphVersion(),
@@ -846,6 +914,7 @@ async function confirmGraphOp(
   const decision = await requestHumanDecision({
     operation: 'flowGraph.confirm',
     desktop: context.desktop,
+    diagnostics: context.diagnostics,
     projectId,
     activeProjectId: context.activeProjectId(),
     prompt: {

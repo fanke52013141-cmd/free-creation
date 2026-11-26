@@ -31,7 +31,7 @@ renderer 的 `emitDiagnosticsEvent` 和 main 的诊断入口。实际验收范�
 所有滚动区域必须遵守 UI 规范 §19 的全局规则：保留滚动能力，始终隐藏横向/纵向滚动条及自绘滑块，悬停和聚焦不得恢复显示。复用 `assets/scrollbars.css`，不得用 `overflow:hidden` 禁止滚动或另设可见滚动条。
 
 新增或修改节点图标、分类、身份色前，必须阅读并遵循
-[节点分类与图标颜色规范](./docs/NODE_COLOR_SPEC.md)。分类色板为 v2 起的六族色相带 × 37 个节点 ID 固定变体（2026-11-02 裁决；
+[节点分类与图标颜色规范](./docs/NODE_COLOR_SPEC.md)。分类色板为 v2 起的六族色相带 × 逐节点 ID 固定变体（2026-11-02 裁决；
 本段旧"五大分类主色"表述已作废）。新增节点必须先在规范中登记所属分类与颜色变体，再使用统一色板；
 不得在组件中自行配色。现有界面的迁移状态以该规范的迁移清单为准。
 
@@ -53,8 +53,8 @@ renderer 的 `emitDiagnosticsEvent` 和 main 的诊断入口。实际验收范�
 2026-11-07：用户目标已升级为全软件 GUI／CLI／MCP 业务能力一致。当前维护要求见
 [一致性规范](AGENT_PARITY_SPEC.md)，实施见[完整开发计划](docs/local-agent-access/15-gui-cli-mcp-parity-plan.md)
 及[节点动作计划](docs/local-agent-access/16-node-action-coverage.md)。操作清单的机器真值是
-`docs/local-agent-access/generated/contracts.json`（当前 190 项，与 `capability.list` 同源）；
-"当前共 N 项"式手写计数一律以机器真值为准。旧最小包排除项不能继续作为永久不接入的依据。
+[`docs/local-agent-access/generated/contracts.json`](docs/local-agent-access/generated/contracts.json)，运行时枚举以
+`capability.list` 为准；节点与操作数量不得手写为现状，旧最小包排除项不能继续作为永久不接入的依据。
 
 2026-10-24 接续：用户已授权按 [本地外部接入规范](AGENT_ACCESS_SPEC.md) 落地 A0 + A1 最小纵向包。
 旧系统仍保持下线；新增本地接入的实际支持、验证和边界以
@@ -93,10 +93,9 @@ renderer 的 `emitDiagnosticsEvent` 和 main 的诊断入口。实际验收范�
 
 ## 画布原生 Agent Flow（2026-10-11）
 
-当前唯一方案入口：[画布原生 Agent Flow](docs/canvas-agent-flow/README.md)（2026-11-20 起含权威文档分类索引；graph 执行模式/循环体等 2026-11-14 后波次的方案文档仍在仓库外，收敛登记见该 README）。
+现行权威入口是 [Agent Flow 规范](docs/AGENT_FLOW_SPEC.md) + [开发台账](docs/BACKLOG.md) + [机器契约](docs/local-agent-access/generated/contracts.json)；[画布原生 Agent Flow 当前状态页](docs/canvas-agent-flow/README.md)只做导航与状态摘要。`docs/canvas-agent-flow/archive/` 仅用于追溯，不得作为当前规范或能力矩阵。
 
-2026-10-12 用户已确认[完整方案](docs/canvas-agent-flow/archive/00-approved-plan.md)并授权按 C0–C4 开发；C1–C4、R 系列与 AF-00～07 均已交付（能力现状以 `docs/canvas-agent-flow/archive/49-af00-baseline-and-sample-2026-11-13.md` §2 支持矩阵与开发台账为准）。首版新增 Agent、状态机、AI 审核三种类型。Agent 职责与人机协作/纯 AI 参与方式独立配置；资产固定版本，审核返工走显式控制关系和有界预算，不形成反向数据环。
-（历史注记：本段曾长期标注"待实施设计"；该状态已失效，实现以测试与验收记录为准。）
+2026-10-12 用户确认的[完整方案](docs/canvas-agent-flow/archive/00-approved-plan.md)是历史起点。C1–C4 与 AF-00～AF-07 已实施；R 系列不能整体称“全部验收”：R09、R11、R12 仍未闭环，精确口径见 [R 系列总台账](docs/canvas-agent-flow/archive/38-agent-completion-plan.md) 与 [BACKLOG](docs/BACKLOG.md)。首版新增 Agent、状态机、AI 审核三种类型；Agent 职责与人机协作/纯 AI 参与方式独立配置，资产固定版本，审核返工走显式控制关系和有界预算，不形成反向数据环。
 
 1. 上帝 Agent 构建画布中的 Flow；主 Agent 节点协调流程、任务、最小输入和产物；专业 Agent 节点承担复杂执行任务。主 Agent 与专业 Agent 复用 Agent 节点类型，以角色及工具权限区分。
 2. 目标、讨论、状态、人工选择和继续发生在画布节点内；成果由可查看、可连接的节点承载。

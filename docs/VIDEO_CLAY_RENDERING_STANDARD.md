@@ -1,7 +1,9 @@
 # 白模视频渲染与验收规范 v2
 
 > status: active
-> last-verified: unverified
+> last-verified: 2026-11-26
+> baseline-commit: e9b263f2
+> verification-scope: video-clay 端口、渲染配置与算法边界的静态核对；未重跑真实视频渲染
 
 
 2026-10-06。适用于 video-clay，端口保持 in-video → out-video，契约版本仍为 1；渲染配置版本为 2。

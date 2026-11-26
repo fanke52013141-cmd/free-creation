@@ -490,7 +490,7 @@ export async function draftToConfig(input: SaveProviderInput): Promise<ProviderC
   // 本机 CLI 通道（即梦）没有 Base URL 与 API Key，草稿也要能直接探测。
   const localCli = driverForSpec(input.specId) === 'local-cli'
   if (!baseURL && !localCli) throw new GatewayError('PROVIDER_NO_URL', 'Base URL 不能为空')
-  const apiKey = input.apiKey?.trim() || (input.id ? ((await getProvider(input.id))?.apiKey ?? '') : '')
+  const apiKey = input.apiKey?.trim() || (input.id ? ((await getProvider(input.id, baseURL))?.apiKey ?? '') : '')
   if (!apiKey && !localCli) throw new GatewayError('PROVIDER_NO_KEY', 'API Key 不能为空')
   return {
     id: input.id ?? 'draft',

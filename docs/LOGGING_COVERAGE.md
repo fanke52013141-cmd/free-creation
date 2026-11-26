@@ -191,7 +191,7 @@ unknown 分支恢复到 `waiting/reconcile`。**不新增诊断事件**：修复
 
 本轮只改验收脚本 `scripts/test-agent-graph-milestone.cjs`（新增 6.10–6.13 真实 Electron 桌面段 + 启动器失败取证），**未改产品代码、未新增/修改日志事件**；日志影响：不涉及业务日志路径。清单更新目的：登记这些路径已在真实桌面被实际执行并复核过，而不是只有服务级样本。
 
-- 桌面段实际触发并复核的既有日志族：`agent.access.started/completed/failed/rejected/unknown`（`library.resource.*`、`node.library.*`、`history.*`、`graph.patch`、`node.execute` 等操作）、`project.restore.started/checkpoint_created/completed`（恢复三段与检查点）、`library.materialization_completed/failed`（资源物化）、`media.buffer_import.started/completed/failed`（节点库/物化媒体复制）、`agent.access.task_running/completed/failed`（`run.wait` 终态）。
+- 桌面段实际触发并复核的既有日志族：`agent.access.started/completed/failed/rejected/unknown`（`library.resource.*`、`node.library.*`、`history.*`、`graph.patch`、`node.execute`、`run.wait` 等操作）、`project.restore.started/checkpoint_created/completed`（恢复三段与检查点）、`library.materialization_completed/failed`（资源物化）、`media.buffer_import.started/completed/failed`（节点库/物化媒体复制）。`run.wait` 的终态复用 `agent.access.completed/failed`。
 - 既有末尾诊断脱敏断言在最终 45 项里继续通过：`diagnostics JSONL exists without prompt/body/user-content leakage`。真实 JSONL 不含剧本文本、用户手工正文、F6 对话正文/会话标题/被拒消息，也不含本轮新增节点正文与配置。
 - 音频族门禁段只走"缺依赖如实跳过"路径：speech/tts/voice-design 均在网关调用前返回，未产生下游请求事件；`run.wait` 终态为 failed、`error` 与执行器文案逐字一致（见 [30 号台账](local-agent-access/30-f7-desktop-segments.md)），`media.list` 前后不变。
 - 测试夹具 `lifecycle.log`（`<dataDir>/lifecycle.log`，记录窗口/退出/powerMonitor/render-process-gone）只写临时数据目录，仅失败时复制到 `qa/` 证据目录；它是验收夹具、不是产品诊断事件，不进入 `diagnostics/` 审计与脱敏范围。
@@ -1077,10 +1077,10 @@ GUI 节点流面板条目卡片移除「运行」按钮（运行走画布既有�
 ### 2026-11-24 人工门禁与节点流编辑页修复（A3/A1/P0、返工预览、调色板）
 
 - 人工等待语义：新增只读 `waitReason`（human/active-child/pending-review/blocked/paused）与阶段返工影响预览（`flowStage.reworkPreview`）。两者都是**只读投影**，不新增诊断事件；返工执行沿用既有 `agent.coordination.stage_rework`。
-- 人工决定：外部 `flowAgent.run(continue)` 命中人工等待时必须经 `desktop.ask` 人工确认，否则以 `HUMAN_DECISION_REQUIRED` / `DESKTOP_UNAVAILABLE` / `HUMAN_DENIED` / `HUMAN_DECISION_TIMEOUT` 失败；拒绝与超时沿用既有 access 失败记录，确认框内容不写入日志或诊断（与 2026-11-22 BL-01 口径一致）。人工采用改为绑定最近一次等待修订号，历史采纳不再冒充新交付的批准。
+- 人工决定：外部 `flowAgent.run(continue)` 命中人工等待时必须经 `desktop.ask` 人工确认，否则以 `HUMAN_DECISION_REQUIRED` / `DESKTOP_UNAVAILABLE` / `HUMAN_DENIED` / `HUMAN_DECISION_TIMEOUT` 失败；当日先复用既有 access 失败记录，随后补登 `agent.human_decision.rejected`（见下节）。确认框内容不写入日志或诊断。人工采用改为绑定最近一次等待修订号，历史采纳不再冒充新交付的批准。
 - 收件箱：`deriveHumanInbox` 为纯派生函数，新增主控/审核/待补输入来源；渲染层只读取运行总览与节点 meta，无新增存储或网络路径。
 - 节点流编辑页：初始视图固定 100%、新节点避让已有卡片、顶栏去分隔线、编辑页打开时主画布不接管键盘（修复删除/复制/粘贴失效）、二级菜单恢复鱼眼特效与拖拽建节点。纯前端交互，无执行/存储/网络/诊断事件变化。
-- 验证：`npm run verify:logging` 通过（无日志旁路）；全量测试与三关门禁见本次提交说明。未覆盖：真实模型长任务下的人工拒绝事件仍未单列（`agent.human_decision.rejected` 拟后续新增并登记白名单）。
+- 验证：`npm run verify:logging` 通过（无日志旁路）；全量测试与三关门禁见本次提交说明。未覆盖：真实模型长任务下的人工拒绝事件仍未端到端复验；`agent.human_decision.rejected` 已于同日后续补登记白名单，见下节。
 
 ### 2026-11-24 人工决定的客户端等待口径、拒绝事件与节点流人工等待
 
@@ -1089,7 +1089,7 @@ GUI 节点流面板条目卡片移除「运行」按钮（运行走画布既有�
 - 诊断：新增 `agent.human_decision.rejected`（events.ts 白名单，owner `main/agent-access/human-decision`，level warn）。人工决定未生效时发唯一终态，attributes 只含 `operation` / `code`（HUMAN_DENIED / HUMAN_DECISION_TIMEOUT / DESKTOP_UNAVAILABLE / ACTIVE_PROJECT_REQUIRED）/ `reason`（denied / timeout / unavailable / active-project-required）；确认框正文、任务内容、提示词与密钥不入日志；诊断写入失败不影响拒绝结果。
 - 节点流人工等待：`composite` 执行器把 `status:'waiting'` 映射为 `skipped`（暂停），不再落到输出投影报「输出契约校验失败」；运行记录保持 `waiting-input`，由 `composite.run.submitHuman` + `composite.run.resume` 续跑。该路径不新增诊断事件（运行/等待账本沿用既有 `agent.coordination.*` 与 composite 步骤事件）。
 - 验证：`test/local-agent-interactive-timeout.test.ts`、`test/human-decision-diagnostics.test.ts`、`test/composite-executor.test.ts`（9 项）通过；真机 `scripts/acceptance/agent-flow-human-task.cjs` 12 项全过（含点「允许提交」、等待→提交→续跑→公开输出）。
-- 未覆盖：其余 7 个真机验收脚本仍停在确认框（BACKLOG BL-01 已登记）；外部 node-run 状态枚举没有 waiting，节点流等人时 `run.wait` 仍如实报 `failed` + 等待原因，真相以 `composite.run.get` 的 `waiting-input` 为准。
+- 未覆盖：当日其余外围真机脚本的确认框问题见 BACKLOG BL-01 的 2026-11-25 复核记录；外部 node-run 状态枚举没有 waiting，节点流等人时 `run.wait` 仍如实报 `failed` + 等待原因，真相以 `composite.run.get` 的 `waiting-input` 为准。
 
 ### 2026-11-24 BL-10 能力目录（节点流即能力）
 
@@ -1214,7 +1214,18 @@ GUI 节点流面板条目卡片移除「运行」按钮（运行走画布既有�
 - `ask-human` 超限复用阶段输入阻塞事件与持久人工等待状态，附阶段 ID 和预算错误码，无正文。没有人工确认时拒绝续跑，确认后重新校验预算。78 项协调器、固定顺序和清单测试通过；人工补料交互仍待验收。
 - Agent 阶段的流程总览提供短文本替代材料入口，按等待修订和阶段绑定，沿用原预算与运行清单持久化。CLI/MCP 只读总览可见阶段和等待修订；正文留在运行快照，不进入总览或诊断。固定顺序回归验证补料后下游交付。能力节点补料及真实界面验收待完成。
 - 真实 Electron 从实际超限状态通过总览提交材料，恢复下游 Agent 并在协调账本核对替代清单。证据见 `qa/agent-flow-overview-visual/desktop/execute-report.json` 的 `contextForm`。总览另显示可用字节上限，并按与宿主一致的 UTF-8 JSON 大小阻止超限提交。
-- 运行策略（NF-8.4 / NF-8.5）：onBranchFailure 与 maxConcurrency 只改变调度批次与失败后的认领范围，不新增事件；失败仍以 composite.run.step failed + ailureNodeId/PortId 记账，跳过仍记 skipped，正常/续跑路径不变。并发只调度无依赖就绪节点，结果收集顺序按 manifest 声明，与完成顺序无关。
-- 能力节点补料（AF-10.4 / BL-40，2026-11-26）：上下文超限等待沿用阶段输入阻塞事件与持久等待状态；提交后 
-ode.execute 的可选 contextMaterial 只携带端口与精简文本，执行时作为 human:context 文本输入注入并替代该端口固定资产，账本提交把该来源计入输入指纹与来源清单。不新增诊断事件；正文只留在命令/运行快照，不进总览或诊断。能力图桌面验收覆盖超限等待→表单提交→执行→完成。
+- 运行策略（NF-8.4 / NF-8.5）：onBranchFailure 与 maxConcurrency 只改变调度批次与失败后的认领范围，不新增事件；失败仍以 `composite.run.step_failed` + `failureNodeId`/`failurePortId` 记账，跳过仍记 skipped，正常/续跑路径不变。并发只调度无依赖就绪节点，结果收集顺序按 manifest 声明，与完成顺序无关。
+- 能力节点补料（AF-10.4 / BL-40，2026-11-26）：上下文超限等待沿用阶段输入阻塞事件与持久等待状态；提交后 `node.execute` 的可选 `contextMaterial` 只携带端口与精简文本，执行时作为 `human:context` 文本输入注入并替代该端口固定资产，账本提交把该来源计入输入指纹与来源清单。不新增诊断事件；正文只留在命令/运行快照，不进总览或诊断。能力图桌面验收覆盖超限等待→表单提交→执行→完成。
 - BL-21 执行者×决策者（2026-11-26）：capability 显式 decider human 的「待采用」沿用 human.wait / agent.completed 与 run.code=HUMAN_ADOPTION_REQUIRED，子任务如实 waiting；人工继续采用后发 agent.completed（`taskId:adopted`）并恢复路由。不新增诊断事件，输出正文不入日志；外部未确认继续按 HUMAN_CONFIRMATION_REQUIRED 拒绝。
+
+### 2026-11-26 外部审查修复：安全、运行准入与接入契约
+
+- 模型/供应商凭据读取改为目标来源绑定：`ModelRuntime`、Agent Flow 实际执行、工具调用验证、headless probe 与供应商探测均使用 `readSecretForRequest`。端点变化且未提供新密钥时在写入前拒绝；来源不匹配返回通用配置错误。复用既有模型验证/配置失败事件，不记录密钥、完整 URL、请求头或原始 vault 异常。新增 origin 绑定回归测试，未发起真实供应商请求。
+- 外部 `media.import` 仅接受受控 `agent-exports` 目录，`realpath + relative` 拒绝目录外与符号链接逃逸；文本正文不进入外部响应或幂等账本。GUI 文件选择器保持原导入能力。复用既有媒体导入诊断，不记录源路径或正文。
+- `node.execute` 在 main 与 renderer 双重校验 `expectedGraphVersion`，`single` 模式限制一个节点；GUI 本地运行忙状态经既有 task-report 通道上报 main，外部写/导出/打开对占用 fail-closed。复用 `agent.access.*` 与 `agent.access.task_*` 事件，不新增正文或路径字段。
+- 外部操作超时元数据、`operationVersion`、MCP `openWorldHint` 与 CLI 结构化错误信封属于发现/传输契约，不新增业务诊断事件。授权失效返回 `AUTH_FAILED`，版本不匹配返回 `UNSUPPORTED_OPERATION_VERSION`，大响应返回 `RESPONSE_TOO_LARGE`；均只含稳定码与阶段，不含请求正文。
+- `external_runs.error` 只保存显式稳定错误码，renderer 原始文案统一归一为 `NODE_EXECUTION_FAILED`，不落库、不回传。GUI 忙状态清理挂在窗口销毁/渲染进程退出，不把节点标题、运行正文或供应商错误写入日志。
+- Agent Flow 修复复用既有 `agent.coordination.*`、`agent.dispatched/completed`、`flow.*` 与命令账本诊断：命令签名覆盖全部业务执行字段；父取消/总 deadline 阻止迟到提交；human-task 失败不再伪装成人工等待；并行超容量按波次排队；生成视频固定/审核上限与输入参考上限分离。新增正式登记 `agent.coordination.cancelled`，停止竞争只发射一次 cancelled 终态，`terminalEvents` 在 run/recover 结束时清理。
+- 编译运行准入、条件分支输入裁剪、定义发布校验/diff、ContextManifest hash、循环预算与恢复断言修复不新增敏感日志字段；错误只记录节点 ID、阶段、稳定 code、计数与字节数。`loop.body` 内 review 当前明确拒绝，未实现按轮次作用域执行。外部 `flowGraph.confirm` 的幂等已提交路径新增 committed scope hash 校验，漂移时返回 `FLOW_CANVAS_DIVERGED`，不触发桌面写入，也不新增诊断事件。
+- CI/门禁修复（完整 Git 历史、fail-closed 日志/规范/动作分母、必需验收脚本缺失即失败、干净 CI 授权处理）不涉及产品运行日志。日志门禁读取 Git diff 的缓冲区提升到 64MiB，避免大规模删除被默认子进程缓冲区误判为基线不可读。
+- 未覆盖边界：未发起真实付费模型/供应商调用；未完成真实 GUI 鼠标端到端验收；code 节点 sandbox 仍待专项隔离审计；Windows named pipe 最小 ACL 与 SSE token 移出 query 尚未实施；真实安装包与干净 GitHub runner 尚未实跑。

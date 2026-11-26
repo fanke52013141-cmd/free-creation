@@ -46,7 +46,12 @@ export class ModelRuntime {
     let resolved: ResolvedWithAdapter
     try { resolved = await this.lookup(connectionId, modelDefinitionId, operation) }
     catch (error) { return this.record(connectionId, modelDefinitionId, operation, 'failed', this.errorMessage(error), checkedAt) }
-    const secret = await this.options.ports.secrets.readSecret(connectionId)
+    let secret: string | null
+    try {
+      secret = await this.options.ports.secrets.readSecretForRequest(connectionId, resolved.connection.baseUrl)
+    } catch {
+      return this.record(connectionId, modelDefinitionId, operation, 'failed', '模型密钥与当前端点不匹配，请重新保存 API Key', checkedAt, '请在模型设置中重新保存 API Key')
+    }
     if (!secret) return this.record(connectionId, modelDefinitionId, operation, 'failed', '该连接没有可用 API Key', checkedAt, '保存 API Key 后重新验证')
     if (!resolved.adapter.supports(operation, resolved.model)) return this.record(connectionId, modelDefinitionId, operation, 'unsupported', '该模型未声明支持此调用能力', checkedAt, '选择支持此能力的模型')
     try {
@@ -61,7 +66,12 @@ export class ModelRuntime {
     const validation = await this.options.ports.validations.getValidation(connectionId, modelDefinitionId, operation)
     if (validation?.status !== 'verified') throw new ModelRuntimeError('not-verified', `模型尚未通过 ${operation} 调用验证${validation?.message ? `：${validation.message}` : ''}`, validation?.action ?? '请先在模型设置中验证此模型')
     const resolved = await this.lookup(connectionId, modelDefinitionId, operation)
-    const secret = await this.options.ports.secrets.readSecret(connectionId)
+    let secret: string | null
+    try {
+      secret = await this.options.ports.secrets.readSecretForRequest(connectionId, resolved.connection.baseUrl)
+    } catch {
+      throw new ModelRuntimeError('invalid-configuration', '模型密钥与当前端点不匹配，请重新保存 API Key', '请在模型设置中重新保存 API Key')
+    }
     if (!secret) throw new ModelRuntimeError('invalid-configuration', '模型连接没有可用 API Key')
     return { ...resolved, secret }
   }

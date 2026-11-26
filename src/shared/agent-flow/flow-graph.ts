@@ -65,6 +65,8 @@ export type FlowDecider = z.infer<typeof FlowDeciderSchema>
  */
 export const FLOW_GRAPH_DISPATCHABLE_KINDS = ['agent', 'capability', 'human-task', 'review'] as const
 export type FlowGraphDispatchableKind = (typeof FLOW_GRAPH_DISPATCHABLE_KINDS)[number]
+/** Shared upper bound for a whole graph run and every delegated child task. */
+export const AGENT_FLOW_MAX_ACTIVE_MS = 3_600_000
 export function isDispatchableFlowNodeKind(kind: FlowNodeKind): kind is FlowGraphDispatchableKind {
   return (FLOW_GRAPH_DISPATCHABLE_KINDS as readonly string[]).includes(kind)
 }
@@ -115,11 +117,22 @@ export const FlowNodeSchema = z
       })
       .strict()
       .optional(),
-    /**
-     * BL-11 / G7：目标节点的公开配置子集（模型/比例/张数等）。按载体类型的 config
+    /** BL-11：目标节点的公开配置子集（模型/比例/张数等）。按载体类型的 config
      * 公开字段校验，编译时合并进固定配置；不接收正文或密钥。
      */
     params: z.record(z.string().max(60), z.unknown()).optional(),
+    /** AF-01：Agent/审核节点的固定模型绑定；无法从图结构安全代选。 */
+    modelDefinitionId: id.optional(),
+    /** AF-01：Agent 工具白名单；缺省安全推导为 node.execute@1。 */
+    tools: z.array(z.object({ id, version: id }).strict()).max(32).optional(),
+    /** AF-01：Agent 可执行载体；缺省从直接下游 capability/human-task 推导。 */
+    allowedNodeIds: z.array(id).max(128).optional(),
+    /** AF-01：审核负责节点；缺省从单一上游来源推导。 */
+    responsibleNodeId: id.optional(),
+    /** AF-01：审核对象来源；缺省从负责节点入边推导。 */
+    subjectSources: z.array(z.object({ nodeId: id, portId: id }).strict()).max(128).optional(),
+    /** AF-01：审核门禁节点；缺省从直接下游推导。 */
+    gatedNodeIds: z.array(id).max(128).optional(),
     /** 循环载体：有界循环声明。任何环必须包含一个声明 loop 的载体节点。 */
     loop: z
       .object({
@@ -164,6 +177,12 @@ export const FlowNodeSchema = z
       context.addIssue({ code: 'custom', message: 'only capability nodes may declare capabilityRef' })
     if (node.kind !== 'capability' && node.params)
       context.addIssue({ code: 'custom', message: 'only capability nodes may declare params' })
+    if (node.kind !== 'agent' && (node.tools || node.allowedNodeIds))
+      context.addIssue({ code: 'custom', message: 'only agent nodes may declare tools/allowedNodeIds' })
+    if (node.kind !== 'review' && (node.responsibleNodeId || node.subjectSources || node.gatedNodeIds))
+      context.addIssue({ code: 'custom', message: 'only review nodes may declare review bindings' })
+    if (node.modelDefinitionId && node.kind !== 'agent' && node.kind !== 'review')
+      context.addIssue({ code: 'custom', message: 'only agent/review nodes may declare modelDefinitionId' })
     if (node.kind === 'review' && !node.review)
       context.addIssue({ code: 'custom', message: 'review node requires review config' })
     // BL-21：显式 executor/decider 必须与该节点的法律组合一致；缺省按参与方式映射。
@@ -301,7 +320,7 @@ export const FlowGraphSchema = z
     budgets: z
       .object({
         maxSteps: z.number().int().min(1).max(64).default(12),
-        maxActiveMs: z.number().int().min(1000).max(3600000).default(600000),
+        maxActiveMs: z.number().int().min(1000).max(AGENT_FLOW_MAX_ACTIVE_MS).default(600000),
         maxLoopIterations: z.number().int().min(1).max(64).default(8)
       })
       .strict()
@@ -391,6 +410,12 @@ export type FlowGraphErrorCode =
   | 'PORT_TYPE_MISMATCH'
   | 'CONDITION_NOT_EXCLUSIVE'
   | 'OTHERWISE_INVALID'
+  | 'FLOW_AGENT_MODEL_REQUIRED'
+  | 'FLOW_AGENT_TOOL_REQUIRED'
+  | 'FLOW_AGENT_SCOPE_REQUIRED'
+  | 'FLOW_REVIEW_MODEL_REQUIRED'
+  | 'FLOW_REVIEW_BINDING_REQUIRED'
+  | 'FLOW_REVIEW_LOOP_UNSUPPORTED'
 export interface FlowGraphError {
   code: FlowGraphErrorCode
   nodeId?: string
@@ -505,6 +530,133 @@ function flowNodePorts(
   return { inputs: record.ports.in.map(map), outputs: outputs.map(map) }
 }
 
+/** AF-01: only direct executable carriers are safe to infer as an Agent's scope. */
+export function deriveFlowAgentAllowedNodeIds(graph: FlowGraph, nodeId: string): string[] {
+  const node = graph.nodes.find((item) => item.nodeId === nodeId)
+  if (node?.allowedNodeIds) return [...node.allowedNodeIds]
+  return [
+    ...new Set(
+      graph.edges
+        .filter((edge) => {
+          if (edge.from.nodeId !== nodeId) return false
+          const target = graph.nodes.find((item) => item.nodeId === edge.to.nodeId)
+          return target?.kind === 'capability' || target?.kind === 'human-task'
+        })
+        .map((edge) => edge.to.nodeId)
+    )
+  ]
+}
+
+/** AF-01: review ownership/subjects are inferred only when the inbound source is unambiguous. */
+export function deriveFlowReviewBindings(
+  graph: FlowGraph,
+  node: FlowNode
+): {
+  responsibleNodeId?: string
+  subjectSources: Array<{ nodeId: string; portId: string }>
+  gatedNodeIds: string[]
+} {
+  const incoming = graph.edges.filter((edge) => edge.to.nodeId === node.nodeId)
+  const sourceIds = [...new Set(incoming.map((edge) => edge.from.nodeId))]
+  const responsibleNodeId = node.responsibleNodeId ??
+    (sourceIds.length === 1 ? sourceIds[0] : undefined)
+  const subjectSources = node.subjectSources ??
+    (responsibleNodeId
+      ? incoming
+          .filter((edge) => edge.from.nodeId === responsibleNodeId)
+          .map((edge) => ({ nodeId: edge.from.nodeId, portId: edge.from.portId }))
+      : [])
+  const gatedNodeIds = node.gatedNodeIds ?? [
+    ...new Set(
+      graph.edges
+        .filter((edge) => edge.from.nodeId === node.nodeId)
+        .map((edge) => edge.to.nodeId)
+    )
+  ]
+  return { responsibleNodeId, subjectSources, gatedNodeIds }
+}
+
+/** AF-01: validate the fields required by the real coordinator/specialist bind path. */
+export function validateFlowGraphRuntime(graph: FlowGraph): FlowGraphError[] {
+  const errors: FlowGraphError[] = []
+  const byId = new Map(graph.nodes.map((node) => [node.nodeId, node]))
+  const loopBodies = loopBodyInfo(graph)
+  for (const node of graph.nodes) {
+    if (node.kind === 'review' && [...loopBodies.values()].some((info) => info.body.has(node.nodeId)))
+      errors.push({
+        code: 'FLOW_REVIEW_LOOP_UNSUPPORTED',
+        nodeId: node.nodeId,
+        message: `Review ${node.nodeId} cannot be placed inside loop.body`
+      })
+    if (node.kind === 'agent') {
+      if (!node.modelDefinitionId?.trim())
+        errors.push({
+          code: 'FLOW_AGENT_MODEL_REQUIRED',
+          nodeId: node.nodeId,
+          message: `Agent ${node.nodeId} requires modelDefinitionId`
+        })
+      const tools = node.tools ?? [{ id: 'node.execute', version: '1' }]
+      if (
+        !tools.some((tool) => tool.id === 'node.execute' && tool.version === '1') ||
+        tools.some((tool) => !['node.execute', 'web.search'].includes(tool.id) || tool.version !== '1') ||
+        new Set(tools.map((tool) => tool.id)).size !== tools.length
+      )
+        errors.push({
+          code: 'FLOW_AGENT_TOOL_REQUIRED',
+          nodeId: node.nodeId,
+          message: `Agent ${node.nodeId} requires a valid node.execute@1 tool whitelist`
+        })
+      const allowed = deriveFlowAgentAllowedNodeIds(graph, node.nodeId)
+      if (
+        !allowed.length ||
+        new Set(allowed).size !== allowed.length ||
+        allowed.some((id) => {
+          const target = byId.get(id)
+          return !target || id === node.nodeId || !['capability', 'human-task'].includes(target.kind)
+        })
+      )
+        errors.push({
+          code: 'FLOW_AGENT_SCOPE_REQUIRED',
+          nodeId: node.nodeId,
+          message: `Agent ${node.nodeId} requires allowedNodeIds targeting capability/human-task carriers`
+        })
+      continue
+    }
+    if (node.kind !== 'review') continue
+    if (!node.modelDefinitionId?.trim())
+      errors.push({
+        code: 'FLOW_REVIEW_MODEL_REQUIRED',
+        nodeId: node.nodeId,
+        message: `Review ${node.nodeId} requires modelDefinitionId`
+      })
+    const binding = deriveFlowReviewBindings(graph, node)
+    const incoming = graph.edges.filter((edge) => edge.to.nodeId === node.nodeId)
+    if (
+      !binding.responsibleNodeId ||
+      byId.get(binding.responsibleNodeId)?.kind !== 'agent' ||
+      !binding.subjectSources.length ||
+      binding.subjectSources.some(
+        (source) =>
+          !incoming.some(
+            (edge) =>
+              edge.from.nodeId === binding.responsibleNodeId &&
+              edge.from.portId === source.portId
+          )
+      ) ||
+      binding.gatedNodeIds.some(
+        (id) => !byId.has(id) || id === node.nodeId || id === binding.responsibleNodeId
+      ) ||
+      new Set(binding.gatedNodeIds).size !== binding.gatedNodeIds.length
+    )
+      errors.push({
+        code: 'FLOW_REVIEW_BINDING_REQUIRED',
+        nodeId: node.nodeId,
+        message: `Review ${node.nodeId} requires an unambiguous responsible Agent, subject sources and valid gates`
+      })
+  }
+  return errors
+}
+
 /**
  * 静态校验入口（纯函数，GUI/CLI/MCP 与宿主共用口径）。
  * schema 层（FlowGraphSchema）已保证引用/参与/结构合法；本层补拓扑/预算：
@@ -518,7 +670,7 @@ function flowNodePorts(
  */
 export function validateFlowGraph(
   graph: FlowGraph,
-  options: { catalog?: readonly CapabilityDescriptor[] } = {}
+  options: { catalog?: readonly CapabilityDescriptor[]; requireRuntime?: boolean } = {}
 ): FlowGraphValidation {
   const errors: FlowGraphError[] = []
   const roleIds = new Set(graph.roles?.map((role) => role.roleId) ?? ['owner'])
@@ -795,7 +947,7 @@ export function validateFlowGraph(
   let loopSteps = 0
   for (const node of graph.nodes)
     if (node.loop)
-      loopSteps += node.loop.maxIterations * (bodies.get(node.nodeId)?.body.size ?? 1)
+      loopSteps += (node.loop.maxIterations - 1) * (bodies.get(node.nodeId)?.body.size ?? 1)
   const requiredSteps = baseSteps + loopSteps
   if (graph.budgets.maxSteps < requiredSteps)
     errors.push({
@@ -811,6 +963,9 @@ export function validateFlowGraph(
         nodeId: node.nodeId,
         message: `Loop maxIterations ${node.loop.maxIterations} exceeds budget ${graph.budgets.maxLoopIterations}`
       })
+
+  if (!errors.length && options.requireRuntime !== false)
+    errors.push(...validateFlowGraphRuntime(graph))
 
   return errors.length ? { ok: false, errors } : { ok: true }
 }

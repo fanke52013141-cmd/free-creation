@@ -529,6 +529,8 @@ describe('flowAgent 建图/审核准入', () => {
   })
 
   it('BL-01：build.commit 须人在 GUI 允许；人拒绝时 HUMAN_DENIED 且不触发桌面提交', async () => {
+    const diagnostics: Array<Record<string, unknown>> = []
+    setGatewayEventSink({ emit: (event) => { if (event) diagnostics.push(event as unknown as Record<string, unknown>) } })
     const { projectId, preview: proposed } = withProject()
     publishFakePort({ inspectReply: proposed })
     const desktopCalls: unknown[] = []
@@ -560,6 +562,12 @@ describe('flowAgent 建图/审核准入', () => {
     expect(asks[0]).toMatchObject({ action: 'confirm-sensitive', projectId })
     expect(String(asks[0].confirmMessage)).toContain('建图标题')
     expect(desktopCalls).toEqual([])
+    const rejected = diagnostics.find((event) => event.event === 'agent.human_decision.rejected')
+    expect(rejected).toMatchObject({
+      traceId: response.traceId,
+      requestId: response.requestId,
+      status: 'failed'
+    })
   })
 
   it('BL-01：确认超时按 HUMAN_DECISION_TIMEOUT 失败，零副作用', async () => {

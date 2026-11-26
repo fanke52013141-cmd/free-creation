@@ -72,13 +72,18 @@ function rejection(
   operation: string,
   code: Extract<HumanDecisionOutcome, { ok: false }>['code'],
   reason: HumanDecisionReason,
-  detail: string
+  detail: string,
+  diagnostics?: { requestId?: string; traceId?: string; spanId?: string }
 ): HumanDecisionOutcome {
   try {
     emitDomainEvent(
       'agent.human_decision.rejected',
       '人工决定未生效：被拒绝或未在时限内确认，操作没有产生副作用',
-      { status: 'failed', attributes: { operation, code, reason } }
+      {
+        ...(diagnostics ? { context: diagnostics } : {}),
+        status: 'failed',
+        attributes: { operation, code, reason }
+      }
     )
   } catch {
     // 诊断不可用不改变业务结果。
@@ -94,21 +99,24 @@ export async function requestHumanDecision(options: {
   activeProjectId: string | null
   prompt: HumanDecisionPrompt
   timeoutMs?: number
+  diagnostics?: { requestId?: string; traceId?: string; spanId?: string }
 }): Promise<HumanDecisionOutcome> {
-  const { desktop, projectId, activeProjectId, prompt, operation } = options
+  const { desktop, projectId, activeProjectId, prompt, operation, diagnostics } = options
   if (activeProjectId !== projectId)
     return rejection(
       operation,
       'ACTIVE_PROJECT_REQUIRED',
       'active-project-required',
-      'a human decision needs the target canvas open on the desktop (project.open first)'
+      'a human decision needs the target canvas open on the desktop (project.open first)',
+      diagnostics
     )
   if (!desktop)
     return rejection(
       operation,
       'DESKTOP_UNAVAILABLE',
       'unavailable',
-      'no desktop to ask a human for this decision'
+      'no desktop to ask a human for this decision',
+      diagnostics
     )
   let reply: Awaited<ReturnType<AccessDesktop['ask']>>
   try {
@@ -125,7 +133,7 @@ export async function requestHumanDecision(options: {
     )
   } catch (error) {
     if (error instanceof DesktopAccessError)
-      return rejection(operation, 'DESKTOP_UNAVAILABLE', 'unavailable', error.code)
+      return rejection(operation, 'DESKTOP_UNAVAILABLE', 'unavailable', error.code, diagnostics)
     throw error
   }
   if (reply.authorized) return { ok: true }
@@ -134,12 +142,14 @@ export async function requestHumanDecision(options: {
       operation,
       'HUMAN_DECISION_TIMEOUT',
       'timeout',
-      'nobody confirmed this decision on the desktop in time; nothing was changed'
+      'nobody confirmed this decision on the desktop in time; nothing was changed',
+      diagnostics
     )
   return rejection(
     operation,
     'HUMAN_DENIED',
     'denied',
-    'the user rejected this decision in the GUI; nothing was changed'
+    'the user rejected this decision in the GUI; nothing was changed',
+    diagnostics
   )
 }

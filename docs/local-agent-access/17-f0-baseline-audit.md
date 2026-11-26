@@ -1,4 +1,6 @@
-# F0 基线审计：动作分母、32类节点与现状证据
+# F0 基线审计：动作分母、节点与现状证据（历史时点）
+
+> 本文是 2026-11-08 的 F0 基线快照，不是当前能力清单。当前操作与节点集合以 [`generated/contracts.json`](./generated/contracts.json) 和 [`generated/action-inventory.json`](./generated/action-inventory.json) 为准；下文数量只代表该时点。
 
 日期：2026-11-08。基线提交：`3b1f2ab`（main），工作区含进行中的授权/密钥库/发行版未提交修改（保留，不并入本任务）。
 本台账落实[完整计划](15-gui-cli-mcp-parity-plan.md) F0：把"全部"列成机器可审计清单，并记录可复现基线证据。
@@ -37,9 +39,9 @@
 
 excluded 清单（审计强制逐项理由）：`project.external-change`、`media.video-audio`、`media.vocal-separate`、`media.pick`、`media.reveal`、`media.copy-path`、`media.open`、`media.tts-generate`（历史通道，节点执行取代）、`workspace.*timing*`×4（性能遥测）、`gateway.event`（流式通道经 run 协议）、`keys.export-credential`（安全边界）、`diagnostics.node-run:event`、`diagnostics.event`、`license.exit-app`、`canvas.view.viewport`。
 
-与旧口径的关系：旧文档的 25 项操作、31 类节点计数、最小包排除条款保留为历史基线；本表是当前权威分母，后续每包更新 action-coverage.json 并保持审计通过。
+与旧口径的关系：旧文档的 25 项操作、31 类节点计数、最小包排除条款保留为历史基线；本表仅记录 F0 时点分母，当前权威分母由机器清单给出，后续每包更新 action-coverage.json 并保持审计通过。
 
-## 3. 32 类节点矩阵
+## 3. F0 时点节点矩阵
 
 逐节点动作清单、当前外部状态与验收重点见 [32类节点动作表](16-node-action-coverage.md)（F0 复核：`ACTIVE_NODE_TYPE_IDS` 32 类与 `NODE_ACCESS_DECLARATIONS` 32 项一致，`node.type.list` 仍全部返回 planned，与代码事实一致）。每类节点 N1–N8 公共动作 + 专有动作的关闭记录格式以该表第 5 节为准。
 

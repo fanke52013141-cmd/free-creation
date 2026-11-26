@@ -13,7 +13,7 @@
 画布写入（节点库实例化）经既有权威宿主 `graph-patch` 握手与正式保存；历史恢复只在**项目未在桌面打开**时以正式保存机制执行，打开中的画布如实返回 `RESOURCE_BUSY/desktop-ownership`；
 旧 `node.library.save`（chat 技能预设子集）**一行未改**，语义与输出 Schema 完全兼容。
 
-当前机器口径：Registry **77 项操作**；业务动作分母 **206 项**（7 个 IPC 域 + 35 画布动作）中 **external 76 / excluded 19 / 仍待接入 87**（F7 剩余 6 项为资源库采集与包传输，属其他包）。
+本包交付时机器口径：Registry **77 项操作**；业务动作分母 **206 项**（7 个 IPC 域 + 35 画布动作）中 **external 76 / excluded 19 / 仍待接入 87**（F7 剩余 6 项为资源库采集与包传输，属其他包）。当前数量以 [`generated/contracts.json`](./generated/contracts.json) 与 [`generated/action-inventory.json`](./generated/action-inventory.json) 为准。
 
 ---
 

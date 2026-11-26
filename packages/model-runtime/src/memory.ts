@@ -8,6 +8,7 @@ import type {
   TaskEvent,
   VoiceResource
 } from '@free-creation/model-contracts'
+import { endpointBindingChanged, originOf } from './endpoint.js'
 import type {
   ArtifactPort,
   ConfigurationPort,
@@ -31,22 +32,32 @@ export class InMemoryModelHost
   private readonly connections = new Map<string, Connection>()
   private readonly models = new Map<string, ModelDefinition>()
   private readonly bindings = new Map<string, FeatureBinding>()
-  private readonly secrets = new Map<string, string>()
+  private readonly secrets = new Map<string, { value: string; origin: string | null }>()
   private readonly validations = new Map<string, ValidationRecord>()
   private readonly tasks = new Map<string, MediaTask>()
   private readonly assets = new Map<string, AssetRef>()
   private readonly voices = new Map<string, VoiceResource>()
 
   setConnection(value: Connection, secret?: string): void {
+    const previous = this.connections.get(value.id)
     this.connections.set(value.id, copy(value))
-    if (secret) this.secrets.set(value.id, secret)
+    if (secret) {
+      this.secrets.set(value.id, { value: secret, origin: originOf(value.baseUrl) })
+    } else if (previous && endpointBindingChanged(previous, value)) {
+      this.secrets.delete(value.id)
+    }
   }
   setModel(value: ModelDefinition): void { this.models.set(value.id, copy(value)) }
   setBinding(value: FeatureBinding): void { this.bindings.set(value.featureKey, copy(value)) }
   async getConnection(id: string): Promise<Connection | null> { return this.connections.get(id) ? copy(this.connections.get(id)!) : null }
   async getModel(id: string): Promise<ModelDefinition | null> { return this.models.get(id) ? copy(this.models.get(id)!) : null }
   async getBinding(key: string): Promise<FeatureBinding | null> { return this.bindings.get(key) ? copy(this.bindings.get(key)!) : null }
-  async readSecret(id: string): Promise<string | null> { return this.secrets.get(id) ?? null }
+  async readSecret(id: string): Promise<string | null> { return this.secrets.get(id)?.value ?? null }
+  async readSecretForRequest(id: string, targetUrl: string): Promise<string | null> {
+    const secret = this.secrets.get(id)
+    const targetOrigin = originOf(targetUrl)
+    return secret && targetOrigin && secret.origin === targetOrigin ? secret.value : null
+  }
   async saveValidation(record: ValidationRecord): Promise<void> { this.validations.set(validationKey(record.connectionId, record.modelDefinitionId, record.operation), copy(record)) }
   async getValidation(connectionId: string, modelDefinitionId: string, operation: ModelOperation): Promise<ValidationRecord | null> {
     const value = this.validations.get(validationKey(connectionId, modelDefinitionId, operation))

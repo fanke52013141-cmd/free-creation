@@ -24,7 +24,11 @@ beforeAll(async () => {
     platform: 'node',
     format: 'cjs',
     external: ['better-sqlite3', 'electron', 'onnxruntime-node'],
-    alias: { '@shared': resolve('src/shared') },
+    alias: {
+      '@shared': resolve('src/shared'),
+      '@free-creation/model-contracts': resolve('packages/model-contracts/src/index.ts'),
+      '@free-creation/model-runtime': resolve('packages/model-runtime/src/index.ts')
+    },
     logLevel: 'silent'
   })
 })

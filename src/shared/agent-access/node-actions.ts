@@ -107,7 +107,7 @@ function familyDefaults(family: 'document' | 'media' | 'paid' | 'conversation' |
     return {
       ...common,
       N5: C('chat 执行器服务级测试；助手回复需已验证模型（桌面实测为如实失败）'),
-      N7: P('对话流式取消仅 GUI 侧验证（chatCancel 仍 F6），外部未接通')
+      N7: C('node.execute/run.cancel 服务级测试（external_runs）；对话流式取消与 GUI 共用引擎，真实供应商长任务未验收')
     }
   if (family === 'agent')
     return {
@@ -151,7 +151,13 @@ const NODE_TABLE: Record<string, Overrides> = {
   processor: { contractVersion: 1, family: 'document' },
   structured: { contractVersion: 1, family: 'document' },
   storyboard: { contractVersion: 1, family: 'document' },
-  code: { contractVersion: 3, family: 'document' },
+  code: {
+    contractVersion: 3,
+    family: 'document',
+    extra: {
+      N5: C('code 执行器/输出投影服务级测试；sandbox boundary pending，未完成隔离专项审计，不宣称可发布')
+    }
+  },
   website: { contractVersion: 1, family: 'document' },
   iterate: { contractVersion: 2, family: 'document' },
   'ai-process': { contractVersion: 1, family: 'document' },
@@ -310,10 +316,14 @@ const NODE_TABLE: Record<string, Overrides> = {
     contractVersion: 1,
     family: 'agent',
     // C 组（2026-11-24）：审核节点在真窗口参与布局与 review-gate 控制线；
-    // 审核执行（真实模型判断）未为本轮证据，不写 N5。
+    // 真实模型判断未为本轮桌面证据，不写 desktop-tested。
     desktop: {
       N2: '真窗口：scripts/acceptance/agent-flow-layout.cjs 与 agent-flow-edges-walkthrough.cjs 通过，审核节点在真实画布创建并参与泳道布局；qa/agent-flow-layout/receipt.json',
       N4: '真窗口：agent-flow-edges-walkthrough.cjs 中 review-gate 控制线着色与淡化通过，审核门禁连线在真实画布成立；qa/agent-flow-edges/receipt.json'
+    },
+    extra: {
+      N5: C('flowAgent.review 经同一 FlowReviewHost 提交模型审核（test/local-agent-flow-agent-build-access.test.ts）；真实模型桌面验收未做'),
+      N7: C('flowAgent.inspect 服务级测试（test/local-agent-flow-agents-access.test.ts）；审核长任务取消/恢复未单独验收')
     }
   },
   // C4：纯人工任务节点——人工提交结果、执行器权威交付；停等语义，composite 内 fail-closed。

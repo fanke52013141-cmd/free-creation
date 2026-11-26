@@ -125,13 +125,20 @@ describe('模型连接与受控凭据写入', () => {
     expect((changed.data as any).secret.fingerprint).not.toBe(fingerprint)
   })
 
-  it('连接事实变化标记 invalidatedBindings（宿主会清除验证与功能绑定）', async () => {
+  it('连接端点变化且未提供新密钥时明确拒绝，旧连接与密钥保持不变', async () => {
     await write('model.connection.save', connectionInput({ apiKey: SECRET_MARKER }))
     const moved = await write(
       'model.connection.save',
       connectionInput({ baseUrl: 'http://127.0.0.1:5300/v1' })
     )
-    expect((moved.data as any).invalidatedBindings).toBe(true)
+    expect(moved.status).toBe('failed')
+    expect(moved.error?.code).toBe('MODEL_CONNECTION_SAVE_FAILED')
+    const row = getDb()
+      .prepare("SELECT base_url FROM model_connections WHERE id='conn-test'")
+      .get() as { base_url: string }
+    expect(row.base_url).toBe('http://127.0.0.1:5200/v1')
+    const status = await call('model.credential.status', { connectionId: 'conn-test' })
+    expect((status.data as any).secret.present).toBe(true)
   })
 
   it('credential.status 只返回存在性与指纹；连接不存在 NOT_FOUND', async () => {

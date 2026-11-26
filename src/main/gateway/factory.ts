@@ -80,7 +80,7 @@ export async function testProvider(
   const baseURL = input.baseURL.trim().replace(/\/+$/, '')
   if (!baseURL) throw new GatewayError('PROVIDER_NO_URL', 'Base URL 不能为空')
   // 已保存供应商的编辑面板不回显密钥；测试未保存的 URL/模型变更时可安全复用主进程密钥。
-  const apiKey = input.apiKey?.trim() || (input.id ? ((await getProvider(input.id))?.apiKey ?? '') : '')
+  const apiKey = input.apiKey?.trim() || (input.id ? ((await getProvider(input.id, baseURL))?.apiKey ?? '') : '')
   if (!apiKey) throw new GatewayError('PROVIDER_NO_KEY', 'API Key 不能为空')
 
   const res = await fetch(`${baseURL}/models`, {

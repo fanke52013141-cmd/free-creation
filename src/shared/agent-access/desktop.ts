@@ -11,6 +11,8 @@ export const ACCESS_DESKTOP_REQUEST = 'local-agent:desktop-request'
 export const ACCESS_DESKTOP_REPLY = 'local-agent:desktop-reply'
 export const ACCESS_DESKTOP_COMMIT = 'local-agent:desktop-commit'
 export const ACCESS_TASK_REPORT = 'local-agent:task-report'
+/** renderer 用既有 task-report 通道上报 GUI 本地运行占用；不是 external_runs 任务 ID。 */
+export const GUI_LOCAL_RUN_TASK_PREFIX = 'gui-local:'
 export const DesktopRequestSchema = z
   .object({
     requestId: z.string().uuid(),

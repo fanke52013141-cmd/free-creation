@@ -10,7 +10,7 @@
 // 测试手法：用一个可控桌面宿主把 project.save / project.open 的握手悬住，
 // 在"写操作确实在飞"的时刻发起其他写操作，从而确定性地观察锁行为（不依赖时间竞态）。
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -20,6 +20,7 @@ import { listMedia } from '../src/main/store/media.repo'
 import { LocalAccessService } from '../src/main/agent-access/service'
 import { DesktopAccessError, type AccessDesktop } from '../src/main/agent-access/desktop'
 import { setGatewayEventSink } from '../src/main/diagnostics/gateway-events'
+import { setGuiRunBusy } from '../src/main/agent-access/gui-busy'
 
 let directory: string
 let service: LocalAccessService
@@ -106,8 +107,10 @@ function withDesktop(desktop: AccessDesktop | undefined): void {
 beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), 'canvas-concurrency-test-'))
   process.env.CANVAS_DATA_DIR = directory
-  writeFileSync(join(directory, 'import-a.png'), PNG_1X1)
-  writeFileSync(join(directory, 'import-b.png'), PNG_1X1)
+  const importRoot = join(getDataDir(), 'agent-exports')
+  mkdirSync(importRoot, { recursive: true })
+  writeFileSync(join(importRoot, 'import-a.png'), PNG_1X1)
+  writeFileSync(join(importRoot, 'import-b.png'), PNG_1X1)
   active = null
   setGatewayEventSink({ emit: () => undefined })
 })
@@ -120,6 +123,29 @@ afterEach(() => {
 })
 
 describe('按项目写入锁', () => {
+  it('GUI 本地运行占用时，外部 graph.patch 在准入阶段返回 RESOURCE_BUSY', async () => {
+    const project = createProject('GUI 占用')
+    active = project.id
+    withDesktop(undefined)
+    setGuiRunBusy(project.id, true)
+    try {
+      const blocked = await call(
+        'graph.patch',
+        {
+          projectId: project.id,
+          expectedGraphVersion: 0,
+          ops: [{ action: 'node.create', nodeType: 'text', x: 0, y: 0 }]
+        },
+        key()
+      )
+      expect(blocked.status).toBe('failed')
+      expect(blocked.error).toMatchObject({ code: 'RESOURCE_BUSY', phase: 'gui-run-occupancy' })
+      expect(openProject(project.id)?.meta.graphVersion).toBe(0)
+    } finally {
+      setGuiRunBusy(project.id, false)
+    }
+  })
+
   it('同一项目写入仍串行；不同项目不再互相阻塞；无项目写入保持全局独占', async () => {
     const projectA = createProject('并发-A')
     const projectB = createProject('并发-B')
@@ -138,7 +164,7 @@ describe('按项目写入锁', () => {
     // 同一项目：仍必须 RESOURCE_BUSY（串行语义不变）。
     const sameProject = await call(
       'media.import',
-      { projectId: projectA.id, filePath: join(directory, 'import-a.png') },
+      { projectId: projectA.id, filePath: join(getDataDir(), 'agent-exports', 'import-a.png') },
       key()
     )
     expect(sameProject.status).toBe('failed')
@@ -156,7 +182,7 @@ describe('按项目写入锁', () => {
     // 不同项目：不再被 A 的保存挡住，必须真正完成。
     const otherProject = await call(
       'media.import',
-      { projectId: projectB.id, filePath: join(directory, 'import-b.png') },
+      { projectId: projectB.id, filePath: join(getDataDir(), 'agent-exports', 'import-b.png') },
       key()
     )
     expect(otherProject.status, JSON.stringify(otherProject.error)).toBe('completed')
@@ -178,7 +204,7 @@ describe('按项目写入锁', () => {
     await harness.waitEntered('open')
     const blocked = await call(
       'media.import',
-      { projectId: projectA.id, filePath: join(directory, 'import-a.png') },
+      { projectId: projectA.id, filePath: join(getDataDir(), 'agent-exports', 'import-a.png') },
       key()
     )
     expect(blocked.status).toBe('failed')
@@ -188,7 +214,7 @@ describe('按项目写入锁', () => {
     expect(opened.status, JSON.stringify(opened.error)).toBe('completed')
     const after = await call(
       'media.import',
-      { projectId: projectA.id, filePath: join(directory, 'import-a.png') },
+      { projectId: projectA.id, filePath: join(getDataDir(), 'agent-exports', 'import-a.png') },
       key()
     )
     expect(after.status, JSON.stringify(after.error)).toBe('completed')
@@ -212,7 +238,7 @@ describe('按项目写入锁', () => {
     // 同一项目下一次写入不能被"泄漏的锁"永久堵住。
     const retried = await call(
       'media.import',
-      { projectId: projectA.id, filePath: join(directory, 'import-a.png') },
+      { projectId: projectA.id, filePath: join(getDataDir(), 'agent-exports', 'import-a.png') },
       key()
     )
     expect(retried.status, JSON.stringify(retried.error)).toBe('completed')
@@ -225,8 +251,8 @@ describe('按项目写入锁', () => {
     active = projectA.id
     withDesktop(undefined)
     const results = await Promise.all([
-      call('media.import', { projectId: projectA.id, filePath: join(directory, 'import-a.png') }, key()),
-      call('media.import', { projectId: projectB.id, filePath: join(directory, 'import-b.png') }, key())
+      call('media.import', { projectId: projectA.id, filePath: join(getDataDir(), 'agent-exports', 'import-a.png') }, key()),
+      call('media.import', { projectId: projectB.id, filePath: join(getDataDir(), 'agent-exports', 'import-b.png') }, key())
     ])
     for (const result of results) expect(result.status, JSON.stringify(result.error)).toBe('completed')
     expect(listMedia(projectA.id)).toHaveLength(1)

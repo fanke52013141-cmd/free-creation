@@ -3,7 +3,7 @@
 > status: archive
 > 来源：`docs/canvas-agent-flow/` 按 `AGENT_FLOW_SPEC.md` §20 收敛；编号保留。
 > 现行入口：[README](../README.md)、[AGENT_FLOW_SPEC](../../AGENT_FLOW_SPEC.md)、[05 节点协同规范](../05-node-coordination-standard.md)。
-> 迁移：BL-32（2026-11-26）。本目录文档只用于追溯，不作为现行规范。
+> 迁移：BL-32（2026-11-26）。本目录文档只用于追溯，不作为现行规范。文中的数量、支持状态、“当前”“最新”“未提交/推送”和“下一步”均为各文档时点的历史记录；当前状态只读 [AGENT_FLOW_SPEC](../../AGENT_FLOW_SPEC.md)、[BACKLOG](../../BACKLOG.md) 与[机器契约](../../local-agent-access/generated/contracts.json)。
 
 | 文档 | 类别 |
 | --- | --- |

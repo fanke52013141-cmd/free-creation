@@ -159,12 +159,15 @@ export function buildContextManifest(
       entries: entries.map((entry) => ({
         sourceStageKey: entry.sourceStageKey,
         path: entry.path,
-        contentHash: entry.contentHash,
-        required: entry.required
+        kind: entry.kind,
+        bytes: entry.bytes,
+        required: entry.required,
+        ...(entry.purpose ? { purpose: entry.purpose } : {}),
+        contentHash: entry.contentHash
       })),
       missing,
       dropped,
-      limitBytes
+      budget: { limitBytes, usedBytes, exceeded }
     })
   )
   return ContextManifestSchema.parse({

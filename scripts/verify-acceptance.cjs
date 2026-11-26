@@ -16,6 +16,7 @@ const { existsSync } = require('node:fs')
 const { join } = require('node:path')
 
 const root = process.cwd()
+// 所有条目默认必需；只有显式声明 optional: true 的条目才允许缺失并在汇总中 SKIP。
 const ALL = [
   { name: 'node-combos', script: 'scripts/test-node-combos.cjs', timeout: 10 * 60_000 },
   { name: 'protocol', script: 'scripts/mcp-acceptance.cjs', timeout: 15 * 60_000 },
@@ -38,6 +39,15 @@ const selected = (fast ? ALL.filter((entry) => FAST.includes(entry.name)) : ALL)
   (entry) => requested.length === 0 || requested.some((name) => entry.name.includes(name))
 )
 
+const missingRequired = selected.filter(
+  (entry) => entry.optional !== true && !existsSync(join(root, entry.script))
+)
+if (missingRequired.length > 0) {
+  console.error('验收前置失败：以下必需脚本不存在')
+  for (const entry of missingRequired) console.error(`  MISSING_REQUIRED_SCRIPT ${entry.name}: ${entry.script}`)
+  process.exit(2)
+}
+
 if (!existsSync(join(root, 'out', 'main', 'local-agent.js'))) {
   console.error('缺少构建产物 out/main/local-agent.js，请先 npm run build')
   process.exit(2)
@@ -47,7 +57,18 @@ const results = []
 let failed = 0
 for (const entry of selected) {
   if (!existsSync(join(root, entry.script))) {
-    console.log(`SKIP ${entry.name}（脚本不存在：${entry.script}）`)
+    const optional = entry.optional === true
+    console.log(`${optional ? 'SKIP' : 'FAIL'} ${entry.name}（${optional ? '可选' : '必需'}脚本不存在：${entry.script}）`)
+    results.push({
+      name: entry.name,
+      script: entry.script,
+      ok: optional,
+      status: 'skipped',
+      skipped: true,
+      optional,
+      reason: 'SCRIPT_MISSING'
+    })
+    if (!optional) failed += 1
     continue
   }
   console.log(`\n=== 验收 ${entry.name} (${entry.script}) ===`)
@@ -65,12 +86,19 @@ for (const entry of selected) {
 
 console.log('\n=== 验收汇总 ===')
 for (const result of results) {
-  console.log(`  ${result.ok ? 'PASS' : 'FAIL'} ${result.name}${result.ok ? '' : '（exit ' + result.status + '）'}`)
+  if (result.skipped) {
+    console.log(`  SKIP ${result.name}（可选脚本不存在：${result.script}）`)
+  } else {
+    console.log(`  ${result.ok ? 'PASS' : 'FAIL'} ${result.name}${result.ok ? '' : '（exit ' + result.status + '）'}`)
+  }
 }
 if (results.length === 0) {
   console.log('  没有选中任何验收项')
   process.exit(2)
 }
+const skipped = results.filter((result) => result.skipped).length
+const executed = results.length - skipped
+const passed = results.filter((result) => result.ok && !result.skipped).length
 
 // 归档证据（qa/ 被忽略，证据要进 docs）
 const archive = join(root, 'scripts', 'archive-acceptance-evidence.cjs')
@@ -78,5 +106,5 @@ if (existsSync(archive)) {
   spawnSync(process.execPath, [archive], { cwd: root, stdio: 'inherit', windowsHide: true })
 }
 
-console.log(`\n${results.length - failed}/${results.length} 个验收批次通过`)
+console.log(`\n${passed}/${executed} 个验收批次通过，${skipped} 个可选批次跳过`)
 process.exit(failed === 0 ? 0 : 1)

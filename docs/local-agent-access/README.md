@@ -1,61 +1,43 @@
-# 本地外部 Agent 接入方案
+# 本地外部 Agent 接入：当前入口与状态
 
-**2026-11-07 当前入口**：用户目标为全软件GUI／CLI／MCP业务能力一致，包含多个独立项目画布、
-32类节点及非节点业务。当前已实现25项外部操作，尚未全量接通。旧18项/31类和A0–A4排期为历史口径。
+> 当前口径（2026-11-26，基线 `8c5c155e`）：GUI／CLI／MCP 业务能力一致是持续维护目标，不代表所有动作均已验收。操作与节点清单的机器真值是 [`generated/contracts.json`](./generated/contracts.json)，运行时枚举以 `capability.list` 为准；本文不手写数量。
 
-| 当前文件 | 用途 |
+## 权威与阅读顺序
+
+| 文件 | 用途 |
 | --- | --- |
 | [一致性规范](../../AGENT_PARITY_SPEC.md) | 完整目标、三个入口同源、后续功能同包维护与发布要求 |
-| [完整开发计划](15-gui-cli-mcp-parity-plan.md) | 现状、架构、多画布、F0–F10落地与验收 |
-| [32类节点动作表](16-node-action-coverage.md) | 每个节点必须接入的编辑、执行、结果和专有动作 |
-| [详细测试计划](66-parity-test-plan.md) | 按F0–F10组织的分层验收、必测场景、故障/人工/付费专项与发布判据 |
-| [R1 基线测试报告](67-r1-baseline-test-report.md) | 2026-11-09 基线重跑实测：门禁/单测/8批验收/里程碑结果、当日分母、发现与修复、边界 |
-| [R2 缺口测试报告](68-r2-gap-report.md) | 2026-11-09 GUI反向腿/崩溃重启/画布切换补测；2个真实缺陷修复、1个验证链回归修复、取消语义观察项与证据 |
-| [视频 Flow 回归修复](69-video-flow-revision-fix.md) | 2026-11-09 taskId 写 config 污染命令修订/输入指纹 → unknown 保持失败；移入 meta + 修订归一化，11 个脚本转绿 |
-| [当前25项能力](14-current-capabilities.md) | 当前可调用范围，不把计划接口当可用接口 |
-| [Skill与节点库交付](13-chat-skills-node-library.md) | 新增6项操作、参数和真实验证边界 |
+| [本地外部接入规范](../../AGENT_ACCESS_SPEC.md) | 边界、架构、协议、版本、运行、保存、导出与本地安全 |
+| [能力矩阵](./02-capability-matrix.md) | 业务动作与节点适配的说明；当前可调用集合以机器契约为准 |
+| [同步维护与强制门禁](./03-change-enforcement.md) | 如何避免桌面功能改了、Agent 接入没有跟着改 |
+| [完整开发计划](./15-gui-cli-mcp-parity-plan.md) | 现状、架构、多画布、F0–F10 落地与验收 |
+| [节点动作计划](./16-node-action-coverage.md) | 每个节点必须接入的编辑、执行、结果和专有动作 |
+| [详细测试计划](./66-parity-test-plan.md) | 分层验收、必测场景、故障/人工/付费专项与发布判据 |
 
-以下保留原方案与交付历史；目标范围冲突以一致性规范为准。
+## 当前已实现的主路径
 
-2026-10-24；完整规范 v0.1 与最小包实施入口。旧接口不恢复，新增接入按共享业务服务实施。
+- **统一契约与入口**：Operation Registry、main Dispatcher、CLI 与 MCP stdio/SSE 适配均已实现；三者派生同一操作目录。应用 REST HTTP API 仍未实现，也不是本目标前提。
+- **项目与传输**：项目查询、新建、打开、元数据修改、保存、重命名、复制、预检删除、导出，以及 `project.import` / `project.importStructure` / `library.import` / `library.export` 已实现。包路径、重映射、凭据剥离、事务与失败边界见[包传输台账](./24-transfer-delivery.md)。
+- **画布与节点**：`graph.get` / `graph.patch` / `graph.validate`、节点创建/读取/更新/删除/连线、`node.execute`、运行查询/等待/取消/核对、输出读取与布局操作已接入；逐节点、逐动作的可用性仍以机器契约和验收记录为准。
+- **Agent Flow 与状态机**：`flowAgent.*`、`flowGraph.*`、`flowGraphDefinition.*`、`humanTask.*` 已接入；`flowStateMachine.submitEvent` / `flowStateMachine.get` 已实现，外部事件与 GUI 提交按钮写入同一待处理事件，不能直接设置状态。
+- **headless 节点流**：`composite.execute` 等独立路径已实现，不依赖项目或画布实例；`inputs` 使用 `in-<id>`，`outputs` / `outputValues` / `resubmit` 使用 `out-<id>`，旧裸 id 仅读取兼容。
 
-用户已授权最小纵向包；已有CLI/MCP项目子集与登记/生成/影响门禁，见[使用说明与真实交付台账](05-a0-a1-minimal-delivery.md)。剩余A0–A4能力继续按计划推进。
+## 交付与证据
 
-后续A1.1增加桌面打开、活动画布保存/导出和名称更新，当前支持及验证以[桌面项目操作台账](06-a1-1-desktop-projects.md)为准；前包台账保留为历史基线。A1.2新增复制与预检确认删除（含`project.delete.precheck`），见[复制删除台账](07-a1-2-clone-delete.md)。
+| 主题 | 记录 |
+| --- | --- |
+| A0+A1 最小包 | [05 交付台账](./05-a0-a1-minimal-delivery.md) |
+| 桌面项目操作 | [06 台账](./06-a1-1-desktop-projects.md) |
+| 图与节点访问 | [18 台账](./18-graph-access-delivery.md)、[19 运行台账](./19-run-access-delivery.md) |
+| 资源库与包传输 | [23 台账](./23-library-delivery.md)、[24 台账](./24-transfer-delivery.md) |
+| Flow Agent | [28 台账](./28-flow-agents-delivery.md)、[29 命令台账](./29-flow-commands-delivery.md)、[40 运行台账](./40-flow-agent-run-delivery.md)、[41 构建台账](./41-flow-agent-build-delivery.md) |
+| 三入口门禁 | [33 台账](./33-three-entry-parity-gate.md) |
+| 历史能力快照 | [14 号文件](./14-current-capabilities.md)仅保留 2026-11-07 时点内容，不得作为现状 |
 
-A1.4首包新增4项只读查询（总计18项）：模型目录、资源库搜索、内部Agent任务基础状态、诊断健康。实际范围与后续路线见[查询交付台账](08-a1-4-read-only-queries.md)。诊断包导出仍待接续。
-
-## 阅读顺序
-
-| 文件                                                                 | 回答的问题                                         |
-| -------------------------------------------------------------------- | -------------------------------------------------- |
-| [本地外部 Agent 接入规范](../../AGENT_ACCESS_SPEC.md)                | 边界、架构、协议、版本、运行、保存、导出与本地安全 |
-| [功能与 31 节点覆盖清单](02-capability-matrix.md)                    | 哪些能力接入、何时接入、哪些限制必须保留           |
-| [同步维护与强制门禁](03-change-enforcement.md)                       | 如何避免桌面功能改了、Agent 接入没有跟着改         |
-| [实施计划与验收](04-implementation-plan.md)                          | A0–A4 每包做什么、怎样判断完成                     |
-| [功能变更接入检查模板](../templates/AGENT_ACCESS_CHANGE_TEMPLATE.md) | 开发/审查时实际填写什么                            |
-
-## 建议采用的决策
+## 维护规则
 
 1. 一份公共业务契约承载 UI、MCP、CLI 以及可选 HTTP；不建设第二份画布或独立 headless 运行器。
-2. 首版支持本地桌面驻留，MCP stdio 与 CLI 优先；应用关闭时返回明确状态，可显式启动同一应用。
-3. 项目新建、读取、修改、重命名、复制、删除和导出进入范围；早期排除的项目包导入已纳入新计划F7，当前未开放。
-4. 当前32个Active节点逐动作接入；普通执行、内部Flow调度、外部接入状态分别标注，历史31类计数不再代表当前全集。
-5. 模型媒体任务复用现有命令账本、租约、固定资产和 unknown 核对；交互型或高风险能力逐项验收。
-6. 接入影响检查、Registry 完整性、生成文件一致性、版本差异、桌面一致性和失败恢复形成发布门禁。
-7. 设计确认后，先交付 A0 和 A1 的真实闭环，再按节点能力扩展；不以“工具数量”替代产品路径验收。
-
-## 当前状态
-
-| 对象                       | 本轮核对结论                                          |
-| -------------------------- | ----------------------------------------------------- |
-| 外部 MCP / CLI / 本地 HTTP | CLI/MCP已实现25项操作，范围及证据见台账13/14；HTTP未实现且不作为本目标前提 |
-| 桌面节点体系               | 32个Active类型；已有契约、共享执行基础；通用外部节点动作尚未接通 |
-| 内部普通 Flow target       | 9 类已有专门适配（含 image-crop/image-split/code 单输出形态），仍受各自模式和配置限制 |
-| 内部 Agent / AI 审核       | 有专用任务和审核路径，不能等同任意节点已自动化        |
-| 状态机独立执行             | 已支持确定性独立执行（不经网关）；外部接入执行仍按 A2/A3 推进 |
-| 新同步维护门禁             | 部分登记/生成/影响门禁已接入verify/CI，其余待实施     |
-
-历史接口撤下说明和内部 Agent Flow 继续有效；本方案补充外部访问层，不取代 [画布 Agent Flow](../canvas-agent-flow/README.md) 的唯一语义图约束。实际测试和门禁状态见交付台账，不能将静态登记或内部既有能力等同外部运行已验证。
-
-最小包涉及本地调用、文件/数据库和诊断路径，日志影响及覆盖边界见[交付台账](05-a0-a1-minimal-delivery.md)和[日志覆盖清单](../LOGGING_COVERAGE.md)。
+2. 新增 GUI 业务能力必须同包提供 CLI/MCP 契约、实现与验证；不得只新增 `planned` 声明便发布 GUI 功能。
+3. 模型媒体任务复用现有命令账本、租约、固定资产和 unknown 核对；交互型或高风险能力逐项验收。
+4. 接入影响检查、Registry 完整性、生成文件一致性、版本差异、桌面一致性和失败恢复形成发布门禁。
+5. 文档登记、静态门禁和测试数量都不能替代真实用户路径、真实传输、真实模型或安装包验收。

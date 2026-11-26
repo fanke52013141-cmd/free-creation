@@ -441,18 +441,18 @@ AF-01～04 交付后，应形成三阶段共创试点。AF-05/06 通过，才可
 
 源码证据：
 
-- [阶段/状态机/人工配置](../../src/shared/agent-flow/node-contracts.ts)
-- [任务快照与决策](../../src/shared/agent-flow/runtime-contracts.ts)
-- [固定端口输入与命令](../../src/shared/agent-flow/commands.ts)
-- [上下文组装、协调与讨论请求](../../src/main/agent-flow/runtime-model.ts)
-- [实际派发与完成门禁](../../src/main/agent-flow/coordinator-host.ts)
-- [分派要求与共创宿主](../../src/main/agent-flow/desktop-host.ts)
-- [工具调用、人工等待与 finish](../../src/main/agent-flow/runtime.ts)
-- [AI 内容处理器](../../src/shared/engine/executors/aiProcess.ts)
-- [普通目标适配范围](../../src/shared/agent-flow/video-adapter.ts)
-- [共创面板](../../src/renderer/src/nodes/specs/AgentCollaborationPanel.tsx)
-- [组合运行与人工节点拒绝](../../src/renderer/src/composite/run-composite.ts)
-- [当前最新交接](../HANDOFF_2026_11_13_AGENT_FLOW_OPTIMIZATION.md)
+- [阶段/状态机/人工配置](../../../src/shared/agent-flow/node-contracts.ts)
+- [任务快照与决策](../../../src/shared/agent-flow/runtime-contracts.ts)
+- [固定端口输入与命令](../../../src/shared/agent-flow/commands.ts)
+- [上下文组装、协调与讨论请求](../../../src/main/agent-flow/runtime-model.ts)
+- [实际派发与完成门禁](../../../src/main/agent-flow/coordinator-host.ts)
+- [分派要求与共创宿主](../../../src/main/agent-flow/desktop-host.ts)
+- [工具调用、人工等待与 finish](../../../src/main/agent-flow/runtime.ts)
+- [AI 内容处理器](../../../src/shared/engine/executors/aiProcess.ts)
+- [普通目标适配范围](../../../src/shared/agent-flow/video-adapter.ts)
+- [共创面板](../../../src/renderer/src/nodes/specs/AgentCollaborationPanel.tsx)
+- [组合运行与人工节点拒绝](../../../src/renderer/src/composite/run-composite.ts)
+- [当前最新交接（历史时点）](../../HANDOFF_2026_11_13_AGENT_FLOW_OPTIMIZATION.md)
 
 本轮定向测试（94/94，8 文件，27.43 秒，退出 0）：
 

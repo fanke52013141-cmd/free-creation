@@ -2,7 +2,7 @@
 
 状态：**已实现并提交**（本文件所在提交）；完整 `npm run verify` 退出码 0（证据 `qa/verification/run-WdMVSl/status.json`，2026-11-24T05:46–06:19Z）。
 基线：`76a487b5`（2026-11-24 12:47 +08:00，`origin/main`）。
-本文件是历史交付记录（证据链），不描述"当前能力"；支持矩阵仍以 [49 号 §2](49-af00-baseline-and-sample-2026-11-13.md) 为准。
+本文件是历史交付记录（证据链），不描述"当前能力"；49 号 §2 仅为 2026-11-13 历史快照。当前状态见 [AGENT_FLOW_SPEC](../../AGENT_FLOW_SPEC.md)、[BACKLOG](../../BACKLOG.md) 与[机器契约](../../local-agent-access/generated/contracts.json)。
 
 ## 0. 一句话结论
 
@@ -48,7 +48,7 @@
 
 ## 4. 唯一下一步
 
-按 [BACKLOG](../BACKLOG.md)：**BL-11 FlowGraph v2**（`params` 按目标节点 config schema 校验、数据边使用真实端口并取消端口重映射、子图循环 `loop.body[]`）→ BL-12/13/14（节点流规范落地）。
+按 [BACKLOG](../../BACKLOG.md)：**BL-11 FlowGraph v2**（`params` 按目标节点 config schema 校验、数据边使用真实端口并取消端口重映射、子图循环 `loop.body[]`）→ BL-12/13/14（节点流规范落地）。
 
 ## 5. 复跑命令
 

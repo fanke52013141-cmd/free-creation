@@ -26,6 +26,7 @@ import {
   nodeAccessDirectorySummary,
   operationDirectory,
   operationResponseSchema,
+  operationSpec,
   type AccessOperationId,
   type AccessResponse
 } from '../../shared/agent-access/registry'
@@ -141,6 +142,7 @@ import {
 } from './transfer-ops'
 import { runLibraryOperation } from './library-ops'
 import { previewValue, requestHumanDecision } from './human-decision'
+import { isGuiRunBusy } from './gui-busy'
 
 class AccessFailure extends Error {
   constructor(
@@ -271,18 +273,6 @@ export class LocalAccessService {
   }
 
   async dispatch(raw: unknown): Promise<AccessResponse> {
-    // 授权守卫：授权失效后立即停止响应外部操作。
-    try {
-      assertLicenseActive('agent.access.dispatch')
-    } catch {
-      return {
-        apiVersion: 1,
-        requestId: 'rejected',
-        operationId: 'invalid',
-        traceId: newTraceId(),
-        status: 'failed'
-      }
-    }
     const parsed = AccessRequestSchema.safeParse(raw)
     const base: AccessResponse = {
       apiVersion: 1,
@@ -290,6 +280,16 @@ export class LocalAccessService {
       operationId: parsed.success ? parsed.data.operationId : 'invalid',
       traceId: newTraceId(),
       status: 'failed'
+    }
+    // 授权守卫：授权失效后立即停止响应外部操作，但必须返回稳定错误对象。
+    try {
+      assertLicenseActive('agent.access.dispatch')
+    } catch {
+      return {
+        ...base,
+        status: 'failed',
+        error: { code: 'AUTH_FAILED', phase: 'authorization', retryable: false }
+      }
     }
     let key: string | undefined
     let claimed = false
@@ -337,7 +337,9 @@ export class LocalAccessService {
       if (!Object.hasOwn(ACCESS_OPERATIONS, request.operationId))
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'validate')
       const operationId = request.operationId as AccessOperationId
-      const spec = ACCESS_OPERATIONS[operationId]
+      const spec = operationSpec(operationId)
+      if (request.operationVersion !== (spec.operationVersion ?? 1))
+        throw new AccessFailure('UNSUPPORTED_OPERATION_VERSION', 'validate')
       const checked = spec.input.safeParse(request.input)
       if (!checked.success) {
         // 带上是哪个字段、为什么不行（zod message 不含具体值，不会泄漏业务数据）。
@@ -358,7 +360,7 @@ export class LocalAccessService {
         if (issued < Date.now() - ACCESS_KEY_TTL_MS)
           throw new AccessFailure('IDEMPOTENCY_EXPIRED', 'validate')
         const intent = createHmac('sha256', this.hmacKey)
-          .update(JSON.stringify({ operationId, version: 1, input: checked.data }))
+          .update(JSON.stringify({ operationId, version: spec.operationVersion ?? 1, input: checked.data }))
           .digest('hex')
         const old = getDb()
           .prepare(
@@ -441,6 +443,15 @@ export class LocalAccessService {
           )
         const executeFile = projects.openProject(id)
         if (!executeFile) throw new AccessFailure('NOT_FOUND', 'read')
+        if (executeFile.meta.graphVersion !== input.expectedGraphVersion)
+          throw new AccessFailure(
+            'REVISION_CONFLICT',
+            'execute-admission',
+            'expectedGraphVersion is stale',
+            executeFile.meta.graphVersion
+          )
+        if (input.mode === 'single' && (input.nodeIds as string[]).length !== 1)
+          throw new AccessFailure('INVALID_INPUT', 'precheck', 'single mode requires exactly one nodeId')
         if (input.mode === 'single' && Array.isArray(input.inputs) && input.inputs.length)
           throw new AccessFailure(
             'INVALID_INPUT',
@@ -462,6 +473,7 @@ export class LocalAccessService {
             projectId: id,
             taskId: run.id,
             mode: run.mode === 'single' ? 'single' : 'subgraph',
+            expectedGraphVersion: input.expectedGraphVersion as number,
             nodeIds: executeNodeIds,
             confirmPaidRerun: input.confirmPaidRerun === true,
             inputs: input.inputs as
@@ -1041,7 +1053,7 @@ export class LocalAccessService {
           desktop: this.options.desktop,
           requestId: request.requestId,
           ...(key ? { idempotencyKey: key } : {}),
-          diagnostics: { traceId: base.traceId, spanId }
+          diagnostics: { requestId: request.requestId, traceId: base.traceId, spanId }
         }
         result = FLOW_AGENT_OPERATION_IDS.has(operationId)
           ? await runFlowAgentOperation(operationId, input, flowContext)
@@ -1052,7 +1064,8 @@ export class LocalAccessService {
         result = await runFlowAgentRunOperation(operationId, input, {
           activeProjectId: this.options.activeProjectId,
           desktop: this.options.desktop,
-          clientId: request.clientId
+          clientId: request.clientId,
+          diagnostics: { requestId: request.requestId, traceId: base.traceId, spanId }
         })
       } else if (operationId === 'flowStateMachine.submitEvent') {
         // C3：状态机人工事件——与 GUI 提交事件按钮同一 meta.stateMachinePending 写入，
@@ -1063,7 +1076,11 @@ export class LocalAccessService {
       } else if (operationId === 'humanTask.submit') {
         // C4：人工任务结果——与 GUI 提交结果按钮同一 meta.humanTaskPending 写入，
         // 经渲染器权威动作（修订核对 + 保存屏障）；完成状态仍由运行时同一执行器校验。
-        result = await this.executeHumanTaskSubmit(id!, active, input)
+        result = await this.executeHumanTaskSubmit(id!, active, input, {
+          requestId: request.requestId,
+          traceId: base.traceId,
+          spanId
+        })
       } else if (operationId === 'humanTask.get') {
         result = this.readHumanTask(id!, input)
       } else if (FLOW_AGENT_BUILD_OPERATION_IDS.has(operationId)) {
@@ -1073,7 +1090,7 @@ export class LocalAccessService {
         result = await runFlowAgentBuildOperation(operationId, input, {
           activeProjectId: this.options.activeProjectId,
           desktop: this.options.desktop,
-          diagnostics: { traceId: base.traceId, spanId }
+          diagnostics: { requestId: request.requestId, traceId: base.traceId, spanId }
         })
       } else if (isFlowCommandOperation(operationId)) {
         // F8（二/收官）：Flow 命令账本协作（flow-commands-ops.ts）。读/结算类只操作既有命令；
@@ -1284,6 +1301,7 @@ export class LocalAccessService {
 
   private assertNoActiveTasks(id: string): void {
     if (projects.hasRecoveryCopy(id)) throw new AccessFailure('RESOURCE_BUSY', 'recovery-ownership')
+    if (isGuiRunBusy(id)) throw new AccessFailure('RESOURCE_BUSY', 'gui-run-occupancy')
     if (this.taskOccupied(id)) throw new AccessFailure('RESOURCE_BUSY', 'task-occupancy')
   }
 
@@ -2090,7 +2108,8 @@ export class LocalAccessService {
   private async executeHumanTaskSubmit(
     id: string,
     activeId: string | null | undefined,
-    input: Record<string, unknown>
+    input: Record<string, unknown>,
+    diagnostics: { requestId: string; traceId: string; spanId: string }
   ): Promise<unknown> {
     if (id !== activeId || !this.options.desktop)
       throw new AccessFailure(
@@ -2116,6 +2135,7 @@ export class LocalAccessService {
     const decision = await requestHumanDecision({
       operation: 'humanTask.submit',
       desktop: this.options.desktop,
+      diagnostics,
       projectId: id,
       activeProjectId: activeId ?? null,
       prompt: {
@@ -2253,18 +2273,22 @@ export class LocalAccessService {
         // 不落在这里。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'media.import': {
-        // F4：素材经公共导入服务登记为项目受控媒体；字节不过线，路径是导入请求。
+        // F4：外部 Agent 只能从受控暂存/导出目录导入；GUI 文件选择器仍走 IPC 的可信路径。
+        // 文本/文档正文永不进入外部响应或幂等账本。
         if (!projects.getProject(id)) throw new AccessFailure('NOT_FOUND', 'read')
-        const outcome = await importMedia(id, input.filePath as string)
-        if (!outcome.ok)
-          throw new AccessFailure(
-            'MEDIA_IMPORT_FAILED',
-            'media-import',
-            outcome.reason.slice(0, 120)
-          )
+        const outcome = await importMedia(id, input.filePath as string, {
+          allowedRoots: [this.exportRoot],
+          allowAnyPath: false,
+          includeTextContent: false
+        })
+        if (!outcome.ok) {
+          if (outcome.code === 'PATH_NOT_ALLOWED')
+            throw new AccessFailure('PATH_NOT_ALLOWED', 'media-import')
+          if (outcome.code === 'INPUT_NOT_FOUND')
+            throw new AccessFailure('INPUT_NOT_FOUND', 'media-import')
+          throw new AccessFailure('MEDIA_IMPORT_FAILED', 'media-import', outcome.reason.slice(0, 120))
+        }
         const asset = outcome.asset
-        const textContent =
-          typeof asset.textContent === 'string' ? asset.textContent.slice(0, 20_000) : undefined
         return {
           projectId: id,
           mediaId: asset.id,
@@ -2272,8 +2296,7 @@ export class LocalAccessService {
           mime: asset.mime,
           path: asset.path,
           sizeBytes: asset.sizeBytes,
-          name: (input.name as string | undefined) ?? asset.name ?? '',
-          ...(textContent ? { textContent } : {})
+          name: (input.name as string | undefined) ?? asset.name ?? ''
         }
       }
       case 'media.list': {
@@ -2781,7 +2804,8 @@ export class LocalAccessService {
         const result = projects.withProjectVersionLock(
           id,
           input.expectedGraphVersion as number,
-          () => {
+          (file) => {
+            const sourceGraphVersion = file.meta.graphVersion
             const destination = join(this.exportRoot, input.fileName as string)
             if (existsSync(destination)) throw new AccessFailure('OUTPUT_EXISTS', 'export')
             const temporary = join(this.exportRoot, `.${randomUUID()}.canvasbundle`)
@@ -2802,7 +2826,7 @@ export class LocalAccessService {
               linkSync(temporary, destination)
               return {
                 path: destination,
-                sourceGraphVersion: input.expectedGraphVersion,
+                sourceGraphVersion,
                 byteSize: bytes,
                 sha256: digest,
                 missingMediaCount: 0
@@ -2950,7 +2974,6 @@ export class LocalAccessService {
       case 'model.validateAgentToolCalling':
         // F9：需要显式确认才联网，在 dispatch 分组分支执行。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
-      case 'provider.package.export':
       case 'provider.package.seal':
       case 'provider.package.preview':
       case 'provider.save':

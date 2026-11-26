@@ -92,8 +92,14 @@ export function registerFlowAgentsIpc(
     } catch {
       throw new AgentRuntimeError('AGENT_MODEL_PROTOCOL', 'model-capability')
     }
+    let hasSecret = false
+    try {
+      hasSecret = Boolean(await catalog.readSecretForRequest(connection.id, connection.baseUrl))
+    } catch {
+      // Origin mismatch or unavailable vault: treat as no usable credential.
+    }
     if (
-      !(await catalog.readSecret(connection.id)) &&
+      !hasSecret &&
       !['localhost', '127.0.0.1', '[::1]'].includes(address.hostname)
     )
       throw new AgentRuntimeError('AGENT_MODEL_KEY_UNAVAILABLE', 'credentials')
@@ -201,7 +207,12 @@ export function registerFlowAgentsIpc(
     } catch {
       throw new AgentRuntimeError('AGENT_MODEL_PROTOCOL', 'model-capability')
     }
-    const secret = await catalog.readSecret(connection.id)
+    let secret: string | null = null
+    try {
+      secret = await catalog.readSecretForRequest(connection.id, connection.baseUrl)
+    } catch {
+      // Never fall back to an unbound secret after an origin/vault rejection.
+    }
     const local = ['localhost', '127.0.0.1', '[::1]'].includes(address.hostname)
     if (!secret && !local) throw new AgentRuntimeError('AGENT_MODEL_KEY_UNAVAILABLE', 'credentials')
     const model = createCatalogChatModel({

@@ -47,6 +47,9 @@ export interface CoordinationRun {
   contextWaitLimitBytes?: number
   traceId: string
   spanId: string
+  /** AF-06: one absolute active deadline for the whole coordinator run (optional for legacy rows). */
+  startedAt?: number
+  deadlineAt?: number
   children: Array<{
     nodeId: string
     taskId: string
@@ -63,6 +66,7 @@ export interface CoordinationRun {
     round?: number
     contextManifest?: import('../../shared/agent-flow/stage-contracts').ContextManifest
     executionEnvelope?: import('../../shared/agent-flow/execution-envelope').ExecutionEnvelope
+    routedInputEdgeIds?: string[]
   }>
   outputs: FlowAgentReply['refs']
   reviews?: CoordinationReview[]

@@ -2,8 +2,8 @@ import { emitDomainEvent } from '../diagnostics/ipc-domain-events'
 // 媒体仓库：文件落项目媒体目录 + SQLite 索引（见《技术框架与规范》§9）
 // 异步复制：大文件导入不阻塞主进程
 import { nanoid } from 'nanoid'
-import { copyFile, mkdir, readFile, rename, stat, unlink, writeFile } from 'fs/promises'
-import { basename, dirname, extname, join } from 'path'
+import { copyFile, mkdir, readFile, realpath, rename, stat, unlink, writeFile } from 'fs/promises'
+import { basename, dirname, extname, isAbsolute, join, relative, sep } from 'path'
 import type { MediaAsset, MediaKind } from '../../shared/types'
 import { BINARY_DOC_EXTS, INLINE_TEXT_EXTS, mimeForExtension } from '../../shared/mime'
 import { MAX_DOC_BYTES, extractDocumentText } from '../media/document-text'
@@ -45,20 +45,68 @@ function detectKind(ext: string, mime: string): MediaKind {
   }
 }
 
-export type ImportOutcome = { ok: true; asset: MediaAsset } | { ok: false; reason: string }
+export type ImportOutcome =
+  | { ok: true; asset: MediaAsset }
+  | { ok: false; reason: string; code?: 'PATH_NOT_ALLOWED' | 'INPUT_NOT_FOUND' }
 
-export async function importMedia(projectId: string, srcAbsPath: string): Promise<ImportOutcome> {
+export interface ImportMediaOptions {
+  /**
+   * Trusted in-process GUI/file-picker callers may explicitly allow any path.
+   * External Agent services must leave this false/undefined and supply allowedRoots.
+   */
+  allowAnyPath?: boolean
+  /** Canonical directories that contain an allowed source file. Symlinks/junctions are resolved. */
+  allowedRoots?: readonly string[]
+  /** External responses must not carry document/text bodies; GUI imports keep the historical default. */
+  includeTextContent?: boolean
+}
+
+function isInsideRoot(root: string, candidate: string): boolean {
+  const rel = relative(root, candidate)
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
+}
+
+async function resolveAllowedSource(
+  srcAbsPath: string,
+  options: ImportMediaOptions | undefined
+): Promise<{ ok: true; path: string } | { ok: false; code: 'PATH_NOT_ALLOWED' | 'INPUT_NOT_FOUND'; reason: string }> {
+  // Backward compatibility for trusted GUI IPC callers: no options means the historical
+  // user-selected file path. The external service always passes an options object and is
+  // therefore fail-closed unless it explicitly authorizes the path.
+  if (options === undefined || options.allowAnyPath === true) return { ok: true, path: srcAbsPath }
+  if (!options.allowedRoots || options.allowedRoots.length === 0)
+    return { ok: false, code: 'PATH_NOT_ALLOWED', reason: 'PATH_NOT_ALLOWED' }
   try {
-    const st = await stat(srcAbsPath)
+    const canonicalSource = await realpath(srcAbsPath)
+    for (const root of options.allowedRoots) {
+      const canonicalRoot = await realpath(root)
+      if (isInsideRoot(canonicalRoot, canonicalSource)) return { ok: true, path: canonicalSource }
+    }
+    return { ok: false, code: 'PATH_NOT_ALLOWED', reason: 'PATH_NOT_ALLOWED' }
+  } catch {
+    return { ok: false, code: 'INPUT_NOT_FOUND', reason: 'INPUT_NOT_FOUND' }
+  }
+}
+
+export async function importMedia(
+  projectId: string,
+  srcAbsPath: string,
+  options?: ImportMediaOptions
+): Promise<ImportOutcome> {
+  try {
+    const allowed = await resolveAllowedSource(srcAbsPath, options)
+    if (!allowed.ok) return allowed
+    const sourcePath = allowed.path
+    const st = await stat(sourcePath)
     if (!st.isFile()) return { ok: false, reason: '不是有效文件' }
     if (st.size > MAX_MEDIA_BYTES) return { ok: false, reason: '超过 2GB 单文件上限' }
 
-    const ext = extname(srcAbsPath).toLowerCase()
+    const ext = extname(sourcePath).toLowerCase()
     const id = nanoid(10)
     const relPath = `projects/${projectId}/media/${id}${ext}`
     const destAbs = join(getDataDir(), relPath)
     await mkdir(dirname(destAbs), { recursive: true })
-    await copyFile(srcAbsPath, destAbs)
+    await copyFile(sourcePath, destAbs)
 
     const mime = mimeForExtension(ext)
     const kind = detectKind(ext, mime)
@@ -68,7 +116,7 @@ export async function importMedia(projectId: string, srcAbsPath: string): Promis
       .prepare(
         'INSERT INTO media (id, kind, mime, path, size_bytes, created_at, name) VALUES (?, ?, ?, ?, ?, ?, ?)'
       )
-      .run(id, kind, mime, relPath, st.size, now, basename(srcAbsPath, ext))
+      .run(id, kind, mime, relPath, st.size, now, basename(sourcePath, ext))
 
     const asset: MediaAsset = {
       id,
@@ -77,11 +125,21 @@ export async function importMedia(projectId: string, srcAbsPath: string): Promis
       path: relPath,
       sizeBytes: st.size,
       createdAt: now,
-      name: basename(srcAbsPath, ext)
+      name: basename(sourcePath, ext)
     }
-    if (kind === 'file' && st.size <= MAX_TEXT_INLINE_BYTES && INLINE_TEXT_EXTS.includes(ext)) {
+    if (
+      options?.includeTextContent !== false &&
+      kind === 'file' &&
+      st.size <= MAX_TEXT_INLINE_BYTES &&
+      INLINE_TEXT_EXTS.includes(ext)
+    ) {
       asset.textContent = decodeTextFile(await readFile(destAbs))
-    } else if (kind === 'file' && st.size <= MAX_DOC_BYTES && BINARY_DOC_EXTS.includes(ext)) {
+    } else if (
+      options?.includeTextContent !== false &&
+      kind === 'file' &&
+      st.size <= MAX_DOC_BYTES &&
+      BINARY_DOC_EXTS.includes(ext)
+    ) {
       // Office / PDF 在导入时就抽取正文：out-text 与节点预览共用同一份结果，失败则只留原始文件。
       const text = await extractDocumentText(ext, await readFile(destAbs))
       if (text) asset.textContent = text

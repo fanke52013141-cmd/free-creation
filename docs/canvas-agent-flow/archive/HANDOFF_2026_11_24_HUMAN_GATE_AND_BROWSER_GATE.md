@@ -1,7 +1,7 @@
 # 2026-11-24 人工门禁、返工预览与浏览器门禁修复交接
 
 状态：**已提交并推送**（`8a2444a`、`8cec947`）；`npm run verify` 退出码 0（证据 `qa/verification/run-VZf1qi/status.json`，2026-11-24T02:29–02:49Z）。
-本文件是历史交付记录（证据链），不描述"当前能力"；当前支持矩阵仍以 [49 号 §2](49-af00-baseline-and-sample-2026-11-13.md) 为准，并按本文 §6 的口径阅读。
+本文件是历史交付记录（证据链），不描述"当前能力"；49 号 §2 仅为 2026-11-13 历史快照。当前状态见 [AGENT_FLOW_SPEC](../../AGENT_FLOW_SPEC.md)、[BACKLOG](../../BACKLOG.md) 与[机器契约](../../local-agent-access/generated/contracts.json)，本文 §6 的口径仅适用于当时。
 
 ## 0. 一句话结论
 
@@ -74,7 +74,7 @@
 
 - 本批**未新增诊断事件**：人工确认拒绝/超时沿用既有 access 失败记录与错误码（`HUMAN_DECISION_REQUIRED` / `DESKTOP_UNAVAILABLE` / `HUMAN_DENIED` / `HUMAN_DECISION_TIMEOUT`）；确认框内容不写日志或诊断（与 2026-11-22 BL-01 口径一致）。
 - 返工预览是只读投影，沿用 `agent.coordination.stage_rework`（执行时）。
-- 已在 [LOGGING_COVERAGE](../LOGGING_COVERAGE.md) 追加 2026-11-24 条目。
+- 已在 [LOGGING_COVERAGE](../../LOGGING_COVERAGE.md) 追加 2026-11-24 条目。
 - **待补**：`agent.human_decision.rejected` 事件（需登记白名单），见 §6.6。
 
 ## 6. 未覆盖边界（如实）
@@ -106,4 +106,4 @@ node scripts/test-agent-flow-human-task-graph.cjs
 
 ## 9. 建议阅读顺序
 
-[完整方案](00-approved-plan.md) → [节点协同规范](05-node-coordination-standard.md) → [审核与返工](07-ai-review-node.md) → 本文件 → [49 号支持矩阵 §2](49-af00-baseline-and-sample-2026-11-13.md)（注意 §6.7 的口径冲突）。
+[完整方案](00-approved-plan.md) → [节点协同规范](../05-node-coordination-standard.md) → [审核与返工](../07-ai-review-node.md) → 本文件 → [49 号历史快照](49-af00-baseline-and-sample-2026-11-13.md)（仅追溯，注意 §6.7 的历史口径冲突）。

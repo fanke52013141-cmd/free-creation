@@ -31,6 +31,23 @@ describe('本地 Agent 客户端响应超时口径', () => {
     expect(INTERACTIVE_RESPONSE_TIMEOUT_MS).toBeGreaterThan(HUMAN_DECISION_TIMEOUT_MS)
   })
 
+  it('模型/网络/发布长操作使用 shared 元数据，不再 15s 误报 unknown', () => {
+    for (const operationId of [
+      'provider.testConnection',
+      'model.validate',
+      'model.discover',
+      'model.validateAgentToolCalling',
+      'flowAgent.build.propose',
+      'flowAgent.review',
+      'director.publish.continue',
+      'webSearch.run'
+    ]) {
+      expect(responseTimeoutMs(operationId, 0), operationId).toBeGreaterThanOrEqual(120_000)
+      expect((ACCESS_OPERATIONS as Record<string, { responseTimeoutMs?: number }>)[operationId]?.responseTimeoutMs)
+        .toBe(responseTimeoutMs(operationId, 0))
+    }
+  })
+
   it('run.wait 仍按请求的等待时长（长轮询不能被截断）', () => {
     expect(responseTimeoutMs('run.wait', 120_000)).toBe(150_000)
   })

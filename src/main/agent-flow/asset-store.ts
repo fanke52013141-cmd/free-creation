@@ -1,6 +1,6 @@
 import { projectCompositeOutputs } from '../../shared/composite/outputs'
 import { resolveCompositeTarget } from './composite-target'
-import { fixedFlowImage, fixedFlowMedia } from './image-assets'
+import { fixedFlowImage, fixedFlowMedia, FLOW_VIDEO_OUTPUT_MAX_BYTES } from './image-assets'
 import type Database from 'better-sqlite3'
 import { createHash, randomUUID } from 'node:crypto'
 import type { ProjectFile } from '../../shared/types'
@@ -274,7 +274,9 @@ export class FlowAssetStore {
           !pinned
         ) {
           // 轨道线的成片与视频资产同源：都是本机已落盘的固定媒体，直接固化引用。
-          value = fixedFlowMedia(this.db, input.projectId, value)
+          value = fixedFlowMedia(this.db, input.projectId, value, {
+            maxBytes: FLOW_VIDEO_OUTPUT_MAX_BYTES
+          })
         } else if (value.kind === 'video') {
           if (
             record.props.nodeType !== 'video' ||
@@ -437,7 +439,9 @@ export class FlowAssetStore {
     }
     if (version.value.kind === 'video' && version.value.contentSha256 !== undefined) {
       if (!/^[a-f0-9]{64}$/.test(version.value.contentSha256)) fail('ASSET_INTEGRITY_FAILED')
-      fixedFlowMedia(this.db, projectId, version.value)
+      fixedFlowMedia(this.db, projectId, version.value, {
+        maxBytes: FLOW_VIDEO_OUTPUT_MAX_BYTES
+      })
     }
     if (version.value.kind === 'audio') {
       if (!/^[a-f0-9]{64}$/.test(version.value.contentSha256 ?? '')) fail('ASSET_INTEGRITY_FAILED')

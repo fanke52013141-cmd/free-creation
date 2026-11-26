@@ -496,7 +496,7 @@ describe('local Agent flow command ledger access', () => {
     }>
     for (const [operationId, effect] of expected) {
       const entry = directory.find((item) => item.operationId === operationId)
-      expect(entry).toMatchObject({ effect, transports: ['cli', 'mcp-stdio'] })
+      expect(entry).toMatchObject({ effect, transports: ['cli', 'mcp-stdio', 'mcp-sse'] })
     }
     // prepare 不单独开放：外部"只准备不交付"会留下无法执行的占用，等价能力并入 dispatch。
     expect(ACCESS_OPERATIONS).not.toHaveProperty('flow.command.prepare')

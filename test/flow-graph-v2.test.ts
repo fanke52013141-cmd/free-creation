@@ -9,6 +9,11 @@ import {
 import { compileFlowGraph } from '../src/shared/agent-flow/flow-graph-compiler'
 import { buildCapabilityCatalog } from '../src/shared/agent-flow/capability-catalog'
 
+const validateFlowGraphTopology = (
+  value: FlowGraph,
+  options: Parameters<typeof validateFlowGraph>[1] = {}
+) => validateFlowGraph(value, { ...options, requireRuntime: false })
+
 const HASH = 'b'.repeat(64)
 
 const agent = (nodeId: string): FlowNode => ({
@@ -125,7 +130,7 @@ describe('BL-11 FlowGraph v2：params / 真实端口 / 子图循环', () => {
       'a',
       ['img']
     )
-    expect(validateFlowGraph(g)).toEqual({ ok: true })
+    expect(validateFlowGraphTopology(g)).toEqual({ ok: true })
     const compiled = compileFlowGraph(g)
     const img = compiled.nodes.find((node) => node.id === 'shape:img')!
     expect(JSON.parse(img.config)).toMatchObject({
@@ -145,7 +150,7 @@ describe('BL-11 FlowGraph v2：params / 真实端口 / 子图循环', () => {
       'a',
       ['img']
     )
-    const invalid = validateFlowGraph(bad)
+    const invalid = validateFlowGraphTopology(bad)
     expect(invalid.ok).toBe(false)
     if (!invalid.ok)
       expect(invalid.errors.some((error) => error.code === 'CAPABILITY_PARAMS_INVALID')).toBe(true)
@@ -163,7 +168,7 @@ describe('BL-11 FlowGraph v2：params / 真实端口 / 子图循环', () => {
       ['flow']
     )
     const catalog = buildCapabilityCatalog([compositeRecord])
-    const compositeResult = validateFlowGraph(composite, { catalog })
+    const compositeResult = validateFlowGraphTopology(composite, { catalog })
     expect(compositeResult.ok).toBe(false)
     if (!compositeResult.ok)
       expect(
@@ -192,7 +197,7 @@ describe('BL-11 FlowGraph v2：params / 真实端口 / 子图循环', () => {
       'a',
       ['img']
     )
-    const unknownResult = validateFlowGraph(unknown)
+    const unknownResult = validateFlowGraphTopology(unknown)
     expect(unknownResult.ok).toBe(false)
     if (!unknownResult.ok)
       expect(unknownResult.errors.some((error) => error.code === 'PORT_NOT_FOUND')).toBe(true)
@@ -203,7 +208,7 @@ describe('BL-11 FlowGraph v2：params / 真实端口 / 子图循环', () => {
       'a',
       ['video']
     )
-    const mismatchResult = validateFlowGraph(mismatch)
+    const mismatchResult = validateFlowGraphTopology(mismatch)
     expect(mismatchResult.ok).toBe(false)
     if (!mismatchResult.ok)
       expect(mismatchResult.errors.some((error) => error.code === 'PORT_TYPE_MISMATCH')).toBe(true)
@@ -220,7 +225,7 @@ describe('BL-11 FlowGraph v2：params / 真实端口 / 子图循环', () => {
       'a',
       ['c']
     )
-    const v1Result = validateFlowGraph(v1)
+    const v1Result = validateFlowGraphTopology(v1)
     expect(v1Result.ok).toBe(false)
     if (!v1Result.ok)
       expect(v1Result.errors.some((error) => error.code === 'LOOP_BODY_UNSUPPORTED')).toBe(true)
@@ -244,11 +249,12 @@ describe('BL-11 FlowGraph v2：params / 真实端口 / 子图循环', () => {
       'a',
       ['c']
     )
-    expect(validateFlowGraph(v2)).toEqual({ ok: true })
-    expect(validateFlowGraph({ ...v2, budgets: { ...v2.budgets, maxSteps: 8 } })).toEqual({
+    expect(validateFlowGraphTopology(v2)).toEqual({ ok: true })
+    expect(validateFlowGraphTopology({ ...v2, budgets: { ...v2.budgets, maxSteps: 5 } })).toEqual({
       ok: false,
-      errors: [{ code: 'STEP_BUDGET_INSUFFICIENT', message: 'maxSteps 8 must be at least 9' }]
+      errors: [{ code: 'STEP_BUDGET_INSUFFICIENT', message: 'maxSteps 5 must be at least 6' }]
     })
+    expect(validateFlowGraphTopology({ ...v2, budgets: { ...v2.budgets, maxSteps: 6 } })).toEqual({ ok: true })
     const compiled = compileFlowGraph(v2)
     const carrier = compiled.nodes.find((node) => node.id === 'shape:a')!
     expect(JSON.parse(carrier.config)).toBeTruthy()
@@ -285,7 +291,7 @@ describe('BL-11 FlowGraph v2：params / 真实端口 / 子图循环', () => {
       'a',
       ['b']
     )
-    const noCarrierResult = validateFlowGraph(noCarrier)
+    const noCarrierResult = validateFlowGraphTopology(noCarrier)
     expect(noCarrierResult.ok).toBe(false)
     if (!noCarrierResult.ok)
       expect(noCarrierResult.errors.some((error) => error.code === 'LOOP_BODY_INVALID')).toBe(true)
@@ -307,7 +313,7 @@ describe('BL-11 FlowGraph v2：params / 真实端口 / 子图循环', () => {
       'a',
       ['c']
     )
-    const noExitResult = validateFlowGraph(noExit)
+    const noExitResult = validateFlowGraphTopology(noExit)
     expect(noExitResult.ok).toBe(false)
     if (!noExitResult.ok)
       expect(noExitResult.errors.some((error) => error.code === 'LOOP_BODY_NO_EXIT')).toBe(true)

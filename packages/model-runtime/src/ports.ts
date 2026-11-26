@@ -29,7 +29,10 @@ export interface ConfigurationPort {
 }
 
 export interface SecretPort {
+  /** Unbound read for local credential administration only; never use it for outbound requests. */
   readSecret(connectionId: string): Promise<string | null>
+  /** Release a credential only when the concrete request target matches its bound origin. */
+  readSecretForRequest(connectionId: string, targetUrl: string): Promise<string | null>
 }
 
 export interface ValidationPort {

@@ -35,7 +35,7 @@
 
 复用公共保存、下载/媒体入库及原命令/Agent 生命周期；新增 task.control.started/completed，同 task/新 trace/span，固定 operation/state。离线成果恢复有 media.persist 开始/唯一终态。网络子模块由调用者持有生命周期，日志 allowlist 登记职责与测试，不豁免敏感信息。恢复 worker 验证终态配对和私有字节排除；SHA-256、文件正文、路径、源 URL、模型正文/Key 不进诊断。logger 失败不改变业务结果。
 
-强杀没有可观察的终态就不补造；业务事实来自 SQLite/可信回执/校验后的文件，不来自日志。实际覆盖和未覆盖范围见 [LOGGING_COVERAGE](../LOGGING_COVERAGE.md)，未宣称完整 trace 树或全部 C4 完成。
+强杀没有可观察的终态就不补造；业务事实来自 SQLite/可信回执/校验后的文件，不来自日志。实际覆盖和未覆盖范围见 [LOGGING_COVERAGE](../../LOGGING_COVERAGE.md)，未宣称完整 trace 树或全部 C4 完成。
 
 ## 下一步唯一优先路径
 

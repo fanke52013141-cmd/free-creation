@@ -120,6 +120,43 @@ describe('O4-P2 编译器', () => {
     expect(JSON.parse(a.config).operation).toBe('pass')
   })
 
+  it('maps capability goals into adapter default template/instruction fields', () => {
+    const templateCompiled = compileFlowGraph(
+      graph(
+        [
+          node('source'),
+          node('template', {
+            kind: 'capability',
+            capability: 'text-template@1',
+            goal: '结果：{{value}}'
+          })
+        ],
+        [{ from: { nodeId: 'source', portId: 'out-text' }, to: { nodeId: 'template', portId: 'in-value' }, kind: 'data' }],
+        'source',
+        ['template']
+      )
+    )
+    expect(JSON.parse(templateCompiled.nodes.find((node) => node.id === canvasNodeId('template'))!.config))
+      .toMatchObject({ operation: 'template', template: '结果：{{value}}' })
+    const editCompiled = compileFlowGraph(
+      graph(
+        [
+          node('image', { kind: 'capability', capability: 'image-gen@3', goal: '生成图片' }),
+          node('edit', {
+            kind: 'capability',
+            capability: 'image-edit@2',
+            goal: '把背景改成雪景'
+          })
+        ],
+        [{ from: { nodeId: 'image', portId: 'out-image' }, to: { nodeId: 'edit', portId: 'in-image' }, kind: 'data' }],
+        'image',
+        ['edit']
+      )
+    )
+    expect(JSON.parse(editCompiled.nodes.find((node) => node.id === canvasNodeId('edit'))!.config))
+      .toMatchObject({ instruction: '把背景改成雪景' })
+  })
+
   it('human-task 节点编译为 human-task 配置', () => {
     const compiled = compileFlowGraph(
       graph([node('a'), node('b', { participation: 'human', kind: 'human-task' })], [dataEdge('a', 'b')], 'a', ['b'])
@@ -157,6 +194,69 @@ describe('O4-P2 编译器', () => {
       )
     )
     expect(compiled.nodes.map((n) => n.id)).toEqual(expect.arrayContaining([canvasNodeId('a'), canvasNodeId('b')]))
+  })
+})
+
+describe('AF-01 编译运行准入', () => {
+  it('缺少模型/执行范围时明确返回不可运行，而不是静默生成空绑定', () => {
+    const compiled = compileFlowGraph(
+      graph([node('a'), node('b')], [dataEdge('a', 'b')], 'a', ['b'])
+    )
+    expect(compiled.runnable).toBe(false)
+    expect(compiled.runtimeErrors.map((error) => error.code)).toEqual(
+      expect.arrayContaining(['FLOW_AGENT_MODEL_REQUIRED', 'FLOW_AGENT_SCOPE_REQUIRED'])
+    )
+    const agent = AgentNodeConfigSchema.parse(
+      JSON.parse(compiled.nodes.find((item) => item.id === canvasNodeId('a'))!.config)
+    )
+    expect(agent.modelDefinitionId).toBeUndefined()
+    expect(agent.allowedNodeIds).toEqual([])
+  })
+
+  it('显式模型/工具/范围与审核绑定可编译为真实 specialist/review 配置', () => {
+    const compiled = compileFlowGraph(
+      graph(
+        [
+          node('a', {
+            modelDefinitionId: 'fixture-model',
+            tools: [{ id: 'node.execute', version: '1' }],
+            allowedNodeIds: ['sink']
+          }),
+          node('sink', { kind: 'capability', capability: 'text-pass@1' }),
+          node('review', {
+            kind: 'review',
+            modelDefinitionId: 'fixture-review-model',
+            review: { criteria: '必须通过', rejectPolicy: 'stop', maxReworks: 0 }
+          })
+        ],
+        [
+          { from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'sink', portId: 'in-value' }, kind: 'data' },
+          { from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'review', portId: 'in-text' }, kind: 'data' }
+        ],
+        'a',
+        ['sink', 'review']
+      )
+    )
+    expect(compiled.runnable).toBe(true)
+    expect(compiled.runtimeErrors).toEqual([])
+    const agent = AgentNodeConfigSchema.parse(
+      JSON.parse(compiled.nodes.find((item) => item.id === canvasNodeId('a'))!.config)
+    )
+    expect(agent).toMatchObject({
+      role: 'specialist',
+      modelDefinitionId: 'fixture-model',
+      tools: [{ id: 'node.execute', version: '1' }],
+      allowedNodeIds: [canvasNodeId('sink')]
+    })
+    const review = ReviewNodeConfigSchema.parse(
+      JSON.parse(compiled.nodes.find((item) => item.id === canvasNodeId('review'))!.config)
+    )
+    expect(review).toMatchObject({
+      modelDefinitionId: 'fixture-review-model',
+      responsibleNodeId: canvasNodeId('a'),
+      subjectSources: [{ nodeId: canvasNodeId('a'), portId: 'out-text' }],
+      gatedNodeIds: []
+    })
   })
 })
 

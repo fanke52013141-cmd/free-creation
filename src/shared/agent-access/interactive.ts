@@ -2,18 +2,13 @@
 // 这类操作没有下行流量可等，不能用默认 15s 响应超时衡量；把「哪些操作是交互式的」
 // 与「客户端该等多久」收敛成一份真值，main 与 CLI 客户端都从这里取。
 import { ACCESS_OPERATIONS } from './registry'
+import {
+  DEFAULT_RESPONSE_TIMEOUT_MS,
+  HUMAN_DECISION_TIMEOUT_MS,
+  INTERACTIVE_RESPONSE_TIMEOUT_MS
+} from './ops/common'
 
-/**
- * main 侧等待人工决定的上限（与 `main/agent-access/human-decision` 同源）。
- * 人工决定何时发生由人决定，不能压缩成默认响应超时。
- */
-export const HUMAN_DECISION_TIMEOUT_MS = 5 * 60 * 1000
-
-/** 非交互操作的响应超时：应用无响应时尽快失败。 */
-export const DEFAULT_RESPONSE_TIMEOUT_MS = 15_000
-
-/** 交互式操作的客户端响应超时：人工决定上限 + 确认后实际写入的余量。 */
-export const INTERACTIVE_RESPONSE_TIMEOUT_MS = HUMAN_DECISION_TIMEOUT_MS + 30_000
+export { DEFAULT_RESPONSE_TIMEOUT_MS, HUMAN_DECISION_TIMEOUT_MS, INTERACTIVE_RESPONSE_TIMEOUT_MS }
 
 /**
  * 操作是否可能阻塞在「人在 GUI 点确认」上。
@@ -36,7 +31,7 @@ export function isInteractiveOperation(operationId: string): boolean {
  */
 export function responseTimeoutMs(operationId: string, requestedWaitMs: number): number {
   if (requestedWaitMs > 0) return requestedWaitMs + 30_000
-  return isInteractiveOperation(operationId)
-    ? INTERACTIVE_RESPONSE_TIMEOUT_MS
-    : DEFAULT_RESPONSE_TIMEOUT_MS
+  const spec = (ACCESS_OPERATIONS as Record<string, { interactive?: boolean; responseTimeoutMs?: number } | undefined>)[operationId]
+  if (spec?.interactive === true) return INTERACTIVE_RESPONSE_TIMEOUT_MS
+  return spec?.responseTimeoutMs ?? DEFAULT_RESPONSE_TIMEOUT_MS
 }

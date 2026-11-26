@@ -125,6 +125,7 @@ export interface GraphNodeDiff {
 export interface GraphDefinitionDiff {
   nameChanged: boolean
   goalChanged: boolean
+  budgetsChanged: boolean
   nodes: GraphNodeDiff[]
   edgesAdded: Array<{ from: { nodeId: string; portId: string }; to: { nodeId: string; portId: string } }>
   edgesRemoved: Array<{ from: { nodeId: string; portId: string }; to: { nodeId: string; portId: string } }>
@@ -133,14 +134,28 @@ export interface GraphDefinitionDiff {
 const GRAPH_NODE_FIELDS: Array<keyof FlowNode> = [
   'title',
   'participation',
+  'executor',
+  'decider',
+  'humanRole',
+  'humanOutputType',
   'kind',
   'goal',
   'completion',
   'inputs',
   'decisions',
   'capability',
+  'capabilityRef',
+  'params',
+  'modelDefinitionId',
+  'tools',
+  'allowedNodeIds',
+  'responsibleNodeId',
+  'subjectSources',
+  'gatedNodeIds',
   'review',
-  'loop'
+  'loop',
+  'joinPolicy',
+  'carrierNodeId'
 ]
 
 /** 纯函数图定义差异：比较名称/总目标/节点（增删改及变更字段）/数据边（增删）。 */
@@ -171,6 +186,8 @@ export function diffGraphDefinitions(
   return {
     nameChanged: before.name !== after.name,
     goalChanged: before.graph.goal !== after.graph.goal,
+    budgetsChanged:
+      canonicalFlowJson(before.graph.budgets) !== canonicalFlowJson(after.graph.budgets),
     nodes,
     edgesAdded: after.graph.edges.filter((edge) => !beforeEdges.has(edgeKey(edge))),
     edgesRemoved: before.graph.edges.filter((edge) => !afterEdges.has(edgeKey(edge)))

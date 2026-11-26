@@ -2,7 +2,7 @@
 
 状态：**已提交并推送**（本文件所在提交）；完整 `npm run verify` 退出码 0（证据 `qa/verification/run-kXfLHN/status.json`）。
 基线：`f0e9b994`（2026-11-24 10:55 +08:00，`origin/main`）。
-本文件是历史交付记录（证据链），不描述"当前能力"；当前支持矩阵仍以 [49 号 §2](49-af00-baseline-and-sample-2026-11-13.md) 为准。
+本文件是历史交付记录（证据链），不描述"当前能力"；49 号 §2 仅为 2026-11-13 历史快照。当前状态见 [AGENT_FLOW_SPEC](../../AGENT_FLOW_SPEC.md)、[BACKLOG](../../BACKLOG.md) 与[机器契约](../../local-agent-access/generated/contracts.json)。
 
 ## 0. 一句话结论
 
@@ -63,9 +63,9 @@
 
 ## 5. 唯一下一步
 
-按 [BACKLOG](../BACKLOG.md) P1 主线：**BL-10 节点流即能力**（发布即登记 `capabilityRef`、能力目录自动生成、删除硬编码 `CAPABILITY_COMPILE` / `FLOW_GRAPH_CAPABILITY_IDS`）→ BL-11 FlowGraph v2（params、真实端口、端口类型校验、子图循环）→ BL-12/13/14。
+按 [BACKLOG](../../BACKLOG.md) P1 主线：**BL-10 节点流即能力**（发布即登记 `capabilityRef`、能力目录自动生成、删除硬编码 `CAPABILITY_COMPILE` / `FLOW_GRAPH_CAPABILITY_IDS`）→ BL-11 FlowGraph v2（params、真实端口、端口类型校验、子图循环）→ BL-12/13/14。
 
-待拍板项见 [11-22 交接 §4](../HANDOFF_2026_11_22_SPEC_P0.md)：`flowStateMachine.submitEvent` / `composite.run.submitHuman` 是否纳入人工确认、BL-18 阶段 FSM、BL-20 人工媒体交付方式、NF-5.3 输出键前缀。
+待拍板项见 [11-22 交接 §4](../../HANDOFF_2026_11_22_SPEC_P0.md)：`flowStateMachine.submitEvent` / `composite.run.submitHuman` 是否纳入人工确认、BL-18 阶段 FSM、BL-20 人工媒体交付方式、NF-5.3 输出键前缀。
 
 ## 6. 复跑命令
 

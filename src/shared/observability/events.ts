@@ -113,7 +113,7 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
       phase: 'short',
       code: 'short'
     }),
-    ...['started', 'completed', 'failed'].map((stage) =>
+    ...['started', 'completed', 'failed', 'cancelled'].map((stage) =>
       def(
         `agent.coordination.${stage}`,
         stage === 'failed' ? 'error' : 'info',

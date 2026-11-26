@@ -29,10 +29,13 @@ const validGraph = FlowGraphSchema.parse({
   graphId: 'g',
   name: '顺序',
   goal: '总目标',
-  nodes: [node('a'), node('b')],
-  edges: [edge('a', 'b')],
+  nodes: [
+    node('a', { modelDefinitionId: 'fixture-model', allowedNodeIds: ['sink'] }),
+    node('sink', { kind: 'capability', capability: 'text-pass@1', goal: '固化成果', completion: '输出固定文本' })
+  ],
+  edges: [{ from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'sink', portId: 'in-value' }, kind: 'data' }],
   entry: 'a',
-  exits: ['b']
+  exits: ['sink']
 })
 const cycleGraph = FlowGraphSchema.parse({
   schemaVersion: 1,
@@ -72,7 +75,7 @@ describe('O4-P5 flowGraph.compile', () => {
     }
     expect(result.ok).toBe(true)
     expect(result.compiled.nodes.map((n) => n.id)).toEqual(
-      expect.arrayContaining([canvasNodeId('a'), canvasNodeId('b'), result.compiled.coordinatorNodeId, result.compiled.stateNodeId])
+      expect.arrayContaining([canvasNodeId('a'), canvasNodeId('sink'), result.compiled.coordinatorNodeId, result.compiled.stateNodeId])
     )
   })
   it('非法图 ok=false 且 compiled=null', async () => {

@@ -2,7 +2,8 @@ import { z } from 'zod'
 import { identifier } from './common'
 
 /**
- * 凭据包（F9 收尾）：导出/预览侧。用户已确认"允许导出与预览到受控目录；导入必须人工确认"。
+ * 凭据包（F9 收尾）：封包与预览侧。用户已确认"允许封包/预览到受控目录；导入必须人工确认"。
+ * 旧 provider.package.export 因缺少人工门禁与明确 providerIds 安全边界，已从公开契约移除。
  *
  * 安全口径：
  * - 密码由调用方提供（它是用户为这个包设的解封密码，不是设备密钥）；
@@ -14,22 +15,6 @@ const password = z.string().min(1).max(200)
 const fileName = z.string().regex(/^[a-zA-Z0-9_-]{1,100}\.[a-z]{2,10}$/)
 
 export const KEY_PACKAGE_OPERATIONS = {
-  'provider.package.export': {
-    effect: 'export',
-    idempotent: false,
-    destructive: true,
-    cost: 'none',
-    description:
-      '把选定的供应商连接导出为凭据包（.cskeys）到受控导出目录（复用 GUI 同一 exportProviders 与加密格式）：需要解封密码；回执给文件名/sha256/字节数/连接数，不回传包正文',
-    input: z
-      .object({
-        fileName,
-        password,
-        /** 省略=导出全部连接；显式给出时必须全部存在。 */
-        providerIds: z.array(identifier).min(1).max(200).optional()
-      })
-      .strict()
-  },
   'provider.package.seal': {
     effect: 'export',
     idempotent: false,
@@ -64,12 +49,6 @@ const exportedFile = {
 }
 
 export const KEY_PACKAGE_OUTPUTS = {
-  'provider.package.export': z
-    .object({
-      ...exportedFile,
-      connectionCount: z.number().int().nonnegative()
-    })
-    .strict(),
   'provider.package.seal': z
     .object({
       ...exportedFile,

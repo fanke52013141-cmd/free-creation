@@ -704,6 +704,7 @@ describe('local Agent vertical slice', () => {
     )
     expect(exported.status).toBe('completed')
     const bundled = JSON.parse(new AdmZip((exported.data as any).path).readAsText('project.json'))
+    expect((exported.data as any).sourceGraphVersion).toBe(bundled.meta.graphVersion)
     expect(bundled.meta).toMatchObject({ name: 'after', graphVersion: 4 })
     expect(bundled.nodes[0].params.text).toBe('private unsaved text')
     expect(JSON.stringify(events)).not.toContain('private unsaved text')
@@ -1204,7 +1205,7 @@ describe('local Agent vertical slice', () => {
     )
     const missing = run(['--impact-file', impact])
     expect(missing.status).not.toBe(0)
-    expect(missing.stderr).toContain('Protected source changed')
+    expect(missing.stderr).toMatch(/Protected source|Generated contract is stale/)
   })
 
   it('clones a closed project at a fixed version without touching the source', async () => {

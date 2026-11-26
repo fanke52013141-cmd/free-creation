@@ -6,6 +6,9 @@ import {
 } from './node-contracts'
 import {
   validateFlowGraph,
+  validateFlowGraphRuntime,
+  deriveFlowAgentAllowedNodeIds,
+  deriveFlowReviewBindings,
   flowNodeCapabilityRef,
   type FlowGraph,
   type FlowNode,
@@ -45,6 +48,8 @@ export interface CompiledGraph {
   edges: CompiledEdge[]
   coordinatorNodeId: string
   stateNodeId: string
+  runnable: boolean
+  runtimeErrors: FlowGraphError[]
 }
 
 /**
@@ -89,8 +94,9 @@ function compileNode(
       humanRole: node.participation === 'collaborative' ? node.humanRole ?? 'owner' : undefined,
       interactionMode: node.participation === 'collaborative' ? 'collaborative' : 'autonomous',
       skills: [],
-      tools: [],
-      allowedNodeIds: [],
+      tools: node.tools ?? [{ id: 'node.execute', version: '1' }],
+      allowedNodeIds: deriveFlowAgentAllowedNodeIds(graph, node.nodeId),
+      modelDefinitionId: node.modelDefinitionId,
       maxSteps: graph.budgets.maxSteps,
       relations: []
     })
@@ -106,14 +112,17 @@ function compileNode(
     return { ...base, type: 'human-task', config: JSON.stringify(config), contractVersion: 1 }
   }
   if (node.kind === 'review') {
+    const binding = deriveFlowReviewBindings(graph, node)
     const config = ReviewNodeConfigSchema.parse({
       schemaVersion: 1,
       rulesVersion: 'flow-interpreter-v1',
       reviewMode: 'text-json',
+      modelDefinitionId: node.modelDefinitionId,
       rejectPolicy: node.review!.rejectPolicy,
       maxReworks: node.review!.maxReworks,
-      subjectSources: [],
-      gatedNodeIds: [],
+      responsibleNodeId: binding.responsibleNodeId,
+      subjectSources: binding.subjectSources,
+      gatedNodeIds: binding.gatedNodeIds,
       relations: []
     })
     return { ...base, type: 'ai-review', text: node.review!.criteria, config: JSON.stringify(config), contractVersion: 1 }
@@ -130,12 +139,24 @@ function compileNode(
         }
       ])
     // BL-11 / G7：params 合并进载体固定配置（校验已在 validateFlowGraph 完成）。
+    const goalConfig = descriptor.builder?.configFromStep
+      ? JSON.parse(
+          descriptor.builder.configFromStep({
+            instruction: node.goal,
+            template: node.goal
+          })
+        ) as Record<string, unknown>
+      : {}
     const carrierConfig = node.params
       ? JSON.stringify({
           ...(JSON.parse(descriptor.carrier.config) as Record<string, unknown>),
+          ...goalConfig,
           ...node.params
         })
-      : descriptor.carrier.config
+      : JSON.stringify({
+          ...(JSON.parse(descriptor.carrier.config) as Record<string, unknown>),
+          ...goalConfig
+        })
     return {
       ...base,
       type: descriptor.carrier.type,
@@ -215,6 +236,15 @@ function toCanvasGraph(graph: FlowGraph): FlowGraph {
     nodes: graph.nodes.map((node) => ({
       ...node,
       nodeId: canvasNodeId(node.nodeId),
+      ...(node.allowedNodeIds ? { allowedNodeIds: node.allowedNodeIds.map(canvasNodeId) } : {}),
+      ...(node.responsibleNodeId ? { responsibleNodeId: canvasNodeId(node.responsibleNodeId) } : {}),
+      ...(node.subjectSources ? {
+        subjectSources: node.subjectSources.map((source) => ({
+          ...source,
+          nodeId: canvasNodeId(source.nodeId)
+        }))
+      } : {}),
+      ...(node.gatedNodeIds ? { gatedNodeIds: node.gatedNodeIds.map(canvasNodeId) } : {}),
       ...(node.inputs
         ? {
             inputs: {
@@ -271,8 +301,9 @@ export function compileFlowGraph(
   options: { catalog?: readonly CapabilityDescriptor[] } = {}
 ): CompiledGraph {
   const catalog = options.catalog ?? buildCapabilityCatalog()
-  const validation = validateFlowGraph(graph, { catalog })
+  const validation = validateFlowGraph(graph, { catalog, requireRuntime: false })
   if (!validation.ok) throw new FlowGraphCompileError(validation.errors)
+  const runtimeErrors = validateFlowGraphRuntime(graph)
 
   const mapped = toCanvasGraph(graph)
   const graphIdSlug = graph.graphId.replace(/[^a-zA-Z0-9_-]/g, '-')
@@ -385,5 +416,12 @@ export function compileFlowGraph(
     node.y = pos.y
   }
 
-  return { nodes, edges, coordinatorNodeId, stateNodeId }
+  return {
+    nodes,
+    edges,
+    coordinatorNodeId,
+    stateNodeId,
+    runnable: runtimeErrors.length === 0,
+    runtimeErrors
+  }
 }

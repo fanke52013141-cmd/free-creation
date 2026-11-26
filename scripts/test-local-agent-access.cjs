@@ -55,7 +55,9 @@ async function captureDesktop(app,file){
 }
 ;(async()=>{
   const directory=await mkdtemp(join(tmpdir(),'canvas-local-agent-desktop-'))
-  if(!installedRoot) await cp(licensedSecurityDir(),join(directory,'security'),{recursive:true})
+  // CANVAS_OWNER=1 的构建已跳过授权门禁；干净 CI 没有本机 security 目录，不能复制。
+  // 非 owner 模式仍必须使用真实设备授权，installedRoot 发行版则按既有行为不复制。
+  if(!installedRoot && process.env.CANVAS_OWNER!=='1') await cp(licensedSecurityDir(),join(directory,'security'),{recursive:true})
   const evidence=qaOutputPath(installedRoot?'qa/local-agent-access/installed-vertical-slice':'qa/local-agent-access/vertical-slice')
   await mkdir(evidence,{recursive:true})
   let app; let client; let transport

@@ -69,6 +69,7 @@ import { FlowAssetStore } from './asset-store'
 import { agentReplyOutputProjection } from '../../shared/agent-flow/agent-outputs'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import { projectSemanticRevision } from './command-intent'
+import { stopAgentVideos } from './video-tasks'
 import { FlowReviewStore, reviewBinding } from './review-store'
 import { readStoredNodeRunStatus } from '../../shared/engine/run-status'
 import {
@@ -106,6 +107,7 @@ export class FlowCoordinatorHost {
   readonly store: CoordinationStore
   private readonly assets: FlowAssetStore
   private readonly active = new Map<string, AbortController>()
+  private readonly terminalEvents = new Set<string>()
   private readonly reviews: CoordinatorReviews
   private readonly reports: FlowReviewStore
   constructor(
@@ -197,6 +199,29 @@ export class FlowCoordinatorHost {
       )
     })
   }
+  private emitCoordinationTerminal(
+    run: CoordinationRun,
+    outcome: 'completed' | 'cancelled' | 'failed',
+    context: { projectId: string; nodeId: string; taskId: string; traceId: string; spanId: string },
+    attributes: { phase?: string; code?: string; resumesTraceId?: string } = {},
+    retain = true
+  ): void {
+    if (this.terminalEvents.has(run.taskId)) return
+    if (retain) this.terminalEvents.add(run.taskId)
+    emitGatewayEvent(
+      `agent.coordination.${outcome}`,
+      outcome === 'cancelled'
+        ? '主 Agent 协调已取消'
+        : outcome === 'failed'
+          ? '主 Agent 协调未确认'
+          : '主 Agent 协调结束',
+      context,
+      {
+        status: outcome === 'completed' ? 'success' : outcome === 'cancelled' ? 'cancelled' : 'failed',
+        attributes
+      }
+    )
+  }
   private file(input: Identity): ProjectFile {
     const file = this.open(input.projectId)
     if (!this.isActive(input.projectId) || !file)
@@ -208,6 +233,20 @@ export class FlowCoordinatorHost {
     if (scopeRevision(file, run.scopeIds, run.reviews) !== run.scopeRevision)
       throw new AgentRuntimeError('FLOW_REVISION_CONFLICT', 'coordination')
     return file
+  }
+  private ensureBudget(run: CoordinationRun): void {
+    const now = Date.now()
+    if (run.startedAt === undefined) run.startedAt = now
+    if (run.deadlineAt === undefined) {
+      const maxActiveMs = run.config.graph?.budgets.maxActiveMs ?? 600000
+      run.deadlineAt = run.startedAt + maxActiveMs
+    }
+    if (now >= run.deadlineAt)
+      throw new AgentRuntimeError('AGENT_BUDGET_EXHAUSTED', 'coordination')
+  }
+  private remainingBudgetMs(run: CoordinationRun): number {
+    this.ensureBudget(run)
+    return Math.max(1, run.deadlineAt! - Date.now())
   }
   /**
    * A3：等待原因单一判定。此前 view() 把所有 waiting 都报成 waitKind='human'，
@@ -278,11 +317,25 @@ export class FlowCoordinatorHost {
     this.file(input)
     const run = this.store.latest(input.projectId, input.nodeId)
     if (!run || terminal(run)) return run ? this.view(run) : null
+    const wasActive = this.active.has(run.taskId)
+    run.state = 'cancelled'
+    run.code = 'AGENT_CANCELLED'
+    this.store.save(run)
     this.active.get(run.taskId)?.abort()
     for (const review of run.reviews ?? []) this.cancelReview?.(run.projectId, review.nodeId)
     for (const child of run.children.filter(
       (c) => !['completed', 'cancelled', 'failed'].includes(c.state)
     )) {
+      const kind = run.config.graph?.nodes.find((node) => node.nodeId === child.nodeId)?.kind
+      if (kind === 'capability') {
+        stopAgentVideos(this.db, run.projectId, child.taskId)
+        child.state = 'cancelled'
+        continue
+      }
+      if (kind === 'human-task') {
+        child.state = 'cancelled'
+        continue
+      }
       const saved = this.specialists.inspect({ projectId: run.projectId, nodeId: child.nodeId })
       if (saved?.taskId === child.taskId && saved.state === 'completed') {
         const assignment = this.specialists.assignment(
@@ -296,13 +349,18 @@ export class FlowCoordinatorHost {
         child.state = 'cancelled'
       }
     }
-    run.state = 'cancelled'
-    run.code = 'AGENT_CANCELLED'
+    this.store.save(run)
     if (run.stateConfig.transitions.some((edge) => edge.from === run.phase && edge.event === 'flow.stopped')) {
       this.emitTrustedEvent(run, `${run.taskId}:stopped`, 'flow.stopped', run.revision)
     }
-    this.store.save(run)
     this.store.release(run)
+    this.emitCoordinationTerminal(run, 'cancelled', {
+      projectId: run.projectId,
+      nodeId: run.nodeId,
+      taskId: run.taskId,
+      traceId: run.traceId,
+      spanId: run.spanId
+    }, { code: 'AGENT_CANCELLED' }, wasActive)
     return this.view(run)
   }
   private bind(input: FlowAgentRun): CoordinationRun {
@@ -448,7 +506,9 @@ export class FlowCoordinatorHost {
       children: [],
       outputs: [],
       traceId: input.traceId,
-      spanId: input.spanId
+      spanId: input.spanId,
+      startedAt: Date.now(),
+      deadlineAt: Date.now() + (graphMode ? config.graph!.budgets.maxActiveMs : 600000)
     }
     this.store.create(run, [...controls])
     return run
@@ -467,7 +527,10 @@ export class FlowCoordinatorHost {
     this.file(input)
     let run = this.store.latest(input.projectId, input.nodeId)
     if (input.action === 'reconcile' || input.action === 'restore') return this.recover(input)
-    if (run && input.action === 'start' && run.taskId === input.requestId) return this.reply(run)
+    if (run && input.action === 'start' && run.taskId === input.requestId) {
+      if (terminal(run)) this.store.release(run)
+      return this.reply(run)
+    }
     if (run && !terminal(run) && input.action === 'start')
       throw new AgentRuntimeError('AGENT_TASK_OCCUPIED', 'admission')
     if (input.action === 'continue') {
@@ -499,6 +562,12 @@ export class FlowCoordinatorHost {
       throw new AgentRuntimeError('AGENT_TASK_BUSY', 'coordination')
     const controller = new AbortController()
     this.active.set(fixed.taskId, controller)
+    this.ensureBudget(fixed)
+    const deadlineTimer = setTimeout(
+      () => controller.abort(new AgentRuntimeError('AGENT_BUDGET_EXHAUSTED', 'coordination')),
+      Math.max(1, fixed.deadlineAt! - Date.now())
+    )
+    deadlineTimer.unref()
     const context = {
       projectId: fixed.projectId,
       nodeId: fixed.nodeId,
@@ -547,9 +616,12 @@ export class FlowCoordinatorHost {
       await graph.invoke({}, { recursionLimit: 130 })
       const current = this.store.latest(fixed.projectId, fixed.nodeId)!
       if (terminal(current)) this.store.release(current)
-      emitGatewayEvent('agent.coordination.completed', '主 Agent 协调结束', context, {
-        status: 'success'
-      })
+      this.emitCoordinationTerminal(
+        current,
+        current.state === 'cancelled' ? 'cancelled' : current.state === 'failed' ? 'failed' : 'completed',
+        context,
+        { code: current.code }
+      )
       return this.reply(current)
     } catch (error) {
       const current = this.store.latest(fixed.projectId, fixed.nodeId)!
@@ -561,14 +633,18 @@ export class FlowCoordinatorHost {
         }
         this.store.save(current)
       }
-      emitGatewayEvent('agent.coordination.failed', '主 Agent 协调未确认', context, {
-        status: 'failed',
-        attributes: { phase: 'coordination', code: current.code }
-      })
+      this.emitCoordinationTerminal(
+        current,
+        current.state === 'cancelled' ? 'cancelled' : 'failed',
+        context,
+        { phase: 'coordination', code: current.code }
+      )
       if (current.state === 'cancelled') return this.reply(current)
       throw error
     } finally {
+      clearTimeout(deadlineTimer)
       this.active.delete(fixed.taskId)
+      this.terminalEvents.delete(fixed.taskId)
     }
   }
   private async step(
@@ -579,6 +655,7 @@ export class FlowCoordinatorHost {
   ): Promise<boolean> {
     const stored = this.store.latest(run.projectId, run.nodeId)!
     if (signal.aborted || stored.state === 'cancelled') return false
+    this.ensureBudget(run)
     this.check(run)
     if (stored.paused) return this.wait(run, 'flow.paused')
     const control = await this.reviews.step(run, signal)
@@ -661,6 +738,7 @@ export class FlowCoordinatorHost {
           const candidate = this.specialists.describeAssignment(
             {
               ...input,
+              ...(child.routedInputEdgeIds ? { routedInputEdgeIds: child.routedInputEdgeIds } : {}),
               nodeId: child.nodeId,
               action: 'start',
               requestId: child.taskId
@@ -679,6 +757,7 @@ export class FlowCoordinatorHost {
           const snapshot = this.specialists.prepareAssignment(
             {
               ...input,
+              ...(child.routedInputEdgeIds ? { routedInputEdgeIds: child.routedInputEdgeIds } : {}),
               nodeId: child.nodeId,
               action: 'start',
               requestId: child.taskId
@@ -693,7 +772,12 @@ export class FlowCoordinatorHost {
         }
         prepared.set(child.nodeId, task.snapshot)
       }
-      const waves = assignmentWaves(assignments, prepared, file)
+      const waves = assignmentWaves(
+        assignments,
+        prepared,
+        file,
+        run.config.maxParallelTasks ?? 1
+      )
       const firstWaveIds = new Set(waves[0]?.map((assignment) => assignment.nodeId) ?? [])
       for (const child of queuedChildren)
         child.state = firstWaveIds.has(child.nodeId) ? 'ready' : 'queued'
@@ -792,13 +876,12 @@ export class FlowCoordinatorHost {
           .map(canonicalFlowJson)
       )
       if (
-        run.children.length !== run.childIds.length ||
         run.reviews?.some((review) => review.state !== 'passed') ||
-        run.children.some((c) => c.state !== 'completed') ||
         decision.outputs.some((r) => !allowed.has(canonicalFlowJson(r))) ||
         new Set(decision.outputs.map(canonicalFlowJson)).size !== decision.outputs.length
       )
         throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'coordination')
+      this.assertChildrenComplete(run)
       this.assets.resolveInputs(run.projectId, decision.outputs)
       run.outputs = decision.outputs
       run.decisionPending = false
@@ -825,11 +908,17 @@ export class FlowCoordinatorHost {
     candidates: Map<string, AgentTaskSnapshot>,
     signal: AbortSignal,
     contextManifests?: Map<string, ContextManifest>,
-    envelopes?: Map<string, ExecutionEnvelope>
+    envelopes?: Map<string, ExecutionEnvelope>,
+    routedInputEdgeIds?: string[]
   ): Promise<boolean> {
     const file = this.check(run)
     const assignments = admitAssignments(run, decision, candidates)
-    const waves = assignmentWaves(assignments, candidates, file)
+    const waves = assignmentWaves(
+      assignments,
+      candidates,
+      file,
+      run.config.maxParallelTasks ?? 1
+    )
     const firstWaveIds = new Set(waves[0]?.map((assignment) => assignment.nodeId) ?? [])
     // BL-11：v2 循环体子任务按载体轮次取独立 taskId（与上一轮历史区分）。
     const bodies = run.config.graph ? loopBodyInfo(run.config.graph) : new Map()
@@ -861,7 +950,8 @@ export class FlowCoordinatorHost {
           : {}),
         ...(envelopes?.get(assignment.nodeId)
           ? { executionEnvelope: envelopes.get(assignment.nodeId) }
-          : {})
+          : {}),
+        ...(routedInputEdgeIds ? { routedInputEdgeIds } : {})
       }
     })
     run.children.push(...children)
@@ -875,6 +965,7 @@ export class FlowCoordinatorHost {
     for (const child of children) {
       const candidate = candidates.get(child.nodeId)
       if (!candidate) throw new AgentRuntimeError('FLOW_HANDOFF_INPUT_REJECTED', 'handoff')
+      candidate.maxActiveMs = Math.min(candidate.maxActiveMs, this.remainingBudgetMs(run))
       prepared.set(
         child.nodeId,
         this.specialists.prepareAssignment(
@@ -950,13 +1041,12 @@ export class FlowCoordinatorHost {
     if (isFlowComplete(graph, facts, delivered)) {
       const finalChild = run.children.find((child) => graph.exits.includes(child.nodeId))
       if (
-        run.children.length !== run.childIds.length ||
-        run.children.some((child) => child.state !== 'completed') ||
         run.reviews?.some((review) => review.state !== 'passed') ||
         (run.stageDeliveries ?? []).some((record) => record.stale) ||
         !finalChild?.outputs.length
       )
         throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'stage-delivery')
+      this.assertChildrenComplete(run)
       return this.completeRoutedFlow(run, finalChild.outputs)
     }
     if (!next || run.children.some((child) => child.nodeId === next.nodeId))
@@ -1039,6 +1129,33 @@ export class FlowCoordinatorHost {
     })
   }
 
+  private assertChildrenComplete(run: CoordinationRun): void {
+    if (run.config.executionMode === 'graph') {
+      const skipped = new Set(run.skippedNodeIds ?? [])
+      const expected = run.childIds.filter((id) => !skipped.has(id))
+      if (
+        expected.some(
+          (nodeId) =>
+            !run.children.some(
+              (child) => child.nodeId === nodeId && child.state === 'completed'
+            )
+        ) ||
+        run.children.some(
+          (child) =>
+            child.state !== 'completed' &&
+            !(child.state === 'skipped' && skipped.has(child.nodeId))
+        )
+      )
+        throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'graph-complete')
+      return
+    }
+    if (
+      run.children.length !== run.childIds.length ||
+      run.children.some((child) => child.state !== 'completed')
+    )
+      throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'coordination')
+  }
+
   private completeRoutedFlow(run: CoordinationRun, outputs: AgentFlowAssetRef[]): false {
     this.assets.resolveInputs(run.projectId, outputs)
     run.outputs = outputs
@@ -1051,6 +1168,58 @@ export class FlowCoordinatorHost {
     run.state = 'completed'
     this.store.save(run)
     return false
+  }
+
+  private routedGraphCanvasEdgeIds(
+    graph: FlowGraph,
+    file: ProjectFile,
+    edgeState: ReturnType<typeof flowRouteState>['edgeState'],
+    targetNodeId: string
+  ): string[] {
+    const selected = new Set(
+      graph.edges
+        .filter((edge) => edgeState(edge) === 'satisfied')
+        .map((edge) => canonicalFlowJson({ from: edge.from, to: edge.to }))
+    )
+    return file.edges
+      .filter(
+        (edge) =>
+          edge.to.nodeId === targetNodeId &&
+          selected.has(canonicalFlowJson({ from: edge.from, to: edge.to }))
+      )
+      .map((edge) => edge.id)
+  }
+
+  private routedCanvasEdgeIds(
+    graph: FlowGraph,
+    file: ProjectFile,
+    edgeState: ReturnType<typeof flowRouteState>['edgeState']
+  ): string[] {
+    const graphEdgeStates = new Map(
+      graph.edges.map((edge) => [
+        canonicalFlowJson({ from: edge.from, to: edge.to }),
+        edgeState(edge)
+      ])
+    )
+    const scopeTargets = new Set(graph.nodes.map((node) => node.nodeId))
+    for (const node of graph.nodes) {
+      if (node.kind !== 'agent') continue
+      try {
+        const config = AgentNodeConfigSchema.parse(
+          JSON.parse(shape(file, node.nodeId).props.config)
+        )
+        for (const id of config.allowedNodeIds) scopeTargets.add(id)
+      } catch {
+        /* The normal bind path reports the invalid carrier config. */
+      }
+    }
+    return file.edges
+      .filter((edge) => {
+        if (!scopeTargets.has(edge.to.nodeId)) return false
+        const key = canonicalFlowJson({ from: edge.from, to: edge.to })
+        return !graphEdgeStates.has(key) || graphEdgeStates.get(key) === 'satisfied'
+      })
+      .map((edge) => edge.id)
   }
 
   /**
@@ -1117,6 +1286,11 @@ export class FlowCoordinatorHost {
     )
     run.skippedNodeIds = route.skipped
     run.stalledNodeIds = undefined
+    const { edgeState } = flowRouteState(
+      graph, facts, delivered, loopIterations, isRequiredInput, executionSkipped
+    )
+    const routedInputEdgeIds = this.routedCanvasEdgeIds(graph, file, edgeState)
+    const routedInput = { ...input, routedInputEdgeIds }
     if (isFlowComplete(graph, facts, delivered, loopIterations, isRequiredInput, executionSkipped)) {
       // 出口可能是审核节点（交付物=被审核通过的固定版本）或普通子节点。
       const exitReview = (run.reviews ?? []).find(
@@ -1223,7 +1397,7 @@ export class FlowCoordinatorHost {
         }
         const candidate = this.specialists.describeAssignment(
           {
-            ...input,
+            ...routedInput,
             nodeId: node.nodeId,
             action: 'start',
             requestId: hash([
@@ -1267,19 +1441,17 @@ export class FlowCoordinatorHost {
         candidates,
         signal,
         contextManifests,
-        envelopes
+        envelopes,
+        routedInputEdgeIds
       )
     }
     // ②：capability 图节点直接执行（复用 node.execute 账本端口），不经 agent 分派。
     if (next.kind === 'capability') {
-      const { edgeState } = flowRouteState(
-        graph, facts, delivered, loopIterations, isRequiredInput, executionSkipped
-      )
-      return this.dispatchCapability(run, input, next, graph, facts, edgeState, loopIterations, signal)
+      return this.dispatchCapability(run, routedInput, next, graph, facts, edgeState, loopIterations, signal)
     }
     // ②：human-task 图节点停等人工提交（C4 执行器），提交后续跑重新分派应用。
     if (next.kind === 'human-task') {
-      return this.dispatchHumanTask(run, next, graph, signal)
+      return this.dispatchHumanTask(run, routedInput, next, graph, edgeState, signal)
     }
     let contextManifest: ContextManifest | undefined
     if (next.inputs) {
@@ -1304,7 +1476,7 @@ export class FlowCoordinatorHost {
     }
     const nextBody = bodyOf.get(next.nodeId)
     const nextRound = nextBody ? (loopIterations[nextBody.carrierId] ?? 1) : undefined
-    return this.dispatchRoutedAgent(run, input, next, signal, contextManifest, {
+    return this.dispatchRoutedAgent(run, routedInput, next, signal, contextManifest, {
       loopRound: nextRound ?? loopIterations[next.nodeId]
     })
   }
@@ -1375,7 +1547,8 @@ export class FlowCoordinatorHost {
       candidates,
       signal,
       contextManifest ? new Map([[next.nodeId, contextManifest]]) : undefined,
-      envelope ? new Map([[next.nodeId, envelope]]) : undefined
+      envelope ? new Map([[next.nodeId, envelope]]) : undefined,
+      input.routedInputEdgeIds
     )
   }
 
@@ -1549,6 +1722,9 @@ export class FlowCoordinatorHost {
         taskId,
         agentNodeId: run.nodeId,
         targetNodeId: next.nodeId,
+        parentCoordinatorTaskId: run.taskId,
+        parentDeadlineAt: run.deadlineAt,
+        ...(input.routedInputEdgeIds ? { routedInputEdgeIds: this.routedGraphCanvasEdgeIds(graph, file, edgeState, next.nodeId) } : {}),
         contractVersion: node.contractVersion,
         inputs,
         ...(material && materialPortId
@@ -1604,8 +1780,10 @@ export class FlowCoordinatorHost {
    */
   private async dispatchHumanTask(
     run: CoordinationRun,
+    input: FlowAgentRun,
     next: FlowNode,
     graph: FlowGraph,
+    edgeState: ReturnType<typeof flowRouteState>['edgeState'],
     signal: AbortSignal
   ): Promise<boolean> {
     const file = this.check(run)
@@ -1625,7 +1803,7 @@ export class FlowCoordinatorHost {
     const commandId = `graph:${hash([taskId, 'human', run.decisions])}`
     const inputPorts = node.ports.filter((port) => port.dir === 'in')
     const incoming = graph.edges.filter(
-      (edge) => edge.to.nodeId === next.nodeId
+      (edge) => edge.to.nodeId === next.nodeId && edgeState(edge) === 'satisfied'
     )
     const inputs = incoming.map((edge) => {
       const upstream = run.children
@@ -1690,6 +1868,9 @@ export class FlowCoordinatorHost {
           taskId,
           agentNodeId: run.nodeId,
           scopedHumanTask: true,
+          parentCoordinatorTaskId: run.taskId,
+          parentDeadlineAt: run.deadlineAt,
+          ...(input.routedInputEdgeIds ? { routedInputEdgeIds: this.routedGraphCanvasEdgeIds(graph, file, edgeState, next.nodeId) } : {}),
           targetNodeId: next.nodeId,
           contractVersion: node.contractVersion,
           inputs,
@@ -1700,6 +1881,11 @@ export class FlowCoordinatorHost {
         signal
       )
     } catch (error) {
+      if (signal.aborted || this.store.latest(run.projectId, run.nodeId)!.state === 'cancelled') {
+        child.state = 'cancelled'
+        this.store.save(run)
+        return false
+      }
       child.state = 'blocked'
       this.store.save(run)
       throw new AgentRuntimeError(
@@ -1717,10 +1903,26 @@ export class FlowCoordinatorHost {
       this.emitTrustedEvent(run, `${taskId}:completed`, 'agent.completed', run.revision)
       return true
     }
-    // skipped/pending：停等人工提交，不伪造成功；续跑后重新分派应用提交。
-    child.state = 'waiting'
+    if (receipt.state === 'skipped' && receipt.code === 'FLOW_EXECUTION_SKIPPED') {
+      child.state = 'waiting'
+      this.store.save(run)
+      return this.wait(run, 'human.wait')
+    }
+    if (receipt.state === 'cancelled') {
+      child.state = 'cancelled'
+      this.store.save(run)
+      if (signal.aborted || this.store.latest(run.projectId, run.nodeId)!.state === 'cancelled')
+        return false
+      throw new AgentRuntimeError(receipt.code ?? 'AGENT_CANCELLED', 'graph-human-task')
+    }
+    child.state = receipt.state === 'failed' ? 'failed' : 'blocked'
     this.store.save(run)
-    return this.wait(run, 'human.wait')
+    throw new AgentRuntimeError(
+      receipt.state === 'pending' || receipt.state === 'unknown'
+        ? 'FLOW_COMMAND_OUTCOME_UNKNOWN'
+        : receipt.code ?? 'FLOW_CHILD_BLOCKED',
+      'graph-human-task'
+    )
   }
 
   /**
@@ -1926,6 +2128,11 @@ export class FlowCoordinatorHost {
       const stage = stageByNode.get(child.nodeId)
       if (!stage || child.state !== 'completed' || !child.outputs.length) continue
       if (records.some((record) => record.taskId === child.taskId && !record.stale)) continue
+      const isAgent =
+        run.config.executionMode !== 'graph' ||
+        run.config.graph?.nodes.some(
+          (node) => node.nodeId === child.nodeId && node.kind === 'agent'
+        ) === true
       records.push(
         StageDeliveryRecordSchema.parse({
           schemaVersion: 1,
@@ -1933,16 +2140,20 @@ export class FlowCoordinatorHost {
           nodeId: child.nodeId,
           taskId: child.taskId,
           outputRefs: child.outputs,
-          handoffNote: child.handoffNote ?? this.specialists.deliveryHandoff(run.projectId, child.nodeId, child.taskId),
+          handoffNote:
+            child.handoffNote ??
+            (isAgent
+              ? this.specialists.deliveryHandoff(run.projectId, child.nodeId, child.taskId)
+              : undefined),
           ...(child.contextManifest
             ? { contextManifestHash: child.contextManifest.manifestHash }
             : {}),
           ...(child.executionEnvelope
             ? { envelopeHash: `sha256:${hash(child.executionEnvelope)}` }
             : {}),
-          humanDecided: (run.config.executionMode !== 'graph' ||
-            run.config.graph?.nodes.some((node) => node.nodeId === child.nodeId && node.kind === 'agent')) === true
-            && this.specialists.humanDecision(
+          humanDecided:
+            isAgent &&
+            this.specialists.humanDecision(
               { projectId: run.projectId, nodeId: child.nodeId },
               run.taskId,
               child.taskId
@@ -2027,7 +2238,9 @@ export class FlowCoordinatorHost {
           ? 'FLOW_REWORK_BUDGET_EXHAUSTED'
           : unresolved
             ? 'FLOW_COMMAND_OUTCOME_UNKNOWN'
-            : undefined
+            : activeChildCount > 0
+              ? 'FLOW_STAGE_REWORK_ACTIVE_CHILD'
+              : undefined
     return {
       stageKey,
       stageIndex: index + 1,
@@ -2198,6 +2411,7 @@ export class FlowCoordinatorHost {
     )
       throw new AgentRuntimeError('RESUME_CONFLICT', 'recovery')
     if (this.active.has(run.taskId)) throw new AgentRuntimeError('AGENT_TASK_BUSY', 'recovery')
+    const terminalOnEntry = terminal(run)
     const context = {
       projectId: run.projectId,
       nodeId: run.nodeId,
@@ -2213,7 +2427,10 @@ export class FlowCoordinatorHost {
     })
     try {
       this.check(run)
-      if (terminal(run) || run.state === 'waiting') return this.reply(run)
+      if (terminal(run) || run.state === 'waiting') {
+        if (terminal(run)) this.store.release(run)
+        return this.reply(run)
+      }
       const reasons: string[] = []
       let canRestore = false
       let observed = false
@@ -2397,12 +2614,11 @@ export class FlowCoordinatorHost {
           )
           if (
             !run.outputs.length ||
-            run.children.length !== run.childIds.length ||
-            run.children.some((child) => child.state !== 'completed') ||
             run.reviews?.some((review) => review.state !== 'passed') ||
             run.outputs.some((ref) => !allowed.has(canonicalFlowJson(ref)))
           )
             throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'recovery')
+          this.assertChildrenComplete(run)
           this.assets.resolveInputs(run.projectId, run.outputs)
           run.state = 'completed'
           run.code = undefined
@@ -2430,9 +2646,9 @@ export class FlowCoordinatorHost {
       failed = true
       const current = this.store.latest(run.projectId, run.nodeId)
       if (current?.state === 'cancelled') {
-        emitGatewayEvent('agent.coordination.completed', '主控核对已取消', context, {
-          status: 'cancelled',
-          attributes: { phase: input.action, code: 'AGENT_CANCELLED' }
+        this.emitCoordinationTerminal(current, 'cancelled', context, {
+          phase: input.action,
+          code: 'AGENT_CANCELLED'
         })
         return this.reply(current)
       }
@@ -2442,21 +2658,23 @@ export class FlowCoordinatorHost {
         run.recovery = { reasons: [run.code], canRestore: false }
         this.store.save(run)
       }
-      emitGatewayEvent('agent.coordination.failed', '主控执行事实核对失败', context, {
-        status: 'failed',
-        attributes: {
-          phase: input.action,
-          code: error instanceof AgentRuntimeError ? error.code : 'FLOW_RECOVERY_FAILED'
-        }
+      this.emitCoordinationTerminal(run, 'failed', context, {
+        phase: input.action,
+        code: error instanceof AgentRuntimeError ? error.code : 'FLOW_RECOVERY_FAILED'
       })
       throw error
     } finally {
       this.active.delete(run.taskId)
-      if (!failed)
-        emitGatewayEvent('agent.coordination.completed', '主控执行事实核对结束', context, {
-          status: 'success',
-          attributes: { phase: input.action, code: run.code }
-        })
+      this.terminalEvents.delete(run.taskId)
+      if (!failed && !terminalOnEntry) {
+        const current = this.store.latest(run.projectId, run.nodeId) ?? run
+        this.emitCoordinationTerminal(
+          current,
+          current.state === 'cancelled' ? 'cancelled' : current.state === 'failed' ? 'failed' : 'completed',
+          context,
+          { phase: input.action, code: current.code }
+        )
+      }
     }
   }
   private waitForContextBudget(run: CoordinationRun, manifest: ContextManifest): false {

@@ -1,8 +1,9 @@
-# 本地 Agent 接入能力矩阵（评审草案）
+# 本地 Agent 接入能力矩阵
+
+> **当前口径（2026-11-26）**：可调用操作、运输面与节点动作以 [`generated/contracts.json`](./generated/contracts.json) 和 `capability.list` 为准，本文不手写数量。下文 A0–A4 表保留历史分期与设计基线；标为 `planned` 的历史单元格不能用来否定后续已实现的操作，当前状态必须核对机器契约和交付台账。
 
 2026-11-07 完整目标接续：[一致性规范](../../AGENT_PARITY_SPEC.md)、[F0–F10开发计划](15-gui-cli-mcp-parity-plan.md)
-和[32类节点动作表](16-node-action-coverage.md)补齐当前全软件范围。以下A0–A4及planned表保留为历史分期，
-不能用于豁免今后的GUI新功能同步要求；项目/资源包导入纳入最终目标，当前仍未开放。
+和[节点动作表](16-node-action-coverage.md)补齐当前全软件范围。项目包、结构包和资源包导入/导出已实现，边界见[包传输台账](24-transfer-delivery.md)。
 
 2026-11-20：画布底部全局搜索将当前画布、当前项目素材、本机资源库和节点流合并展示。CLI 与 MCP 可组合现有 `graph.get`、`media.list`、`library.search` / `library.resource.get`、`node.library.search`、`composite.search` / `composite.get` / `composite.draft.get` 读取对应来源。节点库摘要搜索增加正文匹配，入参与出参结构保持兼容。桌面搜索可见当前编辑中的画布，外部图查询仍以现有项目快照规则为准。未新增合并查询命令。搜索结果拖放复用现有画布移动、节点创建、节点库模板插入、固定版本组合与素材添加，外部入口沿用 graph.patch、node.library.insert、composite.get 和 library.resource.materialize 等已有操作。证据为真实 CLI 与 MCP 传输测试、节点库服务测试和浏览器模拟数据验收。
 
@@ -12,7 +13,7 @@
 
 2026-11-07：新增 Skill 安装/查询、AI 对话技能绑定/查询、节点库保存/查询共6项，Registry共25项。范围、参数与限制见[接入说明](13-chat-skills-node-library.md)。实现不等于全部桌面/安装包验收完成。
 
-2026-10-24 内容 Skill Agent 接续：AI 对话与 AI 处理桌面节点增加固定 Skill 配置和自主内容循环；外部节点执行、Skill 安装仍未开放，不提升本矩阵状态。公共端口/输出和外部 Schema 不变；接入影响、持久化、日志和验证见[本包交付记录](../SKILL_AGENT_DELIVERY_2026_10_24.md)。
+2026-10-24 内容 Skill Agent 接续：AI 对话与 AI 处理桌面节点增加固定 Skill 配置和自主内容循环；该包当时未开放外部节点执行与 Skill 安装，后续已由其他交付接入。公共端口/输出和外部 Schema 不变；接入影响、持久化、日志和验证见[本包交付记录](../SKILL_AGENT_DELIVERY_2026_10_24.md)。
 
 状态：评审草案；日期：2026-10-24；范围：本地单用户桌面应用。
 
@@ -39,7 +40,7 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 
 “内部 Flow 支持”只表示画布原生 Agent Flow 已有目标适配/命令协议；它不是 `implemented`，也不是外部 MCP/CLI/API 的可用证明。桌面节点有 executor 同样不能推导为可由外部 Agent 自动执行。
 
-覆盖率分母由主规范的 operation Registry 自动生成：每个唯一 `operationId`、每个 transport 暴露和 33 个 Active 节点分别计数（节点数以 `generated/contracts.json` 为机器真值）。每次发布报告列出 `implemented / verified / excluded / planned` 的实际 operation、transport 和节点清单，不以“已有 IPC 数”或“已有 executor 数”替代。
+覆盖率分母由主规范的 operation Registry 自动生成：每个唯一 `operationId`、每个 transport 暴露和每个 Active 节点分别计数；操作与节点数量均以 [`generated/contracts.json`](./generated/contracts.json) 为机器真值。每次发布报告列出 `implemented / verified / excluded / planned` 的实际 operation、transport 和节点清单，不以“已有 IPC 数”或“已有 executor 数”替代。
 
 ### 1.2 阶段
 
@@ -47,7 +48,7 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 | ---- | -------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | `A0` | 规范、操作目录、统一请求信封、身份与日志门禁底座   | 本文件、接口规范、变更门禁和测试模板进入 CI；没有业务接口                                   |
 | `A1` | 一条端到端 MCP + CLI 路径，项目读写与导出          | `run.get`、项目 CRUD/导出在隔离数据中完成，并发/幂等/脱敏通过                               |
-| `A2` | 图与全部 32 节点的结构化读取、编辑；确定性节点执行 | 任意 Active 节点均可被枚举、读取契约、创建/更新配置、连线和删除；已开放执行的节点有独立验收 |
+| `A2` | 图与全部 Active 节点的结构化读取、编辑；确定性节点执行 | 任意 Active 节点均可被枚举、读取契约、创建/更新配置、连线和删除；已开放执行的节点有独立验收 |
 | `A3` | 模型/媒体长任务与已有 Agent Flow 协议              | 租约、固定输入、异步状态、取消、unknown、恢复和结果版本与桌面一致                           |
 | `A4` | 复杂交互、高风险动作及可选 localhost HTTP          | 专项安全与人工确认完成；HTTP 不早于 stdio MCP/CLI 验证后开放                                |
 
@@ -77,7 +78,7 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 | 复制项目         | `project.clone`    | A1   | verified（CLI/MCP，见[台账07](07-a1-2-clone-delete.md)） | 复用 clone 的媒体 ID/结构化引用重映射；固定源版本，活动源先保存握手；不继承运行任务                       | 源项目不变、克隆可独立打开                            |
 | 删除项目         | `project.delete`（前置 `project.delete.precheck` 签发短期 impactToken） | A1   | verified（CLI/MCP，见[台账07](07-a1-2-clone-delete.md)） | 硬删除；必须精确 `projectId`、预检令牌绑定权威修订与影响摘要、显式确认；拒绝活动画布与运行/未知占用；禁止批量删除；同名新项目不受旧回执影响 | 确认缺失/令牌过期或事实漂移/占用拒绝；审计与幂等       |
 | 导出项目         | `project.export`   | A1   | verified（CLI/MCP，见[台账06](06-a1-1-desktop-projects.md)） | 调用 [transfer.ts](../../src/main/store/transfer.ts)；目标限在调用方声明的已允许目录；回传缺失媒体计数 | API Key 排除、媒体与结构化引用检查、临时文件提交/清理 |
-| 导入项目包       | `project.import`   | —    | excluded     | 用户本轮明确不对接项目导入；保留桌面路径，不开放工具                                                   | tools/list 中不存在；直调返回稳定拒绝码               |
+| 导入项目/结构包  | `project.import` / `project.importStructure` | F7 | implemented（CLI/MCP；服务级验收，见[台账24](24-transfer-delivery.md)） | 仅接受受控导出目录内的包；复用暂存、校验、引用重映射、凭据剥离、事务与失败清理；真实桌面端到端边界见台账 | 包往返、越界路径拒绝、损坏包回滚、幂等重放、密钥剥离 |
 
 “媒体受控接入”是把一个已选定的本地文件经受控目录、MIME/大小/哈希检查后物化为媒体资产；它不接受项目包，也不替代项目导入。因此它不违反上述 `project.import` 的排除范围。
 
@@ -99,7 +100,7 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 | 发布/归档资源修订  | `library.publish_revision` / `library.archive_revision` | A4          | planned      | 版本不可变；归档含确认                                                        | 修订冲突、回读一致           |
 | 集合维护           | `library.save_collection`                               | A2          | planned      | 仅 ID 引用；不把项目图复制为第二拓扑                                          | 顺序/引用校验、保存重开      |
 | 导出资源包         | `library.export_package`                                | A1 可选扩展 | planned      | 与用户明确要求的project.export分开；复用现有 transfer；不含 API Key，路径受控 | 包往返、脱敏、缺失引用报告   |
-| 导入资源包         | `library.import_package`                                | A4          | planned      | 非本轮必须项，待单独安全设计；与项目导入不同                                  | 重映射、事务回滚、恶意包拒绝 |
+| 导入/导出资源包   | `library.import` / `library.export`                     | F7          | implemented（CLI/MCP；服务级验收，见[台账24](24-transfer-delivery.md)） | 受控目录、清单/哈希校验、单事务、重复包拒绝；导出排他落位并回传摘要 | 包往返、损坏包回滚、重复包、越界路径、密钥剥离 |
 
 ### 2.3 画布图与节点通用操作
 
@@ -107,37 +108,37 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 
 | 能力                 | 建议 `operationId`                          | 阶段  | 当前外部状态 | 风险与约束                                                                         | 验收                                       |
 | -------------------- | ------------------------------------------- | ----- | ------------ | ---------------------------------------------------------------------------------- | ------------------------------------------ |
-| 读取图与契约目录     | `graph.get` / `node.type.list`              | A1    | planned      | 返回稳定 nodeId/type/contractVersion/ports/schema 引用                             | 与注册表快照一致                           |
-| 受控原子图写         | `graph.patch`                               | A2    | planned      | 显式 add/update/remove node/edge 与关系类型；不接收任意快照覆盖；autoLayout 可选智能整理 | 全成或全拒绝、修订冲突、关系类型校验       |
+| 读取图与契约目录     | `graph.get` / `node.type.list`              | A1–A2 | implemented/verified（见[台账18](18-graph-access-delivery.md)） | 返回稳定 nodeId/type/contractVersion/ports/schema 引用；具体字段以机器契约为准 | 与注册表快照一致 |
+| 受控原子图写         | `graph.patch`                               | A2    | implemented/verified（见[台账18](18-graph-access-delivery.md)） | 显式 add/update/remove node/edge 与关系类型；不接收任意快照覆盖；autoLayout 可选智能整理 | 全成或全拒绝、修订冲突、关系类型校验 |
 | 智能整理坐标         | `graph.layout`                              | A2    | verified（L2） | 拓扑分层/角色泳道/网格，与 GUI 智能整理同一 layoutGraph 纯函数；只改坐标不改配置，单撤销步 | 三入口坐标一致、零重叠、保存屏障、修订冲突 |
 | 状态机人工事件       | `flowStateMachine.submitEvent` / `flowStateMachine.get` | A2 | verified（C3） | 与 GUI 提交事件按钮同一待处理写入；修订核对；迁移由运行时执行器校验，外部不能直接改状态 | 提交→运行推进、过期修订拒绝、output.get out-state 投影 |
-| 创建节点             | `node.create`                               | A2    | planned      | 只接受 Active 类型与声明 config/text；必须经注册校验                               | 32 类型逐项创建、旧类型拒绝                |
-| 读取节点/运行摘要    | `node.get`                                  | A2    | planned      | 默认安全摘要；正文可在显式字段选择下返回，但不得进入诊断                           | 结果与保存快照一致                         |
-| 更新配置或正文       | `node.update`                               | A2    | planned      | config 与 text 分离；契约版本不可由更新伪造                                        | 输入 schema、冲突、保存恢复                |
-| 重命名/摆放/删除节点 | `node.rename` / `node.move` / `node.delete` | A2    | planned      | 删除仅影响声明关系；产物/来源按现有业务规则处理                                    | 连线清理、产物不被隐式误删                 |
-| 创建/删除关系        | `edge.create` / `edge.delete`               | A2    | planned      | 明确数据/控制/状态关系及相应准入；生产溯源只读，由正式产物路径生成，不能由外部伪造 | 全连接矩阵、many 顺序、拒绝无效边/伪造溯源 |
-| 校验图               | `graph.validate`                            | A2    | planned      | 只读；报告 portId/字段路径，不写入用户内容至诊断                                   | 断边、循环、schema、版本案例               |
-| 提交节点执行         | `node.execute`                              | A2–A3 | planned      | 逐节点按第 3 节开放；长任务不得伪装同步成功                                        | 状态机、取消、unknown、重开恢复            |
+| 创建节点             | `node.create`                               | A2    | implemented/verified（见[台账18](18-graph-access-delivery.md)） | 只接受 Active 类型与声明 config/text；必须经注册校验 | Active 类型逐项创建、旧类型拒绝 |
+| 读取节点/运行摘要    | `node.get`                                  | A2    | implemented/verified（见[台账18](18-graph-access-delivery.md)） | 默认安全摘要；正文可在显式字段选择下返回，但不得进入诊断 | 结果与保存快照一致 |
+| 更新配置或正文       | `node.update`                               | A2    | implemented/verified（见[台账18](18-graph-access-delivery.md)） | config 与 text 分离；契约版本不可由更新伪造 | 输入 schema、冲突、保存恢复 |
+| 重命名/摆放/删除节点 | `node.rename` / `node.move` / `node.delete` | A2    | implemented（逐动作状态以机器契约为准） | 删除仅影响声明关系；产物/来源按现有业务规则处理 | 连线清理、产物不被隐式误删 |
+| 创建/删除关系        | `edge.create` / `edge.delete`               | A2    | implemented（逐动作状态以机器契约为准） | 明确数据/控制/状态关系及相应准入；生产溯源只读，由正式产物路径生成，不能由外部伪造 | 全连接矩阵、many 顺序、拒绝无效边/伪造溯源 |
+| 校验图               | `graph.validate`                            | A2    | implemented（见[台账18](18-graph-access-delivery.md)） | 只读；报告 portId/字段路径，不写入用户内容至诊断 | 断边、循环、schema、版本案例 |
+| 提交节点执行         | `node.execute`                              | A2–A3 | implemented（见[台账19](19-run-access-delivery.md)） | 逐节点按第 3 节开放；长任务返回持久 taskId，不得伪装同步成功 | 状态机、取消、unknown、重开恢复 |
 
-A1.4首包接续：[查询交付台账](08-a1-4-read-only-queries.md)。`library.search`只开放摘要检索；`model.list`只回本地配置/验证事实，不探测在线；`run.get`仅覆盖持久化内部Agent任务；`diagnostics.summary`仅健康计数。其余动作继续planned。
+A1.4 首包接续：[查询交付台账](08-a1-4-read-only-queries.md)。该包当时 `library.search` 只开放摘要检索，`model.list` 只回本地配置/验证事实，`run.get` 仅覆盖持久化内部 Agent 任务，`diagnostics.summary` 仅健康计数；其余动作的后续状态以机器契约为准。
 
 ### 2.4 模型、媒体和运行诊断
 
 | 能力                    | 建议 `operationId`                                                                  | 阶段                   | 当前外部状态 | 风险与约束                                                                            | 验收                                     |
 | ----------------------- | ----------------------------------------------------------------------------------- | ---------------------- | ------------ | ------------------------------------------------------------------------------------- | ---------------------------------------- |
 | 列出已验证模型能力      | `model.list`                                                                        | A1                     | implemented（首包）      | 只给连接 ID、模型 ID、能力和状态；绝不返回密钥/完整 URL                               | 脱敏、离线/失效状态                      |
-| 受控媒体接入            | `media.ingest`                                                                      | A3                     | planned      | 目录授权、大小/MIME/内容校验、临时落盘后提交                                          | 失败回滚、媒体 ID/相对路径重映射         |
-| 读取媒体元信息/受控导出 | `media.get` / `media.export`                                                        | A3                     | planned      | 返回资源 ID、尺寸、MIME；文件传输须显式路径或二进制通道                               | 越界路径/签名 URL 不泄露                 |
-| 运行查询/取消/核对/继续 | `run.get` / `run.list` / `run.wait` / `run.cancel` / `run.reconcile` / `run.resume` | A1 基础查询，A2–A3扩展 | run.get子集implemented；其余planned      | 按taskId；接受不等于完成；unknown 不重放；取消核对远端事实；resume逐类开放            | 超时、远端未知、重开、幂等               |
-| 输出列出/读取/选择/导出 | `output.list` / `output.get` / `output.select` / `output.export`                    | A2 基础，A3媒体扩展    | planned      | 选择只改变显式活动输出，不覆盖不可变产物；导出受控路径                                | 产物版本、来源、缺失媒体、导出脱敏       |
-| Flow 生命周期           | `flow.start` / `flow.get` / `flow.stop` / `flow.resume` / `flow.reconcile`          | A3                     | planned      | 复用命令账本/租约；未知不重放，不建立第二任务拓扑                                     | 占用、冲突、暂停、恢复、未知             |
-| 审核读取/AI 继续        | `review.get` / `review.continue`                                                    | A3                     | planned      | AI 只能按固定资产/规则继续；人类确认、发布、选择门禁不可由调用方冒充                  | 技术失败与质量拒绝区分；人工门禁拒绝伪造 |
-| 诊断摘要/导出           | `diagnostics.summary` / `diagnostics.export`                                        | A1                     | summary健康计数implemented；export planned      | 复用诊断包；不能导出密钥、签名 URL 或原始请求响应；正文/提示词/回复不进入日志或诊断包 | 脱敏样例、范围/截断/丢失显示             |
-| provider/API Key 管理   | —                                                                                   | —                      | excluded     | 外部 Agent 不读写供应商配置、密钥或任意 URL                                           | tools/list 不暴露，直调拒绝              |
+| 受控媒体接入            | `media.import` / `media.list` / `media.delete`                                     | A3                     | implemented（见[台账21](21-media-access-delivery.md)） | 目录授权、大小/MIME/内容校验、临时落盘后提交；不得读取任意文件正文 | 失败回滚、媒体 ID/相对路径重映射、越界路径拒绝 |
+| 读取媒体元信息/受控导出 | `media.getRecipe` / `media.batchExport`                                           | A3                     | implemented（逐动作状态以机器契约为准） | 返回资源 ID、尺寸、MIME；文件传输须显式路径或二进制通道 | 越界路径/签名 URL 不泄露 |
+| 运行查询/取消/核对/继续 | `run.get` / `run.wait` / `run.cancel`                                               | A1 基础查询，A2–A3扩展 | implemented（见[台账19](19-run-access-delivery.md)） | 按 taskId；接受不等于完成；unknown 不重放；取消核对远端事实 | 超时、远端未知、重开、幂等 |
+| 输出读取                | `output.get`                                                                        | A2 基础，A3媒体扩展    | implemented（见[台账19](19-run-access-delivery.md)） | 返回正式端口投影与固定资产引用；不覆盖不可变产物 | 产物版本、来源、缺失媒体、导出脱敏 |
+| Flow 生命周期           | `flowAgent.*` / `flow.command.*`                                                   | A3                     | implemented（见[台账28](28-flow-agents-delivery.md)、[台账29](29-flow-commands-delivery.md)） | 复用命令账本/租约；未知不重放，不建立第二任务拓扑 | 占用、冲突、暂停、恢复、未知 |
+| 审核读取/AI 继续        | `review.get` / `review.continue`                                                    | A3                     | 以机器契约和 Flow Agent 台账为准 | AI 只能按固定资产/规则继续；人类确认、发布、选择门禁不可由调用方冒充 | 技术失败与质量拒绝区分；人工门禁拒绝伪造 |
+| 诊断摘要/导出           | `diagnostics.summary` / `diagnostics.query` / `diagnostics.exportBundle` / `diagnostics.exportNodeRun` | A1/A9 | implemented（逐动作状态以机器契约为准） | 复用诊断包；不能导出密钥、签名 URL 或原始请求响应；正文/提示词/回复不进入日志或诊断包 | 脱敏样例、范围/截断/丢失显示 |
+| provider/模型配置       | `provider.*` / `model.*`                                                            | F9                     | 部分 implemented；密钥明文读取仍 excluded | 只开放受控配置、验证、绑定与凭据状态；不得返回密钥或任意 URL | 脱敏、来源绑定、网络/费用确认、幽灵操作拒绝 |
 
 ## 3. 节点逐项对接清单
 
-节点标识、版本和可创建范围以 [共享节点清单](../../src/shared/types/index.ts) 和 [注册表](../../src/renderer/src/nodes/specs/index.tsx) 为准。下表的“结构化适配”均为 A2 目标：列举、读取契约与安全摘要、创建、更新 config/text、端口连线和图校验。`执行`描述的是建议开放阶段，并不表示当前对外可执行。
+节点标识、版本和可创建范围以[共享节点清单](../../src/shared/types/index.ts)、[注册表](../../src/renderer/src/nodes/specs/index.tsx)和机器契约为准。下表保留节点适配建议与限制；`执行`一栏是建议开放阶段，不表示当前对外可执行。逐节点、逐动作的当前状态必须核对 `node-actions.ts` 与 [`generated/contracts.json`](./generated/contracts.json)。
 
 **节点动作状态以 `node-actions.ts` 矩阵与 `generated/contracts.json` 为机器真值，本文不再手写“全部 planned”。** 2026-11-24 按真实窗口验收回执登记了四个核心节点的部分动作：`agent` desktopTested=2（创建/排列、连线）、`state-machine`=4（创建、事件推进、输出投影、状态读取）、`ai-review`=2（创建、review-gate 连线）、`human-task`=4（创建、执行交付、输出投影、等待/恢复）；未覆盖动作仍保持 contract-tested/planned。登记完成不等于全部动作可调用，实施账本按 `discover/read/create/update/connect/execute/result/export` × transport 记录独立状态、证据链接和不适用原因。
 

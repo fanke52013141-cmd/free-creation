@@ -6,11 +6,12 @@ import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { CanvasNode } from '../src/shared/types'
-import { closeDb, getDataDir } from '../src/main/store/db'
+import { closeDb, getDataDir, getDb } from '../src/main/store/db'
 import { createProject, openProject, saveProject } from '../src/main/store/projects.repo'
 import { LocalAccessService } from '../src/main/agent-access/service'
 import { setGatewayEventSink } from '../src/main/diagnostics/gateway-events'
 import type { AccessDesktop } from '../src/main/agent-access/desktop'
+import { externalRunErrorCode } from '../src/main/agent-access/run-errors'
 import {
   createExternalRun,
   getExternalRun,
@@ -114,6 +115,49 @@ afterEach(() => {
 })
 
 describe('local Agent run access', () => {
+  it('rejects stale expectedGraphVersion before creating a task or calling the desktop', async () => {
+    const p = createProject('过期执行')
+    const saved = saveProject({
+      id: p.id,
+      graph: { nodes: [textNode('a', '正文')], edges: [], groups: [] }
+    })!
+    active = p.id
+    const run = vi.fn(async () => ({ graphVersion: saved.graphVersion }))
+    withDesktop({ run })
+    const refused = await call(
+      'node.execute',
+      { projectId: p.id, expectedGraphVersion: saved.graphVersion - 1, nodeIds: ['shape:a'], mode: 'single' },
+      key()
+    )
+    expect(refused.status).toBe('failed')
+    expect(refused.error).toMatchObject({
+      code: 'REVISION_CONFLICT',
+      phase: 'execute-admission',
+      currentGraphVersion: saved.graphVersion
+    })
+    expect(run).not.toHaveBeenCalled()
+    expect((getDb().prepare('SELECT COUNT(*) AS n FROM external_runs').get() as { n: number }).n).toBe(0)
+  })
+
+  it('requires exactly one nodeId in single mode', async () => {
+    const p = createProject('单节点执行')
+    const saved = saveProject({
+      id: p.id,
+      graph: { nodes: [textNode('a', 'A'), textNode('b', 'B')], edges: [], groups: [] }
+    })!
+    active = p.id
+    const run = vi.fn(async () => ({ graphVersion: saved.graphVersion }))
+    withDesktop({ run })
+    const refused = await call(
+      'node.execute',
+      { projectId: p.id, expectedGraphVersion: saved.graphVersion, nodeIds: ['shape:a', 'shape:b'], mode: 'single' },
+      key()
+    )
+    expect(refused.error?.code).toBe('INVALID_INPUT')
+    expect(run).not.toHaveBeenCalled()
+    expect((getDb().prepare('SELECT COUNT(*) AS n FROM external_runs').get() as { n: number }).n).toBe(0)
+  })
+
   it('accepts execution, reports terminal state through the ledger and answers run.get/run.wait', async () => {
     const p = createProject('执行')
     saveProject({ id: p.id, graph: { nodes: [textNode('a', '正文')], edges: [], groups: [] } })!
@@ -141,7 +185,7 @@ describe('local Agent run access', () => {
 
   it('waits for a late terminal report instead of fabricating success', async () => {
     const p = createProject('等待')
-    saveProject({ id: p.id, graph: { nodes: [textNode('a', 'x')], edges: [], groups: [] } })!
+    const saved = saveProject({ id: p.id, graph: { nodes: [textNode('a', 'x')], edges: [], groups: [] } })!
     active = p.id
     let release!: () => void
     withDesktop({
@@ -158,7 +202,7 @@ describe('local Agent run access', () => {
     })
     const accepted = await call(
       'node.execute',
-      { projectId: p.id, expectedGraphVersion: 0, nodeIds: ['shape:a'] },
+      { projectId: p.id, expectedGraphVersion: saved.graphVersion, nodeIds: ['shape:a'] },
       key()
     )
     const taskId = (accepted.data as any).taskId as string
@@ -169,7 +213,7 @@ describe('local Agent run access', () => {
 
   it('maps validated host refusals to failed without a live task', async () => {
     const p = createProject('拒绝')
-    saveProject({ id: p.id, graph: { nodes: [textNode('a', 'x')], edges: [], groups: [] } })!
+    const saved = saveProject({ id: p.id, graph: { nodes: [textNode('a', 'x')], edges: [], groups: [] } })!
     active = p.id
     const { DesktopAccessError } = await import('../src/main/agent-access/desktop')
     withDesktop({
@@ -179,7 +223,7 @@ describe('local Agent run access', () => {
     })
     const refused = await call(
       'node.execute',
-      { projectId: p.id, expectedGraphVersion: 0, nodeIds: ['shape:a'] },
+      { projectId: p.id, expectedGraphVersion: saved.graphVersion, nodeIds: ['shape:a'] },
       key()
     )
     expect(refused.status).toBe('failed')
@@ -188,7 +232,7 @@ describe('local Agent run access', () => {
 
   it('keeps unknown semantics when the host handshake is lost and replays idempotently', async () => {
     const p = createProject('失联')
-    saveProject({ id: p.id, graph: { nodes: [textNode('a', 'x')], edges: [], groups: [] } })!
+    const saved = saveProject({ id: p.id, graph: { nodes: [textNode('a', 'x')], edges: [], groups: [] } })!
     active = p.id
     const { DesktopAccessError } = await import('../src/main/agent-access/desktop')
     withDesktop({
@@ -200,13 +244,13 @@ describe('local Agent run access', () => {
     const same = key()
     const first = await call(
       'node.execute',
-      { projectId: p.id, expectedGraphVersion: 0, nodeIds: ['shape:a'] },
+      { projectId: p.id, expectedGraphVersion: saved.graphVersion, nodeIds: ['shape:a'] },
       same
     )
     expect(first.status).toBe('unknown')
     const replay = await call(
       'node.execute',
-      { projectId: p.id, expectedGraphVersion: 0, nodeIds: ['shape:a'] },
+      { projectId: p.id, expectedGraphVersion: saved.graphVersion, nodeIds: ['shape:a'] },
       same
     )
     expect(replay.status).toBe('unknown')
@@ -215,7 +259,7 @@ describe('local Agent run access', () => {
 
   it('separates cancel requests from confirmed cancellation', async () => {
     const p = createProject('取消')
-    saveProject({ id: p.id, graph: { nodes: [textNode('a', 'x')], edges: [], groups: [] } })!
+    const saved = saveProject({ id: p.id, graph: { nodes: [textNode('a', 'x')], edges: [], groups: [] } })!
     active = p.id
     withDesktop({
       run: async (request) => {
@@ -226,7 +270,7 @@ describe('local Agent run access', () => {
     })
     const accepted = await call(
       'node.execute',
-      { projectId: p.id, expectedGraphVersion: 0, nodeIds: ['shape:a'] },
+      { projectId: p.id, expectedGraphVersion: saved.graphVersion, nodeIds: ['shape:a'] },
       key()
     )
     const taskId = (accepted.data as any).taskId as string
@@ -320,6 +364,19 @@ describe('local Agent run access', () => {
     expect((output.data as any).outputs).toEqual([
       { portId: 'out-json', kind: 'json', json: { shots: [1, 2] } }
     ])
+  })
+
+  it('stores only a stable error code for renderer failures and never returns raw text', async () => {
+    const p = createProject('脱敏错误')
+    const run = createExternalRun({ projectId: p.id, mode: 'single', nodeIds: ['shape:a'] })
+    const raw = 'PRIVATE_PROMPT_AND_PATH C:/users/secret/model-response.txt'
+    reportExternalRun(run.id, 'failed', { error: externalRunErrorCode(raw) })
+    expect(getExternalRun(run.id)?.error).toBe('NODE_EXECUTION_FAILED')
+    active = p.id
+    const response = await call('run.get', { projectId: p.id, taskId: run.id })
+    expect(response.data).toMatchObject({ state: 'failed', error: 'NODE_EXECUTION_FAILED' })
+    expect(JSON.stringify(response)).not.toContain('PRIVATE_PROMPT_AND_PATH')
+    expect(JSON.stringify(response)).not.toContain('C:/users/secret')
   })
 
   it('settles orphaned non-terminal runs on host startup and never rewrites terminal rows', async () => {

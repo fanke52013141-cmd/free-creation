@@ -1,3 +1,4 @@
+export * from './endpoint.js'
 export * from './errors.js'
 export * from './memory.js'
 export * from './ports.js'

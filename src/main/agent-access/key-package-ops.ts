@@ -6,7 +6,6 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AccessOperationId } from '../../shared/agent-access/registry'
-import { exportProviders } from '../gateway/provider-transfer'
 import { keysPackageAccessPort } from './keys-bridge'
 import { DesktopAccessError } from './desktop'
 
@@ -66,25 +65,6 @@ export async function runKeyPackageOperation(
   input: Record<string, unknown>,
   context: KeyPackageContext
 ): Promise<unknown> {
-  if (operationId === 'provider.package.export') {
-    // 导出走 GUI 同一 exportProviders（同一加密格式）；外部只给连接 id 与密码，
-    // 目标路径由 main 固定在受控导出目录内。
-    const target = join(context.exportRoot, input.fileName as string)
-    if (existsSync(target)) refuse('OUTPUT_EXISTS', String(input.fileName))
-    // 省略 providerIds 时导出全部连接（与 GUI 同一语义）。
-    const providerIds = (input.providerIds as string[] | undefined) ?? []
-    const count = await exportProviders(target, input.password as string, providerIds)
-    if (!existsSync(target)) refuse('EXPORT_FAILED', 'package-missing')
-    const bytes = readFileSync(target)
-    if (bytes.length <= 0) refuse('EXPORT_FAILED', 'package-empty')
-    return {
-      fileName: input.fileName as string,
-      sha256: createHash('sha256').update(bytes).digest('hex'),
-      byteSize: bytes.length,
-      connectionCount: Number(count ?? 0)
-    }
-  }
-
   const port = keysPackageAccessPort()
   if (!port)
     refuse('KEYS_SERVICE_UNAVAILABLE', 'key package service is not published in this instance')

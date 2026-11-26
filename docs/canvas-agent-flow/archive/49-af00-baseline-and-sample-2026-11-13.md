@@ -1,5 +1,7 @@
 # AF-00 基线复核与三阶段固定样例
 
+> **历史快照（2026-11-13）**：§2 是 AF-01～AF-07 实施前的支持矩阵，不是当前唯一能力矩阵。文中的数量、状态与“当前”只代表当时；当前状态见 [AGENT_FLOW_SPEC](../../AGENT_FLOW_SPEC.md)、[BACKLOG](../../BACKLOG.md) 与[机器契约](../../local-agent-access/generated/contracts.json)。
+
 日期：2026-11-13（Asia/Shanghai）。状态：**已实施并验证**（基线修复包）。
 上游方案：[48-特定任务 Agent Flow 优化方案](48-task-specific-flow-optimization-plan-2026-11-13.md)。
 
@@ -38,7 +40,7 @@
 
 修正：替身化 `getProvider` 模拟密钥库返回受控连接，断言改为验证真实安全契约——外部仅传 id、`testProvider` 收到的密钥/地址来自密钥库（`apiKey:'vault-secret-key'`）、reachable 如实反映、回执不含地址与密钥。修正后该文件 7/7 通过，全量归零失败。**未放宽任何断言意图，安全边界断言反而加强。**
 
-## 2. 当前支持矩阵（四态区分）
+## 2. 当时支持矩阵（四态区分，2026-11-13 快照）
 
 四态：**已实现**（代码存在）／**已验证**（有验收证据）／**已实现但未充分验收**（仅部分或 CLI/合成事件证据）／**尚未支持**（无代码）。
 验收证据等级：真实模型（付费小额）／真实搜索（豆包免费额度）／确定性夹具（无计费）／Playwright 合成事件（**非人工鼠标**）。本机回执位于 gitignore 的 `qa/agent-flow-*/receipt.json`，不保证其他 checkout 存在。

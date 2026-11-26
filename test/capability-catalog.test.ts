@@ -321,7 +321,8 @@ describe('BL-10 FlowGraph 能力引用编译与准入', () => {
       [agentNode('a'), { ...compositeCapabilityNode('b'), participation: 'collaborative' }],
       [{ from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'b', portId: 'in-source' } }]
     )
-    expect(validateFlowGraph(g, { catalog }).ok).toBe(true)
+    // This suite validates catalog/port admission; runtime model/scope binding is covered by flow-graph-compiler tests.
+    expect(validateFlowGraph(g, { catalog, requireRuntime: false }).ok).toBe(true)
     const compiled = compileFlowGraph(g, { catalog })
     const composite = compiled.nodes.find((node) => node.id === 'shape:b')!
     expect(composite.type).toBe('composite')
@@ -384,7 +385,7 @@ describe('BL-10 FlowGraph 能力引用编译与准入', () => {
         node.nodeId === 'b' ? { ...node, participation: 'collaborative' as const } : node
       )
     }
-    expect(validateFlowGraph(raised, { catalog }).ok).toBe(true)
+    expect(validateFlowGraph(raised, { catalog, requireRuntime: false }).ok).toBe(true)
     expect(() => compileFlowGraph(belowFloor, { catalog })).toThrow(FlowGraphCompileError)
   })
 

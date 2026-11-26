@@ -16,7 +16,7 @@ import {
   AgentNodeConfigSchema,
   ReviewNodeConfigSchema
 } from '../../shared/agent-flow/node-contracts'
-import { compileFlowGraph, type FlowGraphPreview } from '../../shared/agent-flow/flow-graph-compiler'
+import { compileFlowGraph, FlowGraphCompileError, type FlowGraphPreview } from '../../shared/agent-flow/flow-graph-compiler'
 import { nodeCapabilityDescriptors, buildCapabilityCatalog } from '../../shared/agent-flow/capability-catalog'
 import { listAllCompositeVersions } from '../store/composite.repo'
 import { FlowGraphSchema, type FlowGraph } from '../../shared/agent-flow/flow-graph'
@@ -227,6 +227,7 @@ export class FlowBuilderHost {
     const compiled = compileFlowGraph(graph, {
       catalog: buildCapabilityCatalog(listAllCompositeVersions())
     })
+    if (!compiled.runnable) throw new FlowGraphCompileError(compiled.runtimeErrors)
     const anchor = compiled.coordinatorNodeId
     const buildId = `graph-${createHash('sha256')
       .update(JSON.stringify([input.projectId, anchor, input.requestId]))
@@ -377,10 +378,20 @@ export class FlowBuilderHost {
     const file = this.activeFile(input.projectId)
     const preview = this.readGraph(input.projectId, input.buildId)
     if (!preview) throw new AgentRuntimeError('FLOW_BUILD_MISSING', 'builder')
+    if (
+      preview.state === 'committed' &&
+      preview.committedScopeHash &&
+      graphCanvasScopeHash(file, preview) !== preview.committedScopeHash
+    )
+      throw new AgentRuntimeError('FLOW_CANVAS_DIVERGED', 'builder')
+    const compiled = compileFlowGraph(preview.graph, {
+      catalog: buildCapabilityCatalog(listAllCompositeVersions())
+    })
+    if (!compiled.runnable) throw new FlowGraphCompileError(compiled.runtimeErrors)
     if (!this.committed(preview, file))
       throw new AgentRuntimeError('FLOW_BUILD_UNCONFIRMED', 'builder')
     preview.state = 'committed'
-    preview.committedScopeHash ??= graphCanvasScopeHash(file, preview)
+    preview.committedScopeHash = graphCanvasScopeHash(file, preview)
     this.saveGraph(preview)
     return preview
   }

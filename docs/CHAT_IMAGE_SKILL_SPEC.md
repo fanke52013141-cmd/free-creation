@@ -1,7 +1,9 @@
 # AI 对话生图规范
 
 > status: active
-> last-verified: unverified
+> last-verified: 2026-11-26
+> baseline-commit: e9b263f2
+> verification-scope: 对话生图、附件、模型能力与日志契约的静态核对；未重跑真实供应商
 
 
 ## 使用与默认值

@@ -9,6 +9,9 @@
       "destructive": false,
       "cost": "none",
       "description": "分页查询已安装技能的名称、固定版本和摘要，不返回指令正文",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -146,7 +149,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -157,6 +161,9 @@
       "destructive": true,
       "cost": "none",
       "description": "安装本机 SKILL.md、JSON 技能包或扁平技能目录；name 为独立技能名称；仅支持指令与文本参考，不执行脚本",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "skillPackage"
       ],
@@ -279,7 +286,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -290,6 +298,9 @@
       "destructive": false,
       "cost": "none",
       "description": "分页查询项目已保存的 AI 对话节点及其绑定技能版本；活动画布的未保存修改不在结果中",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "chatNode"
@@ -459,7 +470,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -470,6 +482,9 @@
       "destructive": true,
       "cost": "none",
       "description": "替换当前打开的 AI 对话节点的完整技能集合（空数组为清空），经桌面保存；必须使用已安装的固定版本，不启动对话",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "chatNode"
@@ -658,7 +673,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -669,6 +685,9 @@
       "destructive": true,
       "cost": "none",
       "description": "以独立 name 将指定 AI 对话节点和固定版本技能保存到节点库；排除聊天记录、附件与运行结果",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "chatNode"
@@ -801,7 +820,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -812,6 +832,9 @@
       "destructive": false,
       "cost": "none",
       "description": "分页查询节点库条目摘要，不返回配置正文",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -948,7 +971,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -959,6 +983,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取画布节点/连线/分组的版本化视图（分页）；config 与正文经 node.get 显式读取；latest 视图仅限当前打开项目",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -1315,7 +1342,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -1326,6 +1354,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取单个已保存节点的类型、契约版本、配置、正文、端口与连线引用；运行事实与结果经 run/output 族查询",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -1725,7 +1756,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -1736,6 +1768,9 @@
       "destructive": true,
       "cost": "none",
       "description": "向当前打开项目提交一批类型化画布编辑（建/改/删节点与连线）；整体校验后原子应用并保存；返回ID映射与保存版本。autoLayout=true 时应用后在同一撤销步内智能整理坐标",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -2744,7 +2779,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -2755,6 +2791,9 @@
       "destructive": true,
       "cost": "none",
       "description": "对当前打开项目按拓扑分层/角色泳道/网格重排节点坐标（与 GUI 智能整理同一算法）；只改位置不改配置，单撤销步并保存",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2905,7 +2944,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -2916,6 +2956,9 @@
       "destructive": false,
       "cost": "none",
       "description": "预检当前打开画布的目标节点及上游闭包，列出可确定的缺失输入及端口类型。只读，不调用模型。",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -3064,7 +3107,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -3075,6 +3119,9 @@
       "destructive": true,
       "cost": "possible",
       "description": "向当前打开项目提交节点执行（single=仅该节点读取已持久化上游；subgraph=所选节点及其上游闭包）；subgraph 可传 inputs 补齐缺失端口（媒体使用项目 mediaId）；返回持久任务ID，最终状态以 run.get 为准",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": true,
       "requires": [
         "openProject",
         "verifiedModel"
@@ -3339,7 +3386,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -3350,6 +3398,9 @@
       "destructive": false,
       "cost": "none",
       "description": "等待任务到达终态或超时；返回任务当前状态，不自动重放或取消任务",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -3530,7 +3581,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -3541,6 +3593,9 @@
       "destructive": true,
       "cost": "none",
       "description": "请求取消当前打开项目上的在途任务；取消请求与取消确认分开，最终状态以 run.get 为准",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -3665,7 +3720,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -3676,6 +3732,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取节点最近一次正式输出投影（确定性文本/JSON/processor/媒体引用等已登记类型）；运行事实来自真实运行记录，不可伪造",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -3865,7 +3924,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -3876,6 +3936,9 @@
       "destructive": true,
       "cost": "none",
       "description": "把本机文件登记为项目受控媒体（复制入库、去敏索引）；返回受控 mediaId 供节点引用，不接收二进制报文",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "project"
       ],
@@ -3969,10 +4032,6 @@
               "name": {
                 "type": "string",
                 "maxLength": 200
-              },
-              "textContent": {
-                "type": "string",
-                "maxLength": 20000
               }
             },
             "required": [
@@ -4027,7 +4086,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -4038,6 +4098,9 @@
       "destructive": false,
       "cost": "none",
       "description": "分页读取项目受控媒体摘要（kind/mime/尺寸/相对引用路径），不返回绝对路径或文件正文",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -4212,7 +4275,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -4223,6 +4287,9 @@
       "destructive": true,
       "cost": "none",
       "description": "删除项目受控媒体（磁盘文件+索引）；mediaId 必须属于指定项目；回执含保存图中引用计数，不校验引用为空（与 GUI 面板删除同一规则）",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -4342,7 +4409,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -4353,6 +4421,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取对话节点的会话目录（含活动会话标记与模型配置摘要）；消息正文经 chat.messages 显式读取",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "chatNode"
@@ -4533,7 +4604,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -4544,6 +4616,9 @@
       "destructive": false,
       "cost": "none",
       "description": "分页读取指定会话的消息正文（role/content/意图/附件引用）；助手回复是模型真实输出，不可伪造",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "chatNode"
@@ -4754,7 +4829,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -4765,6 +4841,9 @@
       "destructive": false,
       "cost": "none",
       "description": "分页读取本地模型ID、启用状态与能力验证状态；不联网探测，不返回凭据、地址或配置",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -4943,7 +5022,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -4954,6 +5034,9 @@
       "destructive": false,
       "cost": "none",
       "description": "分页检索资源库摘要；不返回组件正文、媒体路径或资源包",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -5129,7 +5212,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -5140,6 +5224,9 @@
       "destructive": true,
       "cost": "none",
       "description": "创建单图图片资源（一张图片+名称）；图片取自本机已存在的文件路径，不接收网络地址、二进制报文或额外组件",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -5279,7 +5366,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -5290,6 +5378,9 @@
       "destructive": false,
       "cost": "none",
       "description": "按项目和taskId读取持久化内部Agent任务基础状态；不含命令、模型媒体任务、正文或控制操作",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -5554,7 +5645,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -5565,6 +5657,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取诊断存储健康计数；不返回事件正文或诊断包，不代表任务执行成功",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -5694,7 +5789,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -5705,6 +5801,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取本地应用版本与实例身份",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -5815,7 +5914,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -5826,6 +5926,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取当前已开放操作及其输入契约",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -5981,7 +6084,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -5991,7 +6095,10 @@
       "idempotent": true,
       "destructive": false,
       "cost": "none",
-      "description": "读取节点接入状态；本包不开放节点操作",
+      "description": "读取全部 Active 节点的逐动作接入状态、契约版本与证据；具体写/执行仍按各操作契约准入",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -6275,7 +6382,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -6286,6 +6394,9 @@
       "destructive": false,
       "cost": "none",
       "description": "分页读取项目摘要",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -6428,7 +6539,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -6439,6 +6551,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取已保存项目摘要与内容数量，不返回原始快照",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -6590,7 +6705,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -6601,6 +6717,9 @@
       "destructive": false,
       "cost": "none",
       "description": "幂等新建空项目",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -6735,7 +6854,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -6746,6 +6866,9 @@
       "destructive": true,
       "cost": "none",
       "description": "保存当前画布后在桌面打开项目；等待画布就绪",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -6879,7 +7002,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -6889,7 +7013,10 @@
       "idempotent": false,
       "destructive": true,
       "cost": "none",
-      "description": "按版本修改项目名称；活动画布先保存并同步版本",
+      "description": "按版本修改项目名称（规范主操作）；活动画布先保存并同步版本",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -7037,7 +7164,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -7048,6 +7176,9 @@
       "destructive": true,
       "cost": "none",
       "description": "按已保存版本修改项目名称；活动画布经保存握手同步",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -7193,7 +7324,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -7204,6 +7336,9 @@
       "destructive": true,
       "cost": "none",
       "description": "保存当前权威内容；活动画布等待最新编辑落盘，不接收客户端快照",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -7316,7 +7451,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -7327,6 +7463,9 @@
       "destructive": false,
       "cost": "none",
       "description": "固定源版本复制项目（媒体ID/引用重映射）；活动源画布先保存，克隆不继承运行任务",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -7472,7 +7611,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -7483,6 +7623,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取删除影响摘要与占用阻塞项，无阻塞时签发短期确认令牌",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -7654,7 +7797,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -7665,6 +7809,9 @@
       "destructive": true,
       "cost": "none",
       "description": "凭预检令牌硬删除项目；拒绝活动画布、运行/未知占用，令牌过期或事实漂移需重新预检",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -7779,7 +7926,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -7790,6 +7938,9 @@
       "destructive": true,
       "cost": "none",
       "description": "活动画布先保存最新编辑，再导出完整项目到受控目录，不覆盖文件",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -7922,7 +8073,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -7933,6 +8085,9 @@
       "destructive": false,
       "cost": "none",
       "description": "分页检索资源库摘要（分类/文件夹/集合/类型/归档过滤）；不返回组件正文与媒体路径",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -8209,7 +8364,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -8220,6 +8376,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取单个资源详情：组件摘要（角色/类型/哈希/引用）、全部修订与项目使用记录；正文需显式 includeText",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -8622,7 +8781,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -8633,6 +8793,9 @@
       "destructive": false,
       "cost": "none",
       "description": "物化前预检所选组件的资源文件是否存在（与 GUI 复用文件预检同一服务），不复制文件",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -8760,7 +8923,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -8771,6 +8935,9 @@
       "destructive": false,
       "cost": "none",
       "description": "创建任意类型资源（文本/图片/音频/视频/文件/JSON 组件，可带分类/标签/集合/文件夹）；媒体组件只接受本机已存在文件路径作为导入请求",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -9285,7 +9452,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -9296,6 +9464,9 @@
       "destructive": true,
       "cost": "none",
       "description": "在指定基础版本上发布新修订（标题/描述/标签/分类/集合同步更新）；components 省略时复用基础版本全部组件",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -9817,7 +9988,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -9828,6 +10000,9 @@
       "destructive": true,
       "cost": "none",
       "description": "彻底删除一个资源（全部修订/组件/标签/集合与文件夹归属/使用记录，随后清理无引用 blob）；与 GUI 删除同一服务",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -9931,7 +10106,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -9942,6 +10118,9 @@
       "destructive": true,
       "cost": "none",
       "description": "批量彻底删除资源，逐项回执（单项不存在返回 NOT_FOUND，不静默跳过，不影响其它项）",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -10078,7 +10257,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -10089,6 +10269,9 @@
       "destructive": true,
       "cost": "none",
       "description": "归档/取消归档资源（可逆的「隐藏」标记）：归档后默认检索不返回，includeArchived 可查回；不删除内容",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -10294,7 +10477,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -10305,6 +10489,9 @@
       "destructive": true,
       "cost": "none",
       "description": "把资源归入某个资源库文件夹（folderId=null 表示移到资源库根目录）",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -10518,7 +10705,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -10529,6 +10717,9 @@
       "destructive": true,
       "cost": "none",
       "description": "替换资源的完整收藏集归属（空数组为清空）；收藏集 ID 必须存在",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -10739,7 +10930,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -10750,6 +10942,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取资源库文件夹目录（含上级与资源数量）",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -10895,7 +11090,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -10906,6 +11102,9 @@
       "destructive": false,
       "cost": "none",
       "description": "新建资源库文件夹；同一上级下不允许重名",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -11045,7 +11244,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -11056,6 +11256,9 @@
       "destructive": true,
       "cost": "none",
       "description": "重命名资源库文件夹；同一上级下不允许重名",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -11196,7 +11399,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -11207,6 +11411,9 @@
       "destructive": true,
       "cost": "none",
       "description": "删除资源库文件夹；子文件夹与资源上移到上级目录，不删除任何资源",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -11310,7 +11517,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -11321,6 +11529,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取收藏集目录（含资源数量）",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -11459,7 +11670,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -11470,6 +11682,9 @@
       "destructive": false,
       "cost": "none",
       "description": "新建收藏集；名称全局唯一",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -11602,7 +11817,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -11613,6 +11829,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取资源分类蓝图目录（含槽位定义，创建资源时用于 metadata.librarySlotId 映射）",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -11801,7 +12020,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -11812,6 +12032,9 @@
       "destructive": true,
       "cost": "none",
       "description": "按基础版本保存一个新的分类蓝图版本（版本必须为基础版本 +1，防覆盖）",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -12114,7 +12337,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -12125,6 +12349,9 @@
       "destructive": true,
       "cost": "none",
       "description": "把指定资源版本的所选组件物化到当前打开画布：复制资源文件为项目受控媒体，再经桌面握手创建节点并正式保存；返回逐组件节点映射",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -12354,7 +12581,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -12365,6 +12593,9 @@
       "destructive": true,
       "cost": "none",
       "description": "补偿性清理一次资源物化复制出的项目媒体（按 usageId 与项目归属核对）；已存在引用或跨项目一律拒绝删除",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -12480,7 +12711,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -12491,6 +12723,9 @@
       "destructive": true,
       "cost": "none",
       "description": "把项目中选中的多个节点及它们之间的连线保存为节点库组合条目（含媒体引用记录）；排除聊天历史、附件与运行结果",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "nodeLibraryEntry"
       ],
@@ -12627,7 +12862,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -12638,6 +12874,9 @@
       "destructive": true,
       "cost": "none",
       "description": "重命名节点库条目；条目内容与画布不受影响",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "nodeLibraryEntry"
       ],
@@ -12758,7 +12997,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -12769,6 +13009,9 @@
       "destructive": true,
       "cost": "none",
       "description": "用当前项目画布上选中的节点及其连线原位覆盖节点库条目的内容（同 GUI「编辑节点」保存路径）；条目名称与画布不受影响，媒体引用随内容重新记录",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -12902,7 +13145,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -12913,6 +13157,9 @@
       "destructive": true,
       "cost": "none",
       "description": "删除节点库条目；画布上已经插入的节点不受影响",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "nodeLibraryEntry"
       ],
@@ -13018,7 +13265,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -13029,6 +13277,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取节点库条目详情（节点类型/标题/尺寸/正文与配置存在性/媒体引用/连线拓扑）；不返回配置与正文内容",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "nodeLibraryEntry"
       ],
@@ -13269,7 +13520,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -13280,6 +13532,9 @@
       "destructive": false,
       "cost": "none",
       "description": "按条目名称、节点标题、节点类型与节点文本过滤节点库条目（分页）；返回条目摘要",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -13436,7 +13691,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -13447,6 +13703,9 @@
       "destructive": true,
       "cost": "none",
       "description": "把节点库条目实例化到指定项目画布（须先 project.open 到当前画布）：重映射节点 ID、连线与媒体引用，经权威宿主落盘；外部输入只携带媒体 ID",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "nodeLibraryEntry"
@@ -13675,7 +13934,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -13686,6 +13946,9 @@
       "destructive": false,
       "cost": "none",
       "description": "按名称/ID/标签搜索已发布的组合能力；返回摘要与固定版本，不含内部图",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -13852,7 +14115,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -13863,6 +14127,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取指定组合固定版本的 manifest（公开输入输出、依赖、执行策略）；不传版本取最新",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -14573,7 +14840,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -14584,6 +14852,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取组合草稿（含 revision）；不存在时返回 null",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -15293,7 +15564,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -15304,6 +15576,9 @@
       "destructive": true,
       "cost": "none",
       "description": "创建/更新组合草稿；允许未接完的图并返回问题；expectedRevision 用于乐观并发，冲突返回 DRAFT_REVISION_CONFLICT 且保留草稿",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -16005,7 +16280,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -16016,6 +16292,9 @@
       "destructive": false,
       "cost": "none",
       "description": "按 GUI 同一规则校验组合 manifest：端口、映射、类型、基数、必填来源、DAG、依赖与预算",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -16728,7 +17007,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -16739,6 +17019,9 @@
       "destructive": true,
       "cost": "none",
       "description": "发布不可变组合版本：同版本同摘要幂等；同版本异摘要返回 VERSION_IMMUTABLE；新版本必须递增，可带 expectedRevision 校验草稿未被他人改动",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -17444,7 +17727,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -17455,6 +17739,9 @@
       "destructive": false,
       "cost": "none",
       "description": "按项目内已绑定实例的实际连线预检升级：比较端口 ID/类型/Schema/必填/基数，返回阻断项及受影响节点与边",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -18427,7 +18714,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -18438,6 +18726,9 @@
       "destructive": true,
       "cost": "none",
       "description": "把画布上的节点流实例升级到指定已发布版本：先运行同一升级预检，阻断则拒绝且原实例不变；通过后以固定版本引用原子更新实例并保留兼容连线",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -19166,7 +19457,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -19177,6 +19469,9 @@
       "destructive": false,
       "cost": "none",
       "description": "列出某个组合能力的全部已发布版本（名称/摘要/发布时间），供切换与历史查看",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -19267,7 +19562,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -19278,6 +19574,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取一次组合运行的状态与内部步骤（固定版本、产物归属、失败原因）",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -19386,7 +19685,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -19397,6 +19697,9 @@
       "destructive": false,
       "cost": "none",
       "description": "列出项目最近的组合运行（状态/能力/版本/时间）",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -19492,7 +19795,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -19503,6 +19807,9 @@
       "destructive": true,
       "cost": "possible",
       "description": "headless 执行已发布节点流：不依赖项目/画布。inputs 按公开输入端口的完整端口 ID 喂值（portId 写 `in-<公开输入id>`，如 in-copy）；返回 runId，终态与输出经 composite.run.get / composite.execute.wait 读取。**键约定**：outputs / outputValues 以带前缀的公开输出端口为键（out-<公开输出id>，如 out-polished），与画布连线、outputPorts 摘要、升级预检一致；resubmit 提交值同样使用 out-<id>（读取时兼容历史裸 id）。**计费**：运行会真实执行流内模型/联网节点，必须显式 confirmCost=true 才发起（否则 COST_CONFIRM_REQUIRED，不启动任何运行）",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": true,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -19721,7 +20028,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -19732,6 +20040,9 @@
       "destructive": false,
       "cost": "none",
       "description": "阻塞等待 headless 运行到达终态：返回状态/公开输出/失败原因；超时返回当前状态。outputs 以带前缀的公开输出端口为键（out-<id>，与画布一致）",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -19886,7 +20197,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -19897,6 +20209,9 @@
       "destructive": true,
       "cost": "possible",
       "description": "受控重试失败的 headless 运行：仅 failed/interrupted 可重试，按原固定版本与原公开输入复跑（输入未记录则拒绝）；同一根运行重试上限 3 次；返回新 runId，终态经 composite.run.get 读取",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": true,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -20025,7 +20340,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -20036,6 +20352,9 @@
       "destructive": true,
       "cost": "none",
       "description": "向等待人工的节点流运行提交某内部人工任务节点的结果（满足开放人工等待）；仅 waiting-input 且该节点有开放等待时接受；提交值经续跑消费为正式输出，不伪造自动成功",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -20230,7 +20549,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -20241,6 +20561,9 @@
       "destructive": true,
       "cost": "possible",
       "description": "续跑等待人工的节点流运行：消费已满足的人工提交，跳过已完成步骤（保护已付费任务），从等待节点继续；仅 waiting-input 可续跑；返回 runId，终态经 composite.run.get 读取",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": true,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -20357,7 +20680,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -20368,6 +20692,9 @@
       "destructive": true,
       "cost": "none",
       "description": "人工补交失败 headless 运行的公开输出：仅 failed/interrupted 可补交，须一次性补齐全部公开输出端口（portId 用 out-<公开输出id>，兼容历史裸 id；text/markdown/json；媒体补交暂不支持）；补交后运行 completed 但 manualSubmission=true 如实标记，不伪造自动成功",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -20565,7 +20892,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -20576,6 +20904,9 @@
       "destructive": true,
       "cost": "none",
       "description": "归档/恢复组合能力；归档后默认搜索不可见，已引用版本仍可读取",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -20683,7 +21014,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -20694,6 +21026,9 @@
       "destructive": false,
       "cost": "none",
       "description": "删除前引用检查：列出各项目画布上绑定该能力的实例（含固定版本）与其他节点流发布版本的嵌套依赖；归档不阻断引用",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -20856,7 +21191,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -20867,6 +21203,9 @@
       "destructive": true,
       "cost": "none",
       "description": "物理删除节点流（发布版本+草稿+能力行）。先做同一引用检查，存在画布实例或嵌套引用时返回 CAPABILITY_IN_USE 且不改动数据",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -20971,7 +21310,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -20982,6 +21322,9 @@
       "destructive": false,
       "cost": "none",
       "description": "分页读取项目历史版本快照目录（名称/时间/节点数/可否外部恢复）；不返回快照正文",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -21135,7 +21478,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -21146,6 +21490,9 @@
       "destructive": false,
       "cost": "none",
       "description": "把项目当前已持久化的画布与图数据保存为命名历史版本快照；聊天正文与运行结果不进入快照，未保存的画布编辑不在其中（GUI 历史坞的快照捕获内存状态）",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -21287,7 +21634,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -21298,6 +21646,9 @@
       "destructive": true,
       "cost": "none",
       "description": "删除历史版本快照；当前画布与项目内容不受影响",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -21411,7 +21762,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -21422,6 +21774,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取历史版本恢复影响（当前/目标节点与连线数、媒体可用性）与占用阻塞项；无阻塞且快照含可恢复图数据时签发短期确认令牌",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "snapshot"
       ],
@@ -21642,7 +21997,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -21653,6 +22009,9 @@
       "destructive": true,
       "cost": "none",
       "description": "凭预检令牌把历史版本恢复为项目正式内容（先保存恢复前检查点，再走正式保存机制）；生效前失败保持原图，令牌过期或事实漂移需重新预检",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "snapshot"
@@ -21803,7 +22162,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -21814,6 +22174,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取关窗冲突恢复副本的事实与阻塞项（是否存在/版本/节点数）。**不传 decision 时只读事实**（无需先做决定）；传入 use/discard 且无阻塞时额外签发短期确认令牌供 resolve 使用",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -21990,7 +22353,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -22001,6 +22365,9 @@
       "destructive": true,
       "cost": "none",
       "description": "凭预检令牌裁决恢复副本：use=经正式保存把副本落盘并移除副本；discard=丢弃副本、保留磁盘版本。与 GUI 打开项目时的裁决调用同一 repo 服务",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "pendingRecovery"
       ],
@@ -22138,7 +22505,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -22149,6 +22517,9 @@
       "destructive": true,
       "cost": "none",
       "description": "导入受控导出目录内的完整项目包（.canvasbundle）：先写暂存目录，校验版本/媒体哈希与凭据剥离，媒体ID与相对路径全量重映射后才提交为新项目；失败清理暂存与半个项目",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "exportRootPackage"
       ],
@@ -22326,7 +22697,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -22337,6 +22709,9 @@
       "destructive": true,
       "cost": "none",
       "description": "导入受控导出目录内的画布结构包（.canvasflow）为新项目：节点/连线/分组与快照经公共清洗后落库，不含媒体文件、运行结果与聊天正文；失败回滚新项目",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "exportRootPackage"
       ],
@@ -22502,7 +22877,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -22513,6 +22889,9 @@
       "destructive": true,
       "cost": "none",
       "description": "导入受控导出目录内的资源包（.canvaslib）：校验清单格式/版本/逐文件大小与 sha256 后经事务登记为新资源；同一内容包按包哈希拒绝重复导入",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "exportRootPackage"
       ],
@@ -22631,7 +23010,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -22642,6 +23022,9 @@
       "destructive": true,
       "cost": "none",
       "description": "把资源库资源导出为受控导出目录内的资源包（.canvaslib）：临时文件→fsync→排他落位，不覆盖已有文件；返回路径、sha256 与字节数",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -22770,7 +23153,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -22781,6 +23165,9 @@
       "destructive": true,
       "cost": "none",
       "description": "把项目**已保存**的画布结构导出为受控导出目录内的结构包（.canvasflow）：节点/连线/分组与画布快照经公共清洗（不含媒体文件、运行结果、聊天正文），临时文件→fsync→排他落位不覆盖已有文件；返回文件名、sha256、字节数与节点数",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "savedCanvasSnapshot"
       ],
@@ -22908,7 +23295,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -22919,6 +23307,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取已保存 Agent Flow 任务的观察视图（状态/等待/决策与工具计数/审核反馈）；只读账本事实，不判定会话存活、不触发会话恢复、不改写任务状态",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "agentNode"
@@ -23265,7 +23656,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -23276,6 +23668,9 @@
       "destructive": false,
       "cost": "none",
       "description": "预览固定顺序主控某阶段的输入编制清单（当前已交付事实下会采用的字段/片段、缺项、预算）；只读，默认不含正文，includeBody=true 才返回内容；无运行或无阶段输入声明返回 null",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "agentNode"
@@ -23523,7 +23918,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -23534,6 +23930,9 @@
       "destructive": false,
       "cost": "none",
       "description": "预览固定顺序阶段或图模式节点局部返工的影响：将重跑的阶段（该阶段及下游）、将被标为过期并移入历史的既有交付、保留的交付数量、受影响未完成子任务数与当前是否可返工；只读，不修改运行事实",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "agentNode"
@@ -23769,7 +24168,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -23780,6 +24180,9 @@
       "destructive": true,
       "cost": "none",
       "description": "对固定顺序阶段或图模式节点执行局部返工。图模式使用节点 ID 作为 stageKey，按数据、条件和审核依赖确定影响范围。确认后由主控继续执行，旧交付留存，未结算命令阻止返工。",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "agentNode"
@@ -24119,7 +24522,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -24130,6 +24534,9 @@
       "destructive": true,
       "cost": "none",
       "description": "从固定顺序主控的已保存配置发布一个不可变流程定义版本（阶段/方法/输入/进入条件快照，版本递增）；只存定义内容，不存运行正文/产物；非固定顺序如实拒绝",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "agentNode"
@@ -24574,7 +24981,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -24585,6 +24993,9 @@
       "destructive": false,
       "cost": "none",
       "description": "列出项目各流程定义的最新版本（只读定义快照，不含运行产物）",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -25014,7 +25425,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -25025,6 +25437,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取某流程定义指定版本（缺省最新）；不存在返回 null",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -25469,7 +25884,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -25480,6 +25896,9 @@
       "destructive": false,
       "cost": "none",
       "description": "差异预览：比较同一流程定义两个版本的名称/目标/阶段增删改及变更字段（只读）",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -25660,7 +26079,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -25671,6 +26091,9 @@
       "destructive": false,
       "cost": "none",
       "description": "O3：读取某协调运行的一次流程运行统一总览（状态/阶段/修订/子任务 + 可回放事件时间线，事件来源 user/agent 归因）；只读投影，权威仍是命令账本与运行实例；不存在返回 null",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -26341,7 +26764,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -26352,6 +26776,9 @@
       "destructive": false,
       "cost": "none",
       "description": "O4-P5：静态校验外部生成的 FlowGraph（引用/参与合法性/环须有界/可达/预算），返回 ok 与稳定错误码；只读，不写画布、不执行",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -26790,6 +27217,90 @@
                         "maxLength": 60
                       },
                       "additionalProperties": {}
+                    },
+                    "modelDefinitionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "tools": {
+                      "maxItems": 32,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          },
+                          "version": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "version"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "allowedNodeIds": {
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      }
+                    },
+                    "responsibleNodeId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "subjectSources": {
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "nodeId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          },
+                          "portId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          }
+                        },
+                        "required": [
+                          "nodeId",
+                          "portId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "gatedNodeIds": {
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      }
                     },
                     "loop": {
                       "type": "object",
@@ -27344,7 +27855,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -27355,6 +27867,9 @@
       "destructive": false,
       "cost": "none",
       "description": "O4-P5：把 FlowGraph 编译为画布图预览（节点配置+边+派生状态机，与建图预览同构）；只读预览不写画布；非法图返回 ok=false 与错误",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -27793,6 +28308,90 @@
                         "maxLength": 60
                       },
                       "additionalProperties": {}
+                    },
+                    "modelDefinitionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "tools": {
+                      "maxItems": 32,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          },
+                          "version": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "version"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "allowedNodeIds": {
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      }
+                    },
+                    "responsibleNodeId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "subjectSources": {
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "nodeId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          },
+                          "portId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          }
+                        },
+                        "required": [
+                          "nodeId",
+                          "portId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "gatedNodeIds": {
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      }
                     },
                     "loop": {
                       "type": "object",
@@ -28490,7 +29089,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -28501,6 +29101,9 @@
       "destructive": true,
       "cost": "none",
       "description": "P5：外部已生成 FlowGraph 的建图提案——校验+编译+持久化预览（flow_builds source=graph，锚点=编译 coordinator）；不调模型、不写画布；同图同 requestId 幂等返回同 buildId；落画布须人在 GUI 确认（flowGraph.confirm），外部不能自确认",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -28943,6 +29546,90 @@
                         "maxLength": 60
                       },
                       "additionalProperties": {}
+                    },
+                    "modelDefinitionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "tools": {
+                      "maxItems": 32,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          },
+                          "version": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "version"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "allowedNodeIds": {
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      }
+                    },
+                    "responsibleNodeId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "subjectSources": {
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "nodeId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          },
+                          "portId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          }
+                        },
+                        "required": [
+                          "nodeId",
+                          "portId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "gatedNodeIds": {
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      }
                     },
                     "loop": {
                       "type": "object",
@@ -29691,7 +30378,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -29702,6 +30390,9 @@
       "destructive": false,
       "cost": "none",
       "description": "P5：读取外部建图预览（最近一次或指定 buildId）；只读，不调模型不改画布；已保存图含预览节点时自动 promote committed",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -29993,7 +30684,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -30004,6 +30696,9 @@
       "destructive": false,
       "cost": "none",
       "description": "P5：列出本项目的外部建图预览（含 preview/committed/discarded）；只读",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -30286,7 +30981,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -30297,6 +30993,9 @@
       "destructive": true,
       "cost": "none",
       "description": "P5：取消外部建图预览（置 discarded）；已 committed 的预览幂等返回 committed，不可取消",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -30582,7 +31281,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -30593,6 +31293,9 @@
       "destructive": true,
       "cost": "none",
       "description": "P5.3：确认外部建图预览落画布——经渲染器权威 commitFlowGraph（authorize/CAS/单撤销步/保存屏障/confirm），与 GUI 预览面板同一动作；main 按 buildId 触发并核对落盘 committed 与节点真实存在；外部不能绕渲染器自确认；BL-01：这是人工决定，外部调用会在桌面弹出确认，只有人点允许才生效，拒绝/超时/无桌面分别返回 HUMAN_DENIED / HUMAN_DECISION_TIMEOUT / DESKTOP_UNAVAILABLE（均零副作用）",
+      "interactive": true,
+      "responseTimeoutMs": 330000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -30895,7 +31598,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -30906,6 +31610,9 @@
       "destructive": true,
       "cost": "none",
       "description": "④P6：从图定义版本创建运行——读定义的 FlowGraph→经建图提案管线（校验/编译/持久化预览）；落画布仍须人工确认（flowGraph.confirm），不改模板",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -31237,7 +31944,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -31248,6 +31956,9 @@
       "destructive": true,
       "cost": "none",
       "description": "④P6：发布 FlowGraph 定义版本（不可变快照，与运行分离）；校验图→contentHash→版本递增；同内容也允许新版本以便评测",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -31701,6 +32412,90 @@
                         "maxLength": 60
                       },
                       "additionalProperties": {}
+                    },
+                    "modelDefinitionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "tools": {
+                      "maxItems": 32,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          },
+                          "version": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "version"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "allowedNodeIds": {
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      }
+                    },
+                    "responsibleNodeId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                    },
+                    "subjectSources": {
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "nodeId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          },
+                          "portId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-zA-Z0-9_.:-]+$"
+                          }
+                        },
+                        "required": [
+                          "nodeId",
+                          "portId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "gatedNodeIds": {
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                      }
                     },
                     "loop": {
                       "type": "object",
@@ -32646,6 +33441,90 @@
                               },
                               "additionalProperties": {}
                             },
+                            "modelDefinitionId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "tools": {
+                              "maxItems": 32,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                  },
+                                  "version": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "version"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "allowedNodeIds": {
+                              "maxItems": 128,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                                "pattern": "^[a-zA-Z0-9_.:-]+$"
+                              }
+                            },
+                            "responsibleNodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[a-zA-Z0-9_.:-]+$"
+                            },
+                            "subjectSources": {
+                              "maxItems": 128,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "nodeId": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                  },
+                                  "portId": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                  }
+                                },
+                                "required": [
+                                  "nodeId",
+                                  "portId"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "gatedNodeIds": {
+                              "maxItems": 128,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                                "pattern": "^[a-zA-Z0-9_.:-]+$"
+                              }
+                            },
                             "loop": {
                               "type": "object",
                               "properties": {
@@ -33158,7 +34037,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -33169,6 +34049,9 @@
       "destructive": false,
       "cost": "none",
       "description": "④P6：列出本项目的图定义（每个 definitionId 的最新版本）；只读",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -33686,6 +34569,90 @@
                                 },
                                 "additionalProperties": {}
                               },
+                              "modelDefinitionId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                                "pattern": "^[a-zA-Z0-9_.:-]+$"
+                              },
+                              "tools": {
+                                "maxItems": 32,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                    },
+                                    "version": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "version"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "allowedNodeIds": {
+                                "maxItems": 128,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                }
+                              },
+                              "responsibleNodeId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                                "pattern": "^[a-zA-Z0-9_.:-]+$"
+                              },
+                              "subjectSources": {
+                                "maxItems": 128,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "nodeId": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                    },
+                                    "portId": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                    }
+                                  },
+                                  "required": [
+                                    "nodeId",
+                                    "portId"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "gatedNodeIds": {
+                                "maxItems": 128,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                }
+                              },
                               "loop": {
                                 "type": "object",
                                 "properties": {
@@ -34199,7 +35166,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -34210,6 +35178,9 @@
       "destructive": false,
       "cost": "none",
       "description": "④P6：读取图定义（指定版本或最新）；只读",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -34738,6 +35709,90 @@
                                   },
                                   "additionalProperties": {}
                                 },
+                                "modelDefinitionId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                },
+                                "tools": {
+                                  "maxItems": 32,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 128,
+                                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                      },
+                                      "version": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 128,
+                                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "version"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "allowedNodeIds": {
+                                  "maxItems": 128,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                  }
+                                },
+                                "responsibleNodeId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                },
+                                "subjectSources": {
+                                  "maxItems": 128,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "nodeId": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 128,
+                                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                      },
+                                      "portId": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 128,
+                                        "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                      }
+                                    },
+                                    "required": [
+                                      "nodeId",
+                                      "portId"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "gatedNodeIds": {
+                                  "maxItems": 128,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[a-zA-Z0-9_.:-]+$"
+                                  }
+                                },
                                 "loop": {
                                   "type": "object",
                                   "properties": {
@@ -35255,7 +36310,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -35266,6 +36322,9 @@
       "destructive": false,
       "cost": "none",
       "description": "④P6：比较两个图定义版本的名称/总目标/节点（增删改）/数据边（增删）；只读纯函数",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -35562,7 +36621,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -35573,6 +36633,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取当前打开画布的 Agent 能力目录（可用文本模型、受控工具、固定版本技能摘要、可编排能力：节点能力 + 已发布节点流，含端口/参与形态/成本/网络/可调度性与不可调度原因）；要求项目已在桌面打开，不返回技能指令正文",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -36047,7 +37110,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -36058,6 +37122,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取指定 Agent 任务的协作记录（目标/消息/固定输入/候选成果）；只读，不接受外部代替人填写意见、选择或继续",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "agentNode",
@@ -36545,7 +37612,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -36556,6 +37624,9 @@
       "destructive": true,
       "cost": "none",
       "description": "向指定 Agent 任务写入一次协作事件（note/discuss/submit/revise），与 GUI 面板同一宿主实例与同一任务表；discuss/revise 可能真实调用模型，故先做模型工具调用预检；事件带 actor=external 标记，与人工输入可区分；不接受伪造 revision/waitRevision（由宿主核对）；BL-01：action=submit 或 accepted=true 属人工决定，外部调用会在桌面弹出确认，只有人点允许才生效，拒绝/超时/无桌面分别返回 HUMAN_DENIED / HUMAN_DECISION_TIMEOUT / DESKTOP_UNAVAILABLE（均零副作用）",
+      "interactive": true,
+      "responseTimeoutMs": 330000,
+      "openWorld": true,
       "requires": [
         "openProject",
         "agentNode",
@@ -37167,7 +38238,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -37178,6 +38250,9 @@
       "destructive": true,
       "cost": "possible",
       "description": "在当前打开的 Agent 节点上启动/继续/对账/恢复内部 Agent 运行（与 GUI 面板同一宿主实例与同一任务账本）；start/continue 先做模型工具调用预检，失败发生在任何模型请求之前；不新建宿主、不伪造运行身份",
+      "interactive": true,
+      "responseTimeoutMs": 330000,
+      "openWorld": true,
       "requires": [
         "openProject",
         "agentNode",
@@ -37613,7 +38688,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -37624,6 +38700,9 @@
       "destructive": true,
       "cost": "none",
       "description": "请求暂停当前打开的 Agent 任务（下一次安全点生效）；任务不存在如实返回 NOT_FOUND，不伪造暂停结果",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "agentNode",
@@ -37950,7 +39029,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -37961,6 +39041,9 @@
       "destructive": true,
       "cost": "none",
       "description": "停止当前打开的 Agent 任务（与 GUI 停止按钮同一宿主方法）；调用后的终态仍以 flowAgent.inspect 读取的账本事实为准",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "agentNode",
@@ -38287,7 +39370,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -38298,6 +39382,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取 Flow 建图预览（最近一次或指定 buildId）：buildId/状态/计划步骤/节点身份与几何；只读已持久化预览，不调用模型、不修改画布；要求目标项目已在桌面打开",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "agentNode"
@@ -38631,7 +39718,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -38642,6 +39730,9 @@
       "destructive": true,
       "cost": "possible",
       "description": "在 builder 角色的 Agent 节点上提交建图目标，由同一桌面宿主的模型端口生成预览并持久化（不落画布）；需要已验证工具调用能力的模型，模型预检失败时零模型请求；request/trace/span 由 main 生成，外部不能自造",
+      "interactive": false,
+      "responseTimeoutMs": 180000,
+      "openWorld": true,
       "requires": [
         "openProject",
         "agentNode",
@@ -38963,7 +40054,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -38974,6 +40066,9 @@
       "destructive": true,
       "cost": "none",
       "description": "按 buildId 把已生成的建图预览提交到当前打开的权威画布（复用 GUI 同一 commitFlowBuild：authorize/confirm + 单撤销步 + 保存屏障）；外部不能自带预览内容；已 committed 的重复提交按持久化事实返回，不重复建节点；BL-01：这是人工决定，外部调用会在桌面弹出确认，只有人点允许才生效，拒绝/超时/无桌面分别返回 HUMAN_DENIED / HUMAN_DECISION_TIMEOUT / DESKTOP_UNAVAILABLE（均零副作用）",
+      "interactive": true,
+      "responseTimeoutMs": 330000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "agentNode",
@@ -39313,7 +40408,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -39324,6 +40420,9 @@
       "destructive": true,
       "cost": "possible",
       "description": "在 ai-review 节点上提交一次模型审核并读取报告（与 GUI 同一 FlowReviewHost 与同一证据/预算规则）；审核结论由模型产生，外部不能改写为通过；需要已验证工具调用能力的模型，模型预检失败时零模型请求；request/trace/span 由 main 生成",
+      "interactive": false,
+      "responseTimeoutMs": 180000,
+      "openWorld": true,
       "requires": [
         "openProject",
         "agentNode",
@@ -39579,7 +40678,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -39590,6 +40690,9 @@
       "destructive": true,
       "cost": "none",
       "description": "向状态机节点提交一个人工事件（与 GUI 提交事件按钮同一待处理写入）；携带观察到的 expectedRevision，过期提交拒绝；事件合法性与迁移在运行节点时由同一执行器校验；要求目标项目已在桌面打开",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -39745,7 +40848,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -39756,6 +40860,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取状态机节点的当前阶段/修订/合法出边事件与待处理提交（只读持久化事实；未运行时按配置初始阶段与修订 1 返回）",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -39918,7 +41025,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -39929,6 +41037,9 @@
       "destructive": true,
       "cost": "none",
       "description": "向人工任务节点提交结果（与 GUI 提交结果按钮同一待处理写入）；携带观察到的 expectedRevision，过期提交拒绝；结果类型须与节点声明一致；完成状态在运行节点时由同一执行器校验；要求目标项目已在桌面打开；BL-01：这是人工决定，外部调用会在桌面弹出确认，只有人点允许才生效，拒绝/超时/无桌面分别返回 HUMAN_DENIED / HUMAN_DECISION_TIMEOUT / DESKTOP_UNAVAILABLE（均零副作用）",
+      "interactive": true,
+      "responseTimeoutMs": 330000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -40157,7 +41268,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -40168,6 +41280,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取人工任务节点的当前状态/修订/已交付结果与待处理提交（只读持久化事实；未运行时按 pending 修订 1 返回）",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -40420,7 +41535,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -40431,6 +41547,9 @@
       "destructive": false,
       "cost": "none",
       "description": "按项目与 commandId 读取既有 Flow 命令的账本回执（状态/运行/输出版本引用）；只读事实，不创建、不结算、不改写命令",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -40629,7 +41748,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -40640,6 +41760,9 @@
       "destructive": false,
       "cost": "none",
       "description": "核对节点当前是否可执行：复用账本同一占用、协调控制范围与审核门禁；只读检查，不占用、不执行。不可用时返回与 GUI 相同的稳定拒绝码",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -40762,7 +41885,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -40773,6 +41897,9 @@
       "destructive": true,
       "cost": "none",
       "description": "按已保存运行事实核对既有 Flow 命令并结算账本回执；只有运行记录的 runId/命令/租约/输入指纹全部一致时才推进状态，无法确认时保持 pending/unknown 并回传稳定原因，绝不把 unknown 报成成功；需要幂等键",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -41011,7 +42138,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -41022,6 +42150,9 @@
       "destructive": false,
       "cost": "none",
       "description": "只读核对既有 Flow 命令：读取账本回执，并在回滚事务内用同一账本结算规则预演\"现在结算会得到什么状态\"（不落账、不改写命令、不产生输出版本）；无法结算时回传稳定原因，供 reconcile 决定是否提交",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "command"
@@ -41276,7 +42407,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -41287,6 +42419,9 @@
       "destructive": true,
       "cost": "possible",
       "description": "把一条外部派发请求交给当前活动画布执行：main 生成命令/任务/运行身份并先保存画布，按已保存图计算语义版本，账本记录 principal=external 后经既有渲染器 grant 通道执行；受理只表示已交给渲染器，最终状态用 lookup/check 读、reconcile 结算；付费目标必须 confirmPaidTarget=true",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "command"
@@ -41505,7 +42640,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -41516,6 +42652,9 @@
       "destructive": true,
       "cost": "none",
       "description": "放弃一条外部派发且**从未准入**的 Flow 命令（principal=external、admitted=0、pending/unknown）；已准入或已终态一律拒绝，绝不改写已执行事实；需要幂等键",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "command"
@@ -41715,7 +42854,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -41726,6 +42866,9 @@
       "destructive": true,
       "cost": "none",
       "description": "把项目已保存画布上某节点端口的结果固化为固定资产版本（幂等 submissionId）；活动画布先经桌面保存屏障，节点有未核对命令时拒绝，不接收外部提供的取值",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "node"
@@ -41915,7 +43058,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -41926,6 +43070,9 @@
       "destructive": false,
       "cost": "none",
       "description": "按节点端口列出固定资产版本摘要（序号/画布版本/摘要值），不返回取值正文；最多 100 条",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -42128,7 +43275,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -42139,6 +43287,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取固定资产版本摘要与固定取值（文本/JSON 上限 20k 字符或 100k 编码字符，超出如实拒绝）；媒体只返回受控 mediaId 与相对引用，不返回绝对路径或字节",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "flowAsset"
@@ -42396,7 +43547,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -42407,6 +43559,9 @@
       "destructive": false,
       "cost": "none",
       "description": "分页读取本机模型供应商连接的去敏摘要（ID/名称/协议/启用状态/时间）；字段白名单投影，不返回地址、鉴权头、密钥密文或密钥引用，不联网探测",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -42557,7 +43712,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -42568,6 +43724,9 @@
       "destructive": false,
       "cost": "none",
       "description": "分页读取模型定义（可按 connectionId 过滤）的能力声明与验证状态；不返回能力控制参数、元数据、验证原文或密钥材料，不联网探测",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -42859,7 +44018,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -42870,6 +44030,9 @@
       "destructive": false,
       "cost": "none",
       "description": "分页读取已启用的默认功能绑定（featureKey → 连接/模型/能力）；执行参数 overrides 与模型元数据不返回",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -43039,7 +44202,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -43050,6 +44214,9 @@
       "destructive": false,
       "cost": "none",
       "description": "按 featureKey（可选显式 provider::model 目标）解析实际执行会用的 provider/model；复用 GUI 同一解析服务（含能力验证与密钥存在性检查），只返回去敏目标，不发起任何供应商请求",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "savedConnection",
         "modelDefinition"
@@ -43215,7 +44382,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -43226,6 +44394,9 @@
       "destructive": false,
       "cost": "none",
       "description": "只读探测本机媒体工具（FFmpeg/FFprobe/audio-separator）与本地推理环境（Python/GPU/IndexTTS）就绪状态；不安装、不下载、不联网，缺依赖如实报告不可用",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -43431,7 +44602,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -43442,6 +44614,9 @@
       "destructive": false,
       "cost": "none",
       "description": "只读读取视频引擎（本地 CUDA 推理环境，video-depth/video-clay 使用）的安装与就绪状态；不触发安装、下载或任何模型调用",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -43553,7 +44728,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -43564,6 +44740,9 @@
       "destructive": true,
       "cost": "none",
       "description": "启动本地视频推理环境安装（联网下载 CUDA/PyTorch 依赖与校验后的模型权重并写入应用数据目录，需要本机 Python 3.12）；必须显式 confirmInstall=true，否则拒绝且不启动任何下载；只受理启动，不等待安装完成，进度与就绪经 environment.videoEngine.status 读取",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": true,
       "requires": [
         "pythonRuntime",
         "installConfirm"
@@ -43678,7 +44857,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -43689,6 +44869,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取调色板（一级分类 Dock）的本机偏好：分类显示顺序与名称覆盖；这是纯界面业务偏好，不含项目数据、不含密钥",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -43802,7 +44985,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -43813,6 +44997,9 @@
       "destructive": true,
       "cost": "none",
       "description": "保存调色板偏好（分类显示顺序 + 可选名称覆盖）。与 GUI 调色板设置同一归一化：忽略未知分类、自动去重、缺失分类补默认顺序；幂等，同幂等键重放不产生第二次写入",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "none"
       ],
@@ -43963,7 +45150,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -43974,6 +45162,9 @@
       "destructive": false,
       "cost": "none",
       "description": "按 trace/run/request/节点/级别/时间窗分页查询已落盘的结构化诊断事件；复用 GUI 同一诊断存储与脱敏（不返回提示词、模型回复正文、密钥或原始请求响应），服务不可用时如实报错而不是空结果",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -44344,7 +45535,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -44355,6 +45547,9 @@
       "destructive": true,
       "cost": "none",
       "description": "把指定范围的诊断事件导出为诊断包（zip）到**受控导出目录**（复用 GUI 同一 exportBundle 与脱敏规则）；范围可为一次流程(traceId)、一次运行(runId)或时间窗，可组合；回执给文件名/sha256/字节数/事件数，不接受任意输出路径也不覆盖已有文件",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "diagnosticsStore"
       ],
@@ -44512,7 +45707,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -44523,6 +45719,9 @@
       "destructive": true,
       "cost": "none",
       "description": "把某个节点最近一次运行与历史运行（≤13 条）导出为节点诊断 JSON 到**受控导出目录**：记录由权威宿主提供（与 GUI 面板\"导出诊断信息\"同一来源），节点正文/密钥/媒体内容在导出前被脱敏；回执给文件名/sha256/字节数/运行条数，不接受任意输出路径",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -44649,7 +45848,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -44660,6 +45860,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取项目已保存的节点可见集（预设/可见类型/节点集版本）与当前可创建类型；旧项目从未保存过配置时如实表达\"全部可创建节点可见\"，不伪造 general 预设",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -44854,7 +46057,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -44865,6 +46069,9 @@
       "destructive": true,
       "cost": "none",
       "description": "替换项目的节点可见集（决定调色板里出现哪些节点）；只接受当前可创建类型 ID，未知/重复/空集合显式拒绝；经项目正式保存机制落盘，重开项目后生效",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -45049,7 +46256,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -45060,6 +46268,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取某类节点的契约：契约版本、端口（输入/输出、类型、必填、基数、Schema）、初始配置、执行方式、输出真值来源与是否需要动态端口二次读取；不需要创建实例",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -45435,7 +46646,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -45446,6 +46658,9 @@
       "destructive": true,
       "cost": "none",
       "description": "创建或更新模型供应商连接；可选写入 API Key（写入设备绑定密钥库，明文不回传、不进日志）。连接协议/地址/头或密钥发生变化会清除该连接的模型验证与功能绑定，回执如实标记",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -45686,7 +46901,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -45697,6 +46913,9 @@
       "destructive": false,
       "cost": "none",
       "description": "查询某个连接是否已保存 API Key：只返回是否存在与不可逆指纹，不返回明文、不返回端点或请求头",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -45816,7 +47035,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -45827,6 +47047,9 @@
       "destructive": true,
       "cost": "none",
       "description": "删除模型供应商连接及其下所有模型定义（连带清理验证与功能绑定）；连接不存在如实 NOT_FOUND",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -45936,7 +47159,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -45947,6 +47171,9 @@
       "destructive": true,
       "cost": "none",
       "description": "创建或更新模型定义（必须绑定既有连接，能力声明非空）；不涉及凭据；能力变化会清除对应验证与绑定",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "savedConnection"
       ],
@@ -46220,7 +47447,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -46231,6 +47459,9 @@
       "destructive": true,
       "cost": "none",
       "description": "删除单个模型定义（连带清理其验证、工具调用验证与功能绑定）；不存在如实 NOT_FOUND",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -46334,7 +47565,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -46345,6 +47577,9 @@
       "destructive": true,
       "cost": "none",
       "description": "批量删除模型定义（与 GUI 多选删除同一 deleteModels）；不存在的 ID 计入 notFound 而不是让整批失败，回执逐项可核对",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -46461,7 +47696,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -46472,6 +47708,9 @@
       "destructive": true,
       "cost": "none",
       "description": "保存功能默认绑定（featureKey + 连接 + 模型定义 + 操作）。**只有该模型该操作已通过验证才成立**：外部无法自行验证模型，因此未验证一律拒绝，不伪造\"已绑定可用\"",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "savedConnection",
         "modelDefinition"
@@ -46677,7 +47916,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -46688,6 +47928,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取某个项目媒体的生成来源（产物谱系）：生产者节点、运行ID、操作与参数摘要；媒体不属于该项目或没有来源时如实返回 found=false，不伪造谱系。生成来源只能由执行器写入，外部不可写",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "project",
         "projectMedia"
@@ -46924,7 +48167,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -46935,6 +48179,9 @@
       "destructive": true,
       "cost": "none",
       "description": "把项目媒体（可指定 mediaIds，省略=全部）批量导出到受控导出目录下的新子目录：同名文件自动加序号后缀、绝不覆盖已有文件；逐项回执成功/失败文件名，不用总数掩盖个别失败",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "project"
       ],
@@ -47113,7 +48360,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -47124,6 +48372,9 @@
       "destructive": true,
       "cost": "none",
       "description": "把项目里已登记的受控媒体采集为资源库资源（复制文件入库，生成来源随之迁移）；媒体必须属于该项目，外部只提供 mediaId 与可选文案，不提供路径；素材缺失/超限如实失败",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -47267,7 +48518,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -47278,6 +48530,9 @@
       "destructive": true,
       "cost": "none",
       "description": "把项目中选定的画布节点快照采集为一份独立版本化资源；每个节点的 nodeId 必须真实存在于该项目、nodeType 必须与持久化数据一致、引用的 mediaId 必须属于该项目，外部不能提交伪造的节点或跨项目媒体",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -47466,7 +48721,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -47477,6 +48733,9 @@
       "destructive": true,
       "cost": "none",
       "description": "在当前打开的画布上执行一步撤销或重做（与 GUI 历史坞同一 editor 历史栈）；只回滚画布编辑，不会撤销已发生的模型调用或发布副作用；expectedGraphVersion 为**建议值**（只拒绝超前版本；保存屏障会推进版本，严格相等会使调用永远失败）；执行后保存并返回新的图版本",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -47610,7 +48869,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -47621,6 +48881,9 @@
       "destructive": true,
       "cost": "none",
       "description": "保存并关闭当前打开的项目画布，回到项目列表（与 GUI 项目菜单\"返回\"同一动作）；只能关闭当前打开的画布，未打开的项目不会被误关",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject"
       ],
@@ -47726,7 +48989,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -47737,6 +49001,9 @@
       "destructive": false,
       "cost": "none",
       "description": "分页读取供应商目录（新目录优先，旧 providers 表保留为遗留档案）；只返回 id/名称/协议/模型数/是否有密钥/是否遗留，不返回地址、鉴权头或密钥材料，不联网探测",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -47912,7 +49179,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -47923,6 +49191,9 @@
       "destructive": false,
       "cost": "none",
       "description": "只读读取**节点执行实际可用**的供应商目录（已验证接管的目录档案）；与 GUI 节点模型选择器同一来源，不返回地址或密钥，不联网探测",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -48050,7 +49321,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -48061,6 +49333,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取\"可导出为凭据包\"的连接清单（用于凭据包导出前的选择）；只返回连接 id/名称/协议与模型数，不返回任何密钥材料或地址",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -48188,7 +49463,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -48199,6 +49475,9 @@
       "destructive": true,
       "cost": "none",
       "description": "测试已保存供应商连接是否可用（向供应商 /models 发一次请求）；必须显式 confirmNetwork=true 才执行，否则拒绝且不发任何请求；外部只给供应商 id，密钥与地址由 main 从设备密钥库读取；回执只给可用性与模型数量",
+      "interactive": false,
+      "responseTimeoutMs": 120000,
+      "openWorld": true,
       "requires": [
         "savedProvider",
         "networkConfirm"
@@ -48319,7 +49598,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -48330,6 +49610,9 @@
       "destructive": true,
       "cost": "possible",
       "description": "对某个模型定义做真实能力验证（会向供应商发起真实请求、**可能产生费用**）；必须同时显式 confirmNetwork=true 与 confirmCost=true 才执行，否则拒绝且不发任何请求；外部只给连接与模型定义 id，不提供密钥",
+      "interactive": false,
+      "responseTimeoutMs": 180000,
+      "openWorld": true,
       "requires": [
         "savedConnection",
         "modelDefinition",
@@ -48474,7 +49757,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -48485,6 +49769,9 @@
       "destructive": true,
       "cost": "none",
       "description": "拉取某个已保存连接在供应商侧的可用模型列表（与 GUI「拉取可用模型」同一实现：同一端点绑定校验、同一诊断事件）；会向供应商发请求，必须显式 confirmNetwork=true 才执行；外部只给 connectionId，不提供密钥或地址",
+      "interactive": false,
+      "responseTimeoutMs": 120000,
+      "openWorld": true,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -48615,7 +49902,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -48626,6 +49914,9 @@
       "destructive": true,
       "cost": "possible",
       "description": "验证某个文本模型是否支持 Agent 强制结构化工具调用与工具结果往返（与 GUI「验证 Agent 工具调用」同一实现）；会向供应商发真实请求、**可能产生费用**，必须同时显式 confirmNetwork=true 与 confirmCost=true；结果写入该模型的工具调用验证快照",
+      "interactive": false,
+      "responseTimeoutMs": 180000,
+      "openWorld": true,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -48762,7 +50053,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -48773,6 +50065,9 @@
       "destructive": true,
       "cost": "possible",
       "description": "受控联网搜索（豆包 web_search，官方真实端点）：必须同时显式 confirmNetwork=true 与 confirmCost=true 才执行，否则拒绝且不发任何请求；密钥由 main 从设备密钥库读取（well-known 连接 doubao-search），外部不提供密钥或地址；返回标题/链接/摘要等结构化结果，不含请求报文或密钥",
+      "interactive": false,
+      "responseTimeoutMs": 120000,
+      "openWorld": true,
       "requires": [
         "savedConnection",
         "networkConfirm",
@@ -48937,7 +50232,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -48948,6 +50244,9 @@
       "destructive": true,
       "cost": "none",
       "description": "新建或更新供应商连接（与 GUI 设置页同一 saveProvider）：id 缺省=新建；更新时 apiKey 留空表示保留已保存密钥；回执只给 id/名称/协议/模型数/是否有密钥，**不回显密钥**",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -49110,7 +50409,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -49121,6 +50421,9 @@
       "destructive": true,
       "cost": "none",
       "description": "删除已保存的供应商连接；不存在时如实 NOT_FOUND，不静默成功",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -49224,7 +50527,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -49235,6 +50539,9 @@
       "destructive": true,
       "cost": "none",
       "description": "对**已保存**的供应商做连通性探测（复用 GUI 同一 probeProvider）：只做免费/只读探测，不发起计费调用；必须显式 confirmNetwork=true；外部只给 providerId，密钥由 main 读取",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": true,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -49377,7 +50684,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -49388,6 +50696,9 @@
       "destructive": true,
       "cost": "none",
       "description": "导入受控目录内的凭据包（.cskeys）：必须显式 confirmImport=true，并会在 GUI 弹人工确认框；只有人点允许才解密并写入连接，回执给包ID/新增/更新/模型数，不含密钥",
+      "interactive": true,
+      "responseTimeoutMs": 330000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -49518,7 +50829,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -49529,6 +50841,9 @@
       "destructive": true,
       "cost": "none",
       "description": "导入受控目录内的旧版供应商包（.cskeys 旧格式）：必须显式 confirmImport=true，并会在 GUI 弹人工确认框；只有人点允许才写入，回执给新增数量，不含密钥",
+      "interactive": true,
+      "responseTimeoutMs": 330000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -49642,7 +50957,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -49653,6 +50969,9 @@
       "destructive": true,
       "cost": "none",
       "description": "清除本机即梦 CLI 登录态，切换账号前使用；需 confirmLogout=true",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -49747,7 +51066,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -49758,6 +51078,9 @@
       "destructive": true,
       "cost": "none",
       "description": "发起即梦（Dreamina）设备流登录：返回需要在浏览器打开的验证地址与用户码；若本机已有有效登录则直接返回 already。**不伪造登录状态**，登录必须由人完成；需 confirmNetwork=true",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": true,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -49877,7 +51200,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -49888,6 +51212,9 @@
       "destructive": true,
       "cost": "none",
       "description": "查询即梦设备流登录结果（pending/success/expired/failed）；只如实反映本机 CLI 的真实状态，成功与否由人是否真的在浏览器完成授权决定；需 confirmNetwork=true",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": true,
       "requires": [],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -50000,151 +51327,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
-      ]
-    },
-    {
-      "operationId": "provider.package.export",
-      "operationVersion": 1,
-      "effect": "export",
-      "idempotent": false,
-      "destructive": true,
-      "cost": "none",
-      "description": "把选定的供应商连接导出为凭据包（.cskeys）到受控导出目录（复用 GUI 同一 exportProviders 与加密格式）：需要解封密码；回执给文件名/sha256/字节数/连接数，不回传包正文",
-      "requires": [
-        "activeLicense",
-        "savedConnection"
-      ],
-      "inputSchema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {
-          "fileName": {
-            "type": "string",
-            "pattern": "^[a-zA-Z0-9_-]{1,100}\\.[a-z]{2,10}$"
-          },
-          "password": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          },
-          "providerIds": {
-            "minItems": 1,
-            "maxItems": 200,
-            "type": "array",
-            "items": {
-              "type": "string",
-              "pattern": "^[a-zA-Z0-9_-]{1,80}$"
-            }
-          }
-        },
-        "required": [
-          "fileName",
-          "password"
-        ],
-        "additionalProperties": false
-      },
-      "outputSchema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {
-          "apiVersion": {
-            "type": "number",
-            "const": 1
-          },
-          "requestId": {
-            "type": "string"
-          },
-          "operationId": {
-            "type": "string",
-            "const": "provider.package.export"
-          },
-          "traceId": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "completed",
-              "failed",
-              "unknown"
-            ]
-          },
-          "idempotencyKey": {
-            "type": "string"
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "fileName": {
-                "type": "string",
-                "maxLength": 160
-              },
-              "sha256": {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
-              },
-              "byteSize": {
-                "type": "integer",
-                "exclusiveMinimum": 0,
-                "maximum": 9007199254740991
-              },
-              "connectionCount": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 9007199254740991
-              }
-            },
-            "required": [
-              "fileName",
-              "sha256",
-              "byteSize",
-              "connectionCount"
-            ],
-            "additionalProperties": false
-          },
-          "error": {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string"
-              },
-              "phase": {
-                "type": "string"
-              },
-              "retryable": {
-                "type": "boolean"
-              },
-              "detail": {
-                "type": "string",
-                "maxLength": 300
-              },
-              "currentGraphVersion": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 9007199254740991
-              }
-            },
-            "required": [
-              "code",
-              "phase",
-              "retryable"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "required": [
-          "apiVersion",
-          "requestId",
-          "operationId",
-          "traceId",
-          "status"
-        ],
-        "additionalProperties": false
-      },
-      "transports": [
-        "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -50155,6 +51339,9 @@
       "destructive": true,
       "cost": "none",
       "description": "把选定的已保存连接封成凭据包（.cskeys）写入受控导出目录：需要解封密码与接收设备的凭证文件名（服务端从受控目录读取，不接受任意路径）；回执给文件名/sha256/字节数/包ID/连接数/到期时间，不回传包正文",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "activeLicense",
         "recipientCredential"
@@ -50305,7 +51492,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -50316,6 +51504,9 @@
       "destructive": false,
       "cost": "none",
       "description": "预览受控目录内的凭据包（只读，不解密落库）：需要解封密码；返回包 ID/签发设备摘要/到期/连接清单/是否已导入，不含任何密钥材料",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "activeLicense",
         "keyPackage"
@@ -50477,7 +51668,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -50488,6 +51680,9 @@
       "destructive": true,
       "cost": "none",
       "description": "在当前打开的导演台节点上申请发布（frame=静帧 PNG，video=WebM 预演）；只创建待人工授权的请求，不渲染、不改变画布，授权与拒绝由 GUI 中的人决定",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "openProject",
         "directorNode",
@@ -50667,7 +51862,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -50678,6 +51874,9 @@
       "destructive": false,
       "cost": "none",
       "description": "读取一次发布申请的授权与执行状态（待授权/已授权/已拒绝/已过期/执行中/已完成/失败）；完成态返回正式产物媒体引用",
+      "interactive": false,
+      "responseTimeoutMs": 15000,
+      "openWorld": false,
       "requires": [
         "publishRequest"
       ],
@@ -50866,7 +52065,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     },
     {
@@ -50877,6 +52077,9 @@
       "destructive": true,
       "cost": "none",
       "description": "人工授权后执行发布：用与 GUI 相同的发布服务渲染并写入节点正式结果；未授权、已拒绝或已过期一律拒绝，不重放、不重复发布",
+      "interactive": false,
+      "responseTimeoutMs": 120000,
+      "openWorld": false,
       "requires": [
         "publishRequest",
         "humanAuthorization"
@@ -51056,7 +52259,8 @@
       },
       "transports": [
         "cli",
-        "mcp-stdio"
+        "mcp-stdio",
+        "mcp-sse"
       ]
     }
   ],
@@ -52364,8 +53568,8 @@
         {
           "actionId": "N7",
           "label": "状态、任务、取消、暂停与恢复",
-          "status": "planned",
-          "evidence": "对话流式取消仅 GUI 侧验证（chatCancel 仍 F6），外部未接通"
+          "status": "contract-tested",
+          "evidence": "node.execute/run.cancel 服务级测试（external_runs）；对话流式取消与 GUI 共用引擎，真实供应商长任务未验收"
         },
         {
           "actionId": "N8",
@@ -52376,8 +53580,8 @@
       ],
       "summary": {
         "desktopTested": 4,
-        "contractTested": 3,
-        "planned": 1,
+        "contractTested": 4,
+        "planned": 0,
         "notApplicable": 0
       }
     },
@@ -52473,7 +53677,7 @@
           "actionId": "N5",
           "label": "执行、显式发布或作为素材输出",
           "status": "contract-tested",
-          "evidence": "test/ 执行器/输出投影服务级测试（同一实现，无桌面逐动作证据）"
+          "evidence": "code 执行器/输出投影服务级测试；sandbox boundary pending，未完成隔离专项审计，不宣称可发布"
         },
         {
           "actionId": "N6",
@@ -53012,8 +54216,8 @@
         {
           "actionId": "N5",
           "label": "执行、显式发布或作为素材输出",
-          "status": "planned",
-          "evidence": "run/pause/stop/review 需要共享宿主句柄与外部主体协议，尚未开放"
+          "status": "contract-tested",
+          "evidence": "flowAgent.review 经同一 FlowReviewHost 提交模型审核（test/local-agent-flow-agent-build-access.test.ts）；真实模型桌面验收未做"
         },
         {
           "actionId": "N6",
@@ -53024,8 +54228,8 @@
         {
           "actionId": "N7",
           "label": "状态、任务、取消、暂停与恢复",
-          "status": "planned",
-          "evidence": "Agent 任务状态/暂停/停止需共享宿主句柄，外部只能读账本事实（F8 剩余）"
+          "status": "contract-tested",
+          "evidence": "flowAgent.inspect 服务级测试（test/local-agent-flow-agents-access.test.ts）；审核长任务取消/恢复未单独验收"
         },
         {
           "actionId": "N8",
@@ -53036,8 +54240,8 @@
       ],
       "summary": {
         "desktopTested": 2,
-        "contractTested": 3,
-        "planned": 2,
+        "contractTested": 5,
+        "planned": 0,
         "notApplicable": 1
       }
     },

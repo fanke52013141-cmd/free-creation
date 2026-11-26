@@ -255,7 +255,8 @@ describe('text model with image input', () => {
         id: 'connection-1',
         name: 'renamed',
         protocol: 'openai-compatible',
-        baseUrl: 'https://other.test/v1'
+        baseUrl: 'https://other.test/v1',
+        apiKey: 'test-secret-2'
       })
       expect(host.listModels('connection-1')[0].validation['text.generate']).toBeUndefined()
     } finally {
@@ -305,7 +306,8 @@ describe('text model with image input', () => {
         id: 'connection-1',
         name: 'test',
         protocol: 'openai-compatible',
-        baseUrl: 'http://127.0.0.1:5300/v1'
+        baseUrl: 'http://127.0.0.1:5300/v1',
+        apiKey: 'test-secret-2'
       })
       expect(host.listModels()[0].agentToolCallingValidation?.status).toBe('unverified')
       expect(() => host.saveAgentToolCallingValidation({

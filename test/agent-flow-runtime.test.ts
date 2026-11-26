@@ -74,6 +74,13 @@ function snapshot(mode: 'autonomous' | 'collaborative' = 'autonomous'): AgentTas
     spanId: 'span'
   })
 }
+describe('AF-06 shared active budget schema', () => {
+  it('accepts the FlowGraph one-hour ceiling and rejects larger child budgets', () => {
+    expect(AgentTaskSnapshotSchema.parse({ ...snapshot(), maxActiveMs: 3_600_000 }).maxActiveMs).toBe(3_600_000)
+    expect(AgentTaskSnapshotSchema.safeParse({ ...snapshot(), maxActiveMs: 3_600_001 }).success).toBe(false)
+  })
+})
+
 function fixture(path = ':memory:') {
   const db = new Database(path)
   db.pragma('foreign_keys=ON')

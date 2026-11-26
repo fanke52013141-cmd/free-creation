@@ -12,10 +12,7 @@ export function admitAssignments(
   candidates: Map<string, AgentTaskSnapshot>
 ): Omit<Extract<CoordinationDecision, { kind: 'dispatch' }>, 'kind'>[] {
   const assignments = decision.kind === 'dispatch' ? [decision] : decision.assignments
-  if (
-    assignments.length > (run.config.maxParallelTasks ?? 1) ||
-    new Set(assignments.map((item) => item.nodeId)).size !== assignments.length
-  )
+  if (new Set(assignments.map((item) => item.nodeId)).size !== assignments.length)
     throw new AgentRuntimeError('FLOW_PARALLEL_REJECTED', 'handoff')
   if (run.decisions + (run.controlSteps ?? 0) + assignments.length - 1 > run.config.maxSteps)
     throw new AgentRuntimeError('AGENT_BUDGET_EXHAUSTED', 'coordination')
@@ -40,8 +37,10 @@ export function admitAssignments(
 export function assignmentWaves(
   assignments: Omit<Extract<CoordinationDecision, { kind: 'dispatch' }>, 'kind'>[],
   candidates: Map<string, AgentTaskSnapshot>,
-  file: ProjectFile
+  file: ProjectFile,
+  maxParallelTasks = 4
 ): typeof assignments[] {
+  const capacity = Math.max(1, Math.min(4, maxParallelTasks))
   const downstream = new Map<string, string[]>()
   for (const edge of file.edges) {
     const next = downstream.get(edge.from.nodeId) ?? []
@@ -78,7 +77,11 @@ export function assignmentWaves(
     let wave = 0
     for (let prior = 0; prior < index; prior++)
       if (conflicts(prior, index)) wave = Math.max(wave, assignedWave[prior] + 1)
-    while (waveIndices[wave]?.some((prior) => conflicts(prior, index))) wave++
+    while (
+      waveIndices[wave] &&
+      (waveIndices[wave].length >= capacity || waveIndices[wave].some((prior) => conflicts(prior, index)))
+    )
+      wave++
     ;(waveIndices[wave] ??= []).push(index)
     assignedWave[index] = wave
   }

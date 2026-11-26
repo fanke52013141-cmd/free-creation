@@ -219,7 +219,13 @@ describe('C2.2 command intent foundation (not dispatch authorization)', () => {
     for (const override of [
       { taskId: 'new-task' },
       { targetNodeId: 'shape:other' },
-      { contractVersion: 2 }
+      { contractVersion: 2 },
+      { envelope: { schemaVersion: 1 as const, stageGoal: 'new goal' } },
+      { contextMaterial: { targetPortId: 'in-value', text: 'human material' } },
+      { scopedHumanTask: true as const },
+      { parentCoordinatorTaskId: 'parent-task' },
+      { parentDeadlineAt: 123456789 },
+      { routedInputEdgeIds: ['edge-a'] }
     ]) {
       expect(nodeCommandIntentSignature({ ...original, ...override })).not.toBe(signature)
     }

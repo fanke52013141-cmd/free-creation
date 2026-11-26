@@ -58,6 +58,21 @@ export function exportCanvasFlowGraph(
         const review = ReviewNodeConfigSchema.parse(JSON.parse(current.config))
         return {
           ...updated,
+          modelDefinitionId: review.modelDefinitionId,
+          responsibleNodeId: review.responsibleNodeId
+            ? canvasIds.get(review.responsibleNodeId)
+            : undefined,
+          subjectSources: review.subjectSources
+            .map((source) => ({
+              ...source,
+              nodeId: canvasIds.get(source.nodeId)
+            }))
+            .filter((source): source is { nodeId: string; portId: string } =>
+              typeof source.nodeId === 'string'
+            ),
+          gatedNodeIds: review.gatedNodeIds
+            .map((id) => canvasIds.get(id))
+            .filter((id): id is string => typeof id === 'string'),
           review: {
             criteria: current.text,
             rejectPolicy: review.rejectPolicy,
@@ -72,6 +87,18 @@ export function exportCanvasFlowGraph(
           goal: current.text,
           humanOutputType: human.outputType,
           ...(preview.graph.roles ? { humanRole: human.humanRole } : {})
+        }
+      }
+      if (node.kind === 'agent') {
+        const agent = AgentNodeConfigSchema.parse(JSON.parse(current.config))
+        return {
+          ...updated,
+          goal: current.text,
+          modelDefinitionId: agent.modelDefinitionId,
+          tools: agent.tools,
+          allowedNodeIds: agent.allowedNodeIds
+            .map((id) => canvasIds.get(id))
+            .filter((id): id is string => typeof id === 'string')
         }
       }
       if (node.kind === 'capability') {

@@ -9,6 +9,13 @@ import { SkillBindingSchema } from '../../agent-flow/runtime-contracts'
  * （operationDirectory / 契约快照）必须保持等价，任何 Schema 变化仍要
  * 走 check-agent-access.cjs --write --accept-contract-change。
  */
+/** 客户端与 main 共用的响应等待口径（毫秒）。 */
+export const DEFAULT_RESPONSE_TIMEOUT_MS = 15_000
+export const HUMAN_DECISION_TIMEOUT_MS = 5 * 60 * 1000
+export const INTERACTIVE_RESPONSE_TIMEOUT_MS = HUMAN_DECISION_TIMEOUT_MS + 30_000
+export const LONG_RESPONSE_TIMEOUT_MS = 120_000
+export const MODEL_RESPONSE_TIMEOUT_MS = 180_000
+
 export const identifier = z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/)
 export const empty = z.object({}).strict()
 export const project = z.object({ projectId: identifier }).strict()
@@ -60,4 +67,12 @@ export type AccessOperationSpec = {
   readonly cost: 'none' | 'possible' | 'certain'
   readonly description: string
   readonly input: z.ZodType
+  /** 返回前可能等待真实人工确认。 */
+  readonly interactive?: boolean
+  /** 普通长操作的响应等待上限；与客户端/main 共用。 */
+  readonly responseTimeoutMs?: number
+  /** 操作可能访问外网或外部实体；用于 MCP openWorldHint。 */
+  readonly openWorld?: boolean
+  /** 操作契约版本；缺省为当前 v1。 */
+  readonly operationVersion?: number
 }

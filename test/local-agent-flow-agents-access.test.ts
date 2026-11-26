@@ -358,6 +358,56 @@ describe('flowAgent.inspect', () => {
     expect(result.data.graphVersion).toBe(openProject(projectId)!.meta.graphVersion)
   })
 
+  it('projects coordinator waitReason and children without treating active children as human work', async () => {
+    const project = createProject('协调器观察')
+    const coordinator = node(
+      'shape:coordinator',
+      'agent',
+      1,
+      [],
+      '',
+      JSON.stringify({ role: 'coordinator' })
+    )
+    saveProject({
+      id: project.id,
+      graph: { nodes: [coordinator], edges: [], groups: [] }
+    })!
+    active = project.id
+    getDb()
+      .prepare(
+        'INSERT INTO flow_coordination_runs(project_id,node_id,task_id,body_json) VALUES (?,?,?,?)'
+      )
+      .run(
+        project.id,
+        coordinator.id,
+        'task-coordinator',
+        JSON.stringify({
+          taskId: 'task-coordinator',
+          state: 'waiting',
+          paused: false,
+          children: [{ nodeId: 'shape:child', taskId: 'task-child', state: 'running' }],
+          reviews: [],
+          config: { stages: [] },
+          waitRevision: 3,
+          decisions: 0,
+          phase: 'running'
+        })
+      )
+    const result = await call('flowAgent.inspect', {
+      projectId: project.id,
+      nodeId: coordinator.id
+    })
+    expect(result.status).toBe('completed')
+    expect(result.data.ownership).toBe('ledger-only')
+    expect(result.data.task).toMatchObject({
+      taskId: 'task-coordinator',
+      state: 'waiting',
+      waitKind: null,
+      waitReason: 'active-child',
+      children: [{ nodeId: 'shape:child', taskId: 'task-child', state: 'running' }]
+    })
+  })
+
   it('returns no task without inventing facts', async () => {
     const { projectId } = seedFlowProject()
     active = projectId
@@ -889,14 +939,6 @@ describe('BL-10 节点流即能力（发布 → 目录 → 校验/编译）', ()
       goal: '验证发布即能力',
       nodes: [
         {
-          nodeId: 'a',
-          title: '整理者',
-          participation: 'autonomous',
-          kind: 'agent',
-          goal: '整理材料',
-          completion: '提交整理结果'
-        },
-        {
           nodeId: 'b',
           title: '材料整理流',
           participation: 'collaborative',
@@ -904,17 +946,26 @@ describe('BL-10 节点流即能力（发布 → 目录 → 校验/编译）', ()
           capabilityRef: { kind: 'composite', id: 'material-flow', version: '1.0' },
           goal: '整理成稿',
           completion: '公开输出交付'
+        },
+        {
+          nodeId: 'c',
+          title: '二次整理流',
+          participation: 'collaborative',
+          kind: 'capability',
+          capabilityRef: { kind: 'composite', id: 'material-flow', version: '1.0' },
+          goal: '再次整理',
+          completion: '公开输出交付'
         }
       ],
-      edges: [{ from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'b', portId: 'in-source' } }],
-      entry: 'a',
-      exits: ['b']
+      edges: [{ from: { nodeId: 'b', portId: 'out-result' }, to: { nodeId: 'c', portId: 'in-source' } }],
+      entry: 'b',
+      exits: ['c']
     }
     const validated = await call('flowGraph.validate', { graph })
     expect(validated.status).toBe('completed')
     expect(validated.data).toMatchObject({ ok: true, errors: [] })
     const compiled = await call('flowGraph.compile', { graph })
-    expect(compiled.status).toBe('completed')
+    expect(compiled.status, JSON.stringify(compiled.error)).toBe('completed')
     const composite = compiled.data.compiled.nodes.find((node: any) => node.type === 'composite')
     expect(composite).toBeTruthy()
     expect(JSON.parse(composite.config)).toMatchObject({

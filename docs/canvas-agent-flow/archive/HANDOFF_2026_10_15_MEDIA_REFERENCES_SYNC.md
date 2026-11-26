@@ -37,7 +37,7 @@
 2. 旧强杀夹具只有 flowAssetRef、没有 pinnedOutput，被新一致性校验提前拒绝。补齐与真实固定节点一致的快照后，原四个强杀切点与恢复断言通过。
 3. 原处理器来源端口 out-value 与放入文本资产后的呈现端口 out-text 可不同。校验改为比较唯一固定输出内容，来源身份/端口继续独立匹配版本行；新增专门回归。修正后恢复桌面、媒体项目包及最终完整 verify 通过。
 
-日志影响检查见各包及 [日志覆盖清单](../LOGGING_COVERAGE.md)。执行/恢复复用 agent.desktop、coordination、command、公共 node/model/task/media/asset/save 生命周期；项目包复用 project.transfer.started/committed/failed，不重复终态。新增受控视频完整性与媒体迁移失败码，记录安全 phase/code 和关联 ID，不写入媒体字节、Data URL、正文、回复、凭据或私有路径。日志不作为恢复权威，写入失败不改变业务结果。
+日志影响检查见各包及 [日志覆盖清单](../../LOGGING_COVERAGE.md)。执行/恢复复用 agent.desktop、coordination、command、公共 node/model/task/media/asset/save 生命周期；项目包复用 project.transfer.started/committed/failed，不重复终态。新增受控视频完整性与媒体迁移失败码，记录安全 phase/code 和关联 ID，不写入媒体字节、Data URL、正文、回复、凭据或私有路径。日志不作为恢复权威，写入失败不改变业务结果。
 
 独立扫描所有累积诊断文件，并按最终项目选择实际两个会话：desktop **6/6**、coordination **2/2**、transfer **2/2** 开始/唯一终态配对，无缺失或重复；测试正文、图片/视频 Data URL、PNG/MP4 字节前缀排除通过。该结果不等于完整媒体 trace 树覆盖。
 

@@ -45,16 +45,11 @@ export function collaborationScopeRevision(project: ProjectFile, agentNodeId: st
 /** Receipt identity is separate from diagnostics; a retry may use a fresh trace/span. */
 export function nodeCommandIntentSignature(raw: NodeExecuteCommand): string {
   const command = NodeExecuteCommandSchema.parse(raw)
+  const { traceId: _traceId, spanId: _spanId, ...intent } = command
+  void _traceId
+  void _spanId
   return fingerprint({
-    schemaVersion: command.schemaVersion,
-    kind: command.kind,
-    projectId: command.projectId,
-    taskId: command.taskId,
-    agentNodeId: command.agentNodeId,
-    targetNodeId: command.targetNodeId,
-    expectedSemanticRevision: command.expectedSemanticRevision,
-    contractVersion: command.contractVersion,
-    ...(command.videoRework ? { videoRework: command.videoRework } : {}),
+    ...intent,
     // Port map order is irrelevant; asset order within each port remains significant.
     inputs: [...command.inputs].sort((a, b) => a.targetPortId.localeCompare(b.targetPortId))
   })

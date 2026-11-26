@@ -12,7 +12,6 @@
 // - 请求 schema 直接复用内部的 FlowAgentRunSchema / FlowAgentQuerySchema，
 //   包括 continue/reconcile/restore 必须携带观测到的任务与等待修订号；
 // - 请求 ID / trace / span 由 main 生成，外部不能自造运行身份。
-import { randomUUID } from 'node:crypto'
 import {
   FlowAgentQuerySchema,
   FlowAgentRunSchema,
@@ -34,6 +33,8 @@ export const FLOW_AGENT_RUN_OPERATION_IDS: ReadonlySet<AccessOperationId> = new 
 export interface FlowAgentRunContext {
   activeProjectId: () => string | null
   clientId?: string
+  /** agent.access 的请求/诊断身份，继续传给 coordination/model 事件，避免链路断裂。 */
+  diagnostics: { requestId: string; traceId: string; spanId: string }
   /** BL-01：外部触发的人工决定必须在 GUI 由人确认；缺桌面时 fail-closed。 */
   desktop?: AccessDesktop | null
 }
@@ -78,10 +79,10 @@ export async function runFlowAgentRunOperation(
       ...(input.expectedWaitRevision !== undefined
         ? { expectedWaitRevision: input.expectedWaitRevision }
         : {}),
-      // 运行身份由 main 生成：外部不能自造 requestId/traceId/spanId。
-      requestId: randomUUID(),
-      traceId: randomUUID(),
-      spanId: randomUUID()
+      // 运行身份由 main 生成，并与本次 agent.access 请求/诊断上下文同源。
+      requestId: context.diagnostics.requestId,
+      traceId: context.diagnostics.traceId,
+      spanId: context.diagnostics.spanId
     }
     const parsed = FlowAgentRunSchema.safeParse(raw)
     if (!parsed.success)
@@ -111,6 +112,7 @@ export async function runFlowAgentRunOperation(
         const decision = await requestHumanDecision({
           operation: 'flowAgent.run',
           desktop: context.desktop,
+          diagnostics: context.diagnostics,
           projectId,
           activeProjectId: context.activeProjectId(),
           prompt: {

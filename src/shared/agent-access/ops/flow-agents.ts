@@ -1,7 +1,7 @@
 import { HumanTaskValueSchema } from '../../agent-flow/node-contracts'
 import { HandoffNoteSchema } from '../../agent-flow/stage-contracts'
 import { z } from 'zod'
-import { identifier, nodeId, project } from './common'
+import { identifier, nodeId, project, MODEL_RESPONSE_TIMEOUT_MS } from './common'
 import { FlowDefinitionSchema } from '../../agent-flow/flow-definition'
 import { FlowGraphSchema } from '../../agent-flow/flow-graph'
 import { capabilityDescriptorDtoSchema } from '../../agent-flow/capability-catalog'
@@ -585,6 +585,7 @@ export const FLOW_AGENTS_OPERATIONS = {
     idempotent: false,
     destructive: true,
     cost: 'possible',
+    responseTimeoutMs: MODEL_RESPONSE_TIMEOUT_MS,
     description:
       '在 builder 角色的 Agent 节点上提交建图目标，由同一桌面宿主的模型端口生成预览并持久化（不落画布）；需要已验证工具调用能力的模型，模型预检失败时零模型请求；request/trace/span 由 main 生成，外部不能自造',
     input: project.extend({ nodeId }).strict()
@@ -606,6 +607,7 @@ export const FLOW_AGENTS_OPERATIONS = {
     idempotent: false,
     destructive: true,
     cost: 'possible',
+    responseTimeoutMs: MODEL_RESPONSE_TIMEOUT_MS,
     description:
       '在 ai-review 节点上提交一次模型审核并读取报告（与 GUI 同一 FlowReviewHost 与同一证据/预算规则）；审核结论由模型产生，外部不能改写为通过；需要已验证工具调用能力的模型，模型预检失败时零模型请求；request/trace/span 由 main 生成',
     input: project.extend({ nodeId }).strict()

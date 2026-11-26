@@ -9,6 +9,7 @@ import { decryptSecret, encryptionAvailable, encryptSecret, isEncryptedSecret, p
 import { getActiveVault } from '../security/keystore/vault'
 import { driverForSpec } from '../../shared/provider-driver'
 import { apiKeyPreview } from '../../shared/security/api-key-preview'
+import { originOf } from '@free-creation/model-runtime'
 import type { Capability, Connection, ModelOperation } from '@free-creation/model-contracts'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
 
@@ -74,17 +75,46 @@ function catalogModels(row: CatalogRow): GatewayModelInfo[] {
   return [...byModality.entries()].map(([modality, verifiedOperations]) => ({ id: row.model_id, name: row.model_name, modality, operations: verifiedOperations }))
 }
 
-/** 读取连接密钥：vault 引用走设备密钥库；兼容尚未迁移的 enc:/plain:/裸值。 */
-async function readConnectionSecret(connectionId: string, ref: string | null): Promise<string> {
+/** 请求路径读取连接密钥：目标来源必须与持久化连接端点一致。 */
+async function readConnectionSecret(connectionId: string, ref: string | null, currentBaseUrl: string, targetUrl: string): Promise<string> {
+  if (!ref) return ''
+  const targetOrigin = originOf(targetUrl)
+  if (!targetOrigin || targetOrigin !== originOf(currentBaseUrl)) return ''
   const parsed = parseVaultRef(ref)
   if (parsed) {
+    if (parsed.kind !== 'connection' || parsed.id !== connectionId) return ''
     const vault = getActiveVault()
-    return vault ? ((await vault.readSecret('connection', connectionId)) ?? '') : ''
+    if (!vault) return ''
+    try {
+      return (await vault.readForRequest('connection', connectionId, targetUrl)) ?? ''
+    } catch {
+      return ''
+    }
+  }
+  // Legacy enc:/plain:/裸值没有独立 origin 元数据；仅在同一持久化端点内兼容读取。
+  return decryptSecret(ref)
+}
+
+/** 请求路径读取旧 providers 表密钥；目标来源必须与当前 base_url 一致。 */
+async function readProviderSecret(id: string, ref: string | null, currentBaseUrl: string, targetUrl: string): Promise<string> {
+  if (!ref) return ''
+  const targetOrigin = originOf(targetUrl)
+  if (!targetOrigin || targetOrigin !== originOf(currentBaseUrl)) return ''
+  const parsed = parseVaultRef(ref)
+  if (parsed) {
+    if (parsed.kind !== 'provider' || parsed.id !== id) return ''
+    const vault = getActiveVault()
+    if (!vault) return ''
+    try {
+      return (await vault.readForRequest('provider', id, targetUrl)) ?? ''
+    } catch {
+      return ''
+    }
   }
   return decryptSecret(ref)
 }
 
-async function catalogConfigs(onlyId?: string): Promise<ProviderConfig[]> {
+async function catalogConfigs(onlyId?: string, targetUrl?: string): Promise<ProviderConfig[]> {
   const grouped = new Map<string, ProviderConfig>()
   for (const row of catalogRows()) {
     if (onlyId && row.connection_id !== onlyId) continue
@@ -92,7 +122,7 @@ async function catalogConfigs(onlyId?: string): Promise<ProviderConfig[]> {
     if (!models.length) continue
     const current = grouped.get(row.connection_id)
     if (current) { current.models.push(...models); continue }
-    grouped.set(row.connection_id, { id: row.connection_id, name: row.name, specId: catalogSpec(row.protocol), baseURL: row.base_url, apiKey: await readConnectionSecret(row.connection_id, row.secret_ref), models, createdAt: Date.parse(row.created_at) || Date.now() })
+    grouped.set(row.connection_id, { id: row.connection_id, name: row.name, specId: catalogSpec(row.protocol), baseURL: row.base_url, apiKey: await readConnectionSecret(row.connection_id, row.secret_ref, row.base_url, targetUrl ?? row.base_url), models, createdAt: Date.parse(row.created_at) || Date.now() })
   }
   return [...grouped.values()].map((p) => ({ ...p, models: p.models.filter((m, i, list) => list.findIndex((x) => x.id === m.id && x.modality === m.modality) === i) }))
 }
@@ -158,7 +188,7 @@ export async function bootstrapLegacyProvidersToCatalog(host: SqliteModelHost): 
       | { protocol: Connection['protocol']; base_url: string; secret_ref: string | null }
       | undefined
     const secretChanged =
-      !currentConnection || (await readConnectionSecret(connectionId, currentConnection.secret_ref)) !== provider.apiKey
+      !currentConnection || (await readConnectionSecret(connectionId, currentConnection.secret_ref, currentConnection.base_url, currentConnection.base_url)) !== provider.apiKey
     const currentModels = host.listModels(connectionId)
     const nextModelIds = new Set(provider.models.map((model) => model.id))
     const currentModelIds = new Set(currentModels.map((model) => model.modelId))
@@ -334,45 +364,52 @@ export async function listVerifiedProviders(): Promise<ProviderSummary[]> {
   return (await catalogConfigs()).map(catalogToSummary)
 }
 
-export async function getProvider(id: string): Promise<ProviderConfig | null> {
+export async function getProvider(id: string, targetUrl?: string): Promise<ProviderConfig | null> {
   // 节点只允许使用已验证目录中的模型，运行时必须取同一连接的 URL 和密钥。
   // 旧 providers 表可能碰巧有同 ID 的残留行，不能让它覆盖目录连接。
-  const catalog = (await catalogConfigs(id)).find((provider) => provider.id === id)
+  const catalog = (await catalogConfigs(id, targetUrl)).find((provider) => provider.id === id)
   if (catalog) return catalog
   const row = getDb().prepare('SELECT * FROM providers WHERE id = ?').get(id) as
     ProviderRow | undefined
   if (!row) return null
   const ref = row.api_key_ref
-  const parsed = parseVaultRef(ref)
-  const apiKey = parsed
-    ? ((await getActiveVault()?.readSecret('provider', id)) ?? '')
-    : decryptSecret(ref)
+  const apiKey = await readProviderSecret(id, ref, row.base_url, targetUrl ?? row.base_url)
   return toConfig(row, apiKey)
 }
 
 export async function saveProvider(input: SaveProviderInput): Promise<ProviderSummary> {
   const models = input.models.map(normalizeModel).filter((m): m is GatewayModelInfo => m !== null)
   const id = input.id ?? nanoid(10)
-  const existing = input.id ? await getProvider(input.id) : null
+  const baseURL = input.baseURL.trim().replace(/\/+$/, '')
   const apiKey = input.apiKey?.trim() ?? ''
+  const existingRow = input.id
+    ? (getDb().prepare('SELECT * FROM providers WHERE id = ?').get(id) as ProviderRow | undefined)
+    : undefined
+  const existingOrigin = existingRow ? originOf(existingRow.base_url) : null
+  const nextOrigin = originOf(baseURL)
+  const endpointChanged = Boolean(existingRow && (
+    existingRow.spec_id !== input.specId ||
+    existingOrigin !== nextOrigin ||
+    (existingOrigin === null && existingRow.base_url !== baseURL)
+  ))
+  if (existingRow?.api_key_ref && endpointChanged && !apiKey) {
+    throw new Error('供应商端点已变化，必须重新输入 API Key；旧密钥不能复用到新端点')
+  }
+  const existing = input.id ? await getProvider(input.id) : null
   // 本机 CLI 通道（即梦）没有 API Key：凭据是机器上的 OAuth 登录态，不是密钥列。
   if (driverForSpec(input.specId) !== 'local-cli' && !apiKey && !existing)
     throw new Error('新建供应商必须提供 API Key')
 
-  // F11 修复仍适用：未提交新 key 时保留库里 api_key_ref 原值。P2 起新 key 写入
-  // 设备绑定 vault（来源绑定该供应商 baseURL），引用列存 vault: 指针。
-  const existingRow = input.id
-    ? (getDb().prepare('SELECT * FROM providers WHERE id = ?').get(id) as ProviderRow | undefined)
-    : undefined
+  // P2 起新 key 写入设备绑定 vault（来源绑定该供应商 baseURL），引用列存 vault: 指针。
+  // 未提交新 key 时只有端点事实未变才保留原 api_key_ref。
   let apiKeyRef: string | null
   if (apiKey) {
     const vault = getActiveVault()
-    const baseURL = input.baseURL.trim().replace(/\/+$/, '')
     if (vault) {
       await vault.writeSecret({
         kind: 'provider',
         id,
-        origin: originOfSafe(baseURL),
+        origin: originOf(baseURL) ?? 'unknown',
         source: 'local',
         scope: 'app.run',
         plain: apiKey
@@ -389,7 +426,7 @@ export async function saveProvider(input: SaveProviderInput): Promise<ProviderSu
     id,
     name: input.name.trim(),
     spec_id: input.specId,
-    base_url: input.baseURL.trim().replace(/\/+$/, ''),
+    base_url: baseURL,
     api_key_ref: apiKeyRef,
     models: JSON.stringify(models),
     created_at: existing?.createdAt ?? Date.now()
@@ -422,15 +459,6 @@ export async function deleteProvider(id: string): Promise<boolean> {
     await vault.deleteSecret('connection', `legacy-${id}`)
   }
   return res.changes > 0
-}
-
-function originOfSafe(baseUrl: string): string {
-  try {
-    const url = new URL(baseUrl)
-    return `${url.protocol}//${url.host}`
-  } catch {
-    return 'unknown'
-  }
 }
 
 /**

@@ -1,9 +1,12 @@
 # 2026-10-19 优化与验收收口交接
 
-日期：2026-10-19  
-基线：`b96faf4`（`origin/main` 与本轮开始时的 `HEAD` 相同）  
-方案：[OPTIMIZATION_EXECUTION_PLAN_2026_10_18.md](./testing/OPTIMIZATION_EXECUTION_PLAN_2026_10_18.md)  
-主台账：[AGENT_TEST_REPORT_2026_10_16.md](./testing/AGENT_TEST_REPORT_2026_10_16.md)、`testing/AGENT_TEST_EXECUTION_2026_10_16.csv`
+日期：2026-10-19
+
+基线：`b96faf4`（`origin/main` 与本轮开始时的 `HEAD` 相同）
+
+方案：[OPTIMIZATION_EXECUTION_PLAN_2026_10_18.md](../testing/OPTIMIZATION_EXECUTION_PLAN_2026_10_18.md)
+
+主台账：[AGENT_TEST_REPORT_2026_10_16.md](../testing/AGENT_TEST_REPORT_2026_10_16.md)、`testing/AGENT_TEST_EXECUTION_2026_10_16.csv`
 
 > 本文件记录截至 2026-10-19 的工作树交付内容。`qa/`、`dist/`、`out/` 按仓库约定不入库；文中引用的 `qa/...` 证据位于本次交付机器，需随交付包单独保存。
 
@@ -21,8 +24,8 @@
 
 ### 2.1 控制关系连线显示（方案步骤 1）
 
-- 新增 [agent-flow-relation-geometry.ts](../../src/renderer/src/canvas/agent-flow-relation-geometry.ts)，把锚点、曲线与标签几何从 React 组件中抽出。
-- [AgentFlowRelationLayer.tsx](../../src/renderer/src/canvas/AgentFlowRelationLayer.tsx) 改为纯投影：
+- 新增 [agent-flow-relation-geometry.ts](../../../src/renderer/src/canvas/agent-flow-relation-geometry.ts)，把锚点、曲线与标签几何从 React 组件中抽出。
+- [AgentFlowRelationLayer.tsx](../../../src/renderer/src/canvas/AgentFlowRelationLayer.tsx) 改为纯投影：
   - 横向节点从相对左右边出入，纵向节点从上下边出入；
   - 斜向/近邻布局在 4×4 边组合中取最短且不穿过卡片的路径；
   - 箭头终点落在目标卡片外边缘；标签避开所有卡片；
@@ -45,10 +48,10 @@
 ### 2.3 文档与证据
 
 - 新增/更新：
-  - [GAP_MAP_2026_10_18.md](./testing/GAP_MAP_2026_10_18.md)
-  - [CFG03_CLOSURE_2026_10_18.md](./testing/CFG03_CLOSURE_2026_10_18.md)
-  - [REL03_SUPPORT_MATRIX_2026_10_18.md](./testing/REL03_SUPPORT_MATRIX_2026_10_18.md)
-  - [AGENT_TEST_REPORT_2026_10_16.md](./testing/AGENT_TEST_REPORT_2026_10_16.md)（追加本轮逐日结论）
+  - [GAP_MAP_2026_10_18.md](../testing/GAP_MAP_2026_10_18.md)
+  - [CFG03_CLOSURE_2026_10_18.md](../testing/CFG03_CLOSURE_2026_10_18.md)
+  - [REL03_SUPPORT_MATRIX_2026_10_18.md](../testing/REL03_SUPPORT_MATRIX_2026_10_18.md)
+  - [AGENT_TEST_REPORT_2026_10_16.md](../testing/AGENT_TEST_REPORT_2026_10_16.md)（追加本轮逐日结论）
   - `AGENT_TEST_EXECUTION_2026_10_16.csv`（追加 CFG-03、REL-02、REL-03 收口记录）
 - `docs/LOGGING_COVERAGE.md` 与 `docs/canvas-agent-flow/10-c1-control-declarations.md` 同步本轮边界与锚点说明。
 

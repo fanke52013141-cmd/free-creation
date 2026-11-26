@@ -1,8 +1,8 @@
 ---
 title: Canvas Studio 待开发清单（BACKLOG）
 status: living            # 常更新文档；每完成一项就勾选，并附上提交 hash
-last-updated: 2026-11-25
-baseline-commit: 42c7bdd (main)
+last-updated: 2026-11-26
+baseline-commit: e9b263f2
 sources:
   - docs/SPEC_DEEP_REVIEW_2026_11_22.md（审查报告，编号 A*/G*/N*/F*/U*）
   - docs/NODE_FLOW_SPEC.md 附录 A（NF-*）
@@ -23,6 +23,14 @@ sources:
 
 > **2026-11-25 收尾（干净树）**：`npm run verify` 通过（`qa/verification/run-AwaNQQ`，20:59–21:20 +08，状态 `passed`、退出码 0；应用测试 3938 通过 / 7 跳过，浏览器 34 脚本、构建与全部 Agent Flow 桌面验收通过），BL-16/19/22/30/34/35/36/37/38/39/50/51 一并置 ✅。契约快照无需刷新（`verify:agent-access` 192 操作 / 34 节点通过）；收尾提交 `418ab05`。
 > 取证说明：首轮 `run-R8AV8H` 因本机 DSH 受限令牌下 Electron GPU 沙箱初始化崩溃而失败（库存 Electron 39.8.10 默认应用同样复现，非本仓代码问题），本轮以 `ELECTRON_DISABLE_SANDBOX=1` 取证；`run-fQCftg` 命中 `test/license-keypackage` 篡改用例的既有偶发，重跑后全绿。
+
+## 2026-11-26 外部审查修复工作区记录（已提交）
+
+- **范围**：Agent Flow 运行准入、条件分支输入、并行波次、停止/迟到提交、命令签名、总预算、human-task 状态、视频固定上限、定义发布/diff、恢复与 scope；外部 Agent 的密钥来源绑定、媒体路径边界、节点执行版本、超时、GUI 占用、错误脱敏、CLI/MCP 契约；CI/门禁与规范文档收敛。
+- **机器契约**：`provider.package.export` 因未满足人工确认与显式连接范围要求从公开 Registry 移除；当前操作数以 `docs/local-agent-access/generated/contracts.json` / `capability.list` 为准。
+- **仓库清理**：C0 保留为测试专用并补充 [README](<src/main/agent-flow/c0/README.md>)；42 个无入口一次性脚本已删除（58,182 行），盘点与决策见 [仓库清理记录](<docs/canvas-agent-flow/audits/repo-cleanup-2026-11-26.md>)。清理后全量单测 4043 项通过 / 7 跳过，C0 16/16、门禁与文档回归 86/86 通过。
+- **验证**：`npm test` 358 文件通过 / 2 跳过，4042 项通过 / 7 跳过；最终运行时定向 223 项与外部 committed scope 1 项通过；`npm run typecheck`、`npm run lint`、`CANVAS_OWNER=1 npm run build`、`guard:agent-parity`、`verify:specs`、`verify:logging`、`git diff --check` 均通过；`verify:acceptance:fast` 2/2 批次通过（protocol 34/34、optimizations 9/9），族 2/3/7/8 24/24、族 4/5/6/9 47/47 通过。
+- **边界**：未发起真实付费模型；未完成真实 GUI 鼠标端到端、Windows 打包版与干净 GitHub runner 实跑；code sandbox 专项审计、Windows named pipe 最小 ACL、SSE token 移出 query 仍待后续；`loop.body` 内 review 当前明确拒绝；R09/R11/R12 仍未闭环。
 
 ---
 
@@ -63,7 +71,7 @@ sources:
 
 ### ✅ BL-02 task-bind 工具白名单回归 · S（随 BL-00 合入 `5cb530c`）
 - **来源**：AF-3.2a（如果 BL-00 合入成功，这一项随之关闭，只需复核）
-- **验收**：[ ] 勾选 `web.search@1` 的专家 Agent 能正常运行；`runtime.ts` 与 `desktop-host.ts:280` 使用同一份白名单常量
+- **验收**：[x] 勾选 `web.search@1` 的专家 Agent 能通过 task-bind；`runtime.ts` 与 `desktop-host.ts` 使用同一份白名单口径（`node.execute@1` + 可选 `web.search@1`），白名单之外工具仍拒绝
 
 ### ✅ BL-03 图模式：死路径消除 + 汇合推断 + 「停滞」终态 · M（`cd873b31` 已进 main；门禁见 2026-11-24 `verify`）
 - **来源**：G1 · AF-8.3a / AF-8.3b / AF-8.5b / V7
@@ -270,7 +278,7 @@ sources:
 | ✅ BL-34 | 节点流版本号改为 major.minor；单次撤销和写盘失败回滚已通过 Electron 验收，版本契约 14 项定向测试通过；`run-AwaNQQ` 全量门禁通过 | NF-11.2 / 11.5 | M |
 | ✅ BL-35 | V10、V11、V12 已实现；固定顺序编译为线性路由图，共用就绪、Agent 分派和完成处理；`run-AwaNQQ` 全量门禁通过 | AGENT_FLOW_SPEC §2.2 / §7 | M |
 | ✅ BL-36 | 循环媒体归属与节点流执行前重试已通过 Electron 验收；生图、视频和循环自动重放保护已通过定向测试；`run-AwaNQQ` 全量门禁通过（其余异步路径见未覆盖边界） | N7 / N9 | S–M |
-| ✅ BL-37 | 192 个操作逐项声明 `idempotent / destructive / cost`；能力目录和 MCP 工具从声明派生；`run-AwaNQQ` 全量验收通过 | 审查报告 §七 · NF-14.3 | S |
+| ✅ BL-37 | Registry 操作逐项声明 `idempotent / destructive / cost`；能力目录和 MCP 工具从声明派生；`run-AwaNQQ` 全量验收通过。当前集合以 [`generated/contracts.json`](local-agent-access/generated/contracts.json) 与 `capability.list` 为准 | 审查报告 §七 · NF-14.3 | S |
 | ✅ BL-38 | 音色设计绑定、空循环体提示、右边缘产物落位已通过浏览器验收（U-3、F-1、U-5）；`run-AwaNQQ` 全量门禁通过 | 组合测试 | S–M |
 | ✅ BL-39 | 循环卡片提供「只继续未完成项」，中止后续跑回归覆盖已完成项复用；`run-AwaNQQ` 全量门禁通过 | ROADMAP R4 | M |
 | ✅ BL-40 | **2026-11-26 完成**：`ask-human` 补料打通能力节点——`node.execute` 可选 `contextMaterial{targetPortId,text}`、协调器映射文本端口并重校验预算、账本提交计入 `human:context` 指纹、store 投影放开 capability、渲染层注入文本输入；Agent 阶段行为不变。桌面端到端：`test-agent-flow-capability-graph` 扩展「超限等待→总览提交→能力节点执行→协调完成」通过，`test-agent-flow-overview-visual` 回归通过；选项与代码地图见 [71 决策记录](canvas-agent-flow/71-capability-context-supplement-decision.md) | AF-10.4 | M |
@@ -294,7 +302,7 @@ sources:
 |---|---|---|
 | ~~`135cbef8` 被撤回是否是有意为之~~ | BL-00 | ✅ 误提交，不恢复 |
 | ~~`control` 边：删除，还是实现为「仅顺序依赖」~~ | BL-05 | ✅ 2026-11-22 已决定：删除 |
-| ~~节点流 headless 输出键：带前缀还是裸 id~~ | NF-5.3 | ✅ 2026-11-26 冻结：统一带 `out-` 前缀（旧裸 id 读取兼容） |
+| ~~节点流 headless 输出键：带前缀还是裸 id~~ | NF-5.3 | ✅ 2026-11-26 冻结：`outputs` / `outputValues` / `resubmit` 统一使用 `out-<id>`（旧裸 id 仅读取兼容） |
 
 ## 待补用例确认（来自审查报告附录）
 

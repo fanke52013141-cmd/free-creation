@@ -1,6 +1,6 @@
-# 外部 Agent 当前能力清单
+# 外部 Agent 能力历史快照（2026-11-07）
 
-> **⚠️ 本文件已过期（2026-11-20 标记）**：内容停留在 2026-11-07 的 25 项操作时代。操作清单的机器真值是 `docs/local-agent-access/generated/contracts.json`（与 `capability.list` 同源，当前 190 项）；运行时枚举用 `capability.list` 操作。本文件仅保留为历史快照，不得作为现状引用。
+> **⚠️ 本文件已过期**：内容停留在 2026-11-07 的交付时点。当前操作与节点清单以 [`generated/contracts.json`](./generated/contracts.json) 为准，运行时枚举用 `capability.list`；本文件仅保留为历史快照，不得作为现状引用。
 
 2026-11-07，按 Registry 当时实际 25 项操作整理。CLI 与 MCP stdio 共用本机正在运行的应用；源码能力不等于已发布安装包具有同样版本。外部客户端与画布内部 Agent Flow 是两个入口，内部支持不能推导成外部可调用。
 

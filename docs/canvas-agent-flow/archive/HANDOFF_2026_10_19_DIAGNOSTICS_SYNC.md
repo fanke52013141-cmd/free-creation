@@ -9,7 +9,7 @@
 - **46 包**：素材分类 list/save 有独立 trace/span、开始与唯一完成/失败，固定仓库阶段及安全错误码。
 - **47 包**：资产包 import/export 有开始、完成、取消、失败的唯一生命周期；对话框和仓库阶段可区分。对话框异常返回失败 envelope；取消不执行仓库，原导入/导出业务结果保持。
 
-详见 [源码验证](testing/SOURCE_VALIDATION_2026_10_19.md)、[45](45-diagnostics-bundle-environment.md)、[46](46-library-category-diagnostics.md)、[47](47-library-package-transfer-diagnostics.md)。未修改节点协议、资产包格式或存储事务算法，没有制作安装包或调用付费供应商。
+详见 [源码验证](../testing/SOURCE_VALIDATION_2026_10_19.md)、[45](45-diagnostics-bundle-environment.md)、[46](46-library-category-diagnostics.md)、[47](47-library-package-transfer-diagnostics.md)。未修改节点协议、资产包格式或存储事务算法，没有制作安装包或调用付费供应商。
 
 ## 验证结果与适用范围
 
@@ -25,7 +25,7 @@
 
 ## 日志、隐私与扫描备注
 
-复用公共事件producer/service、trace/span、有界队列及正式诊断入口，不重复记录业务终态。导出环境只接受白名单字段；素材分类与资产包日志只记录固定操作、阶段和错误码，不记录分类正文、ID列表、文件路径或原始异常。logger故障不改变成功、取消及失败业务结果，实际序列化/脱敏断言通过。覆盖登记及分包日志检查模板见 [LOGGING_COVERAGE](../LOGGING_COVERAGE.md)。
+复用公共事件producer/service、trace/span、有界队列及正式诊断入口，不重复记录业务终态。导出环境只接受白名单字段；素材分类与资产包日志只记录固定操作、阶段和错误码，不记录分类正文、ID列表、文件路径或原始异常。logger故障不改变成功、取消及失败业务结果，实际序列化/脱敏断言通过。覆盖登记及分包日志检查模板见 [LOGGING_COVERAGE](../../LOGGING_COVERAGE.md)。
 
 同步扫描排除QA、数据库、媒体、安装包及超过1MiB的文件。凭据模式扫描命中一处既有测试 fakeKey 常量，已核对为基线相同的人工脱敏测试夹具，保留其断言；不把这个命中说成生产凭据，也不将模式扫描视为任意秘密的完整证明。最终扫描摘要保留在本机 `qa/sync-20261019/`。
 

@@ -1,7 +1,9 @@
 # 节点详情侧栏统一设计规则
 
 > status: active
-> last-verified: unverified
+> last-verified: 2026-11-26
+> baseline-commit: e9b263f2
+> verification-scope: 侧栏固定结构、端口与运行页契约的静态核对；未做全部节点 UI 验收
 
 
 版本：v1.0（2026-09-23）  

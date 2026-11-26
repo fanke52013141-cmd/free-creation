@@ -1,6 +1,6 @@
 # 实施与验收
 
-状态（2026-11-20 校准）：C0–C4、R 系列与 AF-00～07 均已交付验收；本页为历史交付记录。实时证据见[开发台账](archive/08-development-ledger.md)，不能把方案确认或 C0 fixture 验证当作正式节点功能完成。
+状态（2026-11-26 校准）：C0–C4 已分阶段实现并留下分段证据；R 系列不能整体称为“全部验收”，R09、R11、R12 仍未闭环。AF-00～AF-07 已实施，但当时证据限于确定性宿主测试与三入口定义走查，未做真实模型固定顺序长任务、真实 GUI 鼠标共创和完整 `npm run verify`。本页为历史交付记录；当前状态见 [AGENT_FLOW_SPEC](../AGENT_FLOW_SPEC.md) 与 [BACKLOG](../BACKLOG.md)，精确边界见[历史总台账](archive/38-agent-completion-plan.md)和[AF 交付备注](archive/51-af01-07-delivery-2026-11-13.md)。
 
 2026-10-12 已补 [详细实施工单、数据协议和验收矩阵](archive/06-implementation-plan.md)。节点区分人机协作 Agent、纯 AI Agent、纯人工和单次处理；上传与生成内容统一称资产。以下 C1–C4 保留，开工先执行 C0；C3 必须交付 Skill 与工具机制，不能只实现对话。
 

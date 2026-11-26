@@ -16,12 +16,12 @@ const graph = FlowGraphSchema.parse({
   name: '顺序',
   goal: '总目标',
   nodes: [
-    { nodeId: 'a', title: 'a', participation: 'autonomous', kind: 'agent', goal: '完成某事', completion: '交付成果' },
-    { nodeId: 'b', title: 'b', participation: 'autonomous', kind: 'agent', goal: '完成某事', completion: '交付成果' }
+    { nodeId: 'a', title: 'a', participation: 'autonomous', kind: 'agent', goal: '完成某事', completion: '交付成果', modelDefinitionId: 'fixture-model', allowedNodeIds: ['sink'] },
+    { nodeId: 'sink', title: 'sink', participation: 'autonomous', kind: 'capability', capability: 'text-pass@1', goal: '固化成果', completion: '输出固定文本' }
   ],
-  edges: [{ from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'b', portId: 'in-text' }, kind: 'data' }],
+  edges: [{ from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'sink', portId: 'in-value' }, kind: 'data' }],
   entry: 'a',
-  exits: ['b']
+  exits: ['sink']
 })
 
 function fixture() {
@@ -65,10 +65,10 @@ describe('④P6 FlowGraph 定义版本存储', () => {
       ...graph,
       goal: '新目标',
       nodes: [
-        { nodeId: 'a', title: 'a改', participation: 'autonomous', kind: 'agent', goal: '完成某事', completion: '交付成果' },
-        { nodeId: 'c', title: 'c', participation: 'autonomous', kind: 'agent', goal: '新节点', completion: '交付' }
+        { nodeId: 'a', title: 'a改', participation: 'autonomous', kind: 'agent', goal: '完成某事', completion: '交付成果', modelDefinitionId: 'fixture-model', allowedNodeIds: ['c'] },
+        { nodeId: 'c', title: 'c', participation: 'autonomous', kind: 'capability', capability: 'text-pass@1', goal: '新节点', completion: '交付' }
       ],
-      edges: [{ from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'c', portId: 'in-text' }, kind: 'data' }],
+      edges: [{ from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'c', portId: 'in-value' }, kind: 'data' }],
       entry: 'a',
       exits: ['c']
     })
@@ -76,7 +76,7 @@ describe('④P6 FlowGraph 定义版本存储', () => {
     const diff = f.store.diffGraph('p', 'd', 1, 2)
     expect(diff.goalChanged).toBe(true)
     expect(diff.nodes.find((n) => n.nodeId === 'a')?.change).toBe('changed')
-    expect(diff.nodes.find((n) => n.nodeId === 'b')?.change).toBe('removed')
+    expect(diff.nodes.find((n) => n.nodeId === 'sink')?.change).toBe('removed')
     expect(diff.nodes.find((n) => n.nodeId === 'c')?.change).toBe('added')
     expect(diff.edgesAdded).toHaveLength(1)
     expect(diff.edgesRemoved).toHaveLength(1)

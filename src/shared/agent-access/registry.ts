@@ -10,6 +10,7 @@ import {
 import { validateNodeContractSnapshot } from './node-contracts'
 export { nodeAccessDirectory } from './node-actions'
 import type { AccessOperationSpec } from './ops/common'
+import { DEFAULT_RESPONSE_TIMEOUT_MS, INTERACTIVE_RESPONSE_TIMEOUT_MS } from './ops/common'
 import {
   bindings,
   empty,
@@ -201,6 +202,14 @@ export const ACCESS_OPERATIONS = {
         inputs: WorkflowInputsSchema.optional()
       })
       .strict()
+      .superRefine((value, ctx) => {
+        if (value.mode === 'single' && value.nodeIds.length !== 1)
+          ctx.addIssue({
+            code: 'custom',
+            path: ['nodeIds'],
+            message: 'single mode requires exactly one nodeId'
+          })
+      })
   },
   'run.wait': {
     effect: 'read',
@@ -375,7 +384,7 @@ export const ACCESS_OPERATIONS = {
     idempotent: true,
     destructive: false,
     cost: 'none',
-    description: '读取节点接入状态；本包不开放节点操作',
+    description: '读取全部 Active 节点的逐动作接入状态、契约版本与证据；具体写/执行仍按各操作契约准入',
     input: empty
   },
   'project.list': {
@@ -420,7 +429,7 @@ export const ACCESS_OPERATIONS = {
     idempotent: false,
     destructive: true,
     cost: 'none',
-    description: '按版本修改项目名称；活动画布先保存并同步版本',
+    description: '按版本修改项目名称（规范主操作）；活动画布先保存并同步版本',
     input: revision.extend({ name: z.string().trim().min(1).max(200) }).strict()
   },
   'project.rename': {
@@ -505,6 +514,40 @@ export const ACCESS_OPERATIONS = {
 } as const satisfies Record<string, AccessOperationSpec>
 export type AccessOperationId = keyof typeof ACCESS_OPERATIONS
 
+/**
+ * 可能访问外网或外部实体的操作。MCP 客户端可据此设置 openWorldHint；
+ * 各操作也可在自己的 spec 中用 openWorld 显式覆盖。
+ */
+const OPEN_WORLD_OPERATION_IDS: ReadonlySet<string> = new Set([
+  'webSearch.run',
+  'provider.testConnection',
+  'provider.probe',
+  'model.validate',
+  'model.discover',
+  'model.validateAgentToolCalling',
+  'dreamina.login.start',
+  'dreamina.login.check',
+  'environment.videoEngine.install',
+  'node.execute',
+  'flowAgent.run',
+  'flowAgent.cooperate',
+  'flowAgent.build.propose',
+  'flowAgent.review',
+  'composite.execute',
+  'composite.run.retry',
+  'composite.run.resume'
+])
+
+/** 返回带默认元数据的操作声明；CLI/MCP/目录必须共用这一份。 */
+export function operationSpec(id: AccessOperationId): AccessOperationSpec {
+  const spec = ACCESS_OPERATIONS[id] as AccessOperationSpec
+  return {
+    ...spec,
+    openWorld: spec.openWorld ?? OPEN_WORLD_OPERATION_IDS.has(id),
+    operationVersion: spec.operationVersion ?? 1
+  }
+}
+
 // 包传输类导入按明确能力范围判定，不用名称子串一票否决（一致性计划 F1 要求）。
 // 2026-11-08 F7 独立验收后，完整项目包/结构包/资源包导入与资源包导出已解除阻断：
 // 它们复用 GUI 同一 store 服务，并且外部入口只接受受控导出目录内的包文件
@@ -522,7 +565,7 @@ const PACKAGE_IMPORT_BLOCKLIST: ReadonlySet<string> = new Set([
 export const AccessRequestSchema = z
   .object({
     apiVersion: z.literal(ACCESS_API_VERSION),
-    operationVersion: z.literal(1),
+    operationVersion: z.number().int().min(1).max(99),
     operationId: z.string().min(1).max(80),
     requestId: identifier,
     expectedDataStoreId: z.string().uuid(),
@@ -543,7 +586,13 @@ export interface AccessResponse {
   status: 'completed' | 'failed' | 'unknown'
   idempotencyKey?: string
   data?: unknown
-  error?: { code: string; phase: string; retryable: boolean; detail?: string }
+  error?: {
+    code: string
+    phase: string
+    retryable: boolean
+    detail?: string
+    currentGraphVersion?: number
+  }
 }
 
 export const AccessResponseSchema = z
@@ -848,8 +897,7 @@ export const ACCESS_OUTPUTS = {
       mime: z.string().max(120),
       path: z.string().max(300),
       sizeBytes: z.number().int().nonnegative(),
-      name: z.string().max(200),
-      textContent: z.string().max(20000).optional()
+      name: z.string().max(200)
     })
     .strict(),
   'chat.read': z
@@ -1160,20 +1208,28 @@ export function advertisedJsonSchema(schema: z.ZodType): Record<string, unknown>
 }
 
 export function operationDirectory(): unknown[] {
-  return Object.entries(ACCESS_OPERATIONS).map(([operationId, spec]) => ({
-    operationId,
-    operationVersion: 1,
-    effect: spec.effect,
-    idempotent: spec.idempotent,
-    destructive: spec.destructive,
-    cost: spec.cost,
-    description: spec.description,
-    /** 前置条件（需要先满足什么），供 Agent 自描述规划。 */
-    requires: OPERATION_REQUIREMENTS[operationId as AccessOperationId] ?? [],
-    inputSchema: advertisedJsonSchema(spec.input),
-    outputSchema: z.toJSONSchema(operationResponseSchema(operationId as AccessOperationId)),
-    transports: ['cli', 'mcp-stdio']
-  }))
+  return Object.keys(ACCESS_OPERATIONS).map((operationId) => {
+    const spec = operationSpec(operationId as AccessOperationId)
+    return {
+      operationId,
+      operationVersion: spec.operationVersion ?? 1,
+      effect: spec.effect,
+      idempotent: spec.idempotent,
+      destructive: spec.destructive,
+      cost: spec.cost,
+      description: spec.description,
+      interactive: spec.interactive === true,
+      responseTimeoutMs:
+        spec.responseTimeoutMs ??
+        (spec.interactive === true ? INTERACTIVE_RESPONSE_TIMEOUT_MS : DEFAULT_RESPONSE_TIMEOUT_MS),
+      openWorld: spec.openWorld === true,
+      /** 前置条件（需要先满足什么），供 Agent 自描述规划。 */
+      requires: OPERATION_REQUIREMENTS[operationId as AccessOperationId] ?? [],
+      inputSchema: advertisedJsonSchema(spec.input),
+      outputSchema: z.toJSONSchema(operationResponseSchema(operationId as AccessOperationId)),
+      transports: ['cli', 'mcp-stdio', 'mcp-sse']
+    }
+  })
 }
 export function validateAccessRegistry(
   activeTypes: readonly string[] = ACTIVE_NODE_TYPE_IDS,

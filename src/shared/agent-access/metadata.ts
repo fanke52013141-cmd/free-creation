@@ -94,7 +94,6 @@ export const OPERATION_REQUIREMENTS: Record<string, readonly string[]> = {
   'model.binding.resolve': ['savedConnection', 'modelDefinition'],
   'provider.package.seal': ['activeLicense', 'recipientCredential'],
   'provider.package.preview': ['activeLicense', 'keyPackage'],
-  'provider.package.export': ['activeLicense', 'savedConnection'],
   'environment.videoEngine.install': ['pythonRuntime', 'installConfirm'],
   'media.import': ['project'],
   'media.batchExport': ['project'],
@@ -115,6 +114,16 @@ export const OPERATION_REQUIREMENTS: Record<string, readonly string[]> = {
 
 /** 业务错误码目录：code → 人读含义 + 调用方该做什么。 */
 export const ACCESS_ERROR_CATALOG: readonly { code: string; meaning: string; hint: string }[] = [
+  {
+    code: 'AUTH_FAILED',
+    meaning: '本机授权已失效或未通过，外部操作被拒绝',
+    hint: '在桌面重新激活/续期授权后重试；不要重放未知副作用'
+  },
+  {
+    code: 'UNSUPPORTED_OPERATION_VERSION',
+    meaning: '调用方请求的操作版本与服务端声明不一致',
+    hint: '重新读取 capability.list/contracts，按声明的 operationVersion 调用'
+  },
   {
     code: 'INVALID_INPUT',
     meaning: '入参不符合契约（缺字段/类型/格式/多余字段）',
@@ -201,6 +210,16 @@ export const ACCESS_ERROR_CATALOG: readonly { code: string; meaning: string; hin
   },
   { code: 'INPUT_NOT_FOUND', meaning: '受控目录内找不到该输入文件', hint: '确认文件名与位置' },
   { code: 'OUTPUT_EXISTS', meaning: '目标文件已存在（不覆盖）', hint: '换一个文件名' },
+  {
+    code: 'NODE_EXECUTION_FAILED',
+    meaning: '节点执行失败；原始错误文案可能含敏感内容，未对外返回',
+    hint: '用 run.get 查看稳定错误码与任务状态，不要直接重跑计费节点'
+  },
+  {
+    code: 'RESPONSE_TOO_LARGE',
+    meaning: '操作结果超过单次接入响应上限',
+    hint: '改用分页/摘要/受控文件引用，不要重放有副作用的操作'
+  },
   {
     code: 'STRUCTURE_SNAPSHOT_MISSING',
     meaning: '项目没有已保存的画布快照',

@@ -5,8 +5,9 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { closeDb, getDataDir } from '../src/main/store/db'
+import { closeDb, getDataDir, getDb } from '../src/main/store/db'
 import { createProject, openProject } from '../src/main/store/projects.repo'
+import { listMedia } from '../src/main/store/media.repo'
 import { LocalAccessService } from '../src/main/agent-access/service'
 import { setGatewayEventSink } from '../src/main/diagnostics/gateway-events'
 import type { AccessDesktop } from '../src/main/agent-access/desktop'
@@ -18,6 +19,7 @@ let lastDesktopRequest: any = null
 const events: any[] = []
 const originalDirectory = process.env.CANVAS_DATA_DIR
 const key = () => `${Date.now()}:${randomUUID()}`
+const controlledPath = (name: string) => join(getDataDir(), 'agent-exports', name)
 
 function call(operationId: string, input: unknown = {}, idempotencyKey?: string) {
   return service.dispatch({
@@ -76,7 +78,7 @@ afterEach(() => {
 describe('local Agent media access', () => {
   it('imports a local file as project-controlled media and lists it without absolute paths', async () => {
     const p = createProject('素材')
-    const source = join(directory, 'pose.png')
+    const source = controlledPath('pose.png')
     writeFileSync(source, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]))
     const imported = await call('media.import', { projectId: p.id, filePath: source, name: '姿势图' }, key())
     expect(imported.status).toBe('completed')
@@ -93,18 +95,59 @@ describe('local Agent media access', () => {
     void saved
   })
 
+  it('rejects files outside the controlled import root without leaking their contents', async () => {
+    const p = createProject('目录边界')
+    const secret = 'PRIVATE_OUTSIDE_ROOT_TEXT_DO_NOT_LEAK'
+    const outside = join(directory, 'outside.txt')
+    writeFileSync(outside, secret)
+    const idempotencyKey = key()
+    const refused = await call(
+      'media.import',
+      { projectId: p.id, filePath: outside },
+      idempotencyKey
+    )
+    expect(refused.status).toBe('failed')
+    expect(refused.error?.code).toBe('PATH_NOT_ALLOWED')
+    expect(JSON.stringify(refused)).not.toContain(secret)
+    expect(JSON.stringify(refused)).not.toContain(outside)
+    const receipt = getDb()
+      .prepare('SELECT receipt_json FROM local_agent_operations WHERE idempotency_key=?')
+      .get(idempotencyKey) as { receipt_json: string }
+    expect(receipt.receipt_json).not.toContain(secret)
+    expect(listMedia(p.id)).toHaveLength(0)
+  })
+
+  it('never returns or stores text bodies for external media imports', async () => {
+    const p = createProject('正文边界')
+    const secret = 'PRIVATE_CONTROLLED_TEXT_DO_NOT_LEAK'
+    const source = controlledPath('note.md')
+    writeFileSync(source, `# title\n${secret}`)
+    const idempotencyKey = key()
+    const imported = await call(
+      'media.import',
+      { projectId: p.id, filePath: source },
+      idempotencyKey
+    )
+    expect(imported.status).toBe('completed')
+    expect(imported.data).not.toHaveProperty('textContent')
+    expect(JSON.stringify(imported)).not.toContain(secret)
+    const receipt = getDb()
+      .prepare('SELECT receipt_json FROM local_agent_operations WHERE idempotency_key=?')
+      .get(idempotencyKey) as { receipt_json: string }
+    expect(receipt.receipt_json).not.toContain(secret)
+  })
+
   it('rejects imports for missing projects and invalid files without touching storage', async () => {
-    const missing = await call('media.import', { projectId: 'ghost', filePath: join(directory, 'x.png') }, key())
+    const missing = await call('media.import', { projectId: 'ghost', filePath: controlledPath('x.png') }, key())
     expect(missing.error?.code).toBe('NOT_FOUND')
     const bad = createProject('坏文件')
-    const dirPath = directory
-    const refused = await call('media.import', { projectId: bad.id, filePath: join(dirPath, 'missing.png') }, key())
-    expect(refused.error?.code).toBe('MEDIA_IMPORT_FAILED')
+    const refused = await call('media.import', { projectId: bad.id, filePath: controlledPath('missing.png') }, key())
+    expect(refused.error?.code).toBe('INPUT_NOT_FOUND')
   })
 
   it('resolves media ownership in graph.patch precheck and injects storage facts to the host only', async () => {
     const p = createProject('引用')
-    const source = join(directory, 'sheet.png')
+    const source = controlledPath('sheet.png')
     writeFileSync(source, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 8, 7]))
     const imported = await call('media.import', { projectId: p.id, filePath: source }, key())
     const mediaId = (imported.data as any).mediaId
@@ -202,7 +245,7 @@ describe('local Agent media access', () => {
 describe('local Agent media delete', () => {
   it('deletes project-owned media with reference count and rejects cross-project or unknown ids', async () => {
     const p = createProject('删除素材')
-    const source = join(directory, 'del.png')
+    const source = controlledPath('del.png')
     writeFileSync(source, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 5, 5, 5]))
     const imported = await call('media.import', { projectId: p.id, filePath: source }, key())
     const mediaId = (imported.data as any).mediaId
@@ -213,7 +256,7 @@ describe('local Agent media delete', () => {
     const again = await call('media.delete', { projectId: p.id, mediaId }, key())
     expect(again.error?.code).toBe('MEDIA_NOT_FOUND')
     // 跨项目删除拒绝
-    const source2 = join(directory, 'del2.png')
+    const source2 = controlledPath('del2.png')
     writeFileSync(source2, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 6, 6, 6]))
     const other = createProject('别家删除')
     const imported2 = await call('media.import', { projectId: other.id, filePath: source2 }, key())

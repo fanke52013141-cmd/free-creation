@@ -194,7 +194,7 @@ describe('local Agent chat access', () => {
 
   it('carries attachment media resolutions only as ids in external input', async () => {
     const p = createProject('附件')
-    const source = join(directory, 'att.png')
+    const source = join(getDataDir(), 'agent-exports', 'att.png')
     writeFileSync(source, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]))
     const imported = await call('media.import', { projectId: p.id, filePath: source }, key())
     const mediaId = (imported.data as any).mediaId

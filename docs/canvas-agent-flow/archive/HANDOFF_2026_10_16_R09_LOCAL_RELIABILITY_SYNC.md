@@ -23,9 +23,9 @@
 
 ## 日志检查与未覆盖边界
 
-沿用 [日志检查模板](../templates/LOGGING_CHANGE_TEMPLATE.md)：仓库提供 `read-snapshot/write-tmp/flush-tmp/rotate-bak/promote-tmp/update-db` 安全阶段；项目 async/sync/工作台 IPC 复用 `project.save` 开始与唯一终态、trace/span/project，记录 backupUsed/rollbackFailed。底层原因仅允许列表码，排除原始异常、路径、正文与密钥；不为 fsync 重复记录终态。
+沿用 [日志检查模板](../../templates/LOGGING_CHANGE_TEMPLATE.md)：仓库提供 `read-snapshot/write-tmp/flush-tmp/rotate-bak/promote-tmp/update-db` 安全阶段；项目 async/sync/工作台 IPC 复用 `project.save` 开始与唯一终态、trace/span/project，记录 backupUsed/rollbackFailed。底层原因仅允许列表码，排除原始异常、路径、正文与密钥；不为 fsync 重复记录终态。
 
-任务/下载/媒体复用公共网关诊断，logger 故障不改变业务结果。长时运行注入的诊断丢弃 29850 次，2988 个归档批次裁剪 2972、保留 16，保留数据 326704 字节；800 条保留事件与 4 条最终恢复事件通过 JSONL 和脱敏审计。最初强杀的两处缺失终态如实保留，不补造。正式保存 IPC 生命周期由 renderer 门禁验证，长时仓库夹具不能替代该检查。覆盖登记见 [LOGGING_COVERAGE](../LOGGING_COVERAGE.md)。
+任务/下载/媒体复用公共网关诊断，logger 故障不改变业务结果。长时运行注入的诊断丢弃 29850 次，2988 个归档批次裁剪 2972、保留 16，保留数据 326704 字节；800 条保留事件与 4 条最终恢复事件通过 JSONL 和脱敏审计。最初强杀的两处缺失终态如实保留，不补造。正式保存 IPC 生命周期由 renderer 门禁验证，长时仓库夹具不能替代该检查。覆盖登记见 [LOGGING_COVERAGE](../../LOGGING_COVERAGE.md)。
 
 未验收：真实磁盘设备故障、物理断电、目录元数据耐久、文件与 SQLite 跨存储原子提交、长驻 renderer 内存稳定性、供应商原子远端撤回。旧任务恢复的祖先 trace 缺失仍明示。R11 真实生成/审核质量/计费按用户决定暂缓，没有真实付费请求。90 分钟局部验收不等于整个 R09 或总目标完成。
 

@@ -4,7 +4,7 @@ import {
   PublishStatusSchema,
   publishRequestIdSchema
 } from '../publish'
-import { nodeId, project, revision } from './common'
+import { nodeId, project, revision, LONG_RESPONSE_TIMEOUT_MS } from './common'
 
 /**
  * 外部发布授权（F6 收尾）：导演台 manual-publish 的等待/继续协议。
@@ -55,6 +55,7 @@ export const PUBLISH_OPERATIONS = {
     idempotent: false,
     destructive: true,
     cost: 'none',
+    responseTimeoutMs: LONG_RESPONSE_TIMEOUT_MS,
     description:
       '人工授权后执行发布：用与 GUI 相同的发布服务渲染并写入节点正式结果；未授权、已拒绝或已过期一律拒绝，不重放、不重复发布',
     input: publishRequestInput

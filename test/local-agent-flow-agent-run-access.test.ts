@@ -212,10 +212,12 @@ describe('flowAgent 运行控制', () => {
     const raw = port.runs[0] as Record<string, unknown>
     expect(raw.action).toBe('start')
     expect(raw).toMatchObject({ runOrigin: 'external', externalClientId: clientId })
-    // 外部没有传身份：三个 ID 都由 main 生成（UUID），不能是调用方给的值。
-    for (const field of ['requestId', 'traceId', 'spanId']) {
-      expect(String(raw[field])).toMatch(/^[a-f0-9-]{36}$/)
-    }
+    // 外部没有传身份：三个 ID 都由 main 生成，且 request/trace 与本次 access 响应同源。
+    expect(String(raw.requestId)).toMatch(/^[a-f0-9-]{36}$/)
+    expect(String(raw.traceId)).toMatch(/^trace-[a-f0-9-]{36}$/)
+    expect(String(raw.spanId)).toMatch(/^span-[a-f0-9-]{36}$/)
+    expect(raw.requestId).toBe(response.requestId)
+    expect(raw.traceId).toBe(response.traceId)
     const data = response.data as { task: { state: string }; refs: unknown[] }
     expect(data.task.state).toBe('running')
     expect(data.refs).toEqual([])

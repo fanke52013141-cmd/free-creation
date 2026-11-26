@@ -177,7 +177,9 @@ async function main() {
     const createdNodes = patch.created ?? []
     const textNodeId = createdNodes.find((entry) => entry.ref === 'text')?.nodeId
     const agentNodeId = createdNodes.find((entry) => entry.ref === 'agent')?.nodeId
-    const sourceImage = join(directory, 'sample.png')
+    const controlled = join(directory, 'agent-exports')
+    await mkdir(controlled, { recursive: true })
+    const sourceImage = join(controlled, 'sample.png')
     await writeFile(
       sourceImage,
       Buffer.from(

@@ -12,16 +12,15 @@ const registryPath = path.join(root, 'src/shared/agent-access/registry.ts')
 const coveragePath = path.join(root, 'docs/local-agent-access/action-coverage.json')
 const inventoryPath = path.join(root, 'docs/local-agent-access/generated/action-inventory.json')
 
-function parseIpcChannels() {
-  const src = fs.readFileSync(contractsPath, 'utf8')
+function parseIpcChannels(source = fs.readFileSync(contractsPath, 'utf8')) {
   const marker = 'export const IPC = {'
-  const start = src.indexOf(marker)
+  const start = source.indexOf(marker)
   if (start < 0) throw new Error('IPC contract not found')
   const objStart = start + marker.length - 1
   let depth = 0
   let end = -1
-  for (let i = objStart; i < src.length; i++) {
-    const c = src[i]
+  for (let i = objStart; i < source.length; i++) {
+    const c = source[i]
     if (c === '{') depth++
     else if (c === '}') {
       depth--
@@ -32,41 +31,32 @@ function parseIpcChannels() {
     }
   }
   if (end < 0) throw new Error('IPC object not terminated')
-  const body = src.slice(objStart, end)
+  const body = source.slice(objStart, end)
   const channels = []
-  const familyRe = /^  ([a-zA-Z]+): \{/
-  const pairRe = /([a-zA-Z][a-zA-Z0-9]*):\s*'([^']+)'/g
+  const familyRe = /^([ \t]*)([a-zA-Z]+)\s*:\s*\{/
+  const pairRe = /([a-zA-Z][a-zA-Z0-9]*)\s*:\s*(['"])(.*?)\2/g
   let family = null
-  for (const line of body.split('\n')) {
+  let familyIndent = null
+  for (const line of body.split(/\r?\n/)) {
     const fam = line.match(familyRe)
-    if (fam) family = fam[1]
+    if (fam && (familyIndent === null || fam[1].length === familyIndent)) {
+      family = fam[2]
+      familyIndent = fam[1].length
+    }
     let m
     pairRe.lastIndex = 0
     while ((m = pairRe.exec(line))) {
-      channels.push({ family, key: m[1], channel: m[2] })
+      channels.push({ family, key: m[1], channel: m[3] })
     }
   }
   if (channels.length === 0) throw new Error('IPC channel parse produced no entries')
   return channels
 }
 
-function parseRegistryOperations() {
-  // 操作按业务族拆分在 src/shared/agent-access/ops/*，registry.ts 只做组装；
-  // 审计必须扫描全部登记文件，不能只看 registry.ts 里的内联操作（否则分母被悄悄缩小）。
-  const opsDirectory = path.join(root, 'src/shared/agent-access/ops')
-  const files = [
-    registryPath,
-    ...fs
-      .readdirSync(opsDirectory)
-      .filter((name) => name.endsWith('.ts'))
-      .sort()
-      .map((name) => path.join(opsDirectory, name))
-  ]
+function parseRegistryOperationIds(sources) {
   const ids = []
-  let scannedBlocks = 0
-  for (const file of files) {
-    const src = fs.readFileSync(file, 'utf8')
-    const markerRe = /export const ([A-Z_]+)_OPERATIONS = \{/g
+  for (const src of sources) {
+    const markerRe = /export\s+const\s+([A-Z_]+)_OPERATIONS\s*=\s*\{/g
     let marker
     while ((marker = markerRe.exec(src))) {
       const objStart = marker.index + marker[0].length - 1
@@ -83,11 +73,10 @@ function parseRegistryOperations() {
           }
         }
       }
-      if (end < 0) throw new Error(`Registry operation block not terminated: ${path.basename(file)}`)
-      scannedBlocks++
-      const re = /'([a-zA-Z_.]+)':\s*\{/g
+      if (end < 0) throw new Error('Registry operation block not terminated')
+      const re = /(['"])([a-zA-Z_.]+)\1\s*:\s*\{/g
       let m
-      while ((m = re.exec(src.slice(objStart, end)))) ids.push(m[1])
+      while ((m = re.exec(src.slice(objStart, end)))) ids.push(m[2])
     }
   }
   if (ids.length === 0) throw new Error('Registry operation parse produced no entries')
@@ -97,6 +86,21 @@ function parseRegistryOperations() {
     throw new Error(`Registry operation declared twice: ${duplicates.join(',')}`)
   }
   return ids
+}
+
+function parseRegistryOperations() {
+  // 操作按业务族拆分在 src/shared/agent-access/ops/*，registry.ts 只做组装；
+  // 审计必须扫描全部登记文件，不能只看 registry.ts 里的内联操作（否则分母被悄悄缩小）。
+  const opsDirectory = path.join(root, 'src/shared/agent-access/ops')
+  const files = [
+    registryPath,
+    ...fs
+      .readdirSync(opsDirectory)
+      .filter((name) => name.endsWith('.ts'))
+      .sort()
+      .map((name) => path.join(opsDirectory, name))
+  ]
+  return parseRegistryOperationIds(files.map((file) => fs.readFileSync(file, 'utf8')))
 }
 
 // 画布级业务动作：GUI 入口在 renderer（调色板/右键菜单/多选工具栏/侧栏/复杂工作区），
@@ -237,10 +241,7 @@ const EXTERNAL_ONLY_OPERATIONS = new Map([
   ]
 ])
 
-function main() {
-  const channels = parseIpcChannels()
-  const operations = parseRegistryOperations()
-  const coverage = JSON.parse(fs.readFileSync(coveragePath, 'utf8'))
+function auditActions({ channels, operations, coverage }) {
   const errors = []
   const actions = { ...coverage.actions }
 
@@ -300,13 +301,21 @@ function main() {
       errors.push(`CLI_STATUS_ALIAS_CONFLICT:${operation}`)
   }
 
+  const byPhase = {}
+  for (const entry of Object.values(actions)) byPhase[entry.phase] = (byPhase[entry.phase] ?? 0) + 1
+  return { errors, actions, byPhase }
+}
+
+function main() {
+  const channels = parseIpcChannels()
+  const operations = parseRegistryOperations()
+  const coverage = JSON.parse(fs.readFileSync(coveragePath, 'utf8'))
+  const { errors, actions, byPhase } = auditActions({ channels, operations, coverage })
   if (errors.length) {
     process.stderr.write(errors.join('\n') + '\n')
     process.exit(1)
   }
 
-  const byPhase = {}
-  for (const entry of Object.values(actions)) byPhase[entry.phase] = (byPhase[entry.phase] ?? 0) + 1
   const inventory = {
     schemaVersion: 1,
     generatedFrom: {
@@ -333,4 +342,12 @@ function main() {
     `Business action audit passed: ${channels.length} IPC channels + ${CANVAS_ACTIONS.length} canvas actions; external ops ${operations.length}; by phase ${JSON.stringify(byPhase)}\n`
   )
 }
-main()
+
+module.exports = {
+  auditActions,
+  parseIpcChannels,
+  parseRegistryOperationIds,
+  parseRegistryOperations
+}
+
+if (require.main === module) main()

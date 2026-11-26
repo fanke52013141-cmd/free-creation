@@ -14,6 +14,26 @@ export interface FlowMediaRef<K extends 'image' | 'video' | 'audio' = 'image' | 
 }
 export type FlowImageRef = FlowMediaRef<'image'>
 
+/** Reference inputs sent to providers remain bounded to 20 MiB. */
+export const FLOW_MEDIA_INPUT_MAX_BYTES = 20 * 1024 * 1024
+/** Locally materialized generated video outputs may be much larger. */
+export const FLOW_VIDEO_OUTPUT_MAX_BYTES = 500 * 1024 * 1024
+
+export interface FixedFlowMediaOptions {
+  maxBytes?: number
+}
+
+export function assertFlowMediaInputLimit(
+  db: Database.Database,
+  value: FlowMediaRef
+): void {
+  const media = db
+    .prepare('SELECT size_bytes FROM media WHERE id=?')
+    .get(value.mediaId) as { size_bytes: number } | undefined
+  if (!media || media.size_bytes <= 0 || media.size_bytes > FLOW_MEDIA_INPUT_MAX_BYTES)
+    throw new FlowAssetError('FLOW_MEDIA_INPUT_TOO_LARGE', 'input')
+}
+
 /** Freeze and recheck bytes as well as metadata. Synchronous asset transactions are bounded to 20 MiB. */
 export function fixedFlowImage(
   db: Database.Database,
@@ -56,7 +76,8 @@ function cachedContentSha256(
 export function fixedFlowMedia<K extends 'image' | 'video' | 'audio'>(
   db: Database.Database,
   projectId: string,
-  value: FlowMediaRef<K>
+  value: FlowMediaRef<K>,
+  options: FixedFlowMediaOptions = {}
 ): FlowMediaRef<K> & { contentSha256: string } {
   try {
     const media = db
@@ -76,7 +97,7 @@ export function fixedFlowMedia<K extends 'image' | 'video' | 'audio'>(
       child.startsWith('..') ||
       isAbsolute(child) ||
       media.size_bytes <= 0 ||
-      media.size_bytes > 20 * 1024 * 1024
+      media.size_bytes > (options.maxBytes ?? FLOW_MEDIA_INPUT_MAX_BYTES)
     )
       throw new Error()
     const realRoot = resolve(realpathSync(getDataDir()), 'projects', projectId, 'media')

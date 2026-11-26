@@ -2,6 +2,8 @@
 
 日期：2026-11-07。基线类型：`src/shared/types/index.ts` 的 `ACTIVE_NODE_TYPE_IDS`；版本来自 `nodes/specs/index.tsx` 与 `agentFlow.tsx`。本表是开发清单，不是已支持声明。新增类型或契约版本变更须同包更新机器清单和本表。
 
+> **历史规划快照**：文中的“32 类节点”等为 2026-11-07 时点口径，不作为现状。当前节点集合与逐动作状态以 [`generated/contracts.json`](./generated/contracts.json)、`node.type.list` 和 [`AGENT_PARITY_SPEC.md`](../../AGENT_PARITY_SPEC.md) 为准。
+
 ## 1. 每类节点必须核对的公共动作
 
 | 编号 | 适用业务动作 | 必须验收 |

@@ -23,6 +23,8 @@ import { FlowReviewStore } from '../src/main/agent-flow/review-store'
 import { projectSemanticRevision } from '../src/main/agent-flow/command-intent'
 import { CoordinatorReviews } from '../src/main/agent-flow/coordinator-reviews'
 import { FlowGraphSchema } from '../src/shared/agent-flow/flow-graph'
+import { flowTargetPorts } from '../src/shared/agent-flow/video-adapter'
+import { compileFlowGraph } from '../src/shared/agent-flow/flow-graph-compiler'
 
 const dbs: Database.Database[] = []
 afterEach(() => {
@@ -60,6 +62,7 @@ function fixture(
     graph?: import('../src/shared/agent-flow/flow-graph').FlowGraph
     /** BL-11：额外第三个 agent 节点（子图循环验收）。 */
     thirdAgent?: boolean
+    humanFailure?: boolean
   } = {}
 ) {
   const db = new Database(':memory:')
@@ -273,11 +276,15 @@ function fixture(
         try {
           const c = grant.command,
             target = byId[c.targetNodeId],
-            fixed = grant.inputs
+            fixed = grant.inputs,
+            humanWaiting =
+              target.props.nodeType === 'human-task' && !target.meta.humanTaskPending,
+            humanFailed =
+              target.props.nodeType === 'human-task' && !!options.humanFailure
           ledger.check({ projectId: c.projectId, commandId: c.commandId, leaseId: grant.leaseId })
           target.meta.nodeRun = {
             runId: grant.runId,
-            status: 'success',
+            status: humanFailed ? 'failed' : humanWaiting ? 'skipped' : 'success',
             startedAt: 0,
             finishedAt: 1,
             commandId: c.commandId,
@@ -308,14 +315,30 @@ function fixture(
                 }))
               )
             }),
-            outputPorts: ['out-value']
+            outputPorts: [target.props.nodeType === 'human-task' ? 'out-text' : 'out-value']
           }
-          const source = fixed[0].versions[0].value
-          target.meta.nodeResult = JSON.stringify(
-            c.targetNodeId === 'process-repair' && 'text' in source
-              ? { kind: 'text', text: `交付：${source.text}` }
-              : source
-          )
+          if (!humanWaiting && !humanFailed) {
+            if (target.props.nodeType === 'human-task') {
+              const pending = JSON.parse(String(target.meta.humanTaskPending))
+              target.meta.humanTask = JSON.stringify({
+                schemaVersion: 1,
+                nodeId: target.id,
+                revision: pending.expectedRevision + 1,
+                status: 'completed',
+                result: pending.value,
+                lastSubmissionId: pending.submissionId
+              })
+            }
+            const source = fixed[0]?.versions[0]?.value ?? {
+              kind: 'text' as const,
+              text: target.props.text
+            }
+            target.meta.nodeResult = JSON.stringify(
+              c.targetNodeId === 'process-repair' && 'text' in source
+                ? { kind: 'text', text: `交付：${source.text}` }
+                : source
+            )
+          }
           file.meta.graphVersion++
           ledger.commit({ projectId: c.projectId, commandId: c.commandId })
         } catch (error) {
@@ -1274,7 +1297,7 @@ function parallelDecision(ctx: CoordinationContext): Promise<CoordinationDecisio
   )
 }
 
-function extendParallelFixture(f: ReturnType<typeof fixture>, branchCount: 4): void {
+function extendParallelFixture(f: ReturnType<typeof fixture>, branchCount: number): void {
   const names = ['third', 'fourth'].slice(0, branchCount - 2)
   for (const name of names) {
     const targetId = `process-${name}`
@@ -1332,6 +1355,66 @@ function extendParallelFixture(f: ReturnType<typeof fixture>, branchCount: 4): v
   f.byId.main.props.config = JSON.stringify(config)
   f.file.nodes.find((node) => node.id === 'main')!.params.config = f.byId.main.props.config
 }
+function addProcessorFixture(
+  f: ReturnType<typeof fixture>,
+  nodeId: string,
+  config: object = { operation: 'pass' }
+): void {
+  const processorShape = {
+    ...structuredClone(f.byId['process-first']),
+    id: nodeId,
+    props: { ...f.byId['process-first'].props, title: nodeId, config: JSON.stringify(config) },
+    meta: {} as Record<string, unknown>
+  }
+  const processorNode = {
+    ...structuredClone(f.file.nodes.find((node) => node.id === 'process-first')!),
+    id: nodeId,
+    title: nodeId,
+    params: { config: processorShape.props.config }
+  }
+  f.byId[nodeId] = processorShape
+  f.file.tldrawSnapshot.store[nodeId] = processorShape
+  f.file.nodes.push(processorNode)
+}
+
+function addHumanTaskFixture(
+  f: ReturnType<typeof fixture>,
+  nodeId: string,
+  sourceNodeId: string,
+  sourcePortId = 'out-text'
+): void {
+  const humanShape = {
+    ...structuredClone(f.byId.material),
+    id: nodeId,
+    props: {
+      ...f.byId.material.props,
+      nodeType: 'human-task',
+      title: nodeId,
+      text: '提交人工成果',
+      config: JSON.stringify({ schemaVersion: 1, outputType: 'text', instructions: '提交人工成果' })
+    },
+    meta: {} as Record<string, unknown>
+  }
+  const humanNode = {
+    ...structuredClone(f.file.nodes.find((node) => node.id === 'material')!),
+    id: nodeId,
+    type: 'human-task' as const,
+    title: nodeId,
+    params: { config: humanShape.props.config },
+    content: { kind: 'text' as const, text: '提交人工成果' },
+    ports: []
+  }
+  humanNode.ports = flowTargetPorts(humanNode)
+  f.byId[nodeId] = humanShape
+  f.file.tldrawSnapshot.store[nodeId] = humanShape
+  f.file.nodes.push(humanNode)
+  f.file.edges.push({
+    id: `edge-${sourceNodeId}-${nodeId}`,
+    from: { nodeId: sourceNodeId, portId: sourcePortId },
+    to: { nodeId, portId: 'in-text' }
+  })
+}
+
 function deferred() {
   let resolve!: () => void
   const promise = new Promise<void>((done) => {
@@ -1409,6 +1492,43 @@ describe('bounded parallel coordination', () => {
     expect(f.count()).toEqual({ executions: 8, modelCalls: 2 })
     expect(f.coordinator.store.latest('p', 'main')!.controlSteps).toBe(3)
   })
+  it.each([2, 3, 4])('runs %i independent branches in bounded waves without rejection', async (branchCount) => {
+    let active = 0,
+      maxActive = 0
+    const f = fixture({
+      parallel: true,
+      coordinate: async (ctx) =>
+        ctx.available.length >= 2
+          ? {
+              kind: 'dispatch-many',
+              assignments: ctx.available.map((item) => ({
+                nodeId: item.nodeId,
+                goal: item.goal,
+                inputs: item.inputs,
+                completion: '交付真实固定成果'
+              }))
+            }
+          : { kind: 'finish', outputs: ctx.completed.at(-1)!.outputs },
+      deliveryDuring: async () => {
+        active++
+        maxActive = Math.max(maxActive, active)
+        await new Promise((resolve) => setTimeout(resolve, 5))
+        active--
+      }
+    })
+    extendParallelFixture(f, branchCount)
+    const config = JSON.parse(f.byId.main.props.config)
+    config.maxParallelTasks = 2
+    f.byId.main.props.config = JSON.stringify(config)
+    f.file.nodes.find((node) => node.id === 'main')!.params.config = f.byId.main.props.config
+    const reply = await f.host.run(input)
+    expect(reply.task.state).toBe('completed')
+    expect(reply.task.children).toHaveLength(branchCount)
+    expect(reply.task.children?.every((child) => child.state === 'completed')).toBe(true)
+    expect(maxActive).toBeLessThanOrEqual(2)
+    expect(f.count().executions).toBe(branchCount * 2)
+  })
+
   it('PAR-02 rejects a five-assignment batch above the four-task cap before any child is reserved', async () => {
     const f = fixture({
       parallel: true,
@@ -1769,6 +1889,36 @@ describe('bounded parallel coordination', () => {
     expect(replay.task.state).toBe('cancelled')
     expect(f.count().modelCalls).toBe(1)
   })
+  it('emits one cancelled terminal event when stop races an in-flight abort', async () => {
+    const entered = deferred(),
+      release = deferred(),
+      events: DiagnosticsEventInput[] = []
+    const f = fixture({
+      parallel: true,
+      coordinate: parallelDecision,
+      deliveryDuring: async () => {
+        entered.resolve()
+        await release.promise
+      }
+    })
+    setGatewayEventSink({
+      emit: (event) => {
+        if (event) events.push(event)
+      }
+    })
+    const running = f.host.run(input)
+    await entered.promise
+    const stopped = f.host.stop({ projectId: 'p', nodeId: 'main' })!
+    expect(stopped.state).toBe('cancelled')
+    release.resolve()
+    expect((await running).task.state).toBe('cancelled')
+    const terminals = events.filter((event) =>
+      ['agent.coordination.cancelled', 'agent.coordination.completed', 'agent.coordination.failed'].includes(event.event)
+    )
+    expect(terminals.map((event) => event.event)).toEqual(['agent.coordination.cancelled'])
+    expect(terminals[0]?.status).toBe('cancelled')
+  })
+
   it.each([false, true])(
     'collects a completed sibling while another child waits (review wait: %s)',
     async (reviewWait) => {
@@ -1886,6 +2036,104 @@ describe('O4-P3 graph mode execution（声明式图路由，mock 模型）', () 
     exits: ['second']
   })
 
+  it('compiles explicit Agent bindings and runs the compiled specialist configs', async () => {
+    const graph = FlowGraphSchema.parse({
+      schemaVersion: 1,
+      graphId: 'compiled-run',
+      name: '编译运行',
+      goal: '验证 compile→run',
+      nodes: [
+        {
+          nodeId: 'process-first', title: 'process-first', participation: 'autonomous',
+          kind: 'capability', capability: 'text-pass@1', goal: '准备材料', completion: '输出'
+        },
+        {
+          ...graphNode('first'),
+          modelDefinitionId: 'fixture',
+          tools: [{ id: 'node.execute', version: '1' }],
+          allowedNodeIds: ['process-first']
+        },
+        {
+          ...graphNode('second'),
+          modelDefinitionId: 'fixture',
+          tools: [{ id: 'node.execute', version: '1' }],
+          allowedNodeIds: ['process-first']
+        },
+        {
+          nodeId: 'process-second', title: 'process-second', participation: 'autonomous',
+          kind: 'capability', capability: 'text-pass@1', goal: '固化成果', completion: '输出'
+        }
+      ],
+      edges: [
+        {
+          from: { nodeId: 'process-first', portId: 'out-value' },
+          to: { nodeId: 'first', portId: 'in-text' },
+          kind: 'data'
+        },
+        {
+          from: { nodeId: 'first', portId: 'out-text' },
+          to: { nodeId: 'second', portId: 'in-text' },
+          kind: 'data'
+        },
+        {
+          from: { nodeId: 'second', portId: 'out-text' },
+          to: { nodeId: 'process-second', portId: 'in-value' },
+          kind: 'data'
+        }
+      ],
+      entry: 'process-first',
+      exits: ['process-second']
+    })
+    const compiled = compileFlowGraph(graph)
+    expect(compiled.runnable).toBe(true)
+    const f = fixture({ graph })
+    f.file.edges = [
+      { id: 'edge-material-process', from: { nodeId: 'material', portId: 'out-text' }, to: { nodeId: 'process-first', portId: 'in-value' } },
+      { id: 'edge-process-first', from: { nodeId: 'process-first', portId: 'out-value' }, to: { nodeId: 'first', portId: 'in-text' } },
+      { id: 'edge-first-second', from: { nodeId: 'first', portId: 'out-text' }, to: { nodeId: 'second', portId: 'in-text' } },
+      { id: 'edge-second-process', from: { nodeId: 'second', portId: 'out-text' }, to: { nodeId: 'process-second', portId: 'in-value' } }
+    ]
+    for (const [semanticId, shapeId] of [['first', 'first'], ['second', 'second']] as const) {
+      const parsed = JSON.parse(compiled.nodes.find((node) => node.id === `shape:${semanticId}`)!.config)
+      parsed.allowedNodeIds = parsed.allowedNodeIds.map((id: string) => id.replace(/^shape:/, ''))
+      const config = JSON.stringify(parsed)
+      f.byId[shapeId].props.config = config
+      f.file.nodes.find((node) => node.id === shapeId)!.params.config = config
+    }
+    const done = await f.host.run(input)
+    expect(done.task.state).toBe('completed')
+    expect(f.count().modelCalls).toBe(0)
+    expect(f.count().executions).toBe(6)
+  })
+
+  it('propagates one absolute graph deadline into each specialist task budget', async () => {
+    const entered = deferred(),
+      release = deferred()
+    const graph = FlowGraphSchema.parse({
+      ...seqGraph,
+      budgets: { maxSteps: 12, maxActiveMs: 5000, maxLoopIterations: 8 }
+    })
+    const f = fixture({
+      graph,
+      deliveryDuring: async () => {
+        entered.resolve()
+        await release.promise
+      }
+    })
+    const running = f.host.run(input)
+    await entered.promise
+    const run = f.coordinator.store.latest('p', 'main')!
+    expect(run.deadlineAt! - run.startedAt!).toBe(5000)
+    const row = f.db.prepare(
+      "SELECT snapshot_json FROM flow_agent_tasks WHERE project_id='p' AND agent_node_id='first'"
+    ).get() as { snapshot_json: string }
+    const child = JSON.parse(row.snapshot_json) as { maxActiveMs: number }
+    expect(child.maxActiveMs).toBeGreaterThan(0)
+    expect(child.maxActiveMs).toBeLessThanOrEqual(5000)
+    release.resolve()
+    expect((await running).task.state).toBe('completed')
+  })
+
   it('顺序图路由端到端完成，且不调用主控决策模型', async () => {
     const f = fixture({ graph: seqGraph })
     const preview = {
@@ -1923,6 +2171,18 @@ describe('O4-P3 graph mode execution（声明式图路由，mock 模型）', () 
     expect((await f.host.run(input)).task.state).toBe('completed')
     expect(f.count().modelCalls).toBe(0)
     expect(f.count().executions).toBe(6)
+  })
+
+  it('blocks rework while an affected child task is still active', async () => {
+    const f = fixture({ graph: seqGraph })
+    await f.host.run(input)
+    const run = f.coordinator.store.latest('p', 'main')!
+    run.children.find((child) => child.nodeId === 'second')!.state = 'waiting'
+    f.coordinator.store.save(run)
+    const impact = f.coordinator.previewStageRework({ projectId: 'p', nodeId: 'main' }, 'second')
+    expect(impact?.activeChildCount).toBe(1)
+    expect(impact?.canRework).toBe(false)
+    expect(impact?.blockedReason).toBe('FLOW_STAGE_REWORK_ACTIVE_CHILD')
   })
 
   it('从图中间返工时保留独立分支，旧交付留在历史', async () => {
@@ -2083,6 +2343,276 @@ describe('O4-P3 graph mode execution（声明式图路由，mock 模型）', () 
     const taskIds = run.children.map((child) => child.taskId)
     expect(new Set(taskIds).size).toBe(taskIds.length)
   })
+  it.each([
+    ['private-source', 'process-second', 'process-no'],
+    ['other', 'process-no', 'process-second']
+  ] as const)('capability XOR routes %s without consuming the dead branch', async (value, selected, skipped) => {
+    const capabilityNode = (nodeId: string) => ({
+      nodeId,
+      title: nodeId,
+      participation: 'autonomous' as const,
+      kind: 'capability' as const,
+      capability: 'text-pass@1',
+      goal: '处理并交付',
+      completion: '输出固定文本'
+    })
+    const graph = FlowGraphSchema.parse({
+      schemaVersion: 1,
+      graphId: 'capability-xor',
+      name: '能力分支',
+      goal: '只执行选中分支',
+      nodes: [capabilityNode('process-first'), capabilityNode('process-second'), capabilityNode('process-no')],
+      edges: [
+        {
+          from: { nodeId: 'process-first', portId: 'out-value' },
+          to: { nodeId: 'process-second', portId: 'in-value' },
+          kind: 'data',
+          condition: [{ kind: 'output-field', stageKey: 'process-first', path: 'text', op: 'equals', value: value === 'private-source' ? 'private-source' : 'never' }]
+        },
+        {
+          from: { nodeId: 'process-first', portId: 'out-value' },
+          to: { nodeId: 'process-no', portId: 'in-value' },
+          kind: 'data',
+          otherwise: true
+        }
+      ],
+      entry: 'process-first',
+      exits: ['process-second', 'process-no']
+    })
+    const f = fixture({ graph })
+    addProcessorFixture(f, 'process-no')
+    f.byId['process-first'].props.text = 'private-source'
+    f.file.edges = f.file.edges.filter((edge) => edge.to.nodeId !== 'process-second')
+    f.file.edges.push(
+      { id: 'edge-source-yes', from: { nodeId: 'process-first', portId: 'out-value' }, to: { nodeId: 'process-second', portId: 'in-value' } },
+      { id: 'edge-source-no', from: { nodeId: 'process-first', portId: 'out-value' }, to: { nodeId: 'process-no', portId: 'in-value' } }
+    )
+    const done = await f.host.run(input)
+    expect(done.task.state).toBe('completed')
+    const run = f.coordinator.store.latest('p', 'main')!
+    expect(run.children.map((child) => child.nodeId)).toEqual(['process-first', selected])
+    expect(run.children.every((child) => child.state === 'completed')).toBe(true)
+    expect(run.skippedNodeIds).toContain(skipped)
+    expect(f.count().executions).toBe(2)
+    const recovered = await f.host.run({
+      ...input,
+      action: 'reconcile',
+      requestId: `recover-${value}`,
+      eventId: `recover-${value}`,
+      expectedTaskId: done.task.taskId,
+      expectedWaitRevision: done.task.waitRevision
+    })
+    expect(recovered.task.state).toBe('completed')
+  })
+
+  it.each([
+    ['private-source', 'second', 'third'],
+    ['other', 'third', 'second']
+  ] as const)('agent XOR routes %s and does not bind dead inbound edges', async (value, selected, skipped) => {
+    const graphNode = (nodeId: string) => ({
+      nodeId,
+      title: nodeId,
+      participation: 'autonomous' as const,
+      kind: 'agent' as const,
+      goal: '处理并交付',
+      completion: '交付固定成果'
+    })
+    const graph = FlowGraphSchema.parse({
+      schemaVersion: 1,
+      graphId: 'agent-xor',
+      name: 'Agent 分支',
+      goal: '只执行选中 Agent',
+      nodes: [graphNode('first'), graphNode('second'), graphNode('third')],
+      edges: [
+        {
+          from: { nodeId: 'first', portId: 'out-text' },
+          to: { nodeId: 'second', portId: 'in-text' },
+          kind: 'data',
+          condition: [{ kind: 'output-field', stageKey: 'first', path: 'text', op: 'equals', value: value === 'private-source' ? 'private-source' : 'never' }]
+        },
+        {
+          from: { nodeId: 'first', portId: 'out-text' },
+          to: { nodeId: 'third', portId: 'in-text' },
+          kind: 'data',
+          otherwise: true
+        }
+      ],
+      entry: 'first',
+      exits: ['second', 'third']
+    })
+    const f = fixture({ graph, thirdAgent: true })
+    f.file.edges.push({
+      id: 'edge-first-third',
+      from: { nodeId: 'first', portId: 'out-text' },
+      to: { nodeId: 'third', portId: 'in-text' }
+    })
+    const done = await f.host.run(input)
+    expect(done.task.state).toBe('completed')
+    const run = f.coordinator.store.latest('p', 'main')!
+    expect(run.children.map((child) => child.nodeId)).toEqual(['first', selected])
+    expect(run.skippedNodeIds).toContain(skipped)
+    expect(f.count().executions).toBe(4)
+  })
+
+  it.each([
+    ['private-source', 'human-yes', 'human-no'],
+    ['other', 'human-no', 'human-yes']
+  ] as const)('human-task XOR waits only for the selected branch (%s)', async (value, selected, skipped) => {
+    const capabilityNode = {
+      nodeId: 'process-first',
+      title: 'process-first',
+      participation: 'autonomous' as const,
+      kind: 'capability' as const,
+      capability: 'text-pass@1',
+      goal: '准备人工材料',
+      completion: '输出固定文本'
+    }
+    const humanNode = (nodeId: string) => ({
+      nodeId,
+      title: nodeId,
+      participation: 'human' as const,
+      kind: 'human-task' as const,
+      humanOutputType: 'text' as const,
+      goal: '提交人工成果',
+      completion: '输出人工文本'
+    })
+    const graph = FlowGraphSchema.parse({
+      schemaVersion: 1,
+      graphId: 'human-xor',
+      name: '人工分支',
+      goal: '只等待选中的人工任务',
+      nodes: [capabilityNode, humanNode('human-yes'), humanNode('human-no')],
+      edges: [
+        {
+          from: { nodeId: 'process-first', portId: 'out-value' },
+          to: { nodeId: 'human-yes', portId: 'in-text' },
+          kind: 'data',
+          condition: [{ kind: 'output-field', stageKey: 'process-first', path: 'text', op: 'equals', value: value === 'private-source' ? 'private-source' : 'never' }]
+        },
+        {
+          from: { nodeId: 'process-first', portId: 'out-value' },
+          to: { nodeId: 'human-no', portId: 'in-text' },
+          kind: 'data',
+          otherwise: true
+        }
+      ],
+      entry: 'process-first',
+      exits: ['human-yes', 'human-no']
+    })
+    const f = fixture({ graph })
+    addHumanTaskFixture(f, 'human-yes', 'process-first', 'out-value')
+    addHumanTaskFixture(f, 'human-no', 'process-first', 'out-value')
+    f.byId['process-first'].props.text = 'private-source'
+    const waiting = await f.host.run(input)
+    expect(waiting.task.state).toBe('waiting')
+    expect(f.coordinator.store.latest('p', 'main')!.skippedNodeIds).toContain(skipped)
+    expect(f.byId[skipped].meta.nodeRun).toBeUndefined()
+    f.byId[selected].meta.humanTaskPending = JSON.stringify({
+      submissionId: `submit-${selected}`,
+      expectedRevision: 1,
+      value: { kind: 'text', text: '人工交付' }
+    })
+    const done = await f.host.run({
+      ...input,
+      action: 'continue',
+      requestId: `continue-${selected}`,
+      eventId: `continue-${selected}`,
+      expectedTaskId: waiting.task.taskId,
+      expectedWaitRevision: waiting.task.waitRevision,
+      humanConfirmed: 'gui'
+    })
+    expect(done.task.state).toBe('completed')
+    expect(f.byId[skipped].meta.nodeRun).toBeUndefined()
+  })
+
+  it('stops an in-flight capability without calling the specialist host or committing late output', async () => {
+    const entered = deferred(),
+      release = deferred()
+    const graph = FlowGraphSchema.parse({
+      schemaVersion: 1,
+      graphId: 'stop-capability',
+      name: '停止能力节点',
+      goal: '验证停止',
+      nodes: [{
+        nodeId: 'process-first', title: 'process-first', participation: 'autonomous',
+        kind: 'capability', capability: 'text-pass@1', goal: '处理', completion: '输出'
+      }],
+      edges: [],
+      entry: 'process-first',
+      exits: ['process-first']
+    })
+    const f = fixture({
+      graph,
+      deliveryDuring: async () => {
+        entered.resolve()
+        await release.promise
+      }
+    })
+    const inspectSpy = vi.spyOn(f.host, 'inspect')
+    const stopSpy = vi.spyOn(f.host, 'stop')
+    const running = f.host.run(input)
+    await entered.promise
+    const stopped = f.host.stop({ projectId: 'p', nodeId: 'main' })!
+    expect(stopped.state).toBe('cancelled')
+    expect(stopped.children?.map((child) => child.state)).toEqual(['cancelled'])
+    release.resolve()
+    expect((await running).task.state).toBe('cancelled')
+    expect(inspectSpy).not.toHaveBeenCalled()
+    expect(stopSpy).toHaveBeenCalledTimes(1)
+    const receipt = f.db.prepare('SELECT state FROM flow_commands').get() as { state: string }
+    expect(['unknown', 'skipped']).toContain(receipt.state)
+    expect(f.byId['process-first'].meta.nodeResult).toBeUndefined()
+  })
+
+  it('stops a waiting human-task without calling the specialist host', async () => {
+    const graph = FlowGraphSchema.parse({
+      schemaVersion: 1,
+      graphId: 'stop-human',
+      name: '停止人工节点',
+      goal: '验证停止',
+      nodes: [{
+        nodeId: 'human', title: 'human', participation: 'human', kind: 'human-task',
+        humanOutputType: 'text', goal: '提交', completion: '输出'
+      }],
+      edges: [],
+      entry: 'human',
+      exits: ['human']
+    })
+    const f = fixture({ graph })
+    addHumanTaskFixture(f, 'human', 'material')
+    const inspectSpy = vi.spyOn(f.host, 'inspect')
+    const stopSpy = vi.spyOn(f.host, 'stop')
+    const waiting = await f.host.run(input)
+    expect(waiting.task.state).toBe('waiting')
+    const stopped = f.host.stop({ projectId: 'p', nodeId: 'main' })!
+    expect(stopped.state).toBe('cancelled')
+    expect(stopped.children?.map((child) => child.state)).toEqual(['cancelled'])
+    expect(inspectSpy).not.toHaveBeenCalled()
+    expect(stopSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('maps a failed human-task receipt to failed instead of human waiting', async () => {
+    const graph = FlowGraphSchema.parse({
+      schemaVersion: 1,
+      graphId: 'failed-human',
+      name: '人工失败',
+      goal: '验证失败映射',
+      nodes: [{
+        nodeId: 'human', title: 'human', participation: 'human', kind: 'human-task',
+        humanOutputType: 'text', goal: '提交', completion: '输出'
+      }],
+      edges: [],
+      entry: 'human',
+      exits: ['human']
+    })
+    const f = fixture({ graph, humanFailure: true })
+    addHumanTaskFixture(f, 'human', 'material')
+    await expect(f.host.run(input)).rejects.toMatchObject({ code: 'FLOW_EXECUTION_FAILED' })
+    const run = f.coordinator.store.latest('p', 'main')!
+    expect(run.state).toBe('blocked')
+    expect(run.children.map((child) => child.state)).toEqual(['failed'])
+  })
+
   it('BL-03：分支条件不成立导致全部出口被跳过 → FLOW_STALLED（不再报成等待人工）', async () => {
     const stallGraph = FlowGraphSchema.parse({
       schemaVersion: 1,

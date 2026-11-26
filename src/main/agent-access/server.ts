@@ -12,13 +12,14 @@ import {
 import { isAbsolute, join, relative } from 'node:path'
 import { assertLicenseActive } from '../security/license/gate'
 import { tmpdir } from 'node:os'
-import { ACCESS_MAX_BYTES } from '../../shared/agent-access/registry'
+import {
+  ACCESS_MAX_BYTES,
+  ACCESS_OPERATIONS,
+  type AccessOperationId
+} from '../../shared/agent-access/registry'
 import { acquireProcessLock } from '../store/process-lock'
 import { emitDomainEvent } from '../diagnostics/ipc-domain-events'
-import { RUN_WAIT_MAX_TIMEOUT_MS } from '../../shared/agent-access/run-ops'
-
-/** 收到请求后的等待上限：覆盖契约内的最长 run.wait，并为慢操作留余量。 */
-const ACCESS_SOCKET_RESPONSE_TIMEOUT_MS = RUN_WAIT_MAX_TIMEOUT_MS + 90_000
+import { responseTimeoutMs } from '../../shared/agent-access/interactive'
 import { LocalAccessService } from './service'
 import { settleOrphanedExternalRuns } from './runs'
 import type { AccessDesktop } from './desktop'
@@ -90,15 +91,23 @@ export async function startLocalAccessServer(options: {
         if (newline < 0) return
         handled = true
         socket.pause()
-        // 请求已到达：run.wait 最长可等待 RUN_WAIT_MAX_TIMEOUT_MS，等待回执期间
-        // 没有下行流量，不能被 15s 空闲超时切断（否则长轮询必然 OUTCOME_UNKNOWN）。
-        socket.setTimeout(ACCESS_SOCKET_RESPONSE_TIMEOUT_MS, () => socket.destroy())
         try {
           const message = JSON.parse(buffer.subarray(0, newline).toString('utf8')) as {
             token?: unknown
             instanceId?: unknown
             request?: unknown
           }
+          const request = message.request as
+            | { operationId?: unknown; input?: unknown; requestId?: unknown }
+            | undefined
+          const operationId = typeof request?.operationId === 'string' ? request.operationId : ''
+          const waitInput = request?.input as { timeoutMs?: unknown } | undefined
+          const requestedWaitMs =
+            operationId === 'run.wait' && typeof waitInput?.timeoutMs === 'number'
+              ? Math.min(Math.max(waitInput.timeoutMs, 0), 120_000)
+              : 0
+          // 请求已到达：按 shared 中的操作元数据覆盖人工确认、长轮询与模型/网络长操作。
+          socket.setTimeout(responseTimeoutMs(operationId, requestedWaitMs), () => socket.destroy())
           const supplied =
             typeof message.token === 'string' ? Buffer.from(message.token) : Buffer.alloc(0)
           const expected = Buffer.from(token)
@@ -113,7 +122,16 @@ export async function startLocalAccessServer(options: {
           const result = await service.dispatch(message.request)
           const encoded = JSON.stringify(result)
           if (Buffer.byteLength(encoded) > ACCESS_MAX_BYTES) {
-            socket.destroy()
+            const effect = ACCESS_OPERATIONS[operationId as AccessOperationId]?.effect
+            const failure = {
+              apiVersion: 1,
+              requestId: result.requestId,
+              operationId: result.operationId,
+              traceId: result.traceId,
+              status: effect && effect !== 'read' ? 'unknown' : 'failed',
+              error: { code: 'RESPONSE_TOO_LARGE', phase: 'serialize', retryable: false }
+            }
+            socket.end(JSON.stringify(failure) + '\n')
             return
           }
           socket.end(encoded + '\n')

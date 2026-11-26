@@ -89,15 +89,15 @@ beforeEach(async () => {
   })
 })
 
-describe('saveProvider 密文保留（F11）', async () => {
-  it('未提交新 apiKey 时 api_key_ref 逐字节保留（即使解密不可用）', async () => {
+describe('saveProvider 密文保留与端点绑定（F11 + SEC-01）', async () => {
+  it('同 origin 更新未提交新 apiKey 时 api_key_ref 逐字节保留（即使解密不可用）', async () => {
     // 模拟 safeStorage 暂不可用：decryptSecret 返回空串
     cryptoState.available = false
     const summary = await saveProvider({
       id: 'p1',
       name: '只改名',
       specId: 'relay',
-      baseURL: 'https://new.example/v1',
+      baseURL: 'https://old.example/v2',
       apiKey: undefined,
       models: [{ id: 'chat-2', modality: 'text' }]
     })
@@ -108,7 +108,21 @@ describe('saveProvider 密文保留（F11）', async () => {
     expect(summary.hasApiKey).toBe(false)
     // 其余字段正常更新
     expect(dbState.rows.get('p1')!.name).toBe('只改名')
-    expect(dbState.rows.get('p1')!.base_url).toBe('https://new.example/v1')
+    expect(dbState.rows.get('p1')!.base_url).toBe('https://old.example/v2')
+  })
+
+  it('origin 变化且未提交新 apiKey 时拒绝保存，旧密文与原端点均保持不变', async () => {
+    cryptoState.available = false
+    await expect(saveProvider({
+      id: 'p1',
+      name: '改端点',
+      specId: 'relay',
+      baseURL: 'https://new.example/v1',
+      apiKey: undefined,
+      models: [{ id: 'chat-2', modality: 'text' }]
+    })).rejects.toThrow(/必须重新输入 API Key/)
+    expect(dbState.rows.get('p1')!.api_key_ref).toBe(ORIGINAL_CIPHER)
+    expect(dbState.rows.get('p1')!.base_url).toBe('https://old.example/v1')
   })
 
   it('加密不可用时提交新 apiKey 被拒绝且原密文保留（P2 明文回退停用）', async () => {
@@ -125,13 +139,13 @@ describe('saveProvider 密文保留（F11）', async () => {
     expect(dbState.rows.get('p1')!.api_key_ref).toBe(ORIGINAL_CIPHER)
   })
 
-  it('getProvider 在解密恢复后仍能读出原始密钥（密文未损坏）', async () => {
+  it('getProvider 在同 origin 路径更新后仍能读出原始密钥（密文未损坏）', async () => {
     cryptoState.available = true
     await saveProvider({
       id: 'p1',
       name: '只改名',
       specId: 'relay',
-      baseURL: 'https://new.example/v1',
+      baseURL: 'https://old.example/v2',
       apiKey: undefined,
       models: []
     })

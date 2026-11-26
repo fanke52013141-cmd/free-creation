@@ -1,25 +1,26 @@
 ---
 title: Agent Flow 规范
-status: draft            # draft → review → frozen
-version: 0.2
-last-verified: 2026-11-24
-baseline-commit: aea3987a (main)
+status: active
+version: 0.3
+last-verified: 2026-11-26
+baseline-commit: e9b263f2
+verification-scope: 文档与静态实现/既有测试证据核对；不代表全部运行路径、真实模型或安装包验收
 owner: Canvas Studio 规范组
 supersedes: |
-  本文收敛以下文档的「现行条款」，原文降级为档案（见 §20）：
+  本文收敛以下文档的「现行条款」，原文只用于追溯（见 §20）：
   docs/canvas-agent-flow/archive/00-approved-plan.md · 01-product.md · 02-architecture.md ·
   05-node-coordination-standard.md · 07-ai-review-node.md · 10-c1-control-declarations.md ·
   仓外 agent-flow-interpreter-plan-20261114.md · agent-flow-three-form-plan-20261114.md
-machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-host.ts · contracts.json
+machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-host.ts · docs/local-agent-access/generated/contracts.json
 ---
 
-# Agent Flow 规范 v0.2（草案）
+# Agent Flow 规范 v0.3
 
-> v0.2（2026-11-22）：§16 参与者模型已决策，确定为「角色化单用户」（只做方案 A）；FlowGraph 删除 `control` 边（AF-4.3a）。
+> v0.3（2026-11-26）：按基线 `8c5c155e` 收敛当前状态；§16 参与者模型为「角色化单用户」，FlowGraph 删除 `control` 边，并将已落地的 params、能力目录、子图循环、固定顺序、角色与运行准入等状态改为【现行】。无法由静态实现证明的真实 GUI、真实模型和安装包验收继续单列为边界。
 
 ## 阅读约定
 
-与 `NODE_FLOW_SPEC.md` 相同：**【现行】** 表示已实现并强制执行；**【目标】** 表示规范要求但尚未实现，附差距编号（见 `规范体系深度审查报告-20261122.md`）；条款编号 `AF-x.y` 是稳定引用 ID；本文不写计数。
+与 `NODE_FLOW_SPEC.md` 相同：**【现行】** 表示已实现并强制执行；**【目标】** 表示规范要求但尚未实现，附差距编号（见 `规范体系深度审查报告-20261122.md`）；条款编号 `AF-x.y` 是稳定引用 ID；本文不写计数。当前可调用操作与节点集合以 [`generated/contracts.json`](local-agent-access/generated/contracts.json) 和运行时 `capability.list` 为准，Markdown 不维护第二份能力清单。
 
 ---
 
@@ -35,9 +36,9 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 **AF-1.3【现行】副作用以命令台账为准。** 每个业务调用都有 `commandId`，台账状态为 `pending / committed / unknown`；`unknown` 必须先核对，不能自动重放；checkpoint 不能代替命令回执。
 
-**AF-1.4【现行】专业节点不读全图。** 每个节点只能拿到其输入清单（ContextManifest）中的内容；节点正文和文件里的指令都视为数据，不会改变权限。
+**AF-1.4【现行】专业节点不读全图。** 节点声明 `inputs` 时，只拿 ContextManifest 选择的内容；未声明时沿用路由器裁剪后的固定输入，不承诺每次执行都会生成清单。节点正文和文件里的指令都视为数据，不会改变权限。
 
-**AF-1.5【现行 · BL-01】人工决定只能由人做出。** 外部 Agent（CLI/MCP）不得代替人完成「人工决定类」动作，包括：确认建图落画布、提交 human-task 结果、协作节点的采用/拒绝、审核人工复审。外部 Agent 只能附上**草稿**，等人在 GUI 中采用（见 §17）。
+**AF-1.5【现行 · BL-01】人工决定只能由人做出。** 外部 Agent（CLI/MCP）不得代替人完成「人工决定类」动作，包括：确认建图落画布、提交 human-task 结果、协作节点的采用/拒绝、审核人工复审。外部调用只能请求桌面人工确认，人允许后才执行原动作（见 §17）。
 
 ---
 
@@ -61,7 +62,7 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 | `fixed-order` | 【现行 · BL-35】声明阶段编译为线性路由图 | 与 `graph` 共用就绪、完成判定和单节点 Agent 分派。阶段契约（stages）保留进入条件、人工采用、输入编制和固定方法。 |
 | `model`（缺省，旧语义） | 【现行】主控模型每轮输出 dispatch/finish/wait | **探索模式**：只用于草案和原型；不得作为交付流程模板发布；UI 上必须标注「模型调度、不可复现」 |
 
-**AF-2.1【目标·A2】** 「主 Agent」在全局只有一个含义：**流程的控制宿主**（持有控制范围、预算、状态和运行总览）。在 `graph` 模式下，主 Agent 不调用模型；在 `model` 模式下，主 Agent 的模型决策同样只能输出受约束的控制命令（`CoordinationDecision`），不能执行业务能力。
+**AF-2.1【现行】** 「主 Agent」在全局只有一个含义：**流程的控制宿主**（持有控制范围、预算、状态和运行总览）。在 `graph` 模式下，主 Agent 不调用模型；在 `model` 模式下，主 Agent 的模型决策同样只能输出受约束的控制命令（`CoordinationDecision`），不能执行业务能力。
 
 ---
 
@@ -71,14 +72,14 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 |---|---|---|---|
 | **上帝 Agent**（构建者） | ① 外部 Agent 经 `flowGraph.*`（FlowGraph）；② 画布内 `role: builder` 的 Agent 节点（BuildPlan） | 理解目标，构建或修改整张流程图：节点、参与形态、最小输入、条件、审核 | 只能 propose；落画布必须由人在 GUI 确认（AF-1.5）；构建完成不等于已执行 |
 | **主 Agent**（协调者） | `role: coordinator` 的 Agent 节点，每个控制范围一个 | 持有控制范围（`allowedNodeIds`）、预算、状态机绑定；按路由推进；汇总交付 | 不改拓扑；发现能力不足时只能提出可见的图变更建议 |
-| **专业 Agent**（执行者） | `role: specialist` 的 Agent 节点 | 完成本节点的复杂任务：在有限步内规划、调用工具、自检、请求补充输入 | 自身的任务范围、预算和工具白名单；返回交付或明确的 blocked/failed |
-| **能力节点** | 基础节点，或【目标】已发布的节点流 | 一次确定性转换 | 不感知流程 |
+| **专业 Agent**（执行者） | `role: specialist` 的 Agent 节点 | 完成本节点的复杂任务：在有限步内规划、调用工具、自检 | 自身的任务范围、预算和工具白名单；返回交付或明确的 blocked/failed；主动补充请求尚未支持（AF-10.3） |
+| **能力节点** | 基础节点，或已发布的节点流（BL-10） | 一次确定性转换 | 不感知流程 |
 | **人** | human-task 节点，或 collaborative 节点里的决策者 | 提交、采用、拒绝、讨论 | 见 §9、§16 |
 
 **AF-3.1【现行】** 同一控制范围只有一个运行中的主 Agent，可以有多个独立的专业 Agent；多个主 Agent 竞争同一范围会被拒绝（`FLOW_CONTROL_OCCUPIED`）。
 
 **AF-3.2【现行】** 角色权限由宿主校验，不靠提示词区分；专业 Agent 的工具只能是 `node.execute@1`，以及显式勾选的 `web.search@1`。
-- **AF-3.2a【目标·回归】** 运行时 task-bind 的工具白名单必须与桌面准入完全相同。现行 `runtime.ts:474-479` 拒绝 `web.search@1`，导致勾选联网的专家必定失败。修复提交已丢失，需恢复。
+- **AF-3.2a【现行 · BL-02】** 运行时 task-bind 与桌面准入共用同一工具白名单：`node.execute@1` 为必选，`web.search@1` 为显式可选，其余工具拒绝。回归测试覆盖勾选联网专家可绑定、白名单之外工具仍被拒绝。
 
 ---
 
@@ -133,19 +134,19 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 流程中的**控制关系**（`controls / observes / review-gate / rework`）不是 FlowGraph 边。它们由编译器生成，保存在节点 config 的 `relations` 中（§6），不受本条影响。
 
-### 4.4 FlowGraph v2【部分现行】
+### 4.4 FlowGraph v2【现行】
 
-> BL-10/BL-11 已完成前四行：`capabilityRef` + 能力目录生成（`capability-catalog.ts`）、`params`（`node-params.ts`，编译前校验并合并）、真实端口（`port-compatibility.ts` 下沉 shared，编译器不再重映射）、子图循环 `loop.body[]`（路由器轮次作用域 + 每轮独立 taskId）。`control` 边在 BL-05 已删除。剩余「执行者×决策者」「角色」两行仍为目标（BL-21/BL-15）。
+> BL-05/BL-10/BL-11/BL-15/BL-21 已落地：`capabilityRef` 与能力目录、`params`、真实端口、子图循环、`executor × decider`、`roles[] / humanRole` 均进入 schema、校验、编译或运行记录。旧 v1 图按兼容规则读取，不静默升级。
 
-| 变化 | 原因 | 差距 |
+| 变化 | 当前实现 | 边界 |
 |---|---|---|
-| ~~`capability` 改为 `capabilityRef`；能力目录生成~~ ✅ BL-10 | 编译器现在硬编码了能力白名单，节点流无法编排 | A1 |
-| ~~新增 `params`，按目标节点 config 校验~~ ✅ BL-11 | 上帝 Agent 无法指定模型、比例、时长等参数 | G7 |
-| ~~数据边端口必须是真实端口；禁止编译器重映射~~ ✅ BL-11 | 多端口能力被强行合并到一个端口 | G7 / G8 |
-| 删除 `control` 边（已决策，见 AF-4.3a） | 现在校验时计入、执行和编译时丢弃 | G4 |
-| `loop` 改为子图载体 `loop: { body: nodeId[], maxIterations, exitCondition }` | 现在多节点循环无法执行 | G3 |
-| 参与形态拆成两维：`executor: human \| ai \| mixed` × `decider: none \| human \| ai-review` | 现在「人微调 capability 结果再确认」必须多包一层 Agent | A4 |
-| 顶层新增 `roles[]`，节点可声明 `humanRole`（引用 `roles[].roleId`） | 角色化单用户：区分「谁的活」、收件箱按角色汇总、决定和讨论都带角色（§16） | A4（已决策） |
+| `capability` 改为 `capabilityRef`；能力目录生成 | ✅ BL-10：节点注册表与已发布节点流生成唯一目录，validate/compile/catalog 同源 | 目录包含不可调度项及原因；不等于所有 Active 节点都可自动执行 |
+| 新增 `params`，按目标节点 config 校验 | ✅ BL-11：编译前校验并合并公开配置子集 | 当前只覆盖已登记的 image-gen/video/image-edit/speech/tts/processor 等子集；未登记类型明确拒绝，复合能力用公开输入 |
+| 数据边端口必须是真实端口；禁止编译器重映射 | ✅ BL-11：`portPairCompatible` 校验存在性与类型，协调器按 `edge.to.portId` 接线 | 类型兼容不证明供应商支持该参数组合 |
+| 删除 `control` 边 | ✅ BL-05：只允许数据边，旧 `control` 明确报错 | 控制关系仍由编译器写入节点 config 的 `relations` |
+| `loop` 改为子图载体 `loop: { body: nodeId[], maxIterations, exitCondition }` | ✅ BL-11：轮次作用域、每轮独立 taskId；v1 多节点环仍拒绝 | 循环体不得嵌套，必须有出口，受全局预算约束 |
+| 参与形态拆成两维：`executor: human \| ai \| mixed` × `decider: none \| human \| ai-review` | ✅ BL-21：旧 participation 自动映射，capability 可显式 `decider: human` | 角色归属仍按节点 `humanRole`/owner 兜底，不引入多身份 |
+| 顶层新增 `roles[]`，节点可声明 `humanRole` | ✅ BL-15：schema、V13–V15、编译、actor 记录、收件箱与角色视图 | V13–V15 当前按 participation 校验；`decider: human` 不自动推导新角色权限 |
 
 ---
 
@@ -173,10 +174,10 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 `flowAgent.build.commit`（builder 角色）同样适用。
 
-**AF-5.4【目标·A3】FlowGraph 与画布的往返规则**：
+**AF-5.4【现行 · BL-17】FlowGraph 与画布的往返规则**：
 - 落画布后，画布成为真值；FlowGraph 版本记录为 `sourceGraph = {definitionId, version, contentHash}`；
-- 用户在画布上修改被控范围内的节点、边或配置后，运行总览把这次运行标记为 `diverged`；
-- 下一次运行前要求二选一：**从画布反向导出**新的 FlowGraph 版本，或者**放弃画布修改**。不允许按旧 IR 静默路由。
+- 用户在画布上修改被控范围内的节点、边或配置后，运行总览把这次运行标记为 `diverged`，启动以 `FLOW_CANVAS_DIVERGED` 拒绝；
+- 下一次运行前要求二选一：**从画布反向导出**新的 FlowGraph 版本，或者**放弃画布修改**。反向导出只接受重新编译后可复现的改动，不允许按旧 IR 静默路由。
 
 **AF-5.5【现行】** FlowGraph 定义可以独立发布为不可变版本（`flowGraphDefinition.*`），并支持 diff；从定义创建运行时仍走 propose → 确认管线，不修改模板。
 
@@ -188,7 +189,9 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 **AF-6.3【现行 · BL-03 修复】编译重映射**：编译器把边条件、`decisions.when`、`inputs.selectors.sourceStageKey` 中的节点引用，与 `loop.exitCondition` 一起映射为画布 id。修复前，带条件分支或最小输入声明的外部图一进契约校验就失败，根本无法编译落画布。
 
-**AF-6.2【种类与能力部分已现行 · BL-05；端口部分为目标·G8，待 BL-11】校验即准入**：种类白名单 `FLOW_GRAPH_DISPATCHABLE_KINDS` 与能力目录 `FLOW_GRAPH_CAPABILITY_IDS` 已成为 validate、compile、运行准入三处的唯一来源。原条款：编译和预览阶段使用的 kind 白名单、端口兼容函数、能力目录，**必须与运行准入完全相同**。现行情况是：schema 和编译器都接受 `state-machine` 节点，运行准入却拒绝它（`FLOW_GRAPH_NODE_KIND_UNSUPPORTED`），用户在人工确认落画布后、第一次运行时才会失败。
+**AF-6.2【现行 · BL-05/BL-11/2026-11-26 审查修复】校验即准入（静态与运行必需绑定）**：种类白名单 `FLOW_GRAPH_DISPATCHABLE_KINDS`、能力目录、真实端口/类型、`params` 与运行必需绑定均由 validate、compile、建图准入共用。Agent 必须声明 `modelDefinitionId`，工具默认包含 `node.execute@1`，执行范围只从直接 capability/human-task 载体安全推导；Review 必须声明模型并能无歧义推导负责 Agent、审核来源与门禁节点。`compileFlowGraph` 返回 `runnable/runtimeErrors`，builder 在 propose 与 commit 两侧拒绝不可运行图，不再把缺失绑定留到首次运行。
+
+**边界**：校验通过只证明图结构与运行准入一致，不证明真实模型可用、供应商请求成功、GUI 鼠标路径或安装包行为；这些仍按 §19 的证据等级单独验收。
 
 ---
 
@@ -198,17 +201,17 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 |---|---|---|
 | V1 | 引用合法：edge、condition、selector 引用的 nodeId 都存在 | 【现行】 |
 | V2 | participation 与 kind 的约束（§4.2 表） | 【现行】 |
-| V3 | 不含 loop 载体的环 → `CYCLE_WITHOUT_LOOP`；**含载体的多节点环或自回边 → `LOOP_BODY_UNSUPPORTED`**，循环只能用单节点 `node.loop` 声明、不画回边 | 【现行 · BL-07】（v2 改为子图载体） |
+| V3 | 不含 loop 载体的环 → `CYCLE_WITHOUT_LOOP`；v2 含 `loop.body[]` 的多节点环按轮次校验，v1 含载体的多节点环或自回边 → `LOOP_BODY_UNSUPPORTED` | 【现行 · BL-07/BL-11】 |
 | V4 | 从入口可达全部节点；出口可达；入口不是出口 | 【现行】 |
 | V5 | `loop.maxIterations ≤ budgets.maxLoopIterations` | 【现行】 |
 | V6 | **同一源节点的多条条件出边必须两两互斥**（`CONDITION_NOT_EXCLUSIVE`，见 `conditionsExclusive`：exists/equals/type 与 missing、equals 不同值、type 不同类型、count 区间不相交），或者改用 `otherwise` 边（每源至多一条、须有条件兄弟边、不能带条件：`OTHERWISE_INVALID`）。human-decision / review-passed 没有否定形式，二选一只能用 otherwise | 【现行 · BL-04】 |
 | V7 | ~~汇合推断~~：已由 AF-8.3b 的新 `all` 语义取代——XOR 汇合用缺省 `all` 即可，无需报错 | 【现行 · BL-03，作废原条款】 |
-| V8 | 数据边端口存在，且按 `portPairCompatible` 类型兼容、Schema 兼容 | 【目标·G8】 |
+| V8 | 数据边端口存在，且按 `portPairCompatible` 类型兼容、Schema 兼容 | 【现行 · BL-11】 |
 | V9 | kind 和能力在运行准入白名单内（与 AF-6.2 同源）：`NODE_KIND_UNSUPPORTED` / `CAPABILITY_UNKNOWN` | 【现行 · BL-05】 |
-| V10 | 预算交叉检查：`maxSteps ≥ 可执行节点数 + Σ(loop.maxIterations × body 大小)`。单节点循环按大小 1 计算。预算不足时返回 `STEP_BUDGET_INSUFFICIENT` 及所需步数。 | 【现行 · BL-35】 |
+| V10 | 预算交叉检查：`maxSteps ≥ 可执行节点数 + Σ((loop.maxIterations - 1) × body 大小)`。基础节点数已包含每轮第一次执行，因此只额外预留后续轮次；单节点循环按大小 1 计算。预算不足时返回 `STEP_BUDGET_INSUFFICIENT` 及所需步数。 | 【现行 · BL-35】 |
 | V11 | `required` 输入 selector 的源节点必须先于使用节点出现在从入口到达该节点的所有拓扑路径上。可绕过源节点或引用自身时返回 `REQUIRED_SELECTOR_UNREACHABLE`。 | 【现行 · BL-35】 |
 | V12 | 错误码语义准确：未知能力用 `CAPABILITY_UNKNOWN`，不复用 `UNREACHABLE_NODE` | 【现行 · BL-05】 |
-| V13–V15 | 角色声明与归属规则（见 §16.1） | 【目标·A4】 |
+| V13–V15 | 角色声明与归属规则（见 §16.1） | 【现行 · BL-15】；当前按 participation 校验，不自动扩展为多身份权限 |
 
 ---
 
@@ -241,7 +244,7 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 **AF-8.4a【现行】** 循环必须有界：`loop.maxIterations` 加上全局 `maxLoopIterations`；每一轮使用独立 taskId（后缀 `loop:<n>`）；达到上限时强制落定，不允许静默无限循环。
 
-**AF-8.4b【现行 · BL-11】子图循环**：循环体是一组节点（`loop.body[]`）。路由器以「轮次作用域」计算 body 内的就绪和落定状态——同体内边按**本轮交付**就绪（循环载体本身要满足退出条件才 settled）；一轮结束（body 内出口节点交付）后评估 `exitCondition`，不满足且未达上限则开下一轮（`run.loopIterations[carrier]` 递增，子任务带 `round` 与独立 taskId）。v1 单节点循环语义不变；**v1 图**（无 body）的多节点环/自回边仍报 `LOOP_BODY_UNSUPPORTED`（只读兼容），v2 图用 body 显式声明后才允许环。
+**AF-8.4b【现行 · BL-11】子图循环**：循环体是一组节点（`loop.body[]`）。路由器以「轮次作用域」计算 body 内的就绪和落定状态——同体内边按**本轮交付**就绪（循环载体本身要满足退出条件才 settled）；一轮结束（body 内出口节点交付）后评估 `exitCondition`，不满足且未达上限则开下一轮（`run.loopIterations[carrier]` 递增，子任务带 `round` 与独立 taskId）。v1 单节点循环语义不变；**v1 图**（无 body）的多节点环/自回边仍报 `LOOP_BODY_UNSUPPORTED`（只读兼容），v2 图用 body 显式声明后才允许环。当前 `review` 节点不允许出现在 `loop.body`，静态校验明确拒绝；按轮次作用域执行审核留待后续。
 
 ### 8.5 完成、停滞与失败
 
@@ -267,8 +270,8 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 **AF-9.1【现行】** 讨论消息**不会**自动成为正式交付；人工修改会产生新版本，旧任务的输入保持不变。
 
-**AF-9.2【现行·限制】** human-task 的结果类型只有 `text | json`。
-- **AF-9.2a【目标】** 人独立完成的媒体工作（上传或修改图片、音频、视频）怎么接入目前没有定义。规范要求二选一：(a) human-task 增加媒体结果类型，提交时引用项目媒体库中的资产；(b) 明确规定「人工媒体交付 = 资产节点 + human-task 引用该资产」，并给出编译模板。
+**AF-9.2【现行 · BL-20】** human-task 的结果类型支持 `text | json | image | video`。图片与视频以项目媒体 ID 提交，执行器核对项目归属、MIME 与内容摘要后生成固定版本；音频结果类型仍未定义，不能假称已支持。
+- **AF-9.2a【现行 · BL-20】** 人工媒体交付采用「human-task 直接引用项目媒体库资产」的方案，编译时按 `humanOutputType` 派生 `out-image` / `out-video` 公开端口；下游只消费固定资产引用。
 
 **AF-9.3【现行·BL-21，2026-11-26 冻结：执行者 × 决策者两维】**（替代一维 participation；旧图缺省自动映射，行为不变）：
 
@@ -284,24 +287,24 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 ## 10. 最小必要输入
 
-**AF-10.1【现行】** 每个节点通过 `inputs.selectors[]` 声明它要读取的内容：`sourceStageKey`（已交付的节点）+ `path`（点路径，空表示整个值）+ `required` + `purpose`；同时声明 `budgetBytes`（缺省 128 KiB）。
+**AF-10.1【现行】** 节点可通过 `inputs.selectors[]` 声明它要读取的内容：`sourceStageKey`（已交付的节点）+ `path`（点路径，空表示整个值）+ `required` + `purpose`；同时声明 `budgetBytes`（缺省 128 KiB）。`inputs` 是可选的；未声明时沿用路由器裁剪后的固定输入，不生成 ContextManifest。
 
-**AF-10.2【现行】** 宿主据此编制 `ContextManifest`：
+**AF-10.2【现行】** 节点声明 `inputs` 时，宿主据此编制 `ContextManifest`：
 - 必需内容**不静默截断**：超出预算时标记 `exceeded`，宿主停止执行并显示原因；
 - 可选内容超出预算时丢弃，记入 `dropped`；
 - 缺失的内容记入 `missing`（`DELIVERY_MISSING / FIELD_MISSING`）；
 - 存在必需缺失或预算超出时，节点不允许执行；
-- 清单带 `manifestHash`，交付记录绑定这个 hash，事后可以追溯「它当时看到了什么」。
+- 清单带 `manifestHash`，交付记录在存在清单时绑定这个 hash，事后可以追溯「它当时看到了什么」。
 
-**AF-10.3【现行】** 专业 Agent 需要更多内容时，返回**补充请求**，不能自己读取全图。
+**AF-10.3【目标】专业 Agent 主动请求补充输入**：当前 `CoordinationDecision` 只有 `dispatch / dispatch-many / finish / wait`，没有 `request-more` 动作；专业 Agent 不能通过模型决策主动申请更多内容，也不能自己读取全图。`overflow: 'ask-human'` 是宿主按声明策略触发的人工补料，不等同于 Agent 主动请求。
 
-**AF-10.4【现行·BL-40，2026-11-26】** 溢出策略可声明：`overflow: 'fail' | 'ask-human' | 'summarize'`（缺省 `fail`，与现行行为一致）。`summarize` 必须由一个显式的能力节点完成并留下交付，不能在宿主里隐式调用模型。`ask-human` 在等待人工补料后继续：Agent 阶段把精简材料作为阶段上下文；能力节点把材料作为文本输入注入（优先第一个 `text`/`markdown` 输入端口，否则取唯一的单值 `any` 端口），命令以可选 `contextMaterial {targetPortId,text}` 承载，渲染层替代该端口的固定资产引用；补料缺失或端口不可承载时显式失败，不静默忽略。
+**AF-10.4【现行·BL-40，2026-11-26】** 溢出策略可声明：`overflow: 'fail' | 'ask-human' | 'summarize'`（缺省 `fail`）。`summarize` 必须由一个显式的能力节点完成并留下交付，不能在宿主里隐式调用模型。`ask-human` 在等待人工补料后继续：Agent 阶段把精简材料作为阶段上下文；能力节点把材料作为文本输入注入（优先第一个 `text`/`markdown` 输入端口，否则取唯一的单值 `any` 端口），命令以可选 `contextMaterial {targetPortId,text}` 承载，渲染层替代该端口的固定资产引用；补料缺失或端口不可承载时显式失败，不静默忽略。
 
 ---
 
 ## 11. 交付与资产
 
-**AF-11.1【现行】** 交付记录（`StageDeliveryRecord`）绑定以下内容：定义修订、节点、taskId、输出资产引用（`assetId / versionId / sourceNodeId / sourcePortId`）、ContextManifest hash、执行信封 hash、人工决定、审核结论、提交时间。
+**AF-11.1【现行】** 交付记录（`StageDeliveryRecord`）绑定以下内容：定义修订、节点、taskId、输出资产引用（`assetId / versionId / sourceNodeId / sourcePortId`）、声明输入时的 ContextManifest hash、执行信封 hash、人工决定、审核结论、提交时间。
 
 **AF-11.2【现行】** 下游 selector 只引用固定版本；上游返工后，旧交付标记为 `stale=true`，不能再当作新版本交付。
 
@@ -314,13 +317,14 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 ### 12.1 流程运行状态【现行】
 
 `ready / running / waiting / blocked / completed / failed / cancelled`；`waiting` 必须带 `waitKind: human | reconcile`。
-- **【目标】** 增加 `stalled`（AF-8.5b）；`waitKind` 增加 `tool`（等待远端异步任务）。
+- **【现行 · BL-03】** 停滞不新增状态枚举，以 `blocked` + `code: FLOW_STALLED` 表达，并带 `stalledNodeIds` / 原因；不得报告为 `human.wait`。
+- **【目标】** `waitKind` 增加 `tool`（等待远端异步任务）。
 
 ### 12.2 子节点和审核状态【现行】
 
-- 子任务状态与流程运行状态同集；
+- 子任务状态与流程运行状态同集，并允许 `skipped`：执行回执明确 `FLOW_EXECUTION_SKIPPED` 时子任务记为 skipped；
 - 审核状态：`ready / pending / passed / rejected / human-wait / manual-wait`；
-- 子节点状态**【目标】** 增加 `skipped`（AF-8.3a）。
+- 死路径节点由 `skippedNodeIds` 与 UI 状态表达，不一定创建子任务记录；`skipped` 视为落定（AF-8.3a）。
 
 ### 12.3 状态机节点
 
@@ -338,7 +342,7 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 **AF-13.3【现行】** 按责任方分别处理：人工责任方等待人修改后提交新版本；纯 AI 责任方保留原任务和输入，带反馈新建一次尝试；人机协作责任方在原节点等待人讨论和调整，人明确继续后修订。
 
-**AF-13.4【目标·新发现】返工上限统一**：现行三处取值不一致：FlowGraph `review.maxReworks` 为 0–3（缺省 1），ReviewNodeConfig 为 0–10，00 号方案为缺省 3。规范冻结为：**上限 0–3，缺省 3**；三处共用同一常量。
+**AF-13.4【现行 · BL-19】返工上限统一**：FlowGraph、建图计划与新审核配置统一为 **0–3、缺省 3**，唯一常量为 `MAX_REWORKS = 3`。历史审核配置读取仍接受 0–10，但解析时截断到 3，并在设置面板提示旧配置按 3 次执行；新输入超过 3 直接拒绝。
 
 ---
 
@@ -359,7 +363,7 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 | 预算 | 层级 | 缺省值 | 状态 |
 |---|---|---|---|
 | `budgets.maxSteps` | 流程 | 12（≤64） | 【现行】；V10 交叉检查见 §7 |
-| `budgets.maxActiveMs` | 流程 | 10 分钟 | 【现行】 |
+| `budgets.maxActiveMs` | 流程 | 10 分钟（≤60 分钟） | 【现行】；协调器持久化绝对 deadline，并在分派时把剩余预算下传子任务 |
 | `budgets.maxLoopIterations` | 流程 | 8 | 【现行】 |
 | 每任务决策轮数、工具次数、时长 | 专业 Agent | 12 轮 / 20 次 / 10 分钟（视频另设） | 【现行】 |
 | ContextManifest `budgetBytes` | 节点 | 128 KiB | 【现行】 |
@@ -373,7 +377,7 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 ### 16.1 角色声明
 
-**AF-16.1【目标】** FlowGraph 顶层声明角色表，节点按角色归属：
+**AF-16.1【现行 · BL-15】** FlowGraph 顶层声明角色表，节点按角色归属：
 
 ```jsonc
 FlowGraph {
@@ -391,14 +395,14 @@ FlowNode {
 
 校验规则（并入 §7）：
 - **V13** `humanRole` 必须引用已声明的 `roleId`；`roleId` 唯一；
-- **V14** `participation` 为 `human` 或 `collaborative`（以及 v2 中 `decider: human`）的节点**必须**声明 `humanRole`；纯 `autonomous` 节点**不得**声明；
+- **V14** `participation` 为 `human` 或 `collaborative` 的节点**必须**声明 `humanRole`；纯 `autonomous` 节点**不得**声明。当前 `decider: human` 不额外推导角色声明要求；
 - **V15** 未声明 `roles` 的图，视为只有一个隐式角色 `owner`（名称「我」）。旧图无需迁移。
 
-角色是**流程定义的一部分**：随 FlowGraph 版本化，编译时写入承载节点配置（`AgentNodeConfig`、`HumanTaskNodeConfig` 新增可选字段 `humanRole`），落画布后由画布作为真值（遵守 AF-5.4 的往返规则）。
+角色是**流程定义的一部分**：随 FlowGraph 版本化，编译时写入承载节点配置（`AgentNodeConfig`、`HumanTaskNodeConfig` 可选字段 `humanRole`），落画布后由画布作为真值（遵守 AF-5.4 的往返规则）。当前 V13–V15 按 `participation` 判断是否必须/禁止声明角色；`executor/decider` 是后续维度，不自动授予新角色权限。
 
 ### 16.2 归属与记录
 
-**AF-16.2【目标】角色由节点决定，不由当前视图决定。** 人工决定、人工提交、讨论消息的角色归属，**一律取所在节点的 `humanRole`**；不读取 UI 里「我现在正以哪个角色查看」的状态。这样即使用户忘了切换视图，归属依然确定、可复现，也无需任何身份校验。
+**AF-16.2【现行 · BL-15】角色由节点决定，不由当前视图决定。** 人工决定、人工提交、讨论消息的角色归属，**一律取所在节点的 `humanRole`**；不读取 UI 里「我现在正以哪个角色查看」的状态。这样即使用户忘了切换视图，归属依然确定、可复现，也无需任何身份校验。
 
 需要记录角色的事实：
 
@@ -414,13 +418,13 @@ FlowNode {
 
 ### 16.3 收件箱与角色视图
 
-**AF-16.3【目标】** 人工收件箱（`human-inbox`）按角色分组汇总以下待办：
+**AF-16.3【现行 · BL-15】** 人工收件箱（`human-inbox`）按角色分组汇总以下待办：
 - human-task 待提交；
 - collaborative 待决策（采用、拒绝、回复）；
 - 审核待人工复审；
 - 流程 `stalled` 告警（不属于任何角色，置顶显示在「流程」分组下）。
 
-**AF-16.4【目标】角色视图是筛选器，不是身份。** UI 可以切换「以某角色查看」：只高亮该角色的节点、过滤收件箱、在节点上显示角色标签。切换视图不会改变任何权限，也不会改变 AF-16.2 的归属规则。
+**AF-16.4【现行 · BL-15】角色视图是筛选器，不是身份。** UI 可以切换「以某角色查看」：只高亮该角色的节点、过滤收件箱、在节点上显示角色标签。切换视图不会改变任何权限，也不会改变 AF-16.2 的归属规则。
 
 ### 16.4 角色间沟通
 
@@ -428,14 +432,14 @@ FlowNode {
 
 **AF-16.5【现行】节点内沟通**：用户以节点的角色，在该节点的会话里与该节点的 Agent 讨论、补充、纠偏；会话按节点和任务隔离，不同 Agent 不共享会话。讨论消息**不会**自动成为正式交付。
 
-**AF-16.6【目标】交接说明**：节点交付时可以附一段 `handoffNote`（≤4 KiB，纯文本），作为交付记录的一部分：
+**AF-16.6【现行 · BL-15】交接说明**：节点交付时可以附一段 `handoffNote`（≤4 KiB，纯文本），作为交付记录的一部分：
 - 在下游节点的卡片和协作面板中展示，标注来源角色和节点；
 - **不会自动进入任何模型的上下文**。下游节点只有在 `inputs.selectors` 中显式声明 `{ sourceStageKey, path: '$handoff' }` 时，交接说明才会进入它的 ContextManifest（受预算和 required 规则约束）；
 - 交接说明不是资产，不参与条件判定和路由。
 
 ### 16.5 与外部 Agent 的边界
 
-**AF-16.7【目标】** 外部 Agent 永远不能以任何角色的名义做出人工决定（AF-1.5、AF-17.2）。它提交的草稿会标注为 `author: agent:external:<clientId>`，需要用户在对应角色的节点上采用后才生效。
+**AF-16.7【现行 · BL-15】** 外部 Agent 永远不能以任何角色的名义做出人工决定（AF-1.5、AF-17.2）。它提交的草稿会标注为 `author: agent:external:<clientId>`，需要用户在对应角色的节点上采用后才生效。
 
 ### 16.6 不在范围内
 
@@ -445,18 +449,20 @@ FlowNode {
 
 **AF-17.1【现行】** Agent Flow 相关操作分属 `flowAgent.*`、`flowGraph.*`、`flowGraphDefinition.*`、`humanTask.*`、`flowStateMachine.*` 操作族；三入口共用同一宿主。清单以 `contracts.json` 为准。
 
-**AF-17.2【目标·A6】动作分级**（由 OperationSpec 声明，宿主强制）：
+**Headless 节点流键约定**：`inputs` 使用完整公开输入端口 ID `in-<id>`；`outputs` / `outputValues` / `resubmit` 统一使用 `out-<id>`。旧裸输出 id 仅保留读取兼容，新调用不得再用裸 id 写入。
+
+**AF-17.2【部分现行 · BL-01】动作分级**（宿主强制）：
 
 | 级别 | 示例 | 外部 Agent |
 |---|---|---|
 | 只读 | catalog / inspect / preview / list / get | 允许 |
 | 提案 | `flowGraph.propose`、`flowAgent.build.propose`、草稿提交 | 允许 |
 | 运行控制 | `flowAgent.run / pause / stop` | 允许（受计费确认门约束） |
-| **人工决定** | `flowGraph.confirm`、`flowAgent.build.commit`、`humanTask.submit`、协作采用/拒绝、人工复审 | **禁止直接生效**：只能写入 `draft`，状态变为 `awaiting-human`，由人在 GUI 中采用 |
+| **人工决定** | `flowGraph.confirm`、`flowAgent.build.commit`、`humanTask.submit`、协作采用/拒绝、人工复审 | **禁止直接生效**：外部调用先请求桌面人工确认，人点允许后才执行原动作；拒绝、超时、无桌面均在生效前失败 |
 
-**【现行 · BL-01】** 人工决定类操作从外部调用时，先在桌面弹出确认，人点允许后才执行（实时确认）。覆盖 `flowGraph.confirm`、`flowAgent.build.commit`、`humanTask.submit`、`flowAgent.cooperate`（action=submit 或 accepted=true）。`flowStateMachine.submitEvent` 与 `composite.run.submitHuman` 暂未纳入，待定（见 BACKLOG BL-01 备注）。
+**【现行 · BL-01】** 实时确认覆盖 `flowGraph.confirm`、`flowAgent.build.commit`、`humanTask.submit`、`flowAgent.cooperate`（action=submit 或 accepted=true）。没有做持久草稿队列，因此不存在离线后再采用的 `awaiting-human` 状态。`flowStateMachine.submitEvent` 与 `composite.run.submitHuman` 暂未纳入，待定（见 BACKLOG BL-01 备注）。
 
-**AF-17.3【目标】** 外部 Agent 身份进入审计：每个外部调用都记录 `clientId`，运行总览事件归属为 `agent:external:<clientId>`。
+**AF-17.3【现行 · BL-15】** 外部 Agent 身份进入审计：每个外部调用都记录 `clientId`，运行总览事件归属为 `agent:external:<clientId>`；CLI 使用固定 `cli` 标识，MCP 使用客户端名称的固定长度摘要，不记录原始名称、密钥或请求正文。
 
 ---
 
@@ -475,12 +481,14 @@ FlowNode {
 
 **AF-19.2 验收门禁**（新增或修改 Agent Flow 能力时同包提供）：
 1. 路由纯函数测试覆盖：顺序、XOR 分支 + 汇合、AND fork/join、单节点循环、**多节点循环**、死路径消除、停滞判定、零输出节点交付。
-2. 「校验即准入」一致性测试：随机生成合法 FlowGraph → 校验通过 ⇒ 运行准入必然通过。
+2. 「校验即准入」一致性测试：合法 FlowGraph 的 schema、端口、能力与运行必需绑定校验通过 ⇒ propose/compile 不因静态准入失败。该测试不替代真实模型、GUI 或安装包验收。
 3. 「模型文字不能改路由」定向测试（现行已有，保留）。
-4. AF-17.2 动作分级测试：外部入口调用人工决定类操作，必须得到 `awaiting-human`。
-5. 角色测试：human 或 collaborative 节点缺少 humanRole 时校验拒绝；切换角色视图不改变决定的归属；交接说明在没有显式 selector 时不会进入模型上下文。
-6. 一条真实画布路径：上帝 Agent propose → 人确认 → 纯 AI 节点 → 人机协作节点 → 审核拒绝 → 返工 → 通过 → 完成；中途重启应用能恢复，且不重放已完成的步骤。
+4. AF-17.2 动作分级测试：外部入口调用人工决定类操作必须先经桌面人工确认；拒绝/超时/无桌面不得产生副作用。当前实现是实时确认，不断言离线草稿状态。
+5. 角色测试：声明 `roles` 时，human 或 collaborative 节点缺少 `humanRole` 必须校验拒绝；切换角色视图不改变决定的归属；交接说明在没有显式 selector 时不会进入模型上下文。
+6. 一条真实画布路径：上帝 Agent propose → 人确认 → 纯 AI 节点 → 人机协作节点 → 审核拒绝 → 返工 → 通过 → 完成；中途重启应用能恢复，且不重放已完成的步骤。缺少的真实 GUI 鼠标、真实模型或重启证据必须逐项写明，不能用确定性夹具补齐。
 7. `npm run verify` + `guard:agent-parity` + `verify:logging` 全绿。
+
+**证据等级**：确定性单测/宿主测试、定义走查、真实桌面自动驱动、真实 GUI 人工鼠标、真实模型/供应商、安装包验收是不同层级；任一层级通过都不能外推为其他层级完成。R 系列与历史 AF-00～AF-07 的精确边界见 [BACKLOG](BACKLOG.md) 与[历史总台账](canvas-agent-flow/archive/38-agent-completion-plan.md)。
 
 ---
 
@@ -499,24 +507,19 @@ FlowNode {
 
 ---
 
-## 附录 A：现行与目标差距（冻结前清零或明确延期）
+## 附录 A：剩余目标与验收边界
 
-| 差距 | 条款 | 优先级 |
+| 项目 | 当前状态 | 边界 |
 |---|---|---|
-| ~~外部 Agent 可自确认落画布、可代人提交人工任务~~ ✅ BL-01（实时确认版） | AF-1.5 / AF-5.3 / AF-17.2 | — |
-| task-bind 工具白名单回归 | AF-3.2a | **P0** |
-| ~~死路径消除、汇合推断、停滞终态~~ ✅ BL-03 | AF-8.3a / V7 / AF-8.5b | — |
-| ~~条件互斥校验~~ ✅ BL-04 | V6 | — |
-| 校验即准入（kind、端口、能力）+ 删除 control 边 | AF-6.2 / AF-4.3a / V8 / V9 | **P0** |
-| ~~零输出节点交付~~ ✅ BL-06 | AF-8.1a | **P0** |
-| 多节点循环（拒绝 ✅ BL-07；实现待 BL-11） | AF-8.4b | P1（实现） |
-| 节点流作为能力、能力目录生成 | §4.4 / NODE_FLOW_SPEC §13 | P1 |
-| params 与显式端口 | §4.4 | P1 |
-| FlowGraph 与画布往返（diverged） | AF-5.4 | P1 |
-| ~~状态机改为阶段状态机~~ ✅ BL-18（阶段 FSM 冻结，编译期唯一配置） | AF-12.3a | — |
-| 返工上限统一 | AF-13.4 | P1 |
-| 人工媒体交付 | AF-9.2a | P1 |
-| 角色化单用户：roles / humanRole / actor 记录 / 收件箱按角色分组 / 交接说明 | §16 | P1（已决策：只做方案 A） |
-| ~~执行者 × 决策者两维~~ ✅ BL-21（executor/decider 冻结；capability 可 decider human） | AF-9.3 | — |
-| 预算交叉检查、错误码语义 | V10 / V12 | P2 |
-| fixed-order 统一编译为 graph | §2.2 | P2 |
+| 外部 Agent 人工决定实时确认 | ✅ BL-01 | 未做持久草稿队列；`flowStateMachine.submitEvent` / `composite.run.submitHuman` 未纳入 |
+| task-bind 工具白名单 | ✅ BL-02 | 与桌面共用 `node.execute@1` + 可选 `web.search@1` |
+| 死路径、汇合、停滞、条件互斥、零输出交付 | ✅ BL-03/04/06 | 停滞用 `blocked + FLOW_STALLED`，不新增状态枚举 |
+| 校验即准入、control 边删除、真实端口 | ✅ BL-05/BL-11/2026-11-26 修复 | 只证明静态与运行准入一致，不证明真实模型/GUI/安装包成功 |
+| 多节点循环、能力目录、params | ✅ BL-07/10/11 | `params` 仅覆盖已登记公开配置子集；不可调度能力仍明确拒绝 |
+| FlowGraph 与画布往返 | ✅ BL-17 | 反向导出只接受可复现改动；其他修改必须恢复原定义或发布新版本 |
+| 阶段状态机、返工上限、人工媒体 | ✅ BL-18/19/20 | 人工媒体仅 image/video；音频未定义 |
+| 角色化单用户、执行者 × 决策者 | ✅ BL-15/21 | 角色校验按 participation；不引入多身份、登录或权限 |
+| 预算交叉检查、fixed-order 统一路由 | ✅ BL-35 | 真实供应商费用与模型质量仍按专项预算验收 |
+| 专业 Agent 主动补充请求 | 【目标】 | 当前 decision schema 无 `request-more`；`ask-human` 仅为声明式溢出策略 |
+| R09 / R11 / R12 | 未闭环 | 真实磁盘/物理掉电/远端撤回、真实供应商质量与计费、最终发布验收仍按历史总台账单独追踪 |
+| 真实 GUI 鼠标、真实模型、安装包 | 按路径单列 | 确定性测试、定义走查和自动桌面驱动不得外推为这些验收完成 |

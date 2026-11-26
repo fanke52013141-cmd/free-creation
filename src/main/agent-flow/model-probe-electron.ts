@@ -82,7 +82,7 @@ if (
       if (!local && !allowCost) throw new Error('PROBE_COST_OPT_IN_REQUIRED')
       const secret = ephemeral
         ? process.env.CANVAS_AGENT_PROBE_KEY
-        : await host!.readSecret(connection.id)
+        : await host!.readSecretForRequest(connection.id, connection.baseUrl)
       phase = 'credentials'
       if (!secret && !local) throw new Error('PROBE_KEY_UNAVAILABLE')
       const model = createCatalogChatModel({

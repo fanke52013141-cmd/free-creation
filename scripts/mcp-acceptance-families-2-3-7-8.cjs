@@ -1,4 +1,4 @@
-﻿/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
 /**
  * MCP 验收 · 第 2/3/7/8 族：媒体、传输、历史快照、诊断与工作区。
  *
@@ -19,7 +19,9 @@ const electron = require('electron')
 const appRoot = resolve('.')
 const cliPath = join(appRoot, 'out/main/local-agent.js')
 // 期望操作数以门禁契约快照为唯一事实源，不再硬编码。
-const expectedOperationCount = JSON.parse(readFileSync(join(appRoot, 'docs/local-agent-access/generated/contracts.json'), 'utf8')).operations.length
+const contractSnapshot = JSON.parse(readFileSync(join(appRoot, 'docs/local-agent-access/generated/contracts.json'), 'utf8'))
+const expectedOperationCount = contractSnapshot.operations.length
+const expectedNodeCount = contractSnapshot.nodes.length
 const key = () => `${Date.now()}:${randomUUID()}`
 const licensedSecurityDir = (() => {
   const roaming = process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming')
@@ -154,7 +156,9 @@ async function main() {
 
     // ========== 第 2 族：媒体 ==========
     const media = section('family-2-media')
-    const sourceImage = join(directory, 'acceptance-sample.png')
+    const controlled = join(directory, 'agent-exports')
+    await mkdir(controlled, { recursive: true })
+    const sourceImage = join(controlled, 'acceptance-sample.png')
     await writeFile(
       sourceImage,
       Buffer.from(
@@ -341,10 +345,10 @@ async function main() {
       expect(operations.length === expectedOperationCount, `操作数=${operations.length}`)
       return { operations: operations.length }
     })
-    await diag.check('node.type.list 返回 32 类节点', async () => {
+    await diag.check(`node.type.list 返回门禁契约节点数（${expectedNodeCount}）`, async () => {
       const data = ok(await call('node.type.list', {}), 'node.type.list')
       const nodes = data?.nodes ?? []
-      expect(nodes.length === 32, `节点类型数=${nodes.length}`)
+      expect(nodes.length === expectedNodeCount, `节点类型数=${nodes.length}`)
       return { nodes: nodes.length }
     })
     await diag.check('node.type.get 读契约', async () => {

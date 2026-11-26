@@ -6,7 +6,7 @@
 
 先做 C0 验证版本、Electron 打包、模型单步工具调用、SQLite 适配与 main-renderer 回执桥。现有 LangChain 依赖和消息类型使用不代表 Agent Flow 已实现。业务执行先经桥复用现有 renderer 唯一入口；宿主断开停止新派发，不能靠超时重发副作用。Skill 加载不扩大工具权限；任务固定资产输入版本、Skill/工具版本；checkpoint 不能代替真实命令回执。
 
-节点间统一协议以[节点协同规范](05-node-coordination-standard.md)为准。上帝 Agent 使用能力发现和图构建命令；主 Agent 使用任务派发、输入选择、产物交接和控制命令；专业 Agent 使用获准的能力工具。角色权限由宿主校验，不能只用提示词区分。
+节点间统一协议以[节点协同规范](../05-node-coordination-standard.md)为准。上帝 Agent 使用能力发现和图构建命令；主 Agent 使用任务派发、输入选择、产物交接和控制命令；专业 Agent 使用获准的能力工具。角色权限由宿主校验，不能只用提示词区分。
 
 ## 1. 从已有画布演进
 

@@ -111,7 +111,11 @@ async function main() {
   try {
     // 授权是设备绑定的：把本机已激活的 security 目录复制进隔离数据目录，
     // 应用才能越过授权门禁启动本地接入服务（不伪造任何签名）。
-    if (existsSync(licensedSecurityDir)) {
+    // CANVAS_OWNER=1 的自用版构建已跳过授权门禁，干净 CI 无需也不应有本机授权目录。
+    if (process.env.CANVAS_OWNER === '1') {
+      report.licensed = 'owner-build'
+      report.licenseMode = 'CANVAS_OWNER=1'
+    } else if (existsSync(licensedSecurityDir)) {
       await cp(licensedSecurityDir, join(directory, 'security'), { recursive: true })
       report.licensed = true
     } else {

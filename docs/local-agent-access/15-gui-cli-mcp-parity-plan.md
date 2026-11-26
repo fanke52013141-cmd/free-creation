@@ -2,6 +2,8 @@
 
 日期：2026-11-07。状态：可执行开发方案，业务能力尚未因此新增。基线：`3b1f2ab`，另有未提交工作区修改，不能视为已发布能力。
 
+> **历史规划快照**：文中的“32 类节点”“25 项接口”等均为 2026-11-07 时点口径，不作为现状。当前节点与操作集合以 [`generated/contracts.json`](./generated/contracts.json)、`capability.list` 和 [`AGENT_PARITY_SPEC.md`](../../AGENT_PARITY_SPEC.md) 为准。
+
 目标由用户明确提出：人使用 GUI 操作软件；Agent 使用 CLI 或 MCP 操作同一个软件；能建立多个画布、创建和连接各类节点、执行任务、取得并复用结果，保存后人在 GUI 中继续操作。最终范围是全软件业务能力，不止32类节点或当前25项接口。
 
 配套：[强制一致性规范](../../AGENT_PARITY_SPEC.md)、[32类节点动作表](16-node-action-coverage.md)、[现有25项能力](14-current-capabilities.md)。本计划接续并扩展原 A0–A4，不再用早期最小包或项目导入排除条款定义最终交付。

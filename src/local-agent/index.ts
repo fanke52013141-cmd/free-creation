@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
 import { z } from 'zod'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
@@ -12,11 +11,13 @@ import {
   operationResponseSchema,
   nodeAccessDirectory,
   operationDirectory,
+  operationSpec,
   toolInputSchema,
   validateAccessRegistry,
   type AccessOperationId
 } from '../shared/agent-access/registry'
 import { callLocalOperation, defaultDataDirectory } from './client'
+import { CliInputError, cliFailure, parseCliInput, writeCliResponse } from './cli'
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2)
@@ -52,25 +53,28 @@ async function main(): Promise<void> {
         { capabilities: { tools: {} } }
       )
       server.setRequestHandler(ListToolsRequestSchema, async () => ({
-        tools: Object.entries(ACCESS_OPERATIONS).map(([id, spec]) => ({
-          name: id.replaceAll('.', '_'),
-          description: spec.cost === 'none' ? spec.description :
-            `${spec.description}（费用：${{ possible: '可能产生费用', certain: '会产生费用' }[spec.cost]}）`,
-          inputSchema: z.toJSONSchema(toolInputSchema(id as AccessOperationId)) as {
-            type: 'object'
-            [key: string]: unknown
-          },
-          outputSchema: z.toJSONSchema(operationResponseSchema(id as AccessOperationId)) as {
-            type: 'object'
-            [key: string]: unknown
-          },
-          annotations: {
-            readOnlyHint: spec.effect === 'read',
-            destructiveHint: spec.destructive,
-            idempotentHint: spec.idempotent,
-            openWorldHint: false
+        tools: Object.keys(ACCESS_OPERATIONS).map((id) => {
+          const spec = operationSpec(id as AccessOperationId)
+          return {
+            name: id.replaceAll('.', '_'),
+            description: spec.cost === 'none' ? spec.description :
+              `${spec.description}（费用：${{ possible: '可能产生费用', certain: '会产生费用' }[spec.cost]}）`,
+            inputSchema: z.toJSONSchema(toolInputSchema(id as AccessOperationId)) as {
+              type: 'object'
+              [key: string]: unknown
+            },
+            outputSchema: z.toJSONSchema(operationResponseSchema(id as AccessOperationId)) as {
+              type: 'object'
+              [key: string]: unknown
+            },
+            annotations: {
+              readOnlyHint: spec.effect === 'read',
+              destructiveHint: spec.destructive,
+              idempotentHint: spec.idempotent,
+              openWorldHint: spec.openWorld === true
+            }
           }
-        }))
+        })
       }))
       server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const id = Object.keys(ACCESS_OPERATIONS).find(
@@ -162,6 +166,30 @@ async function main(): Promise<void> {
       const token = randomUUID()
       const sessions = new Map<string, SSEServerTransport>()
       const http = createServer((request, response) => {
+        const hostHeader = request.headers.host ?? ''
+        const hostName = hostHeader.startsWith('[')
+          ? hostHeader.slice(1, hostHeader.indexOf(']'))
+          : hostHeader.split(':')[0]
+        if (!['127.0.0.1', 'localhost', '::1', '[::1]'].includes(hostName ?? '')) {
+          response.writeHead(403, { 'content-type': 'text/plain' })
+          response.end('forbidden')
+          return
+        }
+        const origin = request.headers.origin
+        if (origin) {
+          try {
+            const parsedOrigin = new URL(origin)
+            if (
+              !['127.0.0.1', 'localhost', '::1', '[::1]'].includes(parsedOrigin.hostname) ||
+              parsedOrigin.port !== String(request.socket.localPort)
+            )
+              throw new Error('origin')
+          } catch {
+            response.writeHead(403, { 'content-type': 'text/plain' })
+            response.end('forbidden')
+            return
+          }
+        }
         const url = new URL(request.url ?? '/', 'http://127.0.0.1')
         if (url.searchParams.get('token') !== token) {
           response.writeHead(401, { 'content-type': 'text/plain' })
@@ -216,24 +244,52 @@ async function main(): Promise<void> {
   const optionStart = argv.findIndex((argument) => argument.startsWith('--'))
   const command = argv.slice(0, optionStart < 0 ? argv.length : optionStart).join('.')
   const operation = (command === 'status' ? 'app.status' : command) as AccessOperationId
-  if (!Object.hasOwn(ACCESS_OPERATIONS, operation)) throw new Error('UNSUPPORTED_OPERATION')
-  const file = option('--input-file')
-  const bytes = file ? readFileSync(file) : null
-  if (bytes && bytes.length > ACCESS_MAX_BYTES) throw new Error('INPUT_TOO_LARGE')
-  const raw: unknown = bytes ? JSON.parse(bytes.toString('utf8')) : { input: {} }
+  if (!Object.hasOwn(ACCESS_OPERATIONS, operation)) {
+    writeCliResponse(cliFailure(operation, 'UNSUPPORTED_OPERATION', 'dispatch'))
+    return
+  }
+  let raw: unknown
+  try {
+    raw = parseCliInput(option('--input-file'))
+  } catch (error) {
+    if (error instanceof CliInputError) {
+      writeCliResponse(cliFailure(operation, error.code, error.phase))
+      return
+    }
+    throw error
+  }
   const parsed = toolInputSchema(operation).safeParse(raw)
-  if (!parsed.success) throw new Error('INVALID_INPUT')
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0]
+    const path = issue?.path.join('.') || 'input'
+    writeCliResponse(
+      cliFailure(
+        operation,
+        'INVALID_INPUT',
+        'validate',
+        undefined,
+        `${path}: ${issue?.message ?? 'invalid'}`
+      )
+    )
+    return
+  }
   const response = await callLocalOperation(
     operation,
     parsed.data as { input: unknown; requestId?: string; idempotencyKey?: string },
     dataDirectory
   )
-  process.stdout.write(JSON.stringify(response) + '\n')
-  process.exitCode = response.status === 'completed' ? 0 : response.status === 'unknown' ? 3 : 2
+  writeCliResponse(response)
 }
 
-void main().catch(() => {
-  // Fixed protocol failure; never leak parser input, credentials, paths or raw exceptions.
+void main().catch((error: unknown) => {
+  // MCP stdio 的 stdout 只能写协议消息；CLI 则必须输出结构化 JSON 失败信封。
+  if (process.argv[2] === 'mcp') {
+    process.stderr.write('LOCAL_AGENT_COMMAND_FAILED\n')
+    process.exitCode = 2
+    return
+  }
+  const code = error instanceof CliInputError ? error.code : 'LOCAL_AGENT_COMMAND_FAILED'
+  const phase = error instanceof CliInputError ? error.phase : 'dispatch'
+  writeCliResponse(cliFailure('invalid', code, phase))
   process.stderr.write('LOCAL_AGENT_COMMAND_FAILED\n')
-  process.exitCode = 2
 })

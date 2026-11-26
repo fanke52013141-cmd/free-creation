@@ -257,6 +257,9 @@ export function createAgentRuntime(options: {
             targetNodeId: target.nodeId,
             contractVersion: target.contractVersion,
             inputs: target.inputs,
+            ...(record.snapshot.routedInputEdgeIdsByTarget?.[target.nodeId]
+              ? { routedInputEdgeIds: record.snapshot.routedInputEdgeIdsByTarget[target.nodeId] }
+              : {}),
             ...(record.snapshot.rework?.videoTargetNodeId === target.nodeId
               ? {
                   videoRework: {

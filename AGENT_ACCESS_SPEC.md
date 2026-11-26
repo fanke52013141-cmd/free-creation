@@ -1,19 +1,21 @@
-# 本地外部 Agent 接入规范（评审草案 v0.1）
+# 本地外部 Agent 接入规范
 
-> status: draft
-> last-verified: unverified
+> status: active
+> last-verified: 2026-11-26
+> baseline-commit: e9b263f2
+> verification-scope: 文档与静态实现/既有测试证据核对；不代表全部运行路径或安装包验收
 
-
-2026-11-07 接续：用户要求全软件GUI业务能力通过CLI与MCP等价调用。新增的
+2026-11-07 接续：用户要求全软件 GUI 业务能力通过 CLI 与 MCP 等价调用。新增的
 [一致性规范](AGENT_PARITY_SPEC.md)、[完整开发计划](docs/local-agent-access/15-gui-cli-mcp-parity-plan.md)
 与[节点动作表](docs/local-agent-access/16-node-action-coverage.md)是当前完整目标及后续维护要求。
-本文保留早期A0–A4设计和历史范围；有冲突时以新一致性规范为准。
+本文保留早期 A0–A4 设计和历史范围；有冲突时以新一致性规范为准。
 
-**2026-11-20 规范审查校准（重要）**：
-- **操作清单的机器真值**是 `docs/local-agent-access/generated/contracts.json`（与 `capability.list` 同源，由 `check-agent-access` 门禁把守）；本文正文的历史计数（"25 项操作""31 类节点"）是 2026-10 时点值，**不得再当作现状**。节点数以 `src/shared/types/index.ts` 的 `ActiveNodeTypeId`（33 类）为准。
-- **headless 节点流六操作已登记进 Registry 并有验收**（2026-11-12 起）：`composite.execute`（含 `confirmCost` 计费确认门）、`composite.execute.wait`、`composite.run.retry`、`composite.run.submitHuman`、`composite.run.resume`、`composite.run.resubmit`。键约定：inputs 按完整公开端口 ID（`in-<id>`）喂值；outputs/outputValues 以**裸公开输出 id** 为键，`outputPorts` 摘要才带 `out-` 前缀。执行语义不经过 `graph.patch + node.execute`（无项目、无画布实例）。
+**2026-11-26 规范审查校准（重要）**：
+- **操作清单的机器真值**是 [`docs/local-agent-access/generated/contracts.json`](docs/local-agent-access/generated/contracts.json)，运行时枚举以 `capability.list` 为准，由 `check-agent-access` 门禁把守；本文不手写当前操作数或节点数。
+- **headless 节点流六操作已登记进 Registry 并有验收**（2026-11-12 起）：`composite.execute`（含 `confirmCost` 计费确认门）、`composite.execute.wait`、`composite.run.retry`、`composite.run.submitHuman`、`composite.run.resume`、`composite.run.resubmit`。键约定：inputs 按完整公开端口 ID（`in-<id>`）喂值；outputs / outputValues / resubmit 统一以 **`out-<id>`** 为键，旧裸 id 仅读取兼容。执行语义不经过 `graph.patch + node.execute`（无项目、无画布实例）。
+- **已实现的外部主路径**包括：`project.import` / `project.importStructure` / `library.import` / `library.export`、统一 Registry / Dispatcher、CLI 与 MCP stdio/SSE 传输、`graph.patch`、`node.execute`、`flowStateMachine.submitEvent` / `flowStateMachine.get`。应用 REST HTTP API 仍未实现，也不是本目标前提。
 - **MCP 注解口径**：`readOnlyHint/destructiveHint/idempotentHint` 按 effect 如实声明（只有只读操作幂等；写操作幂等性来自请求级 idempotencyKey）。
-- 完整画布编辑（graph.patch）与节点执行（node.execute）均已接入；本文"仍待开发"的历史段落以台账为准。
+- 本文“仍待开发”的历史段落不能覆盖后续交付；当前可调用集合与限制以机器契约、交付台账和实际测试为准。
 
 日期：2026-10-24。适用：Canvas Studio 本地单用户 Electron 软件。
 
@@ -34,12 +36,11 @@ A1.1接续：项目打开、名称更新及活动画布保存/导出采用桌面
 本期纳入：
 
 - 项目查询、新建、打开、修改、重命名、复制、删除、保存和导出。
-- 全部 31 个 Active 节点的能力发现，以及适用的创建、读取、配置、连接、结果查询和执行。
+- 全部 Active 节点的能力发现，以及适用的创建、读取、配置、连接、结果查询和执行；节点集合以机器契约为准。
 - 本地素材引用、资源库检索和管理、产物导出、执行任务查询与诊断。
 - 已有画布 Agent Flow 的受控启动、观察、停止、核对和适用的继续操作。
 
-早期最小包排除：项目包导入、资源库资产包导入。2026-11-07全能力目标已将GUI现有的这些操作纳入F7，
-按正式导入服务、暂存、引用重映射及凭据剥离独立实现与验收；当前接口仍未开放，不能借原始快照或文件写口绕过。
+项目包导入、结构包导入和资源库资产包导入/导出已按正式导入服务实现，包含暂存、引用重映射、凭据剥离与失败回滚；当前边界以[包传输台账](docs/local-agent-access/24-transfer-delivery.md)和机器契约为准，不能借原始快照或任意文件写口绕过。
 
 “项目修改”分为三层：`project.update` 修改声明元数据，`graph.patch / node.update` 修改画布内容，`project.save` 请求权威宿主提交并确认持久版本。保存接口不接收客户端整份快照。`project.get` 是只读查询，`project.open` 改变宿主驻留/呈现状态，须处理当前项目未保存修改和占用。
 
@@ -49,15 +50,15 @@ A1.1接续：项目打开、名称更新及活动画布保存/导出采用桌面
 
 | 事实                                                           | 源码依据                                                                                                                                                  | 对方案的约束                                         |
 | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| 31 个 Active 类型已登记                                        | [共享类型](src/shared/types/index.ts)、[节点 Spec](src/renderer/src/nodes/specs/index.tsx)、[Agent Flow Spec](src/renderer/src/nodes/specs/agentFlow.tsx) | 清单必须逐个覆盖，不能只写“所有节点”                 |
+| Active 类型已登记并由共享节点契约生成                        | [共享类型](src/shared/types/index.ts)、[节点 Spec](src/renderer/src/nodes/specs/index.tsx)、[生成契约](src/shared/agent-access/generated/node-contracts.generated.ts) | 清单必须逐个覆盖，不能只写“所有节点”                 |
 | 已有节点契约、共享 executor、各类型输出投影                    | [节点规范](NODE_CONTRACT_SPEC.md)、[执行上下文](src/shared/engine/executor-types.ts)、[执行器表](src/shared/engine/executors/index.ts)                    | 外部调用必须复用契约与输出投影                       |
 | 项目操作已有 main IPC/repo，导出 IPC 带文件对话框              | [项目 IPC](src/main/ipc/project.ipc.ts)、[项目仓库](src/main/store/projects.repo.ts)、[传输实现](src/main/store/transfer.ts)                              | 抽出公共业务入口，交互式对话框由 UI 适配器处理       |
 | 内部 Flow 命令已有账本、租约、语义修订及 unknown 恢复          | [命令契约](src/shared/agent-flow/commands.ts)、[命令账本](src/main/agent-flow/command-ledger.ts)、[桌面桥](src/main/ipc/flow-commands.ipc.ts)             | 扩展准入，不绕过账本或假造回执                       |
 | 普通执行仍依赖桌面运行宿主，main 账本不是通用节点运行器        | [桌面桥](src/main/ipc/flow-commands.ipc.ts)、[命令账本](src/main/agent-flow/command-ledger.ts)                                                            | 首版要求应用和执行宿主可用，不声称纯 headless        |
-| 内部普通 target adapter 仅覆盖 9 类，另有 Agent/审核专用协议   | [目标适配器](src/shared/agent-flow/video-adapter.ts)、[协同规范](docs/canvas-agent-flow/05-node-coordination-standard.md)                                 | 有 executor 不等于可被 Agent 自动协调                |
+| 内部普通 target adapter 覆盖部分类型，另有 Agent/审核专用协议 | [目标适配器](src/shared/agent-flow/video-adapter.ts)、[协同规范](docs/canvas-agent-flow/05-node-coordination-standard.md)                                 | 有 executor 不等于可被 Agent 自动协调                |
 | 旧外部接口已撤下，曾发生配置、输出、正文、取消和多路输入不一致 | [历史审查 F05–F09](docs/HANDOFF_2026_09_15_CODE_REVIEW.md)                                                                                                | 历史代码不作恢复基线，必须有桌面与外部入口一致性验收 |
 
-部分旧文档开头的“尚未实现”和源码中的 headless 注释早于后续实现，不能作为当前支持状态的唯一证据。当前内部交付证据参见 [开发台账](docs/canvas-agent-flow/08-development-ledger.md) 和 [后续完成计划](docs/canvas-agent-flow/38-agent-completion-plan.md)。本轮做了静态调查，没有重新运行这些历史验收。
+部分旧文档开头的“尚未实现”和源码中的 headless 注释早于后续实现，不能作为当前支持状态的唯一证据。当前内部交付证据参见[开发台账](docs/canvas-agent-flow/archive/08-development-ledger.md)和[后续完成计划](docs/canvas-agent-flow/archive/38-agent-completion-plan.md)。2026-11-26 只做静态文档核对，没有重新运行这些历史验收。
 
 ## 3. 总体架构：一份业务契约，多个薄入口
 
@@ -78,7 +79,7 @@ A1.1接续：项目打开、名称更新及活动画布保存/导出采用桌面
                                                正式结果 / 固定资产 / 项目保存
 ```
 
-以上是目标架构。统一 Registry、外部 Dispatcher 和本地传输层均待实现。迁移按受影响模块进行，不要求一次重写全部 UI；已迁移的操作必须由 UI 与外部入口调用同一业务规则和提交边界。
+以上主路径已实现：统一 Operation Registry、main Dispatcher、CLI 与 MCP stdio/SSE 传输均由同一操作目录派生。应用 REST HTTP API 仍是可选项，未实现。迁移按受影响模块进行，不要求一次重写全部 UI；已迁移的操作必须由 UI 与外部入口调用同一业务规则和提交边界。
 
 ### 3.1 业务与存储的拥有者
 
@@ -87,7 +88,7 @@ A1.1接续：项目打开、名称更新及活动画布保存/导出采用桌面
 3. 图修改通过受控命令完成；禁止外部客户端直接修改 `project.json`、SQLite、tldraw 原始快照或任意 `meta`。
 4. 节点执行仍通过正式准入、桌面执行宿主、公共 executor、`projectOutputs` 和产物提交路径。禁止另建外部专用 switch/运行器。
 5. 项目 CRUD、资源库和传输复用 main 服务；IPC handler 中的业务、对话框与日志职责需要拆清，不能在新适配器中复制一份。
-6. 无内部 Agent 任务的普通外部节点执行需要新增受控调用主体，映射到现有命令权威；不得伪造 `agentNodeId/taskId`，也不得绕过现有任务占用和审核门禁。此扩展必须独立验收。
+6. 普通外部节点执行已由 `node.execute` 的受控调用主体映射到现有命令权威；不得伪造 `agentNodeId/taskId`，也不得绕过现有任务占用、版本和审核门禁。具体节点与模式的开放状态仍逐项验收。
 
 ### 3.2 桌面驻留与本地连接
 
@@ -103,7 +104,7 @@ A1.1接续：项目打开、名称更新及活动画布保存/导出采用桌面
 | 入口          | 定位                       | 建议交付顺序               | 要求                                                               |
 | ------------- | -------------------------- | -------------------------- | ------------------------------------------------------------------ |
 | MCP stdio     | 本机 Agent 发现和调用能力  | A1 与 CLI 共用首条用户路径 | 标准 SDK；stdout 只写 MCP 消息；不承载业务实现                     |
-| CLI           | 本机脚本、调试、可重复验收 | A1                         | JSON 输出、稳定退出码、文件/stdin 输入、可等待任务                 |
+| CLI           | 本机脚本、调试、可重复验收 | A1                         | JSON 输出、稳定退出码、`--input-file` 输入、可等待任务；stdin 输入尚未实现 |
 | 本地 HTTP API | 需要 HTTP 的本机工具       | A4 可选                    | 仅 loopback、随机凭据、来源/Host 校验、请求限额；复用相同 Registry |
 
 API 首先指稳定的应用操作契约，不要求第一阶段就开放 HTTP 监听。MCP 的 Streamable HTTP 与应用 REST API 是不同协议，只有明确需要时才增加对应适配器，不能混用。
@@ -112,9 +113,9 @@ MCP 协议版本和 SDK 必须锁定并建立客户端兼容表。2026-10-24 核
 
 ## 4. 统一操作与节点能力声明
 
-### 4.1 OperationSpec（待实现的数据结构）
+### 4.1 OperationSpec（基础结构已实现，元数据尚未全覆盖）
 
-每个对外操作必须注册唯一声明，至少包含：
+每个对外操作必须注册唯一声明。当前 Registry 已提供操作身份、版本、严格输入/输出 Schema、效果、前置条件、幂等/并发与暴露信息；`executionMode`、`resultPolicy`、完整 `diagnostics`、`evidence`、`status`、`owner` 等仍是规范要求，不能据本文认定已全部机器化。目标全集如下：
 
 | 字段                             | 语义                                               |
 | -------------------------------- | -------------------------------------------------- |
@@ -132,7 +133,7 @@ MCP 协议版本和 SDK 必须锁定并建立客户端兼容表。2026-10-24 核
 
 Registry 是 Schema、CLI 参数描述、MCP 工具描述、HTTP 契约与覆盖报告的公共来源。可生成的内容必须生成；节点私有配置不能靠手写多份参数表长期维护。
 
-当前注册表位于 renderer 的 TSX 模块，不能被 main/CLI 直接导入。实施时将纯数据的类型、版本、端口与配置契约抽到 shared，renderer 的 NodeTypeSpec 复用这些契约并补充 UI 呈现；main/外部目录从同一纯数据源生成。禁止为方便接入将 React/Editor/DOM 依赖带入 main，也不能再手抄一份端口。
+节点契约已生成到 shared，renderer 的 `NodeTypeSpec` 复用并补充 UI 呈现；main、外部目录与能力目录从同一机器契约生成。禁止为方便接入将 React/Editor/DOM 依赖带入 main，也不能再手抄一份端口。
 
 ### 4.2 NodeAccessSpec（对现有 NodeTypeSpec 的补充）
 
@@ -240,7 +241,7 @@ MCP 工具名可以将点号映射为下划线；CLI 映射为层级命令。映
 
 旧 F05–F09 各建立防回归样例：`config` 不错层、专用输出投影不丢、JSON 正文不清空、取消循环不复用为成功、多输入不只留下最后一项。
 
-本轮逐节点建议与限制见 [31 节点清单](docs/local-agent-access/02-capability-matrix.md)。所有类型首先登记；具体执行开放必须逐个验收，不能通过一个全局 `agentEnabled=true` 批量放行。
+逐节点建议与限制见[能力矩阵](docs/local-agent-access/02-capability-matrix.md)，节点集合以机器契约为准。所有类型首先登记；具体执行开放必须逐个验收，不能通过一个全局 `agentEnabled=true` 批量放行。
 
 ## 8. 项目、资源库、媒体与导出
 
@@ -266,6 +267,10 @@ MCP 工具名可以将点号映射为下划线；CLI 映射为层级命令。映
 - 媒体登记校验允许根目录、类型、体积与实际文件；返回项目受控 mediaId，不能将任意绝对路径注入节点。
 - 结果接口默认返回摘要、端口、Schema、固定资产/媒体引用及分页信息。正文是显式读取的数据，不能进入日志；大媒体按文件引用或受控读取输出，避免 base64 撑满 Agent 上下文。
 - 不开放密钥读取、任意模型配置写入和任意文件系统浏览。模型查询仅返回去敏的本地连接身份、能力、参数限制和可用状态。
+
+### 8.4 项目与资源包传输
+
+`project.import`、`project.importStructure`、`library.import`、`library.export` 已实现，复用 GUI 同一导入/导出服务，并在外部边界增加受控目录、包校验、引用重映射、凭据剥离、提交后核对与失败清理。具体路径限制、幂等、错误码和未覆盖边界见[包传输台账](docs/local-agent-access/24-transfer-delivery.md)；不得把“已登记”推导为任意路径或任意包都可导入。
 
 ## 9. 日志、故障与本地入口保护
 

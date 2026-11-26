@@ -1,7 +1,9 @@
 # 节点画布呈现与关系交互规范
 
 > status: active
-> last-verified: unverified
+> last-verified: 2026-11-26
+> baseline-commit: e9b263f2
+> verification-scope: 与 NODE_UI_STANDARD v3 §22–§27 入口、关系交互和端口契约的静态核对；未做全节点 UI 整改验收
 
 
 > **现行节点样式入口：** [NODE_UI_STANDARD.md](./NODE_UI_STANDARD.md) v3 §22–§27（几何/线宽数值以 §27 真值表为准）。本文件的旧最小高度 200、自动上限 960、身份图标 88/48、按钮跟随名称及其他冲突几何均被替代；关系交互、端口契约和设置面板的未冲突规则继续有效。历史“已验收”不表示已满足现行规则。

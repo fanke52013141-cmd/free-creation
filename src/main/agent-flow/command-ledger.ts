@@ -48,6 +48,7 @@ import {
 } from '../../shared/agent-flow/commands'
 import { nodeCommandIntentSignature, projectSemanticRevision } from './command-intent'
 import { FlowAssetStore } from './asset-store'
+import { assertFlowMediaInputLimit } from './image-assets'
 import { FlowAssetError } from '../../shared/agent-flow/assets'
 import { FlowReviewStore } from './review-store'
 import { controlledReview } from './coordination-store'
@@ -145,14 +146,18 @@ export class FlowCommandLedger {
       fail('FLOW_COMMAND_MISSING', 'receipt-read')
     )
   }
-  private taskStopped(projectId: string, taskId: string): boolean {
+  private taskStopped(
+    projectId: string,
+    taskId: string,
+    parentCoordinatorTaskId?: string
+  ): boolean {
     const agent = this.db
       .prepare('SELECT state FROM flow_agent_tasks WHERE project_id=? AND task_id=?')
       .get(projectId, taskId) as { state: string } | undefined
     if (agent && ['cancelled', 'failed'].includes(agent.state)) return true
     const coordination = this.db
       .prepare('SELECT body_json FROM flow_coordination_runs WHERE project_id=? AND task_id=?')
-      .get(projectId, taskId) as { body_json: string } | undefined
+      .get(projectId, parentCoordinatorTaskId ?? taskId) as { body_json: string } | undefined
     if (!coordination) return false
     try {
       const state = (JSON.parse(coordination.body_json) as { state?: unknown }).state
@@ -338,25 +343,38 @@ export class FlowCommandLedger {
       fail('FLOW_CONTRACT_MISMATCH', 'composite-version')
     this.assertReviewReady(project, command.targetNodeId, command.inputs)
     const incoming = project.edges.filter((edge) => edge.to.nodeId === command.targetNodeId)
+    const routedInputEdgeIds = command.routedInputEdgeIds
+      ? new Set(command.routedInputEdgeIds)
+      : undefined
+    if (
+      routedInputEdgeIds &&
+      command.routedInputEdgeIds!.some(
+        (edgeId) => !incoming.some((edge) => edge.id === edgeId)
+      )
+    )
+      fail('FLOW_INPUT_MANIFEST_INCOMPLETE', 'input')
+    const activeIncoming = routedInputEdgeIds
+      ? incoming.filter((edge) => routedInputEdgeIds.has(edge.id))
+      : incoming
     // BL-40：人工补料端口由 contextMaterial 提供文本值，不再要求固定资产引用。
     const materialPortId = command.contextMaterial?.targetPortId
     if (
-      incoming.some((edge) => {
+      activeIncoming.some((edge) => {
         const port = ports.find((item) => item.id === edge.to.portId)
         return (
           !port ||
           (port.cardinality === 'one' &&
-            incoming.filter((item) => item.to.portId === edge.to.portId).length > 1)
+            activeIncoming.filter((item) => item.to.portId === edge.to.portId).length > 1)
         )
       }) ||
-      incoming.some((edge) => !inputIds.includes(edge.to.portId)) ||
-      incoming.some(
+      activeIncoming.some((edge) => !inputIds.includes(edge.to.portId)) ||
+      activeIncoming.some(
         (edge) =>
           edge.to.portId !== materialPortId &&
           !command.inputs.some((input) => input.targetPortId === edge.to.portId)
       ) ||
       command.inputs.some((input) => {
-        const edges = incoming.filter((edge) => edge.to.portId === input.targetPortId)
+        const edges = activeIncoming.filter((edge) => edge.to.portId === input.targetPortId)
         return edges.length > 0 && edges.length !== input.assets.length
       })
     )
@@ -431,6 +449,10 @@ export class FlowCommandLedger {
           )
         )
           fail('FLOW_INPUT_CONTRACT_INVALID', 'video-input')
+        if (['in-reference-video', 'in-reference-audio'].includes(input.targetPortId))
+          for (const version of versions)
+            if (version.value.kind === 'video' || version.value.kind === 'audio')
+              assertFlowMediaInputLimit(this.db, version.value)
         if (
           input.targetPortId === 'in-images' &&
           new Set(
@@ -442,7 +464,10 @@ export class FlowCommandLedger {
           fail('FLOW_INPUT_CONTRACT_INVALID', 'video-input')
       }
       const edges = project.edges.filter(
-        (edge) => edge.to.nodeId === command.targetNodeId && edge.to.portId === input.targetPortId
+        (edge) =>
+          edge.to.nodeId === command.targetNodeId &&
+          edge.to.portId === input.targetPortId &&
+          (!command.routedInputEdgeIds || command.routedInputEdgeIds.includes(edge.id))
       )
       const sources = versions.map((version, index) => {
         const edge = edges[index]
@@ -719,6 +744,10 @@ export class FlowCommandLedger {
     )
       fail('FLOW_LEASE_REJECTED', 'lease')
     const command = JSON.parse(row.command_json) as NodeExecuteCommand
+    if (this.taskStopped(input.projectId, command.taskId, command.parentCoordinatorTaskId))
+      fail('FLOW_TASK_STOPPED', 'admission')
+    if (command.parentDeadlineAt !== undefined && Date.now() >= command.parentDeadlineAt)
+      fail('FLOW_TASK_BUDGET_EXHAUSTED', 'admission')
     this.authorize(command, this.file(input.projectId))
     for (const entry of command.inputs) this.assets.resolveInputs(command.projectId, entry.assets)
     this.db
@@ -791,7 +820,20 @@ export class FlowCommandLedger {
         const project = this.file(input.projectId)
         if (projectSemanticRevision(project) !== command.expectedSemanticRevision)
           fail('FLOW_REVISION_CONFLICT', 'saved-revision')
-        if (this.taskStopped(input.projectId, command.taskId))
+        if (
+          command.parentDeadlineAt !== undefined &&
+          Date.now() >= command.parentDeadlineAt
+        )
+          return this.update(row, {
+            ...previous,
+            state: row.admitted === 1 ? 'unknown' : 'skipped',
+            code:
+              row.admitted === 1
+                ? 'FLOW_TASK_BUDGET_EXHAUSTED_OUTCOME_UNKNOWN'
+                : 'FLOW_TASK_BUDGET_EXHAUSTED',
+            outputRefs: []
+          })
+        if (this.taskStopped(input.projectId, command.taskId, command.parentCoordinatorTaskId))
           return this.update(row, {
             ...previous,
             state: row.admitted === 1 ? 'unknown' : 'skipped',
@@ -955,6 +997,7 @@ export class FlowCommandLedger {
                 ).ref
             )
         }
+        if (receipt.outputRefs.length > 128) fail('FLOW_OUTPUT_LIMIT', 'output-version')
         phase = 'receipt-persist'
         return this.update(row, receipt)
       })()

@@ -1,4 +1,4 @@
-﻿/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
 /**
  * 验证 ABC 三组优化是否真的生效（真实 MCP 协议栈）。
  *
@@ -64,7 +64,9 @@ async function main() {
   let app
   let client
   try {
-    await cp(licensedSecurityDir, join(directory, 'security'), { recursive: true })
+    if (process.env.CANVAS_OWNER !== '1') {
+      await cp(licensedSecurityDir, join(directory, 'security'), { recursive: true })
+    }
     const env = { ...process.env, CANVAS_DATA_DIR: directory }
     delete env.ELECTRON_RUN_AS_NODE
     app = await _electron.launch({ executablePath: electron, args: [appRoot, '--local-agent-access'], env })
@@ -260,7 +262,9 @@ async function main() {
 
     // C11：media.list 的 id 别名与 hasRecipe
     await check('C11 media.list 条目带 id 与 hasRecipe', async () => {
-      const source = join(directory, 'opt.png')
+      const controlled = join(directory, 'agent-exports')
+      await mkdir(controlled, { recursive: true })
+      const source = join(controlled, 'opt.png')
       await writeFile(
         source,
         Buffer.from(

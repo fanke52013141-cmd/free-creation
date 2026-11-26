@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { AgentFlowAssetRefSchema, AgentNodeConfigSchema } from './node-contracts'
 import { ContextManifestSchema } from './stage-contracts'
+import { AGENT_FLOW_MAX_ACTIVE_MS } from './flow-graph'
 import { ExecutionEnvelopeSchema } from './execution-envelope'
 import { FixedNodeInputSchema } from './commands'
 
@@ -74,6 +75,9 @@ export const AgentTaskSnapshotSchema = z
     contextManifest: ContextManifestSchema.optional(),
     /** AF-03：执行信封（阶段目标/方法/人工意见/返工反馈）；随命令传到公共内容执行器。 */
     executionEnvelope: ExecutionEnvelopeSchema.optional(),
+    /** AF-02: router-selected canvas inbound edges for every delegated command. */
+    routedInputEdgeIds: z.array(id).max(256).optional(),
+    routedInputEdgeIdsByTarget: z.record(id, z.array(id).max(256)).optional(),
     targets: z
       .array(
         z
@@ -94,7 +98,7 @@ export const AgentTaskSnapshotSchema = z
       .max(128),
     maxDecisions: z.number().int().min(1).max(64).default(12),
     maxTools: z.number().int().min(1).max(64).default(20),
-    maxActiveMs: z.number().int().min(1).max(600000).default(600000),
+    maxActiveMs: z.number().int().min(1).max(AGENT_FLOW_MAX_ACTIVE_MS).default(600000),
     traceId: id,
     spanId: id
   })

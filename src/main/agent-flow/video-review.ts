@@ -5,7 +5,7 @@ import { mkdtemp, open, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve, join, basename } from 'node:path'
 import { getDataDir } from '../store/db'
-import { fixedFlowMedia } from './image-assets'
+import { fixedFlowMedia, FLOW_VIDEO_OUTPUT_MAX_BYTES } from './image-assets'
 import { FlowAssetError, type FlowAssetValue } from '../../shared/agent-flow/assets'
 import type { ReviewDecision } from '../../shared/agent-flow/node-contracts'
 import {
@@ -23,6 +23,17 @@ import {
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 
 const hash = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex')
+const fixedReviewMedia = (
+  db: Database.Database,
+  projectId: string,
+  value: FlowAssetValue
+): ReturnType<typeof fixedFlowMedia> =>
+  fixedFlowMedia(
+    db,
+    projectId,
+    value as Parameters<typeof fixedFlowMedia>[2],
+    value.kind === 'video' ? { maxBytes: FLOW_VIDEO_OUTPUT_MAX_BYTES } : {}
+  )
 const failure = (code = 'FLOW_VIDEO_REVIEW_DECODE_FAILED'): AgentRuntimeError =>
   new AgentRuntimeError(code, code.startsWith('FLOW_MEDIA_REVIEW_') ? 'media-review' : 'video-review-samples')
 
@@ -96,7 +107,7 @@ async function reviewBytes(path: string, signal: AbortSignal): Promise<Buffer> {
     const file = await open(path, 'r')
     try {
       const stat = await file.stat()
-      if (!stat.isFile() || stat.size <= 0 || stat.size > 20 * 1024 * 1024)
+      if (!stat.isFile() || stat.size <= 0 || stat.size > FLOW_VIDEO_OUTPUT_MAX_BYTES)
         throw failure('FLOW_VIDEO_REVIEW_LIMIT')
       const bytes = Buffer.alloc(stat.size)
       let offset = 0
@@ -269,7 +280,7 @@ export async function prepareImageReview(
     !['image/png', 'image/jpeg', 'image/webp'].includes(value.mime)
   )
     throw failure('FLOW_MEDIA_REVIEW_NOT_FIXED')
-  fixedFlowMedia(db, projectId, value)
+  fixedReviewMedia(db, projectId, value)
   const bytes = await reviewMediaBytes(resolve(getDataDir(), value.mediaPath), signal, 'image')
   const digest = hash(bytes)
   if (digest !== value.contentSha256) throw failure('ASSET_IMAGE_CHANGED')
@@ -297,7 +308,7 @@ export async function prepareAudioReview(
   signal: AbortSignal
 ): Promise<AudioReviewInput> {
   if (value.kind !== 'audio' || !value.contentSha256) throw failure('FLOW_MEDIA_REVIEW_NOT_FIXED')
-  fixedFlowMedia(db, projectId, value)
+  fixedReviewMedia(db, projectId, value)
   const source = await reviewMediaBytes(resolve(getDataDir(), value.mediaPath), signal, 'audio')
   const sourceSha256 = hash(source)
   if (sourceSha256 !== value.contentSha256) throw failure('ASSET_AUDIO_CHANGED')
@@ -311,7 +322,7 @@ export async function prepareAudioReview(
     const { ffmpeg, ffprobe } = mediaTools()
     const metadata = await audioMetadata(input, signal, ffprobe)
     const bytes = await decodeAudioTrack(input, signal, ffmpeg)
-    fixedFlowMedia(db, projectId, value)
+    fixedReviewMedia(db, projectId, value)
     if (hash(await reviewMediaBytes(resolve(getDataDir(), value.mediaPath), signal, 'audio')) !== sourceSha256)
       throw failure('ASSET_AUDIO_CHANGED')
     result = {
@@ -368,7 +379,7 @@ export async function sampleReviewVideo(
 ): Promise<VideoReviewSamples> {
   if (value.kind !== 'video' || value.mime !== 'video/mp4' || !value.contentSha256)
     throw failure('FLOW_VIDEO_REVIEW_NOT_FIXED')
-  fixedFlowMedia(db, projectId, value)
+  fixedReviewMedia(db, projectId, value)
   const bytes = await reviewBytes(resolve(getDataDir(), value.mediaPath), signal)
   if (hash(bytes) !== value.contentSha256) throw failure('ASSET_VIDEO_CHANGED')
   const directory = await mkdtemp(join(tmpdir(), 'canvas-review-video-'))
@@ -481,7 +492,7 @@ export async function sampleReviewVideo(
           1024 * 1024
         )
       )
-    fixedFlowMedia(db, projectId, value)
+    fixedReviewMedia(db, projectId, value)
     samples = {
       images,
       evidence: VideoReviewEvidenceSchema.parse({
@@ -516,7 +527,7 @@ export async function sampleReviewAudioVideo(
 ): Promise<AudioVideoReviewInput> {
   if (value.kind !== 'video' || value.mime !== 'video/mp4' || !value.contentSha256)
     throw failure('FLOW_VIDEO_REVIEW_NOT_FIXED')
-  fixedFlowMedia(db, projectId, value)
+  fixedReviewMedia(db, projectId, value)
   const bytes = await reviewBytes(resolve(getDataDir(), value.mediaPath), signal)
   if (hash(bytes) !== value.contentSha256) throw failure('ASSET_VIDEO_CHANGED')
   const directory = await mkdtemp(join(tmpdir(), 'canvas-review-video-'))
@@ -645,7 +656,7 @@ export async function sampleReviewAudioVideo(
       )
     const audio = await audioMetadata(input, signal, ffprobe)
     const audioBytes = await decodeAudioTrack(input, signal, ffmpeg)
-    fixedFlowMedia(db, projectId, value)
+    fixedReviewMedia(db, projectId, value)
     const audioEndMs = audio.startMs + audio.durationMs
     const videoStartMs = allTimes[0]
     result = {
@@ -715,7 +726,7 @@ export function assertImageReviewEvidence(db: Database.Database, projectId: stri
   const value = fixedReviewSubject(db, projectId, report)
   if (value.kind !== 'image' || value.contentSha256 !== evidence.contentSha256 || value.mime !== evidence.mime)
     throw failure('FLOW_MEDIA_REVIEW_NOT_FIXED')
-  fixedFlowMedia(db, projectId, value)
+  fixedReviewMedia(db, projectId, value)
 }
 
 export function assertAudioReviewEvidence(db: Database.Database, projectId: string, report: ReviewDecision): void {
@@ -723,7 +734,7 @@ export function assertAudioReviewEvidence(db: Database.Database, projectId: stri
   const value = fixedReviewSubject(db, projectId, report)
   if (value.kind !== 'audio' || value.contentSha256 !== evidence.sourceSha256 || value.mime !== evidence.sourceMime)
     throw failure('FLOW_MEDIA_REVIEW_NOT_FIXED')
-  fixedFlowMedia(db, projectId, value)
+  fixedReviewMedia(db, projectId, value)
 }
 
 export function assertAudioVideoReviewEvidence(
@@ -735,7 +746,7 @@ export function assertAudioVideoReviewEvidence(
   const value = fixedReviewSubject(db, projectId, report)
   if (value.kind !== 'video' || value.contentSha256 !== evidence.videoSha256)
     throw failure('FLOW_MEDIA_REVIEW_NOT_FIXED')
-  fixedFlowMedia(db, projectId, value)
+  fixedReviewMedia(db, projectId, value)
 }
 
 /** Approvals and cached reports must still match the original, available video bytes. */
@@ -769,5 +780,5 @@ export function assertVideoReviewEvidence(
     value.contentSha256 !== evidence.contentSha256
   )
     throw failure('FLOW_VIDEO_REVIEW_NOT_FIXED')
-  fixedFlowMedia(db, projectId, value)
+  fixedReviewMedia(db, projectId, value)
 }

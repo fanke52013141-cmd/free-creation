@@ -222,7 +222,7 @@ afterEach(() => {
 describe('project.export → project.import round trip', () => {
   it('remaps nodes/edges/groups/snapshot/recipe media into a readable, editable new project', async () => {
     const project = createProject('往返源项目')
-    const sourceImage = join(directory, 'roundtrip.png')
+    const sourceImage = join(exportRoot(), 'roundtrip.png')
     writeFileSync(sourceImage, PNG_BYTES)
     const mediaImport = await call('media.import', { projectId: project.id, filePath: sourceImage }, key())
     expect(mediaImport.status).toBe('completed')
@@ -361,7 +361,7 @@ describe('project.export → project.import round trip', () => {
 
   it('creates one project per package and never shares media identities across projects', async () => {
     const project = createProject('跨项目媒体')
-    const sourceImage = join(directory, 'cross.png')
+    const sourceImage = join(exportRoot(), 'cross.png')
     writeFileSync(sourceImage, PNG_BYTES)
     const mediaImport = await call('media.import', { projectId: project.id, filePath: sourceImage }, key())
     const media = mediaImport.data as { mediaId: string; path: string }
@@ -399,7 +399,7 @@ describe('project.export → project.import round trip', () => {
 
   it('replays the same idempotency key into exactly one project', async () => {
     const project = createProject('幂等源')
-    const sourceImage = join(directory, 'idem.png')
+    const sourceImage = join(exportRoot(), 'idem.png')
     writeFileSync(sourceImage, PNG_BYTES)
     const mediaImport = await call('media.import', { projectId: project.id, filePath: sourceImage }, key())
     const media = mediaImport.data as { mediaId: string; path: string }
@@ -428,7 +428,7 @@ describe('project.import security boundaries', () => {
   it('strips provider credentials from exported and imported packages', async () => {
     const project = createProject('密钥源')
     const secret = 'sk-test-plaintext-credential-123456'
-    const sourceImage = join(directory, 'secret.png')
+    const sourceImage = join(exportRoot(), 'secret.png')
     writeFileSync(sourceImage, PNG_BYTES)
     const mediaImport = await call('media.import', { projectId: project.id, filePath: sourceImage }, key())
     const media = mediaImport.data as { mediaId: string; path: string }

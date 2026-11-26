@@ -15,18 +15,38 @@ import { AgentRuntimeError } from '../src/shared/agent-flow/runtime-contracts'
 const databases: Database.Database[] = []
 afterEach(() => databases.splice(0).forEach((db) => db.close()))
 
+const runnableAgent = (nodeId: string, allowedNodeIds = ['sink']) => ({
+  nodeId,
+  title: nodeId,
+  participation: 'autonomous' as const,
+  kind: 'agent' as const,
+  goal: '完成某事',
+  completion: '交付成果',
+  modelDefinitionId: 'fixture',
+  tools: [{ id: 'node.execute', version: '1' }],
+  allowedNodeIds
+})
+const sinkNode = {
+  nodeId: 'sink',
+  title: 'sink',
+  participation: 'autonomous' as const,
+  kind: 'capability' as const,
+  capability: 'text-pass@1',
+  goal: '固化成果',
+  completion: '输出固定文本'
+}
 const seqGraph = FlowGraphSchema.parse({
   schemaVersion: 1,
   graphId: 'g',
   name: '顺序',
   goal: '总目标',
-  nodes: [
-    { nodeId: 'a', title: 'a', participation: 'autonomous', kind: 'agent', goal: '完成某事', completion: '交付成果' },
-    { nodeId: 'b', title: 'b', participation: 'autonomous', kind: 'agent', goal: '完成某事', completion: '交付成果' }
+  nodes: [runnableAgent('a'), runnableAgent('b'), sinkNode],
+  edges: [
+    { from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'b', portId: 'in-text' }, kind: 'data' },
+    { from: { nodeId: 'b', portId: 'out-text' }, to: { nodeId: 'sink', portId: 'in-value' }, kind: 'data' }
   ],
-  edges: [{ from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'b', portId: 'in-text' }, kind: 'data' }],
   entry: 'a',
-  exits: ['b']
+  exits: ['sink']
 })
 const cycleGraph = FlowGraphSchema.parse({
   schemaVersion: 1,
@@ -80,9 +100,10 @@ describe('P5 flowGraph.propose（外部建图提案）', () => {
       ...seqGraph,
       nodes: [
         seqGraph.nodes[0],
-        { ...seqGraph.nodes[1], kind: 'capability', capabilityRef: { kind: 'node', id: 'video', version: '7' } }
+        { nodeId: 'b', title: 'b', participation: 'autonomous', kind: 'capability', capabilityRef: { kind: 'node', id: 'video', version: '7' }, goal: '生成视频', completion: '输出视频' }
       ],
-      edges: [{ ...seqGraph.edges[0], to: { nodeId: 'b', portId: 'in-images' } }]
+      edges: [{ ...seqGraph.edges[0], to: { nodeId: 'b', portId: 'in-images' } }],
+      exits: ['b']
     }
     await expect(f.host.proposeGraph({ projectId: 'p', graph, requestId: 'bad-port' }))
       .rejects.toThrow('PORT_TYPE_MISMATCH')
@@ -97,19 +118,25 @@ describe('P5 flowGraph.propose（外部建图提案）', () => {
       return seed % length
     }
     for (let sample = 0; sample < 24; sample++) {
-      const nodes = Array.from({ length: 2 + choose(7) }, (_, index) => ({
-        ...seqGraph.nodes[0], nodeId: `n${index}`
-      }))
-      const edges = nodes.slice(1).map((target, index) => ({
+      const nodes = [
+        ...Array.from({ length: 2 + choose(7) }, (_, index) =>
+          runnableAgent(`n${index}`)
+        ),
+        sinkNode
+      ]
+      const edges = nodes.slice(1, -1).map((target, index) => ({
         from: { nodeId: nodes[choose(index + 1)].nodeId, portId: 'out-text' },
         to: { nodeId: target.nodeId, portId: 'in-text' },
         kind: 'data' as const
       }))
-      const exits = nodes.filter(({ nodeId }) => !edges.some(({ from }) => from.nodeId === nodeId))
-        .map(({ nodeId }) => nodeId)
+      edges.push({
+        from: { nodeId: nodes[nodes.length - 2]!.nodeId, portId: 'out-text' },
+        to: { nodeId: 'sink', portId: 'in-value' },
+        kind: 'data' as const
+      })
       const preview = await f.host.proposeGraph({
         projectId: 'p', requestId: `generated-${sample}`,
-        graph: { ...seqGraph, nodes, edges, entry: nodes[0].nodeId, exits }
+        graph: { ...seqGraph, nodes, edges, entry: nodes[0].nodeId, exits: ['sink'] }
       })
       expect(preview.state).toBe('preview')
       expect(preview.edges).toHaveLength(edges.length)
@@ -134,6 +161,21 @@ describe('P5 flowGraph.propose（外部建图提案）', () => {
     // 不写画布、不调模型。
     expect(f.modelCalls()).toBe(0)
     expect(Object.keys(f.file.tldrawSnapshot.store)).toHaveLength(0)
+  })
+
+  it('rejects a structurally valid graph with missing runtime bindings before persistence', async () => {
+    const f = fixture()
+    const { modelDefinitionId: _model, ...unbound } = seqGraph.nodes[0] as Record<string, unknown>
+    await expect(f.host.proposeGraph({
+      projectId: 'p',
+      requestId: 'unbound',
+      graph: FlowGraphSchema.parse({ ...seqGraph, nodes: [unbound, ...seqGraph.nodes.slice(1)] })
+    })).rejects.toMatchObject({
+      errors: expect.arrayContaining([
+        expect.objectContaining({ code: 'FLOW_AGENT_MODEL_REQUIRED', nodeId: 'a' })
+      ])
+    })
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_builds').get()).toEqual({ n: 0 })
   })
 
   it('同图同 requestId 幂等返回同 buildId（不重复持久化）', async () => {
@@ -246,6 +288,8 @@ describe('P5.3 flowGraph.authorize / confirm（落画布 CAS 与核对）', () =
     expect(again.state).toBe('committed')
     const coordinator = store[proposed.coordinatorNodeId] as { props: { text: string } }
     coordinator.props.text = 'Edited draft'
+    await expect(f.host.confirmGraph({ projectId: 'p', buildId: proposed.buildId }))
+      .rejects.toMatchObject({ code: 'FLOW_CANVAS_DIVERGED' })
     const exportPreview = f.host.exportGraphPreview({ projectId: 'p', buildId: proposed.buildId })
     expect(exportPreview.graph.goal).toBe('Edited draft')
     expect(exportPreview.graph.edges).toEqual(seqGraph.edges)
@@ -268,8 +312,8 @@ describe('P5.3 flowGraph.authorize / confirm（落画布 CAS 与核对）', () =
     expect(f.db.prepare('SELECT COUNT(*) AS count FROM flow_definitions WHERE project_id=?').get('p')).toEqual({ count: 1 })
     const first = store[proposed.nodes[1].id] as { props: { config: string } }
     first.props.config = JSON.stringify({ ...JSON.parse(first.props.config), modelDefinitionId: 'local-model' })
-    expect(() => f.host.exportGraphPreview({ projectId: 'p', buildId: proposed.buildId }))
-      .toThrow('FLOW_CANVAS_EXPORT_UNSUPPORTED')
+    const changedModel = f.host.exportGraphPreview({ projectId: 'p', buildId: proposed.buildId })
+    expect(changedModel.graph.nodes.find((node) => node.nodeId === 'a')?.modelDefinitionId).toBe('local-model')
     expect(graphCanvasVersion(f.db, f.file, proposed.coordinatorNodeId)).toMatchObject({ buildId: proposed.buildId, diverged: true, sourceGraph: published.sourceGraph })
   })
 })

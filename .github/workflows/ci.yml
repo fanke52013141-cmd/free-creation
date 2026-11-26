@@ -22,11 +22,13 @@ jobs:
   gate:
     name: typecheck · lint · test · build
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: 安装 pnpm
         uses: pnpm/action-setup@v4
@@ -42,5 +44,5 @@ jobs:
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
 
-      - name: 统一验证门禁（类型、日志、单测、浏览器行为、构建）
+      - name: 统一验证门禁（含 Agent 三关与快速真实验收）
         run: pnpm verify

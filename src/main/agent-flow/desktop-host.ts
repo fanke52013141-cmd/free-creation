@@ -20,6 +20,7 @@ import { FlowSkillStore, BUILTIN_FLOW_SKILLS } from './skill-store'
 import { BUILTIN_CONTENT_SKILLS } from '../../shared/skill-agent'
 import { FlowTaskStore, agentThread, type AgentTaskRecord } from './task-store'
 import { FlowAssetStore } from './asset-store'
+import { assertFlowMediaInputLimit } from './image-assets'
 import { agentReplyOutputProjection } from '../../shared/agent-flow/agent-outputs'
 import { createAgentRuntime, type AgentRuntime, type AgentModelPort } from './runtime'
 import { createAgentTelemetry } from './runtime-diagnostics'
@@ -281,6 +282,15 @@ export class FlowAgentDesktopHost {
       )
     )
       throw new AgentRuntimeError('AGENT_TOOL_UNSUPPORTED', 'admission')
+    const routedInputEdgeIds = raw.routedInputEdgeIds
+      ? new Set(raw.routedInputEdgeIds)
+      : undefined
+    const edgesTo = (nodeId: string): ProjectFile['edges'] =>
+      file.edges.filter(
+        (edge) =>
+          edge.to.nodeId === nodeId &&
+          (!routedInputEdgeIds || routedInputEdgeIds.has(edge.id))
+      )
     const versions = new Map<string, z.infer<typeof AgentFlowAssetRefSchema>>()
     const freeze = (
       from: { nodeId: string; portId: string },
@@ -348,7 +358,7 @@ export class FlowAgentDesktopHost {
       const node = file.nodes.find((item) => item.id === nodeId)
       const adapter = node && flowTargetContract(node)
       if (!node || !adapter) throw new AgentRuntimeError('AGENT_TARGET_UNSUPPORTED', 'admission')
-      const edges = file.edges.filter((edge) => edge.to.nodeId === nodeId)
+      const edges = edgesTo(nodeId)
       if (
         edges.some((edge) => !adapter.inputs.includes(edge.to.portId)) ||
         edges.some((edge) => {
@@ -400,6 +410,11 @@ export class FlowAgentDesktopHost {
                   !version.value.contentSha256)
               )
                 throw new AgentRuntimeError('AGENT_INPUT_NOT_FIXED', 'admission')
+              if (
+                ['in-reference-video', 'in-reference-audio'].includes(input.targetPortId) &&
+                (version.value.kind === 'video' || version.value.kind === 'audio')
+              )
+                assertFlowMediaInputLimit(this.db, version.value)
               return version.value.kind
             })
           }))
@@ -530,8 +545,7 @@ export class FlowAgentDesktopHost {
         throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
       return { nodeId, contractVersion: node.contractVersion as 1 | 2 | 3 | 4 | 7, inputs }
     })
-    const directInputs = file.edges
-      .filter((edge) => edge.to.nodeId === raw.nodeId)
+    const directInputs = edgesTo(raw.nodeId)
       .map((edge, index) => {
         if (!['in-text', 'in-json'].includes(edge.to.portId))
           throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
@@ -546,6 +560,14 @@ export class FlowAgentDesktopHost {
           throw new AgentRuntimeError('AGENT_INPUT_TYPE_INVALID', 'admission')
         return ref
       })
+    const routedInputEdgeIdsByTarget = raw.routedInputEdgeIds
+      ? Object.fromEntries(
+          targets.map((target) => [
+            target.nodeId,
+            edgesTo(target.nodeId).map((edge) => edge.id)
+          ])
+        )
+      : undefined
     return AgentTaskSnapshotSchema.parse({
       runtimeVersion: 1,
       projectId: raw.projectId,
@@ -556,6 +578,8 @@ export class FlowAgentDesktopHost {
       goal: shape.props.text,
       scopeRevision: collaborationScopeRevision(file, raw.nodeId),
       directInputs,
+      ...(raw.routedInputEdgeIds ? { routedInputEdgeIds: raw.routedInputEdgeIds } : {}),
+      ...(routedInputEdgeIdsByTarget ? { routedInputEdgeIdsByTarget } : {}),
       maxDecisions: config.maxSteps,
       targets,
       traceId: raw.traceId,

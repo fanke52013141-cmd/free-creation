@@ -1,7 +1,9 @@
 # 分镜板表格特殊规范
 
 > status: active
-> last-verified: unverified
+> last-verified: 2026-11-26
+> baseline-commit: e9b263f2
+> verification-scope: 分镜板 JSON、表格、端口与执行器契约的静态核对；未做真实 GUI 验收
 
 
 分镜板以 JSON 为数据源，以表格展示；不是普通媒体或表单节点。本规则优先于普通节点的尺寸上限。
