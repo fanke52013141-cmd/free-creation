@@ -177,9 +177,13 @@ async function captureDesktop(app,file){
     const activeUpdated=await client.callTool({name:'project_update',arguments:{input:{projectId,name:'A11 active project',expectedGraphVersion:baseline.response.data.meta.graphVersion},idempotencyKey:key()}})
     check(activeUpdated.structuredContent.status==='completed','ACTIVE_METADATA_UPDATE_FAILED')
     await page.getByText('A11 active project',{exact:true}).first().waitFor()
-    const saveBaseline=await runCli(directory,['project','get'],{input:{projectId}})
-    const activeSaved=await runCli(directory,['project','save'],{input:{projectId,expectedGraphVersion:saveBaseline.response.data.meta.graphVersion},idempotencyKey:key()})
-    check(activeSaved.response.status==='completed','ACTIVE_SAVE_FAILED')
+    let activeSaved
+    for (let attempt=0; attempt<3; attempt++) {
+      const saveBaseline=await runCli(directory,['project','get'],{input:{projectId}})
+      activeSaved=await runCli(directory,['project','save'],{input:{projectId,expectedGraphVersion:saveBaseline.response.data.meta.graphVersion},idempotencyKey:key()})
+      if (activeSaved.response.status==='completed' || activeSaved.response.error?.code!=='REVISION_CONFLICT') break
+    }
+    check(activeSaved.response.status==='completed',`ACTIVE_SAVE_FAILED:${JSON.stringify(activeSaved.response)}`)
     const clockNow=Date.now()
     await page.clock.install({time:clockNow-60000})
     await page.clock.pauseAt(clockNow)

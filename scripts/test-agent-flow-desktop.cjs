@@ -74,6 +74,8 @@ const agentFixedInputVersion = process.argv.includes('--agent-fixed-input-versio
 const agentResidency = process.argv.includes('--agent-residency')
 const agentPerfMatrix = process.argv.includes('--agent-perf-matrix')
 const agentPanelChurn = process.argv.includes('--agent-panel-churn')
+if (agentPanelChurn && process.env.CANVAS_AGENT_PANEL_CHURN_FORCE_GC === undefined)
+  process.env.CANVAS_AGENT_PANEL_CHURN_FORCE_GC = '1'
 const agentPanelChurnHeapSnapshot =
   agentPanelChurn && process.env.CANVAS_AGENT_PANEL_CHURN_HEAP_SNAPSHOT === '1'
 const residencySeconds = Number(process.env.CANVAS_AGENT_RESIDENCY_SECONDS || '7200')

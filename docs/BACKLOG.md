@@ -33,11 +33,11 @@ sources:
 
 以下事项仍然真实未完成，不因 BL 系列已完成而关闭：
 
-- **R09 / R11 / R12**：R09（真实磁盘、物理掉电、目录耐久与远端撤回）、R11（真实供应商质量、计费与远端取消）、R12（最终发布门禁与线上同步）仍未闭环。
+- **R09 / R11 / R12**：R09 本地可注入边界（5400 秒 soak、renderer 崩溃、存储故障、恢复与三次重开）与 R11 Vidu Q3 单次真实付费链路已通过；R09 的物理掉电/真实磁盘硬件故障/目录耐久/跨介质原子性/远端撤回、R11 的付费 `model.validate`/审核质量/远端取消/其他供应商、R12 的最终发布门禁与线上同步仍未闭环。证据见 [R09/R11 真实验收报告](<canvas-agent-flow/audits/r09-r11-acceptance-2026-11-26.md>)。
 - **真实产品验收**：真实 GUI 鼠标端到端、Windows 安装包/完整打包版、干净 GitHub runner 实跑仍未完成；现有 Electron 自动驱动不等于完整产品验收。
-- **真实供应商**：未发起新的真实付费模型调用；既有真实模型证据只覆盖其记录的具体路径，不能外推全部供应商或全部节点。
+- **真实供应商**：Vidu Q3（3.2）首尾帧单次付费任务已通过（30 credits、1 个上游任务、1920×1080 H.264/AAC、ffprobe 4.041667s、节点 `output.get` 成功）；未覆盖 `model.validate`、其他供应商、远端取消/撤回，不能外推全部模型链路。
 - **code sandbox**：code 节点仍待专项隔离审计，节点动作矩阵继续标注 `sandbox boundary pending`。
-- **Windows named pipe**：仍未显式设置最小 ACL。（注：MCP SSE 令牌已由 URL query 迁入 `Authorization: Bearer` 请求头并使用常量时间比对，不再滞留 URL。）
+- **Windows named pipe**：named pipe 默认 DACL 仍未最小化；已落地 `connection.json` 仅当前用户 ACL（失败即拒绝发布）与随机传输 token 作为补偿控制，不宣称 pipe ACL 已完成。MCP SSE 令牌已由 URL query 迁入 `Authorization: Bearer` 请求头并使用常量时间比对，不再滞留 URL。
 - **循环审核**：`loop.body` 内 review 当前明确拒绝（`FLOW_REVIEW_LOOP_UNSUPPORTED`），按轮次作用域执行审核未实现。
 - **长视频审核**：视频审核 schema 仍只接受最长 60 秒，而视频生成配置可达 120 秒；长视频生成后的审核口径尚未统一。
 - **人工任务结果类型**：human-task 已支持 `text / json / image / video`，音频结果类型仍未定义。

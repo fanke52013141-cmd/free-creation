@@ -74,6 +74,18 @@ function runSpecGate(files: Record<string, string>): { status: number; output: s
     mkdirSync(dirname(gate), { recursive: true })
     mkdirSync(join(directory, 'docs'), { recursive: true })
     copyFileSync(resolve('scripts/check-specs.mjs'), gate)
+    if (!files['AGENTS.md']) writeFixture(directory, 'AGENTS.md', '# Fixture constitution\n')
+    for (const extra of [
+      'docs/NODE_COMPLIANCE_MATRIX.md',
+      'docs/local-agent-access/65-AGENT-PARITY-IRON-RULE.md',
+      'docs/local-agent-access/02-capability-matrix.md',
+      'docs/local-agent-access/03-change-enforcement.md',
+      'docs/local-agent-access/15-gui-cli-mcp-parity-plan.md',
+      'docs/local-agent-access/16-node-action-coverage.md',
+      'docs/canvas-agent-flow/05-node-coordination-standard.md'
+    ]) {
+      if (!files[extra]) writeFixture(directory, extra, '# Fixture\n\n> status: draft\n> last-verified: unverified\n')
+    }
     for (const [relativePath, content] of Object.entries(files)) writeFixture(directory, relativePath, content)
     return runNode(gate, directory)
   } finally {
