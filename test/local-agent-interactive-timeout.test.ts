@@ -51,8 +51,10 @@ describe('本地 Agent 客户端响应超时口径', () => {
     }
   })
 
-  it('run.wait 仍按请求的等待时长（长轮询不能被截断）', () => {
+  it('run.wait/composite.wait 按请求的等待时长，server 默认窗口也覆盖 composite 上限', () => {
     expect(responseTimeoutMs('run.wait', 120_000)).toBe(150_000)
+    expect(responseTimeoutMs('composite.execute.wait', 200_000)).toBe(230_000)
+    expect(responseTimeoutMs('composite.execute.wait', 0)).toBe(330_000)
   })
 
   it('普通只读/写入操作保持 15s 快速失败', () => {

@@ -14,6 +14,7 @@ import {
   type FlowAgentView,
   type FlowAgentCatalog,
   FlowAgentCollaborationSchema,
+  FlowAgentCollaborationEnvelopeSchema,
   type FlowAgentCollaborationView
 } from '../../shared/agent-flow/desktop-tasks'
 import { FlowSkillStore, BUILTIN_FLOW_SKILLS } from './skill-store'
@@ -894,7 +895,11 @@ export class FlowAgentDesktopHost {
     }
   }
   async cooperate(raw: unknown): Promise<FlowAgentCollaborationView> {
-    const input = FlowAgentCollaborationSchema.parse(raw)
+    const envelope = FlowAgentCollaborationEnvelopeSchema.safeParse(raw)
+    const input = envelope.success
+      ? envelope.data.input
+      : FlowAgentCollaborationSchema.parse(raw)
+    const origin = envelope.success ? envelope.data.origin : null
     this.saved(input)
     // A saved note is inert and can coexist with an active task. It never changes
     // the model's fixed goal/inputs or supplies consent to an interrupt.
@@ -910,7 +915,7 @@ export class FlowAgentDesktopHost {
         throw new AgentRuntimeError('HUMAN_WAIT_DENIED', 'discussion')
       if (!input.text.trim()) throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'discussion')
       new FlowCollaborationStore(this.db).append(agentThread(record.snapshot), input, {
-        actor: { kind: 'user', roleId: record.snapshot.config.humanRole ?? 'owner' }
+        actor: origin ?? { kind: 'user', roleId: record.snapshot.config.humanRole ?? 'owner' }
       })
       return this.collaboration(input)!
     }
@@ -947,7 +952,7 @@ export class FlowAgentDesktopHost {
         projectSemanticRevision(file) !== record.snapshot.semanticRevision
       )
         throw new AgentRuntimeError('FLOW_REVISION_CONFLICT', 'collaboration')
-      const actor = { kind: 'user' as const, roleId: record.snapshot.config.humanRole ?? 'owner' }
+      const actor = origin ?? { kind: 'user' as const, roleId: record.snapshot.config.humanRole ?? 'owner' }
       if (input.action === 'revise') {
         if (
           !input.text.trim() ||

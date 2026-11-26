@@ -50,7 +50,12 @@ import { ACCESS_ERROR_CATALOG } from '../../shared/agent-access/metadata'
 import { assertLicenseActive } from '../security/license/gate'
 import { DesktopAccessError, type AccessDesktop } from './desktop'
 import { runNodeLibraryOperation } from './node-library-ops'
-import { runCompositeOperation, previewCompositeUpgrade } from './composite-ops'
+import {
+  normalizeCompositeOutputPortId,
+  projectCompositeRunRecord,
+  runCompositeOperation,
+  previewCompositeUpgrade
+} from './composite-ops'
 import { getCompositeVersion, getCompositeCapability } from '../store/composite.repo'
 import {
   getCompositeRun,
@@ -423,6 +428,8 @@ export class LocalAccessService {
         operationId !== 'flowAgent.run' &&
         operationId !== 'flowAgent.pause' &&
         operationId !== 'flowAgent.stop' &&
+        // cooperate 的作用对象就是既有 waiting 任务；宿主仍核对 task/revision/waitKind。
+        operationId !== 'flowAgent.cooperate' &&
         operationId !== 'humanTask.submit'
       )
         this.assertNoActiveTasks(id)
@@ -571,25 +578,21 @@ export class LocalAccessService {
         const timeoutMs = typeof input.timeoutMs === 'number' ? input.timeoutMs : 30000
         const deadline = Date.now() + timeoutMs
         let record = getCompositeRun(runId)?.run
-        while (record && record.status === 'running' && Date.now() < deadline) {
+        // accepted/running 才长轮询；waiting-input 必须立即可见，供人工提交后续跑。
+        while (
+          record &&
+          (record.status === 'accepted' || record.status === 'running') &&
+          Date.now() < deadline
+        ) {
           await new Promise((resolve) => setTimeout(resolve, 500))
           record = getCompositeRun(runId)?.run
         }
         if (!record) throw new AccessFailure('NOT_FOUND', 'read', 'composite-run')
+        const projected = projectCompositeRunRecord(record)
         result = {
           runId,
-          status: record.status,
-          ...(record.outputValues
-            ? {
-                // NF-5.3 冻结（2026-11-26）：headless outputs 统一带 out- 前缀，与画布/摘要/预检一致。
-                outputs: Object.fromEntries(
-                  Object.entries(record.outputValues).map(([id, value]) => [
-                    `out-${String(id).replace(/^out-/, '')}`,
-                    value
-                  ])
-                )
-              }
-            : {}),
+          status: projected.status,
+          ...(projected.outputValues ? { outputs: projected.outputValues } : {}),
           ...(record.errorMessage ? { reason: record.errorMessage } : {}),
           // W4：人工补交/重试链事实如实暴露（不伪造自动成功）。
           ...(record.manualSubmission ? { manualSubmission: true } : {}),
@@ -1060,6 +1063,7 @@ export class LocalAccessService {
           activeProjectId: this.options.activeProjectId,
           desktop: this.options.desktop,
           requestId: request.requestId,
+          clientId: request.clientId ?? 'cli',
           ...(key ? { idempotencyKey: key } : {}),
           diagnostics: { requestId: request.requestId, traceId: base.traceId, spanId }
         }
@@ -2023,6 +2027,7 @@ export class LocalAccessService {
       desktop: this.options.desktop,
       projectId: existing.projectId,
       activeProjectId: this.options.activeProjectId(),
+      headless: existing.instanceNodeId === null && existing.parentRunId === null,
       prompt: {
         title: '外部 Agent 请求代你提交节点流人工结果',
         message: `外部 Agent 想为节点流「${version.manifest.name}」的运行 ${runId} 提交人工节点「${node.title}」的结果。只有你点「允许提交」才会生效。\\n\\n内容：${previewValue(value)}`,
@@ -2053,12 +2058,32 @@ export class LocalAccessService {
     const runId = String(input.runId ?? '')
     const existing = getCompositeRun(runId)?.run
     if (!existing) throw new AccessFailure('NOT_FOUND', 'read', 'composite-run')
-    if (existing.status !== 'waiting-input')
+    if (existing.status !== 'waiting-input' && existing.status !== 'interrupted')
       throw new AccessFailure('RUN_NOT_WAITING', 'precheck', `status:${existing.status}`)
     if (existing.parentRunId && getDb().prepare(
       'SELECT 1 FROM flow_commands WHERE run_id = ? AND project_id = ? AND target_node_id = ?'
     ).get(existing.parentRunId, existing.projectId, existing.instanceNodeId))
       throw new AccessFailure('PARENT_RESUME_REQUIRED', 'precheck', 'continue the parent Agent Flow')
+    if (existing.status === 'interrupted') {
+      // Only a host restart with a satisfied persisted wait and no in-flight step is
+      // resumable. A running step may have unconfirmed paid/remote effects: never replay it.
+      const restored = getDb().prepare(`
+        UPDATE composite_runs
+        SET status='waiting-input', finished_at=NULL, error_code=NULL, error_message=NULL
+        WHERE id=? AND status='interrupted' AND error_code='HOST_RESTARTED'
+          AND (SELECT state FROM composite_run_waits WHERE run_id=composite_runs.id
+            ORDER BY revision DESC LIMIT 1)='satisfied'
+          AND NOT EXISTS (SELECT 1 FROM composite_run_steps
+            WHERE run_id=composite_runs.id AND status='running')
+      `).run(runId).changes
+      if (!restored) {
+        throw new AccessFailure(
+          'RUN_RECOVERY_REQUIRES_RECONCILIATION',
+          'precheck',
+          'interrupted run needs a satisfied wait and no unresolved running step'
+        )
+      }
+    }
     const record = getCompositeVersion(existing.capabilityId, existing.capabilityVersion)
     if (!record) throw new AccessFailure('VERSION_NOT_PUBLISHED', 'precheck', 'published-version')
     const validation = validateCompositeManifest(record.manifest)
@@ -2117,7 +2142,7 @@ export class LocalAccessService {
     }>).map((entry) => ({
       ...entry,
       // NF-5.3：统一 out-<id>；兼容历史裸 id 输入（读取时归一化）。
-      portId: String(entry.portId ?? '').replace(/^out-/, '')
+      portId: normalizeCompositeOutputPortId(record.manifest, String(entry.portId ?? '')).id
     }))
     const declared = record.manifest.outputs
     const submittedIds = outputs.map((entry) => entry.portId)
@@ -2148,6 +2173,7 @@ export class LocalAccessService {
       desktop: this.options.desktop,
       projectId: existing.projectId,
       activeProjectId: this.options.activeProjectId(),
+      headless: existing.instanceNodeId === null && existing.parentRunId === null,
       prompt: {
         title: '外部 Agent 请求补交节点流输出',
         message: `外部 Agent 想为节点流「${record.manifest.name}」的运行 ${runId} 补交正式输出。只有你点「允许补交」才会生效。\\n\\n输出：${previewValue(outputValues)}`,

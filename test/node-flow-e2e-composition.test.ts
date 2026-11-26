@@ -121,6 +121,52 @@ function jsonNode(id: string): CompositeManifest['graph']['nodes'][number] {
   }
 }
 
+function humanTaskNode(id: string): CompositeManifest['graph']['nodes'][number] {
+  return {
+    id,
+    nodeType: 'human-task',
+    contractVersion: 1,
+    title: `人工-${id}`,
+    dx: 0,
+    dy: 0,
+    w: 340,
+    h: 260,
+    config: JSON.stringify({ schemaVersion: 1, outputType: 'text' })
+  }
+}
+
+function twoHumanManifest(first: 'h1' | 'h2'): CompositeManifest {
+  const second = first === 'h1' ? 'h2' : 'h1'
+  return {
+    schemaVersion: 1,
+    runtimeVersion: 2,
+    capabilityId: `e2e-human-${first}`,
+    version: '1.0',
+    name: '两个人工任务',
+    inputs: [],
+    outputs: [
+      {
+        id: 'h1',
+        label: '人工一',
+        type: 'text',
+        required: true,
+        cardinality: 'one',
+        source: { nodeId: 'h1', portId: 'out-text' }
+      },
+      {
+        id: 'h2',
+        label: '人工二',
+        type: 'text',
+        required: true,
+        cardinality: 'one',
+        source: { nodeId: 'h2', portId: 'out-text' }
+      }
+    ],
+    graph: { nodes: [humanTaskNode(first), humanTaskNode(second)], edges: [] },
+    executionPolicy: { requiresManualGate: true, maxConcurrency: 4, onBranchFailure: 'continue' }
+  }
+}
+
 const RUN_REQUEST_BASE = { headless: true as const }
 
 function runFlow(
@@ -487,6 +533,126 @@ describe('P3 · 并行组合（广播 + 分支隔离 + 扇入）', () => {
   })
 })
 
+// ------------------------------------------------------- 调度策略与人工等待
+
+describe('调度策略与人工等待', () => {
+  it('H01：continue 下失败节点仅认领一次，独立分支仍完成', async () => {
+    const manifest = serialManifest()
+    manifest.executionPolicy = { onBranchFailure: 'continue', maxConcurrency: 2 }
+    manifest.graph.nodes.push(textNode('independent', '独立分支结果'))
+    manifest.outputs.push({
+      id: 'independent',
+      label: '独立分支',
+      type: 'text',
+      required: false,
+      cardinality: 'one',
+      source: { nodeId: 'independent', portId: 'out-text' }
+    })
+    const ledger = installLedger()
+    try {
+      const outcome = await runFlow(
+        manifest,
+        inputMap([['payload', [textValue('这不是合法 JSON')]]]),
+        ledger
+      )
+      expect(outcome.status).toBe('failed')
+      expect(outcome.failure).toMatchObject({ code: 'NODE_FAILED', nodeId: 'n2' })
+      const runningSteps = ledger.calls.filter(
+        (call) => call.op === 'runStep' && call.payload.status === 'running'
+      )
+      expect(runningSteps.filter((call) => call.payload.stepKey === 'n2')).toHaveLength(1)
+      const completedSteps = ledger.calls.filter(
+        (call) => call.op === 'runStep' && call.payload.status === 'completed'
+      )
+      expect(completedSteps.map((call) => call.payload.stepKey)).toEqual(
+        expect.arrayContaining(['n1', 'independent'])
+      )
+      expect(finishCall(ledger.calls)).toMatchObject({ status: 'failed', errorCode: 'NODE_FAILED' })
+    } finally {
+      ledger.restore()
+    }
+  })
+
+  it.each([
+    ['h1', 'h2'],
+    ['h2', 'h1']
+  ] as const)('H09：maxConcurrency=4 也只有一个未满足人工等待，两种提交顺序均完成', async (first, second) => {
+    const manifest = twoHumanManifest(first)
+    const ledger = installLedger()
+    const runId = `human-run-${first}`
+    const submissions = {
+      h1: { kind: 'text' as const, text: '人工一完成' },
+      h2: { kind: 'text' as const, text: '人工二完成' }
+    }
+    try {
+      const firstOutcome = await runCompositeIsolated({} as never, 'e2e-project', stubProviders(), {
+        manifest,
+        inputs: inputMap([]),
+        ownRunId: runId,
+        headless: true
+      })
+      expect(firstOutcome).toMatchObject({ status: 'waiting', waitingStepKey: first })
+      expect(
+        ledger.calls.filter((call) => call.op === 'runWait').map((call) => call.payload.stepKey)
+      ).toEqual([first])
+
+      const secondOutcome = await runCompositeIsolated({} as never, 'e2e-project', stubProviders(), {
+        manifest,
+        inputs: inputMap([]),
+        resumeRunId: runId,
+        humanSubmissions: { [first]: submissions[first] },
+        headless: true
+      })
+      expect(secondOutcome).toMatchObject({ status: 'waiting', waitingStepKey: second })
+      expect(
+        ledger.calls.filter((call) => call.op === 'runWait').map((call) => call.payload.stepKey)
+      ).toEqual([first, second])
+
+      const checkpoint = ledger.calls.find(
+        (call) => call.op === 'runStepOutput' && call.payload.nodeId === first
+      )
+      if (!checkpoint) throw new Error('第一个人工任务缺少续跑 checkpoint')
+      const nodeResult = checkpoint.payload.nodeResult
+      const humanTask = checkpoint.payload.humanTask
+      if ((nodeResult !== null && typeof nodeResult !== 'string') || typeof humanTask !== 'string')
+        throw new Error('第一个人工任务 checkpoint 内容不完整')
+
+      const finalOutcome = await runCompositeIsolated({} as never, 'e2e-project', stubProviders(), {
+        manifest,
+        inputs: inputMap([]),
+        resumeRunId: runId,
+        humanSubmissions: submissions,
+        completedSteps: [first],
+        stepOutputs: {
+          [first]: {
+            nodeResult,
+            ...(typeof checkpoint.payload.nodeExtra === 'string'
+              ? { nodeExtra: checkpoint.payload.nodeExtra }
+              : {}),
+            humanTask,
+            nodeRun: checkpoint.payload.nodeRun
+          }
+        },
+        headless: true
+      })
+      expect(finalOutcome.reason).toBeUndefined()
+      expect(finalOutcome.failure).toBeUndefined()
+      expect(finalOutcome).toMatchObject({ status: 'done' })
+      expect(finalOutcome.outputs).toEqual({ h1: submissions.h1, h2: submissions.h2 })
+      expect(
+        ledger.calls.filter((call) => call.op === 'runWait').map((call) => call.payload.stepKey)
+      ).toEqual([first, second])
+      const runningSteps = ledger.calls.filter(
+        (call) => call.op === 'runStep' && call.payload.status === 'running'
+      )
+      expect(runningSteps.filter((call) => call.payload.stepKey === first)).toHaveLength(1)
+      expect(runningSteps.filter((call) => call.payload.stepKey === second)).toHaveLength(1)
+    } finally {
+      ledger.restore()
+    }
+  })
+})
+
 // ---------------------------------------------------------------- P4 嵌套子流
 
 describe('P4 · 子流即节点（封装后可被其他流调用）', () => {
@@ -552,6 +718,57 @@ describe('P4 · 子流即节点（封装后可被其他流调用）', () => {
     expect(outcome.reason).toContain('missing-flow@1.0')
   })
 
+  it.each(['fixed-version', 'inline'] as const)(
+    'H10：三层旧 %s 快照没有人工门传播标记也在运行前明确拒绝',
+    async (mode) => {
+      const ledger = installLedger()
+      const leaf = echoManifest()
+      leaf.capabilityId = 'e2e-legacy-human-leaf'
+      // 旧叶节点只有直接 graph 事实，没有 executionPolicy.requiresManualGate 传播标记。
+      leaf.graph.nodes = [humanTaskNode('n1')]
+      const hashLeaf = await compositeContentHash(leaf)
+      ledger.publish(leaf, hashLeaf)
+      const mid = nestedOuterManifest(
+        {
+          capabilityId: leaf.capabilityId,
+          version: leaf.version,
+          contentHash: hashLeaf,
+          ...(mode === 'inline' ? { manifest: leaf } : {})
+        },
+        { capabilityId: 'e2e-legacy-human-mid' }
+      )
+      const hashMid = await compositeContentHash(mid)
+      ledger.publish(mid, hashMid)
+      const top = nestedOuterManifest(
+        {
+          capabilityId: mid.capabilityId,
+          version: mid.version,
+          contentHash: hashMid,
+          ...(mode === 'inline' ? { manifest: mid } : {})
+        },
+        { capabilityId: 'e2e-legacy-human-top' }
+      )
+      try {
+        const outcome = await runFlow(top, inputMap([['msg', [textValue('三层旧快照')]]]), ledger)
+        expect(outcome.status).toBe('failed')
+        expect(outcome.failure).toMatchObject({
+          code: 'NESTED_MANUAL_GATE_UNSUPPORTED',
+          phase: 'input',
+          nodeId: 'c1'
+        })
+        expect(outcome.reason).toContain('e2e-legacy-human-leaf@1.0')
+        expect(outcome.reason).toContain('暂不支持嵌套')
+        expect(ledger.calls.filter((call) => call.op === 'runStep')).toHaveLength(0)
+        expect(finishCall(ledger.calls)).toMatchObject({
+          status: 'failed',
+          errorCode: 'NESTED_MANUAL_GATE_UNSUPPORTED'
+        })
+      } finally {
+        ledger.restore()
+      }
+    }
+  )
+
   it('三层嵌套：A→B→C 逐层贯通，输出仍按公开端口稳定投影', async () => {
     const ledger = installLedger()
     const inner = echoManifest()
@@ -605,6 +822,91 @@ describe('P4 · 子流即节点（封装后可被其他流调用）', () => {
     ledger.restore()
     expect(outcome.status).toBe('failed')
     expect(outcome.reason).toContain('递归')
+  })
+})
+
+// ------------------------------------------------------- 历史运行语义兼容
+
+describe('历史 runtimeVersion=1 兼容', () => {
+  it('旧内嵌媒体流 headless 成功也落 outputSummary/outputValues，GUI 返回结构不变', async () => {
+    const legacy: CompositeManifest = {
+      schemaVersion: 1,
+      capabilityId: 'e2e-legacy-headless-media',
+      version: '1.0',
+      name: '旧版固定图片',
+      inputs: [],
+      outputs: [
+        {
+          id: 'picture',
+          label: '图片',
+          type: 'image',
+          required: true,
+          cardinality: 'one',
+          source: { nodeId: 'n1', portId: 'out-image' }
+        }
+      ],
+      graph: {
+        nodes: [
+          {
+            id: 'n1',
+            nodeType: 'image',
+            contractVersion: 3,
+            title: '旧图片',
+            dx: 0,
+            dy: 0,
+            w: 340,
+            h: 300,
+            mediaRefs: [
+              {
+                mediaId: 'legacy-media',
+                mediaPath: 'projects/legacy.png',
+                mime: 'image/png'
+              }
+            ],
+            ports: [
+              {
+                id: 'out-image',
+                name: '图片',
+                dir: 'out',
+                type: 'image',
+                required: true,
+                cardinality: 'one'
+              }
+            ]
+          }
+        ],
+        edges: []
+      },
+      dependencies: [{ kind: 'node', id: 'image', contractVersion: 3 }]
+    }
+    const ledger = installLedger()
+    try {
+      const outcome = await runFlow(legacy, inputMap([]), ledger)
+      expect(outcome).toMatchObject({
+        status: 'done',
+        media: {
+          mediaId: 'legacy-media',
+          mediaPath: 'projects/legacy.png',
+          mime: 'image/png'
+        }
+      })
+      // 不把 outputs 新增到旧 GUI 返回结构，避免额外触发旧实例的产物物化分支。
+      expect(outcome.outputs).toBeUndefined()
+      expect(finishCall(ledger.calls)).toMatchObject({
+        status: 'completed',
+        outputPorts: [{ portId: 'out-picture', kind: 'image' }],
+        outputValues: {
+          picture: {
+            kind: 'image',
+            mediaId: 'legacy-media',
+            mediaPath: 'projects/legacy.png',
+            mime: 'image/png'
+          }
+        }
+      })
+    } finally {
+      ledger.restore()
+    }
   })
 })
 

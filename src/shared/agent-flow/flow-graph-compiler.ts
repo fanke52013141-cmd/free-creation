@@ -10,6 +10,7 @@ import {
   deriveFlowAgentAllowedNodeIds,
   deriveFlowReviewBindings,
   flowNodeCapabilityRef,
+  canvasNodeId,
   type FlowGraph,
   type FlowNode,
   type FlowGraphError
@@ -20,6 +21,10 @@ import {
   type CapabilityDescriptor
 } from './capability-catalog'
 import { layoutGraph } from '../flow-layout'
+import { resolveNodeParams } from './node-params'
+
+// 保留现有编译器导出路径；实现与 validate 共用，避免碰撞判定漂移。
+export { canvasNodeId }
 
 /**
  * O4-P2 FlowGraph 纯编译器：把已校验的 FlowGraph IR 编译为画布语义图（节点配置 + 边 +
@@ -138,7 +143,7 @@ function compileNode(
           message: `Capability ${flowNodeCapabilityRef(node)?.id ?? '(missing)'} has no compile carrier`
         }
       ])
-    // BL-11 / G7：params 合并进载体固定配置（校验已在 validateFlowGraph 完成）。
+    // Builder 的目标配置与公开 params 都先转换成执行器真实字段，再合并进固定配置。
     const goalConfig = descriptor.builder?.configFromStep
       ? JSON.parse(
           descriptor.builder.configFromStep({
@@ -147,16 +152,22 @@ function compileNode(
           })
         ) as Record<string, unknown>
       : {}
-    const carrierConfig = node.params
-      ? JSON.stringify({
-          ...(JSON.parse(descriptor.carrier.config) as Record<string, unknown>),
-          ...goalConfig,
-          ...node.params
-        })
-      : JSON.stringify({
-          ...(JSON.parse(descriptor.carrier.config) as Record<string, unknown>),
-          ...goalConfig
-        })
+    const resolved = node.params
+      ? resolveNodeParams(descriptor.carrier.type, node.params, descriptor.carrier.config)
+      : undefined
+    if (resolved && !resolved.ok)
+      throw new FlowGraphCompileError([
+        {
+          code: resolved.code,
+          nodeId: node.nodeId,
+          message: `Capability ${descriptor.capabilityRef.id}@${descriptor.capabilityRef.version} params rejected: ${resolved.message}`
+        }
+      ])
+    const carrierConfig = JSON.stringify({
+      ...(JSON.parse(descriptor.carrier.config) as Record<string, unknown>),
+      ...goalConfig,
+      ...(resolved?.ok ? resolved.params : {})
+    })
     return {
       ...base,
       type: descriptor.carrier.type,
@@ -207,14 +218,6 @@ export function deriveFlowPhaseStateMachine(): {
   }
 }
 
-/**
- * P5.3：把 FlowGraph 的语义 nodeId 重映射为 tldraw 合法画布 shape id（必须 'shape:' 前缀）。
- * 节点/边/entry/exits/循环 exitCondition.stageKey 全部一致重映射，保证编译产物落画布后
- * 协调器 allowedNodeIds、图路由 graph.nodes 与真实画布节点 id 一一对应。
- */
-export function canvasNodeId(id: string): string {
-  return `shape:${id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
-}
 /**
  * 条件里的节点引用同样重映射（BL-03 修复）：此前只重映射了 loop.exitCondition，
  * 边条件、decisions.when、inputs.selectors 仍引用语义 id，编译产物一进 AgentNodeConfigSchema

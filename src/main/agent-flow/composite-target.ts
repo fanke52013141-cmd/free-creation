@@ -1,19 +1,27 @@
 import type { CompositeManifest } from '../../shared/composite/manifest'
 import type Database from 'better-sqlite3'
 import type { PortDecl } from '../../shared/types'
-import { readCompositeInstanceRef } from '../../shared/composite/outputs'
+import { readCompositeInstanceManifest, readCompositeInstanceRef } from '../../shared/composite/outputs'
 import { getCompositeVersion } from '../store/composite.repo'
 
 export function resolveCompositeTarget(
   db: Database.Database,
-  config: string | undefined
+  config: string | undefined,
+  meta?: Record<string, unknown>
 ): { manifest: CompositeManifest; inputs: PortDecl[]; outputs: PortDecl[] } | null {
   const ref = readCompositeInstanceRef(config)
-  if (!ref?.contentHash) return null
-  const version = getCompositeVersion(ref.capabilityId, ref.version, db)
-  if (!version || version.contentHash !== ref.contentHash) return null
+  let manifest: CompositeManifest | null = null
+  if (ref) {
+    const version = getCompositeVersion(ref.capabilityId, ref.version, db)
+    if (!version || (ref.contentHash && version.contentHash !== ref.contentHash)) return null
+    manifest = version.manifest
+  } else {
+    // Historical inline definitions and cached snapshots are immutable facts; they
+    // must not be replaced by a newer publication with the same capability id.
+    manifest = readCompositeInstanceManifest({ props: { config }, meta })
+  }
+  if (!manifest) return null
 
-  const { manifest } = version
   const port = (
     entry: (typeof manifest.inputs)[number] | (typeof manifest.outputs)[number],
     dir: 'in' | 'out'

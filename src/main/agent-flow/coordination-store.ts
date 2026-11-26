@@ -63,6 +63,8 @@ export interface CoordinationRun {
     compositeWait?: { runId: string; stepKey: string }
     /** BL-21：capability 的「AI 产出、人采用」——交付已生成、等待人工采用。 */
     adoptionPending?: boolean
+    /** BL-21：可信 continue 已采用该 task 的固定交付；随运行持久化并供下游条件/审计读取。 */
+    humanDecided?: boolean
     round?: number
     contextManifest?: import('../../shared/agent-flow/stage-contracts').ContextManifest
     executionEnvelope?: import('../../shared/agent-flow/execution-envelope').ExecutionEnvelope

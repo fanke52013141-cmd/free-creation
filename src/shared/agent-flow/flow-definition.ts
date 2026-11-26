@@ -126,6 +126,9 @@ export interface GraphDefinitionDiff {
   nameChanged: boolean
   goalChanged: boolean
   budgetsChanged: boolean
+  entryChanged: boolean
+  exitsChanged: boolean
+  rolesChanged: boolean
   nodes: GraphNodeDiff[]
   edgesAdded: Array<{ from: { nodeId: string; portId: string }; to: { nodeId: string; portId: string } }>
   edgesRemoved: Array<{ from: { nodeId: string; portId: string }; to: { nodeId: string; portId: string } }>
@@ -188,6 +191,9 @@ export function diffGraphDefinitions(
     goalChanged: before.graph.goal !== after.graph.goal,
     budgetsChanged:
       canonicalFlowJson(before.graph.budgets) !== canonicalFlowJson(after.graph.budgets),
+    entryChanged: before.graph.entry !== after.graph.entry,
+    exitsChanged: canonicalFlowJson(before.graph.exits) !== canonicalFlowJson(after.graph.exits),
+    rolesChanged: canonicalFlowJson(before.graph.roles ?? null) !== canonicalFlowJson(after.graph.roles ?? null),
     nodes,
     edgesAdded: after.graph.edges.filter((edge) => !beforeEdges.has(edgeKey(edge))),
     edgesRemoved: before.graph.edges.filter((edge) => !afterEdges.has(edgeKey(edge)))

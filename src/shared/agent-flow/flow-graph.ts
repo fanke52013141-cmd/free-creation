@@ -240,6 +240,11 @@ export function flowNodeCapabilityRef(node: FlowNode): CapabilityRef | null {
   return node.capability ? parseLegacyCapability(node.capability) : null
 }
 
+/** 既有语义 ID → 画布 ID 映射保持不变；映射后的冲突必须显式拒绝。 */
+export function canvasNodeId(id: string): string {
+  return `shape:${id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+}
+
 /** BL-11 子图循环体：载体、body 集合与 body 出口（有出边离开 body 或本身是图出口）。 */
 export interface LoopBodyInfo {
   carrierId: string
@@ -406,6 +411,9 @@ export type FlowGraphErrorCode =
   | 'CAPABILITY_PARTICIPATION_BELOW_FLOOR'
   | 'CAPABILITY_PARAMS_UNSUPPORTED'
   | 'CAPABILITY_PARAMS_INVALID'
+  | 'NODE_ID_COLLISION'
+  | 'EDGE_DUPLICATE'
+  | 'PORT_CARDINALITY'
   | 'PORT_NOT_FOUND'
   | 'PORT_TYPE_MISMATCH'
   | 'CONDITION_NOT_EXCLUSIVE'
@@ -486,6 +494,7 @@ function reachable(adj: Map<string, string[]>, start: string, excluded?: string)
 interface FlowPort {
   portId: string
   type: string
+  cardinality: 'one' | 'many'
   schemaRef?: { id: string; version: number }
 }
 
@@ -512,6 +521,7 @@ function flowNodePorts(
     const map = (port: CapabilityDescriptor['inputs'][number]): FlowPort => ({
       portId: port.portId,
       type: port.type,
+      cardinality: port.cardinality,
       ...(port.schemaRef ? { schemaRef: port.schemaRef } : {})
     })
     return { inputs: descriptor.inputs.map(map), outputs: descriptor.outputs.map(map) }
@@ -522,10 +532,11 @@ function flowNodePorts(
   const map = (port: (typeof record.ports.in)[number]): FlowPort => ({
     portId: port.id,
     type: port.type,
+    cardinality: port.cardinality,
     ...(parsePortSchema(port.schema) ? { schemaRef: parsePortSchema(port.schema) } : {})
   })
-  const outputs = node.kind === 'human-task' && node.humanOutputType
-    ? record.ports.out.filter((port) => port.id === `out-${node.humanOutputType}`)
+  const outputs = node.kind === 'human-task'
+    ? record.ports.out.filter((port) => port.id === `out-${node.humanOutputType ?? 'text'}`)
     : record.ports.out
   return { inputs: record.ports.in.map(map), outputs: outputs.map(map) }
 }
@@ -673,6 +684,23 @@ export function validateFlowGraph(
   options: { catalog?: readonly CapabilityDescriptor[]; requireRuntime?: boolean } = {}
 ): FlowGraphValidation {
   const errors: FlowGraphError[] = []
+  // 原始 ID 唯一不代表有损 canvas 映射后仍唯一。保留既有映射以兼容已保存图，
+  // 但节点之间及节点与派生协调器/状态机之间的冲突必须在编译前结构化拒绝。
+  const canvasOwners = new Map<string, string>()
+  const registerCanvasId = (canvasId: string, semanticId: string): void => {
+    const prior = canvasOwners.get(canvasId)
+    if (prior !== undefined && prior !== semanticId)
+      errors.push({
+        code: 'NODE_ID_COLLISION',
+        nodeId: semanticId,
+        message: `Canvas id ${canvasId} is shared by ${prior} and ${semanticId}; rename the semantic graph/node ids`
+      })
+    else canvasOwners.set(canvasId, semanticId)
+  }
+  for (const node of graph.nodes) registerCanvasId(canvasNodeId(node.nodeId), node.nodeId)
+  const graphIdSlug = graph.graphId.replace(/[^a-zA-Z0-9_-]/g, '-')
+  registerCanvasId(`shape:coordinator-${graphIdSlug}`, `${graph.graphId}:coordinator`)
+  registerCanvasId(`shape:state-${graphIdSlug}`, `${graph.graphId}:state`)
   const roleIds = new Set(graph.roles?.map((role) => role.roleId) ?? ['owner'])
   if (graph.roles && roleIds.size !== graph.roles.length)
     errors.push({ code: 'HUMAN_ROLE_DUPLICATE', message: 'Role ids must be unique' })
@@ -724,6 +752,18 @@ export function validateFlowGraph(
       })
       continue
     }
+    if (
+      descriptor.carrier &&
+      ref.kind === 'node' &&
+      String(descriptor.carrier.contractVersion) !== ref.version
+    ) {
+      errors.push({
+        code: 'CAPABILITY_NOT_SCHEDULABLE',
+        nodeId: node.nodeId,
+        message: `Capability ${ref.id}@${ref.version} carrier contract ${descriptor.carrier.contractVersion} does not match the fixed reference`
+      })
+      continue
+    }
     if (!descriptor.agentSchedulable) {
       errors.push({
         code: 'CAPABILITY_NOT_SCHEDULABLE',
@@ -749,19 +789,32 @@ export function validateFlowGraph(
         })
       } else {
         const carrierType = descriptor.carrier?.type ?? descriptor.capabilityRef.id
-        const params = validateNodeParams(carrierType, node.params)
+        const params = validateNodeParams(carrierType, node.params, descriptor.carrier?.config)
         if (!params.ok)
           errors.push({
-            code: 'CAPABILITY_PARAMS_INVALID',
+            code: params.code,
             nodeId: node.nodeId,
-            message: `Capability ${descriptor.capabilityRef.id}@${descriptor.capabilityRef.version} params invalid: ${params.message}`
+            message: `Capability ${descriptor.capabilityRef.id}@${descriptor.capabilityRef.version} params rejected: ${params.message}`
           })
       }
     }
   }
 
   // BL-11 / G8：数据边必须接在两端节点的真实端口上，且类型兼容（画布同一判定）。
+  // 与画布一致，重复端点与单值输入多连都在编译前拒绝，避免预览可过、commit 才失败。
+  const seenEdges = new Set<string>()
+  const inputEdgeCounts = new Map<string, number>()
   for (const edge of graph.edges) {
+    const edgeKey = JSON.stringify([edge.from.nodeId, edge.from.portId, edge.to.nodeId, edge.to.portId])
+    if (seenEdges.has(edgeKey)) {
+      errors.push({
+        code: 'EDGE_DUPLICATE',
+        nodeId: edge.to.nodeId,
+        message: `Duplicate edge ${edge.from.nodeId}.${edge.from.portId}→${edge.to.nodeId}.${edge.to.portId}`
+      })
+      continue
+    }
+    seenEdges.add(edgeKey)
     const source = nodeById.get(edge.from.nodeId)
     const target = nodeById.get(edge.to.nodeId)
     if (!source || !target) continue
@@ -786,6 +839,15 @@ export function validateFlowGraph(
       })
       continue
     }
+    const inputKey = `${edge.to.nodeId}.${edge.to.portId}`
+    const inputCount = (inputEdgeCounts.get(inputKey) ?? 0) + 1
+    inputEdgeCounts.set(inputKey, inputCount)
+    if (input.cardinality === 'one' && inputCount > 1)
+      errors.push({
+        code: 'PORT_CARDINALITY',
+        nodeId: target.nodeId,
+        message: `Input ${edge.to.nodeId}.${edge.to.portId} is single-value but receives ${inputCount} edges`
+      })
     if (
       !portPairCompatible(
         { type: out.type as never, schema: out.schemaRef as never },

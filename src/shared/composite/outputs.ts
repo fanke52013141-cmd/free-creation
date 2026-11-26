@@ -68,16 +68,18 @@ export function readCompositeInstanceRef(
   try {
     const parsed = JSON.parse(config) as {
       manifest?: unknown
+      ref?: { capabilityId?: unknown; version?: unknown; contentHash?: unknown }
       capabilityId?: unknown
       version?: unknown
       contentHash?: unknown
     }
     if (parsed.manifest) return null
-    if (typeof parsed.capabilityId !== 'string' || typeof parsed.version !== 'string') return null
+    const ref = parsed.ref ?? parsed
+    if (typeof ref.capabilityId !== 'string' || typeof ref.version !== 'string') return null
     return {
-      capabilityId: parsed.capabilityId,
-      version: parsed.version,
-      ...(typeof parsed.contentHash === 'string' ? { contentHash: parsed.contentHash } : {})
+      capabilityId: ref.capabilityId,
+      version: ref.version,
+      ...(typeof ref.contentHash === 'string' ? { contentHash: ref.contentHash } : {})
     }
   } catch {
     return null

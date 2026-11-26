@@ -418,4 +418,93 @@ describe('flowAgent 运行控制', () => {
     expect(replay.data).toEqual(first.data)
     expect(port.runs).toHaveLength(1)
   })
+
+  it.each(['cli', 'mcp-0123456789abcdef'])(
+    '%s 补料先预览确认，再把材料与可信确认转发给同一宿主',
+    async (clientId) => {
+      const project = createProject('运行-上下文补料')
+      active = project.id
+      const port = publishFakePort({
+        collaborationView: {
+          task: { ...taskView('waiting'), code: 'FLOW_CONTEXT_OVER_BUDGET' }
+        }
+      })
+      const confirmations: Array<Record<string, unknown>> = []
+      service = new LocalAccessService({
+        instanceId: randomUUID(),
+        appVersion: 'test',
+        exportDirectory: join(getDataDir(), 'agent-exports'),
+        activeProjectId: () => active,
+        desktop: {
+          async run() {
+            throw new Error('unexpected desktop run')
+          },
+          async ask(input) {
+            confirmations.push(input as Record<string, unknown>)
+            return { authorized: true }
+          }
+        }
+      })
+      const response = await call('flowAgent.run', {
+        projectId: project.id,
+        nodeId: 'shape:agent-1',
+        action: 'continue',
+        eventId: 'event-material',
+        expectedTaskId: 'agent-task-1',
+        expectedWaitRevision: 2,
+        contextMaterial: '人工精简后的材料'
+      }, key(), clientId)
+      expect(response.status, JSON.stringify(response.error)).toBe('completed')
+      expect(confirmations).toHaveLength(1)
+      expect(confirmations[0]).toMatchObject({
+        action: 'confirm-sensitive',
+        confirmText: '提交材料并继续'
+      })
+      expect(String(confirmations[0].confirmMessage)).toContain('人工精简后的材料')
+      expect(port.runs).toHaveLength(1)
+      expect(port.runs[0]).toMatchObject({
+        action: 'continue',
+        contextMaterial: '人工精简后的材料',
+        humanConfirmed: 'desktop-confirm',
+        runOrigin: 'external',
+        externalClientId: clientId
+      })
+    }
+  )
+
+  it('补料被人拒绝时不转发材料或推进任务', async () => {
+    const project = createProject('运行-补料拒绝')
+    active = project.id
+    const port = publishFakePort({
+      collaborationView: {
+        task: { ...taskView('waiting'), code: 'FLOW_CONTEXT_OVER_BUDGET' }
+      }
+    })
+    service = new LocalAccessService({
+      instanceId: randomUUID(),
+      appVersion: 'test',
+      exportDirectory: join(getDataDir(), 'agent-exports'),
+      activeProjectId: () => active,
+      desktop: {
+        async run() {
+          throw new Error('unexpected desktop run')
+        },
+        async ask() {
+          return { authorized: false, code: 'HUMAN_DENIED' }
+        }
+      }
+    })
+    const response = await write('flowAgent.run', {
+      projectId: project.id,
+      nodeId: 'shape:agent-1',
+      action: 'continue',
+      eventId: 'event-material-denied',
+      expectedTaskId: 'agent-task-1',
+      expectedWaitRevision: 2,
+      contextMaterial: '不应生效的材料'
+    })
+    expect(response.status).toBe('failed')
+    expect(response.error?.code).toBe('HUMAN_DENIED')
+    expect(port.runs).toEqual([])
+  })
 })

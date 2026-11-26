@@ -1,12 +1,10 @@
 import type Database from 'better-sqlite3'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
-import type { FlowAgentCollaboration } from '../../shared/agent-flow/desktop-tasks'
-
-import type { HumanActor } from '../../shared/agent-flow/node-contracts'
+import type { CollaborationActor, FlowAgentCollaboration } from '../../shared/agent-flow/desktop-tasks'
 
 export type CollaborationEvent = FlowAgentCollaboration & {
-  actor?: HumanActor
+  actor?: CollaborationActor
   reply?: string
   childTaskId?: string
 }

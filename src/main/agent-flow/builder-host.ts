@@ -166,7 +166,13 @@ export class FlowBuilderHost {
         return (
           shape?.meta?.flowBuildId === preview.buildId &&
           shape.props.nodeType === n.type &&
-          shape.props.config === n.config &&
+          (() => {
+            try {
+              return canonicalFlowJson(JSON.parse(shape.props.config)) === canonicalFlowJson(JSON.parse(n.config))
+            } catch {
+              return shape.props.config === n.config
+            }
+          })() &&
           shape.props.text === n.text &&
           shape.props.title === n.title &&
           file.nodes.some(
@@ -234,7 +240,14 @@ export class FlowBuilderHost {
       .digest('hex')
       .slice(0, 24)}`
     const replay = this.readGraph(input.projectId, buildId)
-    if (replay) return replay
+    if (replay) {
+      if (
+        canonicalFlowJson(replay.graph) !== canonicalFlowJson(graph) ||
+        canonicalFlowJson(replay.sourceGraph ?? null) !== canonicalFlowJson(input.sourceGraph ?? null)
+      )
+        throw new AgentRuntimeError('REQUEST_ID_CONFLICT', 'builder')
+      return replay
+    }
     // 占用：编译产物节点不得已在协调占用中（沿用 builder 的 flow_coordination_scope 守卫）。
     const ids = compiled.nodes.map((node) => node.id)
     const placeholders = ids.map(() => '?').join(',')

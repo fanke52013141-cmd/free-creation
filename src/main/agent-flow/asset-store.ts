@@ -178,7 +178,7 @@ export class FlowAssetStore {
                           : 'out-value'
         const composite =
           record.props.nodeType === 'composite'
-            ? resolveCompositeTarget(this.db, record.props.config)
+            ? resolveCompositeTarget(this.db, record.props.config, record.meta as Record<string, unknown> | undefined)
             : null
         if (record.props.nodeType === 'composite') {
           if (!composite?.outputs.some((port) => port.id === input.portId))

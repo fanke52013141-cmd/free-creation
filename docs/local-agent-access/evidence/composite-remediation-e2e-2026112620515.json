@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "startedAt": "2026-11-26T18:44:38.041Z",
+  "transports": {
+    "cli": "real Electron local-agent process",
+    "mcp": "official MCP SDK stdio client"
+  },
+  "restartVerified": true,
+  "scenarios": [
+    {
+      "transport": "cli",
+      "scenario": "H01",
+      "runId": "e79328aa-6093-4aa1-a545-558d4d193ab7",
+      "status": "failed",
+      "failedStep": "bad-json",
+      "failureAdmissions": 1,
+      "independentCompleted": true
+    },
+    {
+      "transport": "cli",
+      "scenario": "H09",
+      "runId": "8214ac64-ee30-4c60-be16-28e278ab6697",
+      "order": "h1->h2",
+      "revisions": [
+        1,
+        2
+      ],
+      "steps": [
+        {
+          "stepKey": "h1",
+          "status": "completed"
+        },
+        {
+          "stepKey": "h2",
+          "status": "completed"
+        }
+      ],
+      "outputPorts": [
+        "out-h1",
+        "out-h2"
+      ],
+      "restart": true
+    },
+    {
+      "transport": "cli",
+      "scenario": "H10-direct",
+      "runId": "a0446a4f-9628-42f0-86f2-0816725a0155",
+      "levels": 2,
+      "validationCode": "NESTED_MANUAL_GATE_UNSUPPORTED",
+      "runError": "NESTED_MANUAL_GATE_UNSUPPORTED",
+      "internalSteps": 0
+    },
+    {
+      "transport": "cli",
+      "scenario": "H10-indirect",
+      "runId": "74f27fc0-6df8-487f-995d-1631b6a61d87",
+      "levels": 3,
+      "validationCode": "NESTED_MANUAL_GATE_UNSUPPORTED",
+      "runError": "NESTED_MANUAL_GATE_UNSUPPORTED",
+      "internalSteps": 0
+    },
+    {
+      "transport": "mcp",
+      "scenario": "H01",
+      "runId": "656071e7-30ee-4154-9569-55257f24a53f",
+      "status": "failed",
+      "failedStep": "bad-json",
+      "failureAdmissions": 1,
+      "independentCompleted": true
+    },
+    {
+      "transport": "mcp",
+      "scenario": "H09",
+      "runId": "d8faba9a-faae-4b4f-a64a-4e900982aa37",
+      "order": "h2->h1",
+      "revisions": [
+        1,
+        2
+      ],
+      "steps": [
+        {
+          "stepKey": "h2",
+          "status": "completed"
+        },
+        {
+          "stepKey": "h1",
+          "status": "completed"
+        }
+      ],
+      "outputPorts": [
+        "out-h1",
+        "out-h2"
+      ],
+      "restart": false
+    },
+    {
+      "transport": "mcp",
+      "scenario": "H10-direct",
+      "runId": "43891915-00ad-48d3-8f18-31ec941e747e",
+      "levels": 2,
+      "validationCode": "NESTED_MANUAL_GATE_UNSUPPORTED",
+      "runError": "NESTED_MANUAL_GATE_UNSUPPORTED",
+      "internalSteps": 0
+    },
+    {
+      "transport": "mcp",
+      "scenario": "H10-indirect",
+      "runId": "197bb315-dc50-4fae-ba18-63304419301c",
+      "levels": 3,
+      "validationCode": "NESTED_MANUAL_GATE_UNSUPPORTED",
+      "runError": "NESTED_MANUAL_GATE_UNSUPPORTED",
+      "internalSteps": 0
+    }
+  ],
+  "finishedAt": "2026-11-26T18:45:00.683Z"
+}

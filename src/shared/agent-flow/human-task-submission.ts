@@ -1,4 +1,5 @@
 import { canonicalFlowJson } from './semantic-revision'
+import { readStoredNodeRunStatus } from '../engine/run-status'
 import {
   HumanTaskInstanceSchema,
   HumanTaskNodeConfigSchema,
@@ -40,6 +41,10 @@ export function admitHumanTaskSubmission(
     if (canonicalFlowJson(current.data.value) === canonicalFlowJson(submission.data.value) &&
         current.data.handoffNote === submission.data.handoffNote)
       return { ok: true, pending: current.data, replay: true }
+    // A failed attempt is a settled fact and may be replaced. Running/unknown
+    // outcomes remain write-locked so a late retry cannot hide a possible effect.
+    if (readStoredNodeRunStatus(shape.meta?.nodeRun) === 'failed')
+      return { ok: true, pending: submission.data, replay: false }
     return { ok: false, code: 'HUMAN_TASK_SUBMISSION_CONFLICT' }
   }
   return { ok: true, pending: submission.data, replay: false }

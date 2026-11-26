@@ -59,6 +59,9 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
   const capabilities = videoCapabilitiesFor(option.provider.specId, option.model.id, {
     gatewayProxy: isSeedanceGatewayProxy(option.provider.specId, option.provider.baseURL)
   })
+  // 不支持 seed 时必须在归一化删字段之前拒绝；支持时才由 normalize 保留并提交。
+  if (typeof data.params.seed === 'number' && !capabilities.supportsSeed)
+    return { status: 'skipped', reason: '当前模型不支持种子参数' }
   const { mode } = resolveVideoMode(capabilities, {
     mode: data.mode,
     imageCount: images.length,

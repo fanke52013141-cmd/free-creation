@@ -20,7 +20,7 @@ import {
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 import type { AccessOperationId } from '../../shared/agent-access/registry'
 import { DesktopAccessError, type AccessDesktop } from './desktop'
-import { requestHumanDecision } from './human-decision'
+import { previewValue, requestHumanDecision } from './human-decision'
 import { flowAgentAccessPort } from './flow-bridge'
 
 /** 本模块负责的操作；service.ts 只做一次分组委托。 */
@@ -97,17 +97,25 @@ export async function runFlowAgentRunOperation(
     }
     // P0-2：外部调用 continue 时，若目标正处于人工等待，必须在 GUI 由人确认。
     // 外部不能凭一个 action=continue 就把人工门推过去；拒绝/超时在生效前失败（零副作用）。
+    const contextMaterial = input.contextMaterial as string | undefined
+    if (contextMaterial !== undefined && parsed.data.action !== 'continue')
+      refuse('FLOW_CONTEXT_MATERIAL_UNEXPECTED', 'resume')
     let humanConfirmed: 'desktop-confirm' | undefined
     if (parsed.data.action === 'continue') {
       const inspect = port.collaboration
       const current =
         typeof inspect === 'function'
           ? (inspect.call(port, { projectId, nodeId }) as {
-              task?: { state?: string; waitKind?: string | null }
+              task?: { state?: string; waitKind?: string | null; code?: string }
             } | null)
           : null
       const task = port.inspect?.({ projectId, nodeId }) ?? current?.task
       const waitingForHuman = task?.state === 'waiting' && task.waitKind === 'human'
+      if (
+        contextMaterial !== undefined &&
+        (!waitingForHuman || task.code !== 'FLOW_CONTEXT_OVER_BUDGET')
+      )
+        refuse('FLOW_CONTEXT_MATERIAL_UNEXPECTED', 'resume')
       if (waitingForHuman) {
         const decision = await requestHumanDecision({
           operation: 'flowAgent.run',
@@ -115,25 +123,35 @@ export async function runFlowAgentRunOperation(
           diagnostics: context.diagnostics,
           projectId,
           activeProjectId: context.activeProjectId(),
-          prompt: {
-            title: '外部 Agent 请求继续一个人工等待中的任务',
-            message:
-              '外部 Agent 想让人工等待中的 Agent 任务继续。只有你在这里确认后才会继续；这次确认等同你在界面上亲自点「继续」。',
-            confirmText: '允许继续'
-          }
+          prompt: contextMaterial !== undefined
+            ? {
+                title: '外部 Agent 请求提交替代上下文并继续',
+                message: `只有你在这里确认后，才会用下面的替代材料继续当前超限阶段：\n\n${previewValue(contextMaterial)}`,
+                confirmText: '提交材料并继续'
+              }
+            : {
+                title: '外部 Agent 请求继续一个人工等待中的任务',
+                message:
+                  '外部 Agent 想让人工等待中的 Agent 任务继续。只有你在这里确认后才会继续；这次确认等同你在界面上亲自点「继续」。',
+                confirmText: '允许继续'
+              }
         })
         if (!decision.ok) refuse(decision.code, decision.detail)
         humanConfirmed = 'desktop-confirm'
       }
     }
+    const runInput = FlowAgentRunSchema.safeParse({
+      ...parsed.data,
+      ...(contextMaterial !== undefined ? { contextMaterial } : {}),
+      runOrigin: 'external' as const,
+      ...(context.clientId ? { externalClientId: context.clientId } : {}),
+      ...(humanConfirmed ? { humanConfirmed } : {})
+    })
+    if (!runInput.success)
+      refuse('INVALID_INPUT', runInput.error.issues[0]?.path.join('.') ?? 'flowAgent.run')
     let reply: unknown
     try {
-      reply = await port.run({
-        ...parsed.data,
-        runOrigin: 'external',
-        ...(context.clientId ? { externalClientId: context.clientId } : {}),
-        ...(humanConfirmed ? { humanConfirmed } : {})
-      })
+      reply = await port.run(runInput.data)
     } catch (error) {
       fail(error)
     }

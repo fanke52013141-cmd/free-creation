@@ -13,7 +13,7 @@ import { graphCanvasScopeHash, graphCanvasVersion } from '../agent-flow/graph-ca
 import { randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
-import type { FlowAgentView } from '../../shared/agent-flow/desktop-tasks'
+import type { CollaborationActor, FlowAgentView } from '../../shared/agent-flow/desktop-tasks'
 import { FlowAgentCollaborationSchema } from '../../shared/agent-flow/desktop-tasks'
 import { flowAgentAccessPort, type FlowAgentAccessPort } from './flow-bridge'
 import type { AccessOperationId } from '../../shared/agent-access/registry'
@@ -77,6 +77,8 @@ export interface FlowAgentOperationContext {
   diagnostics: { requestId: string; traceId: string; spanId: string }
   /** P5.3：confirm 落画布经渲染器权威动作需要 desktop 通道（service 已注入）。 */
   desktop?: AccessDesktop | null
+  /** 仅由 service 从受控传输请求注入，外部 input 不提供来源。 */
+  clientId?: string
 }
 
 type HostDesktop = ConstructorParameters<typeof FlowAgentDesktopHost>[2]
@@ -410,7 +412,7 @@ function collaborationFlowAgent(
 
 /**
  * 写入一次协作事件（F8 收官）。与 GUI 面板同一宿主实例、同一任务表：
- * - 事件显式标记 `actor: 'external'`，落在协作消息上，可与人工输入区分；
+ * - 可信 envelope 单独携带 external origin/clientId，落在协作消息上，与人工输入区分；
  * - discuss/revise 会真实调用模型，先走与 IPC 入口同一的工具调用预检（付费路径第一道闸门）；
  * - revision/waitRevision 由宿主核对，外部不能自造。
  */
@@ -466,11 +468,14 @@ async function cooperateFlowAgent(
     })
     if (!decision.ok) refuse(decision.code, decision.detail)
   }
-  const view = (await port.cooperate({ ...collaboration, actor: 'external' })) as {
+  const view = (await port.cooperate({
+    input: collaboration,
+    origin: { kind: 'external', clientId: context.clientId ?? 'cli' }
+  })) as {
     task: Parameters<typeof taskDto>[0]
     goal: string
     revision: number
-    messages: Array<{ eventId: string; kind: string; text: string; reply?: string; handoffNote?: string; actor?: import('../../shared/agent-flow/node-contracts').HumanActor }>
+    messages: Array<{ eventId: string; kind: string; text: string; reply?: string; handoffNote?: string; actor?: CollaborationActor }>
     inputs: unknown[]
     candidates: unknown[]
     workingDraft?: string

@@ -6,6 +6,8 @@ import { FlowDefinitionStore } from '../src/main/agent-flow/definition-store'
 import { FlowGraphSchema } from '../src/shared/agent-flow/flow-graph'
 import { diffGraphDefinitions } from '../src/shared/agent-flow/flow-definition'
 import type { ProjectFile } from '../src/shared/types'
+import { buildCapabilityCatalog } from '../src/shared/agent-flow/capability-catalog'
+import type { CompositeVersionRecord } from '../src/shared/composite/types'
 
 const databases: Database.Database[] = []
 afterEach(() => databases.splice(0).forEach((db) => db.close()))
@@ -24,13 +26,13 @@ const graph = FlowGraphSchema.parse({
   exits: ['sink']
 })
 
-function fixture() {
+function fixture(composites: CompositeVersionRecord[] = []) {
   const db = new Database(':memory:')
   databases.push(db)
   migrateDatabase(db)
   db.prepare('INSERT INTO projects(id,name,created_at,updated_at) VALUES (?,?,0,0)').run('p', 'isolated')
   const file = { version: 1, meta: { id: 'p', name: 'test', createdAt: 0, updatedAt: 0, graphVersion: 0 }, nodes: [], edges: [], groups: [], tldrawSnapshot: { store: {} } } as unknown as ProjectFile
-  const store = new FlowDefinitionStore(db, () => file)
+  const store = new FlowDefinitionStore(db, () => file, () => buildCapabilityCatalog(composites))
   return { db, store }
 }
 
@@ -80,6 +82,48 @@ describe('④P6 FlowGraph 定义版本存储', () => {
     expect(diff.nodes.find((n) => n.nodeId === 'c')?.change).toBe('added')
     expect(diff.edgesAdded).toHaveLength(1)
     expect(diff.edgesRemoved).toHaveLength(1)
+  })
+
+  it('publishGraph 与 compile 共用完整 composite catalog，合法固定版本可发布', () => {
+    const composite: CompositeVersionRecord = {
+      capabilityId: 'fixed-composite',
+      version: '1.0',
+      contentHash: 'a'.repeat(64),
+      publishedAt: 1,
+      manifest: {
+        schemaVersion: 1,
+        runtimeVersion: 2,
+        capabilityId: 'fixed-composite',
+        version: '1.0',
+        name: '固定文本流',
+        inputs: [{ id: 'source', label: '输入', type: 'text', required: false, cardinality: 'many', targets: [{ nodeId: 'n1', portId: 'in-text' }] }],
+        outputs: [{ id: 'result', label: '结果', type: 'text', required: true, cardinality: 'one', source: { nodeId: 'n1', portId: 'out-text' } }],
+        graph: {
+          nodes: [{ id: 'n1', nodeType: 'text', contractVersion: 3, title: '文本', dx: 0, dy: 0, w: 340, h: 300, ports: [] }],
+          edges: []
+        }
+      }
+    }
+    const f = fixture([composite])
+    const compositeGraph = FlowGraphSchema.parse({
+      ...graph,
+      nodes: [
+        graph.nodes[0]!,
+        {
+          nodeId: 'sink', title: 'sink', participation: 'autonomous', kind: 'capability',
+          capabilityRef: { kind: 'composite', id: 'fixed-composite', version: '1.0' },
+          goal: '使用固定文本流', completion: '交付固定结果'
+        }
+      ],
+      edges: [{ from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'sink', portId: 'in-source' }, kind: 'data' }]
+    })
+    const published = f.store.publishGraph({
+      projectId: 'p', definitionId: 'composite-definition', name: '组合定义', graph: compositeGraph
+    })
+    expect(published.version).toBe(1)
+    expect(published.graph.nodes[1]?.capabilityRef).toMatchObject({
+      kind: 'composite', id: 'fixed-composite', version: '1.0'
+    })
   })
 
   it('diffGraphDefinitions 纯函数：相同图无差异', () => {

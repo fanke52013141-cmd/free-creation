@@ -54,6 +54,11 @@ export interface ContextBuildOptions {
   modelCapacityBytes?: number
   /** Material supplied through a confirmed request for this waiting stage. */
   humanMaterial?: string
+  /**
+   * Internal effective-input reconstruction only: retain every deduplicated candidate
+   * instead of clipping optional entries. The hash still uses the declared real limit.
+   */
+  includeAllCandidates?: boolean
 }
 
 /**
@@ -121,8 +126,9 @@ export function buildContextManifest(
   )
   let usedBytes = requiredBytes
   for (const entry of candidatesByHash.values()) {
-    if (entry.required) {
+    if (entry.required || options.includeAllCandidates) {
       entries.push(entry)
+      if (!entry.required && options.includeAllCandidates) usedBytes += entry.bytes
     } else if (usedBytes + entry.bytes <= limitBytes) {
       entries.push(entry)
       usedBytes += entry.bytes
@@ -133,7 +139,7 @@ export function buildContextManifest(
     }
   }
   const exceeded = requiredBytes > limitBytes
-  if (exceeded && inputs.overflow === 'ask-human' && options.humanMaterial?.trim() &&
+  if (!options.includeAllCandidates && exceeded && inputs.overflow === 'ask-human' && options.humanMaterial?.trim() &&
       !missing.some((entry) => entry.required)) {
     const replacement = buildContextManifest(stageKey, {
       selectors: [{ sourceStageKey: 'human:context', path: 'text', required: true }],
@@ -144,7 +150,7 @@ export function buildContextManifest(
     }], { modelCapacityBytes: options.modelCapacityBytes })
     if (!contextManifestBlocking(replacement)) return replacement
   }
-  if (exceeded && inputs.overflow === 'summarize' && inputs.summarySelector &&
+  if (!options.includeAllCandidates && exceeded && inputs.overflow === 'summarize' && inputs.summarySelector &&
       !missing.some((entry) => entry.required)) {
     const summary = buildContextManifest(stageKey, {
       selectors: [inputs.summarySelector], budgetBytes: inputs.budgetBytes
@@ -168,6 +174,80 @@ export function buildContextManifest(
       missing,
       dropped,
       budget: { limitBytes, usedBytes, exceeded }
+    })
+  )
+  return ContextManifestSchema.parse({
+    schemaVersion: 1,
+    stageKey,
+    entries,
+    missing,
+    dropped,
+    budget: { limitBytes, usedBytes, exceeded },
+    manifestHash
+  })
+}
+
+/** Stable identity of one selector contribution, independent of the source's other ports. */
+export function contextManifestEntryKey(entry: ContextManifestEntry): string {
+  return canonicalFlowJson([
+    entry.sourceStageKey,
+    entry.path,
+    entry.kind,
+    entry.contentHash,
+    entry.required
+  ])
+}
+
+/**
+ * Rebuild a manifest from the exact effective contributions that will be dispatched.
+ * Optional entries which no longer fit are reported, never silently admitted.
+ */
+export function assembleContextManifest(
+  stageKey: string,
+  limitBytes: number,
+  candidates: ContextManifestEntry[],
+  missing: ContextManifest['missing'] = []
+): ContextManifest {
+  const candidatesByHash = new Map<string, ContextManifestEntry>()
+  for (const entry of candidates) {
+    const prior = candidatesByHash.get(entry.contentHash)
+    if (prior && (prior.required || !entry.required)) continue
+    candidatesByHash.set(entry.contentHash, entry)
+  }
+  const entries: ContextManifestEntry[] = []
+  const dropped: ContextManifest['dropped'] = []
+  const requiredBytes = [...candidatesByHash.values()].reduce(
+    (total, entry) => total + (entry.required ? entry.bytes : 0),
+    0
+  )
+  let usedBytes = requiredBytes
+  for (const entry of candidatesByHash.values()) {
+    if (entry.required) entries.push(entry)
+    else if (usedBytes + entry.bytes <= limitBytes) {
+      entries.push(entry)
+      usedBytes += entry.bytes
+    } else {
+      dropped.push({
+        sourceStageKey: entry.sourceStageKey,
+        path: entry.path,
+        required: false,
+        code: 'FIELD_MISSING'
+      })
+    }
+  }
+  const exceeded = requiredBytes > limitBytes
+  const manifestHash = sha256(
+    canonicalFlowJson({
+      stageKey,
+      entries: entries.map((entry) => ({
+        sourceStageKey: entry.sourceStageKey,
+        path: entry.path,
+        contentHash: entry.contentHash,
+        required: entry.required
+      })),
+      missing,
+      dropped,
+      limitBytes
     })
   )
   return ContextManifestSchema.parse({

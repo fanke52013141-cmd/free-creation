@@ -104,11 +104,23 @@ export const FlowAgentCollaborationSchema = FlowAgentQuerySchema.extend({
       context.addIssue({ code: 'custom', message: 'Selected outputs must be unique references' })
   })
 export type FlowAgentCollaboration = z.infer<typeof FlowAgentCollaborationSchema>
+
+const externalClientId = z.string().regex(/^(?:cli|mcp(?:-[a-f0-9]{16})?)$/)
+/** Trusted bridge envelope; origin is deliberately outside the strict business input. */
+export const FlowAgentCollaborationEnvelopeSchema = z.object({
+  input: FlowAgentCollaborationSchema,
+  origin: z.object({ kind: z.literal('external'), clientId: externalClientId }).strict()
+}).strict()
+export const CollaborationActorSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('user'), roleId: id }).strict(),
+  z.object({ kind: z.literal('external'), clientId: externalClientId }).strict()
+])
+export type CollaborationActor = z.infer<typeof CollaborationActorSchema>
 export interface FlowAgentCollaborationView {
   task: FlowAgentView
   goal: string
   revision: number
-  messages: Array<{ eventId: string; kind: string; text: string; reply?: string; handoffNote?: string; actor?: import('./node-contracts').HumanActor }>
+  messages: Array<{ eventId: string; kind: string; text: string; reply?: string; handoffNote?: string; actor?: CollaborationActor }>
   inputs: Array<{ sourceNodeId: string; sourcePortId: string; versionId: string }>
   candidates: import('zod').infer<typeof importedAssetRef>[]
   /** AF-04：当前工作稿（最近一次已提交候选成果正文）；无候选时为 undefined。 */

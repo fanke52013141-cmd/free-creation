@@ -191,7 +191,7 @@ async function runNode(dir, projectId, nodeId) {
           { id: 'out-json', name: 'JSON', dir: 'out', type: 'json', required: false, cardinality: 'one', schemaRef: { id: 'json.any', version: 1 } }
         ] }], edges: [] },
       dependencies: [{ kind: 'node', id: 'human-task', contractVersion: 1 }],
-      executionPolicy: { timeoutMs: 60000, maxDepth: 5, maxExpandedNodes: 40, maxExpandedEdges: 120, waitForInput: true }
+      executionPolicy: { timeoutMs: 60000, maxDepth: 5, maxExpandedNodes: 40, maxExpandedEdges: 120, waitForInput: true, requiresManualGate: true }
     }
     const validation = await cli(dir, ['composite', 'validate'], { manifest })
     if (validation.response?.data?.ok !== true)
@@ -247,10 +247,10 @@ async function runNode(dir, projectId, nodeId) {
     receipt.outputs.compositeResume = {
       status: detail.run.status,
       steps: detail.steps.map((step) => ({ key: step.stepKey, status: step.status })),
-      output: detail.run.outputValues?.res ?? null
+      output: detail.run.outputValues?.['out-res'] ?? null
     }
     assert(detail.run.status === 'completed', `续跑完成（status=${detail.run.status}）`)
-    const resumedText = detail.run.outputValues?.res
+    const resumedText = detail.run.outputValues?.['out-res']
     assert(
       resumedText?.kind === 'text' && resumedText.text === '人工审核结论：通过。',
       '续跑把人工提交消费为正式公开输出'
@@ -605,7 +605,7 @@ async function runNode(dir, projectId, nodeId) {
           run = ok(await cli(dir, ['composite', 'run', 'get'], { runId: waiting.id }), 'GET_HUMAN_MEDIA').run
           if (!['waiting-input', 'running'].includes(run.status)) break
         }
-        assert(run.status === 'completed' && run.outputValues?.res?.mediaId === imported.mediaId,
+        assert(run.status === 'completed' && run.outputValues?.['out-res']?.mediaId === imported.mediaId,
           `${kind} 续跑公开输出与人工提交的项目素材一致（${run.status}）`)
       }
     }

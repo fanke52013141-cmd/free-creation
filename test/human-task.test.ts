@@ -243,3 +243,27 @@ it('prevents a second writer from replacing a pending canvas submission', () => 
     ok: false, code: 'HUMAN_TASK_REVISION_CONFLICT'
   })
 })
+
+it('allows replacing a settled failed pending submission but never a running or unknown one', () => {
+  const replacement = { submissionId: 'new', expectedRevision: 1, value: { kind: 'text' as const, text: 'new' } }
+  const nodeRun = (status: string) => ({ runId: 'run', startedAt: 0, inputs: {}, status })
+  const shape = {
+    props: { nodeType: 'human-task', config: JSON.stringify({ schemaVersion: 1, outputType: 'text' }) },
+    meta: { humanTaskPending: textPending(1, 'old', 'old'), nodeRun: nodeRun('failed') }
+  }
+  expect(admitHumanTaskSubmission(shape, replacement)).toMatchObject({
+    ok: true, replay: false, pending: replacement
+  })
+  expect(admitHumanTaskSubmission({
+    ...shape,
+    meta: { ...shape.meta, nodeRun: nodeRun('running') }
+  }, replacement)).toEqual({
+    ok: false, code: 'HUMAN_TASK_SUBMISSION_CONFLICT'
+  })
+  expect(admitHumanTaskSubmission({
+    ...shape,
+    meta: { ...shape.meta, nodeRun: nodeRun('cancelled') }
+  }, replacement)).toEqual({
+    ok: false, code: 'HUMAN_TASK_SUBMISSION_CONFLICT'
+  })
+})

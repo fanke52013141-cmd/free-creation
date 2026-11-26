@@ -210,9 +210,9 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 
 **NF-8.4【现行·F5 / BL-33，2026-11-25】分支失败策略**：`executionPolicy.onBranchFailure: 'fail-fast' | 'continue'`，缺省为 `fail-fast`。
 - `fail-fast`：任一内部节点失败，就停止认领尚未开始的节点（已经在运行的节点自然结束，不强杀），整体返回 failed。
-- `continue`：其他独立分支继续执行。对于必填输出，只要来源分支失败就整体 failed；可选输出照常投影。
+- `continue`：其他独立分支继续执行。对于必填输出，只要来源分支失败就整体 failed；可选输出照常投影。失败节点本身也进入本次运行的认领终态，**同一节点在同一运行内最多认领一次**，不得在下一轮被重复执行。
 
-**NF-8.5【现行·BL-33，2026-11-25】内部并发**：`executionPolicy.maxConcurrency`（1–4，缺省 1）。并发只发生在无依赖关系的就绪节点之间，结果聚合顺序与并发无关。
+**NF-8.5【现行·BL-33，2026-11-25】内部并发**：`executionPolicy.maxConcurrency`（1–4，缺省 1）。并发只发生在无依赖关系的就绪节点之间，结果聚合顺序与并发无关。当前人工等待账本按运行跟踪一个未满足请求，因此每批最多认领一个尚未提交的 `human-task`；已满足人工提交与普通节点仍可并发，续跑逐个满足后再继续。
 
 ---
 
@@ -248,6 +248,8 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 后果是：嵌套展开总数在 200 到 500 之间的节点流能**通过发布**，但**运行必然失败**（`EXPANSION_BUDGET_EXCEEDED`）。统一采用运行期取值，因此存量实例的运行行为不变。
 
 **NF-10.3【现行】** 运行期预算错误：`RECURSIVE_COMPOSITE`、`DEPTH_EXCEEDED`、`EXPANSION_BUDGET_EXCEEDED`。
+
+**NF-10.4【现行·2026-11-26 安全边界】** 在逐层暂停与恢复协议落地前，节点流不得把包含人工门的另一节点流嵌套在内。发布校验与运行准入共用递归检查，覆盖固定版本引用、旧内嵌快照及缺少 `requiresManualGate` 传播标记的历史记录，命中时明确返回 `NESTED_MANUAL_GATE_UNSUPPORTED`，不得把内层人工等待当作普通 `skipped` 而错误失败或提前完成。人工任务放在当前最外层节点流仍受支持。
 
 ---
 

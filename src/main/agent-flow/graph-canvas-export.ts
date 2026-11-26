@@ -4,6 +4,7 @@ import { AgentNodeConfigSchema, HumanTaskNodeConfigSchema, ReviewNodeConfigSchem
 import { FlowGraphSchema, type FlowGraph } from '../../shared/agent-flow/flow-graph'
 import { canvasNodeId, compileFlowGraph, type FlowGraphPreview, type CompiledGraph } from '../../shared/agent-flow/flow-graph-compiler'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
+import { readCompositeInstanceManifest, readCompositeInstanceRef } from '../../shared/composite/outputs'
 import type { CapabilityDescriptor } from '../../shared/agent-flow/capability-catalog'
 
 /** Read a saved canvas back into the declarative graph, refusing changes the graph cannot reproduce. */
@@ -106,11 +107,24 @@ export function exportCanvasFlowGraph(
         if (!original) return mismatch()
         const previous = JSON.parse(original.config) as Record<string, unknown>
         const proposed = JSON.parse(current.config) as Record<string, unknown>
+        const identityKeys = new Set(['capabilityId', 'version', 'contentHash', 'ref', 'manifest'])
         const changed = Object.entries(proposed).filter(([key, value]) =>
+          !identityKeys.has(key) &&
           canonicalFlowJson(value) !== (Object.hasOwn(previous, key) ? canonicalFlowJson(previous[key]) : undefined)
         )
+        const ref = readCompositeInstanceRef(current.config)
+        const inline = readCompositeInstanceManifest({ props: { config: current.config } })
+        const capabilityId = ref?.capabilityId ?? inline?.capabilityId
+        const version = ref?.version ?? inline?.version
+        const withoutLegacyCapability = capabilityId && version
+          ? Object.fromEntries(Object.entries(updated).filter(([key]) => key !== 'capability'))
+          : updated
         return {
-          ...updated, goal: current.text,
+          ...withoutLegacyCapability,
+          goal: current.text,
+          ...(capabilityId && version
+            ? { capabilityRef: { kind: 'composite' as const, id: capabilityId, version } }
+            : {}),
           ...(changed.length ? { params: { ...node.params, ...Object.fromEntries(changed) } } : {})
         }
       }

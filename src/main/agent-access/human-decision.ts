@@ -101,11 +101,13 @@ export async function requestHumanDecision(options: {
   projectId: string
   activeProjectId: string | null
   prompt: HumanDecisionPrompt
+  /** Pure headless runs have no openable project; use a main-owned native desktop prompt. */
+  headless?: boolean
   timeoutMs?: number
   diagnostics?: { requestId?: string; traceId?: string; spanId?: string }
 }): Promise<HumanDecisionOutcome> {
   const { desktop, projectId, activeProjectId, prompt, operation, diagnostics } = options
-  if (activeProjectId !== projectId)
+  if (!options.headless && activeProjectId !== projectId)
     return rejection(
       operation,
       'ACTIVE_PROJECT_REQUIRED',
@@ -130,7 +132,9 @@ export async function requestHumanDecision(options: {
         confirmTitle: clip(prompt.title, 120),
         confirmMessage: clip(prompt.message, 1000),
         confirmText: clip(prompt.confirmText, 40),
-        cancelText: '拒绝'
+        cancelText: '拒绝',
+        // 仅 pure headless 使用 main 原生确认；画布操作仍须 renderer sender 绑定回复。
+        ...(options.headless ? { headless: true } : {})
       } as never,
       options.timeoutMs ?? HUMAN_DECISION_TIMEOUT_MS
     )
@@ -140,12 +144,20 @@ export async function requestHumanDecision(options: {
     throw error
   }
   if (reply.authorized) return { ok: true }
-  if (reply.code === 'PUBLISH_AUTHORIZATION_EXPIRED' || reply.code === 'DESKTOP_LOST')
+  if (reply.code === 'PUBLISH_AUTHORIZATION_EXPIRED')
     return rejection(
       operation,
       'HUMAN_DECISION_TIMEOUT',
       'timeout',
       'nobody confirmed this decision on the desktop in time; nothing was changed',
+      diagnostics
+    )
+  if (reply.code === 'DESKTOP_LOST')
+    return rejection(
+      operation,
+      'DESKTOP_UNAVAILABLE',
+      'unavailable',
+      'the desktop was lost before a human decision; nothing was changed',
       diagnostics
     )
   return rejection(

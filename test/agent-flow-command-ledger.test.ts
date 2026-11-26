@@ -18,6 +18,10 @@ import {
 } from '../src/shared/agent-flow/video-adapter'
 import { migrateDatabase } from '../src/main/store/db-migrations'
 import { computeInputFingerprint } from '../src/shared/engine/input-fingerprint'
+import { fingerprintNodeInputs } from '../src/renderer/src/engine/resultFreshness'
+import { getNodeType, registerNodeType, unregisterNodeType } from '../src/renderer/src/nodes/registry'
+import { registerBaseNodeTypes } from '../src/renderer/src/nodes/specs'
+import { ACTIVE_NODE_TYPE_IDS } from '../src/shared/types'
 import type { NodeExecuteCommand, FlowCommandGrant } from '../src/shared/agent-flow/commands'
 import { createAgentRuntime } from '../src/main/agent-flow/runtime'
 import { createLedgerToolPort } from '../src/main/agent-flow/ledger-tool'
@@ -2592,4 +2596,161 @@ it('commits both public outputs of a pinned published node flow', () => {
     { kind: 'text', text: 'copy' }
   ])
   expect(restarted.commit(resumeLookup)).toEqual(receipt)
+})
+
+function withProductionCompositeRegistry(run: () => void): void {
+  const previous = new Map(ACTIVE_NODE_TYPE_IDS.map((id) => [id, getNodeType(id)]))
+  registerBaseNodeTypes()
+  try {
+    run()
+  } finally {
+    for (const id of ACTIVE_NODE_TYPE_IDS) {
+      const spec = previous.get(id)
+      if (spec) registerNodeType(spec)
+      else unregisterNodeType(id)
+    }
+  }
+}
+
+it('commits required composite material with a retained in-voice fixed input', () =>
+  withProductionCompositeRegistry(() => {
+  const f = fixture()
+  const manifest = compositeManifest({
+    inputs: [
+      {
+        id: 'text',
+        label: '精简文本',
+        type: 'text',
+        required: true,
+        cardinality: 'one',
+        targets: [{ nodeId: 'n1', portId: 'in-text' }]
+      },
+      {
+        id: 'voice',
+        label: '保留文本',
+        type: 'text',
+        required: true,
+        cardinality: 'one',
+        targets: [{ nodeId: 'n1', portId: 'in-text' }]
+      }
+    ]
+  })
+  const digest = 'b'.repeat(64)
+  f.db
+    .prepare(
+      "INSERT INTO composite_capabilities (id,name,description,tags,latest_version,archived,created_at,updated_at) VALUES (?,?,?,'[]',?,0,0,0)"
+    )
+    .run(manifest.capabilityId, manifest.name, '', manifest.version)
+  f.db
+    .prepare(
+      "INSERT INTO composite_versions (capability_id,version,manifest,content_hash,published_at,published_by) VALUES (?,?,?,?,0,'test')"
+    )
+    .run(manifest.capabilityId, manifest.version, JSON.stringify(manifest), digest)
+  const config = JSON.stringify({
+    capabilityId: manifest.capabilityId,
+    version: manifest.version,
+    contentHash: digest
+  })
+  f.target.props.nodeType = 'composite'
+  f.target.props.config = config
+  const target = f.file.nodes.find((node) => node.id === f.target.id)!
+  target.type = 'composite'
+  target.params.config = config
+  target.ports = [
+    ...manifest.inputs.map((port) => ({
+      ...port,
+      id: `in-${port.id}`,
+      dir: 'in' as const,
+      name: port.label
+    })),
+    ...manifest.outputs.map((port) => ({
+      ...port,
+      id: `out-${port.id}`,
+      dir: 'out' as const,
+      name: port.label
+    }))
+  ]
+  f.file.edges = [
+    {
+      id: 'edge-material',
+      from: { nodeId: f.source.id, portId: 'out-text' },
+      to: { nodeId: target.id, portId: 'in-text' }
+    },
+    {
+      id: 'edge-fixed',
+      from: { nodeId: f.source.id, portId: 'out-text' },
+      to: { nodeId: target.id, portId: 'in-voice' }
+    }
+  ]
+  const command: NodeExecuteCommand = {
+    ...f.command(),
+    inputs: [{ targetPortId: 'in-voice', assets: [f.version.ref] }],
+    contextMaterial: { targetPortId: 'in-text', text: 'short material' }
+  }
+  const prepared = f.ledger.prepare(command)
+  if (prepared.state !== 'ready') throw new Error('required composite material must be admitted')
+  const { grant } = prepared
+  expect(grant.inputs.map((input) => input.targetPortId)).toEqual(['in-voice'])
+  f.ledger.check({ projectId: command.projectId, commandId: command.commandId, leaseId: grant.leaseId })
+  // Deliberately insert the fixed port first: the renderer must sort the combined
+  // material + fixed packets before producing the durable fingerprint.
+  const rendererInputs = new Map([
+    ['in-voice', [{
+      source: { nodeId: f.source.id, portId: 'out-text' },
+      value: f.version.value
+    }]],
+    ['in-text', [{
+      source: { nodeId: 'human:context', portId: 'out-text' },
+      value: { kind: 'text' as const, text: 'short material' }
+    }]]
+  ])
+  const rendererFingerprint = fingerprintNodeInputs(f.target as never, rendererInputs as never)
+  expect(getNodeType('composite')?.contractVersion).toBe(command.contractVersion)
+  f.target.meta.nodeRun = {
+    runId: grant.runId,
+    status: 'success',
+    startedAt: 0,
+    finishedAt: 1,
+    commandId: command.commandId,
+    commandLeaseId: grant.leaseId,
+    nodeExecutionId: 'composite-material-execution',
+    fixedInputs: command.inputs,
+    inputs: {
+      'in-text': [{ nodeId: 'human:context', portId: 'out-text' }],
+      'in-voice': [{
+        nodeId: f.source.id,
+        portId: 'out-text',
+        assetId: f.version.ref.assetId,
+        versionId: f.version.ref.versionId
+      }]
+    },
+    inputFingerprint: rendererFingerprint,
+    outputPorts: ['out-result']
+  }
+  f.target.meta.nodeExtra = JSON.stringify({
+    'out-result': { kind: 'text', text: 'material delivered' }
+  })
+  f.file.meta.graphVersion++
+  const receipt = f.ledger.commit({ projectId: command.projectId, commandId: command.commandId })
+  expect(receipt.state).toBe('committed')
+  expect(receipt.inputFingerprint).toBe(rendererFingerprint)
+  expect(f.assets.resolveInputs(command.projectId, receipt.outputRefs)[0].value).toEqual({
+    kind: 'text',
+    text: 'material delivered'
+  })
+}))
+
+it('does not require an asset for an optional absent edge outside the effective route', () => {
+  const f = videoFixture()
+  f.file.edges.push({
+    id: 'edge-optional-absent',
+    from: { nodeId: f.source.id, portId: 'out-text' },
+    to: { nodeId: f.target.id, portId: 'in-reference-video' }
+  })
+  const command = {
+    ...f.command(),
+    routedInputEdgeIds: [f.file.edges[0].id]
+  }
+  const prepared = f.ledger.prepare(command)
+  expect(prepared.state).toBe('ready')
 })

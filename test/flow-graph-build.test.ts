@@ -1,7 +1,7 @@
 import { graphCanvasVersion } from '../src/main/agent-flow/graph-canvas-version'
 // P5 外部 FlowGraph 建图宿主：proposeGraph/previewGraph/discardGraph/listGraphPreviews。
 // 复用 flow_builds（source=graph）+ committed/CAS；接收外部已生成图，不调模型、不写画布。
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import Database from 'better-sqlite3'
 import { migrateDatabase } from '../src/main/store/db-migrations'
 import { FlowBuilderHost } from '../src/main/agent-flow/builder-host'
@@ -11,6 +11,12 @@ import { FlowGraphSchema } from '../src/shared/agent-flow/flow-graph'
 import { FlowGraphCompileError, canvasNodeId } from '../src/shared/agent-flow/flow-graph-compiler'
 import { AgentNodeConfigSchema } from '../src/shared/agent-flow/node-contracts'
 import { AgentRuntimeError } from '../src/shared/agent-flow/runtime-contracts'
+
+const catalogOverrides = vi.hoisted(() => ({ versions: [] as unknown[] }))
+vi.mock('../src/main/store/composite.repo', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/main/store/composite.repo')>()
+  return { ...actual, listAllCompositeVersions: () => catalogOverrides.versions }
+})
 
 const databases: Database.Database[] = []
 afterEach(() => databases.splice(0).forEach((db) => db.close()))
@@ -187,6 +193,21 @@ describe('P5 flowGraph.propose（外部建图提案）', () => {
     expect(count.n).toBe(1)
   })
 
+  it('同 requestId 仅允许同 graph/sourceGraph replay，变化时拒绝身份冲突', async () => {
+    const f = fixture()
+    const sourceGraph = { definitionId: 'template', version: 1, contentHash: 'sha256:one' }
+    const first = await f.host.proposeGraph({ projectId: 'p', graph: seqGraph, requestId: 'r1', sourceGraph })
+    const replay = await f.host.proposeGraph({ projectId: 'p', graph: seqGraph, requestId: 'r1', sourceGraph })
+    expect(replay.buildId).toBe(first.buildId)
+    await expect(f.host.proposeGraph({
+      projectId: 'p', graph: { ...seqGraph, name: 'changed' }, requestId: 'r1', sourceGraph
+    })).rejects.toMatchObject({ code: 'REQUEST_ID_CONFLICT' })
+    await expect(f.host.proposeGraph({
+      projectId: 'p', graph: seqGraph, requestId: 'r1',
+      sourceGraph: { ...sourceGraph, version: 2 }
+    })).rejects.toMatchObject({ code: 'REQUEST_ID_CONFLICT' })
+  })
+
   it('非法图（无界环）抛 FlowGraphCompileError，不持久化', async () => {
     const f = fixture()
     await expect(f.host.proposeGraph({ projectId: 'p', graph: cycleGraph, requestId: 'r1' })).rejects.toBeInstanceOf(FlowGraphCompileError)
@@ -315,5 +336,119 @@ describe('P5.3 flowGraph.authorize / confirm（落画布 CAS 与核对）', () =
     const changedModel = f.host.exportGraphPreview({ projectId: 'p', buildId: proposed.buildId })
     expect(changedModel.graph.nodes.find((node) => node.nodeId === 'a')?.modelDefinitionId).toBe('local-model')
     expect(graphCanvasVersion(f.db, f.file, proposed.coordinatorNodeId)).toMatchObject({ buildId: proposed.buildId, diverged: true, sourceGraph: published.sourceGraph })
+  })
+
+  it('exports and republishes an upgraded composite by capabilityRef, never identity params', async () => {
+    const f = fixture()
+    const manifest = {
+      schemaVersion: 1,
+      runtimeVersion: 2,
+      capabilityId: 'upgrade-cap',
+      version: '1.0',
+      name: '升级组合',
+      inputs: [{ id: 'value', label: '文本', type: 'text', required: true, cardinality: 'one', targets: [{ nodeId: 'n1', portId: 'in-text' }] }],
+      outputs: [{ id: 'result', label: '结果', type: 'text', required: true, cardinality: 'one', source: { nodeId: 'n1', portId: 'out-text' } }],
+      graph: {
+        nodes: [{ id: 'n1', nodeType: 'text', contractVersion: 3, title: '文本', text: 'v1', dx: 0, dy: 0, w: 340, h: 300 }],
+        edges: []
+      }
+    } as const
+    f.db.prepare("INSERT INTO composite_capabilities (id,name,description,tags,latest_version,archived,created_at,updated_at) VALUES (?,?,?,'[]',?,0,0,0)")
+      .run('upgrade-cap', '升级组合', '', '1.1')
+    for (const [version, text, digest] of [['1.0', 'v1', 'a'.repeat(64)], ['1.1', 'v2', 'b'.repeat(64)]] as const) {
+      f.db.prepare('INSERT INTO composite_versions (capability_id,version,manifest,content_hash,published_at,published_by) VALUES (?,?,?,?,0,\'test\')')
+        .run('upgrade-cap', version, JSON.stringify({ ...manifest, version, graph: { ...manifest.graph, nodes: [{ ...manifest.graph.nodes[0], text }] } }), digest)
+    }
+    catalogOverrides.versions = (['1.0', '1.1'] as const).map((version, index) => ({
+      capabilityId: 'upgrade-cap',
+      version,
+      manifest: { ...manifest, version, graph: { ...manifest.graph, nodes: [{ ...manifest.graph.nodes[0], text: index === 0 ? 'v1' : 'v2' }] } },
+      contentHash: index === 0 ? 'a'.repeat(64) : 'b'.repeat(64),
+      publishedAt: 0,
+      publishedBy: 'test'
+    }))
+    const graph = FlowGraphSchema.parse({
+      ...seqGraph,
+      nodes: [...seqGraph.nodes.slice(0, 2), {
+        ...sinkNode,
+        capability: undefined,
+        capabilityRef: { kind: 'composite', id: 'upgrade-cap', version: '1.0' }
+      }]
+    })
+    const proposed = await f.host.proposeGraph({ projectId: 'p', graph, requestId: 'upgrade-export' })
+    const store = f.file.tldrawSnapshot.store as Record<string, {
+      id: string
+      type: string
+      x: number
+      y: number
+      meta?: Record<string, unknown>
+      props: Record<string, unknown>
+    }>
+    for (const node of proposed.nodes) {
+      store[node.id] = {
+        id: node.id,
+        type: 'node-card',
+        x: node.x,
+        y: node.y,
+        props: {
+          nodeType: node.type,
+          title: node.title,
+          text: node.text,
+          config: node.config,
+          w: node.w ?? 340,
+          h: node.h ?? 260
+        },
+        meta: { flowBuildId: proposed.buildId }
+      }
+    }
+    f.file.nodes = proposed.nodes.map((node) => ({
+      id: node.id, type: node.type, contractVersion: node.contractVersion, title: node.title,
+      x: node.x, y: node.y, w: node.w ?? 340, h: node.h ?? 260,
+      ports: [], params: { config: node.config },
+      content: node.text ? { kind: 'text', text: node.text } : { kind: 'empty' },
+      exec: { status: 'idle' }
+    }))
+    f.file.edges = proposed.edges.map((edge, index) => ({ id: `edge-${index}`, from: edge.from, to: edge.to }))
+    await f.host.confirmGraph({ projectId: 'p', buildId: proposed.buildId })
+    const upgraded = store['shape:sink']
+    // Key order intentionally differs from the compiler: committed compares
+    // canonical business config, not incidental JSON serialization order.
+    upgraded.props.config = JSON.stringify({
+      version: '1.1', capabilityId: 'upgrade-cap', contentHash: 'b'.repeat(64)
+    })
+    const coordinator = store[proposed.coordinatorNodeId]
+    const coordinatorConfig = JSON.parse(coordinator.props.config as string)
+    coordinatorConfig.graph.nodes.find((node: { nodeId: string }) => node.nodeId === 'shape:sink').capabilityRef.version = '1.1'
+    coordinator.props.config = JSON.stringify(coordinatorConfig)
+    const exported = f.host.exportGraphPreview({ projectId: 'p', buildId: proposed.buildId })
+    const sink = exported.graph.nodes.find((node) => node.nodeId === 'sink')!
+    expect(sink.capabilityRef).toEqual({ kind: 'composite', id: 'upgrade-cap', version: '1.1' })
+    expect(sink.params).toBeUndefined()
+    const compiledSink = exported.nodes.find((node) => node.id === 'shape:sink')!
+    expect(JSON.parse(upgraded.props.config)).toEqual(JSON.parse(compiledSink.config))
+    expect(upgraded.props.text).toBe(compiledSink.text)
+    for (const node of exported.nodes) {
+      const shape = store[node.id]
+      expect({
+        flowBuildId: shape.meta?.flowBuildId,
+        nodeType: shape.props.nodeType,
+        config: JSON.parse(shape.props.config as string),
+        text: shape.props.text,
+        title: shape.props.title
+      }).toEqual({
+        flowBuildId: proposed.buildId,
+        nodeType: node.type,
+        config: JSON.parse(node.config),
+        text: node.text,
+        title: node.title
+      })
+    }
+    const published = f.host.publishCanvasGraph({
+      projectId: 'p', buildId: proposed.buildId, expectedRevision: exported.semanticRevision
+    })
+    expect(published.graph.nodes.find((node) => node.nodeId === 'sink')?.capabilityRef).toEqual({
+      kind: 'composite', id: 'upgrade-cap', version: '1.1'
+    })
+    expect(published.sourceGraph?.version).toBe(1)
   })
 })

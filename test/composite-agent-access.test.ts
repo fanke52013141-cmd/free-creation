@@ -5,8 +5,21 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LocalAccessService } from '../src/main/agent-access/service'
 import { publishCompositeVersion } from '../src/main/store/composite.repo'
-import { createCompositeRun, finishCompositeRun, recordCompositeRunStep } from '../src/main/store/composite-run.repo'
-import { closeDb } from '../src/main/store/db'
+import {
+  beginCompositeResume,
+  createCompositeRun,
+  finishCompositeRun,
+  getCompositeRun,
+  recordCompositeRunStep,
+  recordCompositeStepOutput,
+  settleInterruptedCompositeRuns,
+  waitCompositeRun
+} from '../src/main/store/composite-run.repo'
+import {
+  openCompositeRunWait,
+  satisfyCompositeRunWait
+} from '../src/main/store/composite-run-wait.repo'
+import { closeDb, getDb } from '../src/main/store/db'
 import { ACCESS_OPERATIONS } from '../src/shared/agent-access/registry'
 import { COMPOSITE_OPERATIONS, COMPOSITE_OUTPUTS } from '../src/shared/agent-access/ops/composite'
 import { validateCompositeManifest } from '../src/shared/composite/validate'
@@ -108,6 +121,33 @@ function manifest(): CompositeManifest {
       { kind: 'node', id: 'text', contractVersion: 1 },
       { kind: 'node', id: 'image-gen', contractVersion: 1 }
     ]
+  }
+}
+
+function textFlowManifest(capabilityId: string, outputIds = ['result']): CompositeManifest {
+  return {
+    schemaVersion: 1,
+    capabilityId,
+    version: '1.0',
+    name: capabilityId,
+    inputs: [],
+    outputs: outputIds.map((id) => ({
+      id,
+      label: id,
+      type: 'text',
+      required: true,
+      cardinality: 'one',
+      source: { nodeId: 'n1', portId: 'out-text' }
+    })),
+    graph: {
+      nodes: [{
+        id: 'n1', nodeType: 'text', contractVersion: 3, title: '文本',
+        dx: 0, dy: 0, w: 340, h: 260, text: 'result',
+        ports: [{ id: 'out-text', name: '文本', dir: 'out', type: 'text', required: true, cardinality: 'one' }]
+      }],
+      edges: []
+    },
+    dependencies: [{ kind: 'node', id: 'text', contractVersion: 3 }]
   }
 }
 
@@ -306,6 +346,224 @@ describe('组合能力 Agent 契约（P1 对等）', () => {
         expect(submitted.error).toBeUndefined()
         expect((submitted.data as { outputPorts: string[] }).outputPorts).toEqual(['out-polished'])
       }
+    } finally {
+      closeDb()
+      if (priorDirectory === undefined) delete process.env.CANVAS_DATA_DIR
+      else process.env.CANVAS_DATA_DIR = priorDirectory
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('execute.wait 公开全部持久状态，waiting-input 立即可见且不再触发响应 Schema 错误', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'canvas-composite-wait-states-'))
+    const priorDirectory = process.env.CANVAS_DATA_DIR
+    process.env.CANVAS_DATA_DIR = directory
+    try {
+      const { record } = await publishCompositeVersion(textFlowManifest('wait-states'))
+      const service = new LocalAccessService({
+        instanceId: 'wait-states', appVersion: 'test', exportDirectory: join(directory, 'exports'),
+        activeProjectId: () => null,
+        desktop: { async run() { return {} }, async ask() { return { authorized: false } } }
+      })
+      const statuses = [
+        'accepted', 'running', 'waiting-input', 'completed', 'failed', 'cancelled', 'interrupted', 'unknown'
+      ] as const
+      for (const status of statuses) {
+        const runId = `wait-${status}`
+        createCompositeRun({
+          id: runId, projectId: `headless-${runId}`, capabilityId: record.capabilityId,
+          capabilityVersion: record.version, contentHash: record.contentHash
+        })
+        if (status === 'waiting-input') waitCompositeRun({ runId, stepKey: 'h1' })
+        else if (status === 'accepted' || status === 'running')
+          getDb().prepare('UPDATE composite_runs SET status=? WHERE id=?').run(status, runId)
+        else finishCompositeRun({ runId, status })
+        const response = await service.dispatch({
+          apiVersion: 1, operationVersion: 1, operationId: 'composite.execute.wait',
+          requestId: randomUUID(), expectedDataStoreId: service.dataStoreId,
+          input: { runId, timeoutMs: 100 }
+        })
+        expect(response.error, status).toBeUndefined()
+        expect(response.data).toMatchObject({ runId, status })
+      }
+    } finally {
+      closeDb()
+      if (priorDirectory === undefined) delete process.env.CANVAS_DATA_DIR
+      else process.env.CANVAS_DATA_DIR = priorDirectory
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('manifest-aware 输出键在 get/list/wait/resubmit 消歧，歧义历史值显式拒绝', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'canvas-composite-output-collision-'))
+    const priorDirectory = process.env.CANVAS_DATA_DIR
+    process.env.CANVAS_DATA_DIR = directory
+    try {
+      const { record } = await publishCompositeVersion(textFlowManifest('output-collision', ['foo', 'out-foo']))
+      const service = new LocalAccessService({
+        instanceId: 'output-collision', appVersion: 'test', exportDirectory: join(directory, 'exports'),
+        activeProjectId: () => null,
+        desktop: { async run() { return {} }, async ask() { return { authorized: true } } }
+      })
+      const dispatch = (operationId: string, input: Record<string, unknown>) => service.dispatch({
+        apiVersion: 1, operationVersion: 1, operationId, requestId: randomUUID(),
+        idempotencyKey: `${Date.now()}:${randomUUID()}`, expectedDataStoreId: service.dataStoreId, input
+      })
+      const runId = 'output-pair'
+      createCompositeRun({
+        id: runId, projectId: `headless-${runId}`, capabilityId: record.capabilityId,
+        capabilityVersion: record.version, contentHash: record.contentHash
+      })
+      finishCompositeRun({
+        runId, status: 'completed',
+        outputPorts: [{ portId: 'foo', kind: 'text' }, { portId: 'out-foo', kind: 'text' }],
+        outputValues: {
+          foo: { kind: 'text', text: 'plain foo' },
+          'out-foo': { kind: 'text', text: 'declared out-foo' }
+        }
+      })
+      const expected = {
+        'out-foo': { kind: 'text', text: 'plain foo' },
+        'out-out-foo': { kind: 'text', text: 'declared out-foo' }
+      }
+      const got = await dispatch('composite.run.get', { runId })
+      const listed = await dispatch('composite.run.list', { projectId: `headless-${runId}` })
+      const waited = await dispatch('composite.execute.wait', { runId, timeoutMs: 100 })
+      expect((got.data as any).run.outputValues).toEqual(expected)
+      expect((listed.data as any)[0].outputValues).toEqual(expected)
+      expect((waited.data as any).outputs).toEqual(expected)
+
+      const failedId = 'output-resubmit'
+      createCompositeRun({
+        id: failedId, projectId: `headless-${failedId}`, capabilityId: record.capabilityId,
+        capabilityVersion: record.version, contentHash: record.contentHash
+      })
+      finishCompositeRun({ runId: failedId, status: 'failed', failurePhase: 'step' })
+      const submitted = await dispatch('composite.run.resubmit', {
+        runId: failedId,
+        outputs: [
+          { portId: 'foo', value: { kind: 'text', text: 'raw foo' } },
+          { portId: 'out-out-foo', value: { kind: 'text', text: 'raw prefixed id' } }
+        ]
+      })
+      expect(submitted.error).toBeUndefined()
+      expect((submitted.data as any).outputPorts).toEqual(['out-foo', 'out-out-foo'])
+      expect(getCompositeRun(failedId)?.run.outputValues).toMatchObject({
+        foo: { text: 'raw foo' }, 'out-foo': { text: 'raw prefixed id' }
+      })
+
+      const ambiguousId = 'output-ambiguous'
+      createCompositeRun({
+        id: ambiguousId, projectId: `headless-${ambiguousId}`, capabilityId: record.capabilityId,
+        capabilityVersion: record.version, contentHash: record.contentHash
+      })
+      finishCompositeRun({
+        runId: ambiguousId, status: 'failed', failurePhase: 'step',
+        outputValues: { 'out-foo': { kind: 'text', text: 'ambiguous legacy value' } }
+      })
+      const ambiguous = await dispatch('composite.run.get', { runId: ambiguousId })
+      expect(ambiguous.error?.code).toBe('OUTPUT_KEY_AMBIGUOUS')
+      const ambiguousSubmit = await dispatch('composite.run.resubmit', {
+        runId: ambiguousId,
+        outputs: [
+          { portId: 'out-foo', value: { kind: 'text', text: 'ambiguous alias' } },
+          { portId: 'out-out-foo', value: { kind: 'text', text: 'explicit second' } }
+        ]
+      })
+      expect(ambiguousSubmit.error?.code).toBe('OUTPUT_PORT_AMBIGUOUS')
+      expect(getCompositeRun(ambiguousId)?.run.status).toBe('failed')
+
+      const unknownId = 'output-unknown'
+      createCompositeRun({
+        id: unknownId, projectId: `headless-${unknownId}`, capabilityId: record.capabilityId,
+        capabilityVersion: record.version, contentHash: record.contentHash
+      })
+      finishCompositeRun({
+        runId: unknownId, status: 'failed', failurePhase: 'step',
+        outputValues: { rogue: { kind: 'text', text: 'not declared' } }
+      })
+      const unknown = await dispatch('composite.run.get', { runId: unknownId })
+      expect(unknown.error?.code).toBe('OUTPUT_KEY_UNKNOWN')
+    } finally {
+      closeDb()
+      if (priorDirectory === undefined) delete process.env.CANVAS_DATA_DIR
+      else process.env.CANVAS_DATA_DIR = priorDirectory
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('interrupted resume 恢复已满足提交与 checkpoints，running-step 未结算时拒绝重放', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'canvas-composite-interrupted-resume-'))
+    const priorDirectory = process.env.CANVAS_DATA_DIR
+    process.env.CANVAS_DATA_DIR = directory
+    try {
+      const { record } = await publishCompositeVersion(textFlowManifest('interrupted-resume'))
+      const calls: any[] = []
+      const service = new LocalAccessService({
+        instanceId: 'interrupted-resume', appVersion: 'test', exportDirectory: join(directory, 'exports'),
+        activeProjectId: () => null,
+        desktop: {
+          async run(request) {
+            calls.push(request)
+            // 模拟真实 renderer 的 runStart：使用同一 repo CAS 领取续跑。
+            const accepted = beginCompositeResume({
+              id: request.ownRunId,
+              projectId: request.projectId,
+              capabilityId: request.compositeManifest.capabilityId,
+              capabilityVersion: request.compositeManifest.version,
+              contentHash: record.contentHash
+            })
+            expect(accepted).toBe(true)
+            return { graphVersion: 0 }
+          },
+          async ask() { return { authorized: false } }
+        }
+      })
+      const dispatch = (runId: string) => service.dispatch({
+        apiVersion: 1, operationVersion: 1, operationId: 'composite.run.resume',
+        requestId: randomUUID(), idempotencyKey: `${Date.now()}:${randomUUID()}`,
+        expectedDataStoreId: service.dataStoreId, input: { runId }
+      })
+      const seed = (runId: string, runningStep: boolean) => {
+        createCompositeRun({
+          id: runId, projectId: `headless-${runId}`, capabilityId: record.capabilityId,
+          capabilityVersion: record.version, contentHash: record.contentHash
+        })
+        recordCompositeRunStep({ runId, stepKey: 'upstream', nodeType: 'text', status: 'completed' })
+        recordCompositeStepOutput({
+          runId, nodeId: 'upstream', nodeResult: null,
+          nodeExtra: JSON.stringify({ 'out-text': { kind: 'text', text: 'checkpoint' } }),
+          nodeRun: { status: 'success' }
+        })
+        waitCompositeRun({ runId, stepKey: 'human' })
+        openCompositeRunWait({ requestId: `${runId}:human`, runId, stepKey: 'human', kind: 'human', fields: [] })
+        expect(satisfyCompositeRunWait({
+          requestId: `${runId}:human`, revision: 1,
+          value: { kind: 'text', text: 'confirmed' }, submittedBy: 'test'
+        }).ok).toBe(true)
+        expect(beginCompositeResume({
+          id: runId, projectId: `headless-${runId}`, capabilityId: record.capabilityId,
+          capabilityVersion: record.version, contentHash: record.contentHash
+        })).toBe(true)
+        if (runningStep)
+          recordCompositeRunStep({ runId, stepKey: 'paid', nodeType: 'image-gen', status: 'running' })
+        settleInterruptedCompositeRuns()
+        expect(getCompositeRun(runId)?.run.status).toBe('interrupted')
+      }
+
+      seed('resume-safe', false)
+      const resumed = await dispatch('resume-safe')
+      expect(resumed.error).toBeUndefined()
+      expect((resumed.data as any).status).toBe('running')
+      expect(calls[0].compositeHumanSubmissions).toEqual({ human: { kind: 'text', text: 'confirmed' } })
+      expect(calls[0].compositeCompletedSteps).toContain('upstream')
+      expect(calls[0].compositeStepOutputs.upstream.nodeExtra).toContain('checkpoint')
+
+      seed('resume-uncertain', true)
+      const rejected = await dispatch('resume-uncertain')
+      expect(rejected.error?.code).toBe('RUN_RECOVERY_REQUIRES_RECONCILIATION')
+      expect(getCompositeRun('resume-uncertain')?.run.status).toBe('interrupted')
+      expect(calls).toHaveLength(1)
     } finally {
       closeDb()
       if (priorDirectory === undefined) delete process.env.CANVAS_DATA_DIR

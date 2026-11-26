@@ -17,6 +17,8 @@ import {
 import { FlowGraphSchema, validateFlowGraph, type FlowGraph } from '../../shared/agent-flow/flow-graph'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
+import { buildCapabilityCatalog } from '../../shared/agent-flow/capability-catalog'
+import { listAllCompositeVersions } from '../store/composite.repo'
 
 const sha256 = (value: string): string =>
   `sha256:${createHash('sha256').update(value).digest('hex')}`
@@ -37,7 +39,9 @@ interface DefinitionRow {
 export class FlowDefinitionStore {
   constructor(
     private readonly db: Database.Database,
-    private readonly open: (id: string) => ProjectFile | null
+    private readonly open: (id: string) => ProjectFile | null,
+    private readonly catalog: () => ReturnType<typeof buildCapabilityCatalog> = () =>
+      buildCapabilityCatalog(listAllCompositeVersions())
   ) {}
 
   /** 从主控节点已保存配置发布一个新定义版本（版本递增；内容相同也允许新版本以便评测）。 */
@@ -145,7 +149,7 @@ export class FlowDefinitionStore {
     if (!this.open(input.projectId))
       throw new AgentRuntimeError('FLOW_PROJECT_INACTIVE', 'definition')
     const graph = FlowGraphSchema.parse(input.graph)
-    const validation = validateFlowGraph(graph)
+    const validation = validateFlowGraph(graph, { catalog: this.catalog() })
     if (!validation.ok)
       throw new AgentRuntimeError(validation.errors[0]?.code ?? 'FLOW_GRAPH_INVALID', 'definition')
     const content = graphDefinitionContent({ name: input.name, graph })

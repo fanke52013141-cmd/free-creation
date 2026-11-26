@@ -4,18 +4,21 @@ const ipc = vi.hoisted(() => ({
   on: new Map<string, (...args: any[]) => any>(),
   handle: new Map<string, (...args: any[]) => any>()
 }))
+const nativeDialog = vi.hoisted(() => ({ show: vi.fn() }))
 vi.mock('electron', () => ({
   ipcMain: {
     on: (channel: string, listener: (...args: any[]) => any) => ipc.on.set(channel, listener),
     handle: (channel: string, listener: (...args: any[]) => any) =>
       ipc.handle.set(channel, listener)
-  }
+  },
+  dialog: { showMessageBox: nativeDialog.show }
 }))
 import { createAccessDesktop } from '../src/main/agent-access/desktop'
 import { ACCESS_DESKTOP_REPLY, ACCESS_DESKTOP_COMMIT } from '../src/shared/agent-access/desktop'
 beforeEach(() => {
   ipc.on.clear()
   ipc.handle.clear()
+  nativeDialog.show.mockReset()
   vi.useFakeTimers()
 })
 afterEach(() => vi.useRealTimers())
@@ -25,12 +28,14 @@ function fixture() {
     isDestroyed: () => false,
     send: vi.fn()
   })
-  const desktop = createAccessDesktop(
-    () => ({ isDestroyed: () => false, webContents: contents }) as any
-  )
+  const window = Object.assign(new EventEmitter(), {
+    isDestroyed: () => false,
+    webContents: contents
+  })
+  const desktop = createAccessDesktop(() => window as any)
   const event = { sender: contents, senderFrame: contents.mainFrame }
   const reply = (input: object, sender = event) => ipc.on.get(ACCESS_DESKTOP_REPLY)!(sender, input)
-  return { contents, desktop, event, reply, request: () => contents.send.mock.calls[0][1] }
+  return { contents, window, desktop, event, reply, request: () => contents.send.mock.calls[0][1] }
 }
 it('accepts only matching main-frame sender, project and request', async () => {
   const f = fixture(),
@@ -84,4 +89,34 @@ it('classifies renderer loss as unknown and releases the bounded request', async
     result = f.desktop.run({ action: 'open', projectId: 'p' })
   f.contents.emit('render-process-gone')
   await expect(result).rejects.toMatchObject({ code: 'DESKTOP_LOST', unknownOutcome: true })
+})
+
+it('headless native confirmation works without an active canvas and never uses renderer replies', async () => {
+  const f = fixture()
+  nativeDialog.show.mockResolvedValue({ response: 0 })
+  await expect(f.desktop.ask({
+    action: 'confirm-sensitive',
+    projectId: 'headless-run-1',
+    headless: true,
+    confirmText: '允许',
+    cancelText: '拒绝'
+  }, 1000)).resolves.toEqual({ authorized: true })
+  expect(f.contents.send).not.toHaveBeenCalled()
+})
+
+it('headless timeout is final; a late native allow cannot change it', async () => {
+  const f = fixture()
+  let answer!: (value: { response: number }) => void
+  nativeDialog.show.mockReturnValue(new Promise<{ response: number }>((resolve) => { answer = resolve }))
+  const result = f.desktop.ask({
+    action: 'confirm-sensitive', projectId: 'headless-run-1', headless: true
+  }, 1000)
+  await vi.advanceTimersByTimeAsync(1000)
+  await expect(result).resolves.toEqual({
+    authorized: false,
+    code: 'PUBLISH_AUTHORIZATION_EXPIRED'
+  })
+  answer({ response: 0 })
+  await Promise.resolve()
+  expect(nativeDialog.show).toHaveBeenCalledTimes(1)
 })

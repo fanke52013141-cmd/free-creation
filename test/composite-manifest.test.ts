@@ -86,7 +86,7 @@ function characterDesign(patch: Partial<CompositeManifest> = {}): CompositeManif
 }
 
 describe('组合能力 manifest（P1 契约）', () => {
-  it('固定版本依赖链上存在人工门时，外层发布也须声明', () => {
+  it('H10：发布明确拒绝直接或间接嵌套人工门，顶层人工门仍可声明', () => {
     const outer = characterDesign({ capabilityId: 'outer', version: '1.2' })
     const inner = characterDesign({ capabilityId: 'inner', version: '1.2' })
     const leaf = characterDesign({ capabilityId: 'leaf', version: '1.2' })
@@ -97,12 +97,33 @@ describe('组合能力 manifest（P1 契约）', () => {
       getCapability: (id: string, version: string) =>
         [inner, leaf].find((item) => item.capabilityId === id && item.version === version) ?? null
     }
-    expect(validateCompositePublication(outer, deps).issues).toContainEqual(expect.objectContaining({
-      code: 'MANUAL_GATE_UNDECLARED'
-    }))
+    for (const executionPolicy of [undefined, { requiresManualGate: true }]) {
+      outer.executionPolicy = executionPolicy
+      const issues = validateCompositePublication(outer, deps).issues
+      expect(issues).toContainEqual(expect.objectContaining({
+        code: 'NESTED_MANUAL_GATE_UNSUPPORTED',
+        path: 'dependencies'
+      }))
+      if (executionPolicy)
+        expect(issues).not.toContainEqual(expect.objectContaining({ code: 'MANUAL_GATE_UNDECLARED' }))
+    }
+    // 旧快照没有传播标记时，递归 graph 事实仍必须命中同一发布拒绝。
+    leaf.executionPolicy = undefined
+    leaf.graph.nodes.push({
+      id: 'legacy-human', nodeType: 'human-task', contractVersion: 1, title: '旧人工门',
+      dx: 0, dy: 0, w: 340, h: 260
+    })
     outer.executionPolicy = { requiresManualGate: true }
-    expect(validateCompositePublication(outer, deps).issues).not.toContainEqual(expect.objectContaining({
-      code: 'MANUAL_GATE_UNDECLARED'
+    expect(validateCompositePublication(outer, deps).issues).toContainEqual(expect.objectContaining({
+      code: 'NESTED_MANUAL_GATE_UNSUPPORTED'
+    }))
+    // 非嵌套的顶层人工门保持原有声明式支持；非发布校验不影响历史快照读取。
+    leaf.executionPolicy = { requiresManualGate: true }
+    expect(validateCompositePublication(leaf).issues).not.toContainEqual(expect.objectContaining({
+      code: 'NESTED_MANUAL_GATE_UNSUPPORTED'
+    }))
+    expect(validateCompositeManifest(outer, deps).issues).not.toContainEqual(expect.objectContaining({
+      code: 'NESTED_MANUAL_GATE_UNSUPPORTED'
     }))
   })
   it.each(['human-task', 'ai-review', 'director'])('发布要求 %s 声明人工门，历史读取兼容', (nodeType) => {

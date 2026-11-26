@@ -286,6 +286,80 @@ describe('BL-10 能力目录（节点注册表 + 已发布节点流）', () => {
     expect(dto).not.toHaveProperty('builder')
     expect(JSON.stringify(dto)).not.toContain('"config"')
   })
+
+  it('economics 覆盖直接 AI、嵌套 composite，未知嵌套按 possible+required 保守处理', () => {
+    const direct = record({
+      graph: {
+        nodes: [{ id: 'n1', nodeType: 'voice-design', contractVersion: 1, title: '音色', dx: 0, dy: 0, w: 340, h: 300, ports: [] }],
+        edges: []
+      }
+    })
+    expect(compositeCapabilityDescriptor(direct)).toMatchObject({ cost: 'certain', network: 'required' })
+
+    const innerBase = record({
+      graph: {
+        nodes: [{ id: 'n1', nodeType: 'image-gen', contractVersion: 3, title: '生图', dx: 0, dy: 0, w: 340, h: 300, ports: [] }],
+        edges: []
+      }
+    })
+    const inner = {
+      ...innerBase,
+      capabilityId: 'inner-ai',
+      manifest: { ...innerBase.manifest, capabilityId: 'inner-ai' }
+    }
+    const outerBase = record({
+      graph: {
+        nodes: [{
+          id: 'nested', nodeType: 'composite', contractVersion: 1, title: '嵌套', dx: 0, dy: 0, w: 340, h: 300,
+          config: JSON.stringify({ capabilityId: 'inner-ai', version: '1.0' }), ports: []
+        }],
+        edges: []
+      }
+    })
+    const outer = { ...outerBase, capabilityId: 'outer-ai', manifest: { ...outerBase.manifest, capabilityId: 'outer-ai' } }
+    expect(compositeCapabilityDescriptor(outer, [outer, inner])).toMatchObject({
+      cost: 'certain', network: 'required'
+    })
+    expect(compositeCapabilityDescriptor(outer, [outer])).toMatchObject({
+      cost: 'possible', network: 'required'
+    })
+  })
+
+  it('DTO max400 只截断展示最新集合，完整内部目录仍保留固定版本', () => {
+    const records = Array.from({ length: 450 }, (_, index) => {
+      const item = record()
+      return {
+        ...item,
+        capabilityId: `flow-${index}`,
+        manifest: { ...item.manifest, capabilityId: `flow-${index}` }
+      }
+    }).reverse()
+    const catalog = buildCapabilityCatalog(records)
+    const dto = capabilityCatalogDto(catalog)
+    expect(dto).toHaveLength(400)
+    expect(dto.some((item) => item.capabilityRef.id === 'flow-449')).toBe(true)
+    expect(dto.some((item) => item.capabilityRef.id === 'flow-0')).toBe(false)
+    expect(findCapability(catalog, { kind: 'composite', id: 'flow-0', version: '1.0' })).toBeTruthy()
+  })
+
+  it('固定 ref 与注入载体契约版本不一致时 fail-closed', () => {
+    const valid = nodeCapabilityDescriptors().find((item) => item.capabilityRef.id === 'image-gen')!
+    const tampered = {
+      ...valid,
+      carrier: { ...valid.carrier!, contractVersion: valid.carrier!.contractVersion + 1 }
+    }
+    const g = graph([
+      agentNode('a'),
+      {
+        nodeId: 'b', title: 'b', participation: 'autonomous', kind: 'capability',
+        capabilityRef: { kind: 'node', id: 'image-gen', version: '3' }, goal: 'x', completion: 'x'
+      }
+    ], [{ from: { nodeId: 'a', portId: 'out-text' }, to: { nodeId: 'b', portId: 'in-text' } }])
+    expect(validateFlowGraph(g, { catalog: [tampered], requireRuntime: false })).toMatchObject({
+      ok: false,
+      errors: [expect.objectContaining({ code: 'CAPABILITY_NOT_SCHEDULABLE', nodeId: 'b' })]
+    })
+  })
 })
 
 describe('BL-10 FlowGraph 能力引用编译与准入', () => {

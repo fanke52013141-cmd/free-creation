@@ -32,6 +32,7 @@ function call(options: {
   desktopValue?: never
   activeProjectId?: string | null
   timeoutMs?: number
+  headless?: boolean
 }): ReturnType<typeof requestHumanDecision> {
   return requestHumanDecision({
     operation: 'humanTask.submit',
@@ -43,7 +44,8 @@ function call(options: {
       message: PROMPT_TEXT,
       confirmText: '允许提交'
     },
-    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {})
+    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+    ...(options.headless !== undefined ? { headless: options.headless } : {})
   })
 }
 
@@ -66,12 +68,38 @@ describe('人工决定的唯一终态诊断事件', () => {
     })
   })
 
-  it('确认超时：返回 HUMAN_DECISION_TIMEOUT，原因记为 timeout', async () => {
+  it('真正确认超时：返回 HUMAN_DECISION_TIMEOUT，原因记为 timeout', async () => {
     const result = await call({
-      desktopValue: desktop({ authorized: false, code: 'DESKTOP_LOST' })
+      desktopValue: desktop({ authorized: false, code: 'PUBLISH_AUTHORIZATION_EXPIRED' })
     })
     expect(result).toMatchObject({ ok: false, code: 'HUMAN_DECISION_TIMEOUT' })
     expect(hoisted.emitted[0]?.options.attributes).toMatchObject({ reason: 'timeout' })
+  })
+
+  it('桌面丢失不是人工超时：返回 DESKTOP_UNAVAILABLE/unavailable', async () => {
+    const result = await call({
+      desktopValue: desktop({ authorized: false, code: 'DESKTOP_LOST' })
+    })
+    expect(result).toMatchObject({ ok: false, code: 'DESKTOP_UNAVAILABLE' })
+    expect(hoisted.emitted[0]?.options.attributes).toMatchObject({ reason: 'unavailable' })
+  })
+
+  it('pure headless 允许 activeProjectId=null，且明确使用 headless 桌面路由', async () => {
+    const ask = vi.fn(async () => ({ authorized: true }))
+    const result = await requestHumanDecision({
+      operation: 'composite.run.submitHuman',
+      desktop: { ask } as never,
+      projectId: 'headless-run-1',
+      activeProjectId: null,
+      headless: true,
+      prompt: { title: 'headless', message: 'material', confirmText: '允许' }
+    })
+    expect(result).toEqual({ ok: true })
+    expect(ask).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'confirm-sensitive', headless: true }),
+      expect.any(Number)
+    )
+    expect(hoisted.emitted).toEqual([])
   })
 
   it('没有桌面宿主：返回 DESKTOP_UNAVAILABLE，原因记为 unavailable', async () => {

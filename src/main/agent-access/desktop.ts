@@ -1,4 +1,4 @@
-import { ipcMain, type BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { dialog, ipcMain, type BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
 import {
   ACCESS_DESKTOP_REQUEST,
@@ -27,6 +27,11 @@ export interface DesktopAskResult {
   code?: string
   detail?: string
 }
+type AccessAskInput = Omit<DesktopRequest, 'requestId' | 'expiresAt'> & {
+  /** Pure headless confirmation is main-owned and does not depend on a mounted canvas. */
+  headless?: boolean
+}
+
 export interface AccessDesktop {
   run(
     input: Omit<DesktopRequest, 'requestId' | 'expiresAt'>,
@@ -45,10 +50,7 @@ export interface AccessDesktop {
    * 而且 mutation 请求的 10 秒过期时间也不适合人工步骤。回复仍走同一条
    * 受控回复通道，按 requestId 路由，并同样校验 sender/frame。
    */
-  ask(
-    input: Omit<DesktopRequest, 'requestId' | 'expiresAt'>,
-    timeoutMs: number
-  ): Promise<DesktopAskResult>
+  ask(input: AccessAskInput, timeoutMs: number): Promise<DesktopAskResult>
 }
 /** One bounded, sender-bound request. A late response cannot authorize another mutation. */
 export function createAccessDesktop(getWindow: () => BrowserWindow | null): AccessDesktop {
@@ -176,8 +178,46 @@ export function createAccessDesktop(getWindow: () => BrowserWindow | null): Acce
       if (!window || window.isDestroyed() || window.webContents.isDestroyed())
         return Promise.reject(new DesktopAccessError('DESKTOP_UNAVAILABLE'))
       const bounded = Math.max(1000, Math.min(timeoutMs, 10 * 60 * 1000))
+      if (input.headless) {
+        // No project is open for a pure headless run. A main-owned native dialog keeps
+        // confirmation available on the project list too; late dialog replies are inert.
+        return new Promise((resolve) => {
+          let settled = false
+          const settle = (result: DesktopAskResult): void => {
+            if (settled) return
+            settled = true
+            clearTimeout(timer)
+            window.off('closed', lost)
+            window.webContents.off('destroyed', lost)
+            resolve(result)
+          }
+          const lost = (): void => settle({ authorized: false, code: 'DESKTOP_LOST' })
+          const timer = setTimeout(
+            () => settle({ authorized: false, code: 'PUBLISH_AUTHORIZATION_EXPIRED' }),
+            bounded
+          )
+          window.once('closed', lost)
+          window.webContents.once('destroyed', lost)
+          void dialog.showMessageBox(window, {
+            type: 'warning',
+            title: input.confirmTitle ?? '外部 Agent 请求人工确认',
+            message: input.confirmMessage ?? '外部 Agent 请求人工确认',
+            buttons: [input.confirmText ?? '允许', input.cancelText ?? '拒绝'],
+            defaultId: 1,
+            cancelId: 1,
+            noLink: true
+          }).then(({ response }) => {
+            settle({
+              authorized: response === 0,
+              ...(response === 0 ? {} : { code: 'HUMAN_DENIED' })
+            })
+          }).catch(() => settle({ authorized: false, code: 'DESKTOP_LOST' }))
+        })
+      }
+      const rendererInput = { ...input }
+      delete rendererInput.headless
       const request: DesktopRequest = {
-        ...input,
+        ...rendererInput,
         requestId: randomUUID(),
         expiresAt: Date.now() + bounded
       }

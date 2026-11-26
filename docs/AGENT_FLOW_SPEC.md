@@ -277,7 +277,7 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 | human | 纯人工 | 以角色 X 产出，再切换到角色 Y 复核（同一个本机用户，见 §16） | 人产出，AI 审核 |
 | mixed | — | 节点内对话协作，人最终决定 | — |
 
-旧图映射（缺省）：`autonomous → ai × none`、`collaborative → mixed × human`、`human-task → human × none`、`review → ai × ai-review`；显式声明必须与该节点合法组合一致。**capability 节点缺省 `ai × none`，可显式声明 `decider: 'human'`（AI 产出、人采用）**：能力执行产出交付后先挂起为「待采用」，人工在流程总览点「继续」即采用并放行下游；未采用不会伪造完成，外部 Agent 不能代替该人工采用。
+旧图映射（缺省）：`autonomous → ai × none`、`collaborative → mixed × human`、`human-task → human × none`、`review → ai × ai-review`；显式声明必须与该节点合法组合一致。**capability 节点缺省 `ai × none`，可显式声明 `decider: 'human'`（AI 产出、人采用）**：能力执行产出交付后先挂起为「待采用」，人工在流程总览点「继续」即采用并放行下游；未采用不会伪造完成，外部 Agent 不能代替该人工采用。可信采用会把 `humanDecided=true` 持久化在子任务中，重开后的图事实、`human-decision` 条件路由与 `StageDeliveryRecord` 均读取同一事实，不能只翻转一次内存状态。
 
 ---
 
@@ -294,7 +294,9 @@ machine-truth: src/shared/agent-flow/*.ts · src/main/agent-flow/coordinator-hos
 
 **AF-10.3【目标】专业 Agent 主动请求补充输入**：当前 `CoordinationDecision` 只有 `dispatch / dispatch-many / finish / wait`，没有 `request-more` 动作；专业 Agent 不能通过模型决策主动申请更多内容，也不能自己读取全图。`overflow: 'ask-human'` 是宿主按声明策略触发的人工补料，不等同于 Agent 主动请求。
 
-**AF-10.4【现行·BL-40，2026-11-26】** 溢出策略可声明：`overflow: 'fail' | 'ask-human' | 'summarize'`（缺省 `fail`）。`summarize` 必须由一个显式的能力节点完成并留下交付，不能在宿主里隐式调用模型。`ask-human` 在等待人工补料后继续：Agent 阶段把精简材料作为阶段上下文；能力节点把材料作为文本输入注入（优先第一个 `text`/`markdown` 输入端口，否则取唯一的单值 `any` 端口），命令以可选 `contextMaterial {targetPortId,text}` 承载，渲染层替代该端口的固定资产引用；补料缺失或端口不可承载时显式失败，不静默忽略。
+**AF-10.4【现行·BL-40，2026-11-26】** 溢出策略可声明：`overflow: 'fail' | 'ask-human' | 'summarize'`（缺省 `fail`，与现行行为一致）。`summarize` 必须由一个显式的能力节点完成并留下交付，不能在宿主里隐式调用模型。`ask-human` 在等待人工补料后继续：Agent 阶段把精简材料作为阶段上下文；能力节点把材料作为文本输入注入，命令以可选 `contextMaterial {targetPortId,text}` 承载，渲染层替代该端口的固定资产引用。目标只能从实际选择的边中确定：文本/Markdown 候选必须唯一；没有文本候选时，单值 `any` 候选也必须唯一，其他情况显式拒绝而不猜第一个端口。
+
+补料后的 **effective input set** 必须由「保留边的真实固定版本贡献 + `human:context`」唯一确定；ContextManifest、预算、命令输入、渲染注入和提交指纹都使用这同一集合。先对完整候选去重，再按真实预算装配；可选贡献重新判定，不得把原先的 dropped 当成永久缺失。保留贡献与材料仍超限、贡献归属歧义或目标不可承载时，在执行前明确失败，不得静默保留已声明被替换的输入。CLI/MCP 的 `flowAgent.run(continue)` 与 GUI 使用同一内部材料字段和宿主校验，外部提交须经桌面材料预览与人工确认，不能伪造 `humanConfirmed` 或运行来源。
 
 ---
 

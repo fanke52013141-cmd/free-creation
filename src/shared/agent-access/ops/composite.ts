@@ -2,6 +2,8 @@ import { HumanTaskValueSchema } from '../../agent-flow/node-contracts'
 import { z } from 'zod'
 import { compositeManifestSchema, compositeVersionSchema } from '../../composite/manifest'
 
+export const COMPOSITE_WAIT_MAX_TIMEOUT_MS = 300_000
+
 const capabilityId = z.string().min(1).max(80)
 const semver = compositeVersionSchema
 const manifest = compositeManifestSchema
@@ -186,12 +188,14 @@ export const COMPOSITE_OPERATIONS = {
     idempotent: true,
     destructive: false,
     cost: 'none',
+    // server 在读取请求前的默认窗口也覆盖 300s 长轮询；client 使用实际 timeoutMs+30s。
+    responseTimeoutMs: COMPOSITE_WAIT_MAX_TIMEOUT_MS + 30_000,
     description:
-      '阻塞等待 headless 运行到达终态：返回状态/公开输出/失败原因；超时返回当前状态。outputs 以带前缀的公开输出端口为键（out-<id>，与画布一致）',
+      '阻塞等待 accepted/running 的 headless 运行变化；到达终态、waiting-input 或超时立即返回当前状态、公开输出与失败原因。waiting-input 需先 submitHuman/resume 后再次等待。outputs 以带前缀的公开输出端口为键（out-<id>，与画布一致）',
     input: z
       .object({
         runId: z.string().min(1).max(120),
-        timeoutMs: z.number().int().min(100).max(300000).optional()
+        timeoutMs: z.number().int().min(100).max(COMPOSITE_WAIT_MAX_TIMEOUT_MS).optional()
       })
       .strict()
   },
@@ -429,7 +433,17 @@ export const COMPOSITE_OUTPUTS = {
   'composite.execute.wait': z
     .object({
       runId: z.string().min(1).max(120),
-      status: z.enum(['running', 'completed', 'failed', 'cancelled']),
+      // 与 CompositeRunStatus 完整对齐；waiting-input 是可见暂停，不是响应校验错误。
+      status: z.enum([
+        'accepted',
+        'running',
+        'waiting-input',
+        'completed',
+        'failed',
+        'cancelled',
+        'interrupted',
+        'unknown'
+      ]),
       outputs: z.record(z.string(), z.unknown()).optional(),
       reason: z.string().optional(),
       failure: z

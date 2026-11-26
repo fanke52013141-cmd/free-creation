@@ -36,6 +36,11 @@ import { templatePayloadFromGraph, useWorkflowStore, type WorkflowTemplate } fro
 import { topNotice } from '../stores/topNotice'
 import { buildCompositeManifestFromEditor } from './editor-manifest'
 import {
+  applyCompositeEditorPolicy,
+  compositeEditorPolicyFromManifest,
+  type CompositeEditorPolicy
+} from './editor-policy'
+import {
   CompositePublishPreview,
   type CompositePublishValidationIssue
 } from './CompositePublishPreview'
@@ -179,11 +184,11 @@ export function CompositeCanvasEditor({
   // 节点右键：与主画布同一份节点操作菜单。
   const [nodeMenu, setNodeMenu] = useState<{ x: number; y: number; ids: TLShapeId[] } | null>(null)
   const [showVersions, setShowVersions] = useState(false)
-  /** NF-8.4 / NF-8.5 运行策略编辑面板；null 表示未打开（保存时沿用 base 里的策略）。 */
-  const [policyDraft, setPolicyDraft] = useState<{
-    onBranchFailure: 'fail-fast' | 'continue'
-    maxConcurrency: number
-  } | null>(null)
+  /** NF-8.4 / NF-8.5：可见性与持久编辑值分离；关闭“完成”不丢弃策略草稿。 */
+  const [policyOpen, setPolicyOpen] = useState(false)
+  const [policy, setPolicy] = useState<CompositeEditorPolicy>(() =>
+    compositeEditorPolicyFromManifest(target.kind === 'composite' ? target.manifest : null)
+  )
   // 单击只选中；契约面板由节点 info 按钮显式打开（与主画布 nodePanel store 一致）。
   const panelKind = useNodePanelStore((s) => s.kind)
   const panelShapeId = useNodePanelStore((s) => s.shapeId)
@@ -564,19 +569,10 @@ export function CompositeCanvasEditor({
     })
     const nextIssues = result.issues.map((item) => `${item.path}: ${item.message}`)
     setIssues(nextIssues)
-    const manifest: CompositeManifest = {
-      ...result.manifest,
-      version,
-      ...(policyDraft
-        ? {
-            executionPolicy: {
-              ...result.manifest.executionPolicy,
-              onBranchFailure: policyDraft.onBranchFailure,
-              maxConcurrency: policyDraft.maxConcurrency
-            }
-          }
-        : {})
-    }
+    const manifest = applyCompositeEditorPolicy(
+      { ...result.manifest, version },
+      policy
+    )
     return {
       manifest,
       issues: nextIssues
@@ -596,6 +592,8 @@ export function CompositeCanvasEditor({
       })
       if (!saved.ok) throw new Error(saved.error.message)
       setRevision(saved.data.revision)
+      // 连续保存必须以最近一次已落盘内容为基准，尤其不能回滚刚保存的运行策略。
+      setBase(built.manifest)
       setDirty(false)
       topNotice('已保存，下次编辑会自动恢复')
       return built.manifest
@@ -962,15 +960,7 @@ export function CompositeCanvasEditor({
             className="nf-btn ghost"
             disabled={busy}
             title="分支失败策略与内部并发（NF-8.4 / NF-8.5）"
-            onClick={() =>
-              setPolicyDraft(
-                (current) =>
-                  current ?? {
-                    onBranchFailure: base?.executionPolicy?.onBranchFailure ?? 'fail-fast',
-                    maxConcurrency: base?.executionPolicy?.maxConcurrency ?? 1
-                  }
-              )
-            }
+            onClick={() => setPolicyOpen(true)}
           >
             <Icon name="settings" size={14} /> 运行策略
           </button>
@@ -1020,21 +1010,21 @@ export function CompositeCanvasEditor({
             取消
           </button>
         </div>
-        {policyDraft && (
+        {policyOpen && (
           <div className="nf-policy-pop" role="dialog" aria-label="运行策略">
             <header>
               <strong>运行策略</strong>
-              <button type="button" className="nf-btn ghost" onClick={() => setPolicyDraft(null)}>
+              <button type="button" className="nf-btn ghost" onClick={() => setPolicyOpen(false)}>
                 完成
               </button>
             </header>
             <label>
               <span>分支失败策略</span>
               <select
-                value={policyDraft.onBranchFailure}
+                value={policy.onBranchFailure}
                 onChange={(event) => {
-                  setPolicyDraft({
-                    ...policyDraft,
+                  setPolicy({
+                    ...policy,
                     onBranchFailure: event.target.value as 'fail-fast' | 'continue'
                   })
                   setDirty(true)
@@ -1047,9 +1037,9 @@ export function CompositeCanvasEditor({
             <label>
               <span>内部并发</span>
               <select
-                value={policyDraft.maxConcurrency}
+                value={policy.maxConcurrency}
                 onChange={(event) => {
-                  setPolicyDraft({ ...policyDraft, maxConcurrency: Number(event.target.value) })
+                  setPolicy({ ...policy, maxConcurrency: Number(event.target.value) })
                   setDirty(true)
                 }}
               >
@@ -1073,6 +1063,7 @@ export function CompositeCanvasEditor({
               if (!editor) return
               const nextBase: CompositeManifest = { ...loaded, version }
               setBase(nextBase)
+              setPolicy(compositeEditorPolicyFromManifest(nextBase))
               loadManifestIntoEditor(editor, nextBase)
               setDirty(true)
             }}

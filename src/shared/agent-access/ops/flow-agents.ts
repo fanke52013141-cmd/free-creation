@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { identifier, nodeId, project, MODEL_RESPONSE_TIMEOUT_MS } from './common'
 import { FlowDefinitionSchema } from '../../agent-flow/flow-definition'
 import { FlowGraphSchema } from '../../agent-flow/flow-graph'
+import { CollaborationActorSchema } from '../../agent-flow/desktop-tasks'
 import { capabilityDescriptorDtoSchema } from '../../agent-flow/capability-catalog'
 
 /**
@@ -541,14 +542,16 @@ export const FLOW_AGENTS_OPERATIONS = {
     // action=continue 命中人工等待时，返回前等人在 GUI 点「允许继续」。
     interactive: true,
     description:
-      '在当前打开的 Agent 节点上启动/继续/对账/恢复内部 Agent 运行（与 GUI 面板同一宿主实例与同一任务账本）；start/continue 先做模型工具调用预检，失败发生在任何模型请求之前；不新建宿主、不伪造运行身份',
+      '在当前打开的 Agent 节点上启动/继续/对账/恢复内部 Agent 运行（与 GUI 面板同一宿主实例与同一任务账本）；start/continue 先做模型工具调用预检，失败发生在任何模型请求之前；FLOW_CONTEXT_OVER_BUDGET 的 continue 可携带 contextMaterial，main 先让人在桌面预览材料并确认后再转发；不新建宿主、不伪造运行身份',
     input: project
       .extend({
         nodeId,
         action: z.enum(['start', 'continue', 'reconcile', 'restore']),
         eventId: flowId.optional(),
         expectedTaskId: flowId.optional(),
-        expectedWaitRevision: z.number().int().nonnegative().optional()
+        expectedWaitRevision: z.number().int().nonnegative().optional(),
+        /** BL-40：上下文超限等待的替代材料；main 会先让人在桌面预览并确认。 */
+        contextMaterial: HandoffNoteSchema.optional()
       })
       .strict()
   },
@@ -1072,7 +1075,7 @@ export const FLOW_AGENTS_OUTPUTS = {
               kind: z.string().max(40),
               text: z.string().max(4096),
               handoffNote: HandoffNoteSchema.optional(),
-              actor: z.object({ kind: z.literal('user'), roleId: flowId }).strict().optional(),
+              actor: CollaborationActorSchema.optional(),
               reply: z.string().max(4096).optional()
             })
             .strict()
@@ -1100,14 +1103,16 @@ export const FLOW_AGENTS_OUTPUTS = {
               kind: z.string().max(40),
               text: z.string().max(4096),
               handoffNote: HandoffNoteSchema.optional(),
-              actor: z.object({ kind: z.literal('user'), roleId: flowId }).strict().optional(),
+              actor: CollaborationActorSchema.optional(),
               reply: z.string().max(4096).optional()
             })
             .strict()
         )
         .max(100),
       inputs: z.array(flowAssetRef).max(256),
-      candidates: z.array(flowAssetRef).max(128)
+      candidates: z.array(flowAssetRef).max(128),
+      /** 与 collaboration 相同：真实宿主已有候选成果时携带当前工作稿。 */
+      workingDraft: z.string().max(1048576).optional()
     })
     .strict(),
   'flowAgent.run': z

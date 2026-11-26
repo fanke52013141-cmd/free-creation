@@ -324,6 +324,7 @@ export function waitForVideo(
 
 /** 视频生成解析出的配置（来自视频节点的持久化文本）。 */
 export interface VideoGenData {
+  featureKey?: string
   modelKey: string
   mode?: VideoGenerationMode
   params: VideoGenParams
@@ -335,6 +336,9 @@ export function parseVideoGen(text: string): VideoGenData {
   if (value) {
     const rawParams = parseJsonObj(JSON.stringify(value.params ?? {})) ?? {}
     return {
+      ...(typeof value.featureKey === 'string' && value.featureKey.trim()
+        ? { featureKey: value.featureKey.trim() }
+        : {}),
       modelKey: typeof value.modelKey === 'string' ? value.modelKey : '',
       mode:
         value.mode === 'text' ||

@@ -11,6 +11,7 @@ import {
 import { ConnectionDescriptorSchema } from '../shared/agent-access/connection'
 import { RUN_WAIT_MAX_TIMEOUT_MS } from '../shared/agent-access/run-ops'
 import { responseTimeoutMs } from '../shared/agent-access/interactive'
+import { COMPOSITE_WAIT_MAX_TIMEOUT_MS } from '../shared/agent-access/ops/composite'
 
 export function defaultDataDirectory(): string {
   if (process.env.CANVAS_DATA_DIR) return process.env.CANVAS_DATA_DIR
@@ -77,11 +78,17 @@ export async function callLocalOperation(
     }
     const disconnected = (): void =>
       finish(failure(sent ? 'OUTCOME_UNKNOWN' : 'APP_NOT_RUNNING', sent))
-    // run.wait 是长轮询：等待期间没有下行流量，超时必须覆盖请求的等待时长。
+    // run.wait 与 composite.execute.wait 都是长轮询；等待期间没有下行流量。
     const waitInput = args.input as { timeoutMs?: unknown }
     const requestedWaitMs =
-      operationId === 'run.wait' && typeof waitInput?.timeoutMs === 'number'
-        ? Math.min(waitInput.timeoutMs, RUN_WAIT_MAX_TIMEOUT_MS)
+      (operationId === 'run.wait' || operationId === 'composite.execute.wait') &&
+      typeof waitInput?.timeoutMs === 'number'
+        ? Math.min(
+            waitInput.timeoutMs,
+            operationId === 'composite.execute.wait'
+              ? COMPOSITE_WAIT_MAX_TIMEOUT_MS
+              : RUN_WAIT_MAX_TIMEOUT_MS
+          )
         : 0
     // 交互式操作（人工决定）在返回前要等人点确认，这段等待没有下行流量；
     // 用 15s 默认超时会把「人还没点」误报成 OUTCOME_UNKNOWN。口径见 shared/agent-access/interactive。

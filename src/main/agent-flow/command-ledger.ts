@@ -287,7 +287,7 @@ export class FlowCommandLedger {
     const node = project.nodes.find((item) => item.id === command.targetNodeId)
     const composite =
       node?.type === 'composite' && node.contractVersion === 1
-        ? resolveCompositeTarget(this.db, target.props.config)
+        ? resolveCompositeTarget(this.db, target.props.config, target.meta)
         : null
     const inputIds =
       composite?.inputs.map((port) => port.id) ?? (node && flowTargetContract(node)?.inputs)
@@ -399,22 +399,34 @@ export class FlowCommandLedger {
       versions: this.assets.resolveInputs(command.projectId, input.assets)
     }))
     if (shape.props.nodeType === 'composite') {
-      const composite = resolveCompositeTarget(this.db, shape.props.config)
+      const composite = resolveCompositeTarget(this.db, shape.props.config, shape.meta)
       if (!composite) fail('FLOW_TYPE_UNSUPPORTED', 'contract')
-      const { issues } = planCompositeInputBindings(
-        composite.manifest,
-        new Map(
-          resolved.map(({ input, versions }) => [
-            input.targetPortId,
-            versions.map(({ ref, value, createdAt }) => ({
-              type: value.kind,
-              value,
-              source: { nodeId: ref.sourceNodeId, portId: ref.sourcePortId, runId: ref.versionId },
-              createdAt
-            }))
-          ])
-        )
+      const bindings = new Map(
+        resolved.map(({ input, versions }) => [
+          input.targetPortId,
+          versions.map(({ ref, value, createdAt }) => ({
+            type: value.kind,
+            value,
+            source: { nodeId: ref.sourceNodeId, portId: ref.sourcePortId, runId: ref.versionId },
+            createdAt
+          }))
+        ])
       )
+      if (command.contextMaterial) {
+        const { targetPortId, text } = command.contextMaterial
+        // Preflight must see the same injected packet as the renderer, otherwise a
+        // required public input is rejected before the confirmed material can run.
+        bindings.set(targetPortId, [
+          ...(bindings.get(targetPortId) ?? []),
+          {
+            type: 'text' as const,
+            value: { kind: 'text' as const, text },
+            source: { nodeId: 'human:context', portId: 'out-text', runId: command.commandId },
+            createdAt: 0
+          }
+        ])
+      }
+      const { issues } = planCompositeInputBindings(composite.manifest, bindings)
       if (issues.length) fail(issues[0].code, 'input')
     }
     if (shape.props.nodeType === 'video') {
@@ -935,6 +947,9 @@ export class FlowCommandLedger {
             value: { kind: 'text', text: material.text }
           })
         }
+        // Renderer sorts after fixed inputs and human material are combined. Keep the
+        // receipt digest on that exact effective-input order (e.g. in-text < in-voice).
+        fingerprintSources.sort((a, b) => a.portId.localeCompare(b.portId))
         const fingerprint = computeInputFingerprint({
           contractVersion: command.contractVersion,
           config: shape.props.config,
@@ -958,7 +973,7 @@ export class FlowCommandLedger {
           const targetNode = project.nodes.find((item) => item.id === command.targetNodeId)
           const composite =
             targetNode?.type === 'composite'
-              ? resolveCompositeTarget(this.db, shape.props.config)
+              ? resolveCompositeTarget(this.db, shape.props.config, shape.meta)
               : null
           const targetAdapter = targetNode && flowTargetContract(targetNode)
           if (!composite && !targetAdapter) fail('FLOW_TYPE_UNSUPPORTED', 'saved-output')

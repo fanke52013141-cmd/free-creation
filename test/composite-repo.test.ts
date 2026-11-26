@@ -10,6 +10,7 @@ import {
   deleteCompositeDraft,
   getCompositeDraft,
   getCompositeVersion,
+  listAllCompositeVersions,
   listCompositeCapabilities,
   publishCompositeVersion,
   saveCompositeDraft,
@@ -186,5 +187,23 @@ describe('组合能力存储（P1）', () => {
     bad.graph.nodes = []
     await expect(saveCompositeDraft(bad)).rejects.toThrow('组合契约无效')
     await expect(publishCompositeVersion(bad)).rejects.toThrow('组合契约无效')
+  })
+
+  it('501 个固定版本缺省全部可读，只有显式展示 limit 才截断', () => {
+    const insert = fixture.db.prepare(`INSERT INTO composite_versions
+      (capability_id,version,manifest,content_hash,published_at,published_by)
+      VALUES (?,?,?,?,?,?)`)
+    fixture.db.transaction(() => {
+      for (let index = 0; index <= 500; index++)
+        insert.run('versioned-flow', `1.${index}`, '{}', 'a'.repeat(64), index + 1, 'acceptance-fixture')
+    })()
+    const all = listAllCompositeVersions()
+    expect(all).toHaveLength(501)
+    expect(all[0]?.version).toBe('1.500')
+    expect(all.at(-1)?.version).toBe('1.0')
+    const display = listAllCompositeVersions(500)
+    expect(display).toHaveLength(500)
+    expect(display.some((item) => item.version === '1.0')).toBe(false)
+    expect(all.some((item) => item.version === '1.0')).toBe(true)
   })
 })

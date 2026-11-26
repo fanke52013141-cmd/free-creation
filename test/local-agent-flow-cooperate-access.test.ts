@@ -2,7 +2,7 @@
 //
 // 断言重点：
 // 1) 必须经 flow-bridge 发布的**同一个宿主实例**执行（未发布时如实 FLOW_AGENTS_UNAVAILABLE）；
-// 2) 事件显式带 actor=external，与人工输入可区分；
+// 2) 独立 origin 信封带 external clientId，与人工输入可区分；
 // 3) discuss/revise 会真实调用模型，必须先过工具调用预检（预检失败不能发出任何协作事件）；
 // 4) 输入用与 IPC 完全相同的 Schema 校验（含 refs 去重），外部不能绕过。
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -172,8 +172,13 @@ describe('flowAgent.cooperate', () => {
     expect(response.status, JSON.stringify(response.error)).toBe('completed')
     expect(assertAgentScopeToolCalling).not.toHaveBeenCalled()
     expect(cooperate).toHaveBeenCalledTimes(1)
-    // 关键：外部写入必须可区分于人工输入
-    expect((cooperate.mock.calls[0][0] as { actor?: string }).actor).toBe('external')
+    // 来源独立于 strict 业务输入；外部写入必须可区分于人工输入。
+    const forwarded = cooperate.mock.calls[0][0] as {
+      input?: { action?: string }
+      origin?: { kind?: string; clientId?: string }
+    }
+    expect(forwarded.input).toMatchObject({ action: 'note' })
+    expect(forwarded.origin).toEqual({ kind: 'external', clientId: 'cli' })
     expect((response.data as { revision: number }).revision).toBe(2)
   })
 

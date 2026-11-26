@@ -1238,3 +1238,27 @@ GUI 节点流面板条目卡片移除「运行」按钮（运行走画布既有�
 - CI/门禁修复（完整 Git 历史、fail-closed 日志/规范/动作分母、必需验收脚本缺失即失败、干净 CI 授权处理）不涉及产品运行日志。日志门禁读取 Git diff 的缓冲区提升到 64MiB，避免大规模删除被默认子进程缓冲区误判为基线不可读。
 - 传输安全修复：SSE `/sse` 与 `/messages` 改为仅接受 `Authorization: Bearer` 请求头鉴权，URL 与 SSE endpoint 不再携带 token；query token、缺失或错误 header 均返回 401，Host/Origin 继续返回 403。stdout 发现信息仍只输出独立 token，不记录请求头、完整 URL 或 token。验收覆盖真实 SSE 客户端 `tools/list`/`capability.list` 与 stdio 回归；相关拒绝路径不新增业务诊断事件，启动失败继续由 `agent.access.server_failed` 的固定 `phase=startup/code=ACCESS_START_FAILED` 表达，避免重复终态。
 - Windows `connection.json` 临时文件在发布前通过系统 .NET 安全 API 设置为仅当前用户 FullControl、继承关闭；ACL 设置失败返回稳定 `WINDOWS_DESCRIPTOR_ACL_FAILED` 并清理临时文件、不发布发现信息。测试读回 ACL 仅含当前用户且文件 mode 为 0600（POSIX）；不记录 SID、ACL 明细、路径或 token。Windows named pipe 默认 DACL 仍未能安全事后收紧：`SetSecurityInfo` 返回 ACCESS_DENIED，`SetNamedSecurityInfoW` 返回 ERROR_INVALID_PARAMETER；补偿控制为随机传输 token + 上述发现文件 ACL，**不宣称 named pipe 最小 ACL 已完成**。未覆盖：跨账户 pipe ACL、真实安装包、干净 GitHub runner、付费模型/供应商调用、真实 GUI 鼠标端到端验收及 code 节点 sandbox 专项隔离审计。
+- 运行策略（NF-8.4 / NF-8.5）：onBranchFailure 与 maxConcurrency 只改变调度批次与失败后的认领范围，不新增事件；失败仍以 composite.run.step failed + `failureNodeId/failurePortId` 记账，跳过仍记 skipped，正常/续跑路径不变。并发只调度无依赖就绪节点，结果收集顺序按 manifest 声明，与完成顺序无关；未提交人工任务的独占认领与失败节点终态修正见下方 H01/H09。
+- 能力节点补料（AF-10.4 / BL-40，2026-11-26）：上下文超限等待沿用阶段输入阻塞事件与持久等待状态；`node.execute` 的可选 `contextMaterial` 只携带端口与精简文本，执行时作为 `human:context` 文本输入注入并替代该端口固定资产，账本提交把该来源计入输入指纹与来源清单。不新增诊断事件；正文只留在命令/运行快照，不进总览或诊断。能力图桌面验收覆盖超限等待→表单提交→执行→完成；多输入与外部补料的后续修正见下方 H05–H08。
+- BL-21 执行者×决策者（2026-11-26）：capability 显式 decider human 的「待采用」沿用 human.wait / agent.completed 与 run.code=HUMAN_ADOPTION_REQUIRED，子任务如实 waiting；人工继续采用后发 agent.completed（`taskId:adopted`）并恢复路由。不新增诊断事件，输出正文不入日志；外部未确认继续按 HUMAN_CONFIRMATION_REQUIRED 拒绝。
+
+### 2026-11-26 H01/H02/H04–H10 审查修复
+
+- **节点流失败与人工等待（H01/H09/H10）**：失败节点进入本次运行的认领终态，`continue` 不再重复执行；未提交人工任务每批最多认领一个，等待与续跑沿用既有 `composite.run.waiting`、步骤与终态事件。嵌套人工门在发布/运行准入以 `NESTED_MANUAL_GATE_UNSUPPORTED` + input 阶段明确拒绝，沿用 `composite.run.failed/finish`，仅记录稳定 code、capabilityId@version 与内部 nodeId，不记录节点正文或提交值。续跑 checkpoint 仅省略缺失字段，不改变诊断协议。
+- **公开参数（H02）**：参数校验与编译复用既有图准入错误路径；不支持的字段/枚举返回 `CAPABILITY_PARAMS_UNSUPPORTED`，格式/范围错误返回 `CAPABILITY_PARAMS_INVALID`。`featureKey` 通过公共 parser 到达既有模型能力解析与诊断；video seed 在提交前按能力拒绝或放行，不新增网络路径、付费能力或诊断事件，不记录配置全文。
+- **人工采用（H04）**：可信继续把 `humanDecided=true` 与子任务一并持久化，图条件与交付记录读取同一事实；沿用 human.wait / agent.completed，不新增事件或正文字段。
+- **补料（H05–H08）**：有效输入清单、预算、命令、渲染注入和账本指纹统一使用保留固定版本贡献 + `human:context`；歧义/超限在执行前失败。composite 预检把同一文本材料计入公开输入，指纹在固定输入与材料合并后按 portId 排序。CLI/MCP 复用 `flowAgent.run` 与桌面人工确认，材料预览只用于确认框，正文不进入诊断；拒绝、修订冲突和伪造来源仍由原路径阻断。
+
+### 2026-11-26 真实 Host/Store 与 CLI/MCP 回归
+
+- 新增可重复的 `acceptance:agent-composite-remediation`、`acceptance:agent-capability-params`、`acceptance:agent-flow-context-adoption`，并纳入 `verify:acceptance` 全量清单。真实 Electron、生产 AccessService、CLI socket 与官方 MCP SDK 驱动，不用 fake port 或手写成功回执。
+- 覆盖失败一次认领、双人工等待两种顺序及重开、嵌套人工门拒绝、processor 参数执行、video featureKey/seed，以及多输入补料→采用→下游唯一执行。核对真实 waits/steps/output、诊断计数、命令 committed/fingerprint、有效清单与固定资产。
+- 复用既有 `composite.run.*`、`flowAgent.*`、command ledger 和模型解析诊断，不新增事件、网络路径或正文日志。测试授权使用开发构建 dev bypass，不复制真实 license/security；测试 setup 行与业务回执分开记录，详见 `docs/local-agent-access/73-real-host-store-e2e.md`。
+
+### 2026-11-27 第二轮审查修复
+
+- 图路由、ID/边校验、目录与定义 diff 只新增稳定错误码/结构化错误，不新增正文日志；ID 碰撞、重复边和版本不匹配按节点/边/阶段拒绝。
+- `flowAgent.cooperate` 以独立 envelope 保存 external clientId，GUI 仍记 user role；协作正文不进日志。headless 人工确认使用主进程原生模态，画布继续使用 sender/frame 绑定，拒绝、超时与 DESKTOP_LOST 均不记提交内容。
+- `composite.execute.wait` 全状态与长超时只改变公开契约和轮询，复用既有 run 记录与诊断；interrupted 恢复继续禁止未结算副作用重放。
+- 输出键以 manifest 消歧，歧义/冲突只返回稳定 code，不记录输出正文。弹窗 FIFO 不再伪记 denied，DESKTOP_LOST 与真实 expire 分开归因。
+- 非 Agent 恢复、失败人工提交替换、optional 有效边、replay/export 与旧 composite 形态均复用既有 command ledger、human.wait、agent.completed 和恢复诊断；真实硬杀只验证 committed 与 unknown，未重放第二次副作用。详见 `docs/local-agent-access/74-second-pass-remediation.md`。

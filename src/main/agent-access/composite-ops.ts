@@ -20,6 +20,7 @@ import {
   saveCompositeDraft
 } from '../store/composite.repo'
 import { getCompositeRun, listCompositeRuns } from '../store/composite-run.repo'
+import type { CompositeRunRecord } from '../store/composite-run.repo'
 
 interface CompositeOperationContext {
   diagnostics?: { traceId: string; spanId: string }
@@ -42,6 +43,85 @@ function publishFailure(error: unknown): never {
   if (error instanceof CompositePublishError)
     throw new DesktopAccessError(error.code, false, error.details.version)
   throw error
+}
+
+/** Resolve a bare historical id or canonical out- key against the fixed manifest. */
+export function normalizeCompositeOutputPortId(
+  manifest: CompositeManifest,
+  rawPortId: string
+): { id: string; publicId: string } {
+  const matches = manifest.outputs.filter(
+    (output) => rawPortId === output.id || rawPortId === `out-${output.id}`
+  )
+  if (matches.length !== 1) {
+    throw new DesktopAccessError(
+      matches.length > 1 ? 'OUTPUT_PORT_AMBIGUOUS' : 'OUTPUT_PORTS_MISMATCH',
+      false,
+      rawPortId.slice(0, 100)
+    )
+  }
+  return { id: matches[0]!.id, publicId: `out-${matches[0]!.id}` }
+}
+
+/**
+ * Manifest-aware run output projection. Current storage keys are bare declared ids;
+ * canonical out- keys are accepted only as an unambiguous legacy fallback.
+ */
+export function projectCompositeRunRecord(run: CompositeRunRecord): CompositeRunRecord {
+  if (run.outputValues === null && run.outputSummary.length === 0) return run
+  const version = getCompositeVersion(run.capabilityId, run.capabilityVersion)
+  if (!version || version.contentHash !== run.contentHash) {
+    throw new DesktopAccessError('STORAGE_INCONSISTENT', false, 'composite-run-version')
+  }
+  const manifest = version.manifest
+  if (run.outputValues === null) {
+    const outputSummary = run.outputSummary.map((entry) => ({
+      ...entry,
+      portId: normalizeCompositeOutputPortId(manifest, entry.portId).publicId
+    }))
+    return { ...run, outputSummary }
+  }
+  const stored = run.outputValues
+  const outputValues: Record<string, unknown> = {}
+  const consumed = new Set<string>()
+  for (const output of manifest.outputs) {
+    const publicId = `out-${output.id}`
+    const hasBare = Object.hasOwn(stored, output.id)
+    const hasLegacy = Object.hasOwn(stored, publicId)
+    if (hasBare && hasLegacy && !manifest.outputs.some((candidate) => candidate.id === publicId)) {
+      throw new DesktopAccessError('OUTPUT_KEY_CONFLICT', false, publicId.slice(0, 100))
+    }
+    if (hasBare) {
+      outputValues[publicId] = stored[output.id]
+      consumed.add(output.id)
+      continue
+    }
+    if (hasLegacy) {
+      // out-foo may be foo's legacy key or the real bare key of another declared
+      // output also named out-foo. Never guess which value belongs to foo.
+      if (manifest.outputs.some((candidate) => candidate.id === publicId)) {
+        throw new DesktopAccessError('OUTPUT_KEY_AMBIGUOUS', false, publicId.slice(0, 100))
+      }
+      outputValues[publicId] = stored[publicId]
+      consumed.add(publicId)
+    }
+  }
+  const unknown = Object.keys(stored).find((key) => !consumed.has(key))
+  if (unknown) {
+    throw new DesktopAccessError('OUTPUT_KEY_UNKNOWN', false, unknown.slice(0, 100))
+  }
+  // With values present, derive the summary from those disambiguated values instead
+  // of trusting a legacy summary key that may itself be ambiguous.
+  const outputSummary = manifest.outputs.flatMap((output) => {
+    const publicId = `out-${output.id}`
+    if (!Object.hasOwn(outputValues, publicId)) return []
+    const value = outputValues[publicId]
+    const kind = value && typeof value === 'object' && typeof (value as { kind?: unknown }).kind === 'string'
+      ? (value as { kind: string }).kind
+      : output.type
+    return [{ portId: publicId, kind }]
+  })
+  return { ...run, outputSummary, outputValues }
 }
 
 function connectedPorts(projectId: string, nodeId: string, manifest: CompositeManifest): CompositeConnectedPort[] {
@@ -307,24 +387,13 @@ export async function runCompositeOperation(
     case 'composite.run.get': {
       const record = getCompositeRun(String(input.runId ?? ''))
       if (!record) throw new DesktopAccessError('NOT_FOUND', false, 'composite-run')
-      const run = record.run
-      // NF-5.3 冻结（2026-11-26）：headless 输出统一 out-<id>；存储保持裸 id，仅在读取投影时加前缀。
-      if (run && run.outputValues) {
-        const outputValues = Object.fromEntries(
-          Object.entries(run.outputValues).map(([id, value]) => [
-            `out-${String(id).replace(/^out-/, '')}`,
-            value
-          ])
-        )
-        return { ...record, run: { ...run, outputValues } }
-      }
-      return record
+      return { ...record, run: projectCompositeRunRecord(record.run) }
     }
     case 'composite.run.list': {
       return listCompositeRuns(
         String(input.projectId ?? ''),
         typeof input.limit === 'number' ? input.limit : undefined
-      )
+      ).map(projectCompositeRunRecord)
     }
     case 'composite.archive': {
       const capabilityId = String(input.capabilityId ?? '')

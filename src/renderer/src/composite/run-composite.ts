@@ -8,6 +8,11 @@ import {
 } from 'tldraw'
 import type { CompositeManifest } from '@shared/composite/manifest'
 import { compositeRuntimeVersion } from '@shared/composite/manifest'
+import {
+  compositeNestedCandidates,
+  findNestedCompositeManualGate,
+  type CompositeNestedCapabilityRef
+} from '@shared/composite/manual-gate'
 import type {
   CompositeRunFailure,
   CompositeRunOutcome,
@@ -121,6 +126,19 @@ async function execute(
       })
     )
   }
+  const rejectNestedManualGate = async (
+    nodeId: string,
+    nested: CompositeManifest
+  ): Promise<CompositeRunOutcome> => {
+    failure = { code: 'NESTED_MANUAL_GATE_UNSUPPORTED', phase: 'input', nodeId }
+    const reason = `暂不支持嵌套包含人工门的节点流（${nested.capabilityId}@${nested.version}）；请将人工任务放到最外层节点流`
+    await finish('failed', {
+      errorCode: failure.code,
+      errorMessage: reason,
+      failurePhase: failure.phase
+    })
+    return { status: 'failed', reason, failure, stepCount: 0 }
+  }
   const shapeByNode = new Map<string, TLShapeId>()
   try {
     const contentHash = await compositeContentHash(manifest)
@@ -182,11 +200,47 @@ async function execute(
     // 否则 resolvePorts 推导不出公开端口，内部连线与输入绑定会失败。
     // 与主画布 graph.patch 的 meta.compositeManifest 缓存同口径。
     const nestedManifests = new Map<string, CompositeManifest>()
+    const resolvedCapabilities = new Map<string, CompositeManifest>()
+    const preloadVisited = new Set<string>()
+    const preloadNestedCapabilities = async (current: CompositeManifest): Promise<void> => {
+      const candidates = compositeNestedCandidates(current)
+      for (const inline of candidates.inline) {
+        const key = `inline:${inline.capabilityId}@${inline.version}`
+        if (preloadVisited.has(key)) continue
+        preloadVisited.add(key)
+        await preloadNestedCapabilities(inline)
+      }
+      for (const ref of candidates.references) {
+        const key = `ref:${ref.capabilityId}@${ref.version}`
+        if (preloadVisited.has(key)) continue
+        preloadVisited.add(key)
+        try {
+          const result = await window.api.composite.versionGet({
+            capabilityId: ref.capabilityId,
+            version: ref.version
+          })
+          if (
+            !result.ok ||
+            !result.data ||
+            (ref.contentHash && result.data.contentHash !== ref.contentHash)
+          )
+            continue
+          resolvedCapabilities.set(`${ref.capabilityId}@${ref.version}`, result.data.manifest)
+          await preloadNestedCapabilities(result.data.manifest)
+        } catch {
+          // 直接内部引用仍由下面的既有准入报告精确错误；深层引用在实际执行到该层时报告。
+        }
+      }
+    }
+    // H10：与发布校验共用递归候选和人工门查找；预解析只读取固定版本，不执行任何内部节点。
+    await preloadNestedCapabilities(manifest)
+    const cachedCapability = (capabilityId: string, version: string): CompositeManifest | null =>
+      resolvedCapabilities.get(`${capabilityId}@${version}`) ?? null
     for (const node of manifest.graph.nodes) {
       if (node.nodeType !== 'composite') continue
       let parsed: {
         manifest?: CompositeManifest
-        ref?: { capabilityId?: string; version?: string; contentHash?: string }
+        ref?: CompositeNestedCapabilityRef
         capabilityId?: string
         version?: string
         contentHash?: string
@@ -196,7 +250,13 @@ async function execute(
       } catch {
         parsed = {}
       }
-      if (parsed.manifest) continue
+      if (parsed.manifest) {
+        const gate = findNestedCompositeManualGate(parsed.manifest, cachedCapability, {
+          includeCurrent: true
+        })
+        if (gate) return rejectNestedManualGate(node.id, gate)
+        continue
+      }
       const ref =
         parsed.ref ??
         (parsed.capabilityId
@@ -225,6 +285,11 @@ async function execute(
         })
         return { status: 'failed', reason, failure, stepCount: 0 }
       }
+      resolvedCapabilities.set(`${ref.capabilityId}@${ref.version}`, result.data.manifest)
+      const gate = findNestedCompositeManualGate(result.data.manifest, cachedCapability, {
+        includeCurrent: true
+      })
+      if (gate) return rejectNestedManualGate(node.id, gate)
       nestedManifests.set(node.id, result.data.manifest)
     }
     for (const node of manifest.graph.nodes) {
@@ -358,12 +423,15 @@ async function execute(
           id: shapeId,
           type: 'node-card',
           meta: {
-            nodeResult: output.nodeResult ?? undefined,
-            nodeExtra: output.nodeExtra,
+            // tldraw meta 不接受显式 undefined；旧 checkpoint 可能只有部分输出字段。
+            ...(output.nodeResult !== null ? { nodeResult: output.nodeResult } : {}),
+            ...(output.nodeExtra !== undefined ? { nodeExtra: output.nodeExtra } : {}),
             ...(output.humanTask
               ? { humanTask: JSON.stringify({ ...JSON.parse(output.humanTask), nodeId: shapeId }) }
               : {}),
-            nodeRun: output.nodeRun ? JSON.parse(JSON.stringify(output.nodeRun)) : undefined
+            ...(output.nodeRun !== null && output.nodeRun !== undefined
+              ? { nodeRun: JSON.parse(JSON.stringify(output.nodeRun)) }
+              : {})
           }
         })
       }
@@ -478,7 +546,7 @@ async function execute(
       }
       if (!stopScheduling) {
         const slots = executionPolicy.maxConcurrency - running.size
-        const batch =
+        const ready =
           slots > 0
             ? nextSchedulableNodes(nodeOrder, predecessors, {
                 settled,
@@ -487,6 +555,17 @@ async function execute(
                 limit: slots
               })
             : []
+        // H09：latest-wait 协议同一运行只能跟踪一个未满足人工等待。
+        // 每批最多认领一个未提交人工任务；已提交任务和其他普通节点仍可并发。
+        const needsSubmission = (nodeId: string): boolean =>
+          nodeTypeById.get(nodeId) === 'human-task' && !request.humanSubmissions?.[nodeId]
+        let humanTaskClaimed = [...running.keys()].some(needsSubmission)
+        const batch = ready.filter((nodeId) => {
+          if (!needsSubmission(nodeId)) return true
+          if (humanTaskClaimed) return false
+          humanTaskClaimed = true
+          return true
+        })
         for (const nodeId of batch) {
           const task = runOneNode(nodeId)
             .then((result) => ({ nodeId, ...result }))
@@ -504,6 +583,8 @@ async function execute(
       if (done.outcome === 'failed') {
         firstFailure ??= { nodeId: done.nodeId, reason: done.reason ?? `内部节点失败：${done.nodeId}` }
         failure = { code: 'NODE_FAILED', phase: 'step', nodeId: done.nodeId }
+        // H01：失败也是本次运行的认领终态；continue 只重试无关分支，绝不重跑失败节点。
+        blocked.add(done.nodeId)
         if (executionPolicy.onBranchFailure === 'fail-fast') stopScheduling = true
         else {
           for (const downstream of compositeDownstreamOf(done.nodeId, predecessors)) blocked.add(downstream)
@@ -543,7 +624,17 @@ async function execute(
     if (runtimeVersion === 1) {
       const legacyOutput = collectLegacyMediaOutput(manifest, runEditor, shapeByNode)
       if (legacyOutput) {
-        await finish('completed')
+        const outputs = legacyMediaOutputValues(manifest, legacyOutput)
+        await report(() =>
+          window.api.composite.runFinish({
+            runId,
+            status: 'completed',
+            outputPorts: compositeOutputSummary(manifest, outputs),
+            ...(headless ? { outputValues: outputs } : {})
+          })
+        )
+        ledgerFinished = true
+        // 保持旧 GUI 的返回结构不变；公开输出映射只用于台账和 headless 读取。
         return {
           status: 'done',
           media: legacyOutput,
@@ -683,6 +774,25 @@ function collectLegacyMediaOutput(
     }
   }
   return null
+}
+
+/** 与历史 projectCompositeOutputs 一致：每个已声明媒体输出共享本次首个媒体结果。 */
+function legacyMediaOutputValues(
+  manifest: CompositeManifest,
+  media: { mediaId: string; mediaPath: string; mime: string }
+): Record<string, import('@shared/engine/values').NodeValue> {
+  const outputs: Record<string, import('@shared/engine/values').NodeValue> = {}
+  for (const output of manifest.outputs) {
+    if (
+      output.type === 'image' ||
+      output.type === 'video' ||
+      output.type === 'audio' ||
+      output.type === 'file'
+    ) {
+      outputs[output.id] = { kind: output.type, ...media }
+    }
+  }
+  return outputs
 }
 
 function createVirtualSource(

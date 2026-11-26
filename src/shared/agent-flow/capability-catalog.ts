@@ -242,6 +242,15 @@ const MEDIA_ADAPTERS: Record<string, AdapterSpec> = {
   }
 }
 
+/** 非媒体但会调用模型的直接节点；本地确定性节点不列入。 */
+const DIRECT_AI_ECONOMICS: Record<string, Pick<CapabilityDescriptor, 'cost' | 'network'>> = {
+  'voice-design': { cost: 'certain', network: 'required' },
+  chat: { cost: 'possible', network: 'required' },
+  'ai-process': { cost: 'possible', network: 'required' },
+  agent: { cost: 'possible', network: 'required' },
+  'ai-review': { cost: 'possible', network: 'required' }
+}
+
 function toPorts(record: NodeContractRecord | undefined): {
   inputs: CapabilityPort[]
   outputs: CapabilityPort[]
@@ -274,6 +283,8 @@ function mediaDescriptor(capabilityId: string, spec: AdapterSpec): CapabilityDes
   const [typeId, version] = capabilityId.split('@')
   const carrierType = spec.carrierType ?? typeId
   const record = NODE_RECORDS.get(carrierType)
+  const compatibleRecord = record && String(record.contractVersion) === version ? record : null
+  const schedulable = spec.schedulable && compatibleRecord !== null
   const ports = toPorts(record)
   return {
     capabilityRef: { kind: 'node', id: typeId, version },
@@ -284,16 +295,20 @@ function mediaDescriptor(capabilityId: string, spec: AdapterSpec): CapabilityDes
     participation: 'autonomous',
     cost: spec.cost,
     network: spec.network,
-    agentSchedulable: spec.schedulable,
-    ...(spec.reason ? { reason: spec.reason } : {}),
+    agentSchedulable: schedulable,
+    ...((spec.reason || !schedulable) ? {
+      reason: spec.reason ?? `Capability ${capabilityId} has no exact carrier contract snapshot; refusing to borrow the current record`
+    } : {}),
     ...(spec.builder ? { builder: spec.builder } : {}),
-    carrier: {
-      type: carrierType,
-      contractVersion: record?.contractVersion ?? 1,
-      config: spec.config,
-      inputPort: spec.inputPort,
-      outputPort: spec.outputPort
-    },
+    ...(schedulable && compatibleRecord ? {
+      carrier: {
+        type: carrierType,
+        contractVersion: compatibleRecord.contractVersion,
+        config: spec.config,
+        inputPort: spec.inputPort,
+        outputPort: spec.outputPort
+      }
+    } : {}),
     plan: spec.plan
   }
 }
@@ -311,6 +326,7 @@ export function nodeCapabilityDescriptors(): CapabilityDescriptor[] {
       continue
     }
     const ports = toPorts(record)
+    const economics = DIRECT_AI_ECONOMICS[record.typeId] ?? { cost: 'none' as const, network: 'none' as const }
     descriptors.push({
       capabilityRef: { kind: 'node', id: record.typeId, version: String(record.contractVersion) },
       label: record.label,
@@ -318,8 +334,7 @@ export function nodeCapabilityDescriptors(): CapabilityDescriptor[] {
       inputs: ports.inputs,
       outputs: ports.outputs,
       participation: record.executionMode === 'manual-publish' ? 'collaborative' : 'autonomous',
-      cost: 'none',
-      network: 'none',
+      ...economics,
       agentSchedulable: false,
       reason:
         record.executionDisabledReason ??
@@ -348,22 +363,63 @@ function compositeParticipation(record: CompositeVersionRecord): 'autonomous' | 
     : 'autonomous'
 }
 
-/** 内部节点类型 → 经济/网络口径：取最保守的一档（未知按 possible/none）。 */
-function compositeEconomics(record: CompositeVersionRecord): {
+/** 只读固定引用；不导入 composite/outputs，避免经运行器回到 node-contracts/flow-graph 的运行时环。 */
+function readNestedCompositeRef(config: string | undefined): { capabilityId: string; version: string } | null {
+  if (!config) return null
+  try {
+    const value = JSON.parse(config) as { capabilityId?: unknown; version?: unknown; manifest?: unknown }
+    if (value.manifest) return null
+    return typeof value.capabilityId === 'string' && typeof value.version === 'string'
+      ? { capabilityId: value.capabilityId, version: value.version }
+      : null
+  } catch {
+    return null
+  }
+}
+
+/** 直接节点与嵌套固定版本的保守 economics 汇总。未知/循环引用按 possible + required。 */
+function compositeEconomics(
+  record: CompositeVersionRecord,
+  records: ReadonlyMap<string, CompositeVersionRecord>,
+  visiting = new Set<string>()
+): {
   cost: CapabilityDescriptor['cost']
   network: CapabilityDescriptor['network']
 } {
+  const key = capabilityRefKey({ kind: 'composite', id: record.capabilityId, version: record.version })
+  if (visiting.has(key)) return { cost: 'possible', network: 'required' }
+  visiting.add(key)
   let cost: CapabilityDescriptor['cost'] = 'none'
   let network: CapabilityDescriptor['network'] = 'none'
-  const byType = new Map(cachedNodeCapabilities().map((item) => [item.capabilityRef.id, item]))
-  for (const node of record.manifest.graph.nodes) {
-    const descriptor = byType.get(node.nodeType)
-    const nodeCost = descriptor?.cost ?? 'possible'
-    if (nodeCost === 'certain') cost = 'certain'
-    else if (nodeCost === 'possible' && cost === 'none') cost = 'possible'
-    if (descriptor?.network === 'required') network = 'required'
+  const merge = (
+    nextCost: CapabilityDescriptor['cost'],
+    nextNetwork: CapabilityDescriptor['network']
+  ): void => {
+    if (nextCost === 'certain') cost = 'certain'
+    else if (nextCost === 'possible' && cost === 'none') cost = 'possible'
+    if (nextNetwork === 'required') network = 'required'
   }
-  return { cost, network }
+  try {
+    const byType = new Map(cachedNodeCapabilities().map((item) => [item.capabilityRef.id, item]))
+    for (const node of record.manifest.graph.nodes) {
+      if (node.nodeType === 'composite') {
+        const ref = readNestedCompositeRef(node.config)
+        const nested = ref
+          ? records.get(capabilityRefKey({ kind: 'composite', id: ref.capabilityId, version: ref.version }))
+          : undefined
+        if (nested) {
+          const economics = compositeEconomics(nested, records, visiting)
+          merge(economics.cost, economics.network)
+        } else merge('possible', 'required')
+        continue
+      }
+      const descriptor = byType.get(node.nodeType)
+      merge(descriptor?.cost ?? 'possible', descriptor?.network ?? 'required')
+    }
+    return { cost, network }
+  } finally {
+    visiting.delete(key)
+  }
 }
 
 let nodeCapabilityCache: CapabilityDescriptor[] | null = null
@@ -374,11 +430,16 @@ function cachedNodeCapabilities(): CapabilityDescriptor[] {
 
 /** 已发布节点流 → 能力描述（NF-13.1）。 */
 export function compositeCapabilityDescriptor(
-  record: CompositeVersionRecord
+  record: CompositeVersionRecord,
+  availableRecords: readonly CompositeVersionRecord[] = [record]
 ): CapabilityDescriptor {
   const manifest = record.manifest
   const participation = compositeParticipation(record)
-  const economics = compositeEconomics(record)
+  const records = new Map(availableRecords.map((item) => [
+    capabilityRefKey({ kind: 'composite', id: item.capabilityId, version: item.version }),
+    item
+  ]))
+  const economics = compositeEconomics(record, records)
   return {
     capabilityRef: {
       kind: 'composite',
@@ -432,7 +493,7 @@ export function buildCapabilityCatalog(
   for (const descriptor of nodeCapabilityDescriptors())
     byKey.set(capabilityRefKey(descriptor.capabilityRef), descriptor)
   for (const record of composites) {
-    const descriptor = compositeCapabilityDescriptor(record)
+    const descriptor = compositeCapabilityDescriptor(record, composites)
     byKey.set(capabilityRefKey(descriptor.capabilityRef), descriptor)
   }
   return [...byKey.values()]
@@ -461,9 +522,12 @@ export function findCapability(
 
 /** 对外目录 DTO：不暴露编译载体配置（配置是实现细节，不是能力契约）。 */
 export function capabilityCatalogDto(
-  catalog: readonly CapabilityDescriptor[]
+  catalog: readonly CapabilityDescriptor[],
+  limit = 400
 ): Array<Omit<CapabilityDescriptor, 'carrier' | 'contentHash' | 'builder'>> {
-  return catalog.map(
+  // 对外 schema 的 max400 只约束展示集合；validate/compile 始终使用完整目录。
+  // 节点顺序稳定，仓储按发布日期倒序提供 composite，因此截到前 400 是最新展示集合。
+  return catalog.slice(0, Math.max(0, Math.trunc(limit))).map(
     ({
       capabilityRef,
       label,

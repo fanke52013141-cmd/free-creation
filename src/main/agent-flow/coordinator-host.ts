@@ -4,7 +4,7 @@ import { graphCanvasVersion } from './graph-canvas-version'
 import { createHash } from 'node:crypto'
 import { Annotation, StateGraph, START, END } from '@langchain/langgraph'
 import { AsyncLocalStorageProviderSingleton } from '@langchain/core/singletons'
-import type { ProjectFile } from '../../shared/types'
+import type { ProjectFile, PortDecl } from '../../shared/types'
 import {
   AgentNodeConfigSchema,
   ReviewNodeConfigSchema,
@@ -42,7 +42,7 @@ import {
   loopExitConditionSatisfied,
   flowRouteState
 } from '../../shared/agent-flow/flow-graph-router'
-import { FlowAssetError } from '../../shared/agent-flow/assets'
+import { FlowAssetError, type FlowAssetValue } from '../../shared/agent-flow/assets'
 import { readCompositeInstanceManifest } from '../../shared/composite/outputs'
 import {
   isDispatchableFlowNodeKind,
@@ -53,6 +53,7 @@ import {
   type FlowGraph
 } from '../../shared/agent-flow/flow-graph'
 import {
+  assembleContextManifest,
   buildContextManifest,
   contextManifestBlocking
 } from '../../shared/agent-flow/context-manifest'
@@ -1174,10 +1175,11 @@ export class FlowCoordinatorHost {
     graph: FlowGraph,
     file: ProjectFile,
     edgeState: ReturnType<typeof flowRouteState>['edgeState'],
-    targetNodeId: string
+    targetNodeId: string,
+    effectiveIncoming?: FlowGraph['edges']
   ): string[] {
     const selected = new Set(
-      graph.edges
+      (effectiveIncoming ?? graph.edges)
         .filter((edge) => edgeState(edge) === 'satisfied')
         .map((edge) => canonicalFlowJson({ from: edge.from, to: edge.to }))
     )
@@ -1240,6 +1242,7 @@ export class FlowCoordinatorHost {
       const adopted = run.children.find((child) => child.adoptionPending)
       if (adopted) {
         adopted.state = 'completed'
+        adopted.humanDecided = true
         delete adopted.adoptionPending
         run.code = undefined
         this.emitTrustedEvent(run, `${adopted.taskId}:adopted`, 'agent.completed', run.revision)
@@ -1608,30 +1611,159 @@ export class FlowCoordinatorHost {
     let materialPortId: string | undefined
     let contextManifest: ContextManifest | undefined
     let selectedSources: Set<string> | undefined
+    let materialIncoming: FlowGraph['edges'] | undefined
+    const materialRefs = new Map<FlowGraph['edges'][number], AgentFlowAssetRef>()
     if (next.inputs) {
-      contextManifest = buildContextManifest(next.nodeId, next.inputs, facts.deliveries, {
-        humanMaterial: material
-      })
-      if (next.inputs.overflow === 'ask-human' && contextManifest.budget.exceeded)
-        return this.waitForContextBudget(run, contextManifest)
-      if (contextManifestBlocking(contextManifest))
+      const original = buildContextManifest(next.nodeId, next.inputs, facts.deliveries)
+      contextManifest = original
+      selectedSources = new Set(original.entries.map((entry) => entry.sourceStageKey))
+      if (!material && next.inputs.overflow === 'ask-human' && original.budget.exceeded)
+        return this.waitForContextBudget(run, original)
+      if (original.missing.some((entry) => entry.required))
+        throw new AgentRuntimeError('FLOW_CONTEXT_REQUIRED_MISSING', 'graph-context')
+      if (!material && contextManifestBlocking(original))
         throw new AgentRuntimeError(
-          contextManifest.budget.exceeded ? 'FLOW_CONTEXT_OVER_BUDGET' : 'FLOW_CONTEXT_REQUIRED_MISSING',
+          original.budget.exceeded ? 'FLOW_CONTEXT_OVER_BUDGET' : 'FLOW_CONTEXT_REQUIRED_MISSING',
           'graph-context'
         )
       if (material) {
-        // 人工补料进入文本类端口；`any` 单值端口同样可承载文本（如 processor 的 in-value）。
-        const inputPortsOfNode = node.ports.filter((port) => port.dir === 'in')
-        materialPortId =
-          inputPortsOfNode.find((port) => port.type === 'text' || port.type === 'markdown')?.id ??
-          inputPortsOfNode.find((port) => port.type === 'any' && port.cardinality === 'one')?.id
-        if (!materialPortId)
-          throw new AgentRuntimeError('FLOW_CONTEXT_MATERIAL_UNSUPPORTED', 'graph-context')
-        // 其余输入仍按原始选择器选取，不被补料替换影响。
-        const selection = buildContextManifest(next.nodeId, next.inputs, facts.deliveries)
-        selectedSources = new Set(selection.entries.map((entry) => entry.sourceStageKey))
-      } else {
-        selectedSources = new Set(contextManifest.entries.map((entry) => entry.sourceStageKey))
+        // Original overflow may already have dropped optional candidates. Rebuild the
+        // complete contribution universe before applying the confirmed replacement,
+        // then re-apply the original budget to the exact effective set.
+        const candidates = buildContextManifest(
+          next.nodeId,
+          next.inputs,
+          facts.deliveries,
+          { includeAllCandidates: true }
+        )
+        const candidateSources = new Set(candidates.entries.map((entry) => entry.sourceStageKey))
+        const inputPorts = node.ports.filter((port) => port.dir === 'in')
+        const selectedEdges = graph.edges.filter(
+          (edge) =>
+            edge.to.nodeId === next.nodeId &&
+            edgeState(edge) === 'satisfied' &&
+            candidateSources.has(edge.from.nodeId)
+        )
+        const portOf = (edge: FlowGraph['edges'][number]): PortDecl | undefined =>
+          inputPorts.find((port) => port.id === edge.to.portId)
+        const textPorts = [
+          ...new Set(
+            selectedEdges
+              .filter((edge) => ['text', 'markdown'].includes(portOf(edge)?.type ?? ''))
+              .map((edge) => edge.to.portId)
+          )
+        ]
+        if (textPorts.length > 1)
+          throw new AgentRuntimeError('FLOW_CONTEXT_MATERIAL_AMBIGUOUS', 'graph-context')
+        if (textPorts.length === 1) materialPortId = textPorts[0]
+        else {
+          const anyPorts = [
+            ...new Set(
+              selectedEdges
+                .filter((edge) => {
+                  const port = portOf(edge)
+                  return port?.type === 'any' && port.cardinality === 'one'
+                })
+                .map((edge) => edge.to.portId)
+            )
+          ]
+          if (anyPorts.length !== 1)
+            throw new AgentRuntimeError(
+              anyPorts.length > 1
+                ? 'FLOW_CONTEXT_MATERIAL_AMBIGUOUS'
+                : 'FLOW_CONTEXT_MATERIAL_UNSUPPORTED',
+              'graph-context'
+            )
+          materialPortId = anyPorts[0]
+        }
+        const plans: Array<{
+          edge: FlowGraph['edges'][number]
+          manifest: ContextManifest
+        }> = []
+        for (const edge of selectedEdges) {
+          const upstream = run.children
+            .filter((child) => child.nodeId === edge.from.nodeId && child.state === 'completed')
+            .at(-1)
+          if (!upstream) throw new AgentRuntimeError('FLOW_HANDOFF_INPUT_REJECTED', 'graph-capability')
+          const port = portOf(edge)
+          if (!port) throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'graph-capability')
+          let ref = upstream.outputs.find(
+            (output) =>
+              output.sourceNodeId === edge.from.nodeId && output.sourcePortId === edge.from.portId
+          )
+          let value: FlowAssetValue
+          if (ref) value = this.assets.resolveInputs(run.projectId, [ref])[0]!.value
+          else {
+            try {
+              const version = this.assets.submit({
+                projectId: run.projectId,
+                nodeId: edge.from.nodeId,
+                portId: edge.from.portId,
+                submissionId: `cap-input:${hash([taskId, edge.from.nodeId, edge.from.portId, edge.to.portId])}`,
+                expectedGraphVersion: file.meta.graphVersion,
+                traceId: run.traceId,
+                spanId: run.spanId
+              })
+              ref = version.ref
+              value = version.value
+            } catch (error) {
+              if (
+                port.required === false &&
+                error instanceof FlowAssetError &&
+                error.code === 'ASSET_OUTPUT_UNAVAILABLE'
+              )
+                continue
+              throw error
+            }
+          }
+          materialRefs.set(edge, ref)
+          const sourceFact = facts.deliveries.find(
+            (delivery) => delivery.stageKey === edge.from.nodeId
+          )
+          plans.push({
+            edge,
+            manifest: buildContextManifest(next.nodeId, next.inputs, [
+              {
+                stageKey: edge.from.nodeId,
+                nodeId: edge.from.nodeId,
+                outputs: [value],
+                humanDecided: sourceFact?.humanDecided ?? false,
+                ...(sourceFact?.handoffNote ? { handoffNote: sourceFact.handoffNote } : {})
+              }
+            ], { includeAllCandidates: true })
+          })
+        }
+        const retainedPlans = plans.filter(
+          (plan) => plan.edge.to.portId !== materialPortId && plan.manifest.entries.length > 0
+        )
+        // Preserve the exact per-edge values. assembleContextManifest performs the
+        // only global dedupe, so a prior global projection cannot drop or swap them.
+        const preserved = retainedPlans.flatMap((plan) => plan.manifest.entries)
+        const replacement = buildContextManifest(next.nodeId, next.inputs, facts.deliveries, {
+          humanMaterial: material
+        })
+        const human = replacement.entries.find((entry) => entry.sourceStageKey === 'human:context')
+        if (!human) throw new AgentRuntimeError('FLOW_CONTEXT_MATERIAL_UNSUPPORTED', 'graph-context')
+        const effective = assembleContextManifest(
+          next.nodeId,
+          original.budget.limitBytes,
+          [...preserved, human],
+          original.missing
+        )
+        const retainedOptionalDropped = effective.dropped.some((dropped) =>
+          retainedPlans.some((plan) =>
+            plan.manifest.entries.some(
+              (entry) =>
+                !entry.required &&
+                entry.sourceStageKey === dropped.sourceStageKey &&
+                entry.path === dropped.path
+            )
+          )
+        )
+        if (effective.budget.exceeded || retainedOptionalDropped)
+          throw new AgentRuntimeError('FLOW_CONTEXT_OVER_BUDGET', 'graph-context')
+        contextManifest = effective
+        materialIncoming = retainedPlans.map((plan) => plan.edge)
       }
     }
     if (material && run.contextWaitStageKey === next.nodeId) {
@@ -1639,12 +1771,11 @@ export class FlowCoordinatorHost {
       run.contextWaitLimitBytes = undefined
     }
     const inputPorts = node.ports.filter((port) => port.dir === 'in')
-    const incoming = graph.edges.filter(
+    const incoming = materialIncoming ?? graph.edges.filter(
       (edge) =>
         edge.to.nodeId === next.nodeId &&
         edgeState(edge) === 'satisfied' &&
-        (!selectedSources || selectedSources.has(edge.from.nodeId)) &&
-        (!materialPortId || edge.to.portId !== materialPortId)
+        (!selectedSources || selectedSources.has(edge.from.nodeId))
     )
     const inputsByPort = new Map<string, AgentFlowAssetRef[]>()
     for (const edge of incoming) {
@@ -1657,7 +1788,7 @@ export class FlowCoordinatorHost {
       if (!port) throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'graph-capability')
       // 与 agent bind 的 freeze 同一机制：assets.submit 生成 sourceNodeId=上游节点的固定引用，
       // 与画布边 from 一致，账本输入源校验通过（raw 子任务 outputRefs 指向底层处理器，源不符）。
-      let ref = upstream.outputs.find(
+      let ref = materialRefs.get(edge) ?? upstream.outputs.find(
         (output) => output.sourceNodeId === edge.from.nodeId && output.sourcePortId === edge.from.portId
       )
       if (!ref) {
@@ -1690,9 +1821,9 @@ export class FlowCoordinatorHost {
       inputs: [],
       state: 'ready',
       outputs: [],
-      ...(typeof capabilityRound === 'number' ? { round: capabilityRound } : {}),
-      ...(contextManifest ? { contextManifest } : {})
+      ...(typeof capabilityRound === 'number' ? { round: capabilityRound } : {})
     }
+    if (contextManifest) child.contextManifest = contextManifest
     if (!prior) {
       run.children.push(child)
       run.decisions++
@@ -1724,7 +1855,7 @@ export class FlowCoordinatorHost {
         targetNodeId: next.nodeId,
         parentCoordinatorTaskId: run.taskId,
         parentDeadlineAt: run.deadlineAt,
-        ...(input.routedInputEdgeIds ? { routedInputEdgeIds: this.routedGraphCanvasEdgeIds(graph, file, edgeState, next.nodeId) } : {}),
+        ...(input.routedInputEdgeIds ? { routedInputEdgeIds: this.routedGraphCanvasEdgeIds(graph, file, edgeState, next.nodeId, incoming) } : {}),
         contractVersion: node.contractVersion,
         inputs,
         ...(material && materialPortId
@@ -2003,7 +2134,7 @@ export class FlowCoordinatorHost {
     const graphNodes = run.config.graph?.nodes ?? []
     for (const child of latestByNode.values()) {
       const versions = this.assets.resolveInputs(run.projectId, child.outputs)
-      // ②：capability 节点是处理器，无 agent 任务/人工采用；humanDecision 仅对 agent 子节点查询。
+      // Agent 查询 specialist 的人工续接；capability 读取 BL-21 采用时持久化的决定事实。
       const isAgent = graphNodes.find((node) => node.nodeId === child.nodeId)?.kind === 'agent'
       deliveries.push({
         stageKey: child.nodeId,
@@ -2018,7 +2149,7 @@ export class FlowCoordinatorHost {
               run.taskId,
               child.taskId
             )
-          : false
+          : child.humanDecided === true
       })
     }
     // ⑥审核门禁：审核通过即视为该审核节点"已交付"（交付物=被审核通过的固定版本资产），
@@ -2151,13 +2282,13 @@ export class FlowCoordinatorHost {
           ...(child.executionEnvelope
             ? { envelopeHash: `sha256:${hash(child.executionEnvelope)}` }
             : {}),
-          humanDecided:
-            isAgent &&
-            this.specialists.humanDecision(
-              { projectId: run.projectId, nodeId: child.nodeId },
-              run.taskId,
-              child.taskId
-            ),
+          humanDecided: isAgent
+            ? this.specialists.humanDecision(
+                { projectId: run.projectId, nodeId: child.nodeId },
+                run.taskId,
+                child.taskId
+              )
+            : child.humanDecided === true,
           reviewPassed: reviewsPassed,
           definitionRevision: `sha256:${run.scopeRevision}`,
           acceptedAt: Date.now(),
@@ -2221,7 +2352,9 @@ export class FlowCoordinatorHost {
       (record) => !affectedNodes.has(record.nodeId)
     ).length
     const activeChildCount = run.children.filter(
-      (child) => affectedNodes.has(child.nodeId) && child.state !== 'completed'
+      (child) =>
+        affectedNodes.has(child.nodeId) &&
+        !['completed', 'failed', 'cancelled', 'skipped'].includes(child.state)
     ).length
     const unresolved = this.db
       .prepare(
@@ -2511,6 +2644,54 @@ export class FlowCoordinatorHost {
         )
       }
       for (const child of run.children) {
+        const graphKind = run.config.graph?.nodes.find((node) => node.nodeId === child.nodeId)?.kind
+        if (graphKind && graphKind !== 'agent') {
+          const committedRow = this.db.prepare(
+            "SELECT receipt_json FROM flow_commands WHERE project_id=? AND task_id=? AND state='committed'"
+          ).get(run.projectId, child.taskId) as { receipt_json: string } | undefined
+          const committed = committedRow
+            ? canonicalFlowJson(JSON.parse(committedRow.receipt_json).outputRefs) ===
+              canonicalFlowJson(child.outputs)
+            : false
+          if (['ready', 'queued'].includes(child.state)) {
+            observed = true
+            continue
+          }
+          if (child.state === 'completed') {
+            if (committed) {
+              this.assets.resolveInputs(run.projectId, child.outputs)
+              observed = true
+            } else reasons.push('FLOW_TASK_CHECKPOINT_UNCONFIRMED')
+            continue
+          }
+          if (child.state === 'waiting') {
+            if (child.adoptionPending) {
+              if (committed) observed = true
+              else reasons.push('FLOW_TASK_CHECKPOINT_UNCONFIRMED')
+            } else if (child.compositeWait) {
+              const waiting = findCompositeCommandWait(
+                this.db, run.projectId, child.taskId, child.nodeId
+              )
+              if (
+                waiting &&
+                waiting.runId === child.compositeWait.runId &&
+                waiting.stepKey === child.compositeWait.stepKey &&
+                ['open', 'satisfied'].includes(waiting.state)
+              )
+                observed = true
+              else reasons.push('FLOW_TASK_CHECKPOINT_UNCONFIRMED')
+            } else if (graphKind === 'human-task') {
+              const skipped = this.db.prepare(
+                "SELECT 1 FROM flow_commands WHERE project_id=? AND task_id=? AND state='skipped' AND json_extract(receipt_json,'$.code')='FLOW_EXECUTION_SKIPPED'"
+              ).get(run.projectId, child.taskId)
+              if (skipped) observed = true
+              else reasons.push('FLOW_TASK_CHECKPOINT_UNCONFIRMED')
+            } else reasons.push('FLOW_TASK_CHECKPOINT_UNCONFIRMED')
+            continue
+          }
+          reasons.push('FLOW_TASK_CHECKPOINT_UNCONFIRMED')
+          continue
+        }
         let record: ReturnType<FlowAgentDesktopHost['assignment']> = null
         try {
           record = this.specialists.assignment(
@@ -2635,7 +2816,9 @@ export class FlowCoordinatorHost {
           this.emitTrustedEvent(run, `${input.eventId}:recovery-wait`, 'human.wait', run.revision)
         run.state = 'waiting'
         run.waitRevision++
-        run.code = undefined
+        run.code = run.children.some((child) => child.adoptionPending)
+          ? 'HUMAN_ADOPTION_REQUIRED'
+          : undefined
       } else {
         run.state = 'blocked'
         run.code = reasons[0]

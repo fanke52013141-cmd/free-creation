@@ -395,6 +395,9 @@ export function normalizeImageGenerationConfig(
   const rawCount = typeof input.count === 'number' ? input.count : Number(input.count)
   const count = Number.isFinite(rawCount) ? Math.max(1, Math.min(9, Math.trunc(rawCount))) : 1
   return {
+    ...(typeof input.featureKey === 'string' && input.featureKey.trim()
+      ? { featureKey: input.featureKey.trim() }
+      : {}),
     modelKey: typeof input.modelKey === 'string' ? input.modelKey : '',
     ...(typeof input.providerKey === 'string' && input.providerKey
       ? { providerKey: input.providerKey }

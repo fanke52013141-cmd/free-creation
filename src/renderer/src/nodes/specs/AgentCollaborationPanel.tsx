@@ -159,7 +159,9 @@ export function AgentCollaborationPanel({
                   : message.kind === 'revise'
                     ? '新要求'
                     : '讨论'}
-                {message.actor && ` · ${message.actor.roleId === 'owner' ? '我' : message.actor.roleId}`}
+                {message.actor && ` · ${message.actor.kind === 'user'
+                  ? message.actor.roleId === 'owner' ? '我' : message.actor.roleId
+                  : `外部 Agent · ${message.actor.clientId}`}`}
                 ：{message.text}
               </p>
               {message.handoffNote && <p>交接说明 · {message.handoffNote}</p>}

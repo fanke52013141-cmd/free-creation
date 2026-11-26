@@ -2591,6 +2591,47 @@ describe('O4-P3 graph mode execution（声明式图路由，mock 模型）', () 
     expect(stopSpy).toHaveBeenCalledTimes(1)
   })
 
+  it('recovers a committed capability after session loss without replaying it', async () => {
+    const second = deferred()
+    const graph = FlowGraphSchema.parse({
+      schemaVersion: 1,
+      graphId: 'capability-session-loss',
+      name: '能力恢复',
+      goal: '核对已提交能力而不重放',
+      nodes: [
+        { nodeId: 'process-first', title: 'process-first', participation: 'autonomous', kind: 'capability', capability: 'text-pass@1', goal: '先交付', completion: '输出' },
+        { nodeId: 'process-second', title: 'process-second', participation: 'autonomous', kind: 'capability', capability: 'text-pass@1', goal: '后交付', completion: '输出' }
+      ],
+      edges: [{ from: { nodeId: 'process-first', portId: 'out-value' }, to: { nodeId: 'process-second', portId: 'in-value' }, kind: 'data' }],
+      entry: 'process-first', exits: ['process-second']
+    })
+    const f = fixture({
+      graph,
+      deliveryDuring: async (target) => {
+        if (target === 'process-second') await second.promise
+      }
+    })
+    const running = f.host.run(input)
+    for (let attempt = 0; attempt < 100; attempt++) {
+      if ((f.coordinator.store.latest('p', 'main')?.children.length ?? 0) >= 2) break
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+    const run = f.coordinator.store.latest('p', 'main')!
+    expect(run.children[0].state).toBe('completed')
+    expect(run.children[0].outputs.length).toBeGreaterThan(0)
+    ;(f.coordinator as unknown as { active: Map<string, AbortController> }).active.clear()
+    const recovered = await f.host.run({
+      ...input, action: 'reconcile', requestId: 'recover-capability',
+      eventId: 'recover-capability', expectedTaskId: run.taskId,
+      expectedWaitRevision: run.waitRevision
+    })
+    expect(recovered.task.state).toBe('waiting')
+    second.resolve()
+    expect((await running).task.state).toBe('completed')
+    expect(f.coordinator.store.latest('p', 'main')!.state).toBe('completed')
+    expect(f.count().executions).toBe(2)
+  })
+
   it('maps a failed human-task receipt to failed instead of human waiting', async () => {
     const graph = FlowGraphSchema.parse({
       schemaVersion: 1,
@@ -2605,12 +2646,30 @@ describe('O4-P3 graph mode execution（声明式图路由，mock 模型）', () 
       entry: 'human',
       exits: ['human']
     })
-    const f = fixture({ graph, humanFailure: true })
+    const options = { graph, humanFailure: true }
+    const f = fixture(options)
     addHumanTaskFixture(f, 'human', 'material')
     await expect(f.host.run(input)).rejects.toMatchObject({ code: 'FLOW_EXECUTION_FAILED' })
     const run = f.coordinator.store.latest('p', 'main')!
     expect(run.state).toBe('blocked')
     expect(run.children.map((child) => child.state)).toEqual(['failed'])
+    const impact = f.coordinator.previewStageRework({ projectId: 'p', nodeId: 'main' }, 'human')
+    expect(impact?.activeChildCount).toBe(0)
+    expect(impact?.canRework).toBe(true)
+    f.coordinator.reworkStage({ projectId: 'p', nodeId: 'main' }, 'human')
+    options.humanFailure = false
+    f.byId.human.meta.humanTaskPending = JSON.stringify({
+      submissionId: 'replacement-after-media-loss', expectedRevision: 1,
+      value: { kind: 'text', text: 'replacement' }
+    })
+    const recovered = f.coordinator.store.latest('p', 'main')!
+    const completed = await f.host.run({
+      ...input, action: 'continue', requestId: 'replace-human-failure',
+      eventId: 'replace-human-failure', expectedTaskId: recovered.taskId,
+      expectedWaitRevision: recovered.waitRevision
+    })
+    expect(completed.task.state).toBe('completed')
+    expect(completed.refs.length).toBeGreaterThan(0)
   })
 
   it('BL-03：分支条件不成立导致全部出口被跳过 → FLOW_STALLED（不再报成等待人工）', async () => {

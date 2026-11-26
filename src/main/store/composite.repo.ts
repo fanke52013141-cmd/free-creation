@@ -451,12 +451,14 @@ export function listCompositeVersions(capabilityId: string): CompositeVersionRec
   return rows.map(rowToVersion)
 }
 
-/** BL-10：能力目录需要全部已发布版本（只读；按发布时间倒序，便于取最新）。 */
-export function listAllCompositeVersions(limit = 500): CompositeVersionRecord[] {
-  const rows = getDb()
-    .prepare('SELECT * FROM composite_versions ORDER BY published_at DESC LIMIT ?')
-    .all(Math.max(1, Math.min(2000, limit))) as VersionRow[]
-  return rows.map(rowToVersion)
+/** BL-10：固定版本引用需要完整目录；仅展示调用方显式传 limit 时才截断。 */
+export function listAllCompositeVersions(limit?: number): CompositeVersionRecord[] {
+  const rows = limit === undefined
+    ? getDb().prepare('SELECT * FROM composite_versions ORDER BY published_at DESC').all()
+    : getDb()
+        .prepare('SELECT * FROM composite_versions ORDER BY published_at DESC LIMIT ?')
+        .all(Math.max(1, Math.min(2000, limit)))
+  return (rows as VersionRow[]).map(rowToVersion)
 }
 
 export function listCompositeCapabilities(options: {

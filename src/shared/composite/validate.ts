@@ -1,5 +1,6 @@
 import type { CompositeManifest, CompositeManifestIssue } from './manifest'
 import { hasCompositeManualGate, parseCompositeManifest } from './manifest'
+import { findNestedCompositeManualGate } from './manual-gate'
 import { resolveCompositeBudget } from './budget'
 import { portCompatible, portPairCompatible } from '../port-compatibility'
 
@@ -12,6 +13,7 @@ export type CompositeValidationCode =
   | 'INLINE_SCHEMA_REMOVED'
   | 'VERSION_FORMAT_INVALID'
   | 'MANUAL_GATE_UNDECLARED'
+  | 'NESTED_MANUAL_GATE_UNSUPPORTED'
   | 'PORT_CARDINALITY'
   | 'DUPLICATE_EDGE'
   | 'CYCLE'
@@ -245,6 +247,17 @@ export function validateCompositeManifest(
 
   // 嵌套依赖：环、深度、展开节点预算（注入 resolver 时才可判定）。
   const getCapability = deps.getCapability
+  if (
+    deps.publication &&
+    findNestedCompositeManualGate(manifest, (id, version) => getCapability?.(id, version) ?? null)
+  ) {
+    // H10：与运行准入共用递归展开；旧快照没有 requiresManualGate 传播也不能漏检。
+    issues.push(issue(
+      'NESTED_MANUAL_GATE_UNSUPPORTED',
+      'dependencies',
+      '暂不支持嵌套包含人工门的节点流；请将人工任务放到最外层节点流后再发布'
+    ))
+  }
   if (getCapability) {
     const { maxDepth, maxExpandedNodes: maxNodes } = resolveCompositeBudget(manifest.executionPolicy)
     const walk = (

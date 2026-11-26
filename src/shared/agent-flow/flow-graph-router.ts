@@ -225,7 +225,12 @@ export function flowRouteState(
     changed = false
     for (const node of graph.nodes) {
       if (node.nodeId === graph.entry || resolved(node.nodeId) || delivered.has(node.nodeId)) continue
-      const incoming = graph.edges.filter((edge) => edge.to.nodeId === node.nodeId)
+      const allIncoming = graph.edges.filter((edge) => edge.to.nodeId === node.nodeId)
+      const body = bodies.get(node.nodeId)
+      // 循环载体的回边属于上一轮；判断本轮是否应整体跳过时不能使用它。
+      const incoming = body
+        ? allIncoming.filter((edge) => !body.body.has(edge.from.nodeId))
+        : allIncoming
       const lostRequiredInput = incoming.some((edge) =>
         !hasCondition(edge) &&
         !edge.otherwise &&
@@ -275,17 +280,18 @@ export function nextReadyNodes(
       const external = graph.edges.filter(
         (edge) => edge.to.nodeId === node.nodeId && !body.body.has(edge.from.nodeId)
       )
-      const externalReady = external.every((edge) => {
-        const state = edgeState(edge)
-        return state === 'satisfied' || state === 'absent'
-      })
+      const states = external.map(edgeState)
+      const anySatisfied = states.includes('satisfied') || states.includes('absent')
+      const anyPending = states.includes('pending')
+      // 体外 dead 分支不参与本轮，但不能阻止另一个已满足分支进入循环。
+      const externalReady = external.length === 0 || (node.joinPolicy === 'any'
+        ? anySatisfied
+        : anySatisfied && !anyPending)
       if (externalReady && !delivered.has(node.nodeId)) ready.push(node.nodeId)
       else if (!externalReady)
         blocked.push({
           nodeId: node.nodeId,
-          reason: external.some((edge) => edgeState(edge) === 'pending')
-            ? 'INCOMING_EDGES_PENDING'
-            : 'INCOMING_EDGES_UNSATISFIED'
+          reason: anyPending ? 'INCOMING_EDGES_PENDING' : 'INCOMING_EDGES_UNSATISFIED'
         })
       continue
     }
