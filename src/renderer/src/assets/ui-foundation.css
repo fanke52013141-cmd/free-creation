@@ -653,7 +653,7 @@ textarea {
 }
 
 .app-select-content {
-  z-index: var(--z-context-menu, 1200);
+  z-index: var(--z-popover, var(--z-context-menu, 3500));
   min-width: var(--radix-select-trigger-width);
   max-width: min(420px, calc(100vw - 16px));
   overflow: hidden;

@@ -1,8 +1,11 @@
-# 全软件 GUI／CLI／MCP 一致能力开发计划
+# 全软件 GUI／CLI／MCP 一致能力开发计划（F0–F10 规划档案）
 
-日期：2026-11-07。状态：可执行开发方案，业务能力尚未因此新增。基线：`3b1f2ab`，另有未提交工作区修改，不能视为已发布能力。
+> status: historical
+> last-verified: 2026-11-26
 
-> **历史规划快照**：文中的“32 类节点”“25 项接口”等均为 2026-11-07 时点口径，不作为现状。当前节点与操作集合以 [`generated/contracts.json`](./generated/contracts.json)、`capability.list` 和 [`AGENT_PARITY_SPEC.md`](../../AGENT_PARITY_SPEC.md) 为准。
+日期：2026-11-07。状态：阶段开发规划基线（F0–F9 主体已按台账落地）。
+
+> **历史规划快照**：文中的早期节点与接口数量均为 2026-11-07 时点口径，不作为现状。当前节点与操作集合以 [`generated/contracts.json`](./generated/contracts.json)、`capability.list` 和 [`AGENT_PARITY_SPEC.md`](../../AGENT_PARITY_SPEC.md) 为准。
 
 目标由用户明确提出：人使用 GUI 操作软件；Agent 使用 CLI 或 MCP 操作同一个软件；能建立多个画布、创建和连接各类节点、执行任务、取得并复用结果，保存后人在 GUI 中继续操作。最终范围是全软件业务能力，不止32类节点或当前25项接口。
 

@@ -1,6 +1,8 @@
-# 本地 Agent 接入能力矩阵
+# 本地 Agent 接入能力矩阵（早期阶段规划档案）
 
-> **当前口径（2026-11-26）**：可调用操作、运输面与节点动作以 [`generated/contracts.json`](./generated/contracts.json) 和 `capability.list` 为准，本文不手写数量。下文 A0–A4 表保留历史分期与设计基线；标为 `planned` 的历史单元格不能用来否定后续已实现的操作，当前状态必须核对机器契约和交付台账。
+> status: historical
+> last-verified: 2026-11-26
+> **唯一现行真值声明**：本文为 A0–A4 阶段规划基线与演进记录。当前已开放操作、Schema、运输面与逐节点 N1–N8 动作状态一律以 [`generated/contracts.json`](./generated/contracts.json)、[`generated/action-inventory.json`](./generated/action-inventory.json) 和运行时 `capability.list` / `node.type.list` 为唯一真值，严禁用下表历史 `planned` 单元格或早期阶段节点计数替代机器真值。
 
 2026-11-07 完整目标接续：[一致性规范](../../AGENT_PARITY_SPEC.md)、[F0–F10开发计划](15-gui-cli-mcp-parity-plan.md)
 和[节点动作表](16-node-action-coverage.md)补齐当前全软件范围。项目包、结构包和资源包导入/导出已实现，边界见[包传输台账](24-transfer-delivery.md)。
@@ -254,4 +256,4 @@ A1.4 首包接续：[查询交付台账](08-a1-4-read-only-queries.md)。该包�
 执行路径复用 `graph.patch`（`nodeType:'composite'` 仅限带 manifest 对象插入）+ `node.execute` + `run.wait` / `output.get`。W2 的发布预览/关闭确认为 GUI 呈现与人工步骤，未新增业务动作；差异预检复用 `planCompositeUpgrade`。详见 [W2 交付](../composite/W2_DELIVERY_2026_11_11.md)。
 
 2026-11-20：生图参考图排序通过共享执行器同步应用于 GUI 与 CLI/MCP 的 `node.execute`。所有有效参考图传入，未点名的优先，出站提示词内编号随请求顺序重映射。请求 Schema、节点契约版本及存量画布引用编号保持兼容。输入框的 @ 菜单为 GUI 交互，CLI/MCP 可直接传编号。
-**W3/W4/AF-07 补登记（2026-11-20 规范审查）**：画布内实例执行路径仍如上；**headless 独立路径**（无项目、无画布实例，2026-11-12 起）新增六个操作——`composite.execute`（含 `confirmCost` 计费确认门；inputs 按 `in-<id>` 完整端口 ID，outputs 以裸公开输出 id 为键）、`composite.execute.wait`、`composite.run.retry`（受控重试，上限 3 次）、`composite.run.submitHuman`（人工等待提交）、`composite.run.resume`（续跑，跳过已完成步骤）、`composite.run.resubmit`（人工补交）。其中 `composite.run.submitHuman` / `composite.run.resubmit` 属于人工决定，要求目标项目在桌面打开并人工确认；其余 headless 操作仍可无画布实例。`composite.upgrade.apply/references/delete` 已按 W3 交付（引用保护、固定版本解析）。验收：`scripts/acceptance/headless-execute-acceptance.cjs`（7 项）与 `composite-desktop-acceptance.cjs`（22 项）。
+**W3/W4/AF-07 补登记（2026-11-20 规范审查；2026-11-26 NF-5.3 冻结校准）**：画布内实例执行路径仍如上；**headless 独立路径**（无项目、无画布实例，2026-11-12 起）新增六个操作——`composite.execute`（含 `confirmCost` 计费确认门；inputs 按 `in-<id>` 完整端口 ID，outputs / outputValues / resubmit 统一以 `out-<id>` 为键，旧裸 id 仅读取兼容）、`composite.execute.wait`、`composite.run.retry`（受控重试，上限 3 次）、`composite.run.submitHuman`（人工等待提交）、`composite.run.resume`（续跑，跳过已完成步骤）、`composite.run.resubmit`（人工补交）。其中 `composite.run.submitHuman` / `composite.run.resubmit` 属于人工决定，要求目标项目在桌面打开并人工确认；其余 headless 操作仍可无画布实例。`composite.upgrade.apply/references/delete` 已按 W3 交付（引用保护、固定版本解析）。验收：`scripts/acceptance/headless-execute-acceptance.cjs`（7 项）与 `composite-desktop-acceptance.cjs`（22 项）。

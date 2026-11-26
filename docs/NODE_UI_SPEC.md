@@ -1,7 +1,8 @@
 # 节点 UI 统一规范（历史决定记录）
 
 > status: historical
-> last-verified: unverified
+> last-verified: 2026-11-26
+> 验证口径：已核对本文与现行 `NODE_UI_STANDARD.md` v3 的引用关系及 `test/node-ui-standard-spec.test.ts`；本文仍是历史决定记录，旧提案不因本次核对重新生效。
 
 
 > **现行布局规范：** 请先读 [`NODE_UI_STANDARD.md`](./NODE_UI_STANDARD.md)。本文保留早期提案、已落地实施记录和逐项用户决定，部分旧章节记录的是尚未实施的方案；若与现行布局规范冲突，以 `NODE_UI_STANDARD.md` 为准。本文中未冲突且已确认的具体视觉决定仍然有效。
@@ -13,7 +14,7 @@
 > v1.1 集成决定（用户 v1.0 规范评审拍板）：颜色条采用方案 A（文档流内顶部 4px）；
 > 引用缩略图 48×36 无名称文字，hover 全貌保留；高度档位制 260/320/380/440；
 > NODE_UI Token 单一真值；端口 tooltip 只留「名称 · 类型」。
-> 适用范围：画布上全部 23 个活跃节点。本规范与 `NODE_CONTRACT_SPEC.md` 平行：
+> 适用范围：画布上的活跃节点；具体集合以机器契约为准，不在本文手写数量。本规范与 `NODE_CONTRACT_SPEC.md` 平行：
 > 契约规范管端口与数据，本规范管视觉结构与操作布局。
 
 ## 0. 问题陈述

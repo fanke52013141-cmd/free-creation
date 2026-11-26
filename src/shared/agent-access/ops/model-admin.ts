@@ -43,7 +43,7 @@ export const MODEL_ADMIN_OPERATIONS = {
   'model.connection.save': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '创建或更新模型供应商连接；可选写入 API Key（写入设备绑定密钥库，明文不回传、不进日志）。连接协议/地址/头或密钥发生变化会清除该连接的模型验证与功能绑定，回执如实标记',
@@ -81,7 +81,7 @@ export const MODEL_ADMIN_OPERATIONS = {
   'model.definition.save': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '创建或更新模型定义（必须绑定既有连接，能力声明非空）；不涉及凭据；能力变化会清除对应验证与绑定',
@@ -118,7 +118,7 @@ export const MODEL_ADMIN_OPERATIONS = {
   'model.binding.save': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '保存功能默认绑定（featureKey + 连接 + 模型定义 + 操作）。**只有该模型该操作已通过验证才成立**：外部无法自行验证模型，因此未验证一律拒绝，不伪造"已绑定可用"',

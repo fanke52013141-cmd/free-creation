@@ -19,7 +19,7 @@ export const PROVIDER_ADMIN_OPERATIONS = {
   'provider.save': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '新建或更新供应商连接（与 GUI 设置页同一 saveProvider）：id 缺省=新建；更新时 apiKey 留空表示保留已保存密钥；回执只给 id/名称/协议/模型数/是否有密钥，**不回显密钥**',
@@ -48,7 +48,7 @@ export const PROVIDER_ADMIN_OPERATIONS = {
   'provider.probe': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '对**已保存**的供应商做连通性探测（复用 GUI 同一 probeProvider）：只做免费/只读探测，不发起计费调用；必须显式 confirmNetwork=true；外部只给 providerId，密钥由 main 读取',
@@ -87,7 +87,7 @@ export const PROVIDER_ADMIN_OPERATIONS = {
   'dreamina.login.start': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '发起即梦（Dreamina）设备流登录：返回需要在浏览器打开的验证地址与用户码；若本机已有有效登录则直接返回 already。**不伪造登录状态**，登录必须由人完成；需 confirmNetwork=true',
@@ -96,7 +96,7 @@ export const PROVIDER_ADMIN_OPERATIONS = {
   'dreamina.login.check': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '查询即梦设备流登录结果（pending/success/expired/failed）；只如实反映本机 CLI 的真实状态，成功与否由人是否真的在浏览器完成授权决定；需 confirmNetwork=true',

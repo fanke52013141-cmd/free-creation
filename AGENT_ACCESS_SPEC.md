@@ -2,7 +2,7 @@
 
 > status: active
 > last-verified: 2026-11-26
-> baseline-commit: e9b263f2
+> baseline-commit: 57a7e60d
 > verification-scope: 文档与静态实现/既有测试证据核对；不代表全部运行路径或安装包验收
 
 2026-11-07 接续：用户要求全软件 GUI 业务能力通过 CLI 与 MCP 等价调用。新增的
@@ -14,7 +14,7 @@
 - **操作清单的机器真值**是 [`docs/local-agent-access/generated/contracts.json`](docs/local-agent-access/generated/contracts.json)，运行时枚举以 `capability.list` 为准，由 `check-agent-access` 门禁把守；本文不手写当前操作数或节点数。
 - **headless 节点流六操作已登记进 Registry 并有验收**（2026-11-12 起）：`composite.execute`（含 `confirmCost` 计费确认门）、`composite.execute.wait`、`composite.run.retry`、`composite.run.submitHuman`、`composite.run.resume`、`composite.run.resubmit`。键约定：inputs 按完整公开端口 ID（`in-<id>`）喂值；outputs / outputValues / resubmit 统一以 **`out-<id>`** 为键，旧裸 id 仅读取兼容。执行语义不经过 `graph.patch + node.execute`；其中 `composite.run.submitHuman` / `composite.run.resubmit` 属于人工决定，要求目标项目在桌面打开并人工确认，其余 headless 操作仍可无画布实例。
 - **已实现的外部主路径**包括：`project.import` / `project.importStructure` / `library.import` / `library.export`、统一 Registry / Dispatcher、CLI 与 MCP stdio/SSE 传输、`graph.patch`、`node.execute`、`flowStateMachine.submitEvent`（外部人工事件需桌面确认）/ `flowStateMachine.get`。应用 REST HTTP API 仍未实现，也不是本目标前提。
-- **MCP 注解口径**：`readOnlyHint/destructiveHint/idempotentHint` 按 effect 如实声明（只有只读操作幂等；写操作幂等性来自请求级 idempotencyKey）。
+- **MCP 注解口径**：`readOnlyHint / destructiveHint / idempotentHint / openWorldHint` 由 `OperationSpec` 逐操作如实派生并经 `validateAccessRegistry()` 校验不变量——`read` 操作必为 `idempotent: true, destructive: false, cost: 'none'`；`export` 操作不覆盖现有文件，必为 `destructive: false`；`delete` 操作必为 `destructive: true`；`write / execute` 仅在涉及物理删除、丢弃、中止、退出登录、归档或不可逆覆盖历史时标 `destructive: true`，常规新建/保存/重命名/可撤销编辑标 `false`（计费与联网风险由 `cost` 和 `openWorld` 独立表达，避免客户端对常规编辑产生确认麻木）。写操作请求级去重统一通过 `idempotencyKey` 保障。
 - 本文“仍待开发”的历史段落不能覆盖后续交付；当前可调用集合与限制以机器契约、交付台账和实际测试为准。
 
 日期：2026-10-24。适用：Canvas Studio 本地单用户 Electron 软件。
@@ -174,9 +174,9 @@ MCP 工具名可以将点号映射为下划线；CLI 映射为层级命令。映
 
 ### 5.2 统一响应
 
-所有入口返回同一业务 envelope：`apiVersion/requestId/traceId/operationId/status/data/error`；任务另有 `taskId`，写操作另有提交版本和 `saved` 事实。MCP 外层仍遵守其协议结果格式；HTTP 状态码和 CLI 退出码只是映射，不代替业务结果。
+所有入口返回同一业务传输信封（`AccessResponse`）：`apiVersion / requestId / traceId / operationId / status / data / error`（写操作另回传 `idempotencyKey`、提交版本与 `saved` 事实）。MCP 外层仍遵守其协议结果格式；HTTP 状态码和 CLI 退出码只是映射，不代替业务结果。
 
-建议状态为 `completed/accepted/waiting/blocked/failed/cancelled/unknown`；运行的细节由持久任务状态提供。状态名在实现前与现有状态机明确映射，不为了接口便利改写内部事实。
+现行传输层 `AccessResponse.status` 固定为三态：`completed | failed | unknown`（`completed` 表示本次命令已按契约完成或持久受理）；长任务的细粒度运行状态（`ready / running / waiting / blocked / completed / failed / cancelled`）位于 `run.get`、`run.wait`、`flowAgent.inspect` 等任务载荷中，不混入外层传输信封。
 
 `waiting/blocked/unknown` 必须带稳定 `stateReason`、有限枚举 `allowedActions`、适用的当前图/语义/等待修订和 `reconcileRequired`。无权限或不适用的动作不能出现在列表中；`HUMAN_REQUIRED` 不因客户端传入 `confirmed=true` 就解除。
 

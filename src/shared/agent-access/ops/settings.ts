@@ -101,7 +101,7 @@ export const SETTINGS_OPERATIONS = {
   'environment.videoEngine.install': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '启动本地视频推理环境安装（联网下载 CUDA/PyTorch 依赖与校验后的模型权重并写入应用数据目录，需要本机 Python 3.12）；必须显式 confirmInstall=true，否则拒绝且不启动任何下载；只受理启动，不等待安装完成，进度与就绪经 environment.videoEngine.status 读取',
@@ -119,7 +119,7 @@ export const SETTINGS_OPERATIONS = {
   'workspace.palettePreferences.save': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '保存调色板偏好（分类显示顺序 + 可选名称覆盖）。与 GUI 调色板设置同一归一化：忽略未知分类、自动去重、缺失分类补默认顺序；幂等，同幂等键重放不产生第二次写入',

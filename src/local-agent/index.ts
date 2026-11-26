@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
@@ -157,8 +157,8 @@ async function main(): Promise<void> {
        *
        * 安全边界（缺一不可）：
        * - 只监听 127.0.0.1，不对外网暴露；
-       * - 必须带本进程随机生成的令牌（?token=），否则 401；
-       * - 令牌只写到 stdout 供本机客户端发现，不落盘、不进日志。
+       * - 必须带本进程随机生成的令牌（Authorization: Bearer），否则 401；
+       * - URL 不携带令牌，令牌只写到 stdout 供本机客户端发现，不落盘、不进日志。
        * 实际操作仍走本机受控套接字（connection.json 的令牌），桌面侧鉴权不变。
        */
       const requestedPort = Number(option('--port') ?? '0')
@@ -190,19 +190,26 @@ async function main(): Promise<void> {
             return
           }
         }
-        const url = new URL(request.url ?? '/', 'http://127.0.0.1')
-        if (url.searchParams.get('token') !== token) {
-          response.writeHead(401, { 'content-type': 'text/plain' })
+        const authorization = request.headers.authorization
+        const suppliedToken =
+          typeof authorization === 'string' && /^Bearer [^\s]+$/i.test(authorization)
+            ? authorization.slice(7)
+            : ''
+        const supplied = Buffer.from(suppliedToken)
+        const expected = Buffer.from(token)
+        if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+          response.writeHead(401, {
+            'content-type': 'text/plain',
+            'www-authenticate': 'Bearer realm="canvas-local-agent"'
+          })
           response.end('unauthorized')
           return
         }
+        const url = new URL(request.url ?? '/', 'http://127.0.0.1')
         if (url.pathname === '/sse' && request.method === 'GET') {
           void (async () => {
-            // endpoint 必须带上令牌：客户端会把消息 POST 到这个地址，
-            // 不带令牌的话它自己的请求会被下面的令牌校验挡掉（401）。
-            // endpoint 必须带上令牌：客户端会把消息 POST 到这个地址，
-            // 不带令牌的话它自己的请求会被下面的令牌校验挡掉（401）。
-            const transport = new SSEServerTransport(`/messages?token=${token}`, response)
+            // endpoint 只携带随机会话 ID；每条请求都由 Authorization 请求头鉴权。
+            const transport = new SSEServerTransport('/messages', response)
             sessions.set(transport.sessionId, transport)
             const server = createMcpServer()
             await server.connect(transport)

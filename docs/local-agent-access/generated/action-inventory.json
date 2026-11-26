@@ -9,8 +9,7 @@
     "actions": 255,
     "byPhase": {
       "external": 209,
-      "excluded": 38,
-      "F9": 8
+      "excluded": 46
     }
   },
   "actions": {
@@ -1372,50 +1371,57 @@
       "label": "授权状态",
       "channel": "license:get-status",
       "gui": "授权窗",
-      "phase": "F9"
+      "phase": "excluded",
+      "reason": "授权门禁硬红线（65-AGENT-PARITY-IRON-RULE §7）：授权状态与设备证明通道不向外部 Agent 开放"
     },
     "ipc.license.probeDevice": {
       "label": "设备探测",
       "channel": "license:probe-device",
       "gui": "授权窗",
-      "phase": "F9"
+      "phase": "excluded",
+      "reason": "授权门禁硬红线（65-AGENT-PARITY-IRON-RULE §7）：设备指纹探测不向外部 Agent 开放"
     },
     "ipc.license.exportRequest": {
       "label": "授权申请导出",
       "channel": "license:export-request",
       "gui": "授权窗",
-      "phase": "F9",
-      "note": "设备授权属真实人工/系统步骤，须等待/继续协作协议，不伪造"
+      "phase": "excluded",
+      "reason": "授权门禁硬红线（65-AGENT-PARITY-IRON-RULE §7）：设备授权申请导出须真实人工在授权窗操作，永不对外开放"
     },
     "ipc.license.importChallenge": {
       "label": "挑战导入",
       "channel": "license:import-challenge",
       "gui": "授权窗",
-      "phase": "F9"
+      "phase": "excluded",
+      "reason": "授权门禁硬红线（65-AGENT-PARITY-IRON-RULE §7）：授权挑战导入永不向外部 Agent 开放"
     },
     "ipc.license.exportProof": {
       "label": "证明导出",
       "channel": "license:export-proof",
       "gui": "授权窗",
-      "phase": "F9"
+      "phase": "excluded",
+      "reason": "授权门禁硬红线（65-AGENT-PARITY-IRON-RULE §7）：设备证明导出永不向外部 Agent 开放"
     },
     "ipc.license.importLicense": {
       "label": "授权导入",
       "channel": "license:import-license",
       "gui": "授权窗",
-      "phase": "F9"
+      "phase": "excluded",
+      "reason": "授权门禁硬红线（65-AGENT-PARITY-IRON-RULE §7）：许可证导入永不向外部 Agent 开放"
     },
     "ipc.license.importPolicy": {
       "label": "策略导入",
       "channel": "license:import-policy",
       "gui": "授权窗",
-      "phase": "F9"
+      "phase": "excluded",
+      "reason": "授权门禁硬红线（65-AGENT-PARITY-IRON-RULE §7）：授权策略导入永不向外部 Agent 开放"
     },
     "ipc.license.getDiagnostic": {
       "label": "授权诊断",
       "channel": "license:get-diagnostic",
       "gui": "授权窗",
-      "phase": "F9"
+      "phase": "excluded",
+      "reason": "授权门禁硬红线（65-AGENT-PARITY-IRON-RULE §7）：授权诊断内部信息不向外部 Agent 开放"
     },
     "ipc.license.exitApp": {
       "label": "授权退出应用",

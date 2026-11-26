@@ -1,15 +1,15 @@
 ---
 title: 节点流（composite）规范
-status: draft            # draft → review → frozen
-version: 0.1
-last-verified: 2026-11-24
-baseline-commit: aea3987a (main)
+status: active
+version: 1.0
+last-verified: 2026-11-26
+baseline-commit: 57a7e60d
 owner: Canvas Studio 规范组
-supersedes: NODE_CONTRACT_SPEC.md §8.0（该节改为指向本文）
+supersedes: NODE_CONTRACT_SPEC.md §8.0（单节点契约见 NODE_CONTRACT_SPEC，组合语义以本文为唯一权威）
 machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/contracts.json
 ---
 
-# 节点流（composite）规范 v0.1（草案）
+# 节点流（composite）规范 v1.0
 
 ## 阅读约定
 
@@ -37,7 +37,7 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 | **节点流（本文）** | 确定性数据 DAG | 拓扑序 | 「脚本 → 分镜 → 批量生图」这类可复用加工链 |
 | Agent Flow | 控制流图（条件、有界循环、汇合、人工节点） | 声明式路由器（见 AGENT_FLOW_SPEC） | 跨角色、需要人参与、需要审核返工的任务流程 |
 
-**NF-1.4【目标·A1】** 节点流是 Agent Flow 的**一等能力**：一旦发布，就能被上帝 Agent 发现，并在 FlowGraph 中以 `capabilityRef: { kind: 'composite', id, version }` 引用（见 §13）。
+**NF-1.4【现行·BL-10】** 节点流是 Agent Flow 的**一等能力**：一旦发布，自动进入共享能力目录（`capability-catalog.ts`），可被上帝 Agent 发现并在 FlowGraph 中以 `capabilityRef: { kind: 'composite', id, version }` 引用（见 §13）。
 
 ---
 
@@ -94,7 +94,7 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 | `schemaVersion` | 字面量 1 | manifest 结构版本 |
 | `runtimeVersion` | 1 \| 2，缺省 1 | 运行语义版本，详见 §7；新发布必须写 2 |
 | `capabilityId` | `[a-zA-Z0-9][a-zA-Z0-9._-]*` | 稳定能力 ID，发布后不能改名 |
-| `version` | 当前只允许 `N.0` / `N.0.0` | 详见 §11 |
+| `version` | `major.minor`（历史 `major.minor.0` 仍可读取） | 详见 §11 |
 | `name / description / tags` | 展示用 | 不参与语义 |
 | `inputs[]` | 见 §5 | 公开输入，每个带 `targets[]`（≥1） |
 | `outputs[]` | ≥1，见 §5 | 公开输出，每个带唯一 `source` |
@@ -108,7 +108,7 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 
 **NF-4.3【现行】依赖锁定**：内部图里每一种 `nodeType@contractVersion`，都必须在 `dependencies` 中以 `kind: node` 登记，否则报 `DEPENDENCY_MISSING`。目的是防止注册表升级后，同一版本的节点流静默换用新的节点实现。
 
-**NF-4.4【目标·F3】** 删除自由格式的 `schema` 片段，JSON 端口一律使用 `schemaRef {id, version}`，并且必须命中 `node-schemas` 注册表。过渡期内 `schema` 只能用于 GUI 提示，不参与校验。
+**NF-4.4【现行·BL-13】** 新发布禁止公开端口携带内联自由格式 `schema`（报 `INLINE_SCHEMA_REMOVED`），JSON 端口一律使用 `schemaRef {id, version}` 且必须命中 `node-schemas` 注册表；历史已发布快照仅读取保留原字段以维持版本摘要不变。
 
 ---
 
@@ -180,7 +180,7 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 
 **NF-7.6【现行】** 内部节点继续使用公共 executor、模型和媒体服务以及运行台账，不得另写执行器；内部运行记录可以追溯到父调用和固定版本。
 
-**NF-7.7【现行·守卫测试待恢复】确定性**：同一版本、同一输入，在不调用外部模型的前提下，重复运行的输出必须逐字节一致。涉及模型调用的节点只保证结构一致。11-20 用来验证这一条的测试（`node-flow-e2e-composition.test.ts`）随丢失的提交一起不在 main 上，恢复之前，这一条没有自动守卫。
+**NF-7.7【现行·BL-00】确定性**：同一版本、同一输入，在不调用外部模型的前提下，重复运行的输出必须逐字节一致。涉及模型调用的节点只保证契约结构一致。由 `test/node-flow-e2e-composition.test.ts` 持续守卫。
 
 ### 7.4 输出收集与投影
 
@@ -276,11 +276,9 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 
 ## 12. 副作用、计费与外部调用
 
-**NF-12.1【目标·F6，修复已丢失需恢复】** manifest 只要声明了 `kind: model` 依赖，或者内部包含任何付费生成节点：
-- headless `composite.execute` 必须携带显式的计费确认，或者持有用户预授权（范围、额度、期限）；
-- 否则返回 `CONFIRMATION_REQUIRED`，不执行任何内部节点。
+**NF-12.1【现行·BL-00】** headless `composite.execute` 可能执行流内付费模型或联网节点，调用时必须显式传入计费确认 `confirmCost: true`；未确认时在启动任何内部节点前拒绝并返回 `COST_CONFIRM_REQUIRED`。
 
-**NF-12.2【目标】** 能力描述（`composite.get`、`capability.list`、FlowGraph 能力菜单）必须展示 `cost: none | possible | certain` 和 `network: none | required`，这两个值**由 dependencies 自动派生**。
+**NF-12.2【目标】** 能力描述（`composite.get`、`capability.list`）统一展示由 `dependencies` 自动派生的 `cost: none | possible | certain` 和 `network: none | required`（Agent Flow `capability-catalog.ts` 已实现自动派生；通用 `composite.get` 字段对齐留作后续增强）。
 
 **NF-12.3【现行】** 重试只针对「提交前/提交失败」；提交成功后的失败不自动重提，按运行台账核对（与 `NODE_CONTRACT_SPEC §4.1 W1` 的 video 规则一致）。
 - **NF-12.3a【部分现行 · BL-36】** image-gen 的单次网关调用合并提交、取回和保存，执行器不会自动重发。视频由主进程对明确限流拒绝退避重试，执行器不会重放提交。循环项发起可能计费的媒体请求后，停止整项自动重试。节点流账本对可能产生副作用且已进入执行的旧运行要求先核对交付；重试只直接放行执行前输入失败或白名单内的本地节点流。
@@ -331,11 +329,10 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 | 阶段 | 错误码 | 说明 |
 |---|---|---|
 | 发布/草稿 | `VERSION_IMMUTABLE` `VERSION_NOT_NEWER` `DRAFT_REVISION_CONFLICT` `DRAFT_NOT_FOUND` `PUBLISH_INVALID` | `errors.ts` |
-| 发布校验 | `MANIFEST_SCHEMA` `NODE_REF_MISSING` `PORT_MISSING` `PORT_TYPE_MISMATCH` `PORT_CARDINALITY` `DUPLICATE_EDGE` `CYCLE` `INPUT_NO_TARGET` `INPUT_TARGET_MISSING` `INPUT_DUPLICATE_TARGET` `REQUIRED_INPUT_UNBOUND` `OUTPUT_SOURCE_MISSING` `OUTPUT_TYPE_MISMATCH` `NO_BUSINESS_OUTPUT` `SCHEMA_UNREGISTERED` `DEPENDENCY_MISSING` `BUDGET_EXCEEDED` `SELF_RECURSION` `DEPENDENCY_CYCLE` `MANUAL_GATE_UNDECLARED` | `validate.ts` |
+| 发布校验 | `MANIFEST_SCHEMA` `NODE_REF_MISSING` `PORT_MISSING` `PORT_TYPE_MISMATCH` `SCHEMA_INCOMPATIBLE` `INLINE_SCHEMA_REMOVED` `VERSION_FORMAT_INVALID` `PORT_CARDINALITY` `DUPLICATE_EDGE` `CYCLE` `INPUT_NO_TARGET` `INPUT_TARGET_MISSING` `INPUT_DUPLICATE_TARGET` `REQUIRED_INPUT_UNBOUND` `OUTPUT_SOURCE_MISSING` `OUTPUT_TYPE_MISMATCH` `NO_BUSINESS_OUTPUT` `SCHEMA_UNREGISTERED` `DEPENDENCY_MISSING` `BUDGET_EXCEEDED` `SELF_RECURSION` `DEPENDENCY_CYCLE` `MANUAL_GATE_UNDECLARED` | `validate.ts` |
 | 运行·输入/输出 | `INPUT_REQUIRED` `INPUT_TYPE_UNSUPPORTED` `INPUT_VALUE_INVALID` `OUTPUT_SOURCE_MISSING` `REQUIRED_OUTPUT_MISSING` `OUTPUT_TYPE_MISMATCH` `OUTPUT_VALUE_INVALID` | `runtime.ts` |
-| 运行·预算 | `RECURSIVE_COMPOSITE` `DEPTH_EXCEEDED` `EXPANSION_BUDGET_EXCEEDED` | `runtime.ts` |
-| 引用 | `COMPOSITE_REF_NOT_RESOLVED` | 实例解析 |
-| 【目标】 | `CONFIRMATION_REQUIRED` `SCHEMA_INCOMPATIBLE` | NF-12.1 / NF-6.6 |
+| 运行·预算与准入 | `RECURSIVE_COMPOSITE` `DEPTH_EXCEEDED` `EXPANSION_BUDGET_EXCEEDED` `COST_CONFIRM_REQUIRED` | `runtime.ts` / `service.ts` |
+| 引用 | `COMPOSITE_REF_NOT_RESOLVED` `CAPABILITY_IN_USE` | 实例解析与删除引用保护 |
 
 ---
 
@@ -350,8 +347,8 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 新增或修改节点流相关能力，必须同包提供：
 
 1. **校验测试**：每条 `NF-6.*`、`NF-7.4` 至少一个正例和一个反例。
-2. **口径一致测试【目标】**：遍历 connection-matrix 真值表，断言节点流的端口兼容判定与画布完全相同（NF-6.4）；断言发布期和运行期的预算常量相同（NF-10.2）。
-3. **端到端组合测试**：单节点、串联、广播并联、扇入、引用形态、内嵌形态、三层嵌套、递归拒绝、确定性重复运行（恢复 11-20 丢失的 `node-flow-e2e-composition.test.ts`）。
+2. **口径一致测试【现行】**：节点流端口兼容判定与画布共用 `portPairCompatible`（NF-6.4）；发布期与运行期预算常量共用 `budget.ts`（`test/composite-budget-parity.test.ts`，NF-10.2）；外部契约 `semver` 与 `manifest.ts` 同源（`test/composite-semver-access.test.ts`，NF-11.2）。
+3. **端到端组合测试**：单节点、串联、广播并联、扇入、引用形态、内嵌形态、三层嵌套、递归拒绝、确定性重复运行（`test/node-flow-e2e-composition.test.ts`）。
 4. **升级测试**：NF-11.3 的每一格至少一例。
 5. `npm run verify` + `guard:agent-parity` + `verify:logging` 全绿。
 
@@ -360,24 +357,20 @@ machine-truth: src/shared/composite/*.ts · docs/local-agent-access/generated/co
 ## 18. 变更流程
 
 - 修改任何【现行】条款：同一提交中更新实现、测试和本文，并更新头部的 `last-verified / baseline-commit`。
-- 把【目标】转为【现行】：附带实现提交和测试名，同时删除对应差距编号。
+- 把【目标】转为【现行】：附带实现提交和测试名，同时从附录 A 移除对应增强项。
 - 本文不记录历史；历史写入 `docs/archive/CHANGELOG-node-flow.md`。
 
 ---
 
-## 附录 A：现行与目标差距（冻结前必须清零或明确延期）
+## 附录 A：后续增强项（不影响 v1.0 现行基线）
 
-| 差距 | 条款 | 优先级 |
+原 P0/P1 阻断差距（BL-00 计费确认门与组合单测恢复、BL-08 预算统一、BL-10 可编排能力目录、BL-12 端口兼容同源、BL-13 预检与 Schema 引用校验、BL-14 缺席三态、BL-33 扇入顺序/并发/失败策略/人工门推断、BL-34 `major.minor` 语义版本与外部契约同源、NF-5.3 输出键统一 `out-<id>`）均已落地并转为正文【现行】条款。以下增强项按需排期推进：
+
+| 增强项 | 条款 | 说明 |
 |---|---|---|
-| ~~节点流不可被 Agent Flow 编排~~ ✅ BL-10（capabilityRef + 能力目录；最小输入编制/真实端口随 BL-11/12） | NF-1.4 / NF-13.* | P1 |
-| ~~端口兼容判定与画布分裂~~ ✅ BL-12（共用 `portPairCompatible`，封装明确拒绝 `iteration/camera` 端口） | NF-6.4 / NF-6.5 | — |
-| ~~发布期/运行期预算缺省不一致~~ ✅ BL-08 | NF-10.2 | — |
-| headless 计费确认门（修复提交已丢失） | NF-12.1 | **P0** |
-| ~~必填输入运行前预检~~ ✅ BL-13 | NF-7.5 | — |
-| ~~媒体固定输入按类型匹配~~ ✅ BL-13 | NF-6.2a | — |
-| ~~JSON Schema 兼容校验~~ ✅ BL-13 | NF-6.6 | — |
-| ~~缺席/跳过三态~~ ✅ BL-14 | NF-9.1 | — |
-| ~~分支失败策略、内部并发~~ ✅ BL-33（`executionPolicy.onBranchFailure` / `maxConcurrency`，编辑页「运行策略」） | NF-8.4 / NF-8.5 | — |
-| ~~人工门自动推断~~ ✅ BL-33（`MANUAL_GATE_UNDECLARED`） | NF-9.3a | — |
-| semver major.minor | NF-11.2 | P2 |
-| ~~键约定统一~~ ✅ 2026-11-26 冻结：headless outputs 统一 `out-<id>`（兼容旧裸 id 读取） | NF-5.3 | — |
+| 外部草稿保存强制携带 `expectedRevision` | NF-3.1a | 当前省略时允许覆盖保存草稿 |
+| 彻底停止新建内嵌 manifest 实例（仅保留只读兼容） | NF-3.3a | 新建路径优先使用固定版本引用形态 |
+| 含嵌套引用的版本仅允许归档、禁止物理删除 | NF-3.4a | 当前 `composite.delete` 对有实例或嵌套引用的能力整体返回 `CAPABILITY_IN_USE` 拒绝 |
+| 等待人工输入的细粒度 `waitingFor` 跨重启恢复 | NF-9.2a | 当前会话内 `waiting-input` 提交与续跑已打通 |
+| `composite.get` 直接返回自动派生的 `cost / network` | NF-12.2 | `flowAgent.catalog` 已派生；单能力查询待对齐 |
+| Agent Flow `ContextManifest` 字段级裁剪直注节点流公开输入 | NF-13.4 | 图边真实端口接线与失败透传已就绪 |

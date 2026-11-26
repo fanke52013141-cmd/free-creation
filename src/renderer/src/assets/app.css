@@ -20,7 +20,7 @@
   --elevation-1: 0 5px 18px rgba(0, 0, 0, 0.24);
   /* C1: --txt-dim 原被多处引用却从未定义，始终退回 #9aa4b5，此处显式补齐 */
   --txt-dim: #9aa4b5;
-  /* B1: z-index 语义令牌（自下而上递增，替代裸数字，杜绝层级混乱） */
+  /* B1: z-index 语义令牌（自下而上严格递增，替代裸数字，杜绝弹窗/菜单/提示层级倒置） */
   --z-deco: 220;
   --z-palette: 400;
   --z-overlay-hint: 500;
@@ -31,10 +31,11 @@
   --z-floating: 900;
   --z-conn: 950;
   --z-topbar: 1000;
-  --z-modal: 1100;
-  --z-confirm: 13000;
   --z-context-menu: 1200;
-  --z-toast: 2000;
+  --z-modal: 3000;
+  --z-popover: 3500;
+  --z-confirm: 4000;
+  --z-toast: 5000;
 }
 
 * {
@@ -536,7 +537,7 @@ select:focus-visible {
   border: 1px solid rgba(255, 77, 79, 0.3);
   border-radius: 12px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
-  z-index: 500;
+  z-index: var(--z-overlay-hint);
 }
 
 .engine-errors-head {
@@ -4238,7 +4239,7 @@ select:focus-visible {
   padding: 7px 16px;
   color: var(--txt);
   font-size: 13px;
-  z-index: 3000;
+  z-index: var(--z-toast);
   pointer-events: none;
   max-width: 70vw;
   overflow-wrap: anywhere;

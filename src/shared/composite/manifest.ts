@@ -182,6 +182,11 @@ export const compositeExecutionPolicySchema = z
   })
   .strict()
 
+export const COMPOSITE_VERSION_REGEX = /^\d+\.\d+(?:\.0)?$/
+export const compositeVersionSchema = z
+  .string()
+  .regex(COMPOSITE_VERSION_REGEX, '版本必须为 major.minor（历史 major.minor.0 仍可读取）')
+
 export const compositeManifestSchema = z
   .object({
     schemaVersion: z.literal(COMPOSITE_SCHEMA_VERSION),
@@ -192,9 +197,7 @@ export const compositeManifestSchema = z
       .min(1)
       .max(80)
       .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/, 'capabilityId 只能包含字母/数字/._-'),
-    version: z
-      .string()
-      .regex(/^\d+\.\d+(?:\.0)?$/, '版本必须为 major.minor（历史 major.minor.0 仍可读取）'),
+    version: compositeVersionSchema,
     name: z.string().trim().min(1).max(120),
     description: z.string().trim().max(600).optional(),
     tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),

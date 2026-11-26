@@ -43,7 +43,7 @@ export const PROJECT_SETTINGS_OPERATIONS = {
   'project.nodeVisibility.set': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '替换项目的节点可见集（决定调色板里出现哪些节点）；只接受当前可创建类型 ID，未知/重复/空集合显式拒绝；经项目正式保存机制落盘，重开项目后生效',

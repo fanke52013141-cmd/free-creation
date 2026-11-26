@@ -29,7 +29,7 @@ export const PUBLISH_OPERATIONS = {
   'director.publish.prepare': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '在当前打开的导演台节点上申请发布（frame=静帧 PNG，video=WebM 预演）；只创建待人工授权的请求，不渲染、不改变画布，授权与拒绝由 GUI 中的人决定',
@@ -53,7 +53,7 @@ export const PUBLISH_OPERATIONS = {
   'director.publish.continue': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     responseTimeoutMs: LONG_RESPONSE_TIMEOUT_MS,
     description:

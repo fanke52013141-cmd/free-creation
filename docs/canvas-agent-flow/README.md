@@ -1,6 +1,6 @@
 # 画布原生 Agent Flow：当前状态
 
-> 当前口径（2026-11-26，基线 `8c5c155e`）：本页只做导航与状态摘要，不维护能力清单。现行规范是 [AGENT_FLOW_SPEC.md](../AGENT_FLOW_SPEC.md)，开发状态以 [BACKLOG.md](../BACKLOG.md) 为准，可调用操作与节点集合以 [`generated/contracts.json`](../local-agent-access/generated/contracts.json) 和运行时 `capability.list` 为准。`archive/` 只用于追溯，不得作为当前规范或能力矩阵。
+> 当前口径（2026-11-26，基线 `57a7e60d`）：本页只做导航与状态摘要，不维护能力清单。现行规范是 [AGENT_FLOW_SPEC.md](../AGENT_FLOW_SPEC.md)，开发状态以 [BACKLOG.md](../BACKLOG.md) 为准，可调用操作与节点集合以 [`generated/contracts.json`](../local-agent-access/generated/contracts.json) 和运行时 `capability.list` 为准。`archive/` 只用于追溯，不得作为当前规范或能力矩阵。
 
 ## 1. 权威与阅读顺序
 
@@ -25,6 +25,13 @@
 - **角色化单用户**：角色归属取节点 `humanRole`，收件箱按角色分组，角色视图只是筛选器；不引入登录、多身份或权限系统。
 - **外部接入**：`flowAgent.*`、`flowGraph.*`、`flowGraphDefinition.*`、`humanTask.*`、`flowStateMachine.*` 共用同一宿主。人工决定类操作采用桌面实时确认，未做持久草稿队列。
 - **headless 节点流键约定**：`inputs` 使用 `in-<id>`；`outputs` / `outputValues` / `resubmit` 统一使用 `out-<id>`，旧裸 id 仅读取兼容。
+
+## 2.1 C0 测试专用资产
+
+- **决策：保留，不删除。** [`src/main/agent-flow/c0/`](../../src/main/agent-flow/c0/README.md) 与对应脚本/测试仍是活跃测试基础设施：16 项单测覆盖 checkpoint、命令回执、人工等待与诊断隔离；双进程 Electron pause/resume 用例仍验证跨进程恢复且工具效果计数为 1。
+- **边界**：C0 只使用隔离数据库、隐藏 fixture 窗口和确定性模型，不注册生产节点、不打开产品项目库、不调用真实供应商；不得作为新功能入口或生产真值。
+- **删除条件**：独有覆盖已迁移到正式测试、双进程恢复用例已有替代且持续通过、所有构建/脚本/文档引用清理完毕，并在同一变更中通过完整验证。详见 [C0 README](../../src/main/agent-flow/c0/README.md)。
+- **迁移影响**：现在不移动到 `test/fixtures`；该动作会同时影响测试导入、shared 契约、Electron 独立构建入口、产物名、npm 脚本与 native ABI 运行方式，需另开变更处理。
 
 ## 3. 已验证与未证明
 

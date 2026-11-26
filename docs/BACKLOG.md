@@ -2,7 +2,7 @@
 title: Canvas Studio 待开发清单（BACKLOG）
 status: living            # 常更新文档；每完成一项就勾选，并附上提交 hash
 last-updated: 2026-11-26
-baseline-commit: e9b263f2
+baseline-commit: 57a7e60d
 sources:
   - docs/SPEC_DEEP_REVIEW_2026_11_22.md（审查报告，编号 A*/G*/N*/F*/U*）
   - docs/NODE_FLOW_SPEC.md 附录 A（NF-*）
@@ -21,20 +21,32 @@ sources:
 - 状态：⬜ 未开始 · 🟡 进行中 · ✅ 完成（附 hash）· ⏸ 延期（附原因和期限）。
 - 规模：S（≤1 天）· M（2–4 天）· L（≥1 周）。
 
-> **2026-11-25 收尾（干净树）**：`npm run verify` 通过（`qa/verification/run-AwaNQQ`，20:59–21:20 +08，状态 `passed`、退出码 0；应用测试 3938 通过 / 7 跳过，浏览器 34 脚本、构建与全部 Agent Flow 桌面验收通过），BL-16/19/22/30/34/35/36/37/38/39/50/51 一并置 ✅。契约快照无需刷新（`verify:agent-access` 192 操作 / 34 节点通过）；收尾提交 `418ab05`。
-> 取证说明：首轮 `run-R8AV8H` 因本机 DSH 受限令牌下 Electron GPU 沙箱初始化崩溃而失败（库存 Electron 39.8.10 默认应用同样复现，非本仓代码问题），本轮以 `ELECTRON_DISABLE_SANDBOX=1` 取证；`run-fQCftg` 命中 `test/license-keypackage` 篡改用例的既有偶发，重跑后全绿。
-
-## 2026-11-26 外部审查修复工作区记录（已提交）
+> **2026-11-26 外部审查修复工作区记录（已提交）**
 
 - **范围**：Agent Flow 运行准入、条件分支输入、并行波次、停止/迟到提交、命令签名、总预算、human-task 状态、视频固定上限、定义发布/diff、恢复与 scope；外部 Agent 的密钥来源绑定、媒体路径边界、节点执行版本、超时、GUI 占用、错误脱敏、CLI/MCP 契约；人工决定门禁补齐 `composite.run.submitHuman` / `composite.run.resubmit` / `flowStateMachine.submitEvent`；CI/门禁与规范文档收敛。
 - **机器契约**：`provider.package.export` 因未满足人工确认与显式连接范围要求从公开 Registry 移除；当前操作数以 `docs/local-agent-access/generated/contracts.json` / `capability.list` 为准。
-- **仓库清理**：C0 保留为测试专用并补充 [README](<src/main/agent-flow/c0/README.md>)；42 个无入口一次性脚本已删除（58,182 行），盘点与决策见 [仓库清理记录](<docs/canvas-agent-flow/audits/repo-cleanup-2026-11-26.md>)。清理后全量单测 4048 项通过 / 7 跳过，C0 16/16、门禁与文档回归 86/86 通过。
+- **仓库清理**：C0 保留为测试专用并补充 [README](<../src/main/agent-flow/c0/README.md>)；42 个无入口一次性脚本已删除（58,182 行），盘点与决策见 [仓库清理记录](<canvas-agent-flow/audits/repo-cleanup-2026-11-26.md>)。清理后全量单测 4048 项通过 / 7 跳过，C0 16/16、门禁与文档回归 86/86 通过。
 - **验证**：`npm test` 360 文件通过 / 2 跳过，4048 项通过 / 7 跳过；人工门禁回归 27 项通过；`npm run typecheck`、`npm run lint`、`CANVAS_OWNER=1 npm run build`、`guard:agent-parity`、`verify:specs`、`verify:logging`、`git diff --check` 均通过；`verify:acceptance:fast` 2/2 批次通过（protocol 34/34、optimizations 9/9），族 2/3/7/8 24/24、族 4/5/6/9 47/47 通过；`agent-flow-state-machine.cjs` 7/7 通过（含真实 GUI 人工确认）。
-- **边界**：未发起真实付费模型；未完成真实 GUI 鼠标端到端、Windows 打包版与干净 GitHub runner 实跑；code sandbox 专项审计、Windows named pipe 最小 ACL、SSE token 移出 query 仍待后续；`loop.body` 内 review 当前明确拒绝；R09/R11/R12 仍未闭环。
+- **边界**：真实付费模型、真实 GUI 鼠标端到端、Windows 安装包/完整打包版与干净 GitHub runner 仍未验收；安全与长视频边界见下节。
+
+## 当前未闭环边界（基线 `57a7e60d`）
+
+以下事项仍然真实未完成，不因 BL 系列已完成而关闭：
+
+- **R09 / R11 / R12**：R09（真实磁盘、物理掉电、目录耐久与远端撤回）、R11（真实供应商质量、计费与远端取消）、R12（最终发布门禁与线上同步）仍未闭环。
+- **真实产品验收**：真实 GUI 鼠标端到端、Windows 安装包/完整打包版、干净 GitHub runner 实跑仍未完成；现有 Electron 自动驱动不等于完整产品验收。
+- **真实供应商**：未发起新的真实付费模型调用；既有真实模型证据只覆盖其记录的具体路径，不能外推全部供应商或全部节点。
+- **code sandbox**：code 节点仍待专项隔离审计，节点动作矩阵继续标注 `sandbox boundary pending`。
+- **Windows named pipe**：仍未显式设置最小 ACL。（注：MCP SSE 令牌已由 URL query 迁入 `Authorization: Bearer` 请求头并使用常量时间比对，不再滞留 URL。）
+- **循环审核**：`loop.body` 内 review 当前明确拒绝（`FLOW_REVIEW_LOOP_UNSUPPORTED`），按轮次作用域执行审核未实现。
+- **长视频审核**：视频审核 schema 仍只接受最长 60 秒，而视频生成配置可达 120 秒；长视频生成后的审核口径尚未统一。
+- **人工任务结果类型**：human-task 已支持 `text / json / image / video`，音频结果类型仍未定义。
+- **人工决定持久草稿**：实时确认已验收；人离开后可稍后采用的持久草稿队列仍是未排期增强，不属于 BL-01 的实时确认验收范围。
+- **门禁后真机复跑**：`scripts/acceptance/agent-flow-human-task-dispatch.cjs` 加入人工确认点击后尚未用真实密钥复跑；现有 `qa/agent-flow-human-task-dispatch/receipt.json` 是 2026-11-13 的旧证据，早于门禁，不能作为门禁后验收。
 
 ---
 
-## P0：阻塞类（建议本周完成）
+## P0：阻塞类（原阻塞项已完成，延期增强见 BL-01）
 
 ### ✅ BL-00 恢复 11-20 丢失的 5 个提交并提交规范草案 · S（2026-11-22，`7e36dd8…c293701`，已推送 origin/main）
 - **来源**：审查报告 §一（P0-0）
@@ -47,7 +59,7 @@ sources:
 - **结论**：`135cbef8` 只新增了临时脚本 `test/tmp-matrix-dump.test.ts`（提交说明与内容不符），属于误提交，撤回正确，不恢复；转正工作见 BL-51。
 - **记录**：唯一冲突是 `change-impact.json`（生成文件），合入后已重新生成快照（`39610ae`）；test:contract 331 项、恢复的定向测试 283 项全部通过。
 
-### ✅ BL-01 外部 Agent 不得代人做人工决定 · M（2026-11-24 交付：`8a2444ac` 实时确认 + CLI 等待口径/拒绝事件，门禁全绿）
+### ✅ BL-01 外部 Agent 不得代人做人工决定 · M（2026-11-24 交付：`8a2444ac` 实时确认 + CLI 等待口径/拒绝事件，门禁全绿；持久草稿队列延期）
 - **来源**：审查报告 A6 · AF-1.5 / AF-5.3 / AF-17.2
 - **范围**：
   - 在 OperationSpec 里新增动作级别：`read | propose | control | human-decision`。
@@ -63,11 +75,11 @@ sources:
   - [x] CLI 客户端对交互式操作按人工决定上限等待（`src/shared/agent-access/interactive.ts`；此前 15s 默认超时会在人点确认之前误报 `OUTCOME_UNKNOWN`）
   - [x] 人工决定未生效的唯一终态事件 `agent.human_decision.rejected`（白名单 + 覆盖率 + 单测）
   - [x] 真机 `agent-flow-human-task.cjs` 12 项全过（含点「允许提交」与节点流等待→提交→续跑→公开输出）
-  - [ ] 持久草稿队列（人离开时外部提交可稍后采用）：后续增强，未排期
+  - [ ] 持久草稿队列（人离开时外部提交可稍后采用）：后续增强，未排期；不属于 BL-01 实时确认验收范围
 - **2026-11-26 已纳入**：`flowStateMachine.submitEvent`、`composite.run.submitHuman`、`composite.run.resubmit` 已统一接入桌面人工确认；未确认/拒绝/超时均零副作用，无桌面返回 `DESKTOP_UNAVAILABLE`。回归见 `test/local-agent-human-gates.test.ts`。
-- **⚠️ 需要同步更新的真机验收脚本**：以下脚本通过外部接口调用了这些操作，需要加一步「点允许」才能跑通——`scripts/acceptance/agent-flow-human-task.cjs`（**2026-11-24 已修好**：点「允许提交」+ AF-07 等待/续跑）、`agent-flow-human-task-dispatch.cjs`、`scripts/mcp-acceptance.cjs`、`mcp-acceptance-families-4-5-6-9.cjs`、`mcp-acceptance-gap-fill.cjs`、`mcp-acceptance-optimizations.cjs`、`test-agent-graph-milestone.cjs`、`audit-business-actions.cjs`（其余脚本按 2026-11-25 复核不触发确认门，无需改代码）。
+- **真机验收脚本同步状态**：外部接口调用人工决定操作的脚本需要先处理确认框——`scripts/acceptance/agent-flow-human-task.cjs`（**2026-11-24 已修好**：点「允许提交」+ AF-07 等待/续跑）、`agent-flow-human-task-dispatch.cjs`、`scripts/mcp-acceptance.cjs`、`mcp-acceptance-families-4-5-6-9.cjs`、`mcp-acceptance-gap-fill.cjs`、`mcp-acceptance-optimizations.cjs`、`test-agent-graph-milestone.cjs`、`audit-business-actions.cjs`（其余脚本按 2026-11-25 复核不触发确认门，无需改代码）。
   - **2026-11-25 复核**：7 个脚本里只有 `agent-flow-human-task-dispatch.cjs` 真正命中人工确认（`humanTask.submit` 与两处 `flowAgent.run(continue)` 在人工等待时都会弹窗）；已补「允许提交 / 允许继续」点击并把单次 CLI 超时提到 240s。其余 6 个不触发确认门（`cooperate` 用 `note`、`build.commit` 在门禁前被 `FLOW_BUILD_MISSING` 拒绝等），**无需改代码**，已按顺序复跑全绿：`audit-business-actions` / `mcp-acceptance-optimizations`（9/9）/ `mcp-acceptance-gap-fill`（12/12）/ `mcp-acceptance`（34/34）/ `mcp-acceptance-families-4-5-6-9`（47/47）/ `test-agent-graph-milestone`。
-  - **唯一未复跑**：`agent-flow-human-task-dispatch.cjs` 需 `CANVAS_TEST_API_KEY`（智谱 `glm-5.3-flash` 小额计费）；本机未配置该环境变量，改动已通过语法检查，待有 key 时复跑。
+  - **门禁后仍未复跑**：`agent-flow-human-task-dispatch.cjs` 需 `CANVAS_TEST_API_KEY`（智谱 `glm-5.3-flash` 小额计费）；本机未配置该环境变量，改动已通过语法检查。现有 `qa/agent-flow-human-task-dispatch/receipt.json` 为 2026-11-13 旧证据，早于 2026-11-25 人工确认门禁，不能作为门禁后验收。
 
 ### ✅ BL-02 task-bind 工具白名单回归 · S（随 BL-00 合入 `5cb530c`）
 - **来源**：AF-3.2a（如果 BL-00 合入成功，这一项随之关闭，只需复核）
@@ -86,7 +98,7 @@ sources:
 - **验收**：
   - [x] 路由测试：XOR 分支 + 默认 all 汇合能走到完成；出口落在未选分支上时流程能完成；全部出口都被跳过时不算完成；条件引用未落定节点时不提前跳过
   - [x] 协调器测试：条件永不成立时返回 `FLOW_STALLED`，run 状态为 blocked
-  - [ ] UI 上 stalled 与「等待人工」能明显区分：失败文案已有，正式样式和「被跳过节点」的展示见 BL-16
+  - [x] UI 上 stalled 与「等待人工」能明显区分：失败文案已有，正式样式和「被跳过节点」的展示已由 BL-16 完成
 - **兼容**：已有的 XOR 汇合如果显式写了 `any` 行为不变；显式写了 `all` 的，从「永远等」变为「跳过的分支算已落定」，这正是期望的修复。
 
 ### ✅ BL-04 分支条件互斥校验 · M（`cd873b31` 已进 main；门禁见 2026-11-24 `verify`）
@@ -106,7 +118,7 @@ sources:
     - `run-overview.ts` 里 `edges[].kind` 固定为 `'data'`，或者删掉这个字段
     - 画布上的控制关系（`controls / observes / review-gate / rework`，即 `AgentFlowRelation`）**不受影响**；它们保存在节点 config 中，由编译器生成，和 FlowGraph 边是两回事
     - 影响面：全仓 test、scripts、示例里**没有**使用 `kind:'control'` 的 FlowGraph。用户库 `flow_definitions` 里已发布的定义可能含有这类边，读取时按上面的错误码明确拒绝，并提示重新发布，不做静默丢弃
-- **说明**：FlowGraph v1 只携带 portId、不携带端口类型，`portPairCompatible` 又在 renderer 里，main 侧拿不到类型；端口校验只有在 v2 的显式端口（BL-11）里才能做，因此转入 BL-11。
+- **说明**：FlowGraph v1 只携带 portId、不携带端口类型，`portPairCompatible` 原先在 renderer 里，main 侧拿不到类型；真实端口类型校验已在 BL-11 随 FlowGraph v2 下沉到 `src/shared/port-compatibility.ts` 并接入校验/编译/运行准入，BL-05 保留 kind 与能力白名单统一的验收结论。
 - **验收**：[x] 种类和能力：validate、compile、准入共用 `FLOW_GRAPH_DISPATCHABLE_KINDS` / `FLOW_GRAPH_CAPABILITY_IDS`；编译映射的键类型与能力目录在类型层一一对应；[x] 固定种子生成的 24 个有向无环图均通过提案，顺序图与分叉图通过协调器运行；[x] 类型不兼容的图在 propose 阶段返回 `PORT_TYPE_MISMATCH`，无预览写入；[x] 含 `kind:'control'` 的图在 schema 解析层返回 `FLOW_EDGE_KIND_REMOVED`（propose、validate、读取已发布定义都经同一个 schema）；[x] 源码中已不再出现对 FlowGraph 边 kind 的过滤
 
 ### ✅ BL-06 零输出节点也算交付 · S（`28d02e81`，已推送）
@@ -117,10 +129,10 @@ sources:
 
 ### ✅ BL-07 多节点循环：正式实现前先在校验里拒绝 · S（`28d02e81`，已推送）
 - **来源**：G3 · AF-8.4b
-- **范围**：如果一个环里除了循环载体还有其他节点，校验时拒绝（错误码 `LOOP_BODY_UNSUPPORTED`）。正式实现放在 BL-11。
-- **实现**：含 loop 载体的多节点环和自回边 → `LOOP_BODY_UNSUPPORTED`；无载体的环仍为 `CYCLE_WITHOUT_LOOP`。
+- **范围**：v1 图如果一个环里除了循环载体还有其他节点，校验时拒绝（错误码 `LOOP_BODY_UNSUPPORTED`）。v2 子图循环已在 BL-11 正式实现；本条保留 v1 只读兼容的拒绝边界。
+- **实现**：v1 含 loop 载体的多节点环和自回边 → `LOOP_BODY_UNSUPPORTED`；无载体的环仍为 `CYCLE_WITHOUT_LOOP`。v2 显式声明 `loop.body[]` 的环由 BL-11 的路由器与协调器按轮次执行，不再适用本拒绝规则。
 - **发现**：原测试夹具「有界循环图」用的是 `a→b→a` 回边写法，在 v1 路由下**从第一步起就死锁**（入口 a 有入边，要等 b；b 又要等 a），已改为单节点 loop、不画回边的写法。
-- **验收**：[x] `B(loop)→C→B` 路由测试记录了现状：循环过程中 C 从不就绪（审查附录第 4 项已坐实）；[x] 校验拒绝多节点环和自回边
+- **验收**：[x] v1 `B(loop)→C→B` 路由测试记录了现状：循环过程中 C 从不就绪（审查附录第 4 项已坐实）；[x] v1 校验拒绝多节点环和自回边
 
 ### ✅ BL-08 节点流发布期与运行期预算统一 · S（`28d02e81`，已推送）
 - **来源**：审查报告 A7 · NF-10.2
@@ -130,11 +142,11 @@ sources:
 
 ---
 
-## P1：能力扩展主线
+## P1：能力扩展主线（BL 主线已完成，规范冻结遗留见 BL-10）
 
 ### A. 节点流 → Agent Flow 打通（影响最大）
 
-### ✅ BL-10 节点流即能力 + 可编排能力目录自动生成 · L（2026-11-24 交付：`capability-catalog.ts`；完整门禁绿）
+### ✅ BL-10 节点流即能力 + 可编排能力目录自动生成 · L（2026-11-24 交付：`capability-catalog.ts`；完整门禁绿；NF-13.4 规范冻结遗留）
 - **来源**：A1 / F7 · NF-1.4 / NF-13.* · AGENT_FLOW_SPEC §4.4
 - **范围**：
   - 已发布的节点流自动登记为 `capabilityRef {kind:'composite', id, version}`。
@@ -148,7 +160,8 @@ sources:
   - [x] 在 FlowGraph 里引用它能编译、运行、交付（`test/capability-catalog.test.ts` 编译为 composite 实例、公开端口不重映射、内容摘要固定版本；运行/交付沿用既有复合执行器）
   - [x] 节点流内部失败时，failureNodeId 能透传到运行总览（既有 `composite-executor` / `composite-run-repo` / `node-flow-e2e-composition` 用例锁定）
   - [x] 能力目录完整性：每个 Active 节点类型都有描述且不可调度的如实给出原因（`test/capability-catalog.test.ts`）
-  - [ ] 最小输入编制（ContextManifest → 公开输入）与真实端口类型校验：随 BL-11/BL-12 推进（NF-13.4 仍标【目标】）
+  - [x] 真实端口类型校验已由 BL-11 完成，校验、编译与运行准入共用 `portPairCompatible`
+  - [ ] ContextManifest → 节点流公开输入的最小输入编制仍需按 NF-13.4 确认实现范围并冻结规范；当前图边接线已可运行，但 `NODE_FLOW_SPEC.md` 仍将该条标为【目标】，不得仅凭 BL-11 关闭
 
 ### ✅ BL-11 FlowGraph v2：params、显式端口、子图循环 · L（2026-11-24 交付；完整门禁绿）
 - **来源**：G3 / G7 · AGENT_FLOW_SPEC §4.4 / AF-8.4b
@@ -231,7 +244,7 @@ sources:
 ### ✅ BL-20 人工提交媒体结果 · M
 - **来源**：AF-9.2a
 - **实现**：human-task 支持图片和视频结果类型。
-- **验收**：[x] 打包版验证图片与视频提交、续跑和公开输出。下游固定引用使用项目媒体 ID，并检查项目归属、MIME 与摘要。见 [日志覆盖](LOGGING_COVERAGE.md#2026-11-24-人工图片和视频交付)。
+- **验收**：[x] 历史 Windows 解包版（非安装包）验证图片与视频提交、续跑和公开输出，记录见 [日志覆盖](LOGGING_COVERAGE.md#2026-11-24-人工图片和视频交付)；下游固定引用使用项目媒体 ID，并检查项目归属、MIME 与摘要。该证据不等于当前 Windows 安装包/完整打包版验收
 
 ### ✅ BL-21 执行者 × 决策者两维 · M（2026-11-26 完成）
 - **来源**：AF-9.3
@@ -250,7 +263,7 @@ sources:
   - `cardinality` 拆为 `fanIn / valueShape`（先只改文档，代码改造另立项）。
   - 补充 skip / stale / 缺席语义；修正编号重复，以及 NodeValuePacket 签名、代码入口清单。
 - **实现**：变更历史移入 `docs/CHANGELOG-node-contract.md`，正文不再保留带日期段落；§1 原则 8 与 §3 示例引用 `STANDARD_NODE_SIZE`；§4.3 写明 `fanIn` / `valueShape` 与现行 `PortDecl.cardinality` 的映射；新增 §4.5 AI 失败重试、§4.6 `outputSource`、§6.1 已连接端口的缺席原因（`skipped` / `not-run` / `optional-not-produced`）；§8.2 参考视频段数上限改为「所选模型能力描述 + `src/shared/video-capabilities.ts`」；§6 的 `NodeValuePacket` 签名与 `src/shared/engine/inputs.ts` 一致，顶部代码入口清单保留，章节编号无重复。
-- **验收**：[x] 正文里没有带日期的变更段落；[x] `npm run verify:specs` 通过（其余规范缺 `last-verified` 的告警属 BL-30 范围）。
+- **验收**：[x] 正文里没有带日期的变更段落；[x] `npm run verify:specs` 通过
 - **收尾**：干净树全量门禁通过（`qa/verification/run-AwaNQQ`）。
 
 ### ✅ BL-23 操作节点卡内「死结果区」 · S–M（2026-11-25 桌面确认：`scripts/acceptance/node-result-area-desktop.cjs`）
@@ -267,17 +280,17 @@ sources:
 
 ---
 
-## P2：收敛与体验
+## P2：收敛与体验（已完成）
 
 | ID | 事项 | 来源 | 规模 |
 |---|---|---|---|
-| ✅ BL-30 | **spec-lint**：脚本已接入 `npm run verify`，定向检查覆盖元数据、权威声明、手写计数和过期告警。未登记验证日期的规范标记为 `unverified` 并告警。`run-AwaNQQ` 全量门禁通过 | 审查报告 §九 | S |
+| ✅ BL-30 | **spec-lint**：脚本已接入 `npm run verify`，定向检查覆盖元数据、权威声明、手写计数和过期告警。未登记验证日期的规范输出告警，不自动改写文档；active 规范缺少合法日期会阻断。`run-AwaNQQ` 全量门禁通过 | 审查报告 §九 | S |
 | ✅ BL-31 | **2026-11-26 完成**：NODE_UI_STANDARD 收敛为 v3 单一现行版（header 声明 v3/last-verified/唯一权威），原 §13–§21 历史实施记录与旧几何整体移入 `docs/archive/NODE_UI_STANDARD-history.md`（编号保留不复用）；新增 §27「v3 数值真值表」作为几何/线宽/尺寸的机器可读来源，`test/node-ui-standard-spec.test.ts` 直接解析表格并与 `NODE_UI`/`STORYBOARD_UI`/`TIMELINE_UI` 及 CSS 实现比对（数值漂移即红）。同步更新 AGENTS 与 NODE_CANVAS_PRESENTATION_SPEC 的入口引用。 | U1 | L |
 | ✅ BL-32 | **2026-11-26 完成**：①仓外方案/报告（根目录 md/zip、Agent-Flow 方案包、2026-11-22 审计 md、弹窗规范原始副本、L3 批次执行计划）复制入 `docs/archive/external/` + 顶层 [归档索引](./archive/README.md)；②Agent Flow 历史文档按 AGENT_FLOW_SPEC §20 迁入 `docs/canvas-agent-flow/archive/`（65 份阶段交付/交接/审查，README 与全仓链接同步改写，现行入口保留 03/04/05/07/71）；③弹窗规范入仓为 [UI_MODAL_STANDARD.md](./UI_MODAL_STANDARD.md) 并纳入 NODE_UI_STANDARD §12 索引（U5）；④L3 连线/可读性条款（端口扇出排序、反向边外弧、控制线 kind 着色、hover 聚焦、角色徽标）回写 NODE_CANVAS_PRESENTATION_SPEC 正文（U4）。当前文档链接检查无新增断链；spec-lint 通过 | 审查报告 §九 | M |
 | ✅ BL-33 | **2026-11-25 完成**：扇入顺序在节点流编辑页可见可调（↑/↓）并持久化为 manifest 边 `order`（修复编辑保存丢失 `connectOrder` 的问题）；`executionPolicy.onBranchFailure`（fail-fast/continue）与 `maxConcurrency`（1–4）落地：schema、编辑页「运行策略」面板、隔离执行调度器（就绪批次、失败分支下游阻塞、无关分支继续、已在运行节点自然结束）；人工门自动推断 `MANUAL_GATE_UNDECLARED` 已有。定向测试 `composite-policy.test.ts` 6 项 + `composite-gui-acceptance` 全绿 | NF-8.3a / 8.4 / 8.5 / 9.3a | M |
 | ✅ BL-34 | 节点流版本号改为 major.minor；单次撤销和写盘失败回滚已通过 Electron 验收，版本契约 14 项定向测试通过；`run-AwaNQQ` 全量门禁通过 | NF-11.2 / 11.5 | M |
 | ✅ BL-35 | V10、V11、V12 已实现；固定顺序编译为线性路由图，共用就绪、Agent 分派和完成处理；`run-AwaNQQ` 全量门禁通过 | AGENT_FLOW_SPEC §2.2 / §7 | M |
-| ✅ BL-36 | 循环媒体归属与节点流执行前重试已通过 Electron 验收；生图、视频和循环自动重放保护已通过定向测试；`run-AwaNQQ` 全量门禁通过（其余异步路径见未覆盖边界） | N7 / N9 | S–M |
+| ✅ BL-36 | 循环媒体归属与节点流执行前重试已通过 Electron 验收；生图、视频和循环自动重放保护已通过定向测试；`run-AwaNQQ` 全量门禁通过（其余异步路径见本文「当前未闭环边界」） | N7 / N9 | S–M |
 | ✅ BL-37 | Registry 操作逐项声明 `idempotent / destructive / cost`；能力目录和 MCP 工具从声明派生；`run-AwaNQQ` 全量验收通过。当前集合以 [`generated/contracts.json`](local-agent-access/generated/contracts.json) 与 `capability.list` 为准 | 审查报告 §七 · NF-14.3 | S |
 | ✅ BL-38 | 音色设计绑定、空循环体提示、右边缘产物落位已通过浏览器验收（U-3、F-1、U-5）；`run-AwaNQQ` 全量门禁通过 | 组合测试 | S–M |
 | ✅ BL-39 | 循环卡片提供「只继续未完成项」，中止后续跑回归覆盖已完成项复用；`run-AwaNQQ` 全量门禁通过 | ROADMAP R4 | M |
@@ -286,7 +299,7 @@ sources:
 
 ---
 
-## P3
+## P3（已完成）
 
 | ID | 事项 | 来源 |
 |---|---|---|
@@ -296,28 +309,7 @@ sources:
 
 ---
 
-## 待拍板
+## 已决事项与审查附录闭环
 
-| 问题 | 关联 | 建议 |
-|---|---|---|
-| ~~`135cbef8` 被撤回是否是有意为之~~ | BL-00 | ✅ 误提交，不恢复 |
-| ~~`control` 边：删除，还是实现为「仅顺序依赖」~~ | BL-05 | ✅ 2026-11-22 已决定：删除 |
-| ~~节点流 headless 输出键：带前缀还是裸 id~~ | NF-5.3 | ✅ 2026-11-26 冻结：`outputs` / `outputValues` / `resubmit` 统一使用 `out-<id>`（旧裸 id 仅读取兼容） |
-
-## 待补用例确认（来自审查报告附录）
-
-1. 含 `iterate` / `camera` 端口的节点流，封装时的行为 → BL-12
-2. iteration 媒体还原时是否校验了 mediaId 归属 → BL-36
-3. headless 输出键约定在 BL-00 合入后是否已统一 → BL-00
-4. 多节点循环的实际行为 → BL-07
-
----
-
-## 建议节奏
-
-| 周 | 内容 |
-|---|---|
-| 第 1 周 | BL-00 → BL-02、BL-06、BL-07、BL-08（小项先清）→ BL-01、BL-03、BL-04、BL-05 |
-| 第 2–3 周 | BL-10、BL-12、BL-13、BL-14（打通节点流与 Agent Flow，补齐节点流规范） |
-| 第 4 周 | BL-11、BL-15、BL-16 |
-| 之后 | 其余 P1，以及 P2/P3 按需排期 |
+- 原“待拍板”三项均已决断：`135cbef8` 为误提交不恢复（BL-00）；FlowGraph `control` 边删除（BL-05）；headless 输出键统一为 `out-<id>`、旧裸 id 仅读取兼容（[NODE_FLOW_SPEC.md](./NODE_FLOW_SPEC.md) NF-5.3）。
+- 审查附录四个补用例已分别由 BL-12（`iterate` / `camera` 封装拒绝）、BL-36（iteration 媒体归属）、NF-5.3（输出键）以及 BL-07/BL-11（v1 拒绝、v2 支持多节点循环）闭环；不再保留“待补用例确认”清单。

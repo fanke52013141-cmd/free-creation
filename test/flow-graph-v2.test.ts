@@ -318,4 +318,42 @@ describe('BL-11 FlowGraph v2：params / 真实端口 / 子图循环', () => {
     if (!noExitResult.ok)
       expect(noExitResult.errors.some((error) => error.code === 'LOOP_BODY_NO_EXIT')).toBe(true)
   })
+
+  it('V14 × BL-21：声明 roles 时，显式 decider=human 的能力节点必须声明 humanRole，纯 AI 节点禁止声明', () => {
+    const withRoles = (capExtra: Partial<FlowNode> = {}): FlowGraph =>
+      FlowGraphSchema.parse({
+        schemaVersion: 1,
+        graphId: 'v2-role-decider',
+        name: '角色与人工采用校验',
+        goal: '验证 capability decider=human 的角色归属',
+        roles: [
+          { roleId: 'editor', name: '编辑' },
+          { roleId: 'reviewer', name: '审校' }
+        ],
+        nodes: [
+          agent('entry'),
+          capability('cap', 'image-gen', '3', capExtra)
+        ],
+        edges: [edge('entry', 'out-text', 'cap', 'in-text')],
+        entry: 'entry',
+        exits: ['cap']
+      })
+
+    // decider='human' 缺少 humanRole → HUMAN_ROLE_REQUIRED
+    const missingRole = validateFlowGraphTopology(withRoles({ decider: 'human' }))
+    expect(missingRole.ok).toBe(false)
+    if (!missingRole.ok)
+      expect(missingRole.errors.map((e) => e.code)).toContain('HUMAN_ROLE_REQUIRED')
+
+    // decider='human' 声明合法 humanRole → 通过（不再误报 HUMAN_ROLE_UNEXPECTED）
+    expect(
+      validateFlowGraphTopology(withRoles({ decider: 'human', humanRole: 'reviewer' }))
+    ).toEqual({ ok: true })
+
+    // 纯 AI（decider 缺省 none）声明 humanRole → HUMAN_ROLE_UNEXPECTED
+    const unexpectedRole = validateFlowGraphTopology(withRoles({ humanRole: 'editor' }))
+    expect(unexpectedRole.ok).toBe(false)
+    if (!unexpectedRole.ok)
+      expect(unexpectedRole.errors.map((e) => e.code)).toContain('HUMAN_ROLE_UNEXPECTED')
+  })
 })

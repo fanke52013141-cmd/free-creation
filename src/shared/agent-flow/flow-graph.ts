@@ -677,20 +677,22 @@ export function validateFlowGraph(
   if (graph.roles && roleIds.size !== graph.roles.length)
     errors.push({ code: 'HUMAN_ROLE_DUPLICATE', message: 'Role ids must be unique' })
   for (const node of graph.nodes) {
+    const dimensions = resolveFlowNodeDimensions(node)
+    const involvesHuman = dimensions.executor === 'human' || dimensions.decider === 'human'
     if (node.humanRole && !roleIds.has(node.humanRole))
       errors.push({
         code: 'HUMAN_ROLE_UNKNOWN', nodeId: node.nodeId,
         message: `Unknown human role ${node.humanRole}`
       })
-    if (node.participation === 'autonomous' && node.humanRole)
+    if (!involvesHuman && node.humanRole)
       errors.push({
         code: 'HUMAN_ROLE_UNEXPECTED', nodeId: node.nodeId,
-        message: 'Autonomous nodes cannot declare a human role'
+        message: 'Autonomous nodes without human decision cannot declare a human role'
       })
-    if (graph.roles && node.participation !== 'autonomous' && !node.humanRole)
+    if (graph.roles && involvesHuman && !node.humanRole)
       errors.push({
         code: 'HUMAN_ROLE_REQUIRED', nodeId: node.nodeId,
-        message: 'Human and collaborative nodes must declare a human role'
+        message: 'Human, collaborative, and human-decided nodes must declare a human role'
       })
   }
   const adj = adjacency(graph)

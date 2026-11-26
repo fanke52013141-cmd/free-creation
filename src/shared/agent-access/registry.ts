@@ -80,7 +80,7 @@ export const ACCESS_OPERATIONS = {
   'skill.install': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '安装本机 SKILL.md、JSON 技能包或扁平技能目录；name 为独立技能名称；仅支持指令与文本参考，不执行脚本',
@@ -115,7 +115,7 @@ export const ACCESS_OPERATIONS = {
   'node.library.save': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '以独立 name 将指定 AI 对话节点和固定版本技能保存到节点库；排除聊天记录、附件与运行结果',
@@ -156,7 +156,7 @@ export const ACCESS_OPERATIONS = {
   'graph.patch': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '向当前打开项目提交一批类型化画布编辑（建/改/删节点与连线）；整体校验后原子应用并保存；返回ID映射与保存版本。autoLayout=true 时应用后在同一撤销步内智能整理坐标',
@@ -167,7 +167,7 @@ export const ACCESS_OPERATIONS = {
   'graph.layout': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '对当前打开项目按拓扑分层/角色泳道/网格重排节点坐标（与 GUI 智能整理同一算法）；只改位置不改配置，单撤销步并保存',
@@ -190,7 +190,7 @@ export const ACCESS_OPERATIONS = {
   'node.execute': {
     effect: 'execute',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'possible',
     description:
       '向当前打开项目提交节点执行（single=仅该节点读取已持久化上游；subgraph=所选节点及其上游闭包）；subgraph 可传 inputs 补齐缺失端口（媒体使用项目 mediaId）；返回持久任务ID，最终状态以 run.get 为准',
@@ -245,7 +245,7 @@ export const ACCESS_OPERATIONS = {
   'media.import': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '把本机文件登记为项目受控媒体（复制入库、去敏索引）；返回受控 mediaId 供节点引用，不接收二进制报文',
@@ -333,7 +333,7 @@ export const ACCESS_OPERATIONS = {
   'library.create_resource': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '创建单图图片资源（一张图片+名称）；图片取自本机已存在的文件路径，不接收网络地址、二进制报文或额外组件',
@@ -419,7 +419,7 @@ export const ACCESS_OPERATIONS = {
   'project.open': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description: '保存当前画布后在桌面打开项目；等待画布就绪',
     input: project
@@ -427,7 +427,7 @@ export const ACCESS_OPERATIONS = {
   'project.update': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description: '按版本修改项目名称（规范主操作）；活动画布先保存并同步版本',
     input: revision.extend({ name: z.string().trim().min(1).max(200) }).strict()
@@ -435,7 +435,7 @@ export const ACCESS_OPERATIONS = {
   'project.rename': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description: '按已保存版本修改项目名称；活动画布经保存握手同步',
     input: revision.extend({ name: z.string().trim().min(1).max(200) }).strict()
@@ -443,7 +443,7 @@ export const ACCESS_OPERATIONS = {
   'project.save': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description: '保存当前权威内容；活动画布等待最新编辑落盘，不接收客户端快照',
     input: revision
@@ -480,7 +480,7 @@ export const ACCESS_OPERATIONS = {
   'project.export': {
     effect: 'export',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description: '活动画布先保存最新编辑，再导出完整项目到受控目录，不覆盖文件',
     input: revision
@@ -1247,6 +1247,12 @@ export function validateAccessRegistry(
       !['read', 'write', 'export', 'delete', 'execute'].includes(spec.effect)
     )
       errors.push(`INVALID_OPERATION:${id}`)
+    if (spec.effect === 'read' && (spec.destructive || !spec.idempotent || spec.cost !== 'none'))
+      errors.push(`INVALID_READ_ANNOTATIONS:${id}`)
+    if (spec.effect === 'delete' && !spec.destructive)
+      errors.push(`DELETE_MUST_BE_DESTRUCTIVE:${id}`)
+    if (spec.effect === 'export' && spec.destructive)
+      errors.push(`EXPORT_MUST_NOT_BE_DESTRUCTIVE:${id}`)
     if (PACKAGE_IMPORT_BLOCKLIST.has(id)) errors.push(`EXCLUDED_OPERATION:${id}`)
   }
   // 逐节点动作矩阵必须自洽：缺类型/缺动作/非法状态/无证据都会让门禁失败。

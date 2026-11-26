@@ -304,7 +304,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowStage.rework': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '对固定顺序阶段或图模式节点执行局部返工。图模式使用节点 ID 作为 stageKey，按数据、条件和审核依赖确定影响范围。确认后由主控继续执行，旧交付留存，未结算命令阻止返工。',
@@ -314,7 +314,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowDefinition.publish': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '从固定顺序主控的已保存配置发布一个不可变流程定义版本（阶段/方法/输入/进入条件快照，版本递增）；只存定义内容，不存运行正文/产物；非固定顺序如实拒绝',
@@ -384,7 +384,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowGraph.propose': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       'P5：外部已生成 FlowGraph 的建图提案——校验+编译+持久化预览（flow_builds source=graph，锚点=编译 coordinator）；不调模型、不写画布；同图同 requestId 幂等返回同 buildId；落画布须人在 GUI 确认（flowGraph.confirm），外部不能自确认',
@@ -418,7 +418,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowGraph.confirm': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     // 人工决定：返回前等人在 GUI 点「允许落画布」，CLI 不能按 15s 默认超时放弃。
     interactive: true,
@@ -429,7 +429,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowGraph.proposeFromDefinition': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '④P6：从图定义版本创建运行——读定义的 FlowGraph→经建图提案管线（校验/编译/持久化预览）；落画布仍须人工确认（flowGraph.confirm），不改模板',
@@ -444,7 +444,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowGraphDefinition.publish': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '④P6：发布 FlowGraph 定义版本（不可变快照，与运行分离）；校验图→contentHash→版本递增；同内容也允许新版本以便评测',
@@ -508,7 +508,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowAgent.cooperate': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     // submit / accepted=true 是人工决定：返回前等人在 GUI 点「允许」。
     interactive: true,
@@ -536,7 +536,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowAgent.run': {
     effect: 'execute',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'possible',
     // action=continue 命中人工等待时，返回前等人在 GUI 点「允许继续」。
     interactive: true,
@@ -555,7 +555,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowAgent.pause': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '请求暂停当前打开的 Agent 任务（下一次安全点生效）；任务不存在如实返回 NOT_FOUND，不伪造暂停结果',
@@ -583,7 +583,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowAgent.build.propose': {
     effect: 'execute',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'possible',
     responseTimeoutMs: MODEL_RESPONSE_TIMEOUT_MS,
     description:
@@ -593,7 +593,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowAgent.build.commit': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     // 人工决定：返回前等人在 GUI 点「允许落画布」。
     interactive: true,
@@ -605,7 +605,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowAgent.review': {
     effect: 'execute',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'possible',
     responseTimeoutMs: MODEL_RESPONSE_TIMEOUT_MS,
     description:
@@ -617,7 +617,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'flowStateMachine.submitEvent': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     // 人工决定：外部代拟人工事件前必须由人在 GUI 确认。
     interactive: true,
@@ -646,7 +646,7 @@ export const FLOW_AGENTS_OPERATIONS = {
   'humanTask.submit': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     // 人工决定：返回前等人在 GUI 点「允许提交」。
     interactive: true,

@@ -1,8 +1,11 @@
-# 32类节点的外部动作覆盖与验收计划
+# 节点的外部动作覆盖与验收计划（早期规划档案）
 
-日期：2026-11-07。基线类型：`src/shared/types/index.ts` 的 `ACTIVE_NODE_TYPE_IDS`；版本来自 `nodes/specs/index.tsx` 与 `agentFlow.tsx`。本表是开发清单，不是已支持声明。新增类型或契约版本变更须同包更新机器清单和本表。
+> status: historical
+> last-verified: 2026-11-26
 
-> **历史规划快照**：文中的“32 类节点”等为 2026-11-07 时点口径，不作为现状。当前节点集合与逐动作状态以 [`generated/contracts.json`](./generated/contracts.json)、`node.type.list` 和 [`AGENT_PARITY_SPEC.md`](../../AGENT_PARITY_SPEC.md) 为准。
+日期：2026-11-07。本文件定义了 N1–N8 八类节点公共动作的验收模型；第 2 节表格为 2026-11-07 初始盘点快照，不代表现状。
+
+> **唯一现行真值**：当前全部 Active 节点的逐动作（N1–N8）状态与证据已机器化至 `src/shared/agent-access/node-actions.ts`，对外以 [`generated/contracts.json`](./generated/contracts.json) 和运行时 `node.type.list` 为准。
 
 ## 1. 每类节点必须核对的公共动作
 

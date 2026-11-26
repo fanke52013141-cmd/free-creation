@@ -15,7 +15,7 @@ export const PROVIDER_NETWORK_OPERATIONS = {
   'provider.testConnection': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     responseTimeoutMs: LONG_RESPONSE_TIMEOUT_MS,
     description:
@@ -30,7 +30,7 @@ export const PROVIDER_NETWORK_OPERATIONS = {
   'model.validate': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'possible',
     responseTimeoutMs: MODEL_RESPONSE_TIMEOUT_MS,
     description:
@@ -48,7 +48,7 @@ export const PROVIDER_NETWORK_OPERATIONS = {
   'model.discover': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     responseTimeoutMs: LONG_RESPONSE_TIMEOUT_MS,
     description:
@@ -58,7 +58,7 @@ export const PROVIDER_NETWORK_OPERATIONS = {
   'model.validateAgentToolCalling': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'possible',
     responseTimeoutMs: MODEL_RESPONSE_TIMEOUT_MS,
     description:

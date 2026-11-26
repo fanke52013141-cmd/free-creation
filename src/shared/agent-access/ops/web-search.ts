@@ -16,7 +16,7 @@ export const WEB_SEARCH_OPERATIONS = {
   'webSearch.run': {
     effect: 'execute',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'possible',
     responseTimeoutMs: LONG_RESPONSE_TIMEOUT_MS,
     description:

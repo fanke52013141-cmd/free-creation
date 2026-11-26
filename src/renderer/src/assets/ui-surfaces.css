@@ -1110,7 +1110,7 @@
 .canvas-import-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1200;
+  z-index: var(--z-modal);
   display: grid;
   place-items: center;
   padding: 24px;
@@ -1486,8 +1486,8 @@ button {
 
 .palette-node-flyout {
   position: fixed;
-  /* 必须压过画布内已有节点，否则菜单会被节点卡片遮住。 */
-  z-index: 10000;
+  /* 高于画布节点/侧栏/停靠坞，但低于全局顶栏与模态弹窗。 */
+  z-index: var(--z-floating);
   width: max-content;
   max-width: min(240px, calc(100vw - 166px));
   max-height: min(70vh, calc(100vh - 24px));
@@ -1616,10 +1616,10 @@ button {
   }
 }
 
-/* 统一的 portal 提示层：不受左栏滚动容器裁切，也可被其他高频图标复用。 */
+/* 统一的 portal 提示层：不受左栏滚动容器裁切，弹窗内图标悬浮同样可见。 */
 .app-tooltip {
   position: fixed;
-  z-index: 2000;
+  z-index: var(--z-popover, 3500);
   max-width: 220px;
   padding: 7px 9px;
   border: 1px solid rgba(185, 209, 228, 0.16);

@@ -49,7 +49,7 @@ export const FLOW_ASSETS_OPERATIONS = {
   'flowAsset.submit': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '把项目已保存画布上某节点端口的结果固化为固定资产版本（幂等 submissionId）；活动画布先经桌面保存屏障，节点有未核对命令时拒绝，不接收外部提供的取值',

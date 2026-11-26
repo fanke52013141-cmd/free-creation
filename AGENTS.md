@@ -20,22 +20,22 @@ renderer 的 `emitDiagnosticsEvent` 和 main 的诊断入口。实际验收范�
 
 ## 节点是强制协议
 
-节点内部的空白、图标和字段标题必须可单击选中、拖动移动；卡片输入框遵守“双击编辑、单击选中”的公共指针规则，见 UI 规范 §19。不要通过整个表单的 stopPropagation 保护单个控件；新控件须完成内部区域及拖动验收。
+节点内部的空白、图标和字段标题必须可单击选中、拖动移动；可编辑输入控件单击直接聚焦编辑，只读正文和媒体保持双击动作（指针归属以 `src/renderer/src/canvas/node-pointer-policy.ts` 与 [节点 UI 统一规范](./docs/NODE_UI_STANDARD.md) §22 为准）。不要通过整个表单的 `stopPropagation` 保护单个控件；新控件须完成内部区域及拖动验收。
 
 新增或修改节点 UI 前，必须先读 [节点 UI 统一规范](./docs/NODE_UI_STANDARD.md)。
-现行呈现权威为 [NODE_UI_STANDARD.md](./docs/NODE_UI_STANDARD.md) v3（§22–§27；几何/线宽数值以 §27 真值表为准）。原 §13–§21 的历史几何与实施记录已归档到 `docs/archive/NODE_UI_STANDARD-history.md`，只保留追溯价值，不得作为实现依据。
-不得以旧截图、历史验收或节点私有样式豁免。新增节点须复用公共呈现组件并完成对应验收；规则定稿不等于界面已整改。
+现行呈现权威为 [NODE_UI_STANDARD.md](./docs/NODE_UI_STANDARD.md) v3.1（几何/线宽/层级数值以 §27 真值表为准）。原 §13–§21 的历史几何与实施记录已归档到 `docs/archive/NODE_UI_STANDARD-history.md`，只保留追溯价值，不得作为实现依据。
+不得以旧截图、历史验收或节点私有样式豁免。新增节点须复用公共呈现组件、登记 §9 逐节点呈现表并完成对应验收；规则定稿不等于界面已整改。
 
 新增或修改引用呈现前，必须遵守 [节点引用呈现规范](./docs/NODE_REFERENCE_SPEC.md)：整个引用区只显示一排，完整内容通过统一详情查看；该规范取代旧版逐条换行规则，实施状态以其迁移清单为准。
 
-所有滚动区域必须遵守 UI 规范 §19 的全局规则：保留滚动能力，始终隐藏横向/纵向滚动条及自绘滑块，悬停和聚焦不得恢复显示。复用 `assets/scrollbars.css`，不得用 `overflow:hidden` 禁止滚动或另设可见滚动条。
+所有滚动区域必须遵守 [节点 UI 统一规范](./docs/NODE_UI_STANDARD.md) §6 的全局规则：保留滚动能力，始终隐藏横向/纵向滚动条及自绘滑块，悬停和聚焦不得恢复显示。复用 `assets/scrollbars.css`，不得用 `overflow:hidden` 禁止滚动或另设可见滚动条。
 
 新增或修改节点图标、分类、身份色前，必须阅读并遵循
 [节点分类与图标颜色规范](./docs/NODE_COLOR_SPEC.md)。分类色板为 v2 起的六族色相带 × 逐节点 ID 固定变体（2026-11-02 裁决；
 本段旧"五大分类主色"表述已作废）。新增节点必须先在规范中登记所属分类与颜色变体，再使用统一色板；
 不得在组件中自行配色。现有界面的迁移状态以该规范的迁移清单为准。
 
-新增或修改节点前必须阅读 `NODE_CONTRACT_SPEC.md`。可创建节点必须同时具备：
+新增或修改单节点前必须阅读 [NODE_CONTRACT_SPEC.md](./NODE_CONTRACT_SPEC.md)；涉及节点流（`composite`）封装、版本、升级或运行语义时必须同时阅读 [节点流规范](./docs/NODE_FLOW_SPEC.md)。可创建节点必须同时具备：
 
 1. `ActiveNodeTypeId`、`NodeTypeSpec` 和稳定的 `contractVersion`；
 2. 明确的输入/输出端口、JSON Schema、必填性与基数；
@@ -91,22 +91,14 @@ renderer 的 `emitDiagnosticsEvent` 和 main 的诊断入口。实际验收范�
 当前仅有登记/生成/影响确认门禁，完整版本差异、全部节点适配和外部执行仍按台账推进；
 不得将部分静态门禁宣称为全功能自动覆盖。交付仍须运行针对性检查和完整 `npm run verify`。
 
-## 画布原生 Agent Flow（2026-10-11）
+## 画布原生 Agent Flow（2026-10-11 确立，2026-11-26 收口）
 
-现行权威入口是 [Agent Flow 规范](docs/AGENT_FLOW_SPEC.md) + [开发台账](docs/BACKLOG.md) + [机器契约](docs/local-agent-access/generated/contracts.json)；[画布原生 Agent Flow 当前状态页](docs/canvas-agent-flow/README.md)只做导航与状态摘要。`docs/canvas-agent-flow/archive/` 仅用于追溯，不得作为当前规范或能力矩阵。
+现行唯一规范入口是 [Agent Flow 规范](docs/AGENT_FLOW_SPEC.md) + [节点流规范](docs/NODE_FLOW_SPEC.md) + [开发台账](docs/BACKLOG.md) + [机器契约](docs/local-agent-access/generated/contracts.json)；[当前状态页](docs/canvas-agent-flow/README.md)只做导航摘要。`docs/canvas-agent-flow/05-node-coordination-standard.md` 与 `docs/canvas-agent-flow/archive/` 已并入现行规范，仅保留历史追溯，不得作为独立能力矩阵。R 系列中 R09、R11、R12 仍未闭环，精确边界以 [BACKLOG](docs/BACKLOG.md) 为准。
 
-2026-10-12 用户确认的[完整方案](docs/canvas-agent-flow/archive/00-approved-plan.md)是历史起点。C1–C4 与 AF-00～AF-07 已实施；R 系列不能整体称“全部验收”：R09、R11、R12 仍未闭环，精确口径见 [R 系列总台账](docs/canvas-agent-flow/archive/38-agent-completion-plan.md) 与 [BACKLOG](docs/BACKLOG.md)。首版新增 Agent、状态机、AI 审核三种类型；Agent 职责与人机协作/纯 AI 参与方式独立配置，资产固定版本，审核返工走显式控制关系和有界预算，不形成反向数据环。
-
-1. 上帝 Agent 构建画布中的 Flow；主 Agent 节点协调流程、任务、最小输入和产物；专业 Agent 节点承担复杂执行任务。主 Agent 与专业 Agent 复用 Agent 节点类型，以角色及工具权限区分。
-2. 目标、讨论、状态、人工选择和继续发生在画布节点内；成果由可查看、可连接的节点承载。
-3. 首版包含声明式状态机节点，校验事件、条件与迁移；每个节点保留独立任务状态。执行事实来自真实运行记录，不能由模型或聊天文字直接改为成功。
-4. 画布语义图是唯一可编辑流程定义；控制/状态关系显式可见，不能混入普通数据边。
-5. UI 与 Agent 共用图操作和节点执行契约；后台存储和运行服务只服务这张图。
-6. 保留现有节点和手动流程；不建立独立协作工作台、第二份任务拓扑或云端依赖。
-7. 每包先定义并验收一条画布用户路径，明确已实现/已验证/未支持；不能用测试数量替代产品验收。
-8. 测试使用隔离数据；可见测试窗口必须标注并在退出时清理，不留下无标识测试项目窗口。
-
-新增 Agent、状态机或接入节点调度前，必须遵守[节点协同规范](docs/canvas-agent-flow/05-node-coordination-standard.md)。已有 executor 不等于已支持 Agent 调度；未经适配验收的类型继续支持手动使用，不能宣称已可自动协调。
+核心铁律：
+1. **画布语义图是唯一可编辑流程定义**：上帝 Agent 只能提案建图，落画布与一切「人工决定类」动作必须由真人在桌面确认（AF-1.5）；控制/状态关系显式可见，不混入数据边，不建第二套任务拓扑。
+2. **流转只认真实交付事实与命令台账**：模型或聊天文字不能赋予成功、不能改写路由（AF-1.2）；未知副作用先经台账核对，严禁自动重放（AF-1.3）。
+3. **能力同源与测试隔离**：已有 executor 不等于已支持 Agent 自动调度，可编排能力一律以共享 `capability-catalog.ts` 为准；每包验收一条真实画布路径，测试必须使用隔离数据目录并在退出时清理标识窗口。
 
 ## 本地数据安全
 

@@ -46,7 +46,7 @@ export const MEDIA_ASSET_OPERATIONS = {
   'media.batchExport': {
     effect: 'export',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '把项目媒体（可指定 mediaIds，省略=全部）批量导出到受控导出目录下的新子目录：同名文件自动加序号后缀、绝不覆盖已有文件；逐项回执成功/失败文件名，不用总数掩盖个别失败',

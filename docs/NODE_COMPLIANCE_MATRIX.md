@@ -1,8 +1,10 @@
 # 节点合规矩阵
 
-> 审计基线：`f519ac3` · 2026-08-31。详细审计、连线关系和参考项目差异见 [NODE_PROTOCOL_AUDIT_2026_08_31.md](./NODE_PROTOCOL_AUDIT_2026_08_31.md)。
+> status: active
+> last-verified: 2026-11-26
+> 早期审计基线：`f519ac3` · 2026-08-31。详细审计、连线关系和参考项目差异见 [NODE_PROTOCOL_AUDIT_2026_08_31.md](./NODE_PROTOCOL_AUDIT_2026_08_31.md)。
 
-本表是当前 **34 个可创建节点** 的发布前协议索引；下表共 36 行 = 34 个可创建节点 + 2 个历史节点行（`video-audio`、`vocal-separate`，结论「退役」）。`composite`（节点流）为内部创建节点，只登记在「历史节点」表，不进入创建菜单。新增或修改节点前必须同步更新本表、`NODE_CONTRACT_SPEC.md`、契约快照与连线测试；历史节点仅为兼容读取，不进入创建菜单。表中「版本 / 端口 id」以及明确写出的端口类型、基数和 Schema 由 `test/compliance-matrix-doc.test.ts` 与注册契约逐行比对；「34 个可创建节点」计数、退役行结论与「历史节点」表也由该测试校验，写错、漏行或计数漂移会直接让测试变红。
+本表是当前 **34 个可创建节点** 的发布前协议索引；主表 32 行（30 个常规可创建节点 + 2 个历史节点行 `video-audio`、`vocal-separate`，结论「退役」）与下方「C1 配置节点」表 4 行合计覆盖全部 34 个可创建节点。`composite`（节点流）为内部创建节点，只登记在「历史节点」表，不进入普通创建菜单。新增或修改节点前必须同步更新本表、`NODE_CONTRACT_SPEC.md`、契约快照与连线测试；历史节点仅为兼容读取，不进入创建菜单。表中「版本 / 端口 id」以及明确写出的端口类型、基数和 Schema 由 `test/compliance-matrix-doc.test.ts` 与注册契约逐行比对；全文所有「34 个可创建节点」计数、退役行结论与「历史节点」表均由该测试校验，写错、漏行或计数漂移会直接让测试变红。
 
 | 节点                      | 版本 | 输入端口（类型 / 基数）                                         | 输出端口（类型 / Schema）                                       | 执行与投影                               | 结论 |
 | ------------------------- | ---- | --------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------- | ---- |
@@ -39,16 +41,14 @@
 | 循环 `iterate`            | 2    | `in-list` json `list.items@1` / one / 必填；按顺序逐项运行      | `out-item` iteration（循环体）；`out-items` json `list.items@1` | executor + projectOutputs                | 通过 |
 | 导演台 `director`         | 3    | 分镜 JSON、参考图多输入、机位 camera                            | 帧、预演视频、机位 camera、工程摘要                             | manual-publish + projectOutputs          | 通过 |
 
-语音合成节点的供应商决定动态端口：MiniMax 使用 `in-text`、`in-voice`（接收 `voice.profile@1`）；
-火山引擎使用 `in-text`、可选 `in-audio` 参考音频。两种供应商都输出 `out-audio`，只有火山引擎
-可选输出 `out-subtitle` (`voice.subtitle@1`)。
+语音合成节点的后端配置（`props.config.backend`）决定动态端口：MiniMax（`minimax`）使用 `in-text`、`in-voice`（接收 `voice.profile@1`）；火山引擎（`volc`）使用 `in-text`、可选 `in-audio` 参考音频；本地 IndexTTS 2.5（`indextts`）使用 `in-text`、`in-audio` 参考音频克隆。三种通道都输出 `out-audio`，只有火山引擎在开启字幕时可选输出 `out-subtitle` (`voice.subtitle@1`)。
 
 ## 自动门禁
 
 - `test/node-compliance.test.ts`：Active/Legacy 类型、executor、投影、版本、说明与创建菜单分类。
 - `test/node-contract-snapshot.test.ts`：节点注册、端口命名、Schema 与关键契约快照；历史 `vocal-separate`、`video-audio` 继续保留读取兼容。
 - `test/connection-matrix.test.ts`：端口类型兼容/拒绝矩阵和代表性工作流。
-- `test/compliance-matrix-doc.test.ts`：本表每一行的「版本 / 端口 id」与注册契约逐行比对，并检查每个可创建节点都有一行；同时校验「33 个可创建节点」计数、`creatable=false` 节点与「历史节点」表互相对应。
+- `test/compliance-matrix-doc.test.ts`：本表每一行的「版本 / 端口 id」与注册契约逐行比对，并检查每个可创建节点都有一行；同时校验全文每一处「34 个可创建节点」计数、`creatable=false` 节点与「历史节点」表互相对应。
 - `npm run verify`：本项目发布前的统一自动验证命令。
 
 ## C1 配置节点

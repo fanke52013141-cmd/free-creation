@@ -1,5 +1,8 @@
 # 铁律：功能变更必须同包同步 Agent 对接
 
+> status: active
+> last-verified: 2026-11-26
+
 状态：**立即生效**（2026-11-08 用户明确要求）。本文件是行为规则，不是建议。
 上位规范：[AGENT_PARITY_SPEC.md](../../AGENT_PARITY_SPEC.md)。执行入口：`npm run guard:agent-parity`。
 
@@ -83,8 +86,8 @@ node scripts/verify-acceptance.cjs family1 families-4-5-6-9
 
 | 日期 | 动作/范围 | 原因 | 期限 | 责任人 |
 | --- | --- | --- | --- | --- |
-| 2026-11-08 | `video-depth` / `video-clay` 的真实转换 | 需本机 CUDA 环境安装后才能验收（代码已接通） | 环境就绪后 | 待定 |
-| 2026-11-08 | 付费生成（生图/视频/语音/音色）真实调用 | 需预算授权，且用户要求自测 | 用户自测后 | 用户 |
+| 2026-11-08 | `video-depth` / `video-clay` 的真实转换 | 需本机 CUDA 环境安装后验收（代码与契约已接通） | 2026-12-31 前复审 | `media/video-conversion` 维护者 |
+| 2026-11-08 | 未验证供应商的付费生成真实调用（Vidu Q3 已于 BL-52 实测通过） | 需逐供应商预算授权，用户要求按需自测 | 2026-12-31 前复审 | 用户 + `gateway` 维护者 |
 
 ---
 

@@ -102,7 +102,7 @@ export const DIAGNOSTICS_OPERATIONS = {
   'diagnostics.exportBundle': {
     effect: 'export',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '把指定范围的诊断事件导出为诊断包（zip）到**受控导出目录**（复用 GUI 同一 exportBundle 与脱敏规则）；范围可为一次流程(traceId)、一次运行(runId)或时间窗，可组合；回执给文件名/sha256/字节数/事件数，不接受任意输出路径也不覆盖已有文件',
@@ -120,7 +120,7 @@ export const DIAGNOSTICS_OPERATIONS = {
   'diagnostics.exportNodeRun': {
     effect: 'export',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '把某个节点最近一次运行与历史运行（≤13 条）导出为节点诊断 JSON 到**受控导出目录**：记录由权威宿主提供（与 GUI 面板"导出诊断信息"同一来源），节点正文/密钥/媒体内容在导出前被脱敏；回执给文件名/sha256/字节数/运行条数，不接受任意输出路径',

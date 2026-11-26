@@ -1,7 +1,7 @@
 # 节点输入输出契约规范
 
 > status: active
-> last-verified: 2026-11-25
+> last-verified: 2026-11-26
 > [变更历史](docs/CHANGELOG-node-contract.md)
 
 AI 对话生图补充：消息可保存图片附件（媒体 ID、项目相对路径、名称、MIME），用户消息可保存显式生图意图；旧项目没有这些字段仍可读取。图片在对话工作区展示并保存为项目媒体，既有 `out-text` 仍输出最后一条助手回复的 TXT，不输出图片二进制或隐含图片端口。默认 1K、可选 4K、固定最低质量，详见 [对话生图规范](./docs/CHAT_IMAGE_SKILL_SPEC.md)。
@@ -510,6 +510,8 @@ interface NodeValuePacket {
 
 ### 8.0 组合节点（`composite`）
 
+> **组合层唯一现行权威**：完整 manifest 结构、公开边界推导、`major.minor` 版本与升级预检、嵌套预算、缺席传播、分支并发/失败策略与计费确认门一律以 **[节点流（composite）规范](./docs/NODE_FLOW_SPEC.md)** 为准；本节仅保留与单节点协议衔接的七条底线原则：
+
 组合节点是工作流模板之外的第二条合法路径：它把一组已调试的节点发布为**一个有明确公开契约的能力单元**，
 而不是把步骤藏进巨型配置。必须同时满足：
 
@@ -597,16 +599,16 @@ interface NodeValuePacket {
 轨道线是复合编辑节点（contractVersion 1），用于把图片、视频、音频摆到多条
 轨道上，分割拖动后合成为一条成片。它不属于 §8.1 的 3D 预演台，也不复用导演台的发布语义。
 
-**尺寸策略**：`NodeTypeSpec.sizePolicy` 有三档——`standard`（缺省，340×260 与手动高度档位）、
-`content`（分镜板：宽高随内容自适应）、`free`（轨道线：默认 880×210，宽高完全由用户控制）。
+**尺寸策略**：`NodeTypeSpec.sizePolicy` 有三档——`standard`（缺省，`STANDARD_NODE_SIZE` 与固定高度档位）、
+`content`（分镜板：默认尺寸见 `STORYBOARD_UI`，宽高随内容自适应）、`free`（轨道线：默认尺寸见 `TIMELINE_UI`，现行 `880×291`，宽高由用户自由控制且受 `minWidth/minHeight` 保护）。
 `content`/`free` 节点都豁免旧尺寸迁移与高度夹取；新增节点需要非常规尺寸时必须声明策略，
 不得在 `NodeCardShape.onResize` 或 `NodeCardView.fitHeight` 里再加按类型判断的白名单。
 
 **轨道语义**：轨道是**通用轨道**，不区分视频轨/音频轨——同一轨道可以放
 图片、视频、音频，合成时按**片段自己的 kind** 分流（画面/静帧进画面轨，音频进混音）。因此：
 `TimelineTrack` 没有 `kind` 字段（旧数据里的 `kind` 读入即丢弃），`addTrack()` 不再接收类型；
-同轨重叠约束只针对画面片段（视频/图片），音频片段允许重叠（混音）。默认两条通用轨道，
-默认高度按「工具栏 + 刻度尺 + 两条轨道」计算（880×210）。
+同轨重叠约束只针对画面片段（视频/图片），音频片段允许重叠（混音）。默认三条通用轨道（`TIMELINE_UI.trackCount = 3`，打开旧项目时补齐），
+默认尺寸以 `TIMELINE_UI` 为准（现行 `880×291`）。
 
 **数据真值**：轨道线内容存放在 `props.text` 的 JSON（`schemaVersion=1`，字段见
 `src/shared/timeline.ts`），不新增 tldraw shape prop。`props.config` 只放渲染配置
@@ -617,19 +619,19 @@ interface NodeValuePacket {
 
 | 端口 | 类型 | 语义 |
 | --- | --- | --- |
-| `in-video` | video many | 上游视频素材，用于追加到视频轨（首次连线/首次运行导入，不覆盖用户已编辑内容） |
-| `in-audio` | audio many | 上游音频素材，追加到音频轨 |
-| `in-image` | image many | 上游图片素材，追加到视频轨末端 |
+| `in-video` | video many | 上游视频素材，追加到通用轨道（首次连线/首次运行导入，不覆盖用户已编辑内容） |
+| `in-audio` | audio many | 上游音频素材，追加到通用轨道（合成时进入混音） |
+| `in-image` | image many | 上游图片素材，追加到通用轨道末端 |
 | `out-video` | video（可选） | 合成成片；只在最近一次成功运行后投影，失败/跳过时为空 |
 
 **执行与产物**：`outputSource: 'run'`。执行器先做本机 FFmpeg 预检（缺失时返回显式失败原因，
 不进入执行），再经 `media:timeline-compose` 交给主进程合成；产物**不回写本节点的
-mediaId/mediaPath**（`node-invariants`），必须 `emitArtifact` 成本独立视频资产节点，
+mediaId/mediaPath**（`node-invariants`），必须 `emitArtifact` 成独立视频资产节点，
 `nodeResult` 记录本次成片以供 `out-video` 投影。取消沿用媒体作用域的 ffmpeg 子进程终止链。
 
 **编辑规则**（`src/shared/timeline.ts`）：时间为整数毫秒；分割产生两段共享 mediaId、不同 inMs，
-不复制媒体文件；同一条视频轨不允许片段重叠（音频轨允许重叠做混音）；`inMs + durationMs`
-超过源时长时按源尾截断而不是报错；音频片段只能进音频轨，画面片段只能进视频轨。
+不复制媒体文件；同一条通用轨道内画面片段（视频/图片）不允许时间重叠，音频片段允许重叠做混音；`inMs + durationMs`
+超过源时长时按源尾截断而不是报错。
 
 ## 9. 分阶段改造方案
 

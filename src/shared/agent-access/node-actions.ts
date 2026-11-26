@@ -160,7 +160,15 @@ const NODE_TABLE: Record<string, Overrides> = {
   },
   website: { contractVersion: 1, family: 'document' },
   iterate: { contractVersion: 2, family: 'document' },
-  'ai-process': { contractVersion: 1, family: 'document' },
+  'ai-process': {
+    contractVersion: 1,
+    family: 'document',
+    extra: {
+      N5: C('ai-process 执行器与模拟网关服务级测试；真实文本模型调用按已验证连接运行，不归为纯本地确定性计算'),
+      N6: C('output.get 模型输出投影与运行时 JSON Schema 严格校验服务级测试'),
+      N7: C('node.execute/run.cancel 服务级测试与 W1 退避重试单测')
+    }
+  },
   // 媒体/本地处理族
   image: {
     contractVersion: 3,
@@ -241,7 +249,14 @@ const NODE_TABLE: Record<string, Overrides> = {
     extra: { N5: P('付费生图从未实测（无预算）；用户允许最小图片生成测试，尚未执行'), N6: P('无真实产物') }
   },
   'image-edit': { contractVersion: 2, family: 'paid' },
-  video: { contractVersion: 7, family: 'paid' },
+  video: {
+    contractVersion: 7,
+    family: 'paid',
+    desktop: {
+      N5: 'BL-52 真实桌面宿主 + CLI 组合 8 路径验证 Vidu Q3 首尾帧出片（qa/bl52-vidu-combo8/receipt.json）；仅覆盖已验证 Vidu Q3 路径，不外推全部视频供应商',
+      N6: 'BL-52 真实桌面宿主 output.get 返回 out-video 引用，ffprobe 实测 1920x1080 h264 成片（qa/bl52-vidu-combo8/ffprobe.json）'
+    }
+  },
   'video-depth': { contractVersion: 1, family: 'paid' },
   'video-clay': { contractVersion: 1, family: 'paid' },
   speech: {

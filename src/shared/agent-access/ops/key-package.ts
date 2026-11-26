@@ -18,7 +18,7 @@ export const KEY_PACKAGE_OPERATIONS = {
   'provider.package.seal': {
     effect: 'export',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '把选定的已保存连接封成凭据包（.cskeys）写入受控导出目录：需要解封密码与接收设备的凭证文件名（服务端从受控目录读取，不接受任意路径）；回执给文件名/sha256/字节数/包ID/连接数/到期时间，不回传包正文',

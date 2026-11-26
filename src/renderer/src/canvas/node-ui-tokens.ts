@@ -81,7 +81,7 @@ export const NODE_UI = {
   },
   description: { height: 36, maxLines: 2 },
   content: { padding: 12 },
-  primaryButton: { height: 32, radius: 8 },
+  primaryButton: { height: 32, radius: 10 },
   accent: { height: 4 },
   reference: {
     /** 引用区最多展示行数，超出折叠为 +N */

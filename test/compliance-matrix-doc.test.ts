@@ -153,14 +153,16 @@ describe('NODE_COMPLIANCE_MATRIX · 文档端口与注册契约一致', () => {
     expect(creatable.filter((t) => !documented.has(t))).toEqual([])
   })
 
-  it('文档声明的「N 个可创建节点」计数与注册表实际数量一致', () => {
+  it('文档中每一处「N 个可创建节点」计数均与注册表实际数量一致', () => {
     const creatableCount = allNodeTypes().length
-    const declared = /(\d+)\s*个可创建节点/.exec(DOC)
-    expect(declared, '文档必须以「N 个可创建节点」的形式声明当前计数').not.toBeNull()
-    expect(
-      Number(declared![1]),
-      `文档声明 ${declared![1]} 个可创建节点，注册表实际 ${creatableCount} 个`
-    ).toBe(creatableCount)
+    const matches = Array.from(DOC.matchAll(/(\d+)\s*个可创建节点/g))
+    expect(matches.length, '文档必须以「N 个可创建节点」的形式声明当前计数').toBeGreaterThan(0)
+    for (const match of matches) {
+      expect(
+        Number(match[1]),
+        `文档声明 ${match[1]} 个可创建节点，注册表实际 ${creatableCount} 个`
+      ).toBe(creatableCount)
+    }
   })
 
   it('每个 creatable=false 的注册节点都列入历史节点表，主表结论为退役', () => {

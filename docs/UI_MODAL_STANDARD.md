@@ -1,12 +1,11 @@
 # 弹窗统一规范
 
 > status: active
-> last-verified: 2026-11-25
+> last-verified: 2026-11-26
 
-> **入仓说明（BL-32 / U5，2026-11-26）**：本规范原在仓外 `modal-audit-20261121/弹窗统一规范-v1.0.md`，现作为现行 UI 规范入仓并纳入节点 UI 索引；原始副本保存在 [archive/external/](./archive/external/modal-audit-20261121-弹窗统一规范-v1.0.md)。弹窗视觉/交互与 NODE_UI_STANDARD 冲突时，几何以 NODE_UI_STANDARD §22–§27 为准，弹窗层行为以本文件为准。
+> **入仓说明（BL-32 / U5，2026-11-26）**：本规范作为现行弹窗层统一规范纳入 UI 索引；早期审计原始副本归档在 [archive/external/modal-audit-20261121-弹窗统一规范-v1.0.md](./archive/external/modal-audit-20261121-弹窗统一规范-v1.0.md)。节点几何以 [`NODE_UI_STANDARD.md`](./NODE_UI_STANDARD.md) §22–§27 为准，弹窗层结构、交互与全局浮层阶梯以本文件为准。
 
-> 2026-11-21 · 基于全量弹窗审计（30 个弹窗面 / 11 个家族）制定
-> 审计图库：`modal-audit-20261121/shots/01-28.png`（真实 CSS 复刻截图）
+> 基于全量弹窗审计（31 个弹窗面 / 11 个家族）制定并落地 `ModalShell`
 > Stitch 设计稿：项目「Canvas Studio 弹窗统一规范」（总览 + 家族画廊）
 
 ---
@@ -99,15 +98,16 @@
 - 标题栏动作图标（全屏/设置等）16px，与关闭钮同排，间距 4px
 - 现存违例整改：ModelCatalogPanel 文字「×」→ Icon；skill-help 文字「关闭」→ Icon；各弹窗 13–18px 随手尺寸 → 统一 16px
 
-## 5. z-index 分层（收敛为 4 层，全部用变量）
+## 5. z-index 分层（收敛为严格递增的 5 层语义变量）
 
+```css
+--z-floating: 900;   /* 画布浮层、拖拽幽灵、左侧节点飞出菜单（低于顶栏与弹窗） */
+--z-modal:    3000;  /* 所有普通弹窗、工作台弹窗与 sheet */
+--z-popover:  3500;  /* 弹窗内可打开的 Portal 下拉菜单（AppSelect）与工具提示（app-tooltip） */
+--z-confirm:  4000;  /* 确认弹窗（可叠在普通弹窗与工作台之上） */
+--z-toast:    5000;  /* 全局轻提示与顶部反馈通知（始终可见，不被确认框遮挡） */
 ```
---z-modal:    3000   ← 所有弹窗（含工作台弹窗、sheet）
---z-confirm:  4000   ← 确认弹窗（可叠在弹窗上）
---z-toast:    5000   ← 轻提示
-（画布/浮动控件维持现值，均低于 3000）
-```
-迁移时删除散落的 900/1200/2700/10000/12000/13000 魔数，统一引用变量。
+全部在 `app.css :root` 单点定义并与 `NODE_UI_STANDARD.md §27` 数值真值表绑定测试，禁止散落 `1200 / 2000 / 10000 / 13000` 等裸魔数。
 
 ## 6. 交互行为（统一）
 
@@ -147,36 +147,25 @@
 
 - 模型管理删除连接的「**旧功能绑定**」：语义涉及旧版功能回退行为，需要确认删除后实际表现再改写（目前照抄原文，避免写错误导用户）。
 
-## 8. 实现架构（代码落地蓝图）
+## 8. 实现架构（`ModalShell` 已完成全量迁移）
 
-**新增统一壳组件 `components/ModalShell/`**（Portal 渲染），四档尺寸 + sheet 变体：
+统一壳组件 `components/ModalShell.tsx`（Portal 渲染，支持 `s | m | l | xl | fullscreen` 档位、`headerActions`、`footerLeft`、`hideHeader`、`flush` 正文及 `confirm` 叠层变体）配合 `components/modal-btn.ts` 与 `assets/modal-shell.css` 已落地：
 
 ```tsx
 <ModalShell
-  size="s|m|l|xl"            // 尺寸档位
+  size="s|m|l|xl"            // 尺寸档位（另有 fullscreen 供节点流全屏编辑页使用）
   title="删除项目"            // 必填（含 aria-labelledby）
   eyebrow="PROJECT"          // 可选眉题
   icon="warning"             // 可选语义图标
   danger                     // 危险态（标题图标红 + 主按钮红）
   onClose={fn}               // 渲染右上关闭钮 + Esc + 遮罩点击
-  footer={<ModalActions cancel primary="删除" danger />}  // 或 cancelText/primaryText
+  footer={<ModalActions cancel primary="删除" danger />}
 >…正文…</ModalShell>
 ```
 
-- ConfirmDialog 改为 ModalShell size="s" 的封装（保留 `useConfirmStore` Promise API 不变，30 个调用点零改动）
-- 原生 `<dialog>` 两处（WorkflowInputDialog/InputsDialog）并入 ModalShell，删除 `::backdrop` 分支
-- 首批迁移（试点）：复制项目、恢复副本裁决（收敛进 ConfirmDialog/ModalShell）→ 保存节点、编辑名称、资源三弹窗（library-form 壳退役）→ gw 家族 → 工作台 XL 类（仅统一标题栏/关闭钮，工作区不动）
-- 迁移原则：**一次一个家族、截图对比验收**；工作台 XL 类不动内部布局
-
-## 8. 实现架构（代码落地蓝图）—— ✅ 已完成（2026-11-21）
-
-> 落地状态：`components/ModalShell.tsx`（S/M/L/XL 四档 + headerActions/footerLeft/
-> hideHeader/flush 正文）+ `components/modal-btn.ts` + `assets/modal-shell.css` 已就绪；
-> 31 个弹窗面全部迁移（含盘点补充的「供应商迁移」内联弹窗）。首批试点、library-form
-> 家族、composite 家族、gw 家族、project-create、工作台 XL 类五批完成，验收见
-> modal-audit-20261121/shots-after~shots-after5 共 14 张 After 截图。
-> 遗留：退役壳样式（.confirm-* / .gw-mask / .library-form-mask 等）仍在源码中，
-> 零运行时影响；待用 stylelint 类工具安全清理（手写脚本方案已否决，见事故记录）。
+- `ConfirmDialog` 已封装为 `ModalShell size="s"`（`--z-confirm` 层级，保留 `useConfirmStore` Promise API 不变）；
+- 原生 `<dialog>`（`WorkflowInputDialog` / `InputsDialog`）、`library-form`、`composite-modal`、`gw` 模型管理家族、`project-create` 及各 XL 工作台共 **31 个弹窗面**已全部迁入统一壳；
+- 历史退役壳选择器（如 `.confirm-*` / `.gw-mask` / `.library-form-mask`）待后续配合静态样式检查工具清理，不影响现行渲染。
 
 ## 9. 改造映射总表（30 面 → 4 壳 + 1 sheet）
 

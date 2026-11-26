@@ -6,6 +6,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -1124,9 +1125,34 @@ describe('local Agent vertical slice', () => {
       appVersion: 'test',
       activeProjectId: () => null
     })
-    const descriptor = JSON.parse(
-      readFileSync(join(directory, 'agent-access', 'connection.json'), 'utf8')
-    )
+    const descriptorPath = join(directory, 'agent-access', 'connection.json')
+    const descriptor = JSON.parse(readFileSync(descriptorPath, 'utf8'))
+    if (process.platform === 'win32') {
+      const acl = spawnSync(
+        'powershell.exe',
+        [
+          '-NoLogo',
+          '-NoProfile',
+          '-NonInteractive',
+          '-EncodedCommand',
+          Buffer.from(
+            '$ErrorActionPreference = "Stop"; $acl = Get-Acl -LiteralPath $env:CANVAS_TEST_DESCRIPTOR; $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value; $rules = @($acl.Access); if ($rules.Count -ne 1 -or $rules[0].IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value -ne $identity -or $rules[0].FileSystemRights -ne [System.Security.AccessControl.FileSystemRights]::FullControl -or $rules[0].AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow -or -not $acl.AreAccessRulesProtected) { exit 1 }',
+            'utf16le'
+          ).toString('base64')
+        ],
+        {
+          env: { ...process.env, CANVAS_TEST_DESCRIPTOR: descriptorPath },
+          encoding: 'utf8',
+          timeout: 10_000,
+          windowsHide: true,
+          stdio: ['ignore', 'ignore', 'ignore']
+        }
+      )
+      expect(acl.error).toBeUndefined()
+      expect(acl.status).toBe(0)
+    } else {
+      expect(statSync(descriptorPath).mode & 0o777).toBe(0o600)
+    }
     for (const changed of [{ token: 'bad' }, { instanceId: randomUUID() }]) {
       const reply = await new Promise<string>((resolveReply, reject) => {
         const socket = createConnection(descriptor.endpoint)

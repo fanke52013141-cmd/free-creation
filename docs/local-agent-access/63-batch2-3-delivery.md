@@ -65,14 +65,14 @@
 - `stdio`（默认，行为不变）；
 - `sse`：监听 `127.0.0.1`（可 `--port`，0=随机），启动时把 `{url, token}` 打到 stdout 供发现。
 
-**安全边界**：只绑定 loopback；**必须带本进程随机令牌**（`?token=`）否则 401；
-消息端点也带令牌（否则客户端自己的 POST 会被自己的校验挡掉——本轮踩过）；
-令牌只走 stdout，不落盘不进日志。实际操作仍走本机受控套接字，桌面侧鉴权不变。
+**安全边界**：只绑定 loopback；`/sse` 与 `/messages` 必须携带
+`Authorization: Bearer <token>`，否则 401；URL 与 SSE endpoint 不携带令牌，query token 不再构成鉴权。
+令牌只走 stdout，不落盘不进日志。Host/Origin 校验继续生效。实际操作仍走本机受控套接字，桌面侧鉴权不变。
 每个连接新建 Server（SSE 下 Server 与 transport 一对一，复用会让第二个客户端抢会话）。
 
-**验收**（`scripts/mcp-acceptance-sse.cjs`，4/4 通过）：
-① 启动打印发现信息且绑定 loopback；② 不带令牌 401；③ 错误令牌 401；
-④ 真实 SSE 客户端连上 → `tools/list` = 141 项 → 真实调用 `capability.list` 成功。
+**验收**（`scripts/mcp-acceptance-sse.cjs`）：启动发现 URL 无 query、缺失/错误 header 401、query token 401、
+Host/Origin 403、真实 SSE 客户端 `tools/list` 与 `capability.list` 成功，并回归 stdio 传输。
+工具数量以生成契约为准，不在文档手写。
 
 ## 三、批 4：未开始（依赖未解除）
 

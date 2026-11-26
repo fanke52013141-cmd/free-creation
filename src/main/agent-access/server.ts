@@ -1,4 +1,5 @@
 import { createServer, type Server, type Socket } from 'node:net'
+import { spawnSync } from 'node:child_process'
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import {
   chmodSync,
@@ -24,6 +25,44 @@ import { LocalAccessService } from './service'
 import { settleOrphanedExternalRuns } from './runs'
 import type { AccessDesktop } from './desktop'
 import type { DiagnosticsService } from '../diagnostics/service'
+
+/**
+ * Windows 上 mode 不会收紧文件 ACL。用系统自带的 .NET 安全 API 将临时发现文件
+ * 设为仅当前用户可读写；失败时拒绝发布发现信息，不能静默回退到宽权限。
+ */
+function restrictWindowsFileToCurrentUser(filePath: string): void {
+  const script = [
+    '$ErrorActionPreference = "Stop"',
+    'Add-Type -TypeDefinition "using System; using System.IO; using System.Security.AccessControl; using System.Security.Principal; public static class CanvasDescriptorAcl { public static void Apply(string path) { var identity = WindowsIdentity.GetCurrent(); var rule = new FileSystemAccessRule(identity.User, FileSystemRights.FullControl, AccessControlType.Allow); var acl = new FileSecurity(); acl.SetOwner(identity.User); acl.SetAccessRuleProtection(true, false); acl.AddAccessRule(rule); File.SetAccessControl(path, acl); } }"',
+    '[CanvasDescriptorAcl]::Apply($env:CANVAS_AGENT_DESCRIPTOR_PATH)'
+  ].join('; ')
+  const encoded = Buffer.from(script, 'utf16le').toString('base64')
+  const result = spawnSync(
+    'powershell.exe',
+    [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-EncodedCommand',
+      encoded
+    ],
+    {
+      env: { ...process.env, CANVAS_AGENT_DESCRIPTOR_PATH: filePath },
+      encoding: 'utf8',
+      timeout: 10_000,
+      windowsHide: true,
+      stdio: ['ignore', 'ignore', 'ignore']
+    }
+  )
+  if (result.error || result.status !== 0) {
+    try {
+      rmSync(filePath, { force: true })
+    } catch {
+      // 清理失败也不改变关闭本地接入的决定。
+    }
+    throw new Error('WINDOWS_DESCRIPTOR_ACL_FAILED')
+  }
+}
 
 export interface LocalAccessServer {
   close(): void
@@ -62,6 +101,7 @@ export async function startLocalAccessServer(options: {
       : join(tmpdir(), `canvas-agent-${process.getuid?.() ?? 'local'}-${instanceId}.sock`)
   const directory = join(realpathSync(options.dataDirectory), 'agent-access')
   const descriptorPath = join(directory, 'connection.json')
+  const temporary = join(directory, `${instanceId}.tmp`)
   const sockets = new Set<Socket>()
   let server: Server | undefined
   try {
@@ -153,7 +193,6 @@ export async function startLocalAccessServer(options: {
     listener.on('error', () => {
       for (const socket of sockets) socket.destroy()
     })
-    const temporary = join(directory, `${instanceId}.tmp`)
     writeFileSync(
       temporary,
       JSON.stringify({
@@ -167,6 +206,7 @@ export async function startLocalAccessServer(options: {
       }),
       { mode: 0o600, flag: 'wx' }
     )
+    if (process.platform === 'win32') restrictWindowsFileToCurrentUser(temporary)
     renameSync(temporary, descriptorPath)
     return {
       close(): void {
@@ -192,6 +232,12 @@ export async function startLocalAccessServer(options: {
   } catch (error) {
     server?.close()
     ownership.release()
+    try {
+      rmSync(temporary, { force: true })
+    } catch {
+      // 保留原始失败原因。
+    }
+    if (error instanceof Error && error.message === 'WINDOWS_DESCRIPTOR_ACL_FAILED') throw error
     throw error
   }
 }

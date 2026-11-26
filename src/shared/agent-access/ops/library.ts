@@ -155,7 +155,7 @@ export const LIBRARY_OPERATIONS = {
   'library.resource.publish': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '在指定基础版本上发布新修订（标题/描述/标签/分类/集合同步更新）；components 省略时复用基础版本全部组件',
@@ -206,7 +206,7 @@ export const LIBRARY_OPERATIONS = {
   'library.resource.set_folder': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description: '把资源归入某个资源库文件夹（folderId=null 表示移到资源库根目录）',
     input: z.object({ resourceId: resourceIdSchema, folderId: folderIdSchema.nullable() }).strict()
@@ -214,7 +214,7 @@ export const LIBRARY_OPERATIONS = {
   'library.resource.set_collections': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description: '替换资源的完整收藏集归属（空数组为清空）；收藏集 ID 必须存在',
     input: z
@@ -242,7 +242,7 @@ export const LIBRARY_OPERATIONS = {
   'library.folder.rename': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description: '重命名资源库文件夹；同一上级下不允许重名',
     input: z.object({ folderId: folderIdSchema, name: z.string().trim().min(1).max(100) }).strict()
@@ -287,7 +287,7 @@ export const LIBRARY_OPERATIONS = {
   'library.category.save': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description: '按基础版本保存一个新的分类蓝图版本（版本必须为基础版本 +1，防覆盖）',
     input: z.object({ category: categorySchema, baseVersion: z.number().int().min(0) }).strict()
@@ -295,7 +295,7 @@ export const LIBRARY_OPERATIONS = {
   'library.resource.materialize': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '把指定资源版本的所选组件物化到当前打开画布：复制资源文件为项目受控媒体，再经桌面握手创建节点并正式保存；返回逐组件节点映射',

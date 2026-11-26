@@ -1,6 +1,9 @@
-# 功能变更与 Agent 接入同步维护规范
+# 功能变更与 Agent 接入同步维护规范（门禁设计基线）
 
-2026-11-07 接续：[GUI／CLI／MCP一致性规范](../../AGENT_PARITY_SPEC.md)为当前维护要求。
+> status: historical
+> last-verified: 2026-11-26
+
+现行强制规则以 [65-AGENT-PARITY-IRON-RULE.md](./65-AGENT-PARITY-IRON-RULE.md) 与 [GUI／CLI／MCP一致性规范](../../AGENT_PARITY_SPEC.md) 为准；执行入口为 `npm run guard:agent-parity`。本文保留 A0 早期门禁设计脉络。
 历史能力按[F0–F10](15-gui-cli-mcp-parity-plan.md)迁移；今后新增GUI业务动作、节点或专有模式，
 必须同包提供CLI/MCP实现与一致性证据，不能仅登记planned便发布GUI功能。纯呈现项可说明不涉及。
 以下门禁设计仍有未实现部分；项目导入排除等早期包范围和“新节点可仅标planned”条款不再作为最终豁免。

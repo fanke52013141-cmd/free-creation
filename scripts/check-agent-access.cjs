@@ -165,5 +165,5 @@ if (process.argv.includes('--write')) {
   if (JSON.stringify(old)!==JSON.stringify(now)) throw new Error('Generated contract is stale; update registry, compatibility and evidence together')
   if (impact.reason.length < 12) throw new Error('Protected source changed without refreshed Agent-access impact declaration')
   assertSourceHashCoverage(impact.sourceHashes)
-  process.stdout.write(`Agent access gate passed: ${now.operations.length} operations; ${now.nodes.length} planned nodes.\n`)
+  process.stdout.write(`Agent access gate passed: ${now.operations.length} operations; ${now.nodes.length} active nodes.\n`)
 }

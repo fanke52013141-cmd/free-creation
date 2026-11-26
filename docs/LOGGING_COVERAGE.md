@@ -1,5 +1,12 @@
 # 日志覆盖清单
 
+## 2026-11-26：三大规范体系收敛、节点流版本契约对齐与外部操作风险分级
+
+- **复合节点版本契约对齐**（`src/shared/composite/manifest.ts`、`src/shared/agent-access/ops/composite.ts`）：外部 CLI／MCP `composite.*` 的版本号 Schema 与内部发布校验统一为 `COMPOSITE_VERSION_REGEX`（`major.minor`，兼容历史 `.0` 补丁）。校验失败与费用门禁（`COST_CONFIRM_REQUIRED`）继续由公共 `agent.access.*` 调度诊断承载，**不新增运行事件或敏感字段**，不记录节点流正文、提示词或输入数据。
+- **FlowGraph V14 × `decider: 'human'` 角色校验收口**（`src/shared/agent-flow/flow-graph.ts`）：图声明 `roles` 时，凡解析维度存在人工参与（`executor === 'human' || decider === 'human'`）均要求合法 `humanRole`，纯同步图拓扑校验（返回稳定错误码 `HUMAN_ROLE_REQUIRED` / `HUMAN_ROLE_UNKNOWN` / `HUMAN_ROLE_UNEXPECTED`），外部编译入口沿用既有 `flowGraph.*` 操作终态，无重复终态。
+- **外部 MCP `destructive` 注解分级、动作分母收口与 UI 层级真值表统一**：调整注册表静态元数据（27 个真实破坏/丢弃/取消/登出操作保留 `destructive: true`，76 个可逆或增补写操作改为 `false` 并由 `validateAccessRegistry()` 强校验）、将 `ipc.license.*` 8 个授权通道按铁律 §7 归入 `excluded`、统一 CSS 5 档单调 `z-index` 与主按钮 `10px` 圆角及规范门禁 `scripts/check-specs.mjs`；纯静态元数据、样式与规范文档变更不涉及运行态日志采集。
+- **验证与未覆盖边界**：通过 `npm run verify:specs`、`npm run guard:agent-parity`（含 `verify:logging`）、`npm run typecheck`、`npm run lint` 及复合版本/FlowGraph/UI/节点契约单测；本批未触发真实付费模型请求、未重跑打包安装包与跨平台干净 Runner。
+
 ## 2026-11-25：去气口节点（silence-trim）
 
 新增音频节点 `silence-trim@1`（silencedetect / Silero VAD 双引擎）。节点开始/终态由公共执行器
@@ -1229,4 +1236,5 @@ GUI 节点流面板条目卡片移除「运行」按钮（运行走画布既有�
 - Agent Flow 修复复用既有 `agent.coordination.*`、`agent.dispatched/completed`、`flow.*` 与命令账本诊断：命令签名覆盖全部业务执行字段；父取消/总 deadline 阻止迟到提交；human-task 失败不再伪装成人工等待；并行超容量按波次排队；生成视频固定/审核上限与输入参考上限分离。新增正式登记 `agent.coordination.cancelled`，停止竞争只发射一次 cancelled 终态，`terminalEvents` 在 run/recover 结束时清理。
 - 编译运行准入、条件分支输入裁剪、定义发布校验/diff、ContextManifest hash、循环预算与恢复断言修复不新增敏感日志字段；错误只记录节点 ID、阶段、稳定 code、计数与字节数。`loop.body` 内 review 当前明确拒绝，未实现按轮次作用域执行。外部 `flowGraph.confirm` 的幂等已提交路径新增 committed scope hash 校验，漂移时返回 `FLOW_CANVAS_DIVERGED`，不触发桌面写入，也不新增诊断事件。
 - CI/门禁修复（完整 Git 历史、fail-closed 日志/规范/动作分母、必需验收脚本缺失即失败、干净 CI 授权处理）不涉及产品运行日志。日志门禁读取 Git diff 的缓冲区提升到 64MiB，避免大规模删除被默认子进程缓冲区误判为基线不可读。
-- 未覆盖边界：未发起真实付费模型/供应商调用；未完成真实 GUI 鼠标端到端验收；code 节点 sandbox 仍待专项隔离审计；Windows named pipe 最小 ACL 与 SSE token 移出 query 尚未实施；真实安装包与干净 GitHub runner 尚未实跑。
+- 传输安全修复：SSE `/sse` 与 `/messages` 改为仅接受 `Authorization: Bearer` 请求头鉴权，URL 与 SSE endpoint 不再携带 token；query token、缺失或错误 header 均返回 401，Host/Origin 继续返回 403。stdout 发现信息仍只输出独立 token，不记录请求头、完整 URL 或 token。验收覆盖真实 SSE 客户端 `tools/list`/`capability.list` 与 stdio 回归；相关拒绝路径不新增业务诊断事件，启动失败继续由 `agent.access.server_failed` 的固定 `phase=startup/code=ACCESS_START_FAILED` 表达，避免重复终态。
+- Windows `connection.json` 临时文件在发布前通过系统 .NET 安全 API 设置为仅当前用户 FullControl、继承关闭；ACL 设置失败返回稳定 `WINDOWS_DESCRIPTOR_ACL_FAILED` 并清理临时文件、不发布发现信息。测试读回 ACL 仅含当前用户且文件 mode 为 0600（POSIX）；不记录 SID、ACL 明细、路径或 token。Windows named pipe 默认 DACL 仍未能安全事后收紧：`SetSecurityInfo` 返回 ACCESS_DENIED，`SetNamedSecurityInfoW` 返回 ERROR_INVALID_PARAMETER；补偿控制为随机传输 token + 上述发现文件 ACL，**不宣称 named pipe 最小 ACL 已完成**。未覆盖：跨账户 pipe ACL、真实安装包、干净 GitHub runner、付费模型/供应商调用、真实 GUI 鼠标端到端验收及 code 节点 sandbox 专项隔离审计。

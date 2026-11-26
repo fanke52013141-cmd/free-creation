@@ -2,7 +2,7 @@
 
 > status: active
 > last-verified: 2026-11-26
-> baseline-commit: e9b263f2
+> baseline-commit: 57a7e60d
 > verification-scope: 文档与静态实现/既有测试证据核对；不代表全部运行路径或安装包验收
 
 版本：1.0。日期：2026-11-07。适用：Canvas Studio 本地单用户应用。

@@ -31,7 +31,7 @@ export const NODE_LIBRARY_OPERATIONS = {
   'node.library.compose': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '把项目中选中的多个节点及它们之间的连线保存为节点库组合条目（含媒体引用记录）；排除聊天历史、附件与运行结果',
@@ -45,7 +45,7 @@ export const NODE_LIBRARY_OPERATIONS = {
   'node.library.update': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description: '重命名节点库条目；条目内容与画布不受影响',
     input: z.object({ entryId, name: z.string().trim().min(1).max(120) }).strict()
@@ -99,7 +99,7 @@ export const NODE_LIBRARY_OPERATIONS = {
   'node.library.insert': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '把节点库条目实例化到指定项目画布（须先 project.open 到当前画布）：重映射节点 ID、连线与媒体引用，经权威宿主落盘；外部输入只携带媒体 ID',

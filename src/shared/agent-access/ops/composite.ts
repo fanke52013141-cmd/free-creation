@@ -1,9 +1,9 @@
 import { HumanTaskValueSchema } from '../../agent-flow/node-contracts'
 import { z } from 'zod'
-import { compositeManifestSchema } from '../../composite/manifest'
+import { compositeManifestSchema, compositeVersionSchema } from '../../composite/manifest'
 
 const capabilityId = z.string().min(1).max(80)
-const semver = z.string().regex(/^\d+\.0(\.0)?$/)
+const semver = compositeVersionSchema
 const manifest = compositeManifestSchema
 
 /** headless 执行的公开输入值（与 WorkflowInput 值同口径；媒体按 mediaId 全局解析）。 */
@@ -72,7 +72,7 @@ export const COMPOSITE_OPERATIONS = {
   'composite.draft.save': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '创建/更新组合草稿；允许未接完的图并返回问题；expectedRevision 用于乐观并发，冲突返回 DRAFT_REVISION_CONFLICT 且保留草稿',
@@ -92,7 +92,7 @@ export const COMPOSITE_OPERATIONS = {
   'composite.publish': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '发布不可变组合版本：同版本同摘要幂等；同版本异摘要返回 VERSION_IMMUTABLE；新版本必须递增，可带 expectedRevision 校验草稿未被他人改动',
@@ -121,7 +121,7 @@ export const COMPOSITE_OPERATIONS = {
   'composite.upgrade.apply': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '把画布上的节点流实例升级到指定已发布版本：先运行同一升级预检，阻断则拒绝且原实例不变；通过后以固定版本引用原子更新实例并保留兼容连线',
@@ -166,7 +166,7 @@ export const COMPOSITE_OPERATIONS = {
   'composite.execute': {
     effect: 'execute',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'possible',
     description:
       'headless 执行已发布节点流：不依赖项目/画布。inputs 按公开输入端口的完整端口 ID 喂值（portId 写 `in-<公开输入id>`，如 in-copy）；返回 runId，终态与输出经 composite.run.get / composite.execute.wait 读取。' +
@@ -198,7 +198,7 @@ export const COMPOSITE_OPERATIONS = {
   'composite.run.retry': {
     effect: 'execute',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'possible',
     description:
       '受控重试失败的 headless 运行：仅 failed/interrupted 可重试，按原固定版本与原公开输入复跑（输入未记录则拒绝）；同一根运行重试上限 3 次；返回新 runId，终态经 composite.run.get 读取',
@@ -208,7 +208,7 @@ export const COMPOSITE_OPERATIONS = {
   'composite.run.submitHuman': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     // 人工决定：返回前等人在 GUI 点「允许提交」。
     interactive: true,
@@ -225,7 +225,7 @@ export const COMPOSITE_OPERATIONS = {
   'composite.run.resume': {
     effect: 'execute',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'possible',
     description:
       '续跑等待人工的节点流运行：消费已满足的人工提交，跳过已完成步骤（保护已付费任务），从等待节点继续；仅 waiting-input 可续跑；返回 runId，终态经 composite.run.get 读取',
@@ -234,7 +234,7 @@ export const COMPOSITE_OPERATIONS = {
   'composite.run.resubmit': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     // 人工决定：外部补交正式输出前必须由人在 GUI 确认。
     interactive: true,

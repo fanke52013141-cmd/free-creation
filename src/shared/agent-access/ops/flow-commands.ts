@@ -81,7 +81,7 @@ export const FLOW_COMMANDS_OPERATIONS = {
   'flow.command.reconcile': {
     effect: 'write',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'none',
     description:
       '按已保存运行事实核对既有 Flow 命令并结算账本回执；只有运行记录的 runId/命令/租约/输入指纹全部一致时才推进状态，无法确认时保持 pending/unknown 并回传稳定原因，绝不把 unknown 报成成功；需要幂等键',
@@ -99,7 +99,7 @@ export const FLOW_COMMANDS_OPERATIONS = {
   'flow.command.dispatch': {
     effect: 'execute',
     idempotent: false,
-    destructive: true,
+    destructive: false,
     cost: 'possible',
     description:
       '把一条外部派发请求交给当前活动画布执行：main 生成命令/任务/运行身份并先保存画布，按已保存图计算语义版本，账本记录 principal=external 后经既有渲染器 grant 通道执行；受理只表示已交给渲染器，最终状态用 lookup/check 读、reconcile 结算；付费目标必须 confirmPaidTarget=true',
