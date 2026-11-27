@@ -10,7 +10,7 @@ import { projectAgentOutputs } from '@shared/agent-flow/agent-outputs'
 import { useNodePanelStore } from '../../stores/nodePanel'
 import { useResourceQueue } from '../../engine/resource-queue'
 import { flowAgentFailureMessage } from '@shared/agent-flow/failure-messages'
-import { getAgentModelBindingStatus } from '@shared/agent-flow/node-contracts'
+import { AgentNodeConfigSchema, getAgentModelBindingStatus } from '@shared/agent-flow/node-contracts'
 import { preflightAgentDecisionModels } from '../../engine/agent-model-preflight'
 
 export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): React.JSX.Element {
@@ -98,7 +98,16 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
     setPending(true)
     try {
       let actionableTask = task
-      if (getAgentModelBindingStatus(shape.props.config) === 'missing') {
+      const ruleDriven = (() => {
+        try {
+          const parsed = AgentNodeConfigSchema.safeParse(JSON.parse(shape.props.config))
+          return parsed.success &&
+            (parsed.data.executionMode === 'graph' || parsed.data.executionMode === 'fixed-order')
+        } catch {
+          return false
+        }
+      })()
+      if (!ruleDriven && getAgentModelBindingStatus(shape.props.config) === 'missing') {
         if (window.api.inspectFlowAgent) {
           const inspected = await window.api.inspectFlowAgent({ projectId, nodeId: shape.id })
           if (!inspected.ok) {

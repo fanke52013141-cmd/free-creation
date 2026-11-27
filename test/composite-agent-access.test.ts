@@ -28,6 +28,7 @@ import type { CompositeManifest } from '../src/shared/composite/manifest'
 function manifest(): CompositeManifest {
   return {
     schemaVersion: 1,
+    runtimeVersion: 2,
     capabilityId: 'character-design',
     version: '1.0',
     name: '人物设计',
@@ -127,6 +128,7 @@ function manifest(): CompositeManifest {
 function textFlowManifest(capabilityId: string, outputIds = ['result']): CompositeManifest {
   return {
     schemaVersion: 1,
+    runtimeVersion: 2,
     capabilityId,
     version: '1.0',
     name: capabilityId,
@@ -564,6 +566,187 @@ describe('组合能力 Agent 契约（P1 对等）', () => {
       expect(rejected.error?.code).toBe('RUN_RECOVERY_REQUIRES_RECONCILIATION')
       expect(getCompositeRun('resume-uncertain')?.run.status).toBe('interrupted')
       expect(calls).toHaveLength(1)
+    } finally {
+      closeDb()
+      if (priorDirectory === undefined) delete process.env.CANVAS_DATA_DIR
+      else process.env.CANVAS_DATA_DIR = priorDirectory
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('resubmit 的 JSON 输出必须满足公开端口 Schema', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'canvas-composite-resubmit-schema-'))
+    const priorDirectory = process.env.CANVAS_DATA_DIR
+    process.env.CANVAS_DATA_DIR = directory
+    try {
+      const base = textFlowManifest('resubmit-schema')
+      const manifest: CompositeManifest = {
+        ...base,
+        outputs: [
+          {
+            id: 'result',
+            label: '结果',
+            type: 'json',
+            required: true,
+            cardinality: 'one',
+            schemaRef: { id: 'list.items', version: 1 },
+            source: { nodeId: 'n1', portId: 'out-json' }
+          }
+        ],
+        graph: {
+          nodes: [
+            {
+              id: 'n1',
+              nodeType: 'json',
+              contractVersion: 1,
+              title: 'JSON',
+              dx: 0,
+              dy: 0,
+              w: 340,
+              h: 260,
+              ports: [
+                {
+                  id: 'out-json',
+                  name: 'JSON',
+                  dir: 'out',
+                  type: 'json',
+                  required: true,
+                  cardinality: 'one',
+                  schemaRef: { id: 'list.items', version: 1 }
+                }
+              ]
+            }
+          ],
+          edges: []
+        },
+        dependencies: [{ kind: 'node', id: 'json', contractVersion: 1 }]
+      }
+      const { record } = await publishCompositeVersion(manifest)
+      const service = new LocalAccessService({
+        instanceId: 'resubmit-schema', appVersion: 'test', exportDirectory: join(directory, 'exports'),
+        activeProjectId: () => null,
+        desktop: {
+          async run() { return { graphVersion: 0 } },
+          async ask() { return { authorized: true } }
+        }
+      })
+      const runId = 'resubmit-schema-run'
+      createCompositeRun({
+        id: runId, projectId: `headless-${runId}`, capabilityId: record.capabilityId,
+        capabilityVersion: record.version, contentHash: record.contentHash
+      })
+      finishCompositeRun({ runId, status: 'failed', failurePhase: 'step' })
+      const submitted = await service.dispatch({
+        apiVersion: 1,
+        operationVersion: 1,
+        operationId: 'composite.run.resubmit',
+        requestId: randomUUID(),
+        idempotencyKey: `${Date.now()}:${randomUUID()}`,
+        expectedDataStoreId: service.dataStoreId,
+        input: {
+          runId,
+          outputs: [{ portId: 'out-result', value: { kind: 'json', data: { not: 'a list' } } }]
+        }
+      })
+      expect(submitted.error?.code).toBe('OUTPUT_VALUE_INVALID')
+      expect(getCompositeRun(runId)?.run.status).toBe('failed')
+    } finally {
+      closeDb()
+      if (priorDirectory === undefined) delete process.env.CANVAS_DATA_DIR
+      else process.env.CANVAS_DATA_DIR = priorDirectory
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('canvas-origin resume 复用原实例、公开输入与人工提交，不改走 headless', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'canvas-composite-canvas-resume-'))
+    const priorDirectory = process.env.CANVAS_DATA_DIR
+    process.env.CANVAS_DATA_DIR = directory
+    try {
+      const base = textFlowManifest('canvas-resume')
+      const manifest: CompositeManifest = {
+        ...base,
+        inputs: [
+          {
+            id: 'copy',
+            label: '文案',
+            type: 'text',
+            required: true,
+            cardinality: 'one',
+            targets: [{ nodeId: 'n1', portId: 'in-text' }]
+          }
+        ],
+        graph: {
+          ...base.graph,
+          nodes: [
+            {
+              ...base.graph.nodes[0]!,
+              ports: [
+                { id: 'in-text', name: '文本', dir: 'in', type: 'text', required: true, cardinality: 'many' },
+                ...(base.graph.nodes[0]!.ports ?? [])
+              ]
+            }
+          ]
+        }
+      }
+      const { record } = await publishCompositeVersion(manifest)
+      const calls: any[] = []
+      const service = new LocalAccessService({
+        instanceId: 'canvas-resume', appVersion: 'test', exportDirectory: join(directory, 'exports'),
+        activeProjectId: () => null,
+        desktop: {
+          async run(request) {
+            calls.push(request)
+            return { graphVersion: 0 }
+          },
+          async ask() { return { authorized: false } }
+        }
+      })
+      const runId = 'canvas-resume-run'
+      createCompositeRun({
+        id: runId,
+        projectId: 'canvas-project',
+        capabilityId: record.capabilityId,
+        capabilityVersion: record.version,
+        contentHash: record.contentHash,
+        instanceNodeId: 'shape:composite',
+        inputValues: { 'in-copy': { kind: 'text', text: 'saved-input' } }
+      })
+      recordCompositeRunStep({ runId, stepKey: 'upstream', nodeType: 'text', status: 'completed' })
+      waitCompositeRun({ runId, stepKey: 'human' })
+      openCompositeRunWait({ requestId: `${runId}:human`, runId, stepKey: 'human', kind: 'human', fields: [] })
+      expect(satisfyCompositeRunWait({
+        requestId: `${runId}:human`, revision: 1,
+        value: { kind: 'text', text: 'confirmed' }, submittedBy: 'test'
+      }).ok).toBe(true)
+      expect(beginCompositeResume({
+        id: runId,
+        projectId: 'canvas-project',
+        capabilityId: record.capabilityId,
+        capabilityVersion: record.version,
+        contentHash: record.contentHash
+      })).toBe(true)
+      settleInterruptedCompositeRuns()
+      const resumed = await service.dispatch({
+        apiVersion: 1,
+        operationVersion: 1,
+        operationId: 'composite.run.resume',
+        requestId: randomUUID(),
+        idempotencyKey: `${Date.now()}:${randomUUID()}`,
+        expectedDataStoreId: service.dataStoreId,
+        input: { runId }
+      })
+      expect(resumed.error).toBeUndefined()
+      expect(calls[0]).toMatchObject({
+        action: 'resume-composite-canvas',
+        projectId: 'canvas-project',
+        nodeId: 'shape:composite',
+        compositeResumeRunId: runId,
+        compositeHumanSubmissions: { human: { kind: 'text', text: 'confirmed' } },
+        compositeResumeInputValues: [
+          { portId: 'in-copy', value: { kind: 'text', text: 'saved-input' } }
+        ]
+      })
     } finally {
       closeDb()
       if (priorDirectory === undefined) delete process.env.CANVAS_DATA_DIR

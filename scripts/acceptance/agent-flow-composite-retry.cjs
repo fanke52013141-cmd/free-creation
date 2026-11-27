@@ -124,7 +124,8 @@ function compositeManifest() {
     const INPUT_TEXT = '受控重试验收原文：人机协同。'
     const exec = ok(await cli(dir, ['composite', 'execute'], {
       capabilityId: 'retry-polish', version: '1.0',
-      inputs: [{ portId: 'raw', value: { kind: 'text', text: INPUT_TEXT } }]
+      inputs: [{ portId: 'raw', value: { kind: 'text', text: INPUT_TEXT } }],
+      confirmCost: true
     }), 'EXECUTE')
     const rootRunId = exec.runId
     const firstWait = await waitTerminal(rootRunId)

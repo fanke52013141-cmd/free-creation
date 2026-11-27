@@ -54,7 +54,9 @@ export const DesktopRequestSchema = z
       // F9 收尾：取节点的运行记录（含历史），供外部导出节点诊断用。
       'read-node-runs',
       // headless 节点流执行：脱离项目/画布，渲染层隔离 editor 异步运行，台账轮询终态。
-      'execute-composite-headless'
+      'execute-composite-headless',
+      // 画布起源节点流续跑：复用原实例与公开输入，完成后回写画布输出。
+      'resume-composite-canvas'
     ]),
     nodeId: z.string().optional(),
     agent: SkillAgentConfigSchema.optional(),
@@ -106,6 +108,11 @@ export const DesktopRequestSchema = z
     compositeRetryOf: z.string().min(1).max(120).optional(),
     /** AF-07：续跑同一运行（人工等待满足后），复用既有 runId。 */
     compositeResumeRunId: z.string().min(1).max(120).optional(),
+    /** AF-07：画布起源续跑的原始公开输入包（保留同端口多值顺序）。 */
+    compositeResumeInputValues: z
+      .array(z.object({ portId: z.string().min(1).max(100), value: z.unknown() }).strict())
+      .max(256)
+      .optional(),
     /** AF-07：已满足的人工提交值（按内部节点 ID），续跑消费为人工任务输出。 */
     compositeHumanSubmissions: z.record(z.string(), z.unknown()).optional(),
     /** AF-07：续跑时已完成的内部节点 ID（跳过重跑）。 */

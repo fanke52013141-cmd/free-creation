@@ -65,6 +65,8 @@ export interface NodeMetaPatch {
   humanTask?: string
   /** C4：人工任务待应用结果提交；执行器消费后写空串清除（tldraw meta 浅合并，删键不生效）。 */
   humanTaskPending?: string
+  /** 节点流实例的真实子运行 ID，供运行步骤台账查询。 */
+  compositeRunId?: string
 }
 
 /** 运行控制信号。暂停在当前原子任务结束后生效；停止会解除暂停等待。 */
@@ -231,6 +233,8 @@ export interface ProducedArtifact {
 export interface NodeExecutionResult {
   status: 'done' | 'skipped' | 'failed'
   reason?: string
+  /** 节点流内部停在人工等待：不是完成，也不是普通 skipped。 */
+  waiting?: boolean
   diagnosticPhase?: NodeExecutionPhase
   /** W4 失败定位：组合等嵌套执行失败时，可定位的内部节点/端口 ID（只存 ID）。 */
   failureNodeId?: string

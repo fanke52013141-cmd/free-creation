@@ -1,5 +1,14 @@
 # 日志覆盖清单
 
+## 2026-11-27：节点流深度审查与执行/恢复修复
+
+- **影响范围**：composite 编辑保存/重开、画布等待续跑、公开输出落账；Agent Flow 图路由、协作等待/返工、checkpoint pending writes 迁移 M37。属于执行、数据持久化与恢复路径变更。
+- **复用事件**：节点流与整画布运行继续复用公共 `node.*` / `workflow.*`；新增的结构化人工等待通过已注册的 `workflow.waiting` 表达，不写 `completed`，不记录正文或输入值。Agent Flow 续跑复用 `agent.coordination.*`、`agent.resume*` 与 checkpoint 现有 `checkpoint_saved` / `storage_failed`，只带 projectId/nodeId/taskId/traceId/spanId、阶段与稳定 code。
+- **失败语义**：composite checkpoint 失败、未知端口、Schema 补交失败、协作返工阻塞、deadline/stop 均保留既有稳定错误码与唯一终态；M37 只改变表约束，不新增业务事件。迁移本身的 `migration_*` 事件缺口维持现状，由迁移测试与 user_version 事务保证覆盖。
+- **脱敏**：不记录节点流正文、提示词、模型回复、协作文本、输入值、checkpoint 内容或原始异常；调试输出已移除。日志写入失败不改变运行结果。
+- **验证**：定向 74 文件/1050 用例通过；composite desktop/GUI、CLI/MCP remediation/legacy/retry 与 Agent Flow capability/parallel/end-to-end/human-task/review/collab/media/queue/recovery 桌面验收通过；`typecheck`、`lint`、`verify:agent-access` 通过。完整 `ELECTRON_DISABLE_SANDBOX=1 npm run verify` 退出码 0（`qa/verification/run-Qd20tV/status.json`，4157 单元通过/7 跳过，model-runtime 6/6，桌面与 R09 链路通过）。
+- **未覆盖边界**：真实付费模型、物理掉电/真实磁盘故障、Windows 安装包与干净 Runner；既有 P2 展示/归因问题不在本轮日志闭环范围。
+
 ## 2026-11-26：三大规范体系收敛、节点流版本契约对齐与外部操作风险分级
 
 - **复合节点版本契约对齐**（`src/shared/composite/manifest.ts`、`src/shared/agent-access/ops/composite.ts`）：外部 CLI／MCP `composite.*` 的版本号 Schema 与内部发布校验统一为 `COMPOSITE_VERSION_REGEX`（`major.minor`，兼容历史 `.0` 补丁）。校验失败与费用门禁（`COST_CONFIRM_REQUIRED`）继续由公共 `agent.access.*` 调度诊断承载，**不新增运行事件或敏感字段**，不记录节点流正文、提示词或输入数据。

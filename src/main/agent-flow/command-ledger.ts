@@ -356,9 +356,35 @@ export class FlowCommandLedger {
     const activeIncoming = routedInputEdgeIds
       ? incoming.filter((edge) => routedInputEdgeIds.has(edge.id))
       : incoming
+    const defaultedInputPorts = new Set(
+      composite?.manifest.inputs
+        .filter((port) => port.defaultValue !== undefined)
+        .map((port) => `in-${port.id}`) ?? []
+    )
+    const requiredInputPorts = ports.filter(
+      (port) =>
+        port.dir === 'in' &&
+        inputIds.includes(port.id) &&
+        port.required &&
+        !defaultedInputPorts.has(port.id)
+    )
     // BL-40：人工补料端口由 contextMaterial 提供文本值，不再要求固定资产引用。
     const materialPortId = command.contextMaterial?.targetPortId
+    const missingRequiredInput = routedInputEdgeIds !== undefined && requiredInputPorts.some(
+      (port) =>
+        port.id !== materialPortId &&
+        !activeIncoming.some((edge) => edge.to.portId === port.id)
+    )
+    const unboundInput = command.inputs.some((input) => {
+      if (input.targetPortId === materialPortId) return true
+      const edges = activeIncoming.filter((edge) => edge.to.portId === input.targetPortId)
+      if (routedInputEdgeIds !== undefined)
+        return edges.length === 0 || edges.length !== input.assets.length
+      return edges.length > 0 && edges.length !== input.assets.length
+    })
     if (
+      missingRequiredInput ||
+      unboundInput ||
       activeIncoming.some((edge) => {
         const port = ports.find((item) => item.id === edge.to.portId)
         return (
@@ -372,11 +398,7 @@ export class FlowCommandLedger {
         (edge) =>
           edge.to.portId !== materialPortId &&
           !command.inputs.some((input) => input.targetPortId === edge.to.portId)
-      ) ||
-      command.inputs.some((input) => {
-        const edges = activeIncoming.filter((edge) => edge.to.portId === input.targetPortId)
-        return edges.length > 0 && edges.length !== input.assets.length
-      })
+      )
     )
       fail('FLOW_INPUT_MANIFEST_INCOMPLETE', 'input')
     for (const input of command.inputs) {

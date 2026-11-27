@@ -97,7 +97,8 @@ export function buildContextManifest(
       resolvedAny = true
       const value = resolved.value
       const contentHash = sha256(canonicalFlowJson(value))
-      const prior = candidatesByHash.get(contentHash)
+      const candidateKey = canonicalFlowJson([selector.sourceStageKey, contentHash])
+      const prior = candidatesByHash.get(candidateKey)
       if (prior && (prior.required || !selector.required)) continue
       const bytes = Buffer.byteLength(JSON.stringify(value ?? null), 'utf8')
       const entry: ContextManifestEntry = {
@@ -110,7 +111,7 @@ export function buildContextManifest(
         ...(selector.purpose ? { purpose: selector.purpose } : {}),
         contentHash
       }
-      candidatesByHash.set(contentHash, entry)
+      candidatesByHash.set(candidateKey, entry)
     }
     if (!resolvedAny)
       missing.push({
@@ -210,9 +211,10 @@ export function assembleContextManifest(
 ): ContextManifest {
   const candidatesByHash = new Map<string, ContextManifestEntry>()
   for (const entry of candidates) {
-    const prior = candidatesByHash.get(entry.contentHash)
+    const candidateKey = canonicalFlowJson([entry.sourceStageKey, entry.contentHash])
+    const prior = candidatesByHash.get(candidateKey)
     if (prior && (prior.required || !entry.required)) continue
-    candidatesByHash.set(entry.contentHash, entry)
+    candidatesByHash.set(candidateKey, entry)
   }
   const entries: ContextManifestEntry[] = []
   const dropped: ContextManifest['dropped'] = []

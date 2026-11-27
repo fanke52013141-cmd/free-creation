@@ -1,6 +1,6 @@
 import type { CompositeManifest, CompositeManifestIssue } from './manifest'
 import { hasCompositeManualGate, parseCompositeManifest } from './manifest'
-import { findNestedCompositeManualGate } from './manual-gate'
+import { findNestedCompositeManualGate, compositeGraphCapabilityRefs } from './manual-gate'
 import { resolveCompositeBudget } from './budget'
 import { portCompatible, portPairCompatible } from '../port-compatibility'
 
@@ -12,6 +12,7 @@ export type CompositeValidationCode =
   | 'SCHEMA_INCOMPATIBLE'
   | 'INLINE_SCHEMA_REMOVED'
   | 'VERSION_FORMAT_INVALID'
+  | 'RUNTIME_VERSION_NOT_2'
   | 'MANUAL_GATE_UNDECLARED'
   | 'NESTED_MANUAL_GATE_UNSUPPORTED'
   | 'PORT_CARDINALITY'
@@ -26,6 +27,7 @@ export type CompositeValidationCode =
   | 'NO_BUSINESS_OUTPUT'
   | 'SCHEMA_UNREGISTERED'
   | 'DEPENDENCY_MISSING'
+  | 'DEPENDENCY_MISMATCH'
   | 'BUDGET_EXCEEDED'
   | 'SELF_RECURSION'
   | 'DEPENDENCY_CYCLE'
@@ -107,6 +109,41 @@ export function validateCompositeManifest(
   if (deps.publication) {
     if (!/^\d+\.\d+$/.test(manifest.version)) {
       issues.push(issue('VERSION_FORMAT_INVALID', 'version', '新发布版本必须使用 major.minor'))
+    }
+    if (manifest.runtimeVersion !== 2) {
+      issues.push(issue(
+        'RUNTIME_VERSION_NOT_2',
+        'runtimeVersion',
+        '新发布必须使用 runtimeVersion=2；历史版本仅保留读取与运行兼容'
+      ))
+    }
+    const actualRefs = compositeGraphCapabilityRefs(manifest)
+    const declaredCapabilityDeps = (manifest.dependencies ?? []).filter(
+      (dependency) => dependency.kind === 'capability'
+    )
+    const refKey = (capabilityId: string, version: string | undefined): string =>
+      `${capabilityId}@${version ?? ''}`
+    const actualRefKeys = new Set(actualRefs.map((ref) => refKey(ref.capabilityId, ref.version)))
+    const declaredDepKeys = new Set(
+      declaredCapabilityDeps.map((dependency) => refKey(dependency.id, dependency.version))
+    )
+    for (const ref of actualRefs) {
+      if (!declaredDepKeys.has(refKey(ref.capabilityId, ref.version))) {
+        issues.push(issue(
+          'DEPENDENCY_MISSING',
+          'dependencies',
+          `内部组合节点引用 ${ref.capabilityId}@${ref.version} 未登记 capability dependency`
+        ))
+      }
+    }
+    for (const dependency of declaredCapabilityDeps) {
+      if (!actualRefKeys.has(refKey(dependency.id, dependency.version))) {
+        issues.push(issue(
+          'DEPENDENCY_MISMATCH',
+          'dependencies',
+          `capability dependency ${dependency.id}@${dependency.version ?? '?'} 没有对应的内部组合节点引用`
+        ))
+      }
     }
     for (const direction of ['inputs', 'outputs'] as const) {
       for (const [index, port] of manifest[direction].entries()) {

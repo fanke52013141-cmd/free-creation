@@ -40,6 +40,7 @@ afterEach(() => {
 function humanManifest(): CompositeManifest {
   return {
     schemaVersion: 1,
+    runtimeVersion: 2,
     capabilityId: 'human-gate',
     version: '1.0',
     name: '人工门禁',

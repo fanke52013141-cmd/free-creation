@@ -118,7 +118,7 @@ function fixture(firstKind: 'human-wait' | 'manual-wait') {
   const controller = new CoordinatorReviews(
     db,
     () => file,
-    { assignment, run: start, prepareRework } as unknown as FlowAgentDesktopHost,
+    { assignment, run: start, prepareRework, hasHumanSubmission: vi.fn(() => false) } as unknown as FlowAgentDesktopHost,
     publish,
     () => file
   )

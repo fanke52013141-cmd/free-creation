@@ -2686,12 +2686,11 @@ if (
               rounds++;
               if(!discussed){await collaborate('note','private-e2-note');await collaborate('discuss','private-e2-discuss');discussed=true;}
               await collaborate('submit','明确接受整理成果',true);
-              await publicRun('shape:e2-org');
               root=await publicRun('shape:e2-main');
             } else if(org?.state==='ready'&&org?.prepared){
-              await publicRun('shape:e2-org');
-              for(let j=0;j<600;j++){const t=await inspectNode('shape:e2-org');if(t?.state==='waiting')break;if(t&&['blocked','failed'].includes(t.state))throw new Error(t.code||'E2_REWORK_FAILED');await delay();}
-              root=await inspectNode('shape:e2-main');
+              value(await window.api.runFlowAgent({projectId,nodeId:'shape:e2-org',action:'start',requestId:org.taskId,expectedTaskId:org.taskId,traceId:'trace-e2-rework',spanId:'span-e2-rework'}));
+              root=await publicRun('shape:e2-main');
+              for(let j=0;j<600;j++){const t=await inspectNode('shape:e2-org');if(t?.state==='waiting'||root?.state==='completed')break;if(t&&['blocked','failed'].includes(t.state))throw new Error(t.code||'E2_REWORK_FAILED');if(root&&['blocked','failed'].includes(root.state))throw new Error(root.code||'E2_ROOT_FAILED');await delay();}
             } else {await delay();root=await inspectNode('shape:e2-main');}
           }
           if(root?.state!=='completed')throw new Error('E2_ROOT_TIMEOUT');
@@ -3444,6 +3443,9 @@ if (
           : {}),
         ...(agentRun06Fault && error instanceof Error
           ? { testFailureMessage: error.message.slice(0, 240) }
+          : {}),
+        ...(endToEndGraph && error instanceof Error
+          ? { testFailureMessage: error.message.slice(0, 500), testFailureStack: error.stack?.slice(0, 2000) }
           : {}),
         ...(parallelQueueMedia && error instanceof Error
           ? { testFailureMessage: error.message.slice(0, 240) }

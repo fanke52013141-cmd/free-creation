@@ -1,0 +1,2300 @@
+{
+  "families": {
+    "family-4-library": [
+      {
+        "name": "library.folder.create",
+        "ok": true,
+        "detail": {
+          "folderId": "HA-RCliE3zXJ"
+        }
+      },
+      {
+        "name": "library.folder.list 含新文件夹",
+        "ok": true,
+        "detail": {
+          "total": 1
+        }
+      },
+      {
+        "name": "library.folder.rename",
+        "ok": true,
+        "detail": {}
+      },
+      {
+        "name": "library.collection.create",
+        "ok": true,
+        "detail": {
+          "collectionId": "n874YZtv9S3c"
+        }
+      },
+      {
+        "name": "library.collection.list",
+        "ok": true,
+        "detail": {
+          "total": 1
+        }
+      },
+      {
+        "name": "library.category.list",
+        "ok": true,
+        "detail": {
+          "total": 6
+        }
+      },
+      {
+        "name": "library.resource.create 建文本资源",
+        "ok": true,
+        "detail": {
+          "resourceId": "ZBR22m6HsTzG"
+        }
+      },
+      {
+        "name": "library.resource.get",
+        "ok": true,
+        "detail": {
+          "components": 1
+        }
+      },
+      {
+        "name": "library.resource.list",
+        "ok": true,
+        "detail": {}
+      },
+      {
+        "name": "library.search 能检索到",
+        "ok": true,
+        "detail": {
+          "found": 1
+        }
+      },
+      {
+        "name": "library.resource.set_folder / set_collections",
+        "ok": true,
+        "detail": {}
+      },
+      {
+        "name": "library.resource.publish（发布修订）",
+        "ok": true,
+        "detail": {
+          "code": "INVALID_INPUT"
+        }
+      },
+      {
+        "name": "library.resource.archive",
+        "ok": true,
+        "detail": {
+          "completed": true,
+          "data": {
+            "id": "ZBR22m6HsTzG",
+            "resourceId": "ZBR22m6HsTzG",
+            "title": "验收资源",
+            "formPreset": "prompt",
+            "description": "",
+            "tags": [],
+            "collectionIds": [
+              "n874YZtv9S3c"
+            ],
+            "folderIds": [
+              "HA-RCliE3zXJ"
+            ],
+            "latestRevisionId": "21nfDURXX7Cn",
+            "revisionNumber": 1,
+            "componentCount": 1,
+            "archived": true,
+            "updatedAt": 1795671334645
+          }
+        }
+      },
+      {
+        "name": "library.captureProjectMedia（采集项目媒体）",
+        "ok": true,
+        "detail": {
+          "completed": true,
+          "data": {
+            "resourceId": "MplLYxfbQ4Rp",
+            "revisionId": "o83Gnm93l0JY",
+            "revisionNumber": 1,
+            "title": "采集的媒体",
+            "componentCount": 1
+          }
+        }
+      },
+      {
+        "name": "library.captureProjectNodes（采集节点）",
+        "ok": true,
+        "detail": {
+          "code": "CAPTURE_FAILED"
+        }
+      },
+      {
+        "name": "library.export 资源包导出（指纹自洽）",
+        "ok": true,
+        "detail": {
+          "fileName": "accept.canvaslib",
+          "resourceCount": 1
+        }
+      },
+      {
+        "name": "library.import 导入刚导出的资源包",
+        "ok": true,
+        "detail": {
+          "completed": true,
+          "data": {
+            "imported": 1,
+            "packageSha256": "6e57701e8439b8e26acdb4a360239b9083b6c0d5992d06748becdba619b95143",
+            "byteSize": 1372,
+            "committed": true
+          }
+        }
+      },
+      {
+        "name": "library.resource.materialize（物化到画布）",
+        "ok": true,
+        "detail": {
+          "code": "INVALID_INPUT"
+        }
+      },
+      {
+        "name": "library.materialization.discard",
+        "ok": true,
+        "detail": {
+          "code": "INVALID_INPUT"
+        }
+      },
+      {
+        "name": "node.library.* 形态检查（需 chat/agent 模板）",
+        "ok": true,
+        "detail": {
+          "codes": [
+            "node.library.list=completed",
+            "node.library.save=CHAT_NODE_REQUIRED",
+            "node.library.search=completed",
+            "node.library.get=NOT_FOUND",
+            "node.library.update=NOT_FOUND",
+            "node.library.delete=NOT_FOUND",
+            "node.library.compose=INVALID_INPUT",
+            "node.library.insert=NOT_FOUND"
+          ]
+        }
+      },
+      {
+        "name": "library.resource.delete_many",
+        "ok": true,
+        "detail": {
+          "completed": true,
+          "data": {
+            "items": [
+              {
+                "resourceId": "ZBR22m6HsTzG",
+                "deleted": true
+              }
+            ],
+            "deleted": 1,
+            "failed": 0
+          }
+        }
+      }
+    ],
+    "family-6-model": [
+      {
+        "name": "model.connection.save（假密钥，不回显）",
+        "ok": true,
+        "detail": {
+          "id": "acc-conn"
+        }
+      },
+      {
+        "name": "model.credential.status（只给指纹）",
+        "ok": true,
+        "detail": {}
+      },
+      {
+        "name": "model.definition.save",
+        "ok": true,
+        "detail": {}
+      },
+      {
+        "name": "model.definition.list / model.list",
+        "ok": true,
+        "detail": {
+          "definitions": 0,
+          "models": 0
+        }
+      },
+      {
+        "name": "model.binding.save / binding.list / binding.resolve",
+        "ok": true,
+        "detail": {
+          "code": "MODEL_BINDING_NOT_FOUND"
+        }
+      },
+      {
+        "name": "provider 目录三项（去敏）",
+        "ok": true,
+        "detail": {
+          "providers": 1,
+          "executable": 0,
+          "exportable": 0
+        }
+      },
+      {
+        "name": "environment.local / videoEngine.status",
+        "ok": true,
+        "detail": {
+          "engineReady": false,
+          "phase": "python-ready"
+        }
+      },
+      {
+        "name": "environment.videoEngine.install 未确认必须拒绝",
+        "ok": true,
+        "detail": {
+          "code": "INSTALL_CONFIRM_REQUIRED"
+        }
+      },
+      {
+        "name": "model.validate / provider.testConnection 未确认必须拒绝",
+        "ok": true,
+        "detail": {
+          "validate": "NETWORK_CONFIRM_REQUIRED",
+          "test": "NETWORK_CONFIRM_REQUIRED"
+        }
+      },
+      {
+        "name": "provider.package.* 形态检查",
+        "ok": true,
+        "detail": {
+          "codes": [
+            "provider.package.export=UNSUPPORTED_OPERATION",
+            "provider.package.seal=KEYS_SERVICE_UNAVAILABLE",
+            "provider.package.preview=KEYS_SERVICE_UNAVAILABLE"
+          ]
+        }
+      },
+      {
+        "name": "model.definition.deleteMany / connection.delete 清理",
+        "ok": true,
+        "detail": {}
+      },
+      {
+        "name": "skill.list",
+        "ok": true,
+        "detail": {
+          "completed": true,
+          "data": {
+            "items": [
+              {
+                "id": "content-analysis",
+                "version": "1",
+                "name": "内容分析",
+                "description": "提取输入事实、结构和不确定项。",
+                "contentHash": "sha256:75a68e1363008b52c793bb5986e21bb551a8fc0f4e7d0e494db1f3af2ab69636"
+              },
+              {
+                "id": "content-organize",
+                "version": "1",
+                "name": "内容整理",
+                "description": "按指定格式整理文本、Markdown 或 JSON。",
+                "contentHash": "sha256:b40f7b2fe98dfbe9d5857dca7f69d8dee6672deddd18cf07cf3fd03309f1c503"
+              },
+              {
+                "id": "json-organize",
+                "version": "1",
+                "name": "JSON 整理",
+                "description": "按固定输入和真实回执处理材料；缺少能力时明确说明，禁止猜测已执行。",
+                "contentHash": "sha256:404a6059dea46c2267a9bb2f360b220eb95b250590224107d30bdebdde2ac1e9"
+              },
+              {
+                "id": "material-analysis",
+                "version": "1",
+                "name": "材料分析",
+                "description": "按固定输入和真实回执处理材料；缺少能力时明确说明，禁止猜测已执行。",
+                "contentHash": "sha256:92d07f842a2c23726934b7062a532fc74d7c205555d24535253c99c0780c6fe2"
+              },
+              {
+                "id": "result-check",
+                "version": "1",
+                "name": "结果检查",
+                "description": "按固定输入和真实回执处理材料；缺少能力时明确说明，禁止猜测已执行。",
+                "contentHash": "sha256:7c5cc9ea0d3a06ff7758720bf43be8787653651d5503a117ac8af695ad4840e6"
+              }
+            ],
+            "total": 5
+          }
+        }
+      }
+    ],
+    "family-5-flow": [
+      {
+        "name": "flowAgent.inspect",
+        "ok": true,
+        "detail": {
+          "completed": true,
+          "data": {
+            "projectId": "LJhob1bbJr45",
+            "nodeId": "shape:w3hEuQERdFhwUCKCznCGG",
+            "graphVersion": 3,
+            "ownership": "desktop-host",
+            "task": null
+          }
+        }
+      },
+      {
+        "name": "flowAgent.catalog",
+        "ok": true,
+        "detail": {
+          "completed": true,
+          "data": {
+            "projectId": "LJhob1bbJr45",
+            "graphVersion": 3,
+            "models": [],
+            "tools": [
+              {
+                "id": "node.execute",
+                "version": "1",
+                "name": "执行画布数据处理或视频节点"
+              },
+              {
+                "id": "graph.preview",
+                "version": "1",
+                "name": "文本模板流程预览"
+              },
+              {
+                "id": "agent.dispatch",
+                "version": "1",
+                "name": "分派专业 Agent 任务"
+              },
+              {
+                "id": "review.execute",
+                "version": "1",
+                "name": "执行范围内的固定版本审核"
+              },
+              {
+                "id": "web.search",
+                "version": "1",
+                "name": "受控联网搜索（豆包搜索，需显式启用）"
+              }
+            ],
+            "skills": [
+              {
+                "id": "content-analysis",
+                "version": "1",
+                "name": "内容分析",
+                "description": "提取输入事实、结构和不确定项。"
+              },
+              {
+                "id": "content-organize",
+                "version": "1",
+                "name": "内容整理",
+                "description": "按指定格式整理文本、Markdown 或 JSON。"
+              },
+              {
+                "id": "json-organize",
+                "version": "1",
+                "name": "JSON 整理",
+                "description": "按固定输入和真实回执处理材料；缺少能力时明确说明，禁止猜测已执行。"
+              },
+              {
+                "id": "material-analysis",
+                "version": "1",
+                "name": "材料分析",
+                "description": "按固定输入和真实回执处理材料；缺少能力时明确说明，禁止猜测已执行。"
+              },
+              {
+                "id": "result-check",
+                "version": "1",
+                "name": "结果检查",
+                "description": "按固定输入和真实回执处理材料；缺少能力时明确说明，禁止猜测已执行。"
+              }
+            ],
+            "capabilities": [
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "text",
+                  "version": "3"
+                },
+                "label": "文本",
+                "description": "可编辑的原始文本。上游文本在运行时并入正文，再经 out-text 输出。",
+                "inputs": [
+                  {
+                    "portId": "in-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "文本",
+                    "description": "一个或多个上游文本，执行时与节点内文本合并。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-text",
+                    "type": "text",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "文本",
+                    "description": "节点最终保存的纯文本内容。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "image",
+                  "version": "3"
+                },
+                "label": "图片",
+                "description": "图片资产节点，只负责保存和输出一张已导入的图片，不承担生成逻辑。",
+                "inputs": [],
+                "outputs": [
+                  {
+                    "portId": "out-image",
+                    "type": "image",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "图片",
+                    "description": "已导入并落盘的图片资产引用。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "image-crop",
+                  "version": "2"
+                },
+                "label": "裁剪",
+                "description": "对上游图片做矩形或透视裁剪；每次运行产出新图片，原图不变。",
+                "inputs": [
+                  {
+                    "portId": "in-image",
+                    "type": "image",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "原图",
+                    "description": "必须连接的一张源图片；裁剪参数按其原始比例解释。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-image",
+                    "type": "image",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "裁剪图",
+                    "description": "本地裁剪完成并落盘的新图片资产。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "image-split",
+                  "version": "3"
+                },
+                "label": "拆分",
+                "description": "把一张上游图片按行列拆成多张；输出当前图与图片集合。",
+                "inputs": [
+                  {
+                    "portId": "in-image",
+                    "type": "image",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "原图",
+                    "description": "必须连接的一张源图片；按行列从左到右、从上到下拆分。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-image",
+                    "type": "image",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "当前图片",
+                    "description": "从图片集合中选中的一格，可直接连接图片类下游。"
+                  },
+                  {
+                    "portId": "out-images",
+                    "type": "json",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "图片集合",
+                    "description": "所有格子对应的真实图片资产引用列表，可连接循环节点批处理。",
+                    "schemaRef": {
+                      "id": "list.items",
+                      "version": 1
+                    }
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "image-gen",
+                  "version": "3"
+                },
+                "label": "生图",
+                "description": "根据提示词和有序参考图片生成图片；所有参考图统一连入一个多值图片端口。",
+                "inputs": [
+                  {
+                    "portId": "in-images",
+                    "type": "image",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "参考图",
+                    "description": "唯一的图片输入；可连接 1～4 张图片，按真实连线顺序作为图片 1～4 提交给模型。"
+                  },
+                  {
+                    "portId": "in-prompt",
+                    "type": "json",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "提示词包",
+                    "description": "可选的 prompt.bundle@1；读取其中的 prompt 与 style。",
+                    "schemaRef": {
+                      "id": "prompt.bundle",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "portId": "in-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "提示词",
+                    "description": "生成图片使用的提示文本，可由多个文本上游合并。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-image",
+                    "type": "image",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "图片",
+                    "description": "模型生成并落盘后的图片资产引用。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "certain",
+                "network": "required",
+                "agentSchedulable": true,
+                "plan": {
+                  "title": "生图",
+                  "inputType": "text",
+                  "outputType": "image",
+                  "instruction": "required",
+                  "template": "forbidden",
+                  "reviewable": false
+                }
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "image-edit",
+                  "version": "2"
+                },
+                "label": "P图",
+                "description": "以一张上游图片为原图，结合标注与文字说明生成新的图片；原图保持不变。",
+                "inputs": [
+                  {
+                    "portId": "in-image",
+                    "type": "image",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "原图",
+                    "description": "必须连接的一张待修改图片。"
+                  },
+                  {
+                    "portId": "in-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "修改说明",
+                    "description": "可选的文本修改说明，可由多个文本上游合并。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-image",
+                    "type": "image",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "修改图",
+                    "description": "模型修改并落盘后的新图片资产。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "certain",
+                "network": "required",
+                "agentSchedulable": true,
+                "plan": {
+                  "title": "P图",
+                  "inputType": "image",
+                  "outputType": "image",
+                  "instruction": "required",
+                  "template": "forbidden",
+                  "reviewable": false
+                }
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "website",
+                  "version": "1"
+                },
+                "label": "网址节点",
+                "description": "保存网页名称与链接；点击打开，也可连接输出。",
+                "inputs": [],
+                "outputs": [
+                  {
+                    "portId": "out-website",
+                    "type": "json",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "网址",
+                    "description": "已配置的网页名称和标准化 HTTP(S) 链接。",
+                    "schemaRef": {
+                      "id": "website.link",
+                      "version": 1
+                    }
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "video",
+                  "version": "7"
+                },
+                "label": "视频生成",
+                "description": "由文本与参考素材生成视频；所有参考必须经端口连入。",
+                "inputs": [
+                  {
+                    "portId": "in-images",
+                    "type": "image",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "图片",
+                    "description": "可选的多张图片。按连线顺序读取：第 1 张作为主图/首帧，其余作为有序参考图；全部都连接到同一个绿色端口。"
+                  },
+                  {
+                    "portId": "in-reference-video",
+                    "type": "video",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "运动参考",
+                    "description": "可选的真实参考视频。预演台白模视频可在此传入，模型是否接受由供应商实际响应决定。"
+                  },
+                  {
+                    "portId": "in-reference-audio",
+                    "type": "audio",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "参考音频",
+                    "description": "可选的参考音频；仅在当前模型支持时按真实输入提交，不能替代生成音频设置。"
+                  },
+                  {
+                    "portId": "in-prompt",
+                    "type": "json",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "提示词包",
+                    "description": "可选的 prompt.bundle@1；读取其中的 prompt 与 style。",
+                    "schemaRef": {
+                      "id": "prompt.bundle",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "portId": "in-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "提示词",
+                    "description": "描述视频内容和运动方式的提示文本。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-video",
+                    "type": "video",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "视频",
+                    "description": "生成并落盘后的视频资产引用。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "certain",
+                "network": "required",
+                "agentSchedulable": true,
+                "plan": {
+                  "title": "视频生成",
+                  "inputType": "text",
+                  "outputType": "video",
+                  "instruction": "required",
+                  "template": "forbidden",
+                  "reviewable": true
+                }
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "video-asset",
+                  "version": "2"
+                },
+                "label": "视频素材",
+                "description": "视频资产节点：导入本地视频，只负责预览、替换和向下游输出。",
+                "inputs": [],
+                "outputs": [
+                  {
+                    "portId": "out-video",
+                    "type": "video",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "视频",
+                    "description": "不可变的视频资产引用。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "video-frame",
+                  "version": "4"
+                },
+                "label": "抽帧",
+                "description": "提取上游视频首帧/尾帧/指定时刻画面为新图片。",
+                "inputs": [
+                  {
+                    "portId": "in-video",
+                    "type": "video",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "源视频",
+                    "description": "必须连接的一段源视频。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-image",
+                    "type": "image",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "视频帧",
+                    "description": "指定时间点解码得到的新图片资产。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "video-clip",
+                  "version": "5"
+                },
+                "label": "视频截取",
+                "description": "按起止毫秒截取视频，可选择画面或音频；提取音频时可在同次操作中提取人声。",
+                "inputs": [
+                  {
+                    "portId": "in-video",
+                    "type": "video",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "源视频",
+                    "description": "必须连接的一段源视频。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-video",
+                    "type": "video",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "视频片段",
+                    "description": "精确重编码后的 MP4 视频片段。"
+                  },
+                  {
+                    "portId": "out-audio",
+                    "type": "audio",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "音频片段",
+                    "description": "同一时间范围提取并转码的新音频资产。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "video-depth",
+                  "version": "1"
+                },
+                "label": "深度视频",
+                "description": "使用本地 CUDA 推理将视频转换为灰度深度视频；源音频可选保留。",
+                "inputs": [
+                  {
+                    "portId": "in-video",
+                    "type": "video",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "源视频",
+                    "description": "需要转换的输入视频。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-video",
+                    "type": "video",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "深度视频",
+                    "description": "逐帧深度估计生成的灰度视频资产。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "video-clay",
+                  "version": "1"
+                },
+                "label": "白模视频",
+                "description": "以连续深度生成哑光白模视频，支持光照预设、质量选择和时间稳定处理。",
+                "inputs": [
+                  {
+                    "portId": "in-video",
+                    "type": "video",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "源视频",
+                    "description": "需要转换的输入视频。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-video",
+                    "type": "video",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "白模视频",
+                    "description": "由估计深度和可调材质光照合成的视频资产。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "timeline",
+                  "version": "1"
+                },
+                "label": "轨道线",
+                "description": "把图片、视频、音频铺到多条轨道上，分割拖动后合成成片。",
+                "inputs": [
+                  {
+                    "portId": "in-video",
+                    "type": "video",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "视频素材",
+                    "description": "按连线顺序追加到视频轨。"
+                  },
+                  {
+                    "portId": "in-audio",
+                    "type": "audio",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "音频素材",
+                    "description": "按连线顺序追加到音频轨。"
+                  },
+                  {
+                    "portId": "in-image",
+                    "type": "image",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "图片素材",
+                    "description": "按连线顺序追加到视频轨末端。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-video",
+                    "type": "video",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "合成视频",
+                    "description": "按时间线合成出的成片。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "audio",
+                  "version": "3"
+                },
+                "label": "音频",
+                "description": "音频资产节点：导入本地音频，只负责保存、预览和输出资产。",
+                "inputs": [],
+                "outputs": [
+                  {
+                    "portId": "out-audio",
+                    "type": "audio",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "音频",
+                    "description": "已导入并落盘的音频资产引用。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "sound-adjust",
+                  "version": "1"
+                },
+                "label": "声音调整",
+                "description": "按倍率或目标时长调整音频/视频速度与声量。",
+                "inputs": [
+                  {
+                    "portId": "in-audio",
+                    "type": "audio",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "源音频",
+                    "description": "连接一段音频，与源视频二选一。"
+                  },
+                  {
+                    "portId": "in-video",
+                    "type": "video",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "源视频",
+                    "description": "连接一段视频，与源音频二选一。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-audio",
+                    "type": "audio",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "调整后音频",
+                    "description": "源为音频时生成的新音频资产。"
+                  },
+                  {
+                    "portId": "out-video",
+                    "type": "video",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "调整后视频",
+                    "description": "源为视频时生成的新视频资产。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "silence-trim",
+                  "version": "1"
+                },
+                "label": "去气口",
+                "description": "检测并剪掉音频中的静音与呼吸气口，输出更紧凑的新音频。",
+                "inputs": [
+                  {
+                    "portId": "in-audio",
+                    "type": "audio",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "源音频",
+                    "description": "连接一段需要去气口的音频。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-audio",
+                    "type": "audio",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "去气口音频",
+                    "description": "剪掉气口后生成的新音频资产。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "file",
+                  "version": "2"
+                },
+                "label": "文件",
+                "description": "文件资产节点：导入 Excel / Word / PDF 等文档并输出。",
+                "inputs": [],
+                "outputs": [
+                  {
+                    "portId": "out-file",
+                    "type": "file",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "文件",
+                    "description": "已导入并落盘的原始文件资产引用。"
+                  },
+                  {
+                    "portId": "out-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "文本",
+                    "description": "抽取出的文档正文（文本/CSV/Word/Excel/PPT/PDF）。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "speech",
+                  "version": "4"
+                },
+                "label": "语音合成",
+                "description": "按所选供应商和语音参数，把文本合成为音频。供应商相关输入输出规则见“输入输出”。",
+                "inputs": [
+                  {
+                    "portId": "in-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "朗读文本",
+                    "description": "节点正文与上游文本合并后朗读。MiniMax 支持语气词标签和读音纠正；读音纠正格式为“词/(拼音)(拼音)”，例如“重庆/(chong2)(qing4)”，示例已预填在节点配置中。"
+                  },
+                  {
+                    "portId": "in-voice",
+                    "type": "json",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "音色档案",
+                    "description": "连接上游 MiniMax 音色设计或语音克隆节点的音色档案；以连线传入的 voice_id 为准。未连接时使用节点内音色 ID，留空时使用系统音色 male-qn-qingse。",
+                    "schemaRef": {
+                      "id": "voice.profile",
+                      "version": 1
+                    }
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-audio",
+                    "type": "audio",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "语音",
+                    "description": "MiniMax 异步语音合成（t2a_async_v2，默认通道）；支持语气词标签、音色 ID、情绪、语速、音量和音调。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "certain",
+                "network": "required",
+                "agentSchedulable": true,
+                "plan": {
+                  "title": "语音合成",
+                  "inputType": "text",
+                  "outputType": "audio",
+                  "instruction": "optional",
+                  "template": "forbidden",
+                  "reviewable": false
+                }
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "tts",
+                  "version": "4"
+                },
+                "label": "语音克隆",
+                "description": "根据参考语音登记可复用音色 ID，连接语音合成节点使用。",
+                "inputs": [
+                  {
+                    "portId": "in-audio",
+                    "type": "audio",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "参考语音",
+                    "description": "上游参考音频；也可在节点内上传。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-json",
+                    "type": "json",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "音色档案",
+                    "description": "MiniMax 复刻登记出的可复用 voice_id。",
+                    "schemaRef": {
+                      "id": "voice.profile",
+                      "version": 1
+                    }
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "certain",
+                "network": "required",
+                "agentSchedulable": true,
+                "plan": {
+                  "title": "语音克隆",
+                  "inputType": "audio",
+                  "outputType": "json",
+                  "instruction": "optional",
+                  "template": "forbidden",
+                  "reviewable": false
+                }
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "voice-design",
+                  "version": "1"
+                },
+                "label": "音色设计",
+                "description": "用文字描述设计音色，产出试听音频与可复用的音色 ID。",
+                "inputs": [
+                  {
+                    "portId": "in-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "音色描述",
+                    "description": "音色特征描述；与节点内描述合并后提交。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-json",
+                    "type": "json",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "音色档案",
+                    "description": "设计出的 voice_id 与来源，可直接连接语音合成节点的音色档案输入。",
+                    "schemaRef": {
+                      "id": "voice.profile",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "portId": "out-audio",
+                    "type": "audio",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "试听音频",
+                    "description": "服务端返回的 hex 试听音频解码落盘后的资产。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "chat",
+                  "version": "1"
+                },
+                "label": "AI 对话",
+                "description": "与文本模型对话。上游文本会成为本轮输入，最后一条助手回复作为文本输出。",
+                "inputs": [
+                  {
+                    "portId": "in-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "文本",
+                    "description": "作为本轮用户消息或上下文注入的上游文本。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-text",
+                    "type": "text",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "最后回复（TXT）",
+                    "description": "当前会话最后一条 AI 回复的原始文本，不包含用户消息或思考过程。"
+                  },
+                  {
+                    "portId": "out-markdown",
+                    "type": "markdown",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "回复（Markdown）",
+                    "description": "模型最后一条回复，保留 Markdown 语义以兼容已有连线。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "processor",
+                  "version": "1"
+                },
+                "label": "数据处理",
+                "description": "单值透传并保持原类型；也可从 JSON 取字段或转成文本模板。",
+                "inputs": [
+                  {
+                    "portId": "in-value",
+                    "type": "any",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "输入变量",
+                    "description": "一个文本、JSON 或媒体资产值；此端口不接收多条连线。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-value",
+                    "type": "any",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "输出变量",
+                    "description": "透传时保留原值类型；取字段保留其文本或 JSON 类型；模板模式输出文本。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "code",
+                  "version": "3"
+                },
+                "label": "代码",
+                "description": "本地运行 JavaScript，支持具名输入和多字段输出。",
+                "inputs": [
+                  {
+                    "portId": "in-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "文本输入",
+                    "description": "代码运行时 input.text 读取的合并文本。"
+                  },
+                  {
+                    "portId": "in-json",
+                    "type": "json",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "数据输入",
+                    "description": "代码运行时 input.json 读取的结构化值列表。",
+                    "schemaRef": {
+                      "id": "json.any",
+                      "version": 1
+                    }
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-output",
+                    "type": "any",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "output",
+                    "description": "代码 return 对象字段 output（any）。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "json",
+                  "version": "1"
+                },
+                "label": "JSON",
+                "description": "解析并格式化通用 JSON，支持手工编辑；多条 JSON 连线会汇总成数组。",
+                "inputs": [
+                  {
+                    "portId": "in-json",
+                    "type": "json",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "数据",
+                    "description": "优先输入：一条保留原值；多条按连线顺序汇总为 JSON 数组。",
+                    "schemaRef": {
+                      "id": "json.any",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "portId": "in-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "文本",
+                    "description": "仅在没有 JSON 数据输入时解析；两类同时连接时使用 JSON 数据。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-json",
+                    "type": "json",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "数据",
+                    "description": "校验并格式化后的结构化值。",
+                    "schemaRef": {
+                      "id": "json.any",
+                      "version": 1
+                    }
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "structured",
+                  "version": "1"
+                },
+                "label": "结构数据",
+                "description": "按 Schema 校验 JSON 正文，运行时可插入连线值占位符。",
+                "inputs": [
+                  {
+                    "portId": "in-context",
+                    "type": "json",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "结构上下文",
+                    "description": "一个或多个已连接的结构化输入，可在正文中用 {{input[0].field}} 显式引用。",
+                    "schemaRef": {
+                      "id": "json.any",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "portId": "in-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "文本上下文",
+                    "description": "可在正文中用 {{text}} 显式引用的上游文本。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-json",
+                    "type": "json",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "结构数据",
+                    "description": "经所选 Schema 校验后的结构化数据。",
+                    "schemaRef": {
+                      "id": "json.any",
+                      "version": 1
+                    }
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "storyboard",
+                  "version": "1"
+                },
+                "label": "分镜板",
+                "description": "按镜头 JSON 字段生成可编辑表格，并输出完整分镜数据与文字摘要。",
+                "inputs": [
+                  {
+                    "portId": "in-json",
+                    "type": "json",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "分镜数据",
+                    "description": "符合分镜 Schema 的镜头列表。",
+                    "schemaRef": {
+                      "id": "storyboard.shots",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "portId": "in-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "分镜文本",
+                    "description": "可解析为分镜 JSON 的兼容文本输入。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-json",
+                    "type": "json",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "分镜数据",
+                    "description": "编辑后的完整分镜结构。",
+                    "schemaRef": {
+                      "id": "storyboard.shots",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "portId": "out-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "合成文本",
+                    "description": "由画面、台词和时长生成的可读摘要。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "ai-process",
+                  "version": "1"
+                },
+                "label": "AI 处理",
+                "description": "把上游文本/JSON 交给文本模型，产出文本、Markdown 或 JSON。",
+                "inputs": [
+                  {
+                    "portId": "in-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "文本",
+                    "description": "一个或多个上游文本，作为本次转换的输入。"
+                  },
+                  {
+                    "portId": "in-json",
+                    "type": "json",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "JSON 上下文",
+                    "description": "可选的结构化上下文，注入本次转换。",
+                    "schemaRef": {
+                      "id": "json.any",
+                      "version": 1
+                    }
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "文本",
+                    "description": "模型返回的纯文本结果。"
+                  },
+                  {
+                    "portId": "out-markdown",
+                    "type": "markdown",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "Markdown",
+                    "description": "模型返回的 Markdown 结果。"
+                  },
+                  {
+                    "portId": "out-json",
+                    "type": "json",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "JSON",
+                    "description": "模型返回并校验后的结构化值（按所选 Schema）。",
+                    "schemaRef": {
+                      "id": "json.any",
+                      "version": 1
+                    }
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "iterate",
+                  "version": "2"
+                },
+                "label": "循环",
+                "description": "按顺序逐项运行循环体，并汇总结果。",
+                "inputs": [
+                  {
+                    "portId": "in-list",
+                    "type": "json",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "列表",
+                    "description": "列表项按顺序逐个运行连接的循环体。",
+                    "schemaRef": {
+                      "id": "list.items",
+                      "version": 1
+                    }
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-item",
+                    "type": "iteration",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "当前项",
+                    "description": "循环体专用的临时作用域。普通列表项进入 JSON 输入；带 kind 与资产引用字段的媒体项可进入同类型媒体输入。"
+                  },
+                  {
+                    "portId": "out-items",
+                    "type": "json",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "结果列表",
+                    "description": "每项处理结果的结构化列表（含来源、状态、各节点产物）。",
+                    "schemaRef": {
+                      "id": "list.items",
+                      "version": 1
+                    }
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "director",
+                  "version": "3"
+                },
+                "label": "3D 预演台",
+                "description": "3D 白模预演台；发布后帧、视频与机位才成为下游输入。",
+                "inputs": [
+                  {
+                    "portId": "in-storyboard",
+                    "type": "json",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "分镜",
+                    "description": "可选的分镜列表；连线后需在 3D 预演台点「同步连线输入」才会成为镜头。",
+                    "schemaRef": {
+                      "id": "storyboard.shots",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "portId": "in-reference-images",
+                    "type": "image",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "场景参考图",
+                    "description": "1～3 张参考图建议用于建立白模空间；真实连线输入，不读取其他节点内部状态。"
+                  },
+                  {
+                    "portId": "in-camera-preset",
+                    "type": "camera",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "机位参数",
+                    "description": "可选的初始机位参数，仅接受 3D 预演台发布的机位通道。",
+                    "schemaRef": {
+                      "id": "previs.camera",
+                      "version": 1
+                    }
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-frame",
+                    "type": "image",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "预演帧",
+                    "description": "用户发布的当前镜头静帧。"
+                  },
+                  {
+                    "portId": "out-preview-video",
+                    "type": "video",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "预演视频",
+                    "description": "用户导出的 WebM 预演视频。"
+                  },
+                  {
+                    "portId": "out-camera",
+                    "type": "camera",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "机位参数",
+                    "description": "已发布镜头的焦距、画幅、时长和机位参数；使用专用机位通道，不与工程摘要混为同类输出。",
+                    "schemaRef": {
+                      "id": "previs.camera",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "portId": "out-project",
+                    "type": "json",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "工程摘要",
+                    "description": "导演工程中可交换的镜头和机位摘要，不包含媒体二进制。",
+                    "schemaRef": {
+                      "id": "previs.project",
+                      "version": 2
+                    }
+                  }
+                ],
+                "participation": "collaborative",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "agent",
+                  "version": "1"
+                },
+                "label": "Agent",
+                "description": "按职责和协作方式处理任务，可绑定版本化 Skills 与工具。",
+                "inputs": [
+                  {
+                    "portId": "in-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "文本",
+                    "description": "按明确来源接收已提交的资产；未适配的类型禁止自动执行。"
+                  },
+                  {
+                    "portId": "in-json",
+                    "type": "json",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "结构数据",
+                    "description": "按明确来源接收已提交的资产；未适配的类型禁止自动执行。",
+                    "schemaRef": {
+                      "id": "json.any",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "portId": "in-image",
+                    "type": "image",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "图片",
+                    "description": "按明确来源接收已提交的资产；未适配的类型禁止自动执行。"
+                  },
+                  {
+                    "portId": "in-video",
+                    "type": "video",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "视频",
+                    "description": "按明确来源接收已提交的资产；未适配的类型禁止自动执行。"
+                  },
+                  {
+                    "portId": "in-audio",
+                    "type": "audio",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "音频",
+                    "description": "按明确来源接收已提交的资产；未适配的类型禁止自动执行。"
+                  },
+                  {
+                    "portId": "in-file",
+                    "type": "file",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "文件",
+                    "description": "按明确来源接收已提交的资产；未适配的类型禁止自动执行。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "文本",
+                    "description": "仅在正式执行成功后输出已验证的结果；未启用的节点不产生输出。"
+                  },
+                  {
+                    "portId": "out-json",
+                    "type": "json",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "结构数据",
+                    "description": "仅在正式执行成功后输出已验证的结果；未启用的节点不产生输出。",
+                    "schemaRef": {
+                      "id": "json.any",
+                      "version": 1
+                    }
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "state-machine",
+                  "version": "1"
+                },
+                "label": "状态机",
+                "description": "声明任务阶段与合法转换；人工提交事件、运行节点推进状态。",
+                "inputs": [
+                  {
+                    "portId": "in-json",
+                    "type": "json",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "结构数据",
+                    "description": "按明确来源接收已提交的资产；未适配的类型禁止自动执行。",
+                    "schemaRef": {
+                      "id": "json.any",
+                      "version": 1
+                    }
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-state",
+                    "type": "json",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "结构数据",
+                    "description": "仅在正式执行成功后输出已验证的结果；未启用的节点不产生输出。",
+                    "schemaRef": {
+                      "id": "flow.state",
+                      "version": 1
+                    }
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "ai-review",
+                  "version": "1"
+                },
+                "label": "AI 审核",
+                "description": "审核固定版本的资产，给出是/否和反馈。返工通过显式控制关系调度。",
+                "inputs": [
+                  {
+                    "portId": "in-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "文本",
+                    "description": "按明确来源接收已提交的资产；未适配的类型禁止自动执行。"
+                  },
+                  {
+                    "portId": "in-json",
+                    "type": "json",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "结构数据",
+                    "description": "按明确来源接收已提交的资产；未适配的类型禁止自动执行。",
+                    "schemaRef": {
+                      "id": "json.any",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "portId": "in-image",
+                    "type": "image",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "图片",
+                    "description": "按明确来源接收已提交的资产；未适配的类型禁止自动执行。"
+                  },
+                  {
+                    "portId": "in-video",
+                    "type": "video",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "视频",
+                    "description": "按明确来源接收已提交的资产；未适配的类型禁止自动执行。"
+                  },
+                  {
+                    "portId": "in-audio",
+                    "type": "audio",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "音频",
+                    "description": "按明确来源接收已提交的资产；未适配的类型禁止自动执行。"
+                  },
+                  {
+                    "portId": "in-file",
+                    "type": "file",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "文件",
+                    "description": "按明确来源接收已提交的资产；未适配的类型禁止自动执行。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-review",
+                    "type": "json",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "结构数据",
+                    "description": "仅在正式执行成功后输出已验证的结果；未启用的节点不产生输出。",
+                    "schemaRef": {
+                      "id": "review.decision",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "portId": "out-feedback",
+                    "type": "text",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "文本",
+                    "description": "仅在正式执行成功后输出已验证的结果；未启用的节点不产生输出。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "human-task",
+                  "version": "1"
+                },
+                "label": "人工任务",
+                "description": "纯人工任务：人工填写并提交结果，运行后正式交付；未提交时停等，不伪造成功。",
+                "inputs": [
+                  {
+                    "portId": "in-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "文本",
+                    "description": "可选上下文：供人工参考的已提交资产，不自动决定结果。"
+                  },
+                  {
+                    "portId": "in-json",
+                    "type": "json",
+                    "required": false,
+                    "cardinality": "many",
+                    "name": "结构数据",
+                    "description": "可选上下文：供人工参考的已提交资产，不自动决定结果。",
+                    "schemaRef": {
+                      "id": "json.any",
+                      "version": 1
+                    }
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-text",
+                    "type": "text",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "文本",
+                    "description": "人工正式提交并运行后才输出的结果；未提交不产生输出。"
+                  },
+                  {
+                    "portId": "out-json",
+                    "type": "json",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "结构数据",
+                    "description": "人工正式提交并运行后才输出的结果；未提交不产生输出。",
+                    "schemaRef": {
+                      "id": "json.any",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "portId": "out-image",
+                    "type": "image",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "图片",
+                    "description": "人工正式提交并运行后才输出的结果；未提交不产生输出。"
+                  },
+                  {
+                    "portId": "out-video",
+                    "type": "video",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "视频",
+                    "description": "人工正式提交并运行后才输出的结果；未提交不产生输出。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": false,
+                "reason": "该节点类型尚未声明可编排的编译载体（BL-10 首批只开放媒体能力与已发布节点流）"
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "text-template",
+                  "version": "1"
+                },
+                "label": "文本模板",
+                "description": "单值透传并保持原类型；也可从 JSON 取字段或转成文本模板。",
+                "inputs": [
+                  {
+                    "portId": "in-value",
+                    "type": "any",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "输入变量",
+                    "description": "一个文本、JSON 或媒体资产值；此端口不接收多条连线。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-value",
+                    "type": "any",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "输出变量",
+                    "description": "透传时保留原值类型；取字段保留其文本或 JSON 类型；模板模式输出文本。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": true,
+                "plan": {
+                  "title": "文本模板",
+                  "inputType": "text",
+                  "outputType": "text",
+                  "instruction": "forbidden",
+                  "template": "required",
+                  "reviewable": true
+                }
+              },
+              {
+                "capabilityRef": {
+                  "kind": "node",
+                  "id": "text-pass",
+                  "version": "1"
+                },
+                "label": "文本透传",
+                "description": "单值透传并保持原类型；也可从 JSON 取字段或转成文本模板。",
+                "inputs": [
+                  {
+                    "portId": "in-value",
+                    "type": "any",
+                    "required": false,
+                    "cardinality": "one",
+                    "name": "输入变量",
+                    "description": "一个文本、JSON 或媒体资产值；此端口不接收多条连线。"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "portId": "out-value",
+                    "type": "any",
+                    "required": true,
+                    "cardinality": "one",
+                    "name": "输出变量",
+                    "description": "透传时保留原值类型；取字段保留其文本或 JSON 类型；模板模式输出文本。"
+                  }
+                ],
+                "participation": "autonomous",
+                "cost": "none",
+                "network": "none",
+                "agentSchedulable": true,
+                "plan": {
+                  "title": "文本透传",
+                  "inputType": "text",
+                  "outputType": "text",
+                  "instruction": "forbidden",
+                  "template": "forbidden",
+                  "reviewable": false
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "flowAgent.collaboration",
+        "ok": true,
+        "detail": {
+          "code": "AGENT_TASK_MISSING"
+        }
+      },
+      {
+        "name": "flowAgent.run start（无可用模型应被拒且不发起请求）",
+        "ok": true,
+        "detail": {
+          "code": "AGENT_GOAL_REQUIRED"
+        }
+      },
+      {
+        "name": "flowAgent.pause / stop",
+        "ok": true,
+        "detail": {
+          "pause": {
+            "code": "FLOW_COORDINATOR_CONFIG_INVALID"
+          },
+          "stop": {
+            "code": "NOT_FOUND"
+          }
+        }
+      },
+      {
+        "name": "flowAgent.cooperate（缺任务时的返回形态）",
+        "ok": true,
+        "detail": {
+          "code": "AGENT_TASK_MISSING"
+        }
+      },
+      {
+        "name": "flowAgent.build.inspect / propose",
+        "ok": true,
+        "detail": {
+          "inspect": {
+            "code": "FLOW_BUILD_CONFIG_INVALID"
+          },
+          "propose": {
+            "code": "INVALID_INPUT"
+          }
+        }
+      },
+      {
+        "name": "flowAgent.review",
+        "ok": true,
+        "detail": {
+          "code": "INVALID_INPUT"
+        }
+      },
+      {
+        "name": "flow.command 六项形态检查",
+        "ok": true,
+        "detail": {
+          "codes": [
+            "flow.command.lookup=INVALID_INPUT",
+            "flow.command.availability=INVALID_INPUT",
+            "flow.command.check=NOT_FOUND",
+            "flow.command.reconcile=INVALID_INPUT",
+            "flow.command.dispatch=INVALID_INPUT",
+            "flow.command.abort=NOT_FOUND"
+          ]
+        }
+      },
+      {
+        "name": "flowAsset.list / read / submit",
+        "ok": true,
+        "detail": {
+          "list": {
+            "code": "INVALID_INPUT"
+          },
+          "read": {
+            "code": "INVALID_INPUT"
+          },
+          "submit": {
+            "code": "INVALID_INPUT"
+          }
+        }
+      },
+      {
+        "name": "director.publish.prepare / status / continue",
+        "ok": true,
+        "detail": {
+          "prepare": {
+            "code": "INVALID_INPUT"
+          },
+          "status": {
+            "code": "NOT_FOUND"
+          },
+          "continue": {
+            "code": "INVALID_INPUT"
+          }
+        }
+      }
+    ],
+    "family-9-execution-chat": [
+      {
+        "name": "node.execute（文本节点本地执行）+ run.get/wait + output.get",
+        "ok": true,
+        "detail": {
+          "taskId": "run-mwx4coc4-e111fce9",
+          "completed": true,
+          "data": {
+            "projectId": "LJhob1bbJr45",
+            "taskId": "run-mwx4coc4-e111fce9",
+            "accepted": true,
+            "mode": "subgraph",
+            "nodeIds": [
+              "shape:z1fBxGxEOwogWq1pqVdHg"
+            ],
+            "state": "running"
+          }
+        }
+      },
+      {
+        "name": "run.cancel（不存在的任务应为业务拒绝）",
+        "ok": true,
+        "detail": {
+          "code": "NOT_FOUND"
+        }
+      },
+      {
+        "name": "chat.skill.list / bind / chat.read / chat.messages",
+        "ok": true,
+        "detail": {
+          "codes": [
+            "chat.skill.list=completed",
+            "chat.skill.bind=INVALID_INPUT",
+            "chat.read=CHAT_NODE_REQUIRED",
+            "chat.messages=CHAT_NODE_REQUIRED"
+          ]
+        }
+      }
+    ]
+  },
+  "failures": [],
+  "notes": [
+    "node.library.* 实际返回：node.library.list=completed, node.library.save=CHAT_NODE_REQUIRED, node.library.search=completed, node.library.get=NOT_FOUND, node.library.update=NOT_FOUND, node.library.delete=NOT_FOUND, node.library.compose=INVALID_INPUT, node.library.insert=NOT_FOUND",
+    "provider.package.* 实际返回：provider.package.export=UNSUPPORTED_OPERATION, provider.package.seal=KEYS_SERVICE_UNAVAILABLE, provider.package.preview=KEYS_SERVICE_UNAVAILABLE",
+    "flow.command.* 实际返回：flow.command.lookup=INVALID_INPUT, flow.command.availability=INVALID_INPUT, flow.command.check=NOT_FOUND, flow.command.reconcile=INVALID_INPUT, flow.command.dispatch=INVALID_INPUT, flow.command.abort=NOT_FOUND",
+    "chat.* 实际返回：chat.skill.list=completed, chat.skill.bind=INVALID_INPUT, chat.read=CHAT_NODE_REQUIRED, chat.messages=CHAT_NODE_REQUIRED"
+  ],
+  "businessCodes": {
+    "INVALID_INPUT": 17,
+    "CAPTURE_FAILED": 1,
+    "CHAT_NODE_REQUIRED": 3,
+    "NOT_FOUND": 9,
+    "MODEL_NOT_VERIFIED": 1,
+    "MODEL_BINDING_NOT_FOUND": 1,
+    "UNSUPPORTED_OPERATION": 1,
+    "KEYS_SERVICE_UNAVAILABLE": 2,
+    "AGENT_TASK_MISSING": 2,
+    "AGENT_GOAL_REQUIRED": 1,
+    "FLOW_COORDINATOR_CONFIG_INVALID": 1,
+    "FLOW_BUILD_CONFIG_INVALID": 1
+  },
+  "total": 47,
+  "passed": 47,
+  "failed": 0
+}

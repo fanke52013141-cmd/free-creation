@@ -1,0 +1,76 @@
+{
+  "startedAt": "2026-11-09T04:33:12.509Z",
+  "sections": {
+    "B": {
+      "name": "B 崩溃重启",
+      "checks": [
+        "执行已受理（running）后即硬杀主进程，无正常退出钩子"
+      ],
+      "trace": {
+        "mediaBeforeKill": 1,
+        "inFlight": "running",
+        "afterRestart": {
+          "state": "running",
+          "error": null
+        }
+      }
+    }
+  },
+  "checks": [
+    {
+      "code": "MACHINE_NOT_LICENSED",
+      "ok": true,
+      "detail": "C:\\Users\\Administrator\\AppData\\Roaming\\canvas-studio\\data\\security"
+    },
+    {
+      "code": "PROJECT_CREATE_FAILED",
+      "ok": true
+    },
+    {
+      "code": "PROJECT_OPEN_FAILED",
+      "ok": true
+    },
+    {
+      "code": "MEDIA_IMPORT_FAILED",
+      "ok": true
+    },
+    {
+      "code": "CLIP_NODE_MISSING",
+      "ok": true,
+      "detail": "[{\"ref\":\"src\",\"nodeId\":\"shape:5unMODezWpwjXsnHB3ViH\"},{\"ref\":\"c1\",\"nodeId\":\"shape:u7k6Yk76n9vcGCnzZi-oS\"},{\"ref\":\"c2\",\"nodeId\":\"shape:yfiVFPTIDfa6TKFO_z60h\"},{\"ref\":\"c3\",\"nodeId\":\"shape:FCD_fWKA-U2447pBGZCU0\"}]"
+    },
+    {
+      "code": "EXECUTE_REJECTED",
+      "ok": true
+    },
+    {
+      "code": "EXECUTE_NOT_ACCEPTED",
+      "ok": true,
+      "detail": "{\"projectId\":\"vOSRTfFg-ls4\",\"taskId\":\"run-mw8rn5y8-d8e215c3\",\"accepted\":true,\"mode\":\"subgraph\",\"nodeIds\":[\"shape:FCD_fWKA-U2447pBGZCU0\"],\"state\":\"running\"}"
+    },
+    {
+      "code": "B_TASK_NOT_IN_FLIGHT",
+      "ok": true,
+      "detail": "{\"taskId\":\"run-mw8rn5y8-d8e215c3\",\"projectId\":\"vOSRTfFg-ls4\",\"source\":\"node-run\",\"state\":\"running\",\"mode\":\"subgraph\",\"nodeIds\":[\"shape:FCD_fWKA-U2447pBGZCU0\"],\"cancelRequested\":false,\"error\":null,\"createdAt\":1794198804704,\"updatedAt\":1794198804705,\"hostResident\":true}"
+    },
+    {
+      "code": "B_FAKE_COMPLETION",
+      "ok": true,
+      "detail": "{\"taskId\":\"run-mw8rn5y8-d8e215c3\",\"projectId\":\"vOSRTfFg-ls4\",\"source\":\"node-run\",\"state\":\"running\",\"mode\":\"subgraph\",\"nodeIds\":[\"shape:FCD_fWKA-U2447pBGZCU0\"],\"cancelRequested\":false,\"error\":null,\"createdAt\":1794198804704,\"updatedAt\":1794198804705,\"hostResident\":true}"
+    },
+    {
+      "code": "B_STALE_RUN_NOT_SETTLED",
+      "ok": false,
+      "detail": "state=running error=null"
+    }
+  ],
+  "failures": [
+    {
+      "code": "B_STALE_RUN_NOT_SETTLED",
+      "detail": "state=running error=null"
+    }
+  ],
+  "notes": [],
+  "status": "failed",
+  "error": "B_STALE_RUN_NOT_SETTLED"
+}

@@ -317,7 +317,7 @@ export function nextReadyNodes(
   }
   // BL-04 运行期兜底：静态互斥按单值交付判定，多值交付可能同时命中多个分支。
   const ambiguous: string[] = []
-  for (const source of settled) {
+  for (const source of new Set([...settled, ...delivered])) {
     const targets = new Set(
       graph.edges
         .filter(

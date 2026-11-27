@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 35
+export const DB_SCHEMA_VERSION = 37
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -658,6 +658,44 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
     database.exec(`
       ALTER TABLE flow_builds ADD COLUMN source TEXT NOT NULL DEFAULT 'builder';
+    `)
+  },
+  // M36: Agent Flow 大上下文清单独立持久化。运行主记录只保留有界元数据，
+  // 超过嵌入阈值的 ContextManifest 按子任务存储，读取时无损合并。
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS flow_coordination_contexts (
+        project_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        child_task_id TEXT NOT NULL,
+        manifest_json TEXT NOT NULL,
+        PRIMARY KEY (project_id, task_id, child_task_id),
+        FOREIGN KEY (project_id, task_id)
+          REFERENCES flow_coordination_runs(project_id, task_id) ON DELETE CASCADE
+      );
+    `)
+  },
+  // M37: LangGraph 在 resume 时可能先写 pending writes，再写对应 checkpoint 行。
+  // 旧外键把该合法顺序判为失败；改为无外键表，读取仍只按已存在 checkpoint 关联。
+  (database) => {
+    database.exec(`
+      CREATE TABLE flow_agent_checkpoint_writes_new (
+        thread TEXT NOT NULL,
+        namespace TEXT NOT NULL,
+        checkpoint TEXT NOT NULL,
+        task TEXT NOT NULL,
+        idx INTEGER NOT NULL,
+        channel TEXT NOT NULL,
+        type TEXT NOT NULL,
+        data BLOB NOT NULL,
+        PRIMARY KEY(thread, namespace, checkpoint, task, idx)
+      );
+      INSERT INTO flow_agent_checkpoint_writes_new
+        (thread, namespace, checkpoint, task, idx, channel, type, data)
+      SELECT thread, namespace, checkpoint, task, idx, channel, type, data
+      FROM flow_agent_checkpoint_writes;
+      DROP TABLE flow_agent_checkpoint_writes;
+      ALTER TABLE flow_agent_checkpoint_writes_new RENAME TO flow_agent_checkpoint_writes;
     `)
   }
 ]

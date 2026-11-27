@@ -14,10 +14,11 @@ import { useEditorStore } from './stores/editor'
 import { useSaveCoordinator } from './stores/save-coordinator'
 import { useGatewayStore } from './stores/gateway'
 import { runCompositeIsolated } from './composite/run-composite'
+import { runNodeManually } from './engine/executor'
 import type { ContractInputMap, NodeValuePacket } from '@shared/engine/inputs'
 import type { NodeValue } from '@shared/engine/values'
 import type { PortType } from '@shared/types'
-import type { Editor } from 'tldraw'
+import type { Editor, TLShapeId } from 'tldraw'
 import type { DesktopRequest } from '@shared/agent-access/desktop'
 
 type BootState = { kind: 'loading' } | { kind: 'ready' } | { kind: 'failed'; message: string }
@@ -160,6 +161,60 @@ function Content(): React.JSX.Element {
   useEffect(() => {
     if (bootState.kind !== 'ready') return
     return window.api.onLocalAgentDesktopRequest?.((request) => {
+      if (request.action === 'resume-composite-canvas') {
+        void (async () => {
+          const reply = (ok: boolean, errorCode?: string): void => {
+            window.api.replyLocalAgentDesktop({
+              requestId: request.requestId,
+              projectId: request.projectId,
+              ok,
+              graphVersion: 0,
+              ...(ok ? {} : { validated: true, ...(errorCode ? { errorCode } : {}) })
+            })
+          }
+          try {
+            if (Date.now() >= request.expiresAt) throw new Error('REQUEST_EXPIRED')
+            const editor = useEditorStore.getState().editor
+            const currentProjectId = useAppStore.getState().currentProject?.id
+            if (!editor || currentProjectId !== request.projectId || !request.nodeId)
+              throw new Error('CANVAS_NOT_READY')
+            if (!request.compositeResumeRunId) throw new Error('COMPOSITE_RESUME_RUN_REQUIRED')
+            await useGatewayStore.getState().load()
+            const providers = useGatewayStore.getState().providers
+            const result = await runNodeManually(
+              editor,
+              request.projectId,
+              providers,
+              request.nodeId as TLShapeId,
+              undefined,
+              undefined,
+              undefined,
+              { inputs: request.inputs },
+              undefined,
+              {
+                resumeRunId: request.compositeResumeRunId,
+                humanSubmissions: request.compositeHumanSubmissions as
+                  | Record<string, import('@shared/agent-flow/node-contracts').HumanTaskValue>
+                  | undefined,
+                completedSteps: request.compositeCompletedSteps,
+                stepOutputs: request.compositeStepOutputs as
+                  | Record<
+                      string,
+                      { nodeResult: string | null; nodeExtra?: string; humanTask?: string; nodeRun: unknown }
+                    >
+                  | undefined
+              },
+              request.compositeResumeInputValues as
+                | ReadonlyArray<{ portId: string; value: import('@shared/engine/values').NodeValue }>
+                | undefined
+            )
+            reply(result.status !== 'failed', result.status === 'failed' ? 'COMPOSITE_RESUME_FAILED' : undefined)
+          } catch (error) {
+            reply(false, error instanceof Error ? error.message.slice(0, 80) : 'COMPOSITE_RESUME_FAILED')
+          }
+        })()
+        return
+      }
       if (request.action === 'execute-composite-headless') {
         void handleHeadlessCompositeExecute(request)
         return

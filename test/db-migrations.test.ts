@@ -50,32 +50,35 @@ describe('SQLite user_version migrations', () => {
     // M25 组合能力定义/版本/草稿 → M26 组合运行账本 → M27 运行等待 → M28 W1 运行关联 →
     // M29 媒体路径索引 → M30 headless 运行输出值 → M31 W4 失败定位节点/端口 →
     // M32 W4 受控重试/人工补交 → M33 AF-06 流程定义版本 → M34 AF-07 续跑步骤输出 →
-    // M35 P5 外部建图预览 source 区分。
-    expect(schemas.at(-18)).toContain('agent_tool_calling_validations')
-    expect(schemas.at(-17)).toContain('local_agent_operations')
-    expect(schemas.at(-16)).toContain('secret_vault')
-    expect(schemas.at(-16)).toContain('key_imports')
-    expect(schemas.at(-15)).toContain('CREATE TABLE external_runs')
-    expect(schemas.at(-14)).toContain('director_publish_requests')
-    expect(schemas.at(-13)).toContain('ADD COLUMN graph_json')
-    expect(schemas.at(-12)).toContain('principal')
-    expect(schemas.at(-11)).toContain('composite_capabilities')
-    expect(schemas.at(-11)).toContain('composite_versions')
-    expect(schemas.at(-11)).toContain('composite_drafts')
-    expect(schemas.at(-10)).toContain('composite_runs')
-    expect(schemas.at(-9)).toContain('composite_run_waits')
-    expect(schemas.at(-8)).toContain('parent_run_id')
-    expect(schemas.at(-8)).toContain('failure_phase')
-    expect(schemas.at(-7)).toContain('idx_media_path')
-    expect(schemas.at(-6)).toContain('output_values')
-    expect(schemas.at(-5)).toContain('failure_node_id')
-    expect(schemas.at(-5)).toContain('failure_port_id')
-    expect(schemas.at(-4)).toContain('input_values')
-    expect(schemas.at(-4)).toContain('retry_of')
-    expect(schemas.at(-4)).toContain('manual_submission')
-    expect(schemas.at(-3)).toContain('flow_definitions')
-    expect(schemas.at(-2)).toContain('step_outputs')
-    expect(schemas.at(-1)).toContain('ADD COLUMN source')
+    // M35 P5 外部建图预览 source 区分 → M36 协调运行大上下文清单 → M37 checkpoint pending writes。
+    expect(schemas.at(-20)).toContain('agent_tool_calling_validations')
+    expect(schemas.at(-19)).toContain('local_agent_operations')
+    expect(schemas.at(-18)).toContain('secret_vault')
+    expect(schemas.at(-18)).toContain('key_imports')
+    expect(schemas.at(-17)).toContain('CREATE TABLE external_runs')
+    expect(schemas.at(-16)).toContain('director_publish_requests')
+    expect(schemas.at(-15)).toContain('ADD COLUMN graph_json')
+    expect(schemas.at(-14)).toContain('principal')
+    expect(schemas.at(-13)).toContain('composite_capabilities')
+    expect(schemas.at(-13)).toContain('composite_versions')
+    expect(schemas.at(-13)).toContain('composite_drafts')
+    expect(schemas.at(-12)).toContain('composite_runs')
+    expect(schemas.at(-11)).toContain('composite_run_waits')
+    expect(schemas.at(-10)).toContain('parent_run_id')
+    expect(schemas.at(-10)).toContain('failure_phase')
+    expect(schemas.at(-9)).toContain('idx_media_path')
+    expect(schemas.at(-8)).toContain('output_values')
+    expect(schemas.at(-7)).toContain('failure_node_id')
+    expect(schemas.at(-7)).toContain('failure_port_id')
+    expect(schemas.at(-6)).toContain('input_values')
+    expect(schemas.at(-6)).toContain('retry_of')
+    expect(schemas.at(-6)).toContain('manual_submission')
+    expect(schemas.at(-5)).toContain('flow_definitions')
+    expect(schemas.at(-4)).toContain('step_outputs')
+    expect(schemas.at(-3)).toContain('ADD COLUMN source')
+    expect(schemas.at(-2)).toContain('flow_coordination_contexts')
+    expect(schemas.at(-1)).toContain('flow_agent_checkpoint_writes_new')
+    expect(schemas.at(-1)).toContain('DROP TABLE flow_agent_checkpoint_writes')
   })
 
   it('每个迁移整体包在单个事务里：迁移语句与 user_version 推进同提交', () => {
@@ -153,6 +156,28 @@ describe('SQLite user_version migrations', () => {
         )
         .get()
     ).toBeDefined()
+    sqlite.close()
+  })
+
+  it('真实 SQLite 引擎：M37 允许 pending writes 先于 checkpoint 行持久化', () => {
+    const sqlite = new DatabaseSync(':memory:')
+    const adapter: MigrationDatabase = {
+      exec: (sql) => sqlite.exec(sql),
+      pragma: (statement, options) =>
+        options?.simple
+          ? Number(
+              (sqlite.prepare(`PRAGMA ${statement}`).get() as { user_version: number }).user_version
+            )
+          : sqlite.exec(`PRAGMA ${statement}`)
+    }
+    sqlite.exec('PRAGMA foreign_keys=ON')
+    migrateDatabase(adapter)
+    expect(sqlite.prepare('PRAGMA foreign_key_list(flow_agent_checkpoint_writes)').all()).toEqual([])
+    expect(() => sqlite.prepare(
+      `INSERT INTO flow_agent_checkpoint_writes
+       (thread,namespace,checkpoint,task,idx,channel,type,data)
+       VALUES ('thread','','checkpoint','task',0,'channel','json',?)`
+    ).run(Buffer.from('{}'))).not.toThrow()
     sqlite.close()
   })
 

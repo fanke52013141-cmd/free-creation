@@ -19,7 +19,7 @@ import {
   publishCompositeVersion,
   saveCompositeDraft
 } from '../store/composite.repo'
-import { getCompositeRun, listCompositeRuns } from '../store/composite-run.repo'
+import { getCompositeRun, listCompositeRuns, countCompositeRunsForCapability } from '../store/composite-run.repo'
 import type { CompositeRunRecord } from '../store/composite-run.repo'
 
 interface CompositeOperationContext {
@@ -278,11 +278,12 @@ export function deleteCompositeCapabilityChecked(capabilityId: string): { capabi
   const references = findCompositeReferences(capabilityId)
   const instanceCount = references.projectInstances.length
   const nestedCount = references.nestedVersions.length
-  if (instanceCount > 0 || nestedCount > 0) {
+  const runCount = countCompositeRunsForCapability(capabilityId)
+  if (instanceCount > 0 || nestedCount > 0 || runCount > 0) {
     throw new DesktopAccessError(
       'CAPABILITY_IN_USE',
       false,
-      `instances:${instanceCount},nested:${nestedCount}`
+      `instances:${instanceCount},nested:${nestedCount},runs:${runCount}`
     )
   }
   const deleted = deleteCompositeCapability(capabilityId)

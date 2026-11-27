@@ -1,0 +1,214 @@
+{
+  "ok": true,
+  "mode": "real Electron/CLI/MCP, deterministic local composites (no billing)",
+  "licenseMode": "CANVAS_LICENSE_DEV_BYPASS=1 (development build only)",
+  "checks": [
+    "本地模型结构化工具调用与结果往返验证通过",
+    "e2e-context-source 通过生产发布校验",
+    "e2e-context-source 发布本地固定版本",
+    "e2e-context-capability 通过生产发布校验",
+    "e2e-context-capability 发布本地固定版本",
+    "cli 真实建图预览生成",
+    "cli start 到达真实上下文超限等待",
+    "cli 总览给出中间 capability 补料表单",
+    "cli continue 前完成 flowCommands attach",
+    "cli 补料执行后到达人工采用等待",
+    "cli 采用前中间 capability 尚未完成",
+    "cli continue 前完成 flowCommands attach",
+    "cli 人工采用后流程完成",
+    "cli 最终公开文本来自真实补料",
+    "cli 采用事实持久化为 humanDecided=true",
+    "cli 阶段交付记录与 effective manifest hash 一致",
+    "cli effective manifest 含 human:context",
+    "cli effective manifest 保留固定 JSON 输入",
+    "cli 原始超限文本未进入 effective manifest",
+    "cli source/mid/downstream 三条真实命令全部 committed",
+    "cli 中间命令保存真实输入指纹",
+    "cli 账本命令携带已确认补料",
+    "cli 账本只保留 in-voice 固定资产版本",
+    "cli human-decision 下游真实执行且仅一次",
+    "cli 中间公开文本资产可由 flowAsset.read 读取",
+    "cli 中间公开 JSON 固定资产保持原值",
+    "cli 固定输入源真实完成",
+    "mcp 真实建图预览生成",
+    "mcp start 到达真实上下文超限等待",
+    "mcp 总览给出中间 capability 补料表单",
+    "mcp continue 前完成 flowCommands attach",
+    "mcp 补料执行后到达人工采用等待",
+    "mcp 采用前中间 capability 尚未完成",
+    "mcp 重开保留同一采用等待和 waitRevision",
+    "mcp 重开后采用标记和两份真实能力输出仍在",
+    "mcp continue 前完成 flowCommands attach",
+    "mcp 人工采用后流程完成",
+    "mcp 最终公开文本来自真实补料",
+    "mcp 采用事实持久化为 humanDecided=true",
+    "mcp 阶段交付记录与 effective manifest hash 一致",
+    "mcp effective manifest 含 human:context",
+    "mcp effective manifest 保留固定 JSON 输入",
+    "mcp 原始超限文本未进入 effective manifest",
+    "mcp source/mid/downstream 三条真实命令全部 committed",
+    "mcp 中间命令保存真实输入指纹",
+    "mcp 账本命令携带已确认补料",
+    "mcp 账本只保留 in-voice 固定资产版本",
+    "mcp human-decision 下游真实执行且仅一次",
+    "mcp 中间公开文本资产可由 flowAsset.read 读取",
+    "mcp 中间公开 JSON 固定资产保持原值",
+    "mcp 固定输入源真实完成"
+  ],
+  "runs": {
+    "cli": {
+      "taskId": "1aa8966d-b47c-454d-8e97-3a986dfea72e",
+      "commandIds": [
+        "graph:15a19fe9a0eaec6ff8fcd25e4cfd4439965a501de7c9e61fbfb47fedd1dbcf1e",
+        "graph:7f26bd91f0902b5a4a2ea25057686c8948503f163f18587f917561436cb28102",
+        "graph:f9686a5c2bc0a4579335d8a61ed2de131441362fd4ee49ddf0755bcdffa1e2a3"
+      ],
+      "reopened": false
+    },
+    "mcp": {
+      "taskId": "ca8e6d8f-42bd-4294-ad8a-94dec992e80a",
+      "commandIds": [
+        "graph:2bd8ae6266297019b09b10f5db4def9d833d3c2d2f0a5a7eba372740bf5eec89",
+        "graph:96196129c3989c9859dfdccd9f138061db23b4790432e911624d3ccd82720239",
+        "graph:a6ab33439cebfae1c8b3987756a24b64353c7fd89b994d3b171052a7247858a6"
+      ],
+      "reopened": true
+    }
+  },
+  "diagnostics": {
+    "cli": {
+      "attachResponses": [
+        {
+          "ok": true,
+          "data": null
+        },
+        {
+          "ok": true,
+          "data": null
+        }
+      ],
+      "recovery": {
+        "firstError": null,
+        "attempts": [],
+        "samples": []
+      },
+      "midContextManifestEntries": [
+        {
+          "sourceStageKey": "shape:source",
+          "path": "",
+          "kind": "json",
+          "value": {
+            "voice_id": "fixture-voice",
+            "provider": "local-deterministic"
+          },
+          "bytes": 61,
+          "required": true,
+          "contentHash": "sha256:c744911fa837ff699d8337e7a8fdc7eda40f2cb8235460c437d265e8cac4d60c"
+        },
+        {
+          "sourceStageKey": "human:context",
+          "path": "text",
+          "kind": "text",
+          "value": "short material",
+          "bytes": 16,
+          "required": true,
+          "contentHash": "sha256:35df8e0a6bb862217fb3179073fa1e52d61e275821ba3dffb320e41200cda49a"
+        }
+      ],
+      "midCommandInputs": [
+        {
+          "targetPortId": "in-voice",
+          "assets": [
+            {
+              "assetId": "d70f7e35-328f-47f8-b877-d72dcd420623",
+              "versionId": "3a0308be-d1df-4786-a0ab-d1df7a649103",
+              "sourceNodeId": "shape:source",
+              "sourcePortId": "out-voice"
+            }
+          ]
+        }
+      ],
+      "deliveryOutputRefs": [
+        {
+          "assetId": "e69d5273-244c-4054-b39f-8c2d60f3afdc",
+          "versionId": "088d6f2c-f09d-4a98-8d21-6035e31567fc",
+          "sourceNodeId": "shape:mid",
+          "sourcePortId": "out-summary"
+        },
+        {
+          "assetId": "e7da89b9-f6f7-41f6-b0ab-7c0757365026",
+          "versionId": "21ba5f25-4ab5-48e1-a0e3-10e5665965f2",
+          "sourceNodeId": "shape:mid",
+          "sourcePortId": "out-voice"
+        }
+      ]
+    },
+    "mcp": {
+      "attachResponses": [
+        {
+          "ok": true,
+          "data": null
+        },
+        {
+          "ok": true,
+          "data": null
+        }
+      ],
+      "recovery": {
+        "firstError": null,
+        "attempts": [],
+        "samples": []
+      },
+      "midContextManifestEntries": [
+        {
+          "sourceStageKey": "shape:source",
+          "path": "",
+          "kind": "json",
+          "value": {
+            "voice_id": "fixture-voice",
+            "provider": "local-deterministic"
+          },
+          "bytes": 61,
+          "required": true,
+          "contentHash": "sha256:c744911fa837ff699d8337e7a8fdc7eda40f2cb8235460c437d265e8cac4d60c"
+        },
+        {
+          "sourceStageKey": "human:context",
+          "path": "text",
+          "kind": "text",
+          "value": "short material",
+          "bytes": 16,
+          "required": true,
+          "contentHash": "sha256:35df8e0a6bb862217fb3179073fa1e52d61e275821ba3dffb320e41200cda49a"
+        }
+      ],
+      "midCommandInputs": [
+        {
+          "targetPortId": "in-voice",
+          "assets": [
+            {
+              "assetId": "957662d0-36b4-42f1-8af6-058d546650f4",
+              "versionId": "8b9ab8e7-299b-46ab-888e-7b789d2fdc37",
+              "sourceNodeId": "shape:source",
+              "sourcePortId": "out-voice"
+            }
+          ]
+        }
+      ],
+      "deliveryOutputRefs": [
+        {
+          "assetId": "92104e40-984b-4687-ba0f-1dba2e88346c",
+          "versionId": "32751d25-326c-444b-a11f-3a558404902a",
+          "sourceNodeId": "shape:mid",
+          "sourcePortId": "out-summary"
+        },
+        {
+          "assetId": "7c02e13c-0a8e-48a0-9691-46de397c45a8",
+          "versionId": "01bafc62-e668-4b2d-9f03-18c8bee489aa",
+          "sourceNodeId": "shape:mid",
+          "sourcePortId": "out-voice"
+        }
+      ]
+    }
+  }
+}

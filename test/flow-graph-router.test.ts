@@ -290,6 +290,33 @@ describe('BL-04 otherwise 边与多值歧义', () => {
     }
     expect(nextReadyNodes(xor, facts([twoValues]), new Set(['a'])).ambiguous).toEqual(['a'])
   })
+
+  it('循环 body 内已交付但未 settled 的来源也参与 ambiguous 检测', () => {
+    const loop = graph(
+      [
+        node('l', {
+          loop: {
+            body: ['l', 'a', 'b'],
+            maxIterations: 2,
+            exitCondition: [eq('a', 'done')[0]]
+          }
+        }),
+        node('a'),
+        node('b')
+      ],
+      [dataEdge('l', 'a', eq('l', 'yes')), dataEdge('l', 'b', eq('l', 'no'))],
+      'l',
+      ['a', 'b']
+    )
+    const twoValues: StageDeliveryFact = {
+      stageKey: 'l',
+      nodeId: 'l',
+      outputs: [{ kind: 'text', text: 'yes' }, { kind: 'text', text: 'no' }],
+      humanDecided: false
+    }
+    expect(nextReadyNodes(loop, facts([twoValues]), new Set(['l']), { l: 1 }).ambiguous)
+      .toEqual(['l'])
+  })
 })
 
 

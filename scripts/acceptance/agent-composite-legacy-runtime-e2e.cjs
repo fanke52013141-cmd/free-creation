@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
-// runtimeVersion=1 real CLI/MCP acceptance: published legacy headless execution plus
+// runtimeVersion=1 real CLI/MCP acceptance: seeded legacy headless execution plus
 // an old inline `{manifest}` composite instance on the desktop. No fake ports/receipts.
 const fsp = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
 const fs = require('node:fs')
+const crypto = require('node:crypto')
 const {
   root,
   sleep,
@@ -31,6 +32,54 @@ function assert(condition, label) {
 function persist() {
   fs.mkdirSync(evidenceDir, { recursive: true })
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2))
+}
+
+function stableStringify(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
+  const record = value
+  const keys = Object.keys(record).sort()
+  return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(',')}}`
+}
+
+function legacyContentHash(manifest) {
+  const { contentHash: _contentHash, ...rest } = manifest
+  void _contentHash
+  return crypto.createHash('sha256').update(stableStringify(rest)).digest('hex')
+}
+
+async function seedLegacyVersion(session, manifest) {
+  const contentHash = legacyContentHash(manifest)
+  await session.app.evaluate(async ({ app }, { dir, manifest, contentHash }) => {
+    const require = process.getBuiltinModule('module').createRequire(app.getAppPath() + '/package.json')
+    const Database = require('better-sqlite3')
+    const db = new Database(dir + '/app.db')
+    try {
+      const now = Date.now()
+      db.prepare(`INSERT OR REPLACE INTO composite_capabilities
+        (id, name, description, tags, latest_version, archived, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 0, ?, ?)`).run(
+        manifest.capabilityId,
+        manifest.name,
+        manifest.description ?? '',
+        JSON.stringify(manifest.tags ?? []),
+        manifest.version,
+        now,
+        now
+      )
+      db.prepare(`INSERT OR REPLACE INTO composite_versions
+        (capability_id, version, manifest, content_hash, published_at, published_by)
+        VALUES (?, ?, ?, ?, ?, 'legacy-fixture')`).run(
+        manifest.capabilityId,
+        manifest.version,
+        JSON.stringify(manifest),
+        contentHash,
+        now
+      )
+    } finally {
+      db.close()
+    }
+  }, { dir: session.dir, manifest, contentHash })
 }
 
 function legacyManifest(capabilityId) {
@@ -156,8 +205,10 @@ async function waitInlineOutput(driver, projectId, nodeId) {
 async function runLegacyScenario(driver, session) {
   const manifest = legacyManifest(`accept-legacy-${driver.kind}`)
   const validation = await driver.ok('composite.validate', { manifest })
-  assert(validation.ok === true, `${driver.kind} legacy validation ${JSON.stringify(validation.issues)}`)
-  await driver.ok('composite.publish', { manifest })
+  assert(validation.ok === false && validation.issues.some((issue) => issue.code === 'RUNTIME_VERSION_NOT_2'),
+    `${driver.kind} new legacy publication rejected`)
+  // 历史版本只能作为既有数据夹具存在；不能再经 composite.publish 新发布 v1。
+  await seedLegacyVersion(session, manifest)
 
   const started = await driver.ok('composite.execute', {
     capabilityId: manifest.capabilityId,

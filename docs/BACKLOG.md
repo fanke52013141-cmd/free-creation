@@ -1,7 +1,7 @@
 ---
 title: Canvas Studio 待开发清单（BACKLOG）
 status: living            # 常更新文档；每完成一项就勾选，并附上提交 hash
-last-updated: 2026-11-26
+last-updated: 2026-11-27
 baseline-commit: 57a7e60d
 sources:
   - docs/SPEC_DEEP_REVIEW_2026_11_22.md（审查报告，编号 A*/G*/N*/F*/U*）
@@ -28,6 +28,13 @@ sources:
 - **仓库清理**：C0 保留为测试专用并补充 [README](<../src/main/agent-flow/c0/README.md>)；42 个无入口一次性脚本已删除（58,182 行），盘点与决策见 [仓库清理记录](<canvas-agent-flow/audits/repo-cleanup-2026-11-26.md>)。清理后全量单测 4048 项通过 / 7 跳过，C0 16/16、门禁与文档回归 86/86 通过。
 - **验证**：`npm test` 360 文件通过 / 2 跳过，4048 项通过 / 7 跳过；人工门禁回归 27 项通过；`npm run typecheck`、`npm run lint`、`CANVAS_OWNER=1 npm run build`、`guard:agent-parity`、`verify:specs`、`verify:logging`、`git diff --check` 均通过；`verify:acceptance:fast` 2/2 批次通过（protocol 34/34、optimizations 9/9），族 2/3/7/8 24/24、族 4/5/6/9 47/47 通过；`agent-flow-state-machine.cjs` 7/7 通过（含真实 GUI 人工确认）。
 - **边界**：真实付费模型、真实 GUI 鼠标端到端、Windows 安装包/完整打包版与干净 GitHub runner 仍未验收；安全与长视频边界见下节。
+
+> **2026-11-27 节点流深度审查工作区记录**
+>
+> - **范围**：基础节点串联/并联、composite 编辑保存重开与公开边界、人工等待/续跑、Agent Flow 图路由/循环/协作返工、checkpoint 恢复与整画布单驱动。
+> - **主要修复**：composite ref 重载丢线与边界合并、画布续跑原输入/输出落账、等待不再误报完成、runtimeVersion/依赖/删除历史门禁；Agent Flow review 工具、循环轮次、受控子节点重复执行、空路由绕过、大上下文 M36、完成前子任务断言、selector 真值来源、ContextManifest 多来源去重、loop skipped exit、额外受控入边、deadline/stop、协作返工单驱动与 M37 pending writes 迁移。
+> - **验证**：定向回归 74 文件/1050 用例通过；composite desktop/GUI、CLI/MCP remediation/legacy/retry、Agent Flow capability/parallel/end-to-end/human-task/review/collab/media/queue/recovery 桌面验收通过；完整 `ELECTRON_DISABLE_SANDBOX=1 npm run verify` 退出码 0（`qa/verification/run-Qd20tV/status.json`，4157 单元通过/7 跳过，model-runtime 6/6，桌面与 R09 链路通过）。完整报告见 [节点流深度审查与真实验收](<canvas-agent-flow/audits/node-flow-deep-review-2026-11-27.md>)。
+> - **边界**：真实付费模型、物理掉电/真实磁盘故障、Windows 安装包与干净 Runner 仍未覆盖；Agent Flow 若干 P2 展示/归因问题保留，详见报告 §5。
 
 ## 当前未闭环边界（基线 `57a7e60d`）
 

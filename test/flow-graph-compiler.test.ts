@@ -239,6 +239,13 @@ describe('AF-01 编译运行准入', () => {
     )
     expect(compiled.runnable).toBe(true)
     expect(compiled.runtimeErrors).toEqual([])
+    const coordinator = AgentNodeConfigSchema.parse(
+      JSON.parse(compiled.nodes.find((item) => item.id === compiled.coordinatorNodeId)!.config)
+    )
+    expect(coordinator.tools).toEqual(expect.arrayContaining([
+      { id: 'agent.dispatch', version: '1' },
+      { id: 'review.execute', version: '1' }
+    ]))
     const agent = AgentNodeConfigSchema.parse(
       JSON.parse(compiled.nodes.find((item) => item.id === canvasNodeId('a'))!.config)
     )

@@ -12,6 +12,15 @@ import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import type { ReviewDecision } from '../../shared/agent-flow/node-contracts'
 import type { FlowRunOverview, FlowEventActorSource } from '../../shared/agent-flow/run-overview'
 
+const MAX_EMBEDDED_CONTEXT_BYTES = 16 * 1024
+const MAX_STORED_CONTEXT_BYTES = 4 * 1024 * 1024
+const MAX_COORDINATION_RUN_BYTES = 8 * 1024 * 1024
+
+interface StoredCoordinationContext {
+  childTaskId: string
+  manifestJson: string
+}
+
 export interface CoordinationReview {
   nodeId: string
   requestId: string
@@ -113,13 +122,71 @@ export function controlledReview(
 /** The canvas remains the editable definition; this store contains execution facts only. */
 export class CoordinationStore {
   constructor(private readonly db: Database.Database) {}
+  private hydrate(run: CoordinationRun): CoordinationRun {
+    const rows = this.db
+      .prepare(
+        `SELECT child_task_id, manifest_json FROM flow_coordination_contexts
+         WHERE project_id=? AND task_id=?`
+      )
+      .all(run.projectId, run.taskId) as Array<{
+      child_task_id: string
+      manifest_json: string
+    }>
+    if (!rows.length) return run
+    const manifests = new Map(rows.map((row) => [row.child_task_id, row.manifest_json]))
+    for (const child of run.children) {
+      if (child.contextManifest) continue
+      const manifest = manifests.get(child.taskId)
+      if (manifest) child.contextManifest = JSON.parse(manifest)
+    }
+    return run
+  }
+
+  private serialize(run: CoordinationRun): {
+    bodyJson: string
+    contexts: StoredCoordinationContext[]
+  } {
+    const contexts: StoredCoordinationContext[] = []
+    const children = run.children.map((child) => {
+      if (!child.contextManifest) return child
+      const manifestJson = JSON.stringify(child.contextManifest)
+      const bytes = Buffer.byteLength(manifestJson, 'utf8')
+      if (bytes > MAX_STORED_CONTEXT_BYTES)
+        throw new AgentRuntimeError('AGENT_CONTEXT_TOO_LARGE', 'coordination-context')
+      if (bytes <= MAX_EMBEDDED_CONTEXT_BYTES) return child
+      contexts.push({ childTaskId: child.taskId, manifestJson })
+      const stored = { ...child }
+      delete stored.contextManifest
+      return stored
+    })
+    const bodyJson = JSON.stringify({ ...run, children })
+    if (Buffer.byteLength(bodyJson, 'utf8') > MAX_COORDINATION_RUN_BYTES)
+      throw new AgentRuntimeError('AGENT_CONTEXT_TOO_LARGE', 'coordination')
+    return { bodyJson, contexts }
+  }
+
+  private replaceContexts(
+    run: CoordinationRun,
+    contexts: readonly StoredCoordinationContext[]
+  ): void {
+    this.db
+      .prepare('DELETE FROM flow_coordination_contexts WHERE project_id=? AND task_id=?')
+      .run(run.projectId, run.taskId)
+    const insert = this.db.prepare(
+      `INSERT INTO flow_coordination_contexts
+       (project_id, task_id, child_task_id, manifest_json) VALUES (?,?,?,?)`
+    )
+    for (const context of contexts)
+      insert.run(run.projectId, run.taskId, context.childTaskId, context.manifestJson)
+  }
+
   latest(projectId: string, nodeId: string): CoordinationRun | null {
     const row = this.db
       .prepare(
         `SELECT body_json FROM flow_coordination_runs WHERE project_id=? AND (node_id=? OR json_extract(body_json,'$.stateNodeId')=?) ORDER BY rowid DESC LIMIT 1`
       )
       .get(projectId, nodeId, nodeId) as { body_json: string } | undefined
-    return row ? JSON.parse(row.body_json) : null
+    return row ? this.hydrate(JSON.parse(row.body_json) as CoordinationRun) : null
   }
   save(run: CoordinationRun, preservePause = true): void {
     const current = this.latest(run.projectId, run.nodeId)
@@ -128,13 +195,18 @@ export class CoordinationStore {
         throw new AgentRuntimeError('AGENT_CANCELLED', 'coordination')
       if (preservePause && current.paused) run.paused = true
     }
-    if (Buffer.byteLength(JSON.stringify(run)) > 262144)
-      throw new AgentRuntimeError('AGENT_CONTEXT_TOO_LARGE', 'coordination')
-    this.db
-      .prepare('UPDATE flow_coordination_runs SET body_json=? WHERE project_id=? AND task_id=?')
-      .run(JSON.stringify(run), run.projectId, run.taskId)
+    const { bodyJson, contexts } = this.serialize(run)
+    this.db.transaction(() => {
+      const updated = this.db
+        .prepare('UPDATE flow_coordination_runs SET body_json=? WHERE project_id=? AND task_id=?')
+        .run(bodyJson, run.projectId, run.taskId)
+      if (updated.changes !== 1)
+        throw new AgentRuntimeError('FLOW_RUN_MISSING', 'coordination')
+      this.replaceContexts(run, contexts)
+    })()
   }
   create(run: CoordinationRun, occupied: string[]): void {
+    const { bodyJson, contexts } = this.serialize(run)
     this.db.transaction(() => {
       if (
         occupied.some((id) =>
@@ -146,7 +218,8 @@ export class CoordinationStore {
         throw new AgentRuntimeError('FLOW_CONTROL_OCCUPIED', 'scope')
       this.db
         .prepare('INSERT INTO flow_coordination_runs VALUES (?,?,?,?)')
-        .run(run.projectId, run.nodeId, run.taskId, JSON.stringify(run))
+        .run(run.projectId, run.nodeId, run.taskId, bodyJson)
+      this.replaceContexts(run, contexts)
       for (const id of occupied)
         this.db
           .prepare('INSERT INTO flow_coordination_scope VALUES (?,?,?)')

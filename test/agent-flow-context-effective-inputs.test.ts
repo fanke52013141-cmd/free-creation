@@ -343,10 +343,11 @@ describe('BL-40 effective context inputs', () => {
     expect(command.inputs[0].assets[0].sourcePortId).toBe('out-markdown')
     expect(command.contextMaterial).toEqual({ targetPortId: 'in-text', text: 'short' })
     const child = f.run.children.find((item) => item.nodeId === 'cap')!
-    expect(child.contextManifest?.entries).toHaveLength(1)
-    expect(child.contextManifest?.entries[0]).toMatchObject({
-      sourceStageKey: 'source', path: 'text', kind: 'markdown', value: 'short'
-    })
+    expect(child.contextManifest?.entries).toHaveLength(2)
+    expect(child.contextManifest?.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sourceStageKey: 'source', path: 'text', kind: 'markdown', value: 'short' }),
+      expect.objectContaining({ sourceStageKey: 'human:context', kind: 'text', value: 'short' })
+    ]))
     expect(child.contextManifest?.dropped).toEqual([])
     expect(child.contextManifest?.budget.exceeded).toBe(false)
   })
@@ -382,6 +383,53 @@ describe('BL-40 effective context inputs', () => {
     expect(manifest.entries).toHaveLength(1)
     expect(manifest.budget).toMatchObject({ exceeded: false, usedBytes: manifest.entries[0].bytes })
     expect(manifest.dropped).toEqual([])
+  })
+
+  it('keeps required contributions from different sources even when their values are identical', () => {
+    const manifest = buildContextManifest('cap', {
+      selectors: [
+        { sourceStageKey: 'source-a', path: 'text', required: true },
+        { sourceStageKey: 'source-b', path: 'text', required: true }
+      ],
+      budgetBytes: 1024
+    }, [
+      { stageKey: 'source-a', nodeId: 'source-a', outputs: [{ kind: 'text', text: 'same' }], humanDecided: false },
+      { stageKey: 'source-b', nodeId: 'source-b', outputs: [{ kind: 'text', text: 'same' }], humanDecided: false }
+    ])
+    expect(manifest.entries.map((entry) => entry.sourceStageKey)).toEqual(['source-a', 'source-b'])
+  })
+
+  it('selects only edges whose own output resolves the declared selector path', () => {
+    const f = fixture()
+    const internals = f.host as unknown as {
+      graphFacts: (run: CoordinationRun) => StageEntryFacts
+      selectedIncomingEdges: (
+        run: CoordinationRun,
+        node: import('../src/shared/agent-flow/flow-graph').FlowNode,
+        graph: import('../src/shared/agent-flow/flow-graph').FlowGraph,
+        facts: StageEntryFacts,
+        edgeState: () => 'satisfied'
+      ) => import('../src/shared/agent-flow/flow-graph').FlowGraph['edges']
+    }
+    const facts = internals.graphFacts(f.run)
+    const textOnly = {
+      ...f.cap,
+      inputs: {
+        budgetBytes: 1024,
+        selectors: [{ sourceStageKey: 'source', path: 'text', required: true }]
+      }
+    }
+    const payloadOnly = {
+      ...f.cap,
+      inputs: {
+        budgetBytes: 1024,
+        selectors: [{ sourceStageKey: 'source', path: 'payload', required: true }]
+      }
+    }
+    expect(internals.selectedIncomingEdges(f.run, textOnly, f.graph, facts, () => 'satisfied')
+      .map((edge) => edge.to.portId)).toEqual(['in-text'])
+    expect(internals.selectedIncomingEdges(f.run, payloadOnly, f.graph, facts, () => 'satisfied')
+      .map((edge) => edge.to.portId)).toEqual(['in-voice'])
   })
 
   it('rejects ambiguous text targets instead of silently choosing the first port', async () => {

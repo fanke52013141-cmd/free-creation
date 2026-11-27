@@ -15,7 +15,7 @@ export interface CompositeNestedCandidates {
  * 当前 manifest 的直接嵌套候选：图形节点里的内嵌/固定版本引用 + 显式 capability 依赖。
  * 发布校验和运行准入共用同一份展开事实，兼容旧快照缺少 requiresManualGate 传播标记的情况。
  */
-export function compositeNestedCandidates(manifest: CompositeManifest): CompositeNestedCandidates {
+function graphNestedCandidates(manifest: CompositeManifest): CompositeNestedCandidates {
   const inline: CompositeManifest[] = []
   const references: CompositeNestedCapabilityRef[] = []
   for (const node of manifest.graph.nodes) {
@@ -55,6 +55,24 @@ export function compositeNestedCandidates(manifest: CompositeManifest): Composit
       // 损坏配置由既有运行/发布校验报告；这里不据此推断人工门。
     }
   }
+  return { inline, references }
+}
+
+/** 当前 manifest 的 composite 节点实际固定版本引用（含内嵌快照身份，不含 dependencies 声明）。 */
+export function compositeGraphCapabilityRefs(manifest: CompositeManifest): CompositeNestedCapabilityRef[] {
+  const { inline, references } = graphNestedCandidates(manifest)
+  return [
+    ...references,
+    ...inline.map((nested) => ({ capabilityId: nested.capabilityId, version: nested.version }))
+  ]
+}
+
+/**
+ * 当前 manifest 的直接嵌套候选：图形节点里的内嵌/固定版本引用 + 显式 capability 依赖。
+ * 发布校验和运行准入共用同一份展开事实，兼容旧快照缺少 requiresManualGate 传播标记的情况。
+ */
+export function compositeNestedCandidates(manifest: CompositeManifest): CompositeNestedCandidates {
+  const { inline, references } = graphNestedCandidates(manifest)
   for (const dependency of manifest.dependencies ?? []) {
     if (dependency.kind === 'capability' && dependency.version) {
       references.push({

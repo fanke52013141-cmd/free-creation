@@ -229,9 +229,70 @@ export class CoordinatorReviews {
           child.taskId = record.snapshot.taskId
           this.store.save(run)
         }
-        if (['ready', 'waiting'].includes(record.state)) {
+        if (record.state === 'ready') {
           waiting = true
           continue
+        }
+        if (record.state === 'waiting') {
+          if (!this.specialists.hasHumanSubmission(
+            { projectId: run.projectId, nodeId: owner },
+            record.snapshot.taskId,
+            record.waitRevision
+          )) {
+            waiting = true
+            continue
+          }
+          const reply = await AsyncLocalStorageProviderSingleton.runWithConfig(
+            {},
+            () => this.specialists.runAssignment(
+              {
+                projectId: run.projectId,
+                nodeId: owner,
+                action: 'continue',
+                humanConfirmed: 'gui' as const,
+                eventId: `${record.snapshot.taskId}:review-resume:${record.waitRevision}`,
+                requestId: record.snapshot.taskId,
+                expectedTaskId: record.snapshot.taskId,
+                expectedWaitRevision: record.waitRevision,
+                traceId: run.traceId,
+                spanId: run.spanId
+              },
+              {
+                goal: child.goal,
+                completion: child.completion,
+                inputs: child.inputs,
+                ...(child.contextManifest ? { contextManifest: child.contextManifest } : {}),
+                ...(child.executionEnvelope ? { executionEnvelope: child.executionEnvelope } : {})
+              },
+              run.taskId,
+              record.snapshot
+            ),
+            true
+          )
+          this.ensureLive(run, signal)
+          if (reply.task.state === 'waiting') {
+            waiting = true
+            continue
+          }
+          if (reply.task.state !== 'completed')
+            throw new AgentRuntimeError(reply.task.code ?? 'FLOW_CHILD_BLOCKED', 'rework')
+          await this.publish(
+            {
+              projectId: run.projectId,
+              nodeId: owner,
+              taskId: record.snapshot.taskId,
+              semanticRevision: projectSemanticRevision(file),
+              traceId: run.traceId,
+              spanId: run.spanId
+            },
+            signal
+          )
+          this.ensureLive(run, signal)
+          child.state = 'completed'
+          child.outputs = reply.refs
+          cycle.state = 'ready'
+          this.store.save(run)
+          return 'again'
         }
         if (record.state !== 'completed')
           throw new AgentRuntimeError(record.code ?? 'FLOW_CHILD_BLOCKED', 'rework')

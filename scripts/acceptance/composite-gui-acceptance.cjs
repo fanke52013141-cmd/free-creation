@@ -515,15 +515,27 @@ function ok(res, label) {
       version: '1.0'
     }
     ok(await cli(dir, ['composite', 'publish'], { manifest: requiredManifest }), 'PUBLISH_REQUIRED')
-    const { graphVersion } = ok(await cli(dir, ['graph', 'get'], { projectId }), 'GRAPH_REQUIRED')
-    ok(await cli(dir, ['graph', 'patch'], {
-      projectId,
-      expectedGraphVersion: graphVersion,
-      ops: [{
-        action: 'node.create', nodeType: 'composite', title: requiredManifest.name,
-        x: 90, y: 90, config: { manifest: requiredManifest }
-      }]
-    }), 'INSERT_REQUIRED')
+    let requiredInsert = null
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const { graphVersion } = ok(await cli(dir, ['graph', 'get'], { projectId }), 'GRAPH_REQUIRED')
+      const patched = await cli(dir, ['graph', 'patch'], {
+        projectId,
+        expectedGraphVersion: graphVersion,
+        ops: [{
+          action: 'node.create', nodeType: 'composite', title: requiredManifest.name,
+          x: 90, y: 90, config: { manifest: requiredManifest }
+        }]
+      })
+      if (patched.code === 0 && patched.response && !patched.response.error) {
+        requiredInsert = patched.response.data
+        break
+      }
+      if (patched.response?.error?.code !== 'REVISION_CONFLICT') {
+        throw new Error(`INSERT_REQUIRED:${JSON.stringify(patched.response || patched).slice(0, 600)}`)
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+    ok({ code: 0, response: { data: requiredInsert } }, 'INSERT_REQUIRED')
     const requiredCard = compositeCards().filter({ hasText: requiredManifest.name })
     await runCard(requiredCard)
     const inputDialog = page.getByRole('dialog', { name: '补充运行输入' })

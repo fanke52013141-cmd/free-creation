@@ -1,5 +1,5 @@
 import type { CompositeManifest } from '../composite/manifest'
-import type { ContractInputMap } from '../engine/inputs'
+import type { ContractInputMap, NodeValuePacket } from '../engine/inputs'
 import type { NodeValue } from '../engine/values'
 import type { CancelSignal } from './executor-types'
 
@@ -33,7 +33,7 @@ export interface CompositeRunRequest {
   parentContext?: CompositeRunContext
   /** headless 执行标志（脱离项目/画布）；嵌套运行经 parentContext 继承。 */
   headless?: boolean
-  /** W4 受控重试：headless 公开输入值（创建运行时原子落盘，供失败后按原输入复跑）。 */
+  /** 公开输入值（创建运行时原子落盘，供人工等待续跑与受控重试恢复原输入）。 */
   inputValues?: Record<string, unknown>
   /** W4 受控重试：重试链根运行 ID（受控上限按根计数）。 */
   retryOf?: string
@@ -61,6 +61,8 @@ export interface CompositeRunFailure {
 }
 
 export interface CompositeRunOutcome {
+  /** 本次节点流子运行 ID；与外层工作流/Agent 运行 ID 区分。 */
+  runId: string
   status: 'done' | 'failed' | 'waiting'
   reason?: string
   /** AF-07：等待人工的内部节点 ID（status=waiting 时）；提交后经续跑消费。 */
@@ -72,4 +74,16 @@ export interface CompositeRunOutcome {
   /** 内部运行摘要，供诊断/未来持久化使用，不进入公开端口。 */
   stepCount?: number
   failure?: CompositeRunFailure
+}
+
+/** 将画布/headless 共用的输入包 Map 序列化为运行台账记录；多值端口保留顺序。 */
+export function serializeCompositeInputValues(
+  inputs: ContractInputMap
+): Record<string, unknown> {
+  return Object.fromEntries(
+    [...inputs.entries()].map(([portId, packets]: [string, readonly NodeValuePacket[]]) => [
+      portId,
+      packets.length === 1 ? packets[0]!.value : packets.map((packet) => packet.value)
+    ])
+  )
 }

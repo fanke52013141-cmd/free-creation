@@ -145,10 +145,22 @@ function compositeManifest() {
     ], 'BATCH2')
     check('插入引用形态实例并连接素材 → 公开输入')
 
-    const g2 = ok(await cli(dir, ['graph', 'get'], { projectId }), 'GRAPH2')
-    const exec = ok(await cli(dir, ['node', 'execute'], {
-      projectId, expectedGraphVersion: g2.graphVersion, nodeIds: [r.inst], mode: 'single'
-    }), 'EXECUTE')
+    let exec = null
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const g2 = ok(await cli(dir, ['graph', 'get'], { projectId }), 'GRAPH2')
+      const result = await cli(dir, ['node', 'execute'], {
+        projectId, expectedGraphVersion: g2.graphVersion, nodeIds: [r.inst], mode: 'single'
+      })
+      if (result.code === 0 && result.response && !result.response.error) {
+        exec = result.response.data
+        break
+      }
+      if (result.response?.error?.code !== 'REVISION_CONFLICT') {
+        throw new Error(`EXECUTE:${JSON.stringify(result.response || result).slice(0, 600)}`)
+      }
+      await sleep(250)
+    }
+    ok({ code: 0, response: { data: exec } }, 'EXECUTE')
     let waited = null
     for (let attempt = 0; attempt < 10; attempt++) {
       waited = ok(await cli(dir, ['run', 'wait'], { projectId, taskId: exec.taskId, timeoutMs: 60000 }), 'WAIT')

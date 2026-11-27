@@ -20,6 +20,7 @@ import {
 function manifest(patch: Partial<CompositeManifest> = {}): CompositeManifest {
   return {
     schemaVersion: 1,
+    runtimeVersion: 2,
     capabilityId: 'character-design',
     version: '1.0',
     name: '人物设计',

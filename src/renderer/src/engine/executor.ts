@@ -1,4 +1,4 @@
-﻿// 工作流执行编排层（契约规范 P3 / 路线图 R1 / R4）。
+// 工作流执行编排层（契约规范 P3 / 路线图 R1 / R4）。
 //
 // 这里只保留运行器：拓扑排序 → 收集输入 → 契约校验 → 按节点执行器执行
 // → 读取 shape 投影输出 → 输出契约校验 → 登记。节点专属执行逻辑已迁移到
@@ -13,6 +13,7 @@ import type { Editor, TLShapeId } from 'tldraw'
 import { runCompositeIsolated } from '../composite/run-composite'
 import type { CanvasEdge, CanvasNode, ExecStatus, PortDecl, ProviderSummary } from '@shared/types'
 import type { FlowAssetVersion } from '@shared/agent-flow/assets'
+import type { CompositeRunRequest } from '@shared/engine/composite-run-contract'
 import { deriveGraph } from '../canvas/graph'
 import { markUndoPoint } from '../canvas/history'
 import { materializeArtifact, materializeDocumentArtifact } from '../canvas/artifact-materializer'
@@ -82,6 +83,7 @@ import { captureRunWorkload } from './run-workload'
 import type { FlowCommandGrant } from '@shared/agent-flow/commands'
 import {
   AgentFlowAssetRefSchema,
+  AgentNodeConfigSchema,
   getAgentModelBindingStatus,
   type AgentFlowAssetRef
 } from '@shared/agent-flow/node-contracts'
@@ -160,6 +162,13 @@ interface WorkflowContext {
   isolated?: boolean
   /** W3：所属节点流运行的祖先上下文（递归/深度/预算守卫），顶层画布执行缺省。 */
   compositeRunContext?: import('@shared/engine/composite-run-contract').CompositeRunContext
+  /** 画布起源节点流人工等待续跑：复用原运行、已完成步骤与人工提交。 */
+  compositeResume?: Pick<
+    CompositeRunRequest,
+    'resumeRunId' | 'humanSubmissions' | 'completedSteps' | 'stepOutputs'
+  >
+  /** 画布起源续跑使用的原公开输入包；优先于当前画布边，固定本次运行输入。 */
+  compositeResumeInputs?: ReadonlyArray<{ portId: string; value: NodeValue }>
 }
 
 const nodeTests = new Set<TLShapeId>()
@@ -508,6 +517,50 @@ function topoSort(graph: { nodes: CanvasNode[]; edges: CanvasEdge[] }): CanvasNo
     }
   }
   return ordered.length === graph.nodes.length ? ordered.map((id) => byId.get(id)!) : null
+}
+
+function parseAgentConfig(
+  node: CanvasNode
+): ReturnType<typeof AgentNodeConfigSchema.safeParse> | null {
+  try {
+    return AgentNodeConfigSchema.safeParse(
+      JSON.parse(typeof node.params.config === 'string' ? node.params.config : '{}')
+    )
+  } catch {
+    return null
+  }
+}
+
+/** Nodes whose execution is owned by a graph-mode coordinator. */
+export function agentFlowControlledNodeIds(
+  graph: Pick<ReturnType<typeof deriveGraph>, 'nodes'>
+): Set<string> {
+  const controlled = new Set<string>()
+  for (const node of graph.nodes) {
+    if (node.type !== 'agent') continue
+    const parsed = parseAgentConfig(node)
+    if (!parsed?.success || parsed.data.executionMode !== 'graph') continue
+    for (const id of parsed.data.allowedNodeIds) controlled.add(id)
+    for (const relation of parsed.data.relations) {
+      if (relation.kind === 'observes' && relation.sourceNodeId === node.id)
+        controlled.add(relation.targetNodeId)
+    }
+  }
+  return controlled
+}
+
+function withoutAgentFlowControlledNodes(
+  graph: ReturnType<typeof deriveGraph>
+): ReturnType<typeof deriveGraph> {
+  const controlled = agentFlowControlledNodeIds(graph)
+  if (!controlled.size) return graph
+  const nodes = graph.nodes.filter((node) => !controlled.has(node.id))
+  const ids = new Set(nodes.map((node) => node.id))
+  return {
+    ...graph,
+    nodes,
+    edges: graph.edges.filter((edge) => ids.has(edge.from.nodeId) && ids.has(edge.to.nodeId))
+  }
 }
 
 /**
@@ -1143,6 +1196,7 @@ async function invokeExecutor(
     runComposite: (request) =>
       runCompositeIsolated(ctx.editor, ctx.projectId, ctx.providers, {
         ...request,
+        ...ctx.compositeResume,
         ...ctx.command?.grant.compositeResume,
         signal: ctx.token
       }),
@@ -1231,6 +1285,27 @@ async function collectNodeInputs(
       injections: [...fixedInjections, ...materialInjection]
     })
   }
+  if (ctx.compositeResumeInputs && ctx.compositeResumeInputs.length > 0) {
+    const injections = ctx.compositeResumeInputs.flatMap((input) => {
+      const port = portsOf(node).in.find((candidate) => candidate.id === input.portId)
+      if (!port) return []
+      return [{
+        portId: input.portId,
+        packet: {
+          type: input.value.kind,
+          value: input.value,
+          ...(input.value.kind === 'json' ? { schema: { id: 'json.any', version: 1 } } : {}),
+          source: { nodeId: 'composite:resume', portId: 'out-any', runId: ctx.runId },
+          createdAt: Date.now()
+        }
+      }]
+    })
+    return collectContractInputs(node, [], new Map(), {
+      injections,
+      skippedNodes: ctx.skippedNodes,
+      deferRequiredInputs: node.type === 'composite'
+    })
+  }
   if (!injection) {
     return collectContractInputs(node, ctx.graph.edges, ctx.outputs, {
       skippedNodes: ctx.skippedNodes,
@@ -1309,6 +1384,9 @@ function nodeResource(node: CanvasNode): string {
 
 function agentNeedsDecisionModel(editor: Editor, node: CanvasNode): boolean {
   if (node.type !== 'agent' || getAgentModelBindingStatus(node.params.config) !== 'missing')
+    return false
+  const parsed = parseAgentConfig(node)
+  if (parsed?.success && (parsed.data.executionMode === 'graph' || parsed.data.executionMode === 'fixed-order'))
     return false
   const shape = editor.getShape<NodeCardShape>(node.id as TLShapeId)
   try {
@@ -2233,7 +2311,9 @@ export async function runNodeManually(
   publication?: import('@shared/agent-flow/coordination').AgentPublication,
   compositeRunContext?: import('@shared/engine/composite-run-contract').CompositeRunContext,
   inputOptions?: WorkflowInputOptions,
-  contextMaterial?: NodeExecutionContext['contextMaterial']
+  contextMaterial?: NodeExecutionContext['contextMaterial'],
+  compositeResume?: WorkflowContext['compositeResume'],
+  compositeResumeInputs?: WorkflowContext['compositeResumeInputs']
 ): Promise<NodeExecutionResult> {
   if (hasNodeTask(projectId, nodeId) || nodeTests.has(nodeId))
     return { status: 'skipped', reason: '当前节点已在运行或排队' }
@@ -2241,6 +2321,8 @@ export async function runNodeManually(
   const graph = deriveGraph(editor)
   const node = graph.nodes.find((item) => item.id === nodeId)
   if (!node) return { status: 'skipped', reason: '节点不存在或尚未保存到画布' }
+  if (!command && !publication && !compositeRunContext && agentFlowControlledNodeIds(graph).has(nodeId))
+    return { status: 'skipped', reason: '该节点由主 Agent 协调，请运行对应流程' }
   if (agentNeedsDecisionModel(editor, node)) {
     const reason = '请在节点设置中选择决策模型。'
     toast(reason)
@@ -2296,6 +2378,8 @@ export async function runNodeManually(
     taskId: command?.grant.command.taskId,
     isolated: true,
     compositeRunContext,
+    compositeResume,
+    compositeResumeInputs,
     contextMaterial,
     workflowInputs: inputOptions
   }
@@ -2484,11 +2568,12 @@ export async function runWorkflow(
   projectId: string,
   providers: ProviderSummary[],
   inputOptions?: WorkflowInputOptions
-): Promise<void> {
+): Promise<'completed' | 'failed' | 'cancelled' | 'waiting' | void> {
   const store = useEngineStore.getState()
   if (store.phase !== 'idle') return
-  const graph = deriveGraph(editor)
-  if (graph.nodes.length === 0) return toast('画布上没有节点')
+  const fullGraph = deriveGraph(editor)
+  const graph = withoutAgentFlowControlledNodes(fullGraph)
+  if (graph.nodes.length === 0) return toast('画布上没有可执行节点')
   const order = topoSort(graph)
   if (!order) return toast('工作流存在循环连线，无法执行')
   if (graph.nodes.some((node) => agentNeedsDecisionModel(editor, node)))
@@ -2552,31 +2637,48 @@ export async function runWorkflow(
     const runSubflow = (request: SubflowRequest): Promise<Record<string, ContractOutputs>> =>
       runSubflowForIterate(ctx, runSubflow, request)
 
+    let waiting: NodeExecutionResult | null = null
     for (const node of executableOrder) {
       await waitForResume(token)
       if (token.cancelled) break
       store.setCurrent(node.title || node.type, node.id)
-      await executeNodeOnce(ctx, node, runSubflow)
+      const result = await executeNodeOnce(ctx, node, runSubflow)
       store.nodeDone()
+      if (result.waiting) {
+        waiting = result
+        break
+      }
     }
 
     const after = useEngineStore.getState()
     after.endRun()
     clearRunControls()
+    if (waiting) {
+      const reason = waiting.reason ?? '节点流等待人工输入'
+      toast(reason)
+      emitWorkflowEvent('workflow.waiting', reason, ctx)
+      markUndoPoint(editor, 'workflow-run-waiting')
+      return 'waiting'
+    }
     if (token.cancelled) {
       toast('工作流已停止')
       emitWorkflowEvent('workflow.cancelled', '工作流已停止', ctx, { status: 'cancelled' })
+      markUndoPoint(editor, 'workflow-run')
+      return 'cancelled'
     } else if (after.errors.length > 0) {
       toast(`工作流完成，${after.errors.length} 个节点失败`)
       emitWorkflowEvent('workflow.failed', '工作流完成，部分节点失败', ctx, {
         status: 'failed',
         attributes: { failedCount: after.errors.length }
       })
+      markUndoPoint(editor, 'workflow-run')
+      return 'failed'
     } else {
       toast('工作流执行完成')
       emitWorkflowEvent('workflow.completed', '工作流执行完成', ctx, { status: 'success' })
+      markUndoPoint(editor, 'workflow-run')
+      return 'completed'
     }
-    markUndoPoint(editor, 'workflow-run')
   } finally {
     useEngineStore.getState().endRun()
     clearRunControls()
@@ -2593,7 +2695,7 @@ export async function runWorkflowForNodes(
   providers: ProviderSummary[],
   targetNodeIds: TLShapeId[],
   inputOptions?: WorkflowInputOptions
-): Promise<'completed' | 'failed' | 'cancelled' | void> {
+): Promise<'completed' | 'failed' | 'cancelled' | 'waiting' | void> {
   const store = useEngineStore.getState()
   if (store.phase !== 'idle') return
   let phaseStarted = false
@@ -2604,7 +2706,12 @@ export async function runWorkflowForNodes(
     )
     if (targets.length === 0) return toast('所选节点不存在或尚未保存到画布')
 
+    const controlled = agentFlowControlledNodeIds(fullGraph)
+    if (targets.some((id) => controlled.has(id)))
+      return toast('该节点由主 Agent 协调，请运行对应流程')
     const { graph, required } = workflowScope(fullGraph, targets)
+    if ([...required].some((id) => controlled.has(id)))
+      return toast('所选流程包含由主 Agent 协调的节点，请运行对应流程')
     for (const input of inputOptions?.inputs ?? []) {
       const target = graph.nodes.find((candidate) => candidate.id === input.nodeId)
       const acceptsImageSource = target?.type === 'image' && input.portId === 'out-image'
@@ -2707,11 +2814,17 @@ export async function runWorkflowForNodes(
     const runSubflow = (request: SubflowRequest): Promise<Record<string, ContractOutputs>> =>
       runSubflowForIterate(ctx, runSubflow, request)
 
+    let waiting: NodeExecutionResult | null = null
     for (const node of executableOrder) {
       await waitForResume(token)
       if (token.cancelled) break
       store.setCurrent(node.title || node.type, node.id)
       const result = await executeNodeOnce(ctx, node, runSubflow)
+      if (result.waiting) {
+        waiting = result
+        store.nodeDone()
+        break
+      }
       if (
         inputOptions &&
         result.status === 'skipped' &&
@@ -2727,6 +2840,7 @@ export async function runWorkflowForNodes(
     }
 
     if (
+      !waiting &&
       !token.cancelled &&
       (ctx.workflowInputs?.inputs?.length ?? 0) > (ctx.usedWorkflowInputs?.size ?? 0)
     ) {
@@ -2735,6 +2849,13 @@ export async function runWorkflowForNodes(
     const after = useEngineStore.getState()
     after.endRun()
     clearRunControls()
+    if (waiting) {
+      const reason = waiting.reason ?? '节点流等待人工输入'
+      toast(reason)
+      emitWorkflowEvent('workflow.waiting', reason, ctx)
+      markUndoPoint(editor, 'workflow-run-subgraph-waiting')
+      return 'waiting'
+    }
     if (token.cancelled) {
       toast('子图运行已停止')
       emitWorkflowEvent('workflow.cancelled', '子图运行已停止', ctx, { status: 'cancelled' })

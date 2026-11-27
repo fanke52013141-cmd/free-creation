@@ -13,6 +13,7 @@ import { portPairCompatible } from '../src/renderer/src/canvas/graph'
 function characterDesign(patch: Partial<CompositeManifest> = {}): CompositeManifest {
   return {
     schemaVersion: 1,
+    runtimeVersion: 2,
     capabilityId: 'character-design',
     version: '1.0',
     name: '人物设计',
@@ -289,5 +290,59 @@ describe('组合能力 manifest（P1 契约）', () => {
       getCapability: (id) => (id === 'a' ? a : id === 'b' ? b : null)
     })
     expect(result.issues.map((issue) => issue.code)).toContain('DEPENDENCY_CYCLE')
+  })
+
+  it('新发布强制 runtimeVersion=2，历史读取仍兼容缺省版本', () => {
+    expect(validateCompositePublication(characterDesign({ runtimeVersion: 1 })).issues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'RUNTIME_VERSION_NOT_2' })])
+    )
+    expect(validateCompositePublication(characterDesign({ runtimeVersion: undefined })).issues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'RUNTIME_VERSION_NOT_2' })])
+    )
+    expect(validateCompositeManifest(characterDesign({ runtimeVersion: 1 })).issues).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'RUNTIME_VERSION_NOT_2' })])
+    )
+  })
+
+  it('嵌套 composite 固定引用与 capability dependency 必须双向一致', () => {
+    const nested = characterDesign({ runtimeVersion: 2, capabilityId: 'outer', version: '1.0' })
+    nested.inputs = [{
+      id: 'copy', label: '输入', type: 'text', required: true, cardinality: 'one',
+      targets: [{ nodeId: 'c1', portId: 'in-text' }]
+    }]
+    nested.outputs = [{
+      id: 'result', label: '输出', type: 'text', required: true, cardinality: 'one',
+      source: { nodeId: 'c1', portId: 'out-text' }
+    }]
+    nested.graph = {
+      nodes: [{
+        id: 'c1', nodeType: 'composite', contractVersion: 1, title: '子流',
+        dx: 0, dy: 0, w: 340, h: 260,
+        config: JSON.stringify({ ref: { capabilityId: 'inner', version: '1.0' } }),
+        ports: [
+          { id: 'in-text', name: '输入', dir: 'in', type: 'text', required: true, cardinality: 'one' },
+          { id: 'out-text', name: '输出', dir: 'out', type: 'text', required: true, cardinality: 'one' }
+        ]
+      }],
+      edges: []
+    }
+    nested.dependencies = [{ kind: 'node', id: 'composite', contractVersion: 1 }]
+
+    expect(validateCompositePublication(nested).issues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'DEPENDENCY_MISSING' })])
+    )
+
+    nested.dependencies.push({ kind: 'capability', id: 'inner', version: '1.0' })
+    expect(validateCompositePublication(nested).issues).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'DEPENDENCY_MISSING' }),
+        expect.objectContaining({ code: 'DEPENDENCY_MISMATCH' })
+      ])
+    )
+
+    nested.dependencies.push({ kind: 'capability', id: 'unused', version: '1.0' })
+    expect(validateCompositePublication(nested).issues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'DEPENDENCY_MISMATCH' })])
+    )
   })
 })

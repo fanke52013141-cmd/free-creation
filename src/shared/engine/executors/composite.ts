@@ -1,6 +1,7 @@
 import type { NodeExecutor, NodeExecutionContext } from '../executor-types'
 import { appendMediaResult, serializeMediaResultCollection } from '../values'
 import type { NodeValue } from '../values'
+import { serializeCompositeInputValues } from '../composite-run-contract'
 
 /**
  * composite 节点的公共执行器：不直接读画布，只把固定版本 manifest 与本次输入交给宿主注入的
@@ -68,6 +69,7 @@ export const compositeExecutor: NodeExecutor = async (
   const outcome = await ctx.runComposite({
     manifest,
     inputs: ctx.inputs,
+    inputValues: serializeCompositeInputValues(ctx.inputs),
     runId: ctx.runId,
     instanceNodeId: String(ctx.node.id),
     signal: ctx.signal,
@@ -75,6 +77,7 @@ export const compositeExecutor: NodeExecutor = async (
     ...(ctx.compositeRunContext?.headless ? { headless: true } : {})
   })
   if (outcome.status === 'failed') {
+    ctx.updateMeta?.({ compositeRunId: outcome.runId })
     const phase =
       outcome.failure?.phase === 'input'
         ? 'input'
@@ -92,11 +95,13 @@ export const compositeExecutor: NodeExecutor = async (
   }
 
   if (outcome.status === 'waiting') {
+    ctx.updateMeta?.({ compositeRunId: outcome.runId })
     // AF-07：节点流内部停在人工等待不是失败，也不是完成——运行记录保持 waiting-input，
     // 由外部 humanTask 提交 + composite.run.resume 续跑；节点执行按暂停（skipped）记账。
     // 若落到输出投影，会把「等人」误报成「输出契约校验失败」。
     return {
       status: 'skipped',
+      waiting: true,
       reason:
         outcome.reason ?? `节点流等待人工任务「${outcome.waitingStepKey ?? ''}」提交后续跑`
     }
@@ -141,6 +146,7 @@ export const compositeExecutor: NodeExecutor = async (
 
   // 本次运行没有公开输出时必须清空旧 nodeExtra，避免把上一轮结果冒充本轮结果。
   ctx.updateMeta?.({
+    compositeRunId: outcome.runId,
     nodeExtra: Object.keys(extraOutputs).length > 0 ? JSON.stringify(extraOutputs) : undefined
   })
 

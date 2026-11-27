@@ -1,0 +1,174 @@
+{
+  "ok": true,
+  "mode": "real Electron Host/Store + CLI/MCP + GUI confirmation; deterministic model fixture; no supplier calls",
+  "licenseMode": "dev-bypass-not-authorization-acceptance",
+  "rendererMode": "vite.browser.config.ts source renderer + real built main/preload",
+  "checks": [
+    "共享 e2e-transport 启动真实桌面、CLI 与 MCP",
+    "processor operation=field + field 在 CLI/MCP 均通过 flowGraph.validate",
+    "processor 图生成持久化预览",
+    "cli flowGraph.confirm 经 GUI 允许后持久化为 committed",
+    "落画布后的 processor 配置为真实 operation=pick + path=profile.title",
+    "project.json 中的 processor 配置与 MCP node.get 一致",
+    "processor 流程先等待确定性 human-task JSON 输入",
+    "真实协调器完成且 processor 从 JSON 提取 profile.title=雨巷",
+    "MCP output.get 读取到 processor out-value 正式提取值",
+    "processor 持久化运行事实为 success 且声明 out-value",
+    "Host/Store 运行总览同时记录协调器与 processor 子任务 completed",
+    "video featureKey + seed 公开图通过真实目录校验",
+    "MCP 持久化 video 建图预览",
+    "mcp flowGraph.confirm 经 GUI 允许后持久化为 committed",
+    "video 落画布配置保留自定义 featureKey 与 seed=17",
+    "SQLite verified 行是明确标记的测试 setup，不是供应商业务回执",
+    "生产 model.binding.save 接受已 setup 的自定义 video 绑定",
+    "生产 model.binding.resolve 返回自定义 video fixture 目标",
+    "video 流程先等待固定文本输入",
+    "不支持 seed 的 video 流程以错误/blocked 终态结束，而非伪造完成",
+    "video 持久化 nodeRun 记录不支持种子参数且状态为 skipped",
+    "不支持 seed 时本地 HTTP server 收到 videoSubmit=0",
+    "seed 拒绝后没有伪造 out-video 正式输出"
+  ],
+  "outputs": {
+    "renderer": {
+      "requestedUrl": "http://127.0.0.1:10716",
+      "actualUrl": "http://127.0.0.1:10716/"
+    },
+    "lastPageError": "TypeError: Failed to fetch",
+    "processor": {
+      "nodeId": "shape:field-pick",
+      "operation": "pick",
+      "path": "profile.title",
+      "output": "雨巷",
+      "runStatus": "success",
+      "coordinatorState": "completed"
+    },
+    "video": {
+      "pageUrl": "http://127.0.0.1:10716/",
+      "binding": {
+        "featureKey": "acceptance.video.custom",
+        "connectionId": "fixture-video",
+        "modelDefinitionId": "fixture-video-definition",
+        "operation": "video.generate",
+        "enabled": true
+      },
+      "bindingResolution": {
+        "featureKey": "acceptance.video.custom",
+        "providerId": "fixture-video",
+        "modelId": "fixture-video-unsupported-seed",
+        "operation": "video.generate",
+        "modelKey": "fixture-video::fixture-video-unsupported-seed",
+        "resolvedFrom": "feature-binding"
+      },
+      "validationFixture": {
+        "status": "verified",
+        "message": "TEST SETUP ONLY: no supplier validation was performed"
+      },
+      "rejectionEnvelope": {
+        "apiVersion": 1,
+        "requestId": "228508a7-eaf6-472e-9211-c8f0ffd3b477",
+        "operationId": "flowAgent.run",
+        "traceId": "trace-8134e81c-f61b-470a-aba5-4e64cdbcbb23",
+        "status": "failed",
+        "idempotencyKey": "1795749023568:d38c8049-c1dc-424b-8854-156946ffdfc0",
+        "error": {
+          "code": "FLOW_STALLED",
+          "phase": "desktop-handshake",
+          "retryable": false,
+          "detail": "graph-route"
+        }
+      },
+      "videoSubmitCount": 0,
+      "actualNodeRun": {
+        "runId": "522a7c9d-a6e6-4e48-93fc-872265b04164",
+        "commandId": "graph:6cb60ea0208205a3a2e6326b7ffa7787c18e2f69850604c2c6c92aba94409956",
+        "commandLeaseId": "3c5a345b-9e76-40eb-9629-ccf0acb84090",
+        "fixedInputs": [
+          {
+            "targetPortId": "in-text",
+            "assets": [
+              {
+                "assetId": "13045c12-b352-4a4d-8d64-c59b81780703",
+                "versionId": "5d5d1951-28a5-4335-8b53-75d70b93e167",
+                "sourceNodeId": "shape:video-source",
+                "sourcePortId": "out-text"
+              }
+            ]
+          }
+        ],
+        "status": "skipped",
+        "startedAt": 1795749029234,
+        "inputs": {
+          "in-text": [
+            {
+              "nodeId": "shape:video-source",
+              "portId": "out-text",
+              "assetId": "13045c12-b352-4a4d-8d64-c59b81780703",
+              "versionId": "5d5d1951-28a5-4335-8b53-75d70b93e167"
+            }
+          ]
+        },
+        "trace": [
+          {
+            "at": 1795749029241,
+            "phase": "input",
+            "level": "info",
+            "message": "开始收集并校验输入端口"
+          },
+          {
+            "at": 1795749029280,
+            "phase": "input",
+            "level": "info",
+            "message": "已收集 1 个输入端口"
+          },
+          {
+            "at": 1795749029356,
+            "phase": "execution",
+            "level": "info",
+            "message": "开始调用节点执行器"
+          },
+          {
+            "at": 1795749029393,
+            "phase": "execution",
+            "level": "info",
+            "message": "当前模型不支持种子参数"
+          }
+        ],
+        "traceId": "trace-8134e81c-f61b-470a-aba5-4e64cdbcbb23",
+        "nodeExecutionId": "nexec-13dff014-14e5-4e84-8eac-41e9db4817ea",
+        "inputValues": {
+          "in-text": [
+            {
+              "kind": "text",
+              "text": "固定镜头文本"
+            }
+          ]
+        },
+        "inputFingerprint": "v1:2e39eaed2dfbab41",
+        "estimateFeatures": {
+          "textUnits": 19,
+          "targetDurationSec": 5,
+          "mode": "text"
+        },
+        "estimateProviderKey": "default",
+        "estimateModelKey": "video",
+        "finishedAt": 1795749029396,
+        "durationMs": 162,
+        "error": {
+          "phase": "execution",
+          "reason": "当前模型不支持种子参数"
+        }
+      },
+      "featureKey": "acceptance.video.custom",
+      "seed": 17,
+      "runStatus": "skipped",
+      "reason": "当前模型不支持种子参数",
+      "formalOutputCount": 0
+    }
+  },
+  "boundaries": [
+    "featureKey 由生产 model.binding.resolve + executor 进入 seed 预检共同证明；未单独执行 image-gen featureKey",
+    "video seed 本用例验证不支持能力的提交前拒绝；支持能力的 gateway 路径由 capability-params 单元效果测试覆盖",
+    "未调用真实供应商，未验证供应商受理或媒体质量",
+    "CANVAS_LICENSE_DEV_BYPASS 仅用于未打包开发构建；不复制本机 license/security，不构成授权验收"
+  ]
+}

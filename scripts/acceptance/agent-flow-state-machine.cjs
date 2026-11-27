@@ -113,10 +113,22 @@ const ok = (res, label) => {
     }), 'SUBMIT_1')
     if (sub1.pending !== true || sub1.revision !== 1) throw new Error(`SUBMIT1_WRONG:${JSON.stringify(sub1)}`)
     const runNode = async () => {
-      const g = ok(await cli(dir, ['graph', 'get'], { projectId }), 'GRAPH_RUN')
-      const exec = ok(await cli(dir, ['node', 'execute'], {
-        projectId, expectedGraphVersion: g.graphVersion, nodeIds: [sm], mode: 'single'
-      }), 'EXEC')
+      let exec = null
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const g = ok(await cli(dir, ['graph', 'get'], { projectId }), 'GRAPH_RUN')
+        const result = await cli(dir, ['node', 'execute'], {
+          projectId, expectedGraphVersion: g.graphVersion, nodeIds: [sm], mode: 'single'
+        })
+        if (result.code === 0 && result.response && !result.response.error) {
+          exec = result.response.data
+          break
+        }
+        if (result.response?.error?.code !== 'REVISION_CONFLICT') {
+          throw new Error(`EXEC:${JSON.stringify(result.response || result).slice(0, 600)}`)
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250))
+      }
+      ok({ code: 0, response: { data: exec } }, 'EXEC')
       const waited = ok(await cli(dir, ['run', 'wait'], { projectId, taskId: exec.taskId, timeoutMs: 30000 }), 'WAIT')
       if (waited.state !== 'completed') throw new Error(`RUN_NOT_COMPLETED:${JSON.stringify(waited)}`)
     }

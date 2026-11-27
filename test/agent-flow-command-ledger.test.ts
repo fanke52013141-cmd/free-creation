@@ -1337,6 +1337,25 @@ describe('production durable command ledger', () => {
     expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_commands').get()).toEqual({ n: 1 })
     expect(f.assets.list('project-a', f.target.id, 'out-value')).toHaveLength(1)
   })
+  it('rejects supplied assets when the routed edge list is empty', () => {
+    const f = fixture()
+    expect(() => f.ledger.prepare({ ...f.command(), routedInputEdgeIds: [] })).toThrow(
+      'FLOW_INPUT_MANIFEST_INCOMPLETE'
+    )
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_commands').get()).toEqual({ n: 0 })
+  })
+  it('rejects an empty routed edge list when a required input is missing', () =>
+    withMediaInputFixture(
+      'image',
+      'image-edit',
+      JSON.stringify({ version: 1, modelKey: 'test-model', instruction: 'edit this fixed image' }),
+      (f, commandForRun) => {
+        expect(() => f.ledger.prepare({ ...commandForRun(), routedInputEdgeIds: [] })).toThrow(
+          'FLOW_INPUT_MANIFEST_INCOMPLETE'
+        )
+        expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_commands').get()).toEqual({ n: 0 })
+      }
+    ))
   it.each(['model', 'tool-permission', 'scope', 'target-config', 'data-edge', 'source-body'])(
     'HUM-08 refuses an old confirmation after %s changes without consuming more task budget',
     async (variant) => {

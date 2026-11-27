@@ -464,6 +464,70 @@ describe('P2 · 串行组合（多节点依赖链）', () => {
     expect(finishCall(ledger.calls)?.failureNodeId).toBe('n2')
     expect(finishCall(ledger.calls)?.failurePhase).toBe('step')
   })
+
+  it('内部节点 skipped 后，下游必填输入按 skipped 传播而不是 not-run', async () => {
+    const ledger = installLedger()
+    const manifest: CompositeManifest = {
+      schemaVersion: 1,
+      runtimeVersion: 2,
+      capabilityId: 'e2e-skip-propagation',
+      version: '1.0',
+      name: '跳过传播',
+      inputs: [],
+      outputs: [
+        {
+          id: 'result',
+          label: '结果',
+          type: 'text',
+          required: true,
+          cardinality: 'one',
+          source: { nodeId: 'n2', portId: 'out-item' }
+        }
+      ],
+      graph: {
+        nodes: [
+          {
+            id: 'n1',
+            nodeType: 'processor',
+            contractVersion: 1,
+            title: '数据处理',
+            dx: 0,
+            dy: 0,
+            w: 340,
+            h: 260,
+            config: JSON.stringify({ operation: 'pass' })
+          },
+          {
+            id: 'n2',
+            nodeType: 'iterate',
+            contractVersion: 2,
+            title: '循环',
+            dx: 0,
+            dy: 0,
+            w: 340,
+            h: 260
+          }
+        ],
+        edges: [
+          { from: { nodeId: 'n1', portId: 'out-value' }, to: { nodeId: 'n2', portId: 'in-list' } }
+        ]
+      },
+      dependencies: [
+        { kind: 'node', id: 'processor', contractVersion: 1 },
+        { kind: 'node', id: 'iterate', contractVersion: 2 }
+      ],
+      executionPolicy: { maxConcurrency: 1 }
+    }
+    const outcome = await runFlow(manifest, new Map(), ledger)
+    ledger.restore()
+    expect(outcome.status).toBe('failed')
+    const downstream = ledger.calls.find(
+      (call) => call.op === 'runStep' && call.payload.stepKey === 'n2' && call.payload.status === 'skipped'
+    )
+    expect(downstream, JSON.stringify(ledger.calls)).toBeDefined()
+    expect(downstream?.payload.reason).toContain('上游已跳过')
+    expect(downstream?.payload.reason).not.toContain('尚未运行')
+  })
 })
 
 // ---------------------------------------------------------------- P3 并行流

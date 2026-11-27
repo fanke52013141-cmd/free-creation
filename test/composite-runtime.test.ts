@@ -7,6 +7,7 @@ import {
   planCompositeInputBindings
 } from '../src/shared/composite/runtime'
 import { projectCompositeOutputs } from '../src/shared/composite/outputs'
+import { serializeCompositeInputValues } from '../src/shared/engine/composite-run-contract'
 import { compositeRuntimeVersion } from '../src/shared/composite/manifest'
 import { textExecutor } from '../src/shared/engine/executors/text'
 import { TEXT_MERGE_SEPARATOR } from '../src/shared/engine/helpers'
@@ -159,6 +160,50 @@ describe('节点流 W1 运行时（文本闭环）', () => {
       phase: 'input',
       publicPortId: 'copy'
     })
+  })
+
+  it('输入序列化保留单值并展开多值端口，供人工等待续跑恢复', () => {
+    const single = new Map([packet({ kind: 'text', text: '单值' })])
+    expect(serializeCompositeInputValues(single)).toEqual({
+      'in-copy': { kind: 'text', text: '单值' }
+    })
+    const many = new Map([
+      [
+        'in-copy',
+        [
+          { type: 'text', value: { kind: 'text', text: '甲' }, source: { nodeId: 'a', portId: 'out-text', runId: 'r' }, createdAt: 1 },
+          { type: 'text', value: { kind: 'text', text: '乙' }, source: { nodeId: 'b', portId: 'out-text', runId: 'r' }, createdAt: 2 }
+        ] as NodeValuePacket[]
+      ]
+    ])
+    expect(serializeCompositeInputValues(many)).toEqual({
+      'in-copy': [{ kind: 'text', text: '甲' }, { kind: 'text', text: '乙' }]
+    })
+  })
+
+  it('required 输入的 defaultValue 会真实注入内部目标，而不是只免检', () => {
+    const manifest = copyManifest({
+      inputs: [{ ...copyManifest().inputs[0], defaultValue: '默认文案' }]
+    })
+    const plan = planCompositeInputBindings(manifest, new Map())
+    expect(plan.issues).toEqual([])
+    expect(plan.bindings).toHaveLength(1)
+    expect(plan.bindings[0]).toMatchObject({
+      inputId: 'copy',
+      target: { nodeId: 'n1', portId: 'in-text' },
+      value: { kind: 'text', text: '默认文案' },
+      order: 0
+    })
+  })
+
+  it('未知公开输入端口在执行前失败，不被静默忽略', () => {
+    const plan = planCompositeInputBindings(
+      copyManifest(),
+      new Map([packet({ kind: 'text', text: '误传' }, 'in-not-declared')])
+    )
+    expect(plan.issues).toContainEqual(
+      expect.objectContaining({ code: 'INPUT_PORT_UNKNOWN', publicPortId: 'not-declared' })
+    )
   })
 
   it('文本节点仍按普通合并规则合并上游文本，结果只落运行记录、不改写用户正文', () => {

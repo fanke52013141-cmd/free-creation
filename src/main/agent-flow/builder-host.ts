@@ -188,6 +188,31 @@ export class FlowBuilderHost {
       )
     )
   }
+  private hasExtraControlledInboundEdges(
+    preview: {
+      nodes: ReadonlyArray<{ id: string }>
+      edges: ReadonlyArray<{ from: { nodeId: string; portId: string }; to: { nodeId: string; portId: string } }>
+    },
+    file: ProjectFile
+  ): boolean {
+    const expected = new Set(preview.edges.map((edge) =>
+      canonicalFlowJson({ from: edge.from, to: edge.to })
+    ))
+    const controlledTargets = new Set(preview.nodes.map((node) => node.id))
+    return file.edges.some((edge) =>
+      controlledTargets.has(edge.to.nodeId) &&
+      !expected.has(canonicalFlowJson({ from: edge.from, to: edge.to }))
+    )
+  }
+
+  private graphCommitState(
+    preview: FlowGraphPreview,
+    file: ProjectFile
+  ): 'incomplete' | 'diverged' | 'committed' {
+    if (!this.committed(preview, file)) return 'incomplete'
+    return this.hasExtraControlledInboundEdges(preview, file) ? 'diverged' : 'committed'
+  }
+
   // ── P5：外部 FlowGraph 建图预览（source='graph'，复用 flow_builds/committed/CAS）──────
   // 与 builder 的本质区别：接收外部已生成的 FlowGraph，无 builder 节点、不调模型，
   // 纯校验+编译+持久化预览（不写画布）。锚点 nodeId=编译 coordinator id（D2）。
@@ -286,10 +311,15 @@ export class FlowBuilderHost {
   async previewGraph(input: { projectId: string; buildId?: string }): Promise<FlowGraphPreview | null> {
     const file = this.activeFile(input.projectId)
     const preview = this.readGraph(input.projectId, input.buildId)
-    if (preview?.state === 'preview' && this.committed(preview, file)) {
-      preview.state = 'committed'
-      preview.committedScopeHash ??= graphCanvasScopeHash(file, preview)
-      this.saveGraph(preview)
+    if (preview?.state === 'preview') {
+      const commitState = this.graphCommitState(preview, file)
+      if (commitState === 'diverged')
+        throw new AgentRuntimeError('FLOW_CANVAS_DIVERGED', 'builder')
+      if (commitState === 'committed') {
+        preview.state = 'committed'
+        preview.committedScopeHash ??= graphCanvasScopeHash(file, preview)
+        this.saveGraph(preview)
+      }
     }
     return preview
   }
@@ -297,7 +327,10 @@ export class FlowBuilderHost {
     const file = this.activeFile(input.projectId)
     const preview = this.readGraph(input.projectId, input.buildId)
     if (!preview) throw new AgentRuntimeError('FLOW_BUILD_MISSING', 'builder')
-    if (this.committed(preview, file)) {
+    const commitState = this.graphCommitState(preview, file)
+    if (commitState === 'diverged')
+      throw new AgentRuntimeError('FLOW_CANVAS_DIVERGED', 'builder')
+    if (commitState === 'committed') {
       preview.state = 'committed'
       preview.committedScopeHash ??= graphCanvasScopeHash(file, preview)
       this.saveGraph(preview)
@@ -313,7 +346,10 @@ export class FlowBuilderHost {
     const file = this.activeFile(input.projectId)
     const preview = this.readGraph(input.projectId, input.buildId)
     if (!preview) throw new AgentRuntimeError('FLOW_BUILD_MISSING', 'builder')
-    if (this.committed(preview, file)) {
+    const commitState = this.graphCommitState(preview, file)
+    if (commitState === 'diverged')
+      throw new AgentRuntimeError('FLOW_CANVAS_DIVERGED', 'builder')
+    if (commitState === 'committed') {
       preview.state = 'committed'
       preview.committedScopeHash ??= graphCanvasScopeHash(file, preview)
       this.saveGraph(preview)
@@ -334,6 +370,8 @@ export class FlowBuilderHost {
     const preview = this.readGraph(input.projectId, input.buildId)
     if (preview?.state !== 'committed' || !preview.committedScopeHash)
       throw new AgentRuntimeError('FLOW_BUILD_MISSING', 'definition')
+    if (this.hasExtraControlledInboundEdges(preview, file))
+      throw new AgentRuntimeError('FLOW_CANVAS_DIVERGED', 'definition')
     const ids = preview.nodes.map((node) => node.id)
     const occupied = this.db.prepare(
       `SELECT 1 FROM flow_coordination_scope WHERE project_id=? AND node_id IN (${ids.map(() => '?').join(',')})`
@@ -401,7 +439,10 @@ export class FlowBuilderHost {
       catalog: buildCapabilityCatalog(listAllCompositeVersions())
     })
     if (!compiled.runnable) throw new FlowGraphCompileError(compiled.runtimeErrors)
-    if (!this.committed(preview, file))
+    const commitState = this.graphCommitState(preview, file)
+    if (commitState === 'diverged')
+      throw new AgentRuntimeError('FLOW_CANVAS_DIVERGED', 'builder')
+    if (commitState !== 'committed')
       throw new AgentRuntimeError('FLOW_BUILD_UNCONFIRMED', 'builder')
     preview.state = 'committed'
     preview.committedScopeHash = graphCanvasScopeHash(file, preview)

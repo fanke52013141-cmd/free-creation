@@ -616,6 +616,15 @@ export class FlowAgentDesktopHost {
       agentThread({ projectId: input.projectId, agentNodeId: input.nodeId, taskId })
     )
   }
+  /** 显式协作提交即人工事实；不必等待子 Agent 运行时先消费并写 response。 */
+  hasHumanSubmission(input: Identity, taskId: string, waitRevision: number): boolean {
+    const record = this.latest(input)
+    if (!record || record.snapshot.taskId !== taskId || record.waitRevision !== waitRevision)
+      return false
+    return new FlowCollaborationStore(this.db)
+      .read(agentThread(record.snapshot))
+      .some((event) => event.action === 'submit' && event.accepted === true && event.waitRevision === waitRevision)
+  }
   deliveryHandoff(projectId: string, agentNodeId: string, taskId: string): string | undefined {
     const thread = agentThread({ projectId, agentNodeId, taskId })
     const submissions = new FlowCollaborationStore(this.db).read(thread)

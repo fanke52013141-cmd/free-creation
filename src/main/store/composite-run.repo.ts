@@ -394,6 +394,14 @@ export function listCompositeRuns(projectId: string, limit = 20): CompositeRunRe
   return rows.map(rowToRun)
 }
 
+/** 删除能力前保护历史运行：运行记录仍需要固定版本 manifest 来投影输出。 */
+export function countCompositeRunsForCapability(capabilityId: string): number {
+  const row = getDb()
+    .prepare('SELECT COUNT(*) AS n FROM composite_runs WHERE capability_id = ?')
+    .get(capabilityId) as { n: number }
+  return row.n
+}
+
 /** 领取同一次运行的续跑权，避免重启时把实际执行中的续跑留在人工等待态。 */
 export function beginCompositeResume(input: Pick<
   Parameters<typeof createCompositeRun>[0],

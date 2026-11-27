@@ -1,4 +1,4 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 // 节点流测试矩阵 · A 单节点冒烟 + B 基础拓扑 + C 失败/跳过语义（2026-11-17 全面测试）。
 // A：33 个活跃节点逐一构造最小可运行输入，验证引擎→执行器→输出投影整链；
 //    模型节点走桩网关（管线正确性），本地媒体走桩信封（真实 ffmpeg 由既有 real-media 测试覆盖）。
@@ -6,6 +6,7 @@
 // C：上游失败/跳过对下游的语义（显式失败、不静默复用旧输出、分支隔离、重跑取新值）。
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { runNodeManually, runWorkflow, runWorkflowForNodes } from '@renderer/engine/executor'
+import type { CompositeManifest } from '@shared/composite/manifest'
 import { currentTextResult } from '@shared/engine/deterministic-projections'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 import {
@@ -195,6 +196,70 @@ describe('A · 单节点冒烟 · 纯逻辑', () => {
     await runWorkflow(editor, 'p-a13', [])
     const state = runStateOf(node('n1'))
     expect(state.run).toBe('skipped')
+  })
+
+  it('A13b composite 人工等待：整画布返回 waiting，下游不得伪执行', async () => {
+    const manifest: CompositeManifest = {
+      schemaVersion: 1,
+      runtimeVersion: 2,
+      capabilityId: 'waiting-flow',
+      version: '1.0',
+      name: '等待流',
+      inputs: [],
+      outputs: [
+        {
+          id: 'result',
+          label: '结果',
+          type: 'text',
+          required: true,
+          cardinality: 'one',
+          source: { nodeId: 'h1', portId: 'out-text' }
+        }
+      ],
+      graph: {
+        nodes: [
+          {
+            id: 'h1',
+            nodeType: 'human-task',
+            contractVersion: 1,
+            title: '人工',
+            dx: 0,
+            dy: 0,
+            w: 340,
+            h: 260,
+            config: JSON.stringify({ schemaVersion: 1, outputType: 'text' })
+          }
+        ],
+        edges: []
+      },
+      dependencies: [{ kind: 'node', id: 'human-task', contractVersion: 1 }],
+      executionPolicy: { requiresManualGate: true }
+    }
+    const restore = installWindowApi({
+      composite: {
+        runStart: async () => ({ ok: true, data: true }),
+        runStep: async () => ({ ok: true, data: true }),
+        runStepOutput: async () => ({ ok: true, data: true }),
+        runWait: async () => ({ ok: true, data: true }),
+        runFinish: async () => ({ ok: true, data: true }),
+        versionGet: async () => ({ ok: false, error: { code: 'NOT_FOUND', message: 'unused' } })
+      }
+    })
+    try {
+      const { editor, node } = buildFlowEditor(
+        [
+          { id: 'c1', nodeType: 'composite', title: '等待流', config: { manifest } },
+          { id: 't1', nodeType: 'text', title: '下游', text: '不应运行' }
+        ],
+        [{ from: 'c1', to: 't1', fromPort: 'out-result', toPort: 'in-text' }]
+      )
+      const result = await runWorkflow(editor, 'p-a13b', [])
+      expect(result).toBe('waiting')
+      expect(runStateOf(node('t1')).exec).toBe('idle')
+      expect(runStateOf(node('t1')).run).toBeUndefined()
+    } finally {
+      restore()
+    }
   })
 
   it('A14 director 未发布 → skipped 且原因指向发布动作', async () => {
@@ -700,6 +765,93 @@ describe('A · 单节点冒烟 · 特殊宿主（stub 网关）', () => {
       } finally {
         restore2()
       }
+    } finally {
+      restore()
+    }
+  })
+
+  it('A27c graph coordinator 独占受控子节点，整画布不再重复执行', async () => {
+    const calls: string[] = []
+    const restore = installWindowApi({
+      runFlowAgent: async ({ nodeId }: { nodeId: string }) => {
+        calls.push(nodeId)
+        return {
+          ok: true,
+          data: { task: { taskId: `task-${nodeId}`, state: 'completed' }, outputs: {}, refs: [] }
+        }
+      },
+      stopFlowAgent: async () => ({ ok: true })
+    })
+    try {
+      const childConfig = {
+        schemaVersion: 1,
+        role: 'specialist',
+        interactionMode: 'autonomous',
+        modelDefinitionId: 'model-stub-1',
+        skills: [],
+        tools: [{ id: 'node.execute', version: '1' }],
+        allowedNodeIds: [],
+        maxSteps: 4,
+        relations: []
+      }
+      const coordinatorConfig = {
+        schemaVersion: 1,
+        role: 'coordinator',
+        interactionMode: 'autonomous',
+        skills: [],
+        tools: [{ id: 'agent.dispatch', version: '1' }],
+        allowedNodeIds: ['child'],
+        maxSteps: 4,
+        executionMode: 'graph',
+        graph: {
+          schemaVersion: 1,
+          graphId: 'owned-graph',
+          name: 'owned graph',
+          goal: 'only the coordinator drives the child',
+          nodes: [{
+            nodeId: 'child', title: 'child', participation: 'autonomous', kind: 'agent',
+            goal: 'child goal', completion: 'child completion',
+            modelDefinitionId: 'model-stub-1',
+            tools: [{ id: 'node.execute', version: '1' }],
+            allowedNodeIds: []
+          }],
+          edges: [{
+            from: { nodeId: 'child', portId: 'out-text' },
+            to: { nodeId: 'child', portId: 'in-text' },
+            kind: 'data'
+          }],
+          entry: 'child',
+          exits: ['child']
+        },
+        relations: [{ relationId: 'obs', kind: 'observes', sourceNodeId: 'coordinator', targetNodeId: 'state' }]
+      }
+      const stateConfig = {
+        schemaVersion: 1,
+        initialState: 'idle',
+        states: ['idle', 'completed'],
+        transitions: [{ from: 'idle', event: 'flow.completed', to: 'completed' }],
+        relations: []
+      }
+      const { editor, node } = buildFlowEditor([
+        { id: 'coordinator', nodeType: 'agent', text: 'drive graph', config: coordinatorConfig },
+        { id: 'child', nodeType: 'agent', text: 'child', config: childConfig },
+        { id: 'state', nodeType: 'state-machine', config: stateConfig },
+        { id: 'free', nodeType: 'text', text: 'free node' }
+      ], [
+        { from: 'child', to: 'child', fromPort: 'out-text', toPort: 'in-text' }
+      ])
+
+      await runWorkflow(editor, 'p-a27c', [])
+      expect(calls).toEqual(['coordinator'])
+      expect(runStateOf(node('free')).run).toBe('success')
+      expect(runStateOf(node('child')).run).not.toBe('success')
+      expect(runStateOf(node('state')).run).not.toBe('success')
+
+      const manual = await runNodeManually(editor, 'p-a27c', [], node('child')!.id)
+      expect(manual.status).toBe('skipped')
+      expect(manual.reason).toContain('主 Agent')
+      await runWorkflowForNodes(editor, 'p-a27c', [], [node('child')!.id])
+      expect(calls).toEqual(['coordinator'])
     } finally {
       restore()
     }

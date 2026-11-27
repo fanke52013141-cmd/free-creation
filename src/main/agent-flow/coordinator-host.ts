@@ -321,47 +321,62 @@ export class FlowCoordinatorHost {
     const wasActive = this.active.has(run.taskId)
     run.state = 'cancelled'
     run.code = 'AGENT_CANCELLED'
-    this.store.save(run)
-    this.active.get(run.taskId)?.abort()
-    for (const review of run.reviews ?? []) this.cancelReview?.(run.projectId, review.nodeId)
+    let failure: unknown
+    const attempt = (action: () => void): void => {
+      try {
+        action()
+      } catch (error) {
+        failure ??= error
+      }
+    }
+    attempt(() => this.store.save(run))
+    attempt(() => this.active.get(run.taskId)?.abort())
+    for (const review of run.reviews ?? [])
+      attempt(() => this.cancelReview?.(run.projectId, review.nodeId))
     for (const child of run.children.filter(
       (c) => !['completed', 'cancelled', 'failed'].includes(c.state)
     )) {
-      const kind = run.config.graph?.nodes.find((node) => node.nodeId === child.nodeId)?.kind
-      if (kind === 'capability') {
-        stopAgentVideos(this.db, run.projectId, child.taskId)
-        child.state = 'cancelled'
-        continue
-      }
-      if (kind === 'human-task') {
-        child.state = 'cancelled'
-        continue
-      }
-      const saved = this.specialists.inspect({ projectId: run.projectId, nodeId: child.nodeId })
-      if (saved?.taskId === child.taskId && saved.state === 'completed') {
-        const assignment = this.specialists.assignment(
-          { projectId: run.projectId, nodeId: child.nodeId },
-          run.taskId
-        )
-        child.state = 'completed'
-        child.outputs = assignment?.outputRefs ?? []
-      } else {
-        this.specialists.stop({ projectId: run.projectId, nodeId: child.nodeId })
-        child.state = 'cancelled'
-      }
+      attempt(() => {
+        const kind = run.config.graph?.nodes.find((node) => node.nodeId === child.nodeId)?.kind
+        if (kind === 'capability') {
+          stopAgentVideos(this.db, run.projectId, child.taskId)
+          child.state = 'cancelled'
+          return
+        }
+        if (kind === 'human-task') {
+          child.state = 'cancelled'
+          return
+        }
+        const saved = this.specialists.inspect({ projectId: run.projectId, nodeId: child.nodeId })
+        if (saved?.taskId === child.taskId && saved.state === 'completed') {
+          const assignment = this.specialists.assignment(
+            { projectId: run.projectId, nodeId: child.nodeId },
+            run.taskId
+          )
+          child.state = 'completed'
+          child.outputs = assignment?.outputRefs ?? []
+        } else {
+          this.specialists.stop({ projectId: run.projectId, nodeId: child.nodeId })
+          child.state = 'cancelled'
+        }
+      })
+      if (!['completed', 'cancelled', 'failed'].includes(child.state)) child.state = 'cancelled'
     }
-    this.store.save(run)
-    if (run.stateConfig.transitions.some((edge) => edge.from === run.phase && edge.event === 'flow.stopped')) {
-      this.emitTrustedEvent(run, `${run.taskId}:stopped`, 'flow.stopped', run.revision)
-    }
-    this.store.release(run)
-    this.emitCoordinationTerminal(run, 'cancelled', {
+    attempt(() => this.store.save(run))
+    attempt(() => {
+      if (run.stateConfig.transitions.some((edge) => edge.from === run.phase && edge.event === 'flow.stopped')) {
+        this.emitTrustedEvent(run, `${run.taskId}:stopped`, 'flow.stopped', run.revision)
+      }
+    })
+    attempt(() => this.store.release(run))
+    attempt(() => this.emitCoordinationTerminal(run, 'cancelled', {
       projectId: run.projectId,
       nodeId: run.nodeId,
       taskId: run.taskId,
       traceId: run.traceId,
       spanId: run.spanId
-    }, { code: 'AGENT_CANCELLED' }, wasActive)
+    }, { code: 'AGENT_CANCELLED' }, wasActive))
+    if (failure) throw failure
     return this.view(run)
   }
   private bind(input: FlowAgentRun): CoordinationRun {
@@ -616,6 +631,20 @@ export class FlowCoordinatorHost {
         .compile()
       await graph.invoke({}, { recursionLimit: 130 })
       const current = this.store.latest(fixed.projectId, fixed.nodeId)!
+      if (controller.signal.aborted && current.state !== 'cancelled') {
+        const code = controller.signal.reason instanceof AgentRuntimeError
+          ? controller.signal.reason.code
+          : 'AGENT_BUDGET_EXHAUSTED'
+        current.state = 'failed'
+        current.code = code
+        if (current.stateConfig.transitions.some((edge) => edge.from === current.phase && edge.event === 'flow.failed')) {
+          this.emitTrustedEvent(current, `${current.taskId}:failed:${current.revision}`, 'flow.failed', current.revision)
+        }
+        this.store.save(current)
+        this.store.release(current)
+        this.emitCoordinationTerminal(current, 'failed', context, { code })
+        return this.reply(current)
+      }
       if (terminal(current)) this.store.release(current)
       this.emitCoordinationTerminal(
         current,
@@ -627,12 +656,17 @@ export class FlowCoordinatorHost {
     } catch (error) {
       const current = this.store.latest(fixed.projectId, fixed.nodeId)!
       if (current.state !== 'cancelled') {
-        current.state = 'blocked'
-        current.code = error instanceof AgentRuntimeError ? error.code : 'FLOW_COORDINATION_FAILED'
+        const abortCode = controller.signal.aborted && controller.signal.reason instanceof AgentRuntimeError
+          ? controller.signal.reason.code
+          : undefined
+        const code = abortCode ?? (error instanceof AgentRuntimeError ? error.code : 'FLOW_COORDINATION_FAILED')
+        current.state = code === 'AGENT_BUDGET_EXHAUSTED' ? 'failed' : 'blocked'
+        current.code = code
         if (current.stateConfig.transitions.some((edge) => edge.from === current.phase && edge.event === 'flow.failed')) {
           this.emitTrustedEvent(current, `${current.taskId}:failed:${current.revision}`, 'flow.failed', current.revision)
         }
         this.store.save(current)
+        if (current.state === 'failed') this.store.release(current)
       }
       this.emitCoordinationTerminal(
         current,
@@ -688,8 +722,65 @@ export class FlowCoordinatorHost {
           this.store.save(run)
         }
         if (!state) throw new AgentRuntimeError('RESUME_CONFLICT', 'handoff')
-        if (state.state === 'ready' || state.state === 'waiting') {
-          pendingWait = true
+        if (state.state === 'ready') {
+          pending.state = 'ready'
+          this.store.save(run)
+          continue
+        }
+        if (state.state === 'waiting') {
+          if (!this.specialists.hasHumanSubmission(
+            { projectId: run.projectId, nodeId: pending.nodeId },
+            pending.taskId,
+            state.waitRevision
+          )) {
+            pendingWait = true
+            continue
+          }
+          const assignment = this.specialists.assignment(
+            { projectId: run.projectId, nodeId: pending.nodeId },
+            run.taskId
+          )
+          if (!assignment || assignment.snapshot.taskId !== pending.taskId)
+            throw new AgentRuntimeError('RESUME_CONFLICT', 'handoff')
+          const reply = await AsyncLocalStorageProviderSingleton.runWithConfig(
+            {},
+            () => this.specialists.runAssignment(
+              {
+                projectId: run.projectId,
+                traceId: run.traceId,
+                spanId: run.spanId,
+                nodeId: pending.nodeId,
+                action: 'continue',
+                humanConfirmed: 'gui' as const,
+                eventId: `${pending.taskId}:resume:${state.waitRevision}`,
+                requestId: pending.taskId,
+                expectedTaskId: pending.taskId,
+                expectedWaitRevision: state.waitRevision
+              },
+              {
+                goal: pending.goal,
+                completion: pending.completion,
+                inputs: pending.inputs,
+                ...(pending.contextManifest ? { contextManifest: pending.contextManifest } : {}),
+                ...(pending.executionEnvelope ? { executionEnvelope: pending.executionEnvelope } : {})
+              },
+              run.taskId,
+              assignment.snapshot
+            ),
+            true
+          )
+          pending.state = reply.task.state
+          pending.outputs = reply.refs
+          this.store.save(run)
+          if (pending.state === 'completed') {
+            await this.publishChild(run, pending.nodeId, reply, signal)
+            this.emitTrustedEvent(run, `${pending.taskId}:completed`, 'agent.completed', run.revision)
+            pendingProgress = true
+          } else if (pending.state === 'waiting') {
+            pendingWait = true
+          } else {
+            throw new AgentRuntimeError(reply.task.code ?? 'FLOW_CHILD_BLOCKED', 'handoff')
+          }
           continue
         }
         if (state.state !== 'completed')
@@ -910,7 +1001,8 @@ export class FlowCoordinatorHost {
     signal: AbortSignal,
     contextManifests?: Map<string, ContextManifest>,
     envelopes?: Map<string, ExecutionEnvelope>,
-    routedInputEdgeIds?: string[]
+    routedInputEdgeIds?: string[],
+    routedInputEdgeIdsByNode?: Map<string, string[]>
   ): Promise<boolean> {
     const file = this.check(run)
     const assignments = admitAssignments(run, decision, candidates)
@@ -926,10 +1018,14 @@ export class FlowCoordinatorHost {
     const roundOf = (nodeId: string): number | undefined => {
       for (const info of bodies.values())
         if (info.body.has(nodeId)) return run.loopIterations?.[info.carrierId] ?? 1
-      return undefined
+      const graphNode = run.config.graph?.nodes.find((node) => node.nodeId === nodeId)
+      return graphNode?.loop && !graphNode.loop.body
+        ? run.loopIterations?.[nodeId] ?? 1
+        : undefined
     }
     const children = assignments.map((assignment) => {
       const round = roundOf(assignment.nodeId)
+      const childRoutedInputEdgeIds = routedInputEdgeIdsByNode?.get(assignment.nodeId) ?? routedInputEdgeIds
       return {
         nodeId: assignment.nodeId,
         taskId: hash([
@@ -952,7 +1048,7 @@ export class FlowCoordinatorHost {
         ...(envelopes?.get(assignment.nodeId)
           ? { executionEnvelope: envelopes.get(assignment.nodeId) }
           : {}),
-        ...(routedInputEdgeIds ? { routedInputEdgeIds } : {})
+        ...(childRoutedInputEdgeIds ? { routedInputEdgeIds: childRoutedInputEdgeIds } : {})
       }
     })
     run.children.push(...children)
@@ -1224,6 +1320,72 @@ export class FlowCoordinatorHost {
       .map((edge) => edge.id)
   }
 
+  private selectorIncludesEdge(
+    run: CoordinationRun,
+    node: FlowNode,
+    edge: FlowGraph['edges'][number],
+    facts: StageEntryFacts
+  ): boolean {
+    const selectors = node.inputs?.selectors.filter(
+      (selector) => selector.sourceStageKey === edge.from.nodeId
+    )
+    if (!selectors?.length) return true
+    const fact = facts.deliveries.find((delivery) => delivery.stageKey === edge.from.nodeId)
+    if (!fact) return false
+    const upstream = run.children
+      .filter((child) => child.nodeId === edge.from.nodeId && child.state === 'completed')
+      .at(-1)
+    const ref = upstream?.outputs.find(
+      (output) => output.sourceNodeId === edge.from.nodeId && output.sourcePortId === edge.from.portId
+    )
+    const output = ref ? this.assets.resolveInputs(run.projectId, [ref])[0]?.value : undefined
+    const outputs = output ? [output] : fact.outputs
+    return selectors.some((selector) => {
+      const manifest = buildContextManifest(node.nodeId, {
+        selectors: [selector],
+        budgetBytes: node.inputs!.budgetBytes
+      }, [{ ...fact, outputs }], { includeAllCandidates: true })
+      return manifest.entries.length > 0
+    })
+  }
+
+  private routedAgentInputEdgeIds(
+    run: CoordinationRun,
+    node: FlowNode,
+    graph: FlowGraph,
+    file: ProjectFile,
+    facts: StageEntryFacts,
+    edgeState: ReturnType<typeof flowRouteState>['edgeState'],
+    fallback: readonly string[]
+  ): string[] {
+    if (!node.allowedNodeIds?.length) return [...fallback]
+    const scope = new Set([node.nodeId, ...node.allowedNodeIds])
+    const scopeEdges = graph.edges.filter(
+      (edge) => scope.has(edge.to.nodeId) && edgeState(edge) === 'satisfied'
+    )
+    const agentEdges = node.inputs
+      ? this.selectedIncomingEdges(run, node, graph, facts, edgeState)
+      : scopeEdges.filter((edge) => edge.to.nodeId === node.nodeId)
+    return this.routedGraphCanvasEdgeIds(graph, file, edgeState, node.nodeId, [
+      ...agentEdges,
+      ...scopeEdges
+    ])
+  }
+
+  private selectedIncomingEdges(
+    run: CoordinationRun,
+    node: FlowNode,
+    graph: FlowGraph,
+    facts: StageEntryFacts,
+    edgeState: ReturnType<typeof flowRouteState>['edgeState']
+  ): FlowGraph['edges'] {
+    const incoming = graph.edges.filter(
+      (edge) => edge.to.nodeId === node.nodeId && edgeState(edge) === 'satisfied'
+    )
+    if (!node.inputs) return incoming
+    return incoming.filter((edge) => this.selectorIncludesEdge(run, node, edge, facts))
+  }
+
   /**
    * O4-P3：图模式单步——声明式图路由（nextReadyNodes）决定下一可分派节点。
    * 只认已交付事实 + 声明式条件，不调用主控模型、不接受模型文字改路由。
@@ -1272,11 +1434,6 @@ export class FlowCoordinatorHost {
       if (review.state === 'passed') delivered.add(review.nodeId)
     }
     let facts = this.graphFacts(run, { bodies, loopIterations })
-    // 一轮 body 出口全部交付后评估退出条件；不满足且未达上限则开下一轮。
-    if (this.advanceLoopRounds(run, graph, facts, delivered, bodies, loopIterations)) {
-      delivered = this.roundScopedDelivered(run, bodies, loopIterations)
-      facts = this.graphFacts(run, { bodies, loopIterations })
-    }
     const executionSkipped = new Set(run.children
       .filter((child) => {
         if (child.state !== 'skipped') return false
@@ -1284,9 +1441,19 @@ export class FlowCoordinatorHost {
         return !body || (child.round ?? 1) === (loopIterations[body.carrierId] ?? 1)
       })
       .map((child) => child.nodeId))
-    const route = nextReadyNodes(
+    let route = nextReadyNodes(
       graph, facts, delivered, loopIterations, isRequiredInput, executionSkipped
     )
+    // 一轮 body 出口全部交付或跳过后评估退出条件；不满足且未达上限则开下一轮。
+    if (this.advanceLoopRounds(
+      run, graph, facts, delivered, bodies, loopIterations, new Set(route.skipped)
+    )) {
+      delivered = this.roundScopedDelivered(run, bodies, loopIterations)
+      facts = this.graphFacts(run, { bodies, loopIterations })
+      route = nextReadyNodes(
+        graph, facts, delivered, loopIterations, isRequiredInput, executionSkipped
+      )
+    }
     run.skippedNodeIds = route.skipped
     run.stalledNodeIds = undefined
     const { edgeState } = flowRouteState(
@@ -1295,6 +1462,7 @@ export class FlowCoordinatorHost {
     const routedInputEdgeIds = this.routedCanvasEdgeIds(graph, file, edgeState)
     const routedInput = { ...input, routedInputEdgeIds }
     if (isFlowComplete(graph, facts, delivered, loopIterations, isRequiredInput, executionSkipped)) {
+      this.assertChildrenComplete(run)
       // 出口可能是审核节点（交付物=被审核通过的固定版本）或普通子节点。
       const exitReview = (run.reviews ?? []).find(
         (review) => graph.exits.includes(review.nodeId) && review.state === 'passed' && review.decision
@@ -1388,6 +1556,7 @@ export class FlowCoordinatorHost {
       const candidates = new Map<string, AgentTaskSnapshot>()
       const contextManifests = new Map<string, ContextManifest>()
       const envelopes = new Map<string, ExecutionEnvelope>()
+      const routedInputEdgeIdsByNode = new Map<string, string[]>()
       const assignments = readyAgents.map((node) => {
         if (node.inputs) {
           const manifest = buildContextManifest(node.nodeId, node.inputs, facts.deliveries)
@@ -1398,9 +1567,14 @@ export class FlowCoordinatorHost {
             )
           contextManifests.set(node.nodeId, manifest)
         }
+        const nodeRoutedInputEdgeIds = this.routedAgentInputEdgeIds(
+          run, node, graph, file, facts, edgeState, routedInput.routedInputEdgeIds
+        )
+        routedInputEdgeIdsByNode.set(node.nodeId, nodeRoutedInputEdgeIds)
         const candidate = this.specialists.describeAssignment(
           {
             ...routedInput,
+            routedInputEdgeIds: nodeRoutedInputEdgeIds,
             nodeId: node.nodeId,
             action: 'start',
             requestId: hash([
@@ -1445,8 +1619,33 @@ export class FlowCoordinatorHost {
         signal,
         contextManifests,
         envelopes,
-        routedInputEdgeIds
+        undefined,
+        routedInputEdgeIdsByNode
       )
+    }
+    const nextBody = bodyOf.get(next.nodeId)
+    // Loop rounds must be established before capability/human-task early returns.
+    // A completed v1 iteration starts a new task identity; a ready/waiting child is
+    // resumed in the same round. Any v2 body entry also initializes its carrier.
+    if (nextBody) {
+      if ((loopIterations[nextBody.carrierId] ?? 0) === 0) {
+        loopIterations[nextBody.carrierId] = 1
+        run.loopIterations = loopIterations
+      }
+    } else if (next.loop && !next.loop.body) {
+      const current = loopIterations[next.nodeId] ?? 0
+      if (current === 0) {
+        const completedPrior = run.children.some(
+          (child) => child.nodeId === next.nodeId && child.state === 'completed'
+        )
+        loopIterations[next.nodeId] = completedPrior ? 2 : 1
+      } else {
+        const currentChild = run.children.find(
+          (child) => child.nodeId === next.nodeId && (child.round ?? 1) === current
+        )
+        if (currentChild?.state === 'completed') loopIterations[next.nodeId] = current + 1
+      }
+      run.loopIterations = loopIterations
     }
     // ②：capability 图节点直接执行（复用 node.execute 账本端口），不经 agent 分派。
     if (next.kind === 'capability') {
@@ -1469,17 +1668,14 @@ export class FlowCoordinatorHost {
           'graph-context'
         )
     }
-    // O4-P4 / BL-11：v1 循环载体递增自身迭代；v2 子图循环体按载体轮次分派。
-    if (next.loop && !next.loop.body) {
-      loopIterations[next.nodeId] = (loopIterations[next.nodeId] ?? 0) + 1
-      run.loopIterations = loopIterations
-    } else if (next.loop?.body && (loopIterations[next.nodeId] ?? 0) === 0) {
-      loopIterations[next.nodeId] = 1
-      run.loopIterations = loopIterations
-    }
-    const nextBody = bodyOf.get(next.nodeId)
     const nextRound = nextBody ? (loopIterations[nextBody.carrierId] ?? 1) : undefined
-    return this.dispatchRoutedAgent(run, routedInput, next, signal, contextManifest, {
+    const agentInput = {
+      ...routedInput,
+      routedInputEdgeIds: this.routedAgentInputEdgeIds(
+        run, next, graph, file, facts, edgeState, routedInput.routedInputEdgeIds
+      )
+    }
+    return this.dispatchRoutedAgent(run, agentInput, next, signal, contextManifest, {
       loopRound: nextRound ?? loopIterations[next.nodeId]
     })
   }
@@ -1610,13 +1806,13 @@ export class FlowCoordinatorHost {
         : undefined
     let materialPortId: string | undefined
     let contextManifest: ContextManifest | undefined
-    let selectedSources: Set<string> | undefined
+    let selectedEdges: FlowGraph['edges'] | undefined
     let materialIncoming: FlowGraph['edges'] | undefined
     const materialRefs = new Map<FlowGraph['edges'][number], AgentFlowAssetRef>()
     if (next.inputs) {
       const original = buildContextManifest(next.nodeId, next.inputs, facts.deliveries)
       contextManifest = original
-      selectedSources = new Set(original.entries.map((entry) => entry.sourceStageKey))
+      selectedEdges = this.selectedIncomingEdges(run, next, graph, facts, edgeState)
       if (!material && next.inputs.overflow === 'ask-human' && original.budget.exceeded)
         return this.waitForContextBudget(run, original)
       if (original.missing.some((entry) => entry.required))
@@ -1630,25 +1826,13 @@ export class FlowCoordinatorHost {
         // Original overflow may already have dropped optional candidates. Rebuild the
         // complete contribution universe before applying the confirmed replacement,
         // then re-apply the original budget to the exact effective set.
-        const candidates = buildContextManifest(
-          next.nodeId,
-          next.inputs,
-          facts.deliveries,
-          { includeAllCandidates: true }
-        )
-        const candidateSources = new Set(candidates.entries.map((entry) => entry.sourceStageKey))
         const inputPorts = node.ports.filter((port) => port.dir === 'in')
-        const selectedEdges = graph.edges.filter(
-          (edge) =>
-            edge.to.nodeId === next.nodeId &&
-            edgeState(edge) === 'satisfied' &&
-            candidateSources.has(edge.from.nodeId)
-        )
+        const materialEdges = selectedEdges ?? []
         const portOf = (edge: FlowGraph['edges'][number]): PortDecl | undefined =>
           inputPorts.find((port) => port.id === edge.to.portId)
         const textPorts = [
           ...new Set(
-            selectedEdges
+            materialEdges
               .filter((edge) => ['text', 'markdown'].includes(portOf(edge)?.type ?? ''))
               .map((edge) => edge.to.portId)
           )
@@ -1659,7 +1843,7 @@ export class FlowCoordinatorHost {
         else {
           const anyPorts = [
             ...new Set(
-              selectedEdges
+              materialEdges
                 .filter((edge) => {
                   const port = portOf(edge)
                   return port?.type === 'any' && port.cardinality === 'one'
@@ -1680,7 +1864,7 @@ export class FlowCoordinatorHost {
           edge: FlowGraph['edges'][number]
           manifest: ContextManifest
         }> = []
-        for (const edge of selectedEdges) {
+        for (const edge of materialEdges) {
           const upstream = run.children
             .filter((child) => child.nodeId === edge.from.nodeId && child.state === 'completed')
             .at(-1)
@@ -1771,11 +1955,8 @@ export class FlowCoordinatorHost {
       run.contextWaitLimitBytes = undefined
     }
     const inputPorts = node.ports.filter((port) => port.dir === 'in')
-    const incoming = materialIncoming ?? graph.edges.filter(
-      (edge) =>
-        edge.to.nodeId === next.nodeId &&
-        edgeState(edge) === 'satisfied' &&
-        (!selectedSources || selectedSources.has(edge.from.nodeId))
+    const incoming = materialIncoming ?? selectedEdges ?? graph.edges.filter(
+      (edge) => edge.to.nodeId === next.nodeId && edgeState(edge) === 'satisfied'
     )
     const inputsByPort = new Map<string, AgentFlowAssetRef[]>()
     for (const edge of incoming) {
@@ -1821,7 +2002,7 @@ export class FlowCoordinatorHost {
       inputs: [],
       state: 'ready',
       outputs: [],
-      ...(typeof capabilityRound === 'number' ? { round: capabilityRound } : {})
+      ...(typeof loopSuffix === 'number' ? { round: loopSuffix } : {})
     }
     if (contextManifest) child.contextManifest = contextManifest
     if (!prior) {
@@ -1924,19 +2105,21 @@ export class FlowCoordinatorHost {
       info.body.has(next.nodeId)
     )
     const humanRound = humanBody ? (run.loopIterations?.[humanBody.carrierId] ?? 1) : undefined
+    const loopSuffix = humanRound ?? (next.loop && !next.loop.body
+      ? run.loopIterations?.[next.nodeId]
+      : undefined)
     const taskId = hash([
       run.taskId,
       next.nodeId,
       ...(run.reworkRound ? [run.reworkRound] : []),
-      ...(humanRound ? [`loop:${humanRound}`] : [])
+      ...(loopSuffix ? [`loop:${loopSuffix}`] : [])
     ])
     // 每次分派用新 commandId：上一轮 skipped 已终态释放占用，续跑重新交付执行以应用人工提交。
     const commandId = `graph:${hash([taskId, 'human', run.decisions])}`
     const inputPorts = node.ports.filter((port) => port.dir === 'in')
-    const incoming = graph.edges.filter(
-      (edge) => edge.to.nodeId === next.nodeId && edgeState(edge) === 'satisfied'
-    )
-    const inputs = incoming.map((edge) => {
+    const incoming = this.selectedIncomingEdges(run, next, graph, this.graphFacts(run), edgeState)
+    const inputsByPort = new Map<string, AgentFlowAssetRef[]>()
+    for (const edge of incoming) {
       const upstream = run.children
         .filter((child) => child.nodeId === edge.from.nodeId && child.state === 'completed')
         .at(-1)
@@ -1948,17 +2131,18 @@ export class FlowCoordinatorHost {
         projectId: run.projectId,
         nodeId: edge.from.nodeId,
         portId: edge.from.portId,
-        submissionId: `${taskId}:human-input:${edge.to.portId}:${run.decisions}`,
+        submissionId: `${taskId}:human-input:${edge.from.nodeId}:${edge.from.portId}:${edge.to.portId}:${run.decisions}`,
         expectedGraphVersion: file.meta.graphVersion,
         traceId: run.traceId,
         spanId: run.spanId
       })
-      return { targetPortId: port.id, assets: [ref] }
-    })
+      inputsByPort.set(port.id, [...(inputsByPort.get(port.id) ?? []), ref])
+    }
+    const inputs = [...inputsByPort].map(([targetPortId, assets]) => ({ targetPortId, assets }))
     let child = run.children.find(
       (item) =>
         item.nodeId === next.nodeId &&
-        (humanRound === undefined || (item.round ?? 1) === humanRound)
+        (loopSuffix === undefined || (item.round ?? 1) === loopSuffix)
     )
     if (!child) {
       child = {
@@ -1969,7 +2153,7 @@ export class FlowCoordinatorHost {
         inputs: [],
         state: 'ready',
         outputs: [],
-        ...(typeof humanRound === 'number' ? { round: humanRound } : {})
+        ...(typeof loopSuffix === 'number' ? { round: loopSuffix } : {})
       }
       run.children.push(child)
     }
@@ -2068,11 +2252,18 @@ export class FlowCoordinatorHost {
     const carrierOf = new Map<string, string>()
     for (const [carrierId, info] of bodies)
       for (const id of info.body) carrierOf.set(id, carrierId)
+    const v1LoopIds = new Set(
+      (run.config.graph?.nodes ?? [])
+        .filter((node) => node.loop && !node.loop.body)
+        .map((node) => node.nodeId)
+    )
     const delivered = new Set<string>()
     for (const child of run.children) {
       if (child.state !== 'completed') continue
       const carrier = carrierOf.get(child.nodeId)
       if (!carrier) {
+        if (v1LoopIds.has(child.nodeId) &&
+            (child.round ?? 1) !== (loopIterations[child.nodeId] ?? 1)) continue
         delivered.add(child.nodeId)
         continue
       }
@@ -2091,7 +2282,8 @@ export class FlowCoordinatorHost {
     facts: StageEntryFacts,
     delivered: ReadonlySet<string>,
     bodies: Map<string, LoopBodyInfo>,
-    loopIterations: Record<string, number>
+    loopIterations: Record<string, number>,
+    skipped: ReadonlySet<string>
   ): boolean {
     let changed = false
     for (const [carrierId, info] of bodies) {
@@ -2099,7 +2291,7 @@ export class FlowCoordinatorHost {
       if (round < 1) continue
       const carrier = graph.nodes.find((node) => node.nodeId === carrierId)
       if (!carrier?.loop) continue
-      if (![...info.exits].every((nodeId) => delivered.has(nodeId))) continue
+      if (![...info.exits].every((nodeId) => delivered.has(nodeId) || skipped.has(nodeId))) continue
       if (loopExitConditionSatisfied(carrier, facts)) continue
       if (round >= carrier.loop.maxIterations) continue
       loopIterations[carrierId] = round + 1

@@ -525,7 +525,7 @@ async function runH09(driver, session, first, restart) {
   assert(secondWait.db.waits.filter((wait) => wait.state === 'open').length === 1,
     'H09 only one unsatisfied wait at second checkpoint')
   assert(secondWait.db.steps.filter((step) => step.step_key === first && step.status === 'completed').length === 1,
-    'H09 first human completed before second wait')
+    `H09 first human completed before second wait: ${JSON.stringify(secondWait.db.steps)}`)
 
   await driver.ok('composite.run.submitHuman', {
     runId,

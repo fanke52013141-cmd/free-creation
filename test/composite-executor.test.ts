@@ -50,8 +50,10 @@ function context(overrides: Partial<NodeExecutionContext> = {}): NodeExecutionCo
     signal: { cancelled: false, paused: false, onCancel: () => () => undefined } as never,
     gateway: {} as never,
     updateProps: vi.fn(),
+    updateMeta: vi.fn(),
     updateResult: vi.fn(),
     runComposite: vi.fn(async () => ({
+      runId: 'composite-run-1',
       status: 'done' as const,
       media: { mediaId: 'media-1', mediaPath: 'projects/a.png', mime: 'image/png' },
       stepCount: 1
@@ -70,11 +72,36 @@ describe('composite executor（P2）', () => {
     expect(String(written)).toContain('projects/a.png')
   })
 
+  it('把画布公开输入序列化后交给隔离运行，供人工等待续跑恢复', async () => {
+    const ctx = context({
+      runId: 'outer-run',
+      inputs: new Map([
+        [
+          'in-copy',
+          [
+            {
+              type: 'text',
+              value: { kind: 'text', text: '原文' },
+              source: { nodeId: 'shape:source', portId: 'out-text', runId: 'outer-run' },
+              createdAt: 1
+            }
+          ]
+        ]
+      ])
+    })
+    await compositeExecutor(ctx)
+    expect(vi.mocked(ctx.runComposite).mock.calls[0]?.[0]).toMatchObject({
+      inputValues: { 'in-copy': { kind: 'text', text: '原文' } },
+      runId: 'outer-run'
+    })
+  })
+
   it('公开媒体输出经 emitArtifact 落为独立资产节点（画布可见产物）', async () => {
     const artifacts: Array<Record<string, unknown>> = []
     const ctx = context({
       emitArtifact: (artifact) => artifacts.push(artifact as unknown as Record<string, unknown>),
       runComposite: vi.fn(async () => ({
+        runId: 'composite-run-1',
         status: 'done' as const,
         outputs: {
           portrait: { kind: 'image' as const, mediaId: 'media-1', mediaPath: 'projects/a.png', mime: 'image/png' }
@@ -96,6 +123,7 @@ describe('composite executor（P2）', () => {
   it('headless 未注入 emitArtifact 时仍写 nodeResult，不抛错', async () => {
     const ctx = context({
       runComposite: vi.fn(async () => ({
+        runId: 'composite-run-1',
         status: 'done' as const,
         outputs: {
           portrait: { kind: 'image' as const, mediaId: 'media-1', mediaPath: 'projects/a.png', mime: 'image/png' }
@@ -117,7 +145,7 @@ describe('composite executor（P2）', () => {
 
   it('内部失败透传原因，不写产物', async () => {
     const ctx = context({
-      runComposite: vi.fn(async () => ({ status: 'failed' as const, reason: '内部节点失败：n1' }))
+      runComposite: vi.fn(async () => ({ runId: 'composite-run-1', status: 'failed' as const, reason: '内部节点失败：n1' }))
     })
     const result = await compositeExecutor(ctx)
     expect(result).toMatchObject({ status: 'failed', reason: '内部节点失败：n1' })
@@ -127,6 +155,7 @@ describe('composite executor（P2）', () => {
   it('W4：内部失败的结构化节点/端口透传到执行器结果，不在边界丢弃', async () => {
     const ctx = context({
       runComposite: vi.fn(async () => ({
+        runId: 'composite-run-1',
         status: 'failed' as const,
         reason: '内部节点失败：n1',
         failure: { code: 'NODE_FAILED', phase: 'step' as const, nodeId: 'n1', portId: 'out-text' }
@@ -142,6 +171,7 @@ describe('composite executor（P2）', () => {
   it('AF-07：内部人工等待不算失败，按暂停（skipped）记账并给出等待步骤', async () => {
     const ctx = context({
       runComposite: vi.fn(async () => ({
+        runId: 'composite-run-1',
         status: 'waiting' as const,
         waitingStepKey: 'hn1',
         reason: '节点流等待人工任务「hn1」提交后续跑',
@@ -151,15 +181,17 @@ describe('composite executor（P2）', () => {
     const result = await compositeExecutor(ctx)
     expect(result).toMatchObject({
       status: 'skipped',
+      waiting: true,
       reason: '节点流等待人工任务「hn1」提交后续跑'
     })
+    expect(ctx.updateMeta).toHaveBeenCalledWith({ compositeRunId: 'composite-run-1' })
     // 等待不是完成：不能写产物，也不能落成失败。
     expect(ctx.updateResult).not.toHaveBeenCalled()
   })
 
   it('AF-07：等待结果缺 reason 时给出可读的兜底文案', async () => {
     const ctx = context({
-      runComposite: vi.fn(async () => ({ status: 'waiting' as const, waitingStepKey: 'hn2' }))
+      runComposite: vi.fn(async () => ({ runId: 'composite-run-1', status: 'waiting' as const, waitingStepKey: 'hn2' }))
     })
     const result = await compositeExecutor(ctx)
     expect(result.status).toBe('skipped')
@@ -170,6 +202,7 @@ describe('composite executor（P2）', () => {
   it('W4：输出阶段失败携带节点/端口，diagnosticPhase 归 output', async () => {
     const ctx = context({
       runComposite: vi.fn(async () => ({
+        runId: 'composite-run-1',
         status: 'failed' as const,
         reason: '公开输出缺失',
         failure: {

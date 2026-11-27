@@ -338,6 +338,38 @@ describe('P5.3 flowGraph.authorize / confirm（落画布 CAS 与核对）', () =
     expect(graphCanvasVersion(f.db, f.file, proposed.coordinatorNodeId)).toMatchObject({ buildId: proposed.buildId, diverged: true, sourceGraph: published.sourceGraph })
   })
 
+  it('首次 confirm 发现额外受控入边 → FLOW_CANVAS_DIVERGED', async () => {
+    const f = fixture()
+    const proposed = await f.host.proposeGraph({ projectId: 'p', graph: seqGraph, requestId: 'extra-edge' })
+    const store = f.file.tldrawSnapshot.store as Record<string, unknown>
+    for (const node of proposed.nodes) {
+      store[node.id] = {
+        id: node.id,
+        type: 'node-card',
+        props: { nodeType: node.type, config: node.config, text: node.text, title: node.title },
+        meta: { flowBuildId: proposed.buildId }
+      }
+    }
+    f.file.nodes = proposed.nodes.map((node) => ({
+      id: node.id,
+      type: node.type,
+      contractVersion: node.contractVersion,
+      ports: [],
+      params: { config: node.config },
+      content: { kind: 'text', text: node.text }
+    })) as ProjectFile['nodes']
+    f.file.edges = proposed.edges.map((edge) => ({ from: edge.from, to: edge.to })) as ProjectFile['edges']
+    f.file.edges.push({
+      id: 'extra-inbound',
+      from: { nodeId: 'external-source', portId: 'out-text' },
+      to: { nodeId: canvasNodeId('sink'), portId: 'in-value' }
+    } as ProjectFile['edges'][number])
+    await expect(f.host.confirmGraph({ projectId: 'p', buildId: proposed.buildId }))
+      .rejects.toMatchObject({ code: 'FLOW_CANVAS_DIVERGED' })
+    await expect(f.host.previewGraph({ projectId: 'p', buildId: proposed.buildId }))
+      .rejects.toMatchObject({ code: 'FLOW_CANVAS_DIVERGED' })
+  })
+
   it('exports and republishes an upgraded composite by capabilityRef, never identity params', async () => {
     const f = fixture()
     const manifest = {

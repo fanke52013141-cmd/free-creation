@@ -16,6 +16,7 @@ export type CompositeRuntimeIssuePhase = 'input' | 'step' | 'output'
 
 export type CompositeRuntimeIssueCode =
   | 'INPUT_REQUIRED'
+  | 'INPUT_PORT_UNKNOWN'
   | 'INPUT_TYPE_UNSUPPORTED'
   | 'INPUT_VALUE_INVALID'
   | 'OUTPUT_SOURCE_MISSING'
@@ -115,6 +116,16 @@ function sourceForValue(
   return null
 }
 
+function defaultValueNodeValue(
+  input: CompositeManifest['inputs'][number]
+): NodeValue | null {
+  if (input.defaultValue === undefined) return null
+  if (input.type === 'text') return { kind: 'text', text: String(input.defaultValue) }
+  if (input.type === 'markdown') return { kind: 'markdown', text: String(input.defaultValue) }
+  if (input.type === 'json') return { kind: 'json', data: input.defaultValue }
+  return null
+}
+
 /**
  * 把本次调用的输入包按公开端口映射为虚拟上游。
  *
@@ -127,10 +138,41 @@ export function planCompositeInputBindings(
 ): CompositeInputPlan {
   const bindings: CompositeInputBinding[] = []
   const issues = preflightCompositeRequiredInputs(manifest, inputs)
+  for (const portId of inputs.keys()) {
+    const publicId = portId.startsWith('in-') ? portId.slice(3) : portId
+    if (!manifest.inputs.some((input) => input.id === publicId)) {
+      issues.push(
+        issue('INPUT_PORT_UNKNOWN', 'input', `未知公开输入端口「${publicId}」`, {
+          publicPortId: publicId
+        })
+      )
+    }
+  }
   for (const input of manifest.inputs) {
     const packets = inputs.get(`in-${input.id}`) ?? []
     if (packets.length === 0) {
-      // 可选空值：不接虚拟上游，内部节点使用自身正文/默认配置。
+      const defaultValue = defaultValueNodeValue(input)
+      if (!defaultValue) continue
+      const source = sourceForValue(defaultValue, input.type)
+      if (!source) {
+        issues.push(
+          issue('INPUT_TYPE_UNSUPPORTED', 'input', `输入「${input.label}」的默认值类型不受支持`, {
+            publicPortId: input.id
+          })
+        )
+        continue
+      }
+      for (const target of input.targets) {
+        bindings.push({
+          inputId: input.id,
+          label: input.label,
+          target: { nodeId: target.nodeId, portId: target.portId },
+          value: defaultValue,
+          order: 0,
+          sourceNodeType: source.nodeType,
+          sourcePortId: source.portId
+        })
+      }
       continue
     }
     if (input.cardinality === 'one' && packets.length > 1) {

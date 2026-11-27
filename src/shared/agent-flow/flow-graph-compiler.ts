@@ -314,13 +314,20 @@ export function compileFlowGraph(
   const stateNodeId = `shape:state-${graphIdSlug}`
   const compiledNodes = mapped.nodes.map((node) => compileNode(node, mapped, catalog))
   const specialistIds = compiledNodes.map((node) => node.id)
+  const hasReviewNodes = mapped.nodes.some((node) => node.kind === 'review')
 
   const coordinatorConfig = AgentNodeConfigSchema.parse({
     schemaVersion: 1,
     role: 'coordinator',
     interactionMode: 'autonomous',
     skills: [],
-    tools: [{ id: 'agent.dispatch', version: '1' }],
+    tools: [
+      { id: 'agent.dispatch', version: '1' },
+      // Graph reviews are driven by the coordinator control loop. The runtime
+      // admission check requires the same explicit capability on the compiled
+      // coordinator, otherwise a valid review graph cannot be started.
+      ...(hasReviewNodes ? [{ id: 'review.execute', version: '1' }] : [])
+    ],
     allowedNodeIds: specialistIds,
     maxSteps: graph.budgets.maxSteps,
     // P5：落画布后必须走声明式图路由（graphStep，P3/P4），而非退回模型驱动分派。

@@ -34,7 +34,7 @@ import { toast } from '../stores/toast'
 
 import { templatePayloadFromGraph, useWorkflowStore, type WorkflowTemplate } from '../stores/workflow'
 import { topNotice } from '../stores/topNotice'
-import { buildCompositeManifestFromEditor } from './editor-manifest'
+import { buildCompositeManifestFromEditor, resolveCompositeEditorManifestCache } from './editor-manifest'
 import {
   applyCompositeEditorPolicy,
   compositeEditorPolicyFromManifest,
@@ -170,6 +170,7 @@ export function CompositeCanvasEditor({
   const [editor, setEditor] = useState<Editor | null>(null)
   const [busy, setBusy] = useState(false)
   const [issues, setIssues] = useState<string[]>([])
+  const [loadFailed, setLoadFailed] = useState(false)
   const [revision, setRevision] = useState<number | null>(
     target.kind === 'composite' ? target.draftRevision : null
   )
@@ -208,6 +209,7 @@ export function CompositeCanvasEditor({
   )
   const internalIdByShape = useRef(new Map<string, string>())
   const initialized = useRef(false)
+  const loadingManifest = useRef(false)
   const flyoutTimer = useRef<number | null>(null)
   // 与主画布一致：二级菜单鱼眼特效 + 从二级菜单直接拖出节点。
   const nodeFlyoutRef = useRef<HTMLDivElement | null>(null)
@@ -250,7 +252,15 @@ export function CompositeCanvasEditor({
   }
 
   /** 把一份 manifest 铺进编辑器：清空旧形状、重建节点与连线、固定内部 ID。 */
-  const loadManifestIntoEditor = (instance: Editor, m: CompositeManifest): void => {
+  const loadManifestIntoEditor = async (instance: Editor, m: CompositeManifest): Promise<void> => {
+    loadingManifest.current = true
+    const nestedManifests = await resolveCompositeEditorManifestCache(m, async ({ capabilityId, version }) => {
+      const result = await window.api.composite.versionGet({ capabilityId, version })
+      return result.ok && result.data
+        ? { manifest: result.data.manifest, contentHash: result.data.contentHash }
+        : null
+    })
+    if (instance.isDisposed) return
     instance.deleteShapes(instance.getCurrentPageShapes().map((shape) => shape.id))
     internalIdByShape.current.clear()
     const shapeByNode = new Map<string, TLShapeId>()
@@ -258,12 +268,16 @@ export function CompositeCanvasEditor({
       const id = createShapeId()
       shapeByNode.set(node.id, id)
       internalIdByShape.current.set(id, node.id)
+      const nestedManifest = nestedManifests.get(node.id)
       instance.createShape<NodeCardShape>({
         id,
         type: 'node-card',
         x: node.dx,
         y: node.dy,
-        meta: { compositeNodeId: node.id },
+        meta: {
+          compositeNodeId: node.id,
+          ...(nestedManifest ? { compositeManifest: nestedManifest } : {})
+        } as never,
         props: {
           nodeType: node.nodeType as NodeCardShape['props']['nodeType'],
           title: node.title,
@@ -277,20 +291,37 @@ export function CompositeCanvasEditor({
         }
       })
     }
+    const failedEdges: string[] = []
     for (const edge of m.graph.edges) {
       const from = shapeByNode.get(edge.from.nodeId)
       const to = shapeByNode.get(edge.to.nodeId)
-      if (from && to) {
-        createEdge(
-          instance,
-          { shapeId: from, portId: edge.from.portId },
-          { shapeId: to, portId: edge.to.portId },
-          false,
-          edge.order
-        )
+      if (!from || !to) {
+        failedEdges.push(`${edge.from.nodeId}.${edge.from.portId} -> ${edge.to.nodeId}.${edge.to.portId}`)
+        continue
+      }
+      if (!createEdge(
+        instance,
+        { shapeId: from, portId: edge.from.portId },
+        { shapeId: to, portId: edge.to.portId },
+        false,
+        edge.order
+      )) {
+        failedEdges.push(`${edge.from.nodeId}.${edge.from.portId} -> ${edge.to.nodeId}.${edge.to.portId}`)
       }
     }
+    if (failedEdges.length > 0) {
+      throw new Error(`内部连线无法恢复，已阻止保存以避免丢线：${failedEdges.join('；')}`)
+    }
     resetViewport(instance)
+    loadingManifest.current = false
+  }
+
+  const reportLoadFailure = (cause: unknown): void => {
+    loadingManifest.current = false
+    setLoadFailed(true)
+    const message = cause instanceof Error ? cause.message : String(cause)
+    setIssues([message])
+    toast(message)
   }
 
   useEffect(() => {
@@ -303,10 +334,13 @@ export function CompositeCanvasEditor({
       addNodeLibraryEntry(editor, target.template, false)
       resetViewport(editor)
     } else if (base) {
-      loadManifestIntoEditor(editor, base)
+      void loadManifestIntoEditor(editor, base).catch(reportLoadFailure)
     }
     // 初始化完成后才监听用户改动，避免把恢复快照本身记为未保存修改。
-    const unsubscribeDirty = editor.store.listen(() => setDirty(true), {
+    const unsubscribeDirty = editor.store.listen(() => {
+      if (loadingManifest.current) return
+      setDirty(true)
+    }, {
       scope: 'document',
       source: 'user'
     })
@@ -554,6 +588,7 @@ export function CompositeCanvasEditor({
     // 两个调用方（保存草稿/另存为新版本）都先判过 editor；base 为 null 只可能是条目，
     // 而条目没有这两个入口。
     if (!editor || !base) throw new Error('没有可保存的节点流内容')
+    if (loadFailed) throw new Error('内部图恢复失败，请修复版本引用或端口后重试')
     const graph = deriveGraph(editor)
     const result = buildCompositeManifestFromEditor({
       manifest: base,
@@ -1064,7 +1099,8 @@ export function CompositeCanvasEditor({
               const nextBase: CompositeManifest = { ...loaded, version }
               setBase(nextBase)
               setPolicy(compositeEditorPolicyFromManifest(nextBase))
-              loadManifestIntoEditor(editor, nextBase)
+              setLoadFailed(false)
+              void loadManifestIntoEditor(editor, nextBase).catch(reportLoadFailure)
               setDirty(true)
             }}
             onSwitched={() => {

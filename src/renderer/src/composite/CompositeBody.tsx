@@ -33,6 +33,10 @@ const STEP_STATUS_LABEL: Record<string, string> = {
 export function CompositeBody({ shape }: NodeBodyProps): React.JSX.Element {
   const manifest = readCompositeInstanceManifest(shape)
   const nodeRun = readNodeRunRecord(shape.meta?.nodeRun)
+  const compositeRunId =
+    typeof (shape.meta as Record<string, unknown> | undefined)?.compositeRunId === 'string'
+      ? ((shape.meta as Record<string, unknown>).compositeRunId as string)
+      : nodeRun?.runId
   const [detail, setDetail] = useState<CompositeRunDetail | null>(null)
   const [loading, setLoading] = useState(false)
   const [showSteps, setShowSteps] = useState(false)
@@ -86,14 +90,14 @@ export function CompositeBody({ shape }: NodeBodyProps): React.JSX.Element {
           ) : null}
         </div>
       ) : null}
-      {nodeRun?.runId ? (
+      {compositeRunId ? (
         <button
           type="button"
           className="composite-body-steps-toggle"
           onClick={() => {
             const next = !showSteps
             setShowSteps(next)
-            if (next && !detail) void loadRun(nodeRun.runId)
+            if (next && !detail) void loadRun(compositeRunId)
           }}
         >
           {showSteps ? '收起运行步骤' : '查看运行步骤'}

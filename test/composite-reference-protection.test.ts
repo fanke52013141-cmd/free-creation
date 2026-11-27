@@ -176,6 +176,9 @@ beforeEach(() => {
       capability_id TEXT PRIMARY KEY, manifest TEXT NOT NULL,
       revision INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL
     );
+    CREATE TABLE composite_runs (
+      capability_id TEXT NOT NULL
+    );
   `)
 })
 afterEach(() => fixture.db.close())
@@ -247,6 +250,16 @@ describe('W3 删除保护 · 三入口同一实现', () => {
     )
     expect(getCompositeVersion('copy-polish', '1.0')).not.toBeNull()
     expect(getCompositeVersion('title-polish', '1.0')).not.toBeNull()
+  })
+
+  it('存在历史组合运行时拒绝删除，避免运行输出无法投影', async () => {
+    const inner = textManifest('copy-polish', '文案整理')
+    await publishCompositeVersion(inner)
+    fixture.db.prepare('INSERT INTO composite_runs (capability_id) VALUES (?)').run('copy-polish')
+    await expect(
+      runCompositeOperation('composite.delete', { capabilityId: 'copy-polish' }, {})
+    ).rejects.toMatchObject({ code: 'CAPABILITY_IN_USE', detail: 'instances:0,nested:0,runs:1' })
+    expect(getCompositeVersion('copy-polish', '1.0')).not.toBeNull()
   })
 
   it('无引用时物理删除能力、全部版本与草稿', async () => {

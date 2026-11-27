@@ -328,6 +328,7 @@ function fixture(
                 result: pending.value,
                 lastSubmissionId: pending.submissionId
               })
+              target.meta.humanTaskPending = ''
             }
             const source = fixed[0]?.versions[0]?.value ?? {
               kind: 'text' as const,
@@ -724,7 +725,7 @@ describe('C3.3 coordinator sequential handoff', () => {
     f.byId.main.props.config = JSON.stringify(config)
     await expect(f.host.run(input)).rejects.toMatchObject({ code: 'AGENT_BUDGET_EXHAUSTED' })
     expect(f.count().executions).toBe(2)
-    expect(f.coordinator.inspect({ projectId: 'p', nodeId: 'main' })?.state).toBe('blocked')
+    expect(f.coordinator.inspect({ projectId: 'p', nodeId: 'main' })?.state).toBe('failed')
   })
   it('stops an in-flight review without persisting its late verdict or dispatching downstream', async () => {
     let release!: () => void
@@ -2157,6 +2158,38 @@ describe('O4-P3 graph mode execution（声明式图路由，mock 模型）', () 
     expect(f.byId.second.meta.nodeResult).toBeTruthy()
   })
 
+  it('图模式协调器在人工采纳后重新分派等待中的 Agent 子节点', async () => {
+    const f = fixture({ graph: seqGraph, human: true })
+    const waiting = await f.host.run(input)
+    expect(waiting.task.state).toBe('waiting')
+    const child = waiting.task.children!.find((item) => item.nodeId === 'second')!
+    const childWait = f.host.inspect({ projectId: 'p', nodeId: 'second' })!
+    expect(childWait.state).toBe('waiting')
+    const view = f.host.collaboration({ projectId: 'p', nodeId: 'second' })!
+    await f.host.cooperate({
+      projectId: 'p',
+      nodeId: 'second',
+      taskId: child.taskId,
+      waitRevision: childWait.waitRevision,
+      revision: view.revision,
+      eventId: 'graph-child-submit',
+      action: 'submit',
+      text: 'accept',
+      accepted: true
+    })
+    const done = await f.host.run({
+      ...input,
+      action: 'continue' as const,
+      humanConfirmed: 'gui' as const,
+      eventId: 'graph-main-human',
+      expectedTaskId: waiting.task.taskId,
+      expectedWaitRevision: waiting.task.waitRevision
+    })
+    expect(done.task.state).toBe('completed')
+    expect(f.count().executions).toBe(4)
+    expect(f.byId.second.meta.nodeResult).toBeTruthy()
+  })
+
   it.each(['first', 'second'])('BL-05: accepts generated graph with third node connected to %s', async (parent) => {
     const graph = FlowGraphSchema.parse({
       ...seqGraph,
@@ -2343,6 +2376,292 @@ describe('O4-P3 graph mode execution（声明式图路由，mock 模型）', () 
     const taskIds = run.children.map((child) => child.taskId)
     expect(new Set(taskIds).size).toBe(taskIds.length)
   })
+  it('capability v1 循环按轮次生成新 taskId 并执行真实命令', async () => {
+    const graph = FlowGraphSchema.parse({
+      schemaVersion: 1,
+      graphId: 'capability-v1-loop',
+      name: '能力单节点循环',
+      goal: '验证能力节点两轮独立执行',
+      nodes: [{
+        nodeId: 'process-first', title: 'process-first', participation: 'autonomous',
+        kind: 'capability', capability: 'text-pass@1', goal: '处理', completion: '输出',
+        loop: {
+          maxIterations: 2,
+          exitCondition: [{ kind: 'output-field', stageKey: 'process-first', path: 'text', op: 'equals', value: '__never__' }]
+        }
+      }],
+      edges: [],
+      entry: 'process-first',
+      exits: ['process-first']
+    })
+    const f = fixture({ graph })
+    const done = await f.host.run(input)
+    expect(done.task.state).toBe('completed')
+    const run = f.coordinator.store.latest('p', 'main')!
+    expect(run.loopIterations?.['process-first']).toBe(2)
+    expect(run.children.map((child) => child.round)).toEqual([1, 2])
+    expect(new Set(run.children.map((child) => child.taskId)).size).toBe(2)
+    expect(f.count().executions).toBe(2)
+  })
+
+  it('human-task v1 循环每轮等待独立提交并生成新 taskId', async () => {
+    const graph = FlowGraphSchema.parse({
+      schemaVersion: 1,
+      graphId: 'human-v1-loop',
+      name: '人工单节点循环',
+      goal: '验证人工节点两轮独立提交',
+      nodes: [{
+        nodeId: 'human', title: 'human', participation: 'human', kind: 'human-task',
+        humanOutputType: 'text', goal: '提交人工成果', completion: '输出人工文本',
+        loop: {
+          maxIterations: 2,
+          exitCondition: [{ kind: 'output-field', stageKey: 'human', path: 'text', op: 'equals', value: '__never__' }]
+        }
+      }],
+      edges: [],
+      entry: 'human',
+      exits: ['human']
+    })
+    const f = fixture({ graph })
+    addHumanTaskFixture(f, 'human', 'material')
+    let waiting = await f.host.run(input)
+    expect(waiting.task.state).toBe('waiting')
+    expect(f.coordinator.store.latest('p', 'main')!.loopIterations?.human).toBe(1)
+    for (const round of [1, 2]) {
+      const instance = f.byId.human.meta.humanTask
+        ? JSON.parse(String(f.byId.human.meta.humanTask)) as { revision: number }
+        : { revision: 1 }
+      f.byId.human.meta.humanTaskPending = JSON.stringify({
+        submissionId: `human-loop-${round}`,
+        expectedRevision: instance.revision,
+        value: { kind: 'text', text: `人工第 ${round} 轮` }
+      })
+      waiting = await f.host.run({
+        ...input,
+        action: 'continue',
+        requestId: `human-loop-continue-${round}`,
+        eventId: `human-loop-event-${round}`,
+        expectedTaskId: waiting.task.taskId,
+        expectedWaitRevision: waiting.task.waitRevision,
+        humanConfirmed: 'gui'
+      })
+      expect(waiting.task.state).toBe(round === 1 ? 'waiting' : 'completed')
+    }
+    const run = f.coordinator.store.latest('p', 'main')!
+    expect(run.loopIterations?.human).toBe(2)
+    expect(run.children.map((child) => child.round)).toEqual([1, 2])
+    expect(new Set(run.children.map((child) => child.taskId)).size).toBe(2)
+    expect(f.count().executions).toBe(4)
+  })
+
+  it('capability 作为 v2 循环载体时每轮使用独立任务并正常落定', async () => {
+    const graph = FlowGraphSchema.parse({
+      schemaVersion: 1,
+      graphId: 'capability-v2-carrier',
+      name: '能力子图循环载体',
+      goal: '验证能力载体两轮独立执行',
+      nodes: [{
+        nodeId: 'process-first', title: 'process-first', participation: 'autonomous',
+        kind: 'capability', capability: 'text-pass@1', goal: '处理', completion: '输出',
+        loop: {
+          body: ['process-first'],
+          maxIterations: 2,
+          exitCondition: [{ kind: 'output-field', stageKey: 'process-first', path: 'text', op: 'equals', value: '__never__' }]
+        }
+      }],
+      edges: [{ from: { nodeId: 'process-first', portId: 'out-value' }, to: { nodeId: 'process-first', portId: 'in-value' }, kind: 'data' }],
+      entry: 'process-first',
+      exits: ['process-first']
+    })
+    const f = fixture({ graph })
+    const done = await f.host.run(input)
+    expect(done.task.state).toBe('completed')
+    const run = f.coordinator.store.latest('p', 'main')!
+    expect(run.loopIterations?.['process-first']).toBe(2)
+    expect(run.children.map((child) => child.round)).toEqual([1, 2])
+    expect(new Set(run.children.map((child) => child.taskId)).size).toBe(2)
+    expect(f.count().executions).toBe(2)
+  })
+
+  it('graph 出口落定但仍有未完成子节点时拒绝提前完成', async () => {
+    const graph = FlowGraphSchema.parse({
+      schemaVersion: 1,
+      graphId: 'live-dead-end',
+      name: '活跃死分支',
+      goal: '出口完成不得忽略未完成子节点',
+      nodes: [graphNode('first'), graphNode('second'), graphNode('third')],
+      edges: [
+        { from: { nodeId: 'first', portId: 'out-text' }, to: { nodeId: 'second', portId: 'in-text' }, kind: 'data' },
+        { from: { nodeId: 'second', portId: 'out-text' }, to: { nodeId: 'third', portId: 'in-text' }, kind: 'data' }
+      ],
+      entry: 'first',
+      exits: ['second']
+    })
+    const f = fixture({ graph, thirdAgent: true })
+    f.file.edges.push({
+      id: 'edge-second-third',
+      from: { nodeId: 'second', portId: 'out-text' },
+      to: { nodeId: 'third', portId: 'in-text' }
+    })
+    await expect(f.host.run(input)).rejects.toMatchObject({ code: 'AGENT_OUTPUT_UNVERIFIED' })
+    const run = f.coordinator.store.latest('p', 'main')!
+    expect(run.state).toBe('blocked')
+    expect(run.children.some((child) => child.nodeId === 'third')).toBe(false)
+  })
+
+  it('human-task 同端口 many 输入合并为一条命令输入', async () => {
+    const capabilityNode = (nodeId: string) => ({
+      nodeId,
+      title: nodeId,
+      participation: 'autonomous' as const,
+      kind: 'capability' as const,
+      capability: 'text-pass@1',
+      goal: '处理',
+      completion: '输出'
+    })
+    const graph = FlowGraphSchema.parse({
+      schemaVersion: 1,
+      graphId: 'human-many-input',
+      name: '人工多输入',
+      goal: '同端口多来源合并',
+      nodes: [
+        capabilityNode('process-first'),
+        capabilityNode('process-second'),
+        {
+          nodeId: 'human', title: 'human', participation: 'human', kind: 'human-task',
+          humanOutputType: 'text', goal: '提交', completion: '输出'
+        }
+      ],
+      edges: [
+        { from: { nodeId: 'process-first', portId: 'out-value' }, to: { nodeId: 'process-second', portId: 'in-value' }, kind: 'data' },
+        { from: { nodeId: 'process-first', portId: 'out-value' }, to: { nodeId: 'human', portId: 'in-text' }, kind: 'data' },
+        { from: { nodeId: 'process-second', portId: 'out-value' }, to: { nodeId: 'human', portId: 'in-text' }, kind: 'data' }
+      ],
+      entry: 'process-first',
+      exits: ['human']
+    })
+    const f = fixture({ graph })
+    addHumanTaskFixture(f, 'human', 'process-first')
+    f.file.edges = f.file.edges.filter((edge) => edge.to.nodeId !== 'human')
+    f.file.edges.push(
+      {
+        id: 'edge-process-first-second',
+        from: { nodeId: 'process-first', portId: 'out-value' },
+        to: { nodeId: 'process-second', portId: 'in-value' }
+      },
+      {
+        id: 'edge-process-first-human',
+        from: { nodeId: 'process-first', portId: 'out-value' },
+        to: { nodeId: 'human', portId: 'in-text' }
+      },
+      {
+        id: 'edge-process-second-human',
+        from: { nodeId: 'process-second', portId: 'out-value' },
+        to: { nodeId: 'human', portId: 'in-text' }
+      }
+    )
+    const execute = vi.spyOn(f.host, 'executeNodeCommand')
+    const waiting = await f.host.run(input)
+    expect(waiting.task.state).toBe('waiting')
+    const command = execute.mock.calls
+      .map(([value]) => value)
+      .find((value) => value.targetNodeId === 'human')
+    expect(command?.inputs).toHaveLength(1)
+    expect(command?.inputs[0]?.assets).toHaveLength(2)
+  })
+
+  it('循环 body 的条件跳过出口视为落定并推进下一轮', async () => {
+    const graph = FlowGraphSchema.parse({
+      schemaVersion: 1,
+      graphId: 'loop-skipped-exit',
+      name: '循环跳过出口',
+      goal: 'skipped exit 也应结束当前轮',
+      nodes: [
+        {
+          ...graphNode('first'),
+          loop: {
+            body: ['first', 'second', 'third'],
+            maxIterations: 2,
+            exitCondition: [{ kind: 'output-field', stageKey: 'first', path: 'text', op: 'equals', value: '__never__' }]
+          }
+        },
+        graphNode('second'),
+        graphNode('third')
+      ],
+      edges: [
+        { from: { nodeId: 'first', portId: 'out-text' }, to: { nodeId: 'second', portId: 'in-text' }, kind: 'data' },
+        {
+          from: { nodeId: 'first', portId: 'out-text' },
+          to: { nodeId: 'third', portId: 'in-text' },
+          kind: 'data',
+          condition: [{ kind: 'output-field', stageKey: 'first', path: 'text', op: 'equals', value: '__never__' }]
+        }
+      ],
+      entry: 'first',
+      exits: ['second', 'third']
+    })
+    const f = fixture({ graph, thirdAgent: true })
+    f.file.edges.push({
+      id: 'edge-first-third',
+      from: { nodeId: 'first', portId: 'out-text' },
+      to: { nodeId: 'third', portId: 'in-text' }
+    })
+    const done = await f.host.run(input)
+    expect(done.task.state).toBe('completed')
+    const run = f.coordinator.store.latest('p', 'main')!
+    expect(run.loopIterations?.first).toBe(2)
+    expect(run.children.filter((child) => child.nodeId === 'second').map((child) => child.round))
+      .toEqual([1, 2])
+    expect(run.children.some((child) => child.nodeId === 'third')).toBe(false)
+    expect(run.skippedNodeIds).toContain('third')
+  })
+
+  it('deadline abort 明确落为 AGENT_BUDGET_EXHAUSTED 并释放占用', async () => {
+    const entered = deferred(),
+      release = deferred()
+    const f = fixture({
+      graph: seqGraph,
+      deliveryDuring: async () => {
+        entered.resolve()
+        await release.promise
+      }
+    })
+    const running = f.host.run(input)
+    await entered.promise
+    const taskId = f.coordinator.store.latest('p', 'main')!.taskId
+    const controller = (f.coordinator as unknown as {
+      active: Map<string, AbortController>
+    }).active.get(taskId)!
+    controller.abort(new Error('deadline'))
+    release.resolve()
+    const result = await running
+    expect(result.task.state).toBe('failed')
+    expect(result.task.code).toBe('AGENT_BUDGET_EXHAUSTED')
+    expect(f.coordinator.store.owner('p', 'main')).toBeNull()
+  })
+
+  it('stop 子步骤抛异常仍释放范围占用并保留 cancelled 终态', async () => {
+    const entered = deferred(),
+      release = deferred()
+    const f = fixture({
+      graph: seqGraph,
+      deliveryDuring: async () => {
+        entered.resolve()
+        await release.promise
+      }
+    })
+    const running = f.host.run(input)
+    await entered.promise
+    vi.spyOn(f.host, 'stop').mockImplementation(() => {
+      throw new Error('stop failed')
+    })
+    expect(() => f.coordinator.stop({ projectId: 'p', nodeId: 'main' })).toThrow('stop failed')
+    expect(f.coordinator.store.owner('p', 'main')).toBeNull()
+    expect(f.coordinator.store.latest('p', 'main')!.state).toBe('cancelled')
+    release.resolve()
+    await running.catch(() => undefined)
+  })
+
   it.each([
     ['private-source', 'process-second', 'process-no'],
     ['other', 'process-no', 'process-second']
@@ -2610,6 +2929,11 @@ describe('O4-P3 graph mode execution（声明式图路由，mock 模型）', () 
       deliveryDuring: async (target) => {
         if (target === 'process-second') await second.promise
       }
+    })
+    f.file.edges.push({
+      id: 'edge-process-first-second',
+      from: { nodeId: 'process-first', portId: 'out-value' },
+      to: { nodeId: 'process-second', portId: 'in-value' }
     })
     const running = f.host.run(input)
     for (let attempt = 0; attempt < 100; attempt++) {

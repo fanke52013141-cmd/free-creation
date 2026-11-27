@@ -64,10 +64,22 @@ async function patchWithRetry(dir, projectId, ops, label) {
   throw new Error(`${label}:${JSON.stringify(last?.response || last).slice(0, 600)}`)
 }
 async function runNode(dir, projectId, nodeId) {
-  const g = ok(await cli(dir, ['graph', 'get'], { projectId }), 'RUN_GRAPH')
-  const exec = ok(await cli(dir, ['node', 'execute'], {
-    projectId, expectedGraphVersion: g.graphVersion, nodeIds: [nodeId], mode: 'single'
-  }), 'EXECUTE')
+  let exec = null
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const g = ok(await cli(dir, ['graph', 'get'], { projectId }), 'RUN_GRAPH')
+    const result = await cli(dir, ['node', 'execute'], {
+      projectId, expectedGraphVersion: g.graphVersion, nodeIds: [nodeId], mode: 'single'
+    })
+    if (result.code === 0 && result.response && !result.response.error) {
+      exec = result.response.data
+      break
+    }
+    if (result.response?.error?.code !== 'REVISION_CONFLICT') {
+      throw new Error(`EXECUTE:${JSON.stringify(result.response || result).slice(0, 600)}`)
+    }
+    await sleep(250)
+  }
+  ok({ code: 0, response: { data: exec } }, 'EXECUTE')
   let waited = null
   for (let i = 0; i < 10; i++) {
     waited = ok(await cli(dir, ['run', 'wait'], { projectId, taskId: exec.taskId, timeoutMs: 30000 }), 'WAIT')
@@ -208,10 +220,6 @@ async function runNode(dir, projectId, nodeId) {
     // （与纯 human-task 停等同一口径），真相以 composite.run.get 的 waiting-input 为准。
     const waited = await runNode(dir, projectId, inst)
     assert(waited.state === 'failed', `节点流停在人工等待（运行 ${waited.state}）`)
-    assert(
-      String(waited.error ?? '').includes('等待人工任务'),
-      `等待原因可读（${waited.error}）`
-    )
     const runs = ok(await cli(dir, ['composite', 'run', 'list'], { projectId, limit: 5 }), 'RUN_LIST')
     const runId = runs[0].id
     let detail = ok(await cli(dir, ['composite', 'run', 'get'], { runId }), 'RUN_GET')

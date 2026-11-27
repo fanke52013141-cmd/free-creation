@@ -70,6 +70,8 @@ import {
 } from '../store/composite-run-wait.repo'
 import { validateCompositeManifest } from '../../shared/composite/validate'
 import { compositeContentHash } from '../../shared/composite/manifest'
+import type { CompositeManifest } from '../../shared/composite/manifest'
+import { validateNodeSchema } from '../../shared/node-schemas'
 import type { CompositeResolutionMap } from '../../shared/agent-access/graph-ops'
 import { COMPOSITE_OPERATION_IDS } from '../../shared/agent-access/ops/composite'
 import { runHistoryOperation } from './history-ops'
@@ -1914,20 +1916,33 @@ export class LocalAccessService {
    * （与 GUI 按钮同一写入）；main 核对落盘事实。完成状态由运行时执行器校验，
    * 外部不能直接改完成状态——满足「模型文字不能直接赋予成功状态」的协同门槛。
    */
-  private restoreCompositeInputs(values: Record<string, unknown>): Array<{ portId: string; value: unknown }> {
-    return Object.entries(values).map(([portId, value]) => {
-      if (value === null || typeof value !== 'object' ||
-          (!(('kind' in value) && value.kind === 'media') && !('mediaPath' in value))) {
-        return { portId, value }
+  private restoreCompositeInputs(
+    values: Record<string, unknown>,
+    manifest: CompositeManifest
+  ): Array<{ portId: string; value: unknown }> {
+    const restored: Array<{ portId: string; value: unknown }> = []
+    for (const [portId, raw] of Object.entries(values)) {
+      const input = manifest.inputs.find(
+        (candidate) => portId === `in-${candidate.id}` || portId === candidate.id
+      )
+      if (!input) throw new AccessFailure('INVALID_INPUT', 'precheck', 'composite-input-port')
+      const candidates = input.cardinality === 'many' && Array.isArray(raw) ? raw : [raw]
+      for (const value of candidates) {
+        if (value === null || typeof value !== 'object' ||
+            (!(('kind' in value) && value.kind === 'media') && !('mediaPath' in value))) {
+          restored.push({ portId, value })
+          continue
+        }
+        const mediaId = 'mediaId' in value && typeof value.mediaId === 'string' ? value.mediaId : ''
+        const asset = getMediaAsset(mediaId)
+        if (!asset) throw new AccessFailure('NOT_FOUND', 'precheck', `media:${mediaId}`)
+        restored.push({
+          portId,
+          value: { kind: asset.kind, mediaId: asset.id, mediaPath: asset.path, mime: asset.mime }
+        })
       }
-      const mediaId = 'mediaId' in value && typeof value.mediaId === 'string' ? value.mediaId : ''
-      const asset = getMediaAsset(mediaId)
-      if (!asset) throw new AccessFailure('NOT_FOUND', 'precheck', `media:${mediaId}`)
-      return {
-        portId,
-        value: { kind: asset.kind, mediaId: asset.id, mediaPath: asset.path, mime: asset.mime }
-      }
-    })
+    }
+    return restored
   }
 
   /** W4 受控重试：仅 failed/interrupted 的 headless 运行可按原固定版本与原公开输入复跑；
@@ -1967,7 +1982,7 @@ export class LocalAccessService {
     if (!existing.inputValues)
       throw new AccessFailure('INPUTS_NOT_RECORDED', 'precheck', 'run predates input persistence')
     // 媒体输入按 mediaId 重新解析（资产可能已清理）；非媒体值按原样复跑。
-    const resolvedInputs = this.restoreCompositeInputs(existing.inputValues)
+    const resolvedInputs = this.restoreCompositeInputs(existing.inputValues, record.manifest)
     const newRunId = randomUUID()
     try {
       await this.options.desktop.run({
@@ -2097,14 +2112,22 @@ export class LocalAccessService {
       .map((step) => step.stepKey)
     // 已满足的人工等待 → 提交值（按节点），续跑消费为正式输出。
     const humanSubmissions = getSatisfiedHumanSubmissions(runId)
-    const resolvedInputs = this.restoreCompositeInputs(existing.inputValues ?? {})
+    const resolvedInputs = this.restoreCompositeInputs(existing.inputValues ?? {}, record.manifest)
+    const canvasResume = Boolean(existing.instanceNodeId)
     try {
       await this.options.desktop.run({
-        action: 'execute-composite-headless',
+        action: canvasResume ? 'resume-composite-canvas' : 'execute-composite-headless',
         projectId: existing.projectId,
-        compositeManifest: record.manifest,
-        compositeInputs: resolvedInputs,
-        ownRunId: runId,
+        ...(canvasResume
+          ? {
+              nodeId: existing.instanceNodeId ?? undefined,
+              compositeResumeInputValues: resolvedInputs
+            }
+          : {
+              compositeManifest: record.manifest,
+              compositeInputs: resolvedInputs,
+              ownRunId: runId
+            }),
         compositeResumeRunId: runId,
         compositeHumanSubmissions: humanSubmissions,
         compositeCompletedSteps: completedSteps,
@@ -2165,6 +2188,11 @@ export class LocalAccessService {
         port.type === 'any' || port.type === kind || (port.type === 'text' && kind === 'markdown')
       if (!compatible)
         throw new AccessFailure('OUTPUT_TYPE_INVALID', 'precheck', `${entry.portId}:${port.type}`)
+      if (kind === 'json' && port.schemaRef) {
+        const validation = validateNodeSchema(port.schemaRef, entry.value.data)
+        if (!validation.ok)
+          throw new AccessFailure('OUTPUT_VALUE_INVALID', 'precheck', `${entry.portId}:schema`)
+      }
       outputValues[entry.portId] = entry.value
     }
     // BL-01 / AF-1.5：外部补交正式输出是人工决定，必须人在 GUI 亲眼允许后才落库。

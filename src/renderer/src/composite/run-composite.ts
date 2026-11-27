@@ -77,7 +77,11 @@ async function execute(
   request: CompositeRunRequest
 ): Promise<CompositeRunOutcome> {
   const { manifest } = request
-  if (request.signal?.cancelled) return { status: 'failed', reason: '节点流运行已取消' }
+  // 每次调用独立运行 ID；request.ownRunId 由 headless 外部入口预分配（供台账轮询）；
+  // request.runId 是外层（父）运行，用于父子关联。AF-07 续跑复用既有 runId。
+  const resuming = Boolean(request.resumeRunId)
+  const runId = request.resumeRunId ?? request.ownRunId ?? crypto.randomUUID()
+  if (request.signal?.cancelled) return { runId, status: 'failed', reason: '节点流运行已取消' }
   // W3 运行期守卫：递归、嵌套深度与展开预算与发布校验同口径拒绝。
   // 拒绝同样写入运行台账（failurePhase=runtime），保证可定位、可审计。
   const budget = checkCompositeRunBudget(manifest, request.parentContext)
@@ -87,10 +91,7 @@ async function execute(
     expandedNodes: budget.expandedNodes,
     ...(headless ? { headless: true } : {})
   }
-  // 每次调用独立运行 ID；request.ownRunId 由 headless 外部入口预分配（供台账轮询）；
-  // request.runId 是外层（父）运行，用于父子关联。AF-07 续跑复用既有 runId。
-  const resuming = Boolean(request.resumeRunId)
-  const runId = request.resumeRunId ?? request.ownRunId ?? crypto.randomUUID()
+  // request.runId 是外层（父）运行，用于父子关联。
   const parentRunId = request.runId
   const completedSteps = new Set(request.completedSteps ?? [])
   const runtimeVersion = compositeRuntimeVersion(manifest)
@@ -137,7 +138,7 @@ async function execute(
       errorMessage: reason,
       failurePhase: failure.phase
     })
-    return { status: 'failed', reason, failure, stepCount: 0 }
+    return { runId, status: 'failed', reason, failure, stepCount: 0 }
   }
   const shapeByNode = new Map<string, TLShapeId>()
   try {
@@ -152,7 +153,7 @@ async function execute(
         resume: true
       })
       if (!claimed.ok || claimed.data !== true)
-        return { status: 'failed', reason: '节点流等待未满足或已被续跑', stepCount: 0 }
+        return { runId, status: 'failed', reason: '节点流等待未满足或已被续跑', stepCount: 0 }
     } else {
       await report(() =>
         window.api.composite.runStart({
@@ -178,6 +179,7 @@ async function execute(
         failurePhase: failure.phase
       })
       return {
+        runId,
         status: 'failed',
         reason: budget.issue.message,
         failure,
@@ -194,7 +196,7 @@ async function execute(
         errorMessage: planned.issues.map((issue) => issue.message).join('；').slice(0, 500),
         failurePhase: failure.phase
       })
-      return { status: 'failed', reason: planned.issues[0]!.message, failure, stepCount: 0 }
+      return { runId, status: 'failed', reason: planned.issues[0]!.message, failure, stepCount: 0 }
     }
     // W3：引用形态的内部组合节点必须先解析固定版本快照并缓存到 meta，
     // 否则 resolvePorts 推导不出公开端口，内部连线与输入绑定会失败。
@@ -283,7 +285,7 @@ async function execute(
           errorMessage: reason,
           failurePhase: failure.phase
         })
-        return { status: 'failed', reason, failure, stepCount: 0 }
+        return { runId, status: 'failed', reason, failure, stepCount: 0 }
       }
       resolvedCapabilities.set(`${ref.capabilityId}@${ref.version}`, result.data.manifest)
       const gate = findNestedCompositeManualGate(result.data.manifest, cachedCapability, {
@@ -327,7 +329,7 @@ async function execute(
           errorMessage: legacy,
           failurePhase: failure.phase
         })
-        return { status: 'failed', reason: legacy, failure, stepCount: 0 }
+        return { runId, status: 'failed', reason: legacy, failure, stepCount: 0 }
       }
     } else {
       for (const binding of planned.bindings) {
@@ -346,7 +348,7 @@ async function execute(
             errorMessage: reason,
             failurePhase: 'input'
           })
-          return { status: 'failed', reason, failure, stepCount: 0 }
+          return { runId, status: 'failed', reason, failure, stepCount: 0 }
         }
         const sourceId = createVirtualSource(runEditor, binding, targetShape, shapeByNode.size)
         if (
@@ -371,7 +373,7 @@ async function execute(
             errorMessage: reason,
             failurePhase: 'input'
           })
-          return { status: 'failed', reason, failure, stepCount: 0 }
+          return { runId, status: 'failed', reason, failure, stepCount: 0 }
         }
       }
     }
@@ -387,7 +389,7 @@ async function execute(
           portId: edge.from.portId
         }
         await finish('failed', { errorCode: failure.code, failurePhase: 'step' })
-        return { status: 'failed', reason: '内部连线映射缺失', failure, stepCount: successfulSteps }
+        return { runId, status: 'failed', reason: '内部连线映射缺失', failure, stepCount: successfulSteps }
       }
       if (
         !createEdge(
@@ -410,7 +412,7 @@ async function execute(
           errorMessage: reason,
           failurePhase: 'step'
         })
-        return { status: 'failed', reason, failure, stepCount: successfulSteps }
+        return { runId, status: 'failed', reason, failure, stepCount: successfulSteps }
       }
     }
 
@@ -497,9 +499,19 @@ async function execute(
             ...(typeof meta?.nodeExtra === 'string' ? { nodeExtra: meta.nodeExtra } : {}),
             ...(typeof meta?.humanTask === 'string' ? { humanTask: meta.humanTask } : {}),
             nodeRun: meta?.nodeRun ?? null
-        })
-        if (!checkpoint.ok || checkpoint.data !== true)
+        }).catch((error) => ({ ok: false as const, error }))
+        if (!checkpoint.ok || checkpoint.data !== true) {
+          await report(() =>
+            window.api.composite.runStep({
+              runId,
+              stepKey: nodeId,
+              nodeType,
+              status: 'failed',
+              reason: 'COMPOSITE_STEP_CHECKPOINT_FAILED'
+            })
+          )
           throw new Error('COMPOSITE_STEP_CHECKPOINT_UNCONFIRMED')
+        }
       }
       await report(() =>
         window.api.composite.runStep({
@@ -542,7 +554,7 @@ async function execute(
       if (request.signal?.cancelled) {
         await Promise.allSettled([...running.values()])
         await finish('cancelled')
-        return { status: 'failed', reason: '节点流运行已取消', stepCount: successfulSteps }
+        return { runId, status: 'failed', reason: '节点流运行已取消', stepCount: successfulSteps }
       }
       if (!stopScheduling) {
         const slots = executionPolicy.maxConcurrency - running.size
@@ -610,10 +622,11 @@ async function execute(
         errorMessage: firstFailure.reason,
         failurePhase: 'step'
       })
-      return { status: 'failed', reason: firstFailure.reason, failure, stepCount: successfulSteps }
+      return { runId, status: 'failed', reason: firstFailure.reason, failure, stepCount: successfulSteps }
     }
     if (waitingStepKey) {
       return {
+        runId,
         status: 'waiting',
         waitingStepKey,
         reason: `节点流等待人工任务「${waitingStepKey}」提交后续跑`,
@@ -630,12 +643,13 @@ async function execute(
             runId,
             status: 'completed',
             outputPorts: compositeOutputSummary(manifest, outputs),
-            ...(headless ? { outputValues: outputs } : {})
+            outputValues: outputs
           })
         )
         ledgerFinished = true
         // 保持旧 GUI 的返回结构不变；公开输出映射只用于台账和 headless 读取。
         return {
+          runId,
           status: 'done',
           media: legacyOutput,
           stepCount: successfulSteps
@@ -648,7 +662,7 @@ async function execute(
         errorMessage: reason,
         failurePhase: 'output'
       })
-      return { status: 'failed', reason, failure, stepCount: successfulSteps }
+      return { runId, status: 'failed', reason, failure, stepCount: successfulSteps }
     }
 
     const read = (
@@ -671,18 +685,19 @@ async function execute(
         errorMessage: reason,
         failurePhase: failure.phase
       })
-      return { status: 'failed', reason, failure, stepCount: successfulSteps }
+      return { runId, status: 'failed', reason, failure, stepCount: successfulSteps }
     }
     await report(() =>
       window.api.composite.runFinish({
         runId,
         status: 'completed',
         outputPorts: compositeOutputSummary(manifest, collected.outputs),
-        ...(headless ? { outputValues: collected.outputs } : {})
+        outputValues: collected.outputs
       })
     )
     ledgerFinished = true
     return {
+      runId,
       status: 'done',
       ...(collected.media ? { media: collected.media } : {}),
       outputs: collected.outputs,
@@ -696,7 +711,7 @@ async function execute(
       errorMessage: reason,
       failurePhase: 'runtime'
     })
-    return { status: 'failed', reason, failure, stepCount: successfulSteps }
+    return { runId, status: 'failed', reason, failure, stepCount: successfulSteps }
   } finally {
     if (!runEditor.isDisposed) runEditor.dispose()
   }

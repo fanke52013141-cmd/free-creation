@@ -8,6 +8,11 @@ import type {
 } from '@shared/composite/manifest'
 import { parseCompositeManifest } from '@shared/composite/manifest'
 import { deriveCompositeBoundary } from '@shared/composite/boundary'
+import {
+  readCompositeManifest,
+  readCompositeInstanceRef
+} from '@shared/composite/outputs'
+import { portPairCompatible } from '@shared/port-compatibility'
 
 export interface CompositeEditorBuildInput {
   manifest: CompositeManifest
@@ -39,13 +44,15 @@ function portSnapshot(ports: CanvasNode['ports']): NonNullable<CompositeGraphNod
 
 function nestedCapability(node: CompositeGraphNode): { id: string; version: string } | null {
   if (node.nodeType !== 'composite' || !node.config) return null
+  const ref = readCompositeInstanceRef(node.config)
+  if (ref) return { id: ref.capabilityId, version: ref.version }
   try {
     const parsed = JSON.parse(node.config) as {
       manifest?: { capabilityId?: unknown; version?: unknown }
       capabilityId?: unknown
       version?: unknown
     }
-    // 内嵌快照形态与 W3 固定版本引用形态都登记固定 capabilityId@version。
+    // 内嵌快照形态同样登记固定 capabilityId@version。
     const source = parsed.manifest ?? parsed
     return typeof source.capabilityId === 'string' && typeof source.version === 'string'
       ? { id: source.capabilityId, version: source.version }
@@ -87,6 +94,149 @@ function rebuildDependencies(
     (dependency) => dependency.kind === 'media' || dependency.kind === 'model'
   )
   return [...nodeDeps.values(), ...capabilityDeps.values(), ...retained]
+}
+
+export interface CompositeEditorVersionRecord {
+  manifest: CompositeManifest
+  contentHash: string
+}
+
+/**
+ * 编辑页铺图前解析直接嵌套的固定版本引用。内嵌快照直接复用；引用形态必须从发布仓库
+ * 解析并核对 contentHash，再把快照缓存到 node shape 的 meta.compositeManifest，
+ * 否则 resolvePorts 看不到公开端口，createEdge 会静默失败并在保存时丢线。
+ */
+export async function resolveCompositeEditorManifestCache(
+  manifest: CompositeManifest,
+  getVersion: (input: {
+    capabilityId: string
+    version: string
+  }) => Promise<CompositeEditorVersionRecord | null>
+): Promise<Map<string, CompositeManifest>> {
+  const resolved = new Map<string, CompositeManifest>()
+  for (const node of manifest.graph.nodes) {
+    if (node.nodeType !== 'composite') continue
+    const inline = readCompositeManifest(node.config)
+    if (inline) {
+      resolved.set(node.id, inline)
+      continue
+    }
+    const ref = readCompositeInstanceRef(node.config)
+    if (!ref) continue
+    const record = await getVersion({ capabilityId: ref.capabilityId, version: ref.version })
+    if (!record || (ref.contentHash && record.contentHash !== ref.contentHash)) {
+      throw new Error(`内部组合节点固定版本引用无法解析：${ref.capabilityId}@${ref.version}`)
+    }
+    resolved.set(node.id, record.manifest)
+  }
+  return resolved
+}
+
+function portKey(nodeId: string, portId: string): string {
+  return `${nodeId}:${portId}`
+}
+
+function uniqueBoundaryId(base: string, used: ReadonlySet<string>, reserved: ReadonlySet<string>): string {
+  let candidate = base
+  let index = 2
+  while (used.has(candidate) || reserved.has(candidate)) {
+    candidate = `${base.slice(0, 60)}-${index++}`
+  }
+  return candidate
+}
+
+/**
+ * 编辑保存不能简单用 deriveCompositeBoundary 覆盖旧契约：合法的手工/API 边界可能包含
+ * 一个公开输入广播到多个 targets，或非源/汇节点上的外部端口。这里先保留仍有效的既有
+ * 公开端口与 ID，再只为尚未覆盖的源/汇端口补充自动推导边界。
+ */
+function mergeCompositeBoundary(
+  previous: CompositeManifest,
+  graph: CompositeManifest['graph'],
+  derived: ReturnType<typeof deriveCompositeBoundary>
+): Pick<CompositeManifest, 'inputs' | 'outputs'> {
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]))
+  const portOf = (
+    nodeId: string,
+    portId: string
+  ): NonNullable<CompositeGraphNode['ports']>[number] | undefined =>
+    nodeById.get(nodeId)?.ports?.find((port) => port.id === portId)
+  const usedInputTargets = new Set<string>()
+  const usedOutputSources = new Set<string>()
+  const reservedInputIds = new Set(previous.inputs.map((input) => input.id))
+  const reservedOutputIds = new Set(previous.outputs.map((output) => output.id))
+  const inputs: CompositeManifest['inputs'] = []
+  const outputs: CompositeManifest['outputs'] = []
+
+  for (const input of previous.inputs) {
+    // 新发布只接受 schemaRef；历史内联 schema 不能通过编辑保存偷偷带入新版本。
+    if (input.schema !== undefined) continue
+    const targets = input.targets.filter((target) => {
+      const port = portOf(target.nodeId, target.portId)
+      if (!port || port.dir !== 'in') return false
+      if (!portPairCompatible(
+        { type: input.type, schema: input.schemaRef },
+        { type: port.type, schema: port.schemaRef }
+      )) return false
+      if (input.cardinality === 'many' && port.cardinality === 'one') return false
+      const key = portKey(target.nodeId, target.portId)
+      if (usedInputTargets.has(key)) return false
+      usedInputTargets.add(key)
+      return true
+    })
+    if (targets.length > 0) inputs.push({ ...input, targets })
+  }
+
+  for (const output of previous.outputs) {
+    if (output.schema !== undefined) continue
+    const port = portOf(output.source.nodeId, output.source.portId)
+    if (!port || port.dir !== 'out') continue
+    if (!portPairCompatible(
+      { type: port.type, schema: port.schemaRef },
+      { type: output.type, schema: output.schemaRef }
+    )) continue
+    if (port.cardinality === 'many' && output.cardinality === 'one') continue
+    const key = portKey(output.source.nodeId, output.source.portId)
+    if (usedOutputSources.has(key)) continue
+    usedOutputSources.add(key)
+    outputs.push(output)
+  }
+
+  for (const input of inputs) {
+    if (input.defaultValue !== undefined) continue
+    const derivedMatch = derived.inputs.find((candidate) =>
+      candidate.targets.some((target) =>
+        input.targets.some((existing) => portKey(existing.nodeId, existing.portId) === portKey(target.nodeId, target.portId))
+      )
+    )
+    if (derivedMatch?.defaultValue !== undefined) input.defaultValue = derivedMatch.defaultValue
+  }
+
+  const usedInputIds = new Set(inputs.map((input) => input.id))
+  for (const input of derived.inputs) {
+    const targets = input.targets.filter((target) => {
+      const key = portKey(target.nodeId, target.portId)
+      if (usedInputTargets.has(key)) return false
+      usedInputTargets.add(key)
+      return true
+    })
+    if (targets.length === 0) continue
+    const id = uniqueBoundaryId(input.id, usedInputIds, reservedInputIds)
+    usedInputIds.add(id)
+    inputs.push({ ...input, id, targets })
+  }
+
+  const usedOutputIds = new Set(outputs.map((output) => output.id))
+  for (const output of derived.outputs) {
+    const key = portKey(output.source.nodeId, output.source.portId)
+    if (usedOutputSources.has(key)) continue
+    usedOutputSources.add(key)
+    const id = uniqueBoundaryId(output.id, usedOutputIds, reservedOutputIds)
+    usedOutputIds.add(id)
+    outputs.push({ ...output, id })
+  }
+
+  return { inputs, outputs }
 }
 
 /**
@@ -152,10 +302,15 @@ export function buildCompositeManifestFromEditor(
     }))
 
   const graph = { nodes: graphNodes, edges: graphEdges }
-  // 公开边界随内部图实时推导：文本开头 → 文本输入，图片结尾 → 图片输出。
-  const boundary = deriveCompositeBoundary({ ...input.manifest, graph })
+  // 公开边界随内部图实时推导，但必须保留仍有效的既有 ID/映射（广播 targets、非源汇端口）。
+  const boundary = mergeCompositeBoundary(
+    input.manifest,
+    graph,
+    deriveCompositeBoundary({ ...input.manifest, graph })
+  )
   const manifest: CompositeManifest = {
     ...input.manifest,
+    runtimeVersion: 2,
     graph,
     inputs: boundary.inputs,
     outputs: boundary.outputs,
