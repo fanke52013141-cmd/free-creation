@@ -9,7 +9,70 @@
 .agent-flow-role-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 6px;
   flex: 0 0 auto;
+}
+.agent-flow-deliverable-chip {
+  font-size: 10.5px;
+  line-height: 16px;
+  padding: 1px 6px;
+  border-radius: 2px;
+  color: var(--muted, #8b95a5);
+  background: rgba(15, 19, 26, 0.7);
+  border: 1px solid var(--border-soft, rgba(255, 255, 255, 0.08));
+}
+.agent-flow-role-chip.is-human {
+  color: #e0b970;
+  border-color: rgba(224, 185, 112, 0.42);
+}
+.agent-flow-inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin-top: auto;
+}
+.agent-flow-compact-textarea {
+  flex: 1 1 auto;
+  min-height: 72px;
+  border-radius: 8px;
+  resize: none;
+}
+.agent-flow-inline-actions > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.agent-flow-studio-btn {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid #333b48;
+  background: linear-gradient(180deg, #1d2430, #161b24);
+  color: #e7ebf2;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: filter 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+.agent-flow-studio-btn:hover {
+  background: linear-gradient(180deg, #242b37, #1c222c);
+  border-color: #465266;
+}
+.agent-flow-studio-btn.is-amber {
+  border-color: #f0d295;
+  background: linear-gradient(180deg, #e8c47c, #d4a454);
+  color: #13161b;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(224, 185, 112, 0.24);
+}
+.agent-flow-studio-btn.is-amber:hover {
+  filter: brightness(1.06);
 }
 .agent-flow-role-chip {
   display: inline-flex;

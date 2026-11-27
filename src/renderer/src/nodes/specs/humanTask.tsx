@@ -14,7 +14,7 @@ import {
 import { humanTaskExecutor, projectHumanTaskOutputs } from '@shared/engine/executors/humanTask'
 import { NODE_ACCENTS, registerNodeType, type NodeBodyProps, type NodeSettingsProps } from '../registry'
 import { NODE_UI } from '../../canvas/node-ui-tokens'
-import { NodeIdentity, NodePrimaryButton } from '../../canvas/NodePresentation'
+import { useNodePanelStore } from '../../stores/nodePanel'
 import { markUndoPoint } from '../../canvas/history'
 import { AppSelect } from '../../components/AppSelect'
 import './agentFlow.css'
@@ -61,7 +61,6 @@ function HumanTaskBody({ shape }: NodeBodyProps): React.JSX.Element {
   const config = configOf(shape)
   const instance = instanceOf(shape)
   const [draft, setDraft] = useState('')
-  const [handoffNote, setHandoffNote] = useState('')
   const [error, setError] = useState('')
   const completed = instance?.status === 'completed'
   const revision = instance?.revision ?? 1
@@ -112,7 +111,6 @@ function HumanTaskBody({ shape }: NodeBodyProps): React.JSX.Element {
     const submitted = admitHumanTaskSubmission(current, {
       submissionId: crypto.randomUUID(),
       expectedRevision: revision,
-      ...(handoffNote.trim() ? { handoffNote: handoffNote.trim() } : {}),
       value
     })
     if (!submitted.ok) {
@@ -130,52 +128,60 @@ function HumanTaskBody({ shape }: NodeBodyProps): React.JSX.Element {
       })
     }
     setDraft('')
-    setHandoffNote('')
   }
+
+  const outputLabel =
+    config.outputType === 'json'
+      ? 'JSON'
+      : config.outputType === 'image'
+        ? '图片'
+        : config.outputType === 'video'
+          ? '视频'
+          : '文本'
 
   return (
     <div className="agent-flow-body">
-      <NodeIdentity>
-        {config.instructions ? (
-          <p className="agent-flow-pending">{config.instructions}</p>
-        ) : (
-          <p className="agent-flow-pending">填写结果并提交，运行后交付。</p>
-        )}
-        {completed ? (
-          <p className="agent-flow-pending" role="status">
-            已完成，可重新提交覆盖。
-          </p>
-        ) : (
-          <p className="agent-flow-pending" role="status">
-            等待人工提交。
-          </p>
-        )}
-      </NodeIdentity>
-      {!mediaKind && <textarea
-        className="agent-flow-textarea"
-        aria-label="人工任务结果"
-        rows={4}
-        value={draft}
-        placeholder={config.outputType === 'json' ? '输入 JSON 结果' : '输入结果文本'}
-        onChange={(event) => setDraft(event.target.value)}
-      />}
-      {instance?.handoffNote && <p className="agent-flow-pending">交接说明 · {instance.handoffNote}</p>}
-      <textarea
-        className="agent-flow-textarea"
-        aria-label="交接说明"
-        placeholder="交接说明（可选）"
-        value={handoffNote}
-        maxLength={4096}
-        onChange={(event) => setHandoffNote(event.target.value)}
-      />
+      <div className="agent-flow-role-row">
+        <span className="agent-flow-role-chip is-human">人工</span>
+        <span className="agent-flow-deliverable-chip">
+          交付 · {outputLabel} · {completed ? '已交付' : '待提交'}
+        </span>
+      </div>
+      {config.instructions ? (
+        <p className="agent-flow-pending">{config.instructions}</p>
+      ) : null}
+      {!mediaKind && (
+        <textarea
+          className="node-textarea agent-flow-compact-textarea"
+          aria-label="人工任务结果"
+          rows={3}
+          value={draft}
+          placeholder={config.outputType === 'json' ? '输入 JSON' : '输入内容'}
+          onChange={(event) => setDraft(event.target.value)}
+        />
+      )}
       {error ? (
         <p className="agent-flow-pending" role="alert">
           {error}
         </p>
       ) : null}
-      <NodePrimaryButton disabled={picking || new TextEncoder().encode(handoffNote.trim()).length > 4096} onClick={() => void submit()}>
-        {picking ? '正在选择素材' : mediaKind ? '选择媒体并提交' : '提交结果'}
-      </NodePrimaryButton>
+      <div className="agent-flow-inline-actions">
+        <button
+          type="button"
+          className="agent-flow-studio-btn"
+          disabled={picking}
+          onClick={() => void submit()}
+        >
+          {picking ? '选择中…' : mediaKind ? '上传媒体' : '提交'}
+        </button>
+        <button
+          type="button"
+          className={`agent-flow-studio-btn${!completed ? ' is-amber' : ''}`}
+          onClick={() => useNodePanelStore.getState().open('stage-studio', shape.id, 'collaboration')}
+        >
+          进入工作台 →
+        </button>
+      </div>
     </div>
   )
 }

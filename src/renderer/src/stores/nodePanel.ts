@@ -8,7 +8,7 @@
 import { create } from 'zustand'
 import type { TLShapeId } from 'tldraw'
 
-export type NodePanelKind = 'chat' | 'contract' | 'director'
+export type NodePanelKind = 'chat' | 'contract' | 'director' | 'stage-studio'
 
 /** 契约面板的初始 tab：节点详情默认从可编辑的「设置」开始。 */
 export type NodePanelInitialTab = 'overview' | 'settings' | 'collaboration'

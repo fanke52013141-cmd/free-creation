@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { useEditor } from 'tldraw'
 import type { NodeBodyProps } from '../registry'
 import { ReviewDecisionSchema } from '@shared/agent-flow/node-contracts'
-import { NodePrimaryButton } from '../../canvas/NodePresentation'
 import { useAppStore } from '../../stores/app'
+import { useNodePanelStore } from '../../stores/nodePanel'
 import { ensureCanvasSaved } from '../../canvas/flow-asset-actions'
 import { runNodeManually } from '../../engine/executor'
 import { preflightReviewDecisionModels } from '../../engine/agent-model-preflight'
@@ -87,9 +87,23 @@ export function ReviewTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Rea
           {error}
         </p>
       )}
-      <NodePrimaryButton disabled={busy || !projectId} onClick={() => void run()}>
-        {busy ? '审核中' : decision ? '提交版本复审' : '审核当前版本'}
-      </NodePrimaryButton>
+      <div className="agent-flow-inline-actions">
+        <button
+          type="button"
+          className="agent-flow-studio-btn"
+          disabled={busy || !projectId}
+          onClick={() => void run()}
+        >
+          {busy ? '审核中' : decision ? '复审' : '审核'}
+        </button>
+        <button
+          type="button"
+          className="agent-flow-studio-btn"
+          onClick={() => useNodePanelStore.getState().open('stage-studio', shape.id, 'collaboration')}
+        >
+          审阅台 →
+        </button>
+      </div>
     </>
   )
 }

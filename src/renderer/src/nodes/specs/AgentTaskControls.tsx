@@ -8,6 +8,7 @@ import { ensureCanvasSaved } from '../../canvas/flow-asset-actions'
 import type { FlowAgentView } from '@shared/agent-flow/desktop-tasks'
 import { projectAgentOutputs } from '@shared/agent-flow/agent-outputs'
 import { useNodePanelStore } from '../../stores/nodePanel'
+import { useFlowFocusStore } from '../../stores/flowFocus'
 import { useResourceQueue } from '../../engine/resource-queue'
 import { flowAgentFailureMessage } from '@shared/agent-flow/failure-messages'
 import { AgentNodeConfigSchema, getAgentModelBindingStatus } from '@shared/agent-flow/node-contracts'
@@ -155,7 +156,13 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
       setPending(false)
     }
   }
+  const isControlled = useFlowFocusStore((state) => state.controlledNodeIds.has(shape.id))
+  const isAttention = useFlowFocusStore((state) => state.attentionNodeId === shape.id)
   const outputs = projectAgentOutputs(shape)
+  const quietControlledSpecialist =
+    isControlled && role === 'specialist' && !running && task?.state !== 'blocked'
+  const needsHumanAction =
+    isAttention || (task?.state === 'waiting' && task.waitKind === 'human')
   return (
     <>
       {task && (
@@ -168,10 +175,10 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
                   : '新版本待启动'
                 : '准备中',
               running: '处理中',
-              waiting: task.waitKind === 'human' ? '等待人工确认' : '等待执行核对',
-              blocked: '任务已阻断',
+              waiting: task.waitKind === 'human' ? '等待人工确认' : '等待核对',
+              blocked: '已阻断',
               completed: '已完成',
-              failed: '任务失败',
+              failed: '执行失败',
               cancelled: '已停止'
             }[task.state]
           }
@@ -196,49 +203,63 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
           {flowAgentFailureMessage(reason)}
         </p>
       ))}
-      <NodePrimaryButton allowWhileBusy disabled={!projectId} onClick={() => void act()}>
-        {running
-          ? '停止任务'
-          : task?.state === 'waiting'
-            ? task.waitKind === 'human'
-              ? '确认并继续'
-              : role === 'specialist' && task.code !== 'FLOW_COMMAND_FACTS_VERIFIED'
-                ? '核对执行事实'
-                : '明确继续执行'
-            : task?.state === 'blocked'
-              ? '核对执行事实'
-              : specialist
-                ? '启动任务'
-                : '配置专业 Agent'}
-      </NodePrimaryButton>
-      {['waiting', 'blocked'].includes(task?.state ?? '') && !running && (
-        <NodePrimaryButton onClick={() => void stop()}>停止任务</NodePrimaryButton>
-      )}
-      {task?.state === 'blocked' && task.recovery?.canRestore && !running && (
-        <NodePrimaryButton onClick={() => void act(true)}>补呈现已提交成果</NodePrimaryButton>
-      )}
-      {role === 'coordinator' && running && (
-        <NodePrimaryButton
-          allowWhileBusy
-          onClick={() => {
-            if (projectId)
-              void window.api
-                .pauseFlowAgent({ projectId, nodeId: shape.id })
-                .then((reply) => {
-                  if (!reply.ok) setError(reply.error.message)
-                })
-                .catch(() => setError('暂停未确认，请核对流程状态。'))
-          }}
+      {quietControlledSpecialist ? (
+        <button
+          type="button"
+          className={`agent-flow-studio-btn${needsHumanAction ? ' is-amber' : ''}`}
+          onClick={() => useNodePanelStore.getState().open('stage-studio', shape.id, 'collaboration')}
         >
-          暂停派发
-        </NodePrimaryButton>
-      )}
-      {role === 'specialist' && (
-        <NodePrimaryButton
-          onClick={() => useNodePanelStore.getState().open('contract', shape.id, 'collaboration')}
-        >
-          查看协作
-        </NodePrimaryButton>
+          {needsHumanAction ? '进入工作台 →' : '进入工作台'}
+        </button>
+      ) : (
+        <>
+          <NodePrimaryButton allowWhileBusy disabled={!projectId} onClick={() => void act()}>
+            {running
+              ? '停止任务'
+              : task?.state === 'waiting'
+                ? task.waitKind === 'human'
+                  ? '确认并继续'
+                  : role === 'specialist' && task.code !== 'FLOW_COMMAND_FACTS_VERIFIED'
+                    ? '核对结果'
+                    : '继续执行'
+                : task?.state === 'blocked'
+                  ? '核对结果'
+                  : specialist
+                    ? '启动任务'
+                    : '配置专业 Agent'}
+          </NodePrimaryButton>
+          {['waiting', 'blocked'].includes(task?.state ?? '') && !running && (
+            <NodePrimaryButton onClick={() => void stop()}>停止任务</NodePrimaryButton>
+          )}
+          {task?.state === 'blocked' && task.recovery?.canRestore && !running && (
+            <NodePrimaryButton onClick={() => void act(true)}>补呈现已提交成果</NodePrimaryButton>
+          )}
+          {role === 'coordinator' && running && (
+            <NodePrimaryButton
+              allowWhileBusy
+              onClick={() => {
+                if (projectId)
+                  void window.api
+                    .pauseFlowAgent({ projectId, nodeId: shape.id })
+                    .then((reply) => {
+                      if (!reply.ok) setError(reply.error.message)
+                    })
+                    .catch(() => setError('暂停未确认，请核对流程状态。'))
+              }}
+            >
+              暂停派发
+            </NodePrimaryButton>
+          )}
+          {role === 'specialist' && (
+            <NodePrimaryButton
+              onClick={() =>
+                useNodePanelStore.getState().open('stage-studio', shape.id, 'collaboration')
+              }
+            >
+              进入工作台
+            </NodePrimaryButton>
+          )}
+        </>
       )}
     </>
   )

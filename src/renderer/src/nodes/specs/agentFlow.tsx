@@ -229,6 +229,25 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
           <span className={`agent-flow-role-chip is-${config.role ?? 'specialist'}`}>
             {config.role === 'coordinator' ? '主控' : config.role === 'builder' ? '搭建' : '专业'}
           </span>
+          {config.role !== 'coordinator' && (
+            <span className="agent-flow-deliverable-chip">
+              {config.interactionMode === 'collaborative' ? '人机协同' : 'AI 执行'}
+            </span>
+          )}
+        </div>
+      )}
+      {review && (
+        <div className="agent-flow-role-row">
+          <span className="agent-flow-role-chip is-specialist">审核</span>
+          <span className="agent-flow-deliverable-chip">
+            {config.reviewMode === 'image'
+              ? '图片'
+              : config.reviewMode === 'audio'
+                ? '音频'
+                : config.reviewMode === 'sampled-video' || config.reviewMode === 'audio-video'
+                  ? '音视频'
+                  : '文本/JSON'}
+          </span>
         </div>
       )}
       {shape.props.nodeType !== 'state-machine' && (

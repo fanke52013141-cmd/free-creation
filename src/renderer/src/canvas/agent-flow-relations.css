@@ -48,6 +48,9 @@
 .agent-flow-control-path.is-dimmed {
   opacity: 0.12;
 }
+.agent-flow-control-path.is-flow-quiet {
+  opacity: 0;
+}
 .agent-flow-control-label {
   pointer-events: auto;
   cursor: pointer;
@@ -55,6 +58,10 @@
 }
 .agent-flow-control-label.is-dimmed {
   opacity: 0.15;
+}
+.agent-flow-control-label.is-flow-quiet {
+  opacity: 0;
+  pointer-events: none;
 }
 .agent-flow-control-label rect {
   fill: var(--panel-bg, var(--bg));

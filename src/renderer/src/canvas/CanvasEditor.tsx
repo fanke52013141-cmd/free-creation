@@ -38,6 +38,8 @@ import { CanvasSidePanel, type SidePanelTab } from './CanvasSidePanel'
 import { ChatSidePanel } from './ChatSidePanel'
 import { NodeContractPanel } from './NodeContractPanel'
 import { DirectorStudioPanel } from './DirectorStudioPanel'
+import { FlowStageRail } from './FlowStageRail'
+import { AgentStageStudio } from './AgentStageStudio'
 import { useNodePanelStore } from '../stores/nodePanel'
 import { artifactShapeVisibility } from './artifact-grouping'
 import { SearchPalette, type SearchDestination } from './SearchPalette'
@@ -3639,6 +3641,7 @@ export function CanvasEditor({
         />
       )}
       {editorInstance && <AgentFlowRelationLayer editor={editorInstance} hostRef={wrapRef} />}
+      {editorInstance && <FlowStageRail editor={editorInstance} projectId={project.id} />}
       {editorInstance && (
         <FlowBuildPreviewLayer editor={editorInstance} hostRef={wrapRef} projectId={project.id} />
       )}
@@ -3911,6 +3914,15 @@ export function CanvasEditor({
       )}
       {!panelTab && editorInstance && nodePanelKind === 'director' && nodePanelShapeId && (
         <DirectorStudioPanel
+          key={nodePanelShapeId}
+          editor={editorInstance}
+          projectId={project.id}
+          shapeId={nodePanelShapeId}
+          onClose={() => useNodePanelStore.getState().close()}
+        />
+      )}
+      {!panelTab && editorInstance && nodePanelKind === 'stage-studio' && nodePanelShapeId && (
+        <AgentStageStudio
           key={nodePanelShapeId}
           editor={editorInstance}
           projectId={project.id}

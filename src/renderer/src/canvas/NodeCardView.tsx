@@ -30,6 +30,7 @@ import { getNodePorts, getNodeType, nodeIconColor, PORT_TYPE_LABELS } from '../n
 import type { PortDecl, PortSchemaRef, PortType } from '@shared/types'
 import { useConnectionStore } from '../stores/connection'
 import { useNodePanelStore } from '../stores/nodePanel'
+import { useFlowFocusStore } from '../stores/flowFocus'
 import { beginConnectionDrag } from './connection-drag'
 import { batchConnectionFromSelection } from './batch-connection'
 import { dynamicPortIdsForShape, portPairCompatible } from './graph'
@@ -1159,11 +1160,22 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     shape.props.nodeType
   )
 
+  const spotlightClass = useFlowFocusStore((state) => {
+    if (!state.spotlightEnabled || !state.focusedNodeId) return ''
+    if (state.focusedNodeId === shape.id) {
+      return state.attentionNodeId === shape.id
+        ? 'is-flow-spotlight-focus is-flow-spotlight-attention'
+        : 'is-flow-spotlight-focus'
+    }
+    if (state.inputSourceIds.has(shape.id)) return 'is-flow-spotlight-source'
+    return 'is-flow-spotlight-dim'
+  })
+
   return (
     <HTMLContainer style={{ pointerEvents: shape.opacity === 0 ? 'none' : 'all' }}>
       {/* 外层包一层无裁切的容器：端口圆点要压在卡片边缘外侧，不能被卡片 overflow:hidden 裁掉 */}
       <div
-        className={`node-card-wrap ${selected ? 'is-selected' : ''} ${shape.opacity === 0 ? 'is-opacity-hidden' : ''} ${isTemplateCard ? 'iteration-template-card' : ''} ${isBoundaryMarker ? 'iteration-boundary-marker' : ''} ${inTemplateContainer && !isTemplateCard && !isBoundaryMarker ? 'iteration-template-member' : ''} ${
+        className={`node-card-wrap ${selected ? 'is-selected' : ''} ${spotlightClass} ${shape.opacity === 0 ? 'is-opacity-hidden' : ''} ${isTemplateCard ? 'iteration-template-card' : ''} ${isBoundaryMarker ? 'iteration-boundary-marker' : ''} ${inTemplateContainer && !isTemplateCard && !isBoundaryMarker ? 'iteration-template-member' : ''} ${
           (shape.meta as Record<string, unknown> | undefined)?.stackRole === 'member'
             ? 'stack-member'
             : ''

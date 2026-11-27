@@ -1,0 +1,223 @@
+/* Stitch 极简暗黑工作室规范：44px 顶部常驻阶段轨 + 画布聚光灯层级 */
+.flow-stage-rail {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 44px;
+  z-index: calc(var(--z-dock, 20) + 2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px;
+  background: rgba(19, 23, 32, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid #252b36;
+  pointer-events: auto;
+}
+
+.flow-stage-rail-track {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.flow-stage-rail-track::-webkit-scrollbar {
+  display: none;
+}
+
+.flow-stage-rail-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.flow-stage-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid #252b36;
+  background: #161b24;
+  color: #8b95a5;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+.flow-stage-pill:hover {
+  border-color: #394354;
+  background: #1c222e;
+  color: #e7ebf2;
+}
+
+.flow-stage-pill.is-done {
+  color: #b7d2c6;
+  border-color: rgba(117, 197, 155, 0.3);
+  background: rgba(117, 197, 155, 0.08);
+}
+
+.flow-stage-pill.is-attention {
+  color: #f5dfb0;
+  border-color: rgba(224, 185, 112, 0.65);
+  background: rgba(224, 185, 112, 0.14);
+}
+
+.flow-stage-pill.is-running {
+  color: #bfe3ff;
+  border-color: rgba(120, 184, 248, 0.5);
+  background: rgba(120, 184, 248, 0.12);
+}
+
+.flow-stage-pill.is-danger {
+  color: #f6b5b5;
+  border-color: rgba(237, 142, 142, 0.55);
+  background: rgba(237, 142, 142, 0.12);
+}
+
+.flow-stage-pill.is-selected {
+  color: #e7ebf2;
+  border-color: rgba(60, 221, 227, 0.72);
+  box-shadow: 0 0 0 1px rgba(60, 221, 227, 0.25);
+}
+
+.flow-stage-pill.is-attention.is-selected {
+  border-color: rgba(224, 185, 112, 0.9);
+  box-shadow: 0 0 0 1px rgba(224, 185, 112, 0.35);
+}
+
+.flow-stage-num {
+  font-family: Consolas, 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #38bdf8;
+}
+.flow-stage-pill.is-attention .flow-stage-num {
+  color: #e0b970;
+}
+
+.flow-stage-name {
+  font-weight: 600;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flow-stage-role {
+  font-size: 10px;
+  color: #7c8798;
+}
+
+.flow-stage-glyph {
+  font-size: 10px;
+  font-weight: 700;
+}
+.flow-stage-pill.is-done .flow-stage-glyph {
+  color: #75c59b;
+}
+.flow-stage-pill.is-attention .flow-stage-glyph {
+  color: #e0b970;
+}
+.flow-stage-pill.is-running .flow-stage-glyph {
+  color: #78b8f8;
+}
+.flow-stage-pill.is-danger .flow-stage-glyph {
+  color: #ed8e8e;
+}
+
+.flow-stage-sep {
+  color: #3a4454;
+  font-size: 13px;
+  line-height: 1;
+  user-select: none;
+}
+
+.flow-stage-rail-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding-left: 10px;
+  border-left: 1px solid #252b36;
+}
+
+.flow-rail-icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #252b36;
+  background: #161b24;
+  color: #8b95a5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+}
+.flow-rail-icon-btn:hover {
+  border-color: #3d4758;
+  color: #e7ebf2;
+  background: #1e2532;
+}
+.flow-rail-icon-btn.is-active {
+  border-color: rgba(60, 221, 227, 0.55);
+  color: #86eef3;
+  background: rgba(60, 221, 227, 0.12);
+}
+
+.flow-rail-cta {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: none;
+  background: linear-gradient(100deg, #22d3ee, #5eead4 52%, #38bdf8);
+  color: #09131a;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 140ms ease;
+}
+.flow-rail-cta:hover {
+  opacity: 0.92;
+}
+.flow-rail-cta.is-amber {
+  background: linear-gradient(180deg, #e8c47c, #d4a454);
+  color: #13161b;
+  box-shadow: 0 2px 12px rgba(224, 185, 112, 0.28);
+}
+
+/* 画布聚光灯视觉层级（不占用 .is-dimmed，零干扰连线聚焦回归测试） */
+.node-card-wrap.is-flow-spotlight-dim {
+  opacity: 0.42;
+  filter: saturate(0.62);
+  transition: opacity 180ms ease, filter 180ms ease;
+}
+.node-card-wrap.is-flow-spotlight-dim:hover {
+  opacity: 0.88;
+  filter: saturate(0.95);
+}
+.node-card-wrap.is-flow-spotlight-focus .node-card {
+  border-color: rgba(60, 221, 227, 0.72);
+  box-shadow: 0 0 0 1px rgba(60, 221, 227, 0.35), 0 0 24px rgba(60, 221, 227, 0.14);
+}
+.node-card-wrap.is-flow-spotlight-attention .node-card {
+  border-color: rgba(224, 185, 112, 0.85);
+  box-shadow: 0 0 0 1px rgba(224, 185, 112, 0.45), 0 0 26px rgba(224, 185, 112, 0.18);
+}
+.node-card-wrap.is-flow-spotlight-source .node-card {
+  border-color: rgba(117, 197, 155, 0.55);
+}
+
+/* 左侧节点面板在存在阶段轨时向下让出 44px，避免与阶段轨或左侧节点重叠 */
+.canvas-wrap:has(.flow-stage-rail) .node-palette {
+  top: 56px;
+}

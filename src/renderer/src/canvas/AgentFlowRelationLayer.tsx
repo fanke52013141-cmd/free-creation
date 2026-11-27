@@ -5,6 +5,7 @@ import { resolveFlowDeclaration, CONTROL_LABELS } from '@shared/agent-flow/decla
 import { NODE_ACCENTS } from '../nodes/registry'
 import { useNodePanelStore } from '../stores/nodePanel'
 import { useEdgeSelectionStore } from '../stores/edgeSelection'
+import { useFlowFocusStore } from '../stores/flowFocus'
 import { nodePageIndex } from './node-page-index'
 import './agent-flow-relations.css'
 import { NODE_UI } from './node-ui-tokens'
@@ -37,6 +38,7 @@ function AgentFlowRelationContent({
 }): React.JSX.Element | null {
   const [, setRevision] = useState(0)
   const [host, setHost] = useState<HTMLDivElement | null>(null)
+  const showControlRelations = useFlowFocusStore((state) => state.showControlRelations)
   const maskId = `flow-relations-${useId().replace(/:/g, '')}`
   useEffect(() => {
     let frame = 0
@@ -131,6 +133,9 @@ function AgentFlowRelationContent({
   const focusActive = selectedIds.size > 0
   const isDimmed = (line: (typeof lines)[number]): boolean =>
     focusActive && !selectedIds.has(line.sourceNodeId) && !selectedIds.has(line.targetNodeId)
+  // 降噪：未开启「编排虚线」且未选中节点时，非返工控制线默认隐身（保留 DOM 与语义 stroke 供几何/色值检测）。
+  const isQuiet = (line: (typeof lines)[number]): boolean =>
+    !showControlRelations && !focusActive && line.kind !== 'rework'
   const openOwner = (id: string): void => {
     useEdgeSelectionStore.getState().clear()
     editor.select(id as TLShapeId)
@@ -176,7 +181,7 @@ function AgentFlowRelationContent({
             d={line.path}
             markerEnd={`url(#${maskId}-arrow-${line.kind})`}
             stroke={NODE_ACCENTS['state-machine']}
-            className={`agent-flow-control-path${isDimmed(line) ? ' is-dimmed' : ''}`}
+            className={`agent-flow-control-path${isDimmed(line) ? ' is-dimmed' : ''}${isQuiet(line) ? ' is-flow-quiet' : ''}`}
           />
         ))}
       </g>
@@ -186,7 +191,7 @@ function AgentFlowRelationContent({
           role="button"
           tabIndex={0}
           aria-label={`配置控制关系：${CONTROL_LABELS[line.kind]}`}
-          className={`agent-flow-control-label${isDimmed(line) ? ' is-dimmed' : ''}`}
+          className={`agent-flow-control-label${isDimmed(line) ? ' is-dimmed' : ''}${isQuiet(line) ? ' is-flow-quiet' : ''}`}
           transform={`translate(${line.labelX},${line.labelY})`}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => openOwner(line.ownerNodeId)}

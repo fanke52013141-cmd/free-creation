@@ -187,7 +187,8 @@ export function FlowOverviewPanel({ editor, projectId, onClose }: FlowOverviewPa
   const collaborate = useCallback(
     (nodeId: string) => {
       onClose()
-      useNodePanelStore.getState().open('contract', createShapeId(nodeId) as TLShapeId, 'collaboration')
+      const id = (nodeId.startsWith('shape:') ? nodeId : createShapeId(nodeId)) as TLShapeId
+      useNodePanelStore.getState().open('stage-studio', id, 'collaboration')
     },
     [onClose]
   )
