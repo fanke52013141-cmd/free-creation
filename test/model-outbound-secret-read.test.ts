@@ -15,7 +15,7 @@ describe('outbound model request secret reads', () => {
   })
 
   it('binds the headless Agent probe read to the connection origin', () => {
-    const source = read('src/main/agent-flow/model-probe-electron.ts')
+    const source = read('test/harness/agent-flow/model-probe-electron.ts')
 
     expect(source).toContain('readSecretForRequest(connection.id, connection.baseUrl)')
     expect(source).not.toMatch(/readSecret\(connection\.id\)/)

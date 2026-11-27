@@ -32,14 +32,27 @@ export const CODE_RUNTIME_OFFLINE = true
 export const WORKER_SOURCE = `
 const NativeDate = Date;
 const compileUserFunction = Function;
-const blockedRuntimeApi = () => { throw new Error('代码节点已禁用网络、模块加载与动态执行；请将数据通过输入端口传入'); };
+const hostPostMessage = self.postMessage.bind(self);
+const blockedRuntimeApi = () => { throw new Error('代码节点已禁用网络、存储、线程与动态执行；请将数据通过输入端口传入'); };
+const lockGlobal = (target, name, value) => {
+  try {
+    Object.defineProperty(target, name, {
+      value,
+      writable: false,
+      configurable: false,
+      enumerable: false
+    });
+  } catch {
+    try { target[name] = value; } catch {}
+  }
+};
 const installDeterministicRuntime = (rawSeed) => {
   let state = (Number(rawSeed) >>> 0) || 0x6d2b79f5;
   Math.random = () => {
     state |= 0;
     state = (state + 0x6d2b79f5) | 0;
     let value = Math.imul(state ^ (state >>> 15), 1 | state);
-    value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
+    value ^= value + Math.imul(value ^ (value >>> 7), 61 | state);
     return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
   };
   class FixedDate extends NativeDate {
@@ -104,13 +117,65 @@ const dayjs = (input) => {
   };
   return Object.freeze(api);
 };
+// 彻底锁死 Worker 全局与原型链上的网络、存储、跨上下文通信与动态执行入口，
+// 防止通过 delete self.fetch 或 (()=>{}).constructor 绕过沙箱限制。
+const blockCtor = (proto) => {
+  if (!proto) return;
+  try {
+    Object.defineProperty(proto, 'constructor', {
+      value: blockedRuntimeApi,
+      writable: false,
+      configurable: false
+    });
+  } catch {}
+};
+blockCtor(compileUserFunction.prototype);
+blockCtor(Object.getPrototypeOf(async function () {}));
+blockCtor(Object.getPrototypeOf(function* () {}));
+blockCtor(Object.getPrototypeOf(async function* () {}));
+
 self.fetch = blockedRuntimeApi;
 self.importScripts = blockedRuntimeApi;
-self.XMLHttpRequest = undefined;
-self.WebSocket = undefined;
 self.EventSource = undefined;
 self.Function = blockedRuntimeApi;
-self.eval = blockedRuntimeApi;
+
+const BLOCKED_FN_NAMES = ['fetch', 'importScripts', 'Function', 'eval', 'postMessage', 'close'];
+const BLOCKED_UNDEF_NAMES = [
+  'XMLHttpRequest',
+  'WebSocket',
+  'EventSource',
+  'BroadcastChannel',
+  'indexedDB',
+  'caches',
+  'Worker',
+  'SharedWorker',
+  'MessageChannel',
+  'navigator',
+  'crypto',
+  'performance',
+  'webkitRequestFileSystem',
+  'FileSystemSyncAccessHandle'
+];
+const scopeRoots = typeof globalThis !== 'undefined' && globalThis !== self ? [self, globalThis] : [self];
+const scopeSet = new Set();
+for (const root of scopeRoots) {
+  for (let cursor = root; cursor && cursor !== Object.prototype; cursor = Object.getPrototypeOf(cursor)) {
+    scopeSet.add(cursor);
+  }
+}
+for (const root of scopeRoots) {
+  for (const name of BLOCKED_FN_NAMES) lockGlobal(root, name, blockedRuntimeApi);
+  for (const name of BLOCKED_UNDEF_NAMES) lockGlobal(root, name, undefined);
+}
+for (const scope of scopeSet) {
+  if (scopeRoots.includes(scope)) continue;
+  for (const name of BLOCKED_FN_NAMES) {
+    if (Object.prototype.hasOwnProperty.call(scope, name)) lockGlobal(scope, name, blockedRuntimeApi);
+  }
+  for (const name of BLOCKED_UNDEF_NAMES) {
+    if (Object.prototype.hasOwnProperty.call(scope, name)) lockGlobal(scope, name, undefined);
+  }
+}
 
 // console 输出捕获：桌面端没有可打开的开发者工具，用户在代码里 console.log 的内容
 // 必须带回界面，否则唯一的调试手段就断了。上限防止死循环日志撑爆结构化克隆。
@@ -133,6 +198,7 @@ self.console = {
   debug: captureConsole('log')
 };
 
+const MAX_OUTPUT_CHARS = 2 * 1024 * 1024;
 self.onmessage = async ({ data }) => {
   try {
     let value;
@@ -155,7 +221,12 @@ self.onmessage = async ({ data }) => {
     }
 
     if (value === undefined) throw new Error('代码必须 return 一个文本或 JSON 值');
-    self.postMessage({ ok: true, value, logs: capturedLogs });
+    const serialized = typeof value === 'string' ? value : JSON.stringify(value);
+    if (serialized === undefined) throw new Error('代码返回值必须是可序列化的文本或 JSON 数据');
+    if (serialized.length > MAX_OUTPUT_CHARS) {
+      throw new Error('代码输出超过 2 MiB 上限；请精简返回结果或拆分为多个步骤');
+    }
+    hostPostMessage({ ok: true, value, logs: capturedLogs });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     // 用户函数体第 1 行是 "use strict"; 前缀，堆栈行号比源码大 1。
@@ -168,7 +239,7 @@ self.onmessage = async ({ data }) => {
         if (line >= 1) lineHint = '（第 ' + line + ' 行附近）';
       }
     }
-    self.postMessage({
+    hostPostMessage({
       ok: false,
       error: message + lineHint,
       logs: capturedLogs

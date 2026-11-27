@@ -2,7 +2,7 @@
 import type { BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
-import { importMedia } from '../store/media.repo'
+import { importMedia } from '../../../src/main/store/media.repo'
 
 export async function acceptVideoReview(input: {
   window: BrowserWindow

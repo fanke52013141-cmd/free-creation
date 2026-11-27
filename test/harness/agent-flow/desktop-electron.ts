@@ -1,30 +1,30 @@
-import { deriveFlowPhaseStateMachine } from '../../shared/agent-flow/flow-graph-compiler'
-import { IPC } from '../../shared/contracts'
+import { deriveFlowPhaseStateMachine } from '../../../src/shared/agent-flow/flow-graph-compiler'
+import { IPC } from '../../../src/shared/contracts'
 // Isolated, hidden desktop acceptance; never imported by the application.
 import { app, BrowserWindow, dialog, protocol, net } from 'electron'
 import { execFile } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
-import { getMediaAbsPath, importMedia } from '../store/media.repo'
+import { getMediaAbsPath, importMedia } from '../../../src/main/store/media.repo'
 import { basename, join, resolve } from 'node:path'
 import { cpus, tmpdir, totalmem } from 'node:os'
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { registerFlowCommandsIpc } from '../ipc/flow-commands.ipc'
-import { registerFlowAgentsIpc } from '../ipc/flow-agents.ipc'
-import { registerFlowAssetsIpc } from '../ipc/flow-assets.ipc'
-import { registerProjectIpc } from '../ipc/project.ipc'
-import { registerLibraryIpc } from '../ipc/library.ipc'
-import { registerMediaIpc } from '../ipc/media.ipc'
-import { registerWorkspaceStateIpc } from '../ipc/workspace-state.ipc'
-import { registerGatewayIpc } from '../ipc/gateway.ipc'
-import { registerModelIpc } from '../ipc/models.ipc'
-import { registerDiagnosticsIpc, setDiagnosticsService } from '../ipc/diagnostics.ipc'
-import { SqliteModelHost } from '../model-host/sqlite-model-host'
-import { createDesktopModelRuntime } from '../model-host/runtime'
-import { createProject, openProject } from '../store/projects.repo'
-import { closeDb, getDb, setSetting } from '../store/db'
-import { initDiagnosticsService } from '../diagnostics/service'
-import { setGatewayEventSink } from '../diagnostics/gateway-events'
+import { registerFlowCommandsIpc } from '../../../src/main/ipc/flow-commands.ipc'
+import { registerFlowAgentsIpc } from '../../../src/main/ipc/flow-agents.ipc'
+import { registerFlowAssetsIpc } from '../../../src/main/ipc/flow-assets.ipc'
+import { drainInFlightProjectSaves, registerProjectIpc } from '../../../src/main/ipc/project.ipc'
+import { registerLibraryIpc } from '../../../src/main/ipc/library.ipc'
+import { registerMediaIpc } from '../../../src/main/ipc/media.ipc'
+import { registerWorkspaceStateIpc } from '../../../src/main/ipc/workspace-state.ipc'
+import { registerGatewayIpc } from '../../../src/main/ipc/gateway.ipc'
+import { registerModelIpc } from '../../../src/main/ipc/models.ipc'
+import { registerDiagnosticsIpc, setDiagnosticsService } from '../../../src/main/ipc/diagnostics.ipc'
+import { SqliteModelHost } from '../../../src/main/model-host/sqlite-model-host'
+import { createDesktopModelRuntime } from '../../../src/main/model-host/runtime'
+import { createProject, openProject } from '../../../src/main/store/projects.repo'
+import { closeDb, getDb, setSetting } from '../../../src/main/store/db'
+import { initDiagnosticsService } from '../../../src/main/diagnostics/service'
+import { setGatewayEventSink } from '../../../src/main/diagnostics/gateway-events'
 
 const arg = (name: string): string | undefined =>
   process.argv.find((value) => value.startsWith(`--${name}=`))?.slice(name.length + 3)
@@ -2039,7 +2039,7 @@ if (
             )
               throw new Error('MEDIA_IMPORT_OLD_AUTHORITY')
           }
-          const { FlowAssetStore } = await import('./asset-store')
+          const { FlowAssetStore } = await import('../../../src/main/agent-flow/asset-store')
           const assets = new FlowAssetStore(db, (id) => openProject(id))
           const versions = db
             .prepare(
@@ -2377,7 +2377,7 @@ if (
             editor.createShape({id:'shape:c3-source',type:'node-card',x:100,y:100,props:{nodeType:'text',title:'材料',text:'private-c3-material'}});
             const builderGoal=${JSON.stringify(builderParallelMode ? '建三个独立并行的文本模板分支，分别输出摘要：{{value}}、要点：{{value}}、标签：{{value}}。三路都必须完成，主 Agent 选择一份成果交付。' : '建一个两个自主步骤的文本模板流程。第一步 template 必须是 整理：{{value}}，第二步必须是 交付：{{value}}。每步用其数据处理节点执行一次并交付真实输出。只需文本模板能力。')};
             editor.createShape({id:'shape:c3-builder',type:'node-card',x:100,y:450,props:{nodeType:'agent',title:'搭建 Agent',text:builderGoal,config:JSON.stringify({schemaVersion:1,role:'builder',interactionMode:'collaborative',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'graph.preview',version:'1'}],allowedNodeIds:['shape:c3-source'],maxSteps:12,relations:[]})}});
-            await ensureCanvasSaved();builderStage='propose-button';await until(()=>button('生成建图预览'));button('生成建图预览').click();builderStage='proposal';await until(async()=>!!(await build('inspect')));
+            await ensureCanvasSaved();builderStage='retired-notice';await until(()=>document.querySelector('[data-node-id="shape:c3-builder"]')?.textContent?.includes('内置搭建 Agent 已退役'));if(button('生成建图预览'))throw new Error('BUILDER_GUI_PROPOSE_SHOULD_BE_RETIRED');builderStage='proposal';await build('propose',{requestId:crypto.randomUUID()});await until(async()=>{const p=await build('inspect');return !!(p&&p.state==='preview'&&document.querySelectorAll('.flow-build-preview-layer [data-preview-node-id]').length===p.nodes.length)});
             const preview=await build('inspect');const ghostLayer=document.querySelector('.flow-build-preview-layer');const reviewNode=preview.nodes.find(node=>node.type==='ai-review');const reviewConfig=reviewNode&&JSON.parse(reviewNode.config);if(preview.state!=='preview'||editor.getCurrentPageShapes().filter(s=>s.type==='node-card').length!==2||preview.plan.topology!==(${builderParallelMode ? "'parallel-fork'" : "'sequential'"})||ghostLayer?.querySelectorAll('[data-preview-node-id]').length!==preview.nodes.length||Number(ghostLayer?.firstElementChild?.getAttribute('data-preview-data-edges'))!==preview.edges.length||(!${builderParallelMode}&&(!reviewConfig||reviewConfig.gatedNodeIds.length!==1||Number(ghostLayer?.firstElementChild?.getAttribute('data-preview-gate-edges'))!==1||Number(ghostLayer?.firstElementChild?.getAttribute('data-preview-rework-edges'))!==1)))throw new Error('BUILDER_PREVIEW_SPATIAL_CONTRACT');
             return {projectId,buildId:preview.buildId,checks:['public node button proposes bounded flow','spatial ghost nodes match host positions','typed data edges are visible','preview saved without graph mutation','explicit commit required']};
           }
@@ -3492,6 +3492,7 @@ if (
       }
       foreign?.destroy()
       window?.destroy()
+      await drainInFlightProjectSaves()
       await diagnostics.flushOnQuit()
       closeDb()
       writeFileSync(

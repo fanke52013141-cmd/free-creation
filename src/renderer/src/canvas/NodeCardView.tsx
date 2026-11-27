@@ -251,12 +251,16 @@ type OpenMediaPreviewFn = (next: {
 const MemoizedNodeBody = memo(function MemoizedNodeBody({
   Body,
   shape,
-  openPreview
+  openPreview,
+  upstreamToken
 }: {
   Body: NonNullable<ReturnType<typeof getNodeType>>['Body']
   shape: NodeCardShape
   openPreview: OpenMediaPreviewFn
+  /** 上游连线或上游投影变化时推进引用，确保依赖 gatherInputs/gatherUpstreamMedia 的 Body 及时刷新。 */
+  upstreamToken: readonly unknown[]
 }): React.JSX.Element {
+  void upstreamToken
   return <Body shape={shape} openPreview={openPreview} />
 })
 
@@ -699,6 +703,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       const incomingNodeColors = new Map<string, string>()
       const incomingPortIds = new Set<string>()
       const outgoingPortIds = new Set<string>()
+      const upstreamRefs: unknown[] = []
       const pageIndex = nodePageIndex(editor)
       for (const edge of pageIndex.incomingByNode.get(shape.id) ?? []) {
         if (edge.toPort && edge.endId === shape.id) {
@@ -709,6 +714,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             source?.type === 'node-card' && edge.fromPort
               ? projectNodeOutputs(source)[edge.fromPort]
               : undefined
+          upstreamRefs.push(edge.arrowId, edge.fromPort ?? '', edge.toPort, sourceOutput)
           if (sourceOutput) {
             availableInputCounts.set(edge.toPort, (availableInputCounts.get(edge.toPort) ?? 0) + 1)
           }
@@ -769,6 +775,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       const signature = `${readiness.kind}|${readiness.reason ?? ''}|${readiness.label}|${inputStale ? 1 : 0}|${[...incomingPortIds].sort().join(',')}|${[...outgoingPortIds].sort().join(',')}|${[...incomingNodeColors.entries()].map(([k, v]) => `${k}:${v}`).sort().join(',')}`
       return {
         signature,
+        upstreamRefs,
         readiness,
         incomingCounts,
         outgoingCounts,
@@ -778,7 +785,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         inputStale
       }
     },
-    (prev, next) => prev.signature === next.signature,
+    (prev, next) =>
+      prev.signature === next.signature &&
+      prev.upstreamRefs.length === next.upstreamRefs.length &&
+      prev.upstreamRefs.every((item, idx) => Object.is(item, next.upstreamRefs[idx])),
     [editor, shape, spec, inPorts, modelAvailable, projectedOutputs]
   )
   const readiness = readinessState.readiness
@@ -876,6 +886,56 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     !isBoundaryMarker &&
     spec?.sizePolicy !== 'free' &&
     shape.meta.nodeHeightMode !== 'manual'
+
+  // manual 节点不建 Observer，但仍须在旧项目迁移/超界写入时执行一次高度夹取并记录原始高度。
+  useEffect(() => {
+    if (
+      isTemplateCard ||
+      isBoundaryMarker ||
+      spec?.sizePolicy === 'free' ||
+      shape.props.nodeType === 'storyboard' ||
+      shape.meta.nodeHeightMode !== 'manual'
+    ) {
+      return
+    }
+    const heightCap =
+      shape.props.nodeType === 'video' ? NODE_UI.height.autoMaxVideoGen : NODE_UI.height.autoMax
+    const current = shape.props.h
+    const clamped = Math.max(260, Math.min(heightCap, current))
+    if (clamped === current) return
+    const frame = requestAnimationFrame(() => {
+      if (editor.inputs.isDragging) return
+      const latest = editor.getShape<NodeCardShape>(shape.id)
+      if (!latest || latest.meta.nodeHeightMode !== 'manual') return
+      const latestHeight = latest.props.h
+      const latestClamped = Math.max(260, Math.min(heightCap, latestHeight))
+      if (latestClamped === latestHeight) return
+      editor.run(
+        () =>
+          editor.updateShape({
+            id: latest.id,
+            type: 'node-card',
+            props: { h: latestClamped },
+            meta: {
+              ...latest.meta,
+              nodeOriginalHeight: latest.meta.nodeOriginalHeight ?? latestHeight,
+              nodeHeightMode: 'manual'
+            }
+          }),
+        { history: 'ignore' }
+      )
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [
+    editor,
+    isBoundaryMarker,
+    isTemplateCard,
+    shape.id,
+    shape.meta.nodeHeightMode,
+    shape.props.h,
+    shape.props.nodeType,
+    spec?.sizePolicy
+  ])
 
   // 全节点统一高度边界；旧尺寸仅迁移几何，不改业务内容。
   // manual/free/模板卡不创建 Observer；Observer 生命周期固定，不再随输入反复拆建。
@@ -1455,6 +1515,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                               Body={spec.Body}
                               shape={shape}
                               openPreview={openMediaPreview}
+                              upstreamToken={readinessState.upstreamRefs}
                             />
                           )}
                         </div>

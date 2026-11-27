@@ -3,11 +3,11 @@ import Database from 'better-sqlite3'
 import { basename, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { writeFile } from 'node:fs/promises'
-import { SqliteModelHost } from '../model-host/sqlite-model-host'
-import { createCatalogChatModel } from '../gateway/factory'
-import { probeAgentModel } from './model-probe'
-import { initDiagnosticsService } from '../diagnostics/service'
-import { emitGatewayEvent, setGatewayEventSink } from '../diagnostics/gateway-events'
+import { SqliteModelHost } from '../../../src/main/model-host/sqlite-model-host'
+import { createCatalogChatModel } from '../../../src/main/gateway/factory'
+import { probeAgentModel } from '../../../src/main/agent-flow/model-probe'
+import { initDiagnosticsService } from '../../../src/main/diagnostics/service'
+import { emitGatewayEvent, setGatewayEventSink } from '../../../src/main/diagnostics/gateway-events'
 
 // Opt-in diagnostic entry, never imported by the desktop application.
 const directory = process.argv.find((arg) => arg.startsWith('--probe-dir='))?.slice(12)

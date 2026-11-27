@@ -29,6 +29,10 @@ vi.mock('../src/main/store/projects.repo', () => ({
     if (state.error) throw state.error
     return { graphVersion: 1 }
   },
+  saveProjectAsync: async () => {
+    if (state.error) throw state.error
+    return { graphVersion: 1 }
+  },
   saveWorkspaceProfile: () => {
     if (state.error) throw state.error
     return { graphVersion: 1 }
@@ -66,14 +70,14 @@ function invoke(kind: 'async' | 'sync' | 'workspace') {
 describe('R09 save failure diagnostics at public IPC boundaries', () => {
   it.each(['async', 'sync', 'workspace'] as const)(
     'reports %s flush failure without leaking the OS message or returning success',
-    (kind) => {
+    async (kind) => {
       state.error = new ProjectSaveStorageError(
         'flush-tmp',
         true,
         false,
         Object.assign(new Error('private-flush /private/snapshot'), { code: 'EIO' })
       )
-      expect(invoke(kind)).toMatchObject({ ok: false, error: { code: 'SAVE_FAILED' } })
+      expect(await invoke(kind)).toMatchObject({ ok: false, error: { code: 'SAVE_FAILED' } })
       expect(events).toHaveLength(2)
       expect(events[1]).toMatchObject({
         event: 'project.save.failed',
@@ -85,9 +89,9 @@ describe('R09 save failure diagnostics at public IPC boundaries', () => {
       expect(JSON.stringify(events)).not.toMatch(/private-flush|private\/snapshot/)
     }
   )
-  it('records an unreadable snapshot as a failed read stage without fabricating a saved graph', () => {
+  it('records an unreadable snapshot as a failed read stage without fabricating a saved graph', async () => {
     state.error = new ProjectSaveStorageError('read-snapshot', false, false, null)
-    expect(invoke('async')).toMatchObject({ ok: false, error: { code: 'SAVE_FAILED' } })
+    expect(await invoke('async')).toMatchObject({ ok: false, error: { code: 'SAVE_FAILED' } })
     expect(events).toHaveLength(2)
     expect(events[1]).toMatchObject({
       event: 'project.save.failed',
@@ -97,14 +101,14 @@ describe('R09 save failure diagnostics at public IPC boundaries', () => {
   })
   it.each(['async', 'sync', 'workspace'] as const)(
     'pairs %s storage failure with safe stage and cause',
-    (kind) => {
+    async (kind) => {
       state.error = new ProjectSaveStorageError(
         'promote-tmp',
         true,
         true,
         Object.assign(new Error('private-key /private/snapshot/private-prompt'), { code: 'ENOSPC' })
       )
-      expect(invoke(kind)).toMatchObject({ ok: false, error: { code: 'SAVE_FAILED' } })
+      expect(await invoke(kind)).toMatchObject({ ok: false, error: { code: 'SAVE_FAILED' } })
       expect(events.map((event) => event.event)).toEqual([
         'project.save.started',
         'project.save.failed'
@@ -119,8 +123,8 @@ describe('R09 save failure diagnostics at public IPC boundaries', () => {
       expect(JSON.stringify(events)).not.toMatch(/private-key|private-prompt|private\/snapshot/)
     }
   )
-  it('records one workspace success and keeps its graph version', () => {
-    expect(invoke('workspace')).toEqual({ ok: true, data: { graphVersion: 1 } })
+  it('records one workspace success and keeps its graph version', async () => {
+    expect(await invoke('workspace')).toEqual({ ok: true, data: { graphVersion: 1 } })
     expect(events.map((event) => event.event)).toEqual([
       'project.save.started',
       'project.save.completed'
@@ -129,14 +133,14 @@ describe('R09 save failure diagnostics at public IPC boundaries', () => {
       attributes: { graphVersion: 1, operation: 'workspace-profile' }
     })
   })
-  it('does not change success or failure results when the diagnostic sink throws', () => {
+  it('does not change success or failure results when the diagnostic sink throws', async () => {
     setGatewayEventSink({
       emit: () => {
         throw new Error('diagnostic-storage-full')
       }
     })
-    expect(invoke('async')).toMatchObject({ ok: true })
+    expect(await invoke('async')).toMatchObject({ ok: true })
     state.error = new ProjectSaveStorageError('write-tmp', false, false, null)
-    expect(invoke('sync')).toMatchObject({ ok: false, error: { code: 'SAVE_FAILED' } })
+    expect(await invoke('sync')).toMatchObject({ ok: false, error: { code: 'SAVE_FAILED' } })
   })
 })

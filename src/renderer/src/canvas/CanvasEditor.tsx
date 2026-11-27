@@ -107,7 +107,8 @@ import {
   runNodeManually,
   cancelFlowCommandExecution,
   iterationBodyNodeIds,
-  isDocumentOutputNode
+  isDocumentOutputNode,
+  isFreeLocalExecutionNode
 } from '../engine/executor'
 import { recoverRunningNodes } from '../engine/recoverVideoRuns'
 import {
@@ -2037,7 +2038,11 @@ export function CanvasEditor({
                 const rerunPaid = [...required].filter((id) => {
                   if (targets.has(id) || bodies.has(id)) return false
                   const node = executeGraph.nodes.find((candidate) => candidate.id === id)
-                  return node !== undefined && !isDocumentOutputNode(node.type)
+                  return (
+                    node !== undefined &&
+                    !isDocumentOutputNode(node.type) &&
+                    !isFreeLocalExecutionNode(node.type)
+                  )
                 })
                 if (rerunPaid.length > 0 && !request.confirmPaidRerun) {
                   replyFail('PAID_RERUN_CONFIRM_REQUIRED', `upstream=${rerunPaid.length}`)

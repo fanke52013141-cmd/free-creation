@@ -164,10 +164,14 @@ async function main(): Promise<void> {
         if (!parsed.success) {
           const issue = parsed.error.issues[0]
           const path = issue?.path.join('.') || 'input'
+          const hint =
+            path === 'idempotencyKey'
+              ? ' (expected "<13-digit-ms-timestamp>:<lowercase-uuid-v4>")'
+              : ''
           return protocolFailure(
             'INVALID_INPUT',
             'validate',
-            (path + ': ' + (issue?.message ?? 'invalid')).slice(0, 200)
+            (path + ': ' + (issue?.message ?? 'invalid') + hint).slice(0, 240)
           )
         }
         const clientName = server.getClientVersion()?.name
@@ -321,13 +325,17 @@ async function main(): Promise<void> {
   if (!parsed.success) {
     const issue = parsed.error.issues[0]
     const path = issue?.path.join('.') || 'input'
+    const hint =
+      path === 'idempotencyKey'
+        ? ' (expected "<13-digit-ms-timestamp>:<lowercase-uuid-v4>")'
+        : ''
     writeCliResponse(
       cliFailure(
         operation,
         'INVALID_INPUT',
         'validate',
         undefined,
-        `${path}: ${issue?.message ?? 'invalid'}`
+        `${path}: ${issue?.message ?? 'invalid'}${hint}`
       )
     )
     return

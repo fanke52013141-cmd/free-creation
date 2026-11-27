@@ -41,11 +41,11 @@ export default defineConfig({
         input: {
           index: resolve('src/main/index.ts'),
           'local-agent': resolve('src/local-agent/index.ts'),
-          'agent-flow-c0': resolve('src/main/agent-flow/c0-electron.ts'),
-          'agent-flow-model-probe': resolve('src/main/agent-flow/model-probe-electron.ts'),
-          'agent-flow-assets': resolve('src/main/agent-flow/assets-electron.ts'),
-          'agent-flow-commands': resolve('src/main/agent-flow/commands-electron.ts'),
-          'agent-flow-desktop': resolve('src/main/agent-flow/desktop-electron.ts'),
+          'agent-flow-c0': resolve('test/harness/agent-flow/c0-electron.ts'),
+          'agent-flow-model-probe': resolve('test/harness/agent-flow/model-probe-electron.ts'),
+          'agent-flow-assets': resolve('test/harness/agent-flow/assets-electron.ts'),
+          'agent-flow-commands': resolve('test/harness/agent-flow/commands-electron.ts'),
+          'agent-flow-desktop': resolve('test/harness/agent-flow/desktop-electron.ts'),
           'media-local': resolve('src/main/media/local-media-electron.ts'),
           'save-recovery': resolve('src/main/store/save-recovery-electron.ts')
         }

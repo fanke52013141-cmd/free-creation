@@ -131,7 +131,9 @@ export function FlowGraphPreviewPanel({
           payload.compositeResolutions
         )
         if (!planned.ok) {
-          throw new Error(`画布变更校验失败：${planned.issue.code}`)
+          throw new Error(
+            `画布变更校验失败：${planned.issue.code}${planned.issue.detail ? `（${planned.issue.detail}）` : ''}`
+          )
         }
         markUndoPoint(editor, 'external-graph-patch-preview-commit')
         planned.plan.apply(editor)

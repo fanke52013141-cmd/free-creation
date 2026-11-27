@@ -18,9 +18,12 @@ export async function verifyStorageRecovery(
   fs.copyFileSync(path, path + '.bak')
   const verified = fs.readFileSync(path + '.bak', 'utf8')
   const mutable = createRequire(__filename)('fs') as typeof fs
+  const mutablePromises = createRequire(__filename)('fs/promises') as typeof import('node:fs/promises')
   const write = mutable.writeFileSync,
     rename = mutable.renameSync,
-    sync = mutable.fsyncSync
+    sync = mutable.fsyncSync,
+    openAsync = mutablePromises.open,
+    renameAsync = mutablePromises.rename
   const db = getDb(),
     prepare = db.prepare
   let fault = ''
@@ -63,6 +66,30 @@ export async function verifyStorageRecovery(
       throw Object.assign(new Error('private-save-flush-failure'), { code: 'EIO' })
     return sync(fd)
   }
+  mutablePromises.open = (async (...args: Parameters<typeof openAsync>) => {
+    const fh = await openAsync(...args)
+    if (String(args[0]) !== path + '.tmp') return fh
+    const origWriteFile = fh.writeFile.bind(fh)
+    const origSync = fh.sync.bind(fh)
+    fh.writeFile = (async (...writeArgs: Parameters<typeof origWriteFile>) => {
+      if (fault === 'write-tmp') {
+        await origWriteFile('private-save-partial')
+        throw Object.assign(new Error('private-save-disk-full'), { code: 'ENOSPC' })
+      }
+      return origWriteFile(...writeArgs)
+    }) as typeof fh.writeFile
+    fh.sync = (async () => {
+      if (fault === 'flush-tmp')
+        throw Object.assign(new Error('private-save-flush-failure'), { code: 'EIO' })
+      return origSync()
+    }) as typeof fh.sync
+    return fh
+  }) as typeof openAsync
+  mutablePromises.rename = (async (from, to) => {
+    if (fault === 'promote-tmp' && String(from) === path + '.tmp')
+      throw Object.assign(new Error('private-save-io-failure'), { code: 'EIO' })
+    return renameAsync(from, to)
+  }) as typeof renameAsync
   db.prepare = ((sql: string) => {
     if (fault === 'update-db' && sql.startsWith('UPDATE projects SET updated_at'))
       throw Object.assign(new Error('private-save-sqlite-full'), { code: 'SQLITE_FULL' })
@@ -152,6 +179,8 @@ export async function verifyStorageRecovery(
     mutable.writeFileSync = write
     mutable.renameSync = rename
     mutable.fsyncSync = sync
+    mutablePromises.open = openAsync
+    mutablePromises.rename = renameAsync
     db.prepare = prepare
   }
 }

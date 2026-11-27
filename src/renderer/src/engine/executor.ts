@@ -2259,6 +2259,25 @@ export function isDocumentOutputNode(nodeType: string): boolean {
 }
 
 /**
+ * 纯本地确定性处理节点（零模型调用、零联网计费）：
+ * 子图重跑这些上游不会产生任何供应商费用，不应触发付费重跑确认门（GUI 与外部 node.execute 同源）。
+ */
+const FREE_LOCAL_EXECUTION_TYPES = new Set([
+  'code',
+  'processor',
+  'image-crop',
+  'image-split',
+  'video-frame',
+  'video-clip',
+  'sound-adjust',
+  'silence-trim'
+])
+
+export function isFreeLocalExecutionNode(nodeType: string): boolean {
+  return FREE_LOCAL_EXECUTION_TYPES.has(nodeType)
+}
+
+/**
  * 以当前卡片的已持久化内容预填输出缓存，供单节点执行读取其真实上游输入。
  * 这不会运行上游节点，也不会猜测节点类型；只使用统一输出投影与端口契约校验。
  */
@@ -2758,15 +2777,16 @@ export async function runWorkflowForNodes(
     // 返回，不进入 beginRun。全图 runWorkflow 保持原行为不加闸。
     const targetIds = new Set<string>(targets)
     const nodeById = new Map(fullGraph.nodes.map((node) => [node.id, node]))
-    // 本地免费执行器（代码 Worker / 本地透传处理）重跑不产生费用，不应触发付费确认。
-    const freeLocalTypes = new Set(['code', 'processor'])
+    // 本地免费执行器（代码 / 文本处理 / 本地媒体剪裁与音频处理）重跑不产生费用，不应触发付费确认。
     const rerunPaidUpstream = [...required].filter((nodeId) => {
       if (targetIds.has(nodeId)) return false
       // 循环体成员由循环节点逐项驱动，不单独计入，避免与循环节点双重计数。
       if (iterationBodies.has(nodeId)) return false
       const node = nodeById.get(nodeId)
       return (
-        node !== undefined && !isDocumentOutputNode(node.type) && !freeLocalTypes.has(node.type)
+        node !== undefined &&
+        !isDocumentOutputNode(node.type) &&
+        !isFreeLocalExecutionNode(node.type)
       )
     })
     if (rerunPaidUpstream.length > 0 && !inputOptions?.confirmPaidRerun) {

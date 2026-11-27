@@ -11,7 +11,7 @@ import {
   saveProject
 } from './projects.repo'
 import { getDb, closeDb, setSetting } from './db'
-import { registerProjectIpc } from '../ipc/project.ipc'
+import { drainInFlightProjectSaves, registerProjectIpc } from '../ipc/project.ipc'
 import { registerLibraryIpc } from '../ipc/library.ipc'
 import { registerMediaIpc } from '../ipc/media.ipc'
 import { registerWorkspaceStateIpc } from '../ipc/workspace-state.ipc'
@@ -76,7 +76,9 @@ else {
       })
     }
     const mutableFs = createRequire(__filename)('fs') as typeof fs,
-      originalWrite = mutableFs.writeFileSync
+      mutableFsPromises = createRequire(__filename)('fs/promises') as typeof import('node:fs/promises'),
+      originalWrite = mutableFs.writeFileSync,
+      originalOpenAsync = mutableFsPromises.open
     const originalHandle = ipcMain.handle.bind(ipcMain)
     let armed = false,
       accepted = 0,
@@ -403,6 +405,11 @@ else {
           throw Object.assign(new Error('FIXTURE_WRITE_FAILED'), { code: 'EIO' })
         return originalWrite(...args)
       }) as typeof fs.writeFileSync
+      mutableFsPromises.open = (async (...args: Parameters<typeof originalOpenAsync>) => {
+        if (armed && boundary === 'failed-save' && String(args[0]).endsWith('project.json.tmp'))
+          throw Object.assign(new Error('FIXTURE_WRITE_FAILED'), { code: 'EIO' })
+        return originalOpenAsync(...args)
+      }) as typeof originalOpenAsync
       const gone = new Promise<string>((done) =>
         active.webContents.once('render-process-gone', (_event, details) => done(details.reason))
       )
@@ -431,6 +438,7 @@ else {
       if (boundary !== 'unsent') await waitFor(async () => settled)
       armed = false
       mutableFs.writeFileSync = originalWrite
+      mutableFsPromises.open = originalOpenAsync
       const stored = openProject(project.id)!
       const readText = (file: typeof stored): unknown =>
         (file.tldrawSnapshot as { store: Record<string, { props: { text: string } }> }).store[
@@ -484,8 +492,10 @@ else {
       armed = false
       release()
       mutableFs.writeFileSync = originalWrite
+      mutableFsPromises.open = originalOpenAsync
       ipcMain.handle = originalHandle
       window?.destroy()
+      await drainInFlightProjectSaves()
       await diagnostics.flushOnQuit()
       closeDb()
       fs.writeFileSync(

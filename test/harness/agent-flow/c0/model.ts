@@ -8,9 +8,9 @@ import {
   type C0Decision,
   type C0ModelInput,
   type C0ModelPort
-} from '../../../shared/agent-flow/c0-contracts'
-import { emitGatewayEvent, ensureRequestId } from '../../diagnostics/gateway-events'
-import type { GatewayDiagnosticsContext } from '../../../shared/contracts'
+} from '../../../../src/shared/agent-flow/c0-contracts'
+import { emitGatewayEvent, ensureRequestId } from '../../../../src/main/diagnostics/gateway-events'
+import type { GatewayDiagnosticsContext } from '../../../../src/shared/contracts'
 
 /** One model step only. Tool actions are proposed, never executed inside the SDK. */
 export class C0SdkModel implements C0ModelPort {

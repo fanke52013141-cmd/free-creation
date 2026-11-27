@@ -61,7 +61,14 @@ export const NODE_CATALOG_OUTPUTS = {
           in: z.array(portContract).max(32),
           out: z.array(portContract).max(32)
         })
+        .strict(),
+      configGuide: z
+        .object({
+          summary: z.string().max(600),
+          example: z.record(z.string(), z.unknown())
+        })
         .strict()
+        .optional()
     })
     .strict()
 } as const

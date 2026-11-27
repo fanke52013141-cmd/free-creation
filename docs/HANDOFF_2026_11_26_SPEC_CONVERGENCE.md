@@ -49,7 +49,7 @@
 
 1. **MCP SSE Bearer 鉴权迁移**（[`src/local-agent/index.ts`](../src/local-agent/index.ts)、[`scripts/mcp-acceptance-sse.cjs`](../scripts/mcp-acceptance-sse.cjs)、[`63-batch2-3-delivery.md`](./local-agent-access/63-batch2-3-delivery.md)）：`/sse` 与 `/messages` 改为仅接受 `Authorization: Bearer <token>` 请求头（常量时间比对），URL 与 SSE endpoint 不再携带 `?token=`；query token、缺失或错误 header 一律返回 `401`，Host/Origin 校验返回 `403`。
 2. **Windows `connection.json` 发现文件最小 ACL**（[`src/main/agent-access/server.ts`](../src/main/agent-access/server.ts)、[`test/local-agent-access.test.ts`](../test/local-agent-access.test.ts)）：Windows 下临时文件发布前通过系统 `.NET` 安全 API 设为仅当前用户 `FullControl` 且关闭继承，失败返回 `WINDOWS_DESCRIPTOR_ACL_FAILED` 并清理临时文件；POSIX 保持 `0600`。（注：Windows named pipe 默认 DACL 事后收紧仍受系统句柄权限限制，**不宣称 named pipe 最小 ACL 已完成**。）
-3. **C0 测试资产保留边界与未闭环台账整理**（[`src/main/agent-flow/c0/README.md`](../src/main/agent-flow/c0/README.md)、[`docs/canvas-agent-flow/README.md`](./canvas-agent-flow/README.md)、[`docs/BACKLOG.md`](./BACKLOG.md)）：明确 C0 保留为隔离测试专用基础设施及未来 4 条删除前置条件，整理基线 `57a7e60d` 下的真实未闭环边界。
+3. **C0 测试资产保留边界与未闭环台账整理**（[`test/harness/agent-flow/c0/README.md`](../test/harness/agent-flow/c0/README.md)、[`docs/canvas-agent-flow/README.md`](./canvas-agent-flow/README.md)、[`docs/BACKLOG.md`](./BACKLOG.md)）：明确 C0 保留为隔离测试专用基础设施及未来 4 条删除前置条件，整理基线 `57a7e60d` 下的真实未闭环边界。
 
 ---
 

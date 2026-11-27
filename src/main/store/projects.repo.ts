@@ -17,6 +17,7 @@ import {
   lstatSync,
   copyFileSync
 } from 'fs'
+import { copyFile, open as openAsync, rename as renameAsync, rm as rmAsync } from 'fs/promises'
 import { basename, join } from 'path'
 import type { ProjectFile, ProjectMeta } from '../../shared/types'
 import type { WorkspaceProfile } from '../../shared/workspace-profile'
@@ -239,6 +240,58 @@ function writeProjectSnapshot(
       if (existsSync(tmp)) rmSync(tmp, { force: true })
     } catch {
       // Keep all remaining candidates if rollback itself cannot write.
+      rollbackFailed = true
+    }
+    throw new ProjectSaveStorageError(phase, fromBackup, rollbackFailed, error)
+  }
+}
+
+/**
+ * 异步快照落盘（与 writeProjectSnapshot 保持 100% 相同的阶段顺序、fsync 屏障、
+ * .bak 轮转保护与精确回滚语义），把大文件写盘与 fsync 放到 libuv 线程池执行，
+ * 避免 200+/500+ 节点大画布保存时阻塞 Electron 主进程事件循环。
+ */
+async function writeProjectSnapshotAsync(
+  id: string,
+  file: ProjectFile,
+  fromBackup: boolean,
+  updateIndex: () => void
+): Promise<void> {
+  const path = projectJsonPath(id)
+  const tmp = path + '.tmp'
+  const bak = path + '.bak'
+  let phase: ProjectSavePhase = 'write-tmp'
+  try {
+    const encoded = JSON.stringify(file)
+    const fh = await openAsync(tmp, 'w')
+    try {
+      await fh.writeFile(encoded, 'utf-8')
+      phase = 'flush-tmp'
+      await fh.sync()
+    } finally {
+      await fh.close()
+    }
+    phase = 'rotate-bak'
+    if (!fromBackup && existsSync(path)) await renameAsync(path, bak)
+    phase = 'promote-tmp'
+    await renameAsync(tmp, path)
+    phase = 'update-db'
+    updateIndex()
+  } catch (error) {
+    let rollbackFailed = false
+    try {
+      if (
+        (phase === 'update-db' || (phase === 'promote-tmp' && !existsSync(path))) &&
+        !existsSync(bak)
+      )
+        throw new Error('PROJECT_BACKUP_UNAVAILABLE')
+      if (phase === 'update-db' && existsSync(path)) await renameAsync(path, tmp)
+      if (phase !== 'write-tmp' && !existsSync(path) && existsSync(bak)) {
+        if (fromBackup) await copyFile(bak, path)
+        else await renameAsync(bak, path)
+      }
+      if (existsSync(tmp)) await rmAsync(tmp, { force: true })
+    } catch {
       rollbackFailed = true
     }
     throw new ProjectSaveStorageError(phase, fromBackup, rollbackFailed, error)
@@ -748,6 +801,61 @@ function saveProjectUnlocked(input: {
   })
 
   return { graphVersion: nextVersion }
+}
+
+/**
+ * 异步保存项目（与 saveProject 共用同一把排他跨进程写锁与乐观锁语义）。
+ * 供主进程异步 IPC（`project:save`）调用，避免大画布写盘/fsync 阻塞主进程事件循环；
+ * 关窗同步紧急保存仍使用同步 `saveProject`。
+ */
+export async function saveProjectAsync(input: {
+  id: string
+  tldrawSnapshot?: unknown
+  graph?: { nodes: unknown[]; edges: unknown[]; groups: unknown[] }
+  expectedGraphVersion?: number
+}): Promise<{ graphVersion: number } | null> {
+  const lockPath = projectJsonPath(input.id) + '.write-lock'
+  const releaseLock = acquireProjectWriteLock(lockPath)
+  try {
+    const meta = getProject(input.id)
+    if (!meta) return null
+
+    const loaded = readProjectSnapshot(input.id)
+    if (!loaded) throw new ProjectSaveStorageError('read-snapshot', false, false, null)
+    const file = loaded.file
+
+    if (
+      input.expectedGraphVersion !== undefined &&
+      file.meta.graphVersion !== input.expectedGraphVersion
+    ) {
+      throw new GraphVersionConflictError(input.expectedGraphVersion, file.meta.graphVersion)
+    }
+
+    if (input.tldrawSnapshot !== undefined) file.tldrawSnapshot = input.tldrawSnapshot
+    if (file.workspaceProfile !== undefined) {
+      file.workspaceProfile =
+        normalizeWorkspaceProfile(file.workspaceProfile) ?? defaultWorkspaceProfile()
+    }
+    if (input.graph) {
+      file.nodes = input.graph.nodes as ProjectFile['nodes']
+      file.edges = input.graph.edges as ProjectFile['edges']
+      file.groups = input.graph.groups as ProjectFile['groups']
+    }
+
+    const nextVersion = file.meta.graphVersion + 1
+    const now = Date.now()
+    file.meta = { ...file.meta, graphVersion: nextVersion, updatedAt: now }
+
+    await writeProjectSnapshotAsync(input.id, file, loaded.fromBackup, () => {
+      getDb()
+        .prepare('UPDATE projects SET updated_at = ?, graph_version = ? WHERE id = ?')
+        .run(now, nextVersion, input.id)
+    })
+
+    return { graphVersion: nextVersion }
+  } finally {
+    releaseLock()
+  }
 }
 
 // ── T04（F01）：关窗冲突恢复副本 ────────────────────────────────────────────

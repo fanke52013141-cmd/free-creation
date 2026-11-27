@@ -393,11 +393,27 @@ export function resolvePatchReferences(
       }
       continue
     }
-    if (op.action === 'node.delete' || op.action === 'node.update') {
+    if (op.action === 'node.duplicate') {
+      if (!resolveTarget(op.nodeId)) errors.push({ index, code: 'NODE_NOT_FOUND' })
+      if (op.ref) {
+        if (refs.has(op.ref)) errors.push({ index, code: 'REF_CONFLICT' })
+        else refs.add(op.ref)
+      }
+      continue
+    }
+    if (
+      op.action === 'node.delete' ||
+      op.action === 'node.update' ||
+      op.action === 'node.select-result'
+    ) {
       if (!resolveTarget(op.nodeId)) errors.push({ index, code: 'NODE_NOT_FOUND' })
       continue
     }
-    if (op.action === 'backdrop.create') {
+    if (
+      op.action === 'backdrop.create' ||
+      op.action === 'group.create' ||
+      op.action === 'layout.align'
+    ) {
       if (op.nodeIds.some((id) => !resolveTarget(id))) errors.push({ index, code: 'NODE_NOT_FOUND' })
       continue
     }

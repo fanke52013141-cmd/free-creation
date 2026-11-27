@@ -1,7 +1,11 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
 /**
- * MCP 验收 · �?2/3/7/8 族：媒体、传输、历史快照、诊断与工作区�? *
- * 真实 MCP 协议�?+ 真实桌面会话，跑完整链路并校�?*副作用真实发�?*�? * 遇到需要前置数�?模型/付费的操作，记录"稳定业务错误�?作为"接线正确但缺前置"�? * 只有异常/超时/纯文本错�?假的 completed 才算失败�? */
+ * MCP 验收 · 第 2/3/7/8 族：媒体、传输、历史快照、诊断与工作区。
+ *
+ * 真实 MCP 协议栈 + 真实桌面会话，跑完整链路并校验**副作用真实发生**。
+ * 遇到需要前置数据/模型/付费的操作，记录"稳定业务错误码"作为"接线正确但缺前置"，
+ * 只有异常/超时/纯文本错误/假的 completed 才算失败。
+ */
 const { _electron } = require('playwright')
 const { cp, mkdir, mkdtemp, readFile, writeFile, rm, readdir, stat } = require('node:fs/promises')
 const { existsSync, readFileSync } = require('node:fs')
@@ -14,7 +18,8 @@ const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio
 const electron = require('electron')
 const appRoot = resolve('.')
 const cliPath = join(appRoot, 'out/main/local-agent.js')
-// 期望操作数以门禁契约快照为唯一事实源，不再硬编码�?const contractSnapshot = JSON.parse(readFileSync(join(appRoot, 'docs/local-agent-access/generated/contracts.json'), 'utf8'))
+// 期望操作数以门禁契约快照为唯一事实源，不再硬编码。
+const contractSnapshot = JSON.parse(readFileSync(join(appRoot, 'docs/local-agent-access/generated/contracts.json'), 'utf8'))
 const expectedOperationCount = contractSnapshot.operations.length
 const expectedNodeCount = contractSnapshot.nodes.length
 const key = () => `${Date.now()}:${randomUUID()}`
@@ -58,13 +63,13 @@ async function main() {
   const expect = (condition, message) => {
     if (!condition) throw new Error(message)
   }
-  /** 允许"业务拒绝"：记录为已接通但缺前置，不算失败�?*/
+  /** 允许"业务拒绝"：记录为已接通但缺前置，不算失败。 */
   const allowBusiness = (response, allowed, name) => {
     if (response?.status === 'completed') return { completed: true }
     const code = response?.error?.code ?? ''
     expect(typeof code === 'string' && !code.startsWith('PLAIN_TEXT:'), `${name}: 协议层纯文本错误 ${code}`)
-    expect(allowed.includes(code), `${name}: 非预期错误码 ${code}�?{response?.error?.phase ?? ''}）`)
-    report.notes.push(`${name}: 按预期返�?${code}（缺前置数据，已接通）`)
+    expect(allowed.includes(code), `${name}: 非预期错误码 ${code}（${response?.error?.phase ?? ''}）`)
+    report.notes.push(`${name}: 按预期返回 ${code}（缺前置数据，已接通）`)
     return { code }
   }
 
@@ -119,7 +124,7 @@ async function main() {
         const response = await call('graph.get', { projectId, view: 'latest', offset: 0, limit: 1 })
         const value = response?.status === 'completed' ? response.data?.graphVersion : undefined
         const unsaved = response?.status === 'completed' ? response.data?.unsaved : undefined
-        // 版本相等且没有未保存改动才算稳定；首次读�?0 也允许（新项目）
+        // 版本相等且没有未保存改动才算稳定；首次读到 0 也允许（新项目）
         if (Number.isInteger(value) && value === previous && unsaved === false) return value
         previous = Number.isInteger(value) ? value : previous
         await new Promise((done) => setTimeout(done, 800))
@@ -127,7 +132,9 @@ async function main() {
       return previous
     }
     /**
-     * 写操�?+ 版本冲突重试：冲突时�?detail 里取服务端报告的 current 版本立即重试�?     * 保存屏障会在握手前推进版本，这是外部串接写的必需品�?     */
+     * 写操作 + 版本冲突重试：冲突时从 detail 里取服务端报告的 current 版本立即重试。
+     * 保存屏障会在握手前推进版本，这是外部串接写的必需品。
+     */
     const writeWithVersionRetry = async (operationId, buildInput) => {
       let graphVersion = await version(projectId)
       let response = await call(operationId, buildInput(graphVersion))
@@ -141,13 +148,13 @@ async function main() {
       return response
     }
 
-    // ── 准备：一个带媒体的项�?──
-    const project = ok(await call('project.create', { name: '�?-3 验收项目' }), 'project.create')
+    // ── 准备：一个带媒体的项目 ──
+    const project = ok(await call('project.create', { name: '族2-3 验收项目' }), 'project.create')
     const projectId = project.meta.id
     ok(await call('project.open', { projectId }), 'project.open')
     let graphVersion = await version(projectId)
 
-    // ========== �?2 族：媒体 ==========
+    // ========== 第 2 族：媒体 ==========
     const media = section('family-2-media')
     const controlled = join(directory, 'agent-exports')
     await mkdir(controlled, { recursive: true })
@@ -161,24 +168,24 @@ async function main() {
     )
     const imported = await media.check('media.import 导入真实文件', async () => {
       const data = ok(await call('media.import', { projectId, filePath: sourceImage }), 'media.import')
-      expect(data?.asset?.id || data?.mediaId, '回执缺媒�?ID')
+      expect(data?.asset?.id || data?.mediaId, '回执缺媒体 ID')
       return { mediaId: data.asset?.id ?? data.mediaId, kind: data.asset?.kind }
     })
     const mediaId = imported?.mediaId
     await media.check('media.list 含新导入媒体', async () => {
       const data = ok(await call('media.list', { projectId, limit: 50 }), 'media.list')
       const items = data?.items ?? []
-      expect(items.some((item) => item.mediaId === mediaId), '列表里找不到导入的媒�?)
+      expect(items.some((item) => item.mediaId === mediaId), '列表里找不到导入的媒体')
       return { total: items.length }
     })
-    await media.check('media.getRecipe 导入件无生成来源（found=false�?, async () => {
+    await media.check('media.getRecipe 导入件无生成来源（found=false）', async () => {
       const data = ok(await call('media.getRecipe', { projectId, mediaId }), 'media.getRecipe')
       expect(data.found === false, '导入件不应有生成来源')
       return { found: false }
     })
     await media.check('media.batchExport 落到受控目录且逐项回执', async () => {
       const data = ok(await call('media.batchExport', { projectId }), 'media.batchExport')
-      expect(data.exported >= 1, `导出�?${data.exported}`)
+      expect(data.exported >= 1, `导出数=${data.exported}`)
       const dir = join(directory, 'agent-exports', data.directoryName)
       for (const file of data.files) {
         const target = join(dir, file.fileName)
@@ -192,11 +199,11 @@ async function main() {
       ok(await call('media.delete', { projectId, mediaId }), 'media.delete')
       const data = ok(await call('media.list', { projectId, limit: 50 }), 'media.list after delete')
       const items = data?.items ?? []
-      expect(!items.some((item) => item.mediaId === mediaId), '删除后仍在列�?)
+      expect(!items.some((item) => item.mediaId === mediaId), '删除后仍在列表')
       return {}
     })
     let exportedBundle = null
-    await media.check('project.export 项目包导出（文件�?字节�?哈希自洽�?, async () => {
+    await media.check('project.export 项目包导出（文件名/字节数/哈希自洽）', async () => {
       const data = ok(
         await call('project.export', {
           projectId,
@@ -207,17 +214,17 @@ async function main() {
       )
       const name = data.fileName ?? String(data.path ?? '').split(/[\\/]/).pop()
       const target = join(directory, 'agent-exports', name)
-      expect(existsSync(target), '导出文件不存�?)
+      expect(existsSync(target), '导出文件不存在')
       const bytes = await readFile(target)
       expect(bytes.length === data.byteSize, '字节数与回执不符')
       if (data.sha256) {
-        expect(createHash('sha256').update(bytes).digest('hex') === data.sha256, 'sha256 与文件不�?)
+        expect(createHash('sha256').update(bytes).digest('hex') === data.sha256, 'sha256 与文件不符')
       }
       exportedBundle = name
       return { fileName: name, byteSize: data.byteSize }
     })
 
-    // ========== �?3 族：传输 ==========
+    // ========== 第 3 族：传输 ==========
     const transfer = section('family-3-transfer')
     await transfer.check('project.exportStructure（无快照时给明确码）', async () => {
       const response = await call('project.exportStructure', {
@@ -238,29 +245,30 @@ async function main() {
         await call('project.import', { filePath: exportedBundle }),
         'project.import'
       )
-      expect(data?.meta?.id, '导入回执缺项�?ID')
-      expect(data.committed === true, 'import 未提�?)
+      expect(data?.meta?.id, '导入回执缺项目 ID')
+      expect(data.committed === true, 'import 未提交')
       const list = ok(await call('project.list', { limit: 50 }), 'project.list after import')
       const items = list?.projects ?? []
       expect(items.some((item) => item.id === data.meta.id), '导入的项目不在列表里')
       return { importedProjectId: data.meta.id, mediaCount: data.mediaCount }
     })
-    await transfer.check('project.import 拒绝目录外路�?, async () => {
+    await transfer.check('project.import 拒绝目录外路径', async () => {
       const response = await call('project.import', { filePath: join(directory, '..', 'escape.canvasbundle') })
       expect(response?.status === 'failed', '越界路径不应成功')
-      expect(['PATH_NOT_ALLOWED', 'INPUT_NOT_FOUND'].includes(response.error?.code), `错误�?${response.error?.code}`)
+      expect(['PATH_NOT_ALLOWED', 'INPUT_NOT_FOUND'].includes(response.error?.code), `错误码=${response.error?.code}`)
       return { code: response.error.code }
     })
-    await transfer.check('project.importStructure 拒绝目录外路�?, async () => {
+    await transfer.check('project.importStructure 拒绝目录外路径', async () => {
       const response = await call('project.importStructure', { filePath: '/tmp/evil.canvasflow' })
       expect(response?.status === 'failed', '越界路径不应成功')
-      expect(['PATH_NOT_ALLOWED', 'INPUT_NOT_FOUND'].includes(response.error?.code), `错误�?${response.error?.code}`)
+      expect(['PATH_NOT_ALLOWED', 'INPUT_NOT_FOUND'].includes(response.error?.code), `错误码=${response.error?.code}`)
       return { code: response.error.code }
     })
 
-    // ========== �?7 族：历史快照 ==========
+    // ========== 第 7 族：历史快照 ==========
     const history = section('family-7-history')
-    // 造一次编辑，保证有可快照的内�?    ok(
+    // 造一次编辑，保证有可快照的内容
+    ok(
       await writeWithVersionRetry('graph.patch', (version) => ({
         projectId,
         expectedGraphVersion: version,
@@ -279,7 +287,7 @@ async function main() {
         'history.snapshot.create'
       )
       const id = data?.snapshotId ?? data?.id
-      expect(id, '回执缺快�?ID')
+      expect(id, '回执缺快照 ID')
       return { snapshotId: id }
     })
     await history.check('history.list 含新快照', async () => {
@@ -298,7 +306,7 @@ async function main() {
       return { code: response.error.code }
     })
     await history.check('history.recovery.precheck', async () => {
-      // C10 优化后：不传 decision 也能预检（只读事实），返�?requiresDecision
+      // C10 优化后：不传 decision 也能预检（只读事实），返回 requiresDecision
       const withoutDecision = await call('history.recovery.precheck', { projectId })
       if (withoutDecision?.status === 'completed') {
         expect(
@@ -308,7 +316,7 @@ async function main() {
       } else {
         expect(
           ['ACTIVE_PROJECT_REQUIRED', 'NOT_FOUND'].includes(withoutDecision.error?.code),
-          '不传 decision 时错误码异常�? + withoutDecision.error?.code
+          '不传 decision 时错误码异常：' + withoutDecision.error?.code
         )
       }
       const response = await call('history.recovery.precheck', { projectId, decision: 'discard' })
@@ -316,36 +324,36 @@ async function main() {
       allowBusiness(response, ['NOT_FOUND', 'PROJECT_NOT_OPEN', 'NO_RECOVERY_AVAILABLE'], 'history.recovery.precheck')
       return { code: response.error.code }
     })
-    await history.check('history.snapshot.delete 删除后消�?, async () => {
+    await history.check('history.snapshot.delete 删除后消失', async () => {
       ok(await call('history.snapshot.delete', { projectId, snapshotId: snapshot?.snapshotId }), 'snapshot.delete')
       const data = ok(await call('history.list', { projectId, limit: 50 }), 'history.list after delete')
       const items = data?.items ?? data?.snapshots ?? []
-      expect(!items.some((item) => item.snapshotId === snapshot?.snapshotId), '删除后快照仍�?)
+      expect(!items.some((item) => item.snapshotId === snapshot?.snapshotId), '删除后快照仍在')
       return {}
     })
 
-    // ========== �?8 族：诊断与工作区 ==========
+    // ========== 第 8 族：诊断与工作区 ==========
     const diag = section('family-8-diagnostics-workspace')
     await diag.check('app.status', async () => {
       const data = ok(await call('app.status', {}), 'app.status')
-      expect(data?.instanceId || data?.version, '回执缺基础状�?)
+      expect(data?.instanceId || data?.version, '回执缺基础状态')
       return { version: data.version }
     })
     await diag.check(`capability.list 操作数与门禁一致（${expectedOperationCount}）`, async () => {
       const data = ok(await call('capability.list', {}), 'capability.list')
       const operations = data?.operations ?? []
-      expect(operations.length === expectedOperationCount, `操作�?${operations.length}`)
+      expect(operations.length === expectedOperationCount, `操作数=${operations.length}`)
       return { operations: operations.length }
     })
     await diag.check(`node.type.list 返回门禁契约节点数（${expectedNodeCount}）`, async () => {
       const data = ok(await call('node.type.list', {}), 'node.type.list')
       const nodes = data?.nodes ?? []
-      expect(nodes.length === expectedNodeCount, `节点类型�?${nodes.length}`)
+      expect(nodes.length === expectedNodeCount, `节点类型数=${nodes.length}`)
       return { nodes: nodes.length }
     })
-    await diag.check('node.type.get 读契�?, async () => {
+    await diag.check('node.type.get 读契约', async () => {
       const data = ok(await call('node.type.get', { typeId: 'text' }), 'node.type.get')
-      expect(data?.ports || data?.nodeType === 'text', '回执缺端�?类型')
+      expect(data?.ports || data?.nodeType === 'text', '回执缺端口/类型')
       return { nodeType: data.nodeType ?? 'text' }
     })
     await diag.check('workspace.palettePreferences 读→写→读回', async () => {
@@ -356,7 +364,7 @@ async function main() {
         'palette save'
       )
       const after = ok(await call('workspace.palettePreferences.get', {}), 'palette get after save')
-      expect(after.labels?.image === '图片', '名称覆盖未生�?)
+      expect(after.labels?.image === '图片', '名称覆盖未生效')
       return { changed: data.changed }
     })
     await diag.check('diagnostics.query', async () => {
@@ -379,14 +387,14 @@ async function main() {
       const target = join(directory, 'agent-exports', data.fileName)
       expect(existsSync(target), '诊断包不存在')
       const bytes = await readFile(target)
-      expect(bytes.length === data.byteSize, '字节数不�?)
+      expect(bytes.length === data.byteSize, '字节数不符')
       expect(createHash('sha256').update(bytes).digest('hex') === data.sha256, 'sha256 不符')
       return { byteSize: data.byteSize, totalEvents: data.totalEvents }
     })
-    await diag.check('diagnostics.exportBundle 拒绝空范�?, async () => {
+    await diag.check('diagnostics.exportBundle 拒绝空范围', async () => {
       const response = await call('diagnostics.exportBundle', {})
-      expect(response?.status === 'failed', '空范围不应成�?)
-      expect(response.error?.code === 'INVALID_INPUT', `错误�?${response.error?.code}`)
+      expect(response?.status === 'failed', '空范围不应成功')
+      expect(response.error?.code === 'INVALID_INPUT', `错误码=${response.error?.code}`)
       return { code: response.error.code }
     })
   } catch (error) {
@@ -408,7 +416,7 @@ async function main() {
     try {
       await rm(directory, { recursive: true, force: true })
     } catch {}
-    console.log(`\n�?2/3/7/8 验收：步�?${report.total} 通过=${report.passed} 失败=${report.failed}`)
+    console.log(`\n族 2/3/7/8 验收：步骤=${report.total} 通过=${report.passed} 失败=${report.failed}`)
     for (const [family, entries] of Object.entries(report.families)) {
       console.log(`  ${family}: ${entries.filter((e) => e.ok).length}/${entries.length}`)
     }

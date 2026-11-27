@@ -56,13 +56,26 @@ export function deterministicCodeSeed(source: string, input: Record<string, unkn
   return hash >>> 0
 }
 
-/** 验证代码返回值可 JSON 序列化，并归类为文本或 JSON。 */
+/** 代码节点单次输出最大 JSON/文本字节数（2 MiB），防止内存 DoS 或撑爆快照落盘。 */
+export const CODE_OUTPUT_MAX_BYTES = 2 * 1024 * 1024
+
+/** 验证代码返回值可 JSON 序列化且在安全体积上限内，并归类为文本或 JSON。 */
 export function validateCodeOutput(value: unknown): CodeOutput {
-  if (typeof value === 'string') return { kind: 'text', text: value }
+  if (typeof value === 'string') {
+    if (new TextEncoder().encode(value).length > CODE_OUTPUT_MAX_BYTES) {
+      throw new Error('代码输出超过 2 MiB 上限；请精简返回结果或拆分为多个步骤')
+    }
+    return { kind: 'text', text: value }
+  }
+  let encoded: string | undefined
   try {
-    if (JSON.stringify(value) === undefined) throw new Error('不可序列化')
+    encoded = JSON.stringify(value)
+    if (encoded === undefined) throw new Error('不可序列化')
   } catch {
     throw new Error('代码返回值必须是可序列化的文本或 JSON 数据')
+  }
+  if (new TextEncoder().encode(encoded).length > CODE_OUTPUT_MAX_BYTES) {
+    throw new Error('代码输出超过 2 MiB 上限；请精简返回结果或拆分为多个步骤')
   }
   return { kind: 'json', data: value }
 }

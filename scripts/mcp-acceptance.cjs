@@ -1,20 +1,20 @@
-/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty, no-irregular-whitespace */
-?/**
- * ÕæÊµ MCP ¿Í»§¶ËÑéÊÕ£º°ÑÈ«²¿Íâ²¿²Ù×÷Öð¸ö¹ýÒ»±éÕæÊµ MCP Ð­ÒéÕ»
- * £¨@modelcontextprotocol/sdk Client + StdioClientTransport£¬²»ÊÇÖ±½Óµ÷·þÎñ£©¡£
+ï»¿/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty, no-irregular-whitespace */
+ï»¿/**
+ * çœŸå®ž MCP å®¢æˆ·ç«¯éªŒæ”¶ï¼šæŠŠå…¨éƒ¨å¤–éƒ¨æ“ä½œé€ä¸ªè¿‡ä¸€éçœŸå®ž MCP åè®®æ ˆ
+ * ï¼ˆ@modelcontextprotocol/sdk Client + StdioClientTransportï¼Œä¸æ˜¯ç›´æŽ¥è°ƒæœåŠ¡ï¼‰ã€‚
  *
- * Ä¿µÄ£ºÖ¤Ã÷"Agent ÕæÄÜÍ¨¹ý MCP ÓÃÕâÐ©ÄÜÁ¦"£¬¶ø²»Ö»ÊÇµ¥Ôª²âÊÔÀïÂß¼­ÕýÈ·¡£
+ * ç›®çš„ï¼šè¯æ˜Ž"Agent çœŸèƒ½é€šè¿‡ MCP ç”¨è¿™äº›èƒ½åŠ›"ï¼Œè€Œä¸åªæ˜¯å•å…ƒæµ‹è¯•é‡Œé€»è¾‘æ­£ç¡®ã€‚
  *
- * Ç°Ìá£ºÓ¦ÓÃ±ØÐë**ÒÑ¼¤»î**£¨ÊÚÈ¨ÃÅ½ûÎ´Í¨¹ý¾ÍÍ£ÔÚÊÚÈ¨´°£¬±¾µØ½ÓÈë·þÎñ²»»áÆô¶¯£©¡£
- * ±¾½Å±¾°Ñ±¾»úÒÑ¼¤»îµÄ security Ä¿Â¼¸´ÖÆ½ø¸ôÀëÊý¾ÝÄ¿Â¼¡ª¡ªÊÚÈ¨ÊÇÉè±¸°ó¶¨µÄ£¬
- * Í¬Ò»Ì¨»úÆ÷ÉÏÓÐÐ§£¬²»»áÈÆ¹ýÈÎºÎÐ£Ñé¡£
+ * å‰æï¼šåº”ç”¨å¿…é¡»**å·²æ¿€æ´»**ï¼ˆæŽˆæƒé—¨ç¦æœªé€šè¿‡å°±åœåœ¨æŽˆæƒçª—ï¼Œæœ¬åœ°æŽ¥å…¥æœåŠ¡ä¸ä¼šå¯åŠ¨ï¼‰ã€‚
+ * æœ¬è„šæœ¬æŠŠæœ¬æœºå·²æ¿€æ´»çš„ security ç›®å½•å¤åˆ¶è¿›éš”ç¦»æ•°æ®ç›®å½•â€”â€”æŽˆæƒæ˜¯è®¾å¤‡ç»‘å®šçš„ï¼Œ
+ * åŒä¸€å°æœºå™¨ä¸Šæœ‰æ•ˆï¼Œä¸ä¼šç»•è¿‡ä»»ä½•æ ¡éªŒã€‚
  *
- * ·ÖËÄÀàÅÐ¶¨£º
- *  A. Ô¼¶¨²ã£ºtools/list ±ØÐëÁÐ³öÈ«²¿²Ù×÷£¬ÇÒ inputSchema/outputSchema ¶¼ºÏ·¨£»
- *  B. ¶Á²Ù×÷£ºÔÚÖÖ×ÓÏîÄ¿ÉÏÕæÊµµ÷ÓÃ£¬¼ì²é·µ»Ø½á¹¹£¨²»Í¨¹ý = È±ÏÝ£©£»
- *  C. ·çÏÕ²Ù×÷£¨¸¶·Ñ/ÍøÂç/Ð´/ÐèÈË¹¤£©£º**ÓÃ·Ç·¨»òÎ´È·ÈÏÊäÈëµ÷ÓÃ**£¬ÑéÖ¤"»á±»ÕýÈ·À¹×¡"£¬
- *     ¾ø²»²úÉúÕæÊµ¸±×÷ÓÃ£¨ÕâÊÇ"½ÓÏßÕýÈ·"µÄÖ¤Ã÷£¬²»ÊÇ"¹¦ÄÜÒÑÑéÊÕ"µÄÖ¤Ã÷£©£»
- *  D. Î´¸²¸Ç£ºÃ÷È·ÁÐ³ö²¢Ð´Ô­Òò£¬²»¼Ù×°Í¨¹ý¡£
+ * åˆ†å››ç±»åˆ¤å®šï¼š
+ *  A. çº¦å®šå±‚ï¼štools/list å¿…é¡»åˆ—å‡ºå…¨éƒ¨æ“ä½œï¼Œä¸” inputSchema/outputSchema éƒ½åˆæ³•ï¼›
+ *  B. è¯»æ“ä½œï¼šåœ¨ç§å­é¡¹ç›®ä¸ŠçœŸå®žè°ƒç”¨ï¼Œæ£€æŸ¥è¿”å›žç»“æž„ï¼ˆä¸é€šè¿‡ = ç¼ºé™·ï¼‰ï¼›
+ *  C. é£Žé™©æ“ä½œï¼ˆä»˜è´¹/ç½‘ç»œ/å†™/éœ€äººå·¥ï¼‰ï¼š**ç”¨éžæ³•æˆ–æœªç¡®è®¤è¾“å…¥è°ƒç”¨**ï¼ŒéªŒè¯"ä¼šè¢«æ­£ç¡®æ‹¦ä½"ï¼Œ
+ *     ç»ä¸äº§ç”ŸçœŸå®žå‰¯ä½œç”¨ï¼ˆè¿™æ˜¯"æŽ¥çº¿æ­£ç¡®"çš„è¯æ˜Žï¼Œä¸æ˜¯"åŠŸèƒ½å·²éªŒæ”¶"çš„è¯æ˜Žï¼‰ï¼›
+ *  D. æœªè¦†ç›–ï¼šæ˜Žç¡®åˆ—å‡ºå¹¶å†™åŽŸå› ï¼Œä¸å‡è£…é€šè¿‡ã€‚
  */
 const { _electron } = require('playwright')
 const { cp, mkdir, mkdtemp, readFile, writeFile, rm } = require('node:fs/promises')
@@ -28,11 +28,11 @@ const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio
 const electron = require('electron')
 const appRoot = resolve('.')
 const cliPath = join(appRoot, 'out/main/local-agent.js')
-// ÆÚÍû¹¤¾ßÊýÒÔÃÅ½ûÆõÔ¼¿ìÕÕÎªÎ¨Ò»ÊÂÊµÔ´£¬²»ÔÙÓ²±àÂë£¨×¢²á±íÀ©ÈÝºóÓ²±àÂë±ØÈ»¹ýÆÚ£©¡£
+// æœŸæœ›å·¥å…·æ•°ä»¥é—¨ç¦å¥‘çº¦å¿«ç…§ä¸ºå”¯ä¸€äº‹å®žæºï¼Œä¸å†ç¡¬ç¼–ç ï¼ˆæ³¨å†Œè¡¨æ‰©å®¹åŽç¡¬ç¼–ç å¿…ç„¶è¿‡æœŸï¼‰ã€‚
 const expectedToolCount = JSON.parse(readFileSync(join(appRoot, 'docs/local-agent-access/generated/contracts.json'), 'utf8')).operations.length
 const key = () => `${Date.now()}:${randomUUID()}`
 
-/** ±¾»úÒÑ¼¤»îÊÚÈ¨µÄ security Ä¿Â¼£¨Éè±¸°ó¶¨£¬Í¬Ò»»úÆ÷ÓÐÐ§£©¡£ */
+/** æœ¬æœºå·²æ¿€æ´»æŽˆæƒçš„ security ç›®å½•ï¼ˆè®¾å¤‡ç»‘å®šï¼ŒåŒä¸€æœºå™¨æœ‰æ•ˆï¼‰ã€‚ */
 const licensedSecurityDir = (() => {
   const roaming = process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming')
   const candidates = [
@@ -46,7 +46,7 @@ const licensedSecurityDir = (() => {
   return candidates[0]
 })()
 
-/** Ö»¶Á²Ù×÷£º¿É°²È«ÕæÊµµ÷ÓÃ¡£ */
+/** åªè¯»æ“ä½œï¼šå¯å®‰å…¨çœŸå®žè°ƒç”¨ã€‚ */
 const READ_OPS = [
   'app.status',
   'capability.list',
@@ -70,7 +70,7 @@ const READ_OPS = [
   'history.list'
 ]
 
-/** ·çÏÕ²Ù×÷£ºÖ»ÑéÖ¤"»á±»ÕýÈ·À¹×¡"£¬²ÎÊý¹ÊÒâ²»ÍêÕû/Î´È·ÈÏ¡£ */
+/** é£Žé™©æ“ä½œï¼šåªéªŒè¯"ä¼šè¢«æ­£ç¡®æ‹¦ä½"ï¼Œå‚æ•°æ•…æ„ä¸å®Œæ•´/æœªç¡®è®¤ã€‚ */
 const GUARDED_OPS = [
   ['environment.videoEngine.install', {}, 'INSTALL_CONFIRM_REQUIRED'],
   ['provider.testConnection', { providerId: 'no-such-provider' }, 'NETWORK_CONFIRM_REQUIRED'],
@@ -109,9 +109,9 @@ async function main() {
   let app
   let client
   try {
-    // ÊÚÈ¨ÊÇÉè±¸°ó¶¨µÄ£º°Ñ±¾»úÒÑ¼¤»îµÄ security Ä¿Â¼¸´ÖÆ½ø¸ôÀëÊý¾ÝÄ¿Â¼£¬
-    // Ó¦ÓÃ²ÅÄÜÔ½¹ýÊÚÈ¨ÃÅ½ûÆô¶¯±¾µØ½ÓÈë·þÎñ£¨²»Î±ÔìÈÎºÎÇ©Ãû£©¡£
-    // CANVAS_OWNER=1 µÄ×ÔÓÃ°æ¹¹½¨ÒÑÌø¹ýÊÚÈ¨ÃÅ½û£¬¸É¾» CI ÎÞÐèÒ²²»Ó¦ÓÐ±¾»úÊÚÈ¨Ä¿Â¼¡£
+    // æŽˆæƒæ˜¯è®¾å¤‡ç»‘å®šçš„ï¼šæŠŠæœ¬æœºå·²æ¿€æ´»çš„ security ç›®å½•å¤åˆ¶è¿›éš”ç¦»æ•°æ®ç›®å½•ï¼Œ
+    // åº”ç”¨æ‰èƒ½è¶Šè¿‡æŽˆæƒé—¨ç¦å¯åŠ¨æœ¬åœ°æŽ¥å…¥æœåŠ¡ï¼ˆä¸ä¼ªé€ ä»»ä½•ç­¾åï¼‰ã€‚
+    // CANVAS_OWNER=1 çš„è‡ªç”¨ç‰ˆæž„å»ºå·²è·³è¿‡æŽˆæƒé—¨ç¦ï¼Œå¹²å‡€ CI æ— éœ€ä¹Ÿä¸åº”æœ‰æœ¬æœºæŽˆæƒç›®å½•ã€‚
     if (process.env.CANVAS_OWNER === '1') {
       report.licensed = 'owner-build'
       report.licenseMode = 'CANVAS_OWNER=1'
@@ -120,7 +120,7 @@ async function main() {
       report.licensed = true
     } else {
       report.licensed = false
-      record('±¾»úÊÚÈ¨Ä¿Â¼´æÔÚ', false, licensedSecurityDir)
+      record('æœ¬æœºæŽˆæƒç›®å½•å­˜åœ¨', false, licensedSecurityDir)
     }
     const env = { ...process.env, CANVAS_DATA_DIR: directory }
     delete env.ELECTRON_RUN_AS_NODE
@@ -143,9 +143,9 @@ async function main() {
       }
     }
 
-    // ©¤©¤ A. ÕæÊµ MCP ÎÕÊÖÓë¹¤¾ßÄ¿Â¼ ©¤©¤
-    // MCP ×Ó½ø³ÌÊÇ"ÓÃ electron ¶þ½øÖÆÅÜ node ½Å±¾"£¬±ØÐë´ø ELECTRON_RUN_AS_NODE=1£¬
-    // ·ñÔò electron »á³¢ÊÔµ±×ÀÃæÓ¦ÓÃÆô¶¯£¨±íÏÖÎª initialize ³¬Ê±£©¡£
+    // â”€â”€ A. çœŸå®ž MCP æ¡æ‰‹ä¸Žå·¥å…·ç›®å½• â”€â”€
+    // MCP å­è¿›ç¨‹æ˜¯"ç”¨ electron äºŒè¿›åˆ¶è·‘ node è„šæœ¬"ï¼Œå¿…é¡»å¸¦ ELECTRON_RUN_AS_NODE=1ï¼Œ
+    // å¦åˆ™ electron ä¼šå°è¯•å½“æ¡Œé¢åº”ç”¨å¯åŠ¨ï¼ˆè¡¨çŽ°ä¸º initialize è¶…æ—¶ï¼‰ã€‚
     const mcpEnv = { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
     const transport = new StdioClientTransport({
       command: electron,
@@ -155,23 +155,23 @@ async function main() {
     })
     client = new Client({ name: 'mcp-acceptance', version: '1.0.0' }, { capabilities: {} })
     await client.connect(transport)
-    record('MCP ³õÊ¼»¯ÎÕÊÖ', true)
+    record('MCP åˆå§‹åŒ–æ¡æ‰‹', true)
 
     const listed = await client.listTools()
     report.toolCount = listed.tools.length
-    record(`tools/list ·µ»Ø¹¤¾ßÊý = ${expectedToolCount}`, listed.tools.length === expectedToolCount, String(listed.tools.length))
+    record(`tools/list è¿”å›žå·¥å…·æ•° = ${expectedToolCount}`, listed.tools.length === expectedToolCount, String(listed.tools.length))
     const missingSchema = listed.tools.filter(
       (tool) => !tool.inputSchema || tool.inputSchema.type !== 'object'
     )
-    record('ËùÓÐ¹¤¾ß¶¼ÓÐ object ÐÍ inputSchema', missingSchema.length === 0, missingSchema.map((t) => t.name).join(','))
+    record('æ‰€æœ‰å·¥å…·éƒ½æœ‰ object åž‹ inputSchema', missingSchema.length === 0, missingSchema.map((t) => t.name).join(','))
 
     const call = async (operationId, input, idempotencyKey) => {
       const result = await client.callTool({
         name: toolName(operationId),
         arguments: { input, ...(idempotencyKey ? { idempotencyKey } : {}) }
       })
-      // Ð£ÑéÊ§°ÜÊ± SDK Ö»»Ø´¿ÎÄ±¾£¨Ã»ÓÐ structuredContent£©¡ª¡ª¼ÇÏÂÀ´×÷ÎªÐ­Òé²ã·¢ÏÖ£º
-      // ÕæÕýµÄ Agent ¿Í»§¶ËÖ»ÄÜ¿¿×Ö·û´®ÅÐ¶Ï´íÎóÀàÐÍ£¬ÎÞ·¨°´´íÎóÂë·ÖÖ§¡£
+      // æ ¡éªŒå¤±è´¥æ—¶ SDK åªå›žçº¯æ–‡æœ¬ï¼ˆæ²¡æœ‰ structuredContentï¼‰â€”â€”è®°ä¸‹æ¥ä½œä¸ºåè®®å±‚å‘çŽ°ï¼š
+      // çœŸæ­£çš„ Agent å®¢æˆ·ç«¯åªèƒ½é å­—ç¬¦ä¸²åˆ¤æ–­é”™è¯¯ç±»åž‹ï¼Œæ— æ³•æŒ‰é”™è¯¯ç åˆ†æ”¯ã€‚
       if (result.structuredContent) return result.structuredContent
       const text = String(result.content?.[0]?.text ?? '{}')
       try {
@@ -182,26 +182,26 @@ async function main() {
       }
     }
 
-    // ÖÖ×ÓÏîÄ¿
-    const created = await call('project.create', { name: 'MCP ÑéÊÕÏîÄ¿' }, key())
+    // ç§å­é¡¹ç›®
+    const created = await call('project.create', { name: 'MCP éªŒæ”¶é¡¹ç›®' }, key())
     const projectId = created?.data?.meta?.id
     record(
-      'project.create ¾­ MCP ³É¹¦²¢·µ»ØÏîÄ¿ ID',
+      'project.create ç» MCP æˆåŠŸå¹¶è¿”å›žé¡¹ç›® ID',
       Boolean(projectId),
       JSON.stringify(created?.error ?? created).slice(0, 300)
     )
 
-    // flowAgent.catalog ÒªÇóÏîÄ¿ÒÑÔÚ»­²¼ÖÐ´ò¿ª£ºÏÈ¾­ MCP project.open ×ßÈ¨ÍþËÞÖ÷ÎÕÊÖ¡£
+    // flowAgent.catalog è¦æ±‚é¡¹ç›®å·²åœ¨ç”»å¸ƒä¸­æ‰“å¼€ï¼šå…ˆç» MCP project.open èµ°æƒå¨å®¿ä¸»æ¡æ‰‹ã€‚
     if (projectId) {
       const opened = await call('project.open', { projectId }, key())
       record(
-        'project.open ¾­ MCP ÔÚÕæÊµ×ÀÃæÖÐ´ò¿ª»­²¼',
+        'project.open ç» MCP åœ¨çœŸå®žæ¡Œé¢ä¸­æ‰“å¼€ç”»å¸ƒ',
         opened?.status === 'completed',
         JSON.stringify(opened?.error ?? '').slice(0, 200)
       )
     }
 
-    // ©¤©¤ B. ¶Á²Ù×÷ÕæÊµµ÷ÓÃ£¨Ã¿Ïî°´×Ô¼ºµÄ Schema ´«²Î£¬²»ÄÜÒ»ÂÉÈû projectId£©©¤©¤
+    // â”€â”€ B. è¯»æ“ä½œçœŸå®žè°ƒç”¨ï¼ˆæ¯é¡¹æŒ‰è‡ªå·±çš„ Schema ä¼ å‚ï¼Œä¸èƒ½ä¸€å¾‹å¡ž projectIdï¼‰â”€â”€
     const READ_INPUTS = {
       'node.type.get': { typeId: 'text' },
       'diagnostics.query': { limit: 5 },
@@ -218,19 +218,19 @@ async function main() {
         const response = await call(operationId, input)
         const ok = response?.status === 'completed'
         record(
-          `¶Á²Ù×÷ ${operationId}`,
+          `è¯»æ“ä½œ ${operationId}`,
           ok,
           ok ? '' : JSON.stringify(response?.error ?? response).slice(0, 200)
         )
       } catch (error) {
-        record(`¶Á²Ù×÷ ${operationId}`, false, error instanceof Error ? error.message : String(error))
+        record(`è¯»æ“ä½œ ${operationId}`, false, error instanceof Error ? error.message : String(error))
       }
     }
 
-    // ©¤©¤ B2. È«Á¿Ö»¶ÁÉ¨Ãè£º57 ¸ö read ²Ù×÷È«²¿¾­ÕæÊµ MCP µ÷Ò»±é ©¤©¤
-    // Èë²ÎÓÉ¸÷×ÔµÄ inputSchema.required Éú³É×îÐ¡ºÏ·¨Öµ£¨projectId ÓÃÖÖ×ÓÏîÄ¿£¬ÆäÓàÓÃÕ¼Î» id£©¡£
-    // ÅÐ¶¨£º·µ»ØºÏ·¨ÐÅ·â¼´Ëã"½ÓÍ¨"£¨completed=ÕæÍ¨£»failed ´øÒµÎñÂë=È±Ç°ÖÃÊý¾Ýµ«ÒÑ½ÓÍ¨£©£»
-    // ³¬Ê±/Å×´í/´¿ÎÄ±¾´íÎó = È±ÏÝ¡£Ö»¶Á²Ù×÷ÎÞ¸±×÷ÓÃ¡£
+    // â”€â”€ B2. å…¨é‡åªè¯»æ‰«æï¼š57 ä¸ª read æ“ä½œå…¨éƒ¨ç»çœŸå®ž MCP è°ƒä¸€é â”€â”€
+    // å…¥å‚ç”±å„è‡ªçš„ inputSchema.required ç”Ÿæˆæœ€å°åˆæ³•å€¼ï¼ˆprojectId ç”¨ç§å­é¡¹ç›®ï¼Œå…¶ä½™ç”¨å ä½ idï¼‰ã€‚
+    // åˆ¤å®šï¼šè¿”å›žåˆæ³•ä¿¡å°å³ç®—"æŽ¥é€š"ï¼ˆcompleted=çœŸé€šï¼›failed å¸¦ä¸šåŠ¡ç =ç¼ºå‰ç½®æ•°æ®ä½†å·²æŽ¥é€šï¼‰ï¼›
+    // è¶…æ—¶/æŠ›é”™/çº¯æ–‡æœ¬é”™è¯¯ = ç¼ºé™·ã€‚åªè¯»æ“ä½œæ— å‰¯ä½œç”¨ã€‚
     const readOps = listed.tools.filter((tool) => /^(app|capability|node|project|model|environment|provider|workspace|diagnostics|library|flowAgent|flowAsset|flow_command|history|skill|director|node_library|publish)_/.test(tool.name.replaceAll('_', '_')))
     const contractsOutput = await new Promise((done) => {
       const { execFileSync } = require('node:child_process')
@@ -255,7 +255,7 @@ async function main() {
       if (schema?.type === 'boolean') return false
       if (schema?.type === 'array') return []
       if (schema?.type === 'object') return {}
-      // ÓÐÕýÔòÔ¼ÊøµÄ×Ö¶ÎÒªÉú³É**ÄÜ¹ýÐ£Ñé**µÄÕ¼Î»Öµ£¬·ñÔò²â³öÀ´µÄÖ»ÊÇ"ÎÒµÄÈë²Î²»ºÏ·¨"¡£
+      // æœ‰æ­£åˆ™çº¦æŸçš„å­—æ®µè¦ç”Ÿæˆ**èƒ½è¿‡æ ¡éªŒ**çš„å ä½å€¼ï¼Œå¦åˆ™æµ‹å‡ºæ¥çš„åªæ˜¯"æˆ‘çš„å…¥å‚ä¸åˆæ³•"ã€‚
       const pattern = typeof schema?.pattern === 'string' ? schema.pattern : ''
       if (pattern.includes('shape:')) return 'shape:missing'
       if (pattern.includes('pub_')) return 'pub_missing01'
@@ -269,8 +269,8 @@ async function main() {
     for (const tool of listed.tools) {
       const operationId = tool.name.replaceAll('_', '.')
       if (effectOf.get(operationId) !== 'read') continue
-      // ×¢Òâ£ºMCP ¹¤¾ßµÄÍâ²ã²ÎÊýÊÇ { input, idempotencyKey }£¬
-      // ÕæÕýµÄ²Ù×÷Èë²Î Schema ÔÚ properties.input Àï¡ª¡ª²»ÄÜ°Ñ required ¶Á´íÒ»²ã¡£
+      // æ³¨æ„ï¼šMCP å·¥å…·çš„å¤–å±‚å‚æ•°æ˜¯ { input, idempotencyKey }ï¼Œ
+      // çœŸæ­£çš„æ“ä½œå…¥å‚ Schema åœ¨ properties.input é‡Œâ€”â€”ä¸èƒ½æŠŠ required è¯»é”™ä¸€å±‚ã€‚
       const opSchema = tool.inputSchema.properties?.input ?? {}
       const input = {}
       for (const required of opSchema.required ?? []) {
@@ -283,16 +283,16 @@ async function main() {
         const plainText = typeof code === 'string' && code.startsWith('PLAIN_TEXT:')
         report.readSweep.push({ operationId, status, code })
         if (plainText) {
-          record(`Ö»¶ÁÉ¨Ãè ${operationId}`, false, `Ð­Òé²ã´¿ÎÄ±¾´íÎó£º${code}`)
+          record(`åªè¯»æ‰«æ ${operationId}`, false, `åè®®å±‚çº¯æ–‡æœ¬é”™è¯¯ï¼š${code}`)
         } else if (status !== 'completed' && status !== 'failed') {
-          record(`Ö»¶ÁÉ¨Ãè ${operationId}`, false, `Òì³£×´Ì¬ ${status}`)
+          record(`åªè¯»æ‰«æ ${operationId}`, false, `å¼‚å¸¸çŠ¶æ€ ${status}`)
         } else {
-          record(`Ö»¶ÁÉ¨Ãè ${operationId}`, true, status === 'completed' ? '' : `ÒµÎñ¾Ü¾ø ${code}`)
+          record(`åªè¯»æ‰«æ ${operationId}`, true, status === 'completed' ? '' : `ä¸šåŠ¡æ‹’ç» ${code}`)
         }
       } catch (error) {
         report.readSweep.push({ operationId, status: 'threw' })
         record(
-          `Ö»¶ÁÉ¨Ãè ${operationId}`,
+          `åªè¯»æ‰«æ ${operationId}`,
           false,
           error instanceof Error ? error.message.slice(0, 150) : String(error).slice(0, 150)
         )
@@ -306,14 +306,14 @@ async function main() {
         const code = response?.error?.code ?? ''
         const blocked = response?.status !== 'completed'
         if (expectedCode) {
-          record(`À¹×¡ ${operationId}£¨ÆÚÍû ${expectedCode}£©`, code === expectedCode, `Êµ¼Ê code=${code}`)
+          record(`æ‹¦ä½ ${operationId}ï¼ˆæœŸæœ› ${expectedCode}ï¼‰`, code === expectedCode, `å®žé™… code=${code}`)
         } else {
-          record(`À¹×¡ ${operationId}£¨²»µÃ³É¹¦£©`, blocked, `status=${response?.status} code=${code}`)
+          record(`æ‹¦ä½ ${operationId}ï¼ˆä¸å¾—æˆåŠŸï¼‰`, blocked, `status=${response?.status} code=${code}`)
         }
         report.guarded.push({ operationId, status: response?.status, code })
       } catch (error) {
-        // Å×´íÒ²Ëã±»À¹×¡£¨Ð­Òé²ã¾Ü¾ø£©
-        record(`À¹×¡ ${operationId}£¨Ð­Òé²ã¾Ü¾ø£©`, true, error instanceof Error ? error.message.slice(0, 120) : '')
+        // æŠ›é”™ä¹Ÿç®—è¢«æ‹¦ä½ï¼ˆåè®®å±‚æ‹’ç»ï¼‰
+        record(`æ‹¦ä½ ${operationId}ï¼ˆåè®®å±‚æ‹’ç»ï¼‰`, true, error instanceof Error ? error.message.slice(0, 120) : '')
         report.guarded.push({ operationId, status: 'threw' })
       }
     }
@@ -325,7 +325,7 @@ async function main() {
         return !READ_OPS.includes(name.replaceAll('_', '.')) && !GUARDED_OPS.some(([id]) => id === operationId)
       })
   } catch (error) {
-    record('ÑéÊÕ½Å±¾ÕûÌåÖ´ÐÐ', false, error instanceof Error ? error.stack?.slice(0, 800) : String(error))
+    record('éªŒæ”¶è„šæœ¬æ•´ä½“æ‰§è¡Œ', false, error instanceof Error ? error.stack?.slice(0, 800) : String(error))
   } finally {
     report.finishedAt = new Date().toISOString()
     report.passed = report.checks.filter((c) => c.ok).length
@@ -341,10 +341,10 @@ async function main() {
       await rm(directory, { recursive: true, force: true })
     } catch {}
     console.log(
-      `\nMCP ÑéÊÕ£º¹¤¾ßÊý=${report.toolCount} ¼ì²é=${report.checks.length} Í¨¹ý=${report.passed} Ê§°Ü=${report.failed}`
+      `\nMCP éªŒæ”¶ï¼šå·¥å…·æ•°=${report.toolCount} æ£€æŸ¥=${report.checks.length} é€šè¿‡=${report.passed} å¤±è´¥=${report.failed}`
     )
     for (const failure of report.failures.slice(0, 20)) console.log('  FAIL ' + failure.name + ' :: ' + failure.detail)
-    console.log('±¨¸æ£ºqa/local-agent-access/mcp-acceptance/report.json')
+    console.log('æŠ¥å‘Šï¼šqa/local-agent-access/mcp-acceptance/report.json')
     process.exit(report.failed === 0 ? 0 : 1)
   }
 }

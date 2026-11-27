@@ -209,7 +209,52 @@ export const ACCESS_ERROR_CATALOG: readonly { code: string; meaning: string; hin
   {
     code: 'PATH_NOT_ALLOWED',
     meaning: '路径不在受控目录内',
-    hint: '只使用受控导出/导入目录内的文件'
+    hint: '将待导入文件放入数据目录下的受控 agent-exports 目录后再调用 media.import'
+  },
+  {
+    code: 'PAID_RERUN_CONFIRM_REQUIRED',
+    meaning: 'subgraph 模式包含可能计费的非本地运行型上游节点，需显式确认重跑',
+    hint: '征得用户同意后传 confirmPaidRerun: true，或改用 mode: "single" 仅执行目标节点'
+  },
+  {
+    code: 'PATCH_REFERENCE_INVALID',
+    meaning: '画布变更中的节点 ID、ref 引用或端口不存在',
+    hint: '核对 detail 中的 op 下标、ref 与合法端口列表（可调 node.type.get 查看端口与 configGuide）'
+  },
+  {
+    code: 'EDGE_PORT_INVALID',
+    meaning: '连线引用的端口 ID 在源节点或目标节点上不存在',
+    hint: '按 detail 列出的合法端口 ID 或 node.type.get 修正（如 video 图片端口为 in-images）'
+  },
+  {
+    code: 'EDGE_INCOMPATIBLE',
+    meaning: '连线两端端口数据类型或 Schema 不兼容',
+    hint: '检查两端端口 type/schema，必要时插入 processor 或 code 节点做格式转换'
+  },
+  {
+    code: 'EDGE_CYCLE',
+    meaning: '连线形成有向环，画布不支持循环依赖',
+    hint: '移除形成环路的边，迭代场景请使用 iterate 节点'
+  },
+  {
+    code: 'CONFIG_INVALID',
+    meaning: '节点 config 字段不合法（如 code 节点的 params/outputs/inputName 校验失败）',
+    hint: '按 detail 提示和 node.type.get 的 configGuide 修正后重提'
+  },
+  {
+    code: 'HUMAN_DENIED',
+    meaning: '用户在桌面确认弹窗中拒绝了本次人工决定操作（零副作用）',
+    hint: '不要强行重试；向用户说明并按其反馈调整方案'
+  },
+  {
+    code: 'HUMAN_DECISION_TIMEOUT',
+    meaning: '桌面人工确认在时限内未收到回复（零副作用）',
+    hint: '提示用户注意桌面确认窗，待用户确认可用后再发起新请求'
+  },
+  {
+    code: 'DESKTOP_UNAVAILABLE',
+    meaning: '桌面宿主窗口不可用或未就绪',
+    hint: '确认 Canvas Studio 桌面应用已启动并处于可用状态'
   },
   { code: 'INPUT_NOT_FOUND', meaning: '受控目录内找不到该输入文件', hint: '确认文件名与位置' },
   { code: 'OUTPUT_EXISTS', meaning: '目标文件已存在（不覆盖）', hint: '换一个文件名' },

@@ -152,9 +152,10 @@ const path = require('node:path')
         project
       )
       await page.waitForSelector('.palette-category-item')
-      assert.equal(await page.evaluate(() => window.__canvasMountListeners()), 8)
+      // CanvasEditor 挂载监听固定为 9 项（含 backdrop create/delete，nodePageIndex 已改用同步 store.history），卸载时全部归零。
+      assert.equal(await page.evaluate(() => window.__canvasMountListeners()), 9)
     }
-    checks.push('五次画布卸载无残留 wheel 或八项挂载监听')
+    checks.push('五次画布卸载无残留 wheel 或九项挂载监听')
     await page.evaluate(async () =>
       (await import('/src/stores/app.ts')).useAppStore.getState().setHome()
     )

@@ -8,7 +8,7 @@ import { Readable } from 'stream'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import log from 'electron-log/main'
 import icon from '../../resources/icon.png?asset'
-import { registerProjectIpc } from './ipc/project.ipc'
+import { drainInFlightProjectSaves, registerProjectIpc } from './ipc/project.ipc'
 import { startLocalAccessServer, type LocalAccessServer } from './agent-access/server'
 import { createAccessDesktop } from './agent-access/desktop'
 import { registerLocalAgentTaskReports } from './agent-access/reports'
@@ -797,6 +797,7 @@ app.on('before-quit', (event) => {
         upstreamDrainComplete = false
         log.warn('[diagnostics] renderer shutdown drain failed')
       }
+      await drainInFlightProjectSaves(remainingShutdownTimeMs())
       rendererDiagnosticsComplete = upstreamDrainComplete
       if (diagnostics) {
         diagnostics.emit(mainProducer.build('app.session_ended', undefined, '主进程会话结束', {}))

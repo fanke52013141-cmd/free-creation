@@ -12,8 +12,8 @@ import {
   C0Error,
   type C0ModelPort,
   type C0Scope
-} from '../../shared/agent-flow/c0-contracts'
-import { initDiagnosticsService } from '../diagnostics/service'
+} from '../../../src/shared/agent-flow/c0-contracts'
+import { initDiagnosticsService } from '../../../src/main/diagnostics/service'
 import { createC0Telemetry } from './c0/diagnostics'
 
 const directory = process.argv
@@ -120,7 +120,7 @@ ipcRenderer.on('c0:execute',async(_,command)=>{
             signal.addEventListener('abort', onAbort, { once: true })
             fixtureWindow.webContents.send('c0:execute', command)
           })
-      } satisfies import('../../shared/agent-flow/c0-contracts').C0Transport
+      } satisfies import('../../../src/shared/agent-flow/c0-contracts').C0Transport
       const model: C0ModelPort = {
         decide: async (input) =>
           !input.outputs.length

@@ -1,8 +1,507 @@
 import { randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
-import type { GraphPatchOp } from '../../shared/agent-access/graph-ops'
-import type { ProjectFile } from '../../shared/types'
+import {
+  GRAPH_NODE_CONFIG_MAX_BYTES,
+  type GraphPatchOp
+} from '../../shared/agent-access/graph-ops'
+import { nodeContract } from '../../shared/agent-access/node-contracts'
+import type { CompositeManifest } from '../../shared/composite/manifest'
+import {
+  codeParamPortId,
+  codePortConfigErrors,
+  mapVarTypeToPortType,
+  outputFieldPortId,
+  outputPortId,
+  parseCodeConfigs
+} from '../../shared/engine/executors/code'
+import { portPairCompatible } from '../../shared/port-compatibility'
+import type { PortDecl, PortType, ProjectFile } from '../../shared/types'
 import { layoutGraph } from '../../shared/flow-layout'
+
+interface PrecheckPort {
+  id: string
+  dir: 'in' | 'out'
+  type: PortType
+  cardinality: 'one' | 'many'
+  schema?: { id: string; version: number }
+}
+
+interface PrecheckSimNode {
+  type: string
+  config: string
+  exists: boolean
+  compositeManifest?: CompositeManifest
+  /** 当已有节点来自画布快照时保留其真实端口，供动态端口节点校验。 */
+  existingPorts?: { in: PrecheckPort[]; out: PrecheckPort[] }
+}
+
+function parseSchemaString(raw?: string): { id: string; version: number } | undefined {
+  if (!raw) return undefined
+  const at = raw.lastIndexOf('@')
+  if (at <= 0) return { id: raw, version: 1 }
+  const version = Number(raw.slice(at + 1))
+  return Number.isFinite(version) ? { id: raw.slice(0, at), version } : { id: raw, version: 1 }
+}
+
+function mergePatchConfig(baseRaw: string, patch: Record<string, unknown>): string {
+  let base: Record<string, unknown> = {}
+  if (baseRaw.trim()) {
+    try {
+      const parsed: unknown = JSON.parse(baseRaw)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        base = parsed as Record<string, unknown>
+      }
+    } catch {
+      // ignore malformed historical config
+    }
+  }
+  const merged: Record<string, unknown> = { ...base }
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null) delete merged[k]
+    else merged[k] = v
+  }
+  return JSON.stringify(merged)
+}
+
+function resolvePrecheckPorts(
+  node: PrecheckSimNode
+): { in: PrecheckPort[]; out: PrecheckPort[]; strict: boolean } {
+  if (node.type === 'composite') {
+    const manifest = node.compositeManifest
+    if (!manifest) return { in: [], out: [], strict: true }
+    return {
+      strict: true,
+      in: manifest.inputs.map((input) => ({
+        id: `in-${input.id}`,
+        dir: 'in',
+        type: input.type,
+        cardinality: input.cardinality,
+        ...(input.type === 'json'
+          ? { schema: input.schemaRef ?? { id: 'json.any', version: 1 } }
+          : {})
+      })),
+      out: manifest.outputs.map((output) => ({
+        id: `out-${output.id}`,
+        dir: 'out',
+        type: output.type,
+        cardinality: output.cardinality,
+        ...(output.type === 'json'
+          ? { schema: output.schemaRef ?? { id: 'json.any', version: 1 } }
+          : {})
+      }))
+    }
+  }
+  if (node.type === 'code') {
+    const cfg = parseCodeConfigs(node.config)
+    const paramPorts: PrecheckPort[] = cfg.params.map((p) => {
+      const type = mapVarTypeToPortType(p.type)
+      return {
+        id: codeParamPortId(p),
+        dir: 'in',
+        type,
+        cardinality: p.cardinality ?? 'one',
+        ...(type === 'json' ? { schema: { id: 'json.any', version: 1 } } : {}),
+        ...(type === 'camera' ? { schema: { id: 'previs.camera', version: 1 } } : {})
+      }
+    })
+    const outputFields =
+      cfg.outputMode === 'fields'
+        ? cfg.outputs
+        : [{ name: cfg.outputName, type: cfg.outputType }]
+    return {
+      strict: true,
+      in: [
+        { id: 'in-text', dir: 'in', type: 'text', cardinality: 'many' },
+        {
+          id: 'in-json',
+          dir: 'in',
+          type: 'json',
+          cardinality: 'many',
+          schema: { id: 'json.any', version: 1 }
+        },
+        ...paramPorts
+      ],
+      out: outputFields.map((field) => {
+        const type = mapVarTypeToPortType(field.type)
+        const id = 'portId' in field ? outputFieldPortId(field) : outputPortId(field.name)
+        return {
+          id,
+          dir: 'out',
+          type,
+          cardinality: 'one',
+          ...(type === 'json' ? { schema: { id: 'json.any', version: 1 } } : {}),
+          ...(type === 'camera' ? { schema: { id: 'previs.camera', version: 1 } } : {})
+        }
+      })
+    }
+  }
+  const contract = nodeContract(node.type)
+  if (!contract) {
+    if (node.existingPorts) return { ...node.existingPorts, strict: false }
+    return { in: [], out: [], strict: false }
+  }
+  if (contract.dynamicPorts && node.existingPorts) {
+    return { ...node.existingPorts, strict: false }
+  }
+  return {
+    strict: !contract.dynamicPorts,
+    in: contract.ports.in.map((p) => ({
+      id: p.id,
+      dir: 'in',
+      type: p.type as PortType,
+      cardinality: p.cardinality,
+      schema: parseSchemaString(p.schema)
+    })),
+    out: contract.ports.out.map((p) => ({
+      id: p.id,
+      dir: 'out',
+      type: p.type as PortType,
+      cardinality: p.cardinality,
+      schema: parseSchemaString(p.schema)
+    }))
+  }
+}
+
+export interface GraphPatchPrecheckIssue {
+  code: string
+  detail: string
+}
+
+/**
+ * 方案 A `graph.patch.propose` 主进程深度预检：
+ * 在把幽灵预览推送到用户画布之前，提前校验节点类型、config 体积与 code 动态端口配置、
+ * 连线端口存在性（附带合法端口列表）、端口类型/Schema 兼容、单值端口占用、重复边与全图无环。
+ * 让外部 Agent 在 propose 阶段即可拿到精准错误并自修，绝不把坏预览推给用户点击确认。
+ */
+export function precheckGraphPatchOps(options: {
+  ops: readonly GraphPatchOp[]
+  currentFile: ProjectFile
+  resolveCompositeManifest?: (
+    capabilityId: string,
+    version: string
+  ) => CompositeManifest | undefined
+}): { ok: true } | { ok: false; issue: GraphPatchPrecheckIssue } {
+  const { ops, currentFile, resolveCompositeManifest } = options
+  const simNodes = new Map<string, PrecheckSimNode>()
+  const snapshotStore = (
+    currentFile.tldrawSnapshot as
+      | {
+          store?: Record<
+            string,
+            { props?: { config?: string }; meta?: { compositeManifest?: CompositeManifest } }
+          >
+        }
+      | undefined
+  )?.store
+
+  for (const node of currentFile.nodes) {
+    const snap = snapshotStore?.[node.id]
+    const config = typeof snap?.props?.config === 'string' ? snap.props.config : ''
+    let compositeManifest = snap?.meta?.compositeManifest
+    if (node.type === 'composite' && !compositeManifest && config) {
+      try {
+        const parsed = JSON.parse(config) as {
+          manifest?: CompositeManifest
+          capabilityId?: string
+          version?: string
+        }
+        compositeManifest =
+          parsed.manifest ??
+          (parsed.capabilityId && parsed.version
+            ? resolveCompositeManifest?.(parsed.capabilityId, parsed.version)
+            : undefined)
+      } catch {
+        // ignore
+      }
+    }
+    const existingPorts = {
+      in: node.ports
+        .filter((p) => p.dir === 'in')
+        .map((p) => ({
+          id: p.id,
+          dir: 'in' as const,
+          type: p.type,
+          cardinality: p.cardinality,
+          schema: p.schema
+        })),
+      out: node.ports
+        .filter((p) => p.dir === 'out')
+        .map((p) => ({
+          id: p.id,
+          dir: 'out' as const,
+          type: p.type,
+          cardinality: p.cardinality,
+          schema: p.schema
+        }))
+    }
+    simNodes.set(node.id, {
+      type: node.type,
+      config,
+      exists: true,
+      compositeManifest,
+      existingPorts
+    })
+  }
+
+  const simEdges = new Map<
+    string,
+    { from: { nodeId: string; portId: string }; to: { nodeId: string; portId: string }; exists: boolean }
+  >()
+  for (const edge of currentFile.edges) {
+    simEdges.set(edge.id, {
+      from: { nodeId: edge.from.nodeId, portId: edge.from.portId },
+      to: { nodeId: edge.to.nodeId, portId: edge.to.portId },
+      exists: true
+    })
+  }
+
+  const refToId = new Map<string, string>()
+  const resolveId = (raw: string): string => refToId.get(raw) ?? raw
+
+  for (let index = 0; index < ops.length; index++) {
+    const op = ops[index]
+    if (op.action === 'node.create') {
+      let compositeManifest: CompositeManifest | undefined
+      if (op.nodeType === 'composite') {
+        const cfg = op.config as Record<string, unknown> | undefined
+        if (cfg && typeof cfg.manifest === 'object' && cfg.manifest !== null) {
+          compositeManifest = cfg.manifest as CompositeManifest
+        } else if (cfg && typeof cfg.capabilityId === 'string' && typeof cfg.version === 'string') {
+          compositeManifest = resolveCompositeManifest?.(cfg.capabilityId, cfg.version)
+        }
+        if (!compositeManifest) {
+          return {
+            ok: false,
+            issue: {
+              code: 'NODE_TYPE_INVALID',
+              detail: `op[${index}]: composite node requires config { capabilityId, version }`
+            }
+          }
+        }
+      } else {
+        const contract = nodeContract(op.nodeType)
+        if (!contract || !contract.creatable) {
+          return {
+            ok: false,
+            issue: {
+              code: 'NODE_TYPE_INVALID',
+              detail: `op[${index}]: nodeType '${op.nodeType}' is not creatable`
+            }
+          }
+        }
+      }
+      const baseConfig = op.nodeType === 'composite' ? '' : (nodeContract(op.nodeType)?.initialConfig ?? '')
+      const config = op.config ? mergePatchConfig(baseConfig, op.config) : baseConfig
+      if (Buffer.byteLength(config, 'utf8') > GRAPH_NODE_CONFIG_MAX_BYTES) {
+        return {
+          ok: false,
+          issue: { code: 'CONFIG_TOO_LARGE', detail: `op[${index}]: config exceeds 64KiB` }
+        }
+      }
+      if (op.nodeType === 'code') {
+        const errors = codePortConfigErrors(config)
+        if (errors.length > 0) {
+          return {
+            ok: false,
+            issue: {
+              code: 'CONFIG_INVALID',
+              detail: `op[${index}] (code): ${errors.join('；')}`.slice(0, 280)
+            }
+          }
+        }
+      }
+      const id = op.ref ? `preview:${op.ref}` : `preview:node-${index}`
+      if (op.ref) refToId.set(op.ref, id)
+      simNodes.set(id, { type: op.nodeType, config, exists: true, compositeManifest })
+      continue
+    }
+
+    if (op.action === 'node.duplicate') {
+      const source = simNodes.get(resolveId(op.nodeId))
+      if (!source || !source.exists) {
+        return {
+          ok: false,
+          issue: { code: 'PATCH_REFERENCE_INVALID', detail: `op[${index}]:NODE_NOT_FOUND` }
+        }
+      }
+      const id = op.ref ? `preview:${op.ref}` : `preview:dup-${index}`
+      if (op.ref) refToId.set(op.ref, id)
+      simNodes.set(id, { ...source, exists: true })
+      continue
+    }
+
+    if (op.action === 'node.update') {
+      const id = resolveId(op.nodeId)
+      const node = simNodes.get(id)
+      if (!node || !node.exists) {
+        return {
+          ok: false,
+          issue: { code: 'PATCH_REFERENCE_INVALID', detail: `op[${index}]:NODE_NOT_FOUND` }
+        }
+      }
+      if (op.config) {
+        const nextConfig = mergePatchConfig(node.config, op.config)
+        if (Buffer.byteLength(nextConfig, 'utf8') > GRAPH_NODE_CONFIG_MAX_BYTES) {
+          return {
+            ok: false,
+            issue: { code: 'CONFIG_TOO_LARGE', detail: `op[${index}]: config exceeds 64KiB` }
+          }
+        }
+        if (node.type === 'code') {
+          const errors = codePortConfigErrors(nextConfig)
+          if (errors.length > 0) {
+            return {
+              ok: false,
+              issue: {
+                code: 'CONFIG_INVALID',
+                detail: `op[${index}] (code): ${errors.join('；')}`.slice(0, 280)
+              }
+            }
+          }
+        }
+        node.config = nextConfig
+      }
+      continue
+    }
+
+    if (op.action === 'node.delete') {
+      const id = resolveId(op.nodeId)
+      const node = simNodes.get(id)
+      if (node) {
+        node.exists = false
+        for (const edge of simEdges.values()) {
+          if (edge.from.nodeId === id || edge.to.nodeId === id) edge.exists = false
+        }
+      }
+      continue
+    }
+
+    if (op.action === 'edge.delete') {
+      const edge = simEdges.get(op.edgeId)
+      if (edge) edge.exists = false
+      continue
+    }
+
+    if (op.action === 'edge.create') {
+      const fromId = resolveId(op.from.nodeId)
+      const toId = resolveId(op.to.nodeId)
+      const fromNode = simNodes.get(fromId)
+      const toNode = simNodes.get(toId)
+      if (!fromNode?.exists || !toNode?.exists) {
+        return {
+          ok: false,
+          issue: { code: 'PATCH_REFERENCE_INVALID', detail: `op[${index}]:NODE_NOT_FOUND` }
+        }
+      }
+      const fromResolved = resolvePrecheckPorts(fromNode)
+      const toResolved = resolvePrecheckPorts(toNode)
+      const fromPort = fromResolved.out.find((p) => p.id === op.from.portId)
+      const toPort = toResolved.in.find((p) => p.id === op.to.portId)
+      if (!fromPort && fromResolved.strict) {
+        const valid = fromResolved.out.map((p) => p.id).join(', ') || 'none'
+        return {
+          ok: false,
+          issue: {
+            code: 'EDGE_PORT_INVALID',
+            detail: `op[${index}]: ${fromNode.type}.out has no port '${op.from.portId}' (valid: ${valid})`.slice(0, 280)
+          }
+        }
+      }
+      if (!toPort && toResolved.strict) {
+        const valid = toResolved.in.map((p) => p.id).join(', ') || 'none'
+        return {
+          ok: false,
+          issue: {
+            code: 'EDGE_PORT_INVALID',
+            detail: `op[${index}]: ${toNode.type}.in has no port '${op.to.portId}' (valid: ${valid})`.slice(0, 280)
+          }
+        }
+      }
+      if (fromPort && toPort) {
+        if (
+          !portPairCompatible(
+            fromPort as Pick<PortDecl, 'type' | 'schema'>,
+            toPort as Pick<PortDecl, 'type' | 'schema'>
+          )
+        ) {
+          return {
+            ok: false,
+            issue: {
+              code: 'EDGE_INCOMPATIBLE',
+              detail: `op[${index}]: ${fromNode.type}.${fromPort.id}(${fromPort.type}) -> ${toNode.type}.${toPort.id}(${toPort.type}) incompatible`.slice(0, 280)
+            }
+          }
+        }
+        if (
+          toPort.cardinality === 'one' &&
+          [...simEdges.values()].some(
+            (e) => e.exists && e.to.nodeId === toId && e.to.portId === toPort.id
+          )
+        ) {
+          return {
+            ok: false,
+            issue: {
+              code: 'EDGE_OCCUPIED',
+              detail: `op[${index}]: ${toNode.type}.${toPort.id} accepts only one incoming edge`
+            }
+          }
+        }
+      }
+      if (
+        [...simEdges.values()].some(
+          (e) =>
+            e.exists &&
+            e.from.nodeId === fromId &&
+            e.from.portId === op.from.portId &&
+            e.to.nodeId === toId &&
+            e.to.portId === op.to.portId
+        )
+      ) {
+        return {
+          ok: false,
+          issue: {
+            code: 'EDGE_DUPLICATE',
+            detail: `op[${index}]: duplicate edge ${op.from.nodeId}.${op.from.portId} -> ${op.to.nodeId}.${op.to.portId}`.slice(0, 280)
+          }
+        }
+      }
+      simEdges.set(`preview:edge-${index}`, {
+        from: { nodeId: fromId, portId: op.from.portId },
+        to: { nodeId: toId, portId: op.to.portId },
+        exists: true
+      })
+    }
+  }
+
+  // 全图无环预检
+  const adj = new Map<string, string[]>()
+  for (const edge of simEdges.values()) {
+    if (!edge.exists) continue
+    const list = adj.get(edge.from.nodeId) ?? []
+    list.push(edge.to.nodeId)
+    adj.set(edge.from.nodeId, list)
+  }
+  const color = new Map<string, 1 | 2>()
+  const hasCycle = (id: string): boolean => {
+    const c = color.get(id)
+    if (c === 2) return false
+    if (c === 1) return true
+    color.set(id, 1)
+    for (const next of adj.get(id) ?? []) if (hasCycle(next)) return true
+    color.set(id, 2)
+    return false
+  }
+  for (const id of adj.keys()) {
+    if (hasCycle(id)) {
+      return {
+        ok: false,
+        issue: { code: 'EDGE_CYCLE', detail: 'graph patch introduces a cycle; use iterate node for loops' }
+      }
+    }
+  }
+
+  return { ok: true }
+}
 
 export interface GraphPatchPreviewNode {
   id: string

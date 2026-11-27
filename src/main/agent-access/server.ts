@@ -137,6 +137,19 @@ export async function startLocalAccessServer(options: {
             instanceId?: unknown
             request?: unknown
           }
+          const supplied =
+            typeof message.token === 'string' ? Buffer.from(message.token) : Buffer.alloc(0)
+          const expected = Buffer.from(token)
+          // 必须先完成常量时间令牌与实例 ID 校验，再解析业务操作或放宽长超时，
+          // 防止未认证连接借长超时参数占用 maxConnections 槽位。
+          if (
+            supplied.length !== expected.length ||
+            !timingSafeEqual(supplied, expected) ||
+            message.instanceId !== instanceId
+          ) {
+            socket.destroy()
+            return
+          }
           const request = message.request as
             | { operationId?: unknown; input?: unknown; requestId?: unknown }
             | undefined
@@ -146,19 +159,8 @@ export async function startLocalAccessServer(options: {
             operationId === 'run.wait' && typeof waitInput?.timeoutMs === 'number'
               ? Math.min(Math.max(waitInput.timeoutMs, 0), 120_000)
               : 0
-          // 请求已到达：按 shared 中的操作元数据覆盖人工确认、长轮询与模型/网络长操作。
+          // 已认证请求按 shared 中的操作元数据覆盖人工确认、长轮询与模型/网络长操作。
           socket.setTimeout(responseTimeoutMs(operationId, requestedWaitMs), () => socket.destroy())
-          const supplied =
-            typeof message.token === 'string' ? Buffer.from(message.token) : Buffer.alloc(0)
-          const expected = Buffer.from(token)
-          if (
-            supplied.length !== expected.length ||
-            !timingSafeEqual(supplied, expected) ||
-            message.instanceId !== instanceId
-          ) {
-            socket.destroy()
-            return
-          }
           const result = await service.dispatch(message.request)
           const encoded = JSON.stringify(result)
           if (Buffer.byteLength(encoded) > ACCESS_MAX_BYTES) {

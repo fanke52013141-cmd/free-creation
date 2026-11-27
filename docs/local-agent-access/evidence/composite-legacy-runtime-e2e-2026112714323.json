@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "startedAt": "2026-11-26T20:05:44.461Z",
+  "scenarios": [
+    {
+      "transport": "cli",
+      "scenario": "runtimeVersion=1",
+      "headlessRunId": "b068f850-d859-4952-9a81-64f9ffd71d1f",
+      "headlessOutputPorts": [
+        "out-picture"
+      ],
+      "storedOutputKeys": [
+        "picture"
+      ],
+      "inlineNodeRun": "completed",
+      "inlineOutputPort": "out-picture"
+    },
+    {
+      "transport": "mcp",
+      "scenario": "runtimeVersion=1",
+      "headlessRunId": "da627e9a-085e-4d2a-ad6f-e83abada8852",
+      "headlessOutputPorts": [
+        "out-picture"
+      ],
+      "storedOutputKeys": [
+        "picture"
+      ],
+      "inlineNodeRun": "completed",
+      "inlineOutputPort": "out-picture"
+    }
+  ],
+  "finishedAt": "2026-11-26T20:05:56.300Z"
+}

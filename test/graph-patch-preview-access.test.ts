@@ -184,4 +184,154 @@ describe('graph.patch.propose / confirm / discard (方案 A 全节点幽灵预�
     expect(confirmDiscarded.status).toBe('failed')
     expect(confirmDiscarded.error?.code).toBe('INVALID_INPUT')
   })
+
+  it('rejects bad ports, incompatible edges, invalid code config, and cycles during propose, and checks graphVersion before asking human on confirm', async () => {
+    const meta = projects.createProject('提案预检与版本门禁测试')
+    const runSpy = vi.fn()
+    const askSpy = vi.fn()
+    const desktop: AccessDesktop = {
+      ask: askSpy,
+      run: runSpy
+    } as unknown as AccessDesktop
+
+    const service = new LocalAccessService({
+      dataDirectory: dataDir,
+      appVersion: '1.0.0',
+      instanceId: 'test-instance',
+      exportDirectory: join(dataDir, 'exports'),
+      activeProjectId: () => meta.id,
+      desktop
+    })
+
+    // 1. 不存在的端口（如 video.in-first-frame）应在 propose 阶段即拦截并列出合法端口
+    const badPort = await service.dispatch({
+      apiVersion: 1,
+      operationVersion: 1,
+      expectedDataStoreId: service.dataStoreId,
+      requestId: randomUUID(),
+      idempotencyKey: `${Date.now()}:${randomUUID()}`,
+      operationId: 'graph.patch.propose',
+      input: {
+        projectId: meta.id,
+        expectedGraphVersion: meta.graphVersion,
+        ops: [
+          { action: 'node.create', ref: 'img', nodeType: 'image-gen', x: 0, y: 0 },
+          { action: 'node.create', ref: 'vid', nodeType: 'video', x: 400, y: 0 },
+          {
+            action: 'edge.create',
+            from: { nodeId: 'img', portId: 'out-image' },
+            to: { nodeId: 'vid', portId: 'in-first-frame' }
+          }
+        ]
+      }
+    })
+    expect(badPort.status).toBe('failed')
+    expect(badPort.error?.code).toBe('EDGE_PORT_INVALID')
+    expect(badPort.error?.detail).toContain('in-images')
+
+    // 2. 类型不兼容（text -> image-crop.in-image）
+    const incompatible = await service.dispatch({
+      apiVersion: 1,
+      operationVersion: 1,
+      expectedDataStoreId: service.dataStoreId,
+      requestId: randomUUID(),
+      idempotencyKey: `${Date.now()}:${randomUUID()}`,
+      operationId: 'graph.patch.propose',
+      input: {
+        projectId: meta.id,
+        expectedGraphVersion: meta.graphVersion,
+        ops: [
+          { action: 'node.create', ref: 't', nodeType: 'text', x: 0, y: 0 },
+          { action: 'node.create', ref: 'c', nodeType: 'image-crop', x: 400, y: 0 },
+          {
+            action: 'edge.create',
+            from: { nodeId: 't', portId: 'out-text' },
+            to: { nodeId: 'c', portId: 'in-image' }
+          }
+        ]
+      }
+    })
+    expect(incompatible.status).toBe('failed')
+    expect(incompatible.error?.code).toBe('EDGE_INCOMPATIBLE')
+
+    // 3. code 节点非法配置应在 propose 阶段拦截
+    const badCode = await service.dispatch({
+      apiVersion: 1,
+      operationVersion: 1,
+      expectedDataStoreId: service.dataStoreId,
+      requestId: randomUUID(),
+      idempotencyKey: `${Date.now()}:${randomUUID()}`,
+      operationId: 'graph.patch.propose',
+      input: {
+        projectId: meta.id,
+        expectedGraphVersion: meta.graphVersion,
+        ops: [
+          {
+            action: 'node.create',
+            ref: 'c',
+            nodeType: 'code',
+            x: 0,
+            y: 0,
+            config: { source: 'return 1', params: [{ name: 'p', type: 'not-a-valid-type' }] }
+          }
+        ]
+      }
+    })
+    expect(badCode.status).toBe('failed')
+    expect(badCode.error?.code).toBe('CONFIG_INVALID')
+
+    // 4. 成环边应在 propose 阶段拦截
+    const cyclic = await service.dispatch({
+      apiVersion: 1,
+      operationVersion: 1,
+      expectedDataStoreId: service.dataStoreId,
+      requestId: randomUUID(),
+      idempotencyKey: `${Date.now()}:${randomUUID()}`,
+      operationId: 'graph.patch.propose',
+      input: {
+        projectId: meta.id,
+        expectedGraphVersion: meta.graphVersion,
+        ops: [
+          { action: 'node.create', ref: 'a', nodeType: 'processor', x: 0, y: 0 },
+          { action: 'node.create', ref: 'b', nodeType: 'processor', x: 400, y: 0 },
+          { action: 'edge.create', from: { nodeId: 'a', portId: 'out-value' }, to: { nodeId: 'b', portId: 'in-value' } },
+          { action: 'edge.create', from: { nodeId: 'b', portId: 'out-value' }, to: { nodeId: 'a', portId: 'in-value' } }
+        ]
+      }
+    })
+    expect(cyclic.status).toBe('failed')
+    expect(cyclic.error?.code).toBe('EDGE_CYCLE')
+
+    // 5. 合法 propose 后画布版本变更 -> confirm 必须在弹窗前返回 REVISION_CONFLICT（不打扰用户）
+    const okPropose = await service.dispatch({
+      apiVersion: 1,
+      operationVersion: 1,
+      expectedDataStoreId: service.dataStoreId,
+      requestId: randomUUID(),
+      idempotencyKey: `${Date.now()}:${randomUUID()}`,
+      operationId: 'graph.patch.propose',
+      input: {
+        projectId: meta.id,
+        expectedGraphVersion: meta.graphVersion,
+        ops: [{ action: 'node.create', ref: 't', nodeType: 'text', x: 0, y: 0, text: 'ok' }]
+      }
+    })
+    expect(okPropose.status).toBe('completed')
+    const okPreviewId = (okPropose.data as { previewId: string }).previewId
+    projects.saveProject({ id: meta.id, expectedGraphVersion: meta.graphVersion })
+
+    const staleConfirm = await service.dispatch({
+      apiVersion: 1,
+      operationVersion: 1,
+      expectedDataStoreId: service.dataStoreId,
+      requestId: randomUUID(),
+      idempotencyKey: `${Date.now()}:${randomUUID()}`,
+      operationId: 'graph.patch.confirm',
+      input: { projectId: meta.id, previewId: okPreviewId }
+    })
+    expect(staleConfirm.status).toBe('failed')
+    expect(staleConfirm.error?.code).toBe('REVISION_CONFLICT')
+    expect(staleConfirm.error?.currentGraphVersion).toBe(meta.graphVersion + 1)
+    expect(askSpy).not.toHaveBeenCalled()
+  })
 })

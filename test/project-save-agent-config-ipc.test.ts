@@ -27,6 +27,7 @@ vi.mock('../src/main/store/canvas-structure-transfer', () => ({
 }))
 vi.mock('../src/main/store/projects.repo', () => ({
   saveProject: state.saveProject,
+  saveProjectAsync: async (...args: unknown[]) => state.saveProject(...args),
   saveRecoveryCopySync: state.saveRecoveryCopySync
 }))
 
@@ -71,11 +72,11 @@ describe('Agent config validation at project save IPC boundaries', () => {
     ['async project save', IPC.project.save],
     ['sync project save', IPC.project.saveSync],
     ['sync recovery copy', IPC.project.saveRecoveryCopySync]
-  ] as const)('rejects invalid Agent configs before %s writes', (_label, channel) => {
+  ] as const)('rejects invalid Agent configs before %s writes', async (_label, channel) => {
     const invalid = inputWithAgentConfig({ ...DEFAULT_AGENT_NODE_CONFIG, maxSteps: 0 })
     const reply =
       channel === IPC.project.save
-        ? state.handlers[channel]({}, invalid)
+        ? await state.handlers[channel]({}, invalid)
         : syncReply(channel, invalid)
 
     expect(reply).toMatchObject({
@@ -95,7 +96,7 @@ describe('Agent config validation at project save IPC boundaries', () => {
     expect(JSON.stringify(events)).not.toContain('maxSteps')
   })
 
-  it('rejects a malformed Agent config carried in the tldraw snapshot', () => {
+  it('rejects a malformed Agent config carried in the tldraw snapshot', async () => {
     const input = {
       id: 'project',
       tldrawSnapshot: {
@@ -113,14 +114,14 @@ describe('Agent config validation at project save IPC boundaries', () => {
       }
     }
 
-    expect(state.handlers[IPC.project.save]({}, input)).toMatchObject({
+    expect(await state.handlers[IPC.project.save]({}, input)).toMatchObject({
       ok: false,
       error: { code: 'INVALID_AGENT_CONFIG' }
     })
     expect(state.saveProject).not.toHaveBeenCalled()
   })
 
-  it('rejects a malformed Agent config in the derived graph format', () => {
+  it('rejects a malformed Agent config in the derived graph format', async () => {
     const input = {
       id: 'project',
       graph: {
@@ -136,7 +137,7 @@ describe('Agent config validation at project save IPC boundaries', () => {
       }
     }
 
-    expect(state.handlers[IPC.project.save]({}, input)).toMatchObject({
+    expect(await state.handlers[IPC.project.save]({}, input)).toMatchObject({
       ok: false,
       error: { code: 'INVALID_AGENT_CONFIG' }
     })
@@ -148,9 +149,9 @@ describe('Agent config validation at project save IPC boundaries', () => {
     ['maximum maxSteps', { maxSteps: 64 }],
     ['minimum maxParallelTasks', { maxParallelTasks: 1 }],
     ['maximum maxParallelTasks', { maxParallelTasks: 4 }]
-  ])('accepts legal Agent config boundary: %s', (_label, patch) => {
+  ])('accepts legal Agent config boundary: %s', async (_label, patch) => {
     const input = inputWithAgentConfig({ ...DEFAULT_AGENT_NODE_CONFIG, ...patch })
-    expect(state.handlers[IPC.project.save]({}, input)).toMatchObject({ ok: true })
+    expect(await state.handlers[IPC.project.save]({}, input)).toMatchObject({ ok: true })
     expect(state.saveProject).toHaveBeenCalledOnce()
     expect(events.map((event) => event.event)).toEqual([
       'project.save.started',

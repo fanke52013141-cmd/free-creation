@@ -248,3 +248,48 @@
 | parity-gaps-prefix-c | 2026112705304 | 步骤 12 / 通过 12 / 失败 0 | [parity-gaps-prefix-c-2026112705304.json](parity-gaps-prefix-c-2026112705304.json) |
 | vertical-slice | 2026112705304 | 步骤 13 / 通过 0 | [vertical-slice-2026112705304.json](vertical-slice-2026112705304.json) |
 | composite-remediation-e2e | 2026112707154 | ok | [composite-remediation-e2e-2026112707154.json](composite-remediation-e2e-2026112707154.json) |
+| agent-flow-context-adoption-e2e | 2026112713250 | 步骤 51 / 通过 0 | [agent-flow-context-adoption-e2e-2026112713250.json](agent-flow-context-adoption-e2e-2026112713250.json) |
+| capability-params-e2e | 2026112713250 | 步骤 23 / 通过 0 | [capability-params-e2e-2026112713250.json](capability-params-e2e-2026112713250.json) |
+| composite-legacy-runtime-e2e | 2026112713250 | ok | [composite-legacy-runtime-e2e-2026112713250.json](composite-legacy-runtime-e2e-2026112713250.json) |
+| composite-remediation-e2e | 2026112713250 | ok | [composite-remediation-e2e-2026112713250.json](composite-remediation-e2e-2026112713250.json) |
+| f9-remaining-doable | 2026112713250 | 步骤 17 / 通过 16 / 失败 1 | [f9-remaining-doable-2026112713250.json](f9-remaining-doable-2026112713250.json) |
+| families-02-03-07-08 | 2026112713250 | 步骤 24 / 通过 24 / 失败 0 | [families-02-03-07-08-2026112713250.json](families-02-03-07-08-2026112713250.json) |
+| families-04-05-06-09 | 2026112713250 | 步骤 47 / 通过 47 / 失败 0 | [families-04-05-06-09-2026112713250.json](families-04-05-06-09-2026112713250.json) |
+| families-gap-fill | 2026112713250 | 步骤 12 / 通过 12 / 失败 0 | [families-gap-fill-2026112713250.json](families-gap-fill-2026112713250.json) |
+| family-01-project-graph | 2026112713250 | 步骤 25 / 通过 25 / 失败 0 | [family-01-project-graph-2026112713250.json](family-01-project-graph-2026112713250.json) |
+| mcp-acceptance | 2026112713250 | 步骤 34 / 通过 34 / 失败 0 | [mcp-acceptance-2026112713250.json](mcp-acceptance-2026112713250.json) |
+| mcp-sse-transport | 2026112713250 | 步骤 4 / 通过 4 / 失败 0 | [mcp-sse-transport-2026112713250.json](mcp-sse-transport-2026112713250.json) |
+| milestone-a-b-c | 2026112713250 | 步骤 49 / 通过 0 | [milestone-a-b-c-2026112713250.json](milestone-a-b-c-2026112713250.json) |
+| optimizations-abc | 2026112713250 | 步骤 9 / 通过 9 / 失败 0 | [optimizations-abc-2026112713250.json](optimizations-abc-2026112713250.json) |
+| parity-gaps | 2026112713250 | 步骤 57 / 通过 57 / 失败 0 | [parity-gaps-2026112713250.json](parity-gaps-2026112713250.json) |
+| vertical-slice | 2026112713250 | 步骤 13 / 通过 0 | [vertical-slice-2026112713250.json](vertical-slice-2026112713250.json) |
+| agent-flow-context-adoption-e2e | 2026112713381 | 步骤 51 / 通过 0 | [agent-flow-context-adoption-e2e-2026112713381.json](agent-flow-context-adoption-e2e-2026112713381.json) |
+| capability-params-e2e | 2026112713381 | 步骤 23 / 通过 0 | [capability-params-e2e-2026112713381.json](capability-params-e2e-2026112713381.json) |
+| composite-legacy-runtime-e2e | 2026112713381 | ok | [composite-legacy-runtime-e2e-2026112713381.json](composite-legacy-runtime-e2e-2026112713381.json) |
+| composite-remediation-e2e | 2026112713381 | ok | [composite-remediation-e2e-2026112713381.json](composite-remediation-e2e-2026112713381.json) |
+| f9-remaining-doable | 2026112713381 | 步骤 17 / 通过 16 / 失败 1 | [f9-remaining-doable-2026112713381.json](f9-remaining-doable-2026112713381.json) |
+| families-02-03-07-08 | 2026112713381 | 步骤 24 / 通过 24 / 失败 0 | [families-02-03-07-08-2026112713381.json](families-02-03-07-08-2026112713381.json) |
+| families-04-05-06-09 | 2026112713381 | 步骤 47 / 通过 47 / 失败 0 | [families-04-05-06-09-2026112713381.json](families-04-05-06-09-2026112713381.json) |
+| families-gap-fill | 2026112713381 | 步骤 12 / 通过 12 / 失败 0 | [families-gap-fill-2026112713381.json](families-gap-fill-2026112713381.json) |
+| family-01-project-graph | 2026112713381 | 步骤 25 / 通过 25 / 失败 0 | [family-01-project-graph-2026112713381.json](family-01-project-graph-2026112713381.json) |
+| mcp-acceptance | 2026112713381 | 步骤 34 / 通过 34 / 失败 0 | [mcp-acceptance-2026112713381.json](mcp-acceptance-2026112713381.json) |
+| mcp-sse-transport | 2026112713381 | 步骤 4 / 通过 4 / 失败 0 | [mcp-sse-transport-2026112713381.json](mcp-sse-transport-2026112713381.json) |
+| milestone-a-b-c | 2026112713381 | 步骤 49 / 通过 0 | [milestone-a-b-c-2026112713381.json](milestone-a-b-c-2026112713381.json) |
+| optimizations-abc | 2026112713381 | 步骤 9 / 通过 9 / 失败 0 | [optimizations-abc-2026112713381.json](optimizations-abc-2026112713381.json) |
+| parity-gaps | 2026112713381 | 步骤 57 / 通过 57 / 失败 0 | [parity-gaps-2026112713381.json](parity-gaps-2026112713381.json) |
+| vertical-slice | 2026112713381 | 步骤 13 / 通过 0 | [vertical-slice-2026112713381.json](vertical-slice-2026112713381.json) |
+| agent-flow-context-adoption-e2e | 2026112714323 | 步骤 51 / 通过 0 | [agent-flow-context-adoption-e2e-2026112714323.json](agent-flow-context-adoption-e2e-2026112714323.json) |
+| capability-params-e2e | 2026112714323 | 步骤 23 / 通过 0 | [capability-params-e2e-2026112714323.json](capability-params-e2e-2026112714323.json) |
+| composite-legacy-runtime-e2e | 2026112714323 | ok | [composite-legacy-runtime-e2e-2026112714323.json](composite-legacy-runtime-e2e-2026112714323.json) |
+| composite-remediation-e2e | 2026112714323 | ok | [composite-remediation-e2e-2026112714323.json](composite-remediation-e2e-2026112714323.json) |
+| f9-remaining-doable | 2026112714323 | 步骤 17 / 通过 16 / 失败 1 | [f9-remaining-doable-2026112714323.json](f9-remaining-doable-2026112714323.json) |
+| families-02-03-07-08 | 2026112714323 | 步骤 24 / 通过 24 / 失败 0 | [families-02-03-07-08-2026112714323.json](families-02-03-07-08-2026112714323.json) |
+| families-04-05-06-09 | 2026112714323 | 步骤 47 / 通过 47 / 失败 0 | [families-04-05-06-09-2026112714323.json](families-04-05-06-09-2026112714323.json) |
+| families-gap-fill | 2026112714323 | 步骤 12 / 通过 12 / 失败 0 | [families-gap-fill-2026112714323.json](families-gap-fill-2026112714323.json) |
+| family-01-project-graph | 2026112714323 | 步骤 25 / 通过 25 / 失败 0 | [family-01-project-graph-2026112714323.json](family-01-project-graph-2026112714323.json) |
+| mcp-acceptance | 2026112714323 | 步骤 34 / 通过 34 / 失败 0 | [mcp-acceptance-2026112714323.json](mcp-acceptance-2026112714323.json) |
+| mcp-sse-transport | 2026112714323 | 步骤 4 / 通过 4 / 失败 0 | [mcp-sse-transport-2026112714323.json](mcp-sse-transport-2026112714323.json) |
+| milestone-a-b-c | 2026112714323 | 步骤 49 / 通过 0 | [milestone-a-b-c-2026112714323.json](milestone-a-b-c-2026112714323.json) |
+| optimizations-abc | 2026112714323 | 步骤 9 / 通过 9 / 失败 0 | [optimizations-abc-2026112714323.json](optimizations-abc-2026112714323.json) |
+| parity-gaps | 2026112714323 | 步骤 57 / 通过 57 / 失败 0 | [parity-gaps-2026112714323.json](parity-gaps-2026112714323.json) |
+| vertical-slice | 2026112714323 | 步骤 13 / 通过 0 | [vertical-slice-2026112714323.json](vertical-slice-2026112714323.json) |

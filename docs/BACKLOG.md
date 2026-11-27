@@ -25,7 +25,7 @@ sources:
 
 - **范围**：Agent Flow 运行准入、条件分支输入、并行波次、停止/迟到提交、命令签名、总预算、human-task 状态、视频固定上限、定义发布/diff、恢复与 scope；外部 Agent 的密钥来源绑定、媒体路径边界、节点执行版本、超时、GUI 占用、错误脱敏、CLI/MCP 契约；人工决定门禁补齐 `composite.run.submitHuman` / `composite.run.resubmit` / `flowStateMachine.submitEvent`；CI/门禁与规范文档收敛。
 - **机器契约**：`provider.package.export` 因未满足人工确认与显式连接范围要求从公开 Registry 移除；当前操作数以 `docs/local-agent-access/generated/contracts.json` / `capability.list` 为准。
-- **仓库清理**：C0 保留为测试专用并补充 [README](<../src/main/agent-flow/c0/README.md>)；42 个无入口一次性脚本已删除（58,182 行），盘点与决策见 [仓库清理记录](<canvas-agent-flow/audits/repo-cleanup-2026-11-26.md>)。清理后全量单测 4048 项通过 / 7 跳过，C0 16/16、门禁与文档回归 86/86 通过。
+- **仓库清理**：C0 保留为测试专用并补充 [README](<../test/harness/agent-flow/c0/README.md>)；42 个无入口一次性脚本已删除（58,182 行），盘点与决策见 [仓库清理记录](<canvas-agent-flow/audits/repo-cleanup-2026-11-26.md>)。清理后全量单测 4048 项通过 / 7 跳过，C0 16/16、门禁与文档回归 86/86 通过。
 - **验证**：`npm test` 360 文件通过 / 2 跳过，4048 项通过 / 7 跳过；人工门禁回归 27 项通过；`npm run typecheck`、`npm run lint`、`CANVAS_OWNER=1 npm run build`、`guard:agent-parity`、`verify:specs`、`verify:logging`、`git diff --check` 均通过；`verify:acceptance:fast` 2/2 批次通过（protocol 34/34、optimizations 9/9），族 2/3/7/8 24/24、族 4/5/6/9 47/47 通过；`agent-flow-state-machine.cjs` 7/7 通过（含真实 GUI 人工确认）。
 - **边界**：真实付费模型、真实 GUI 鼠标端到端、Windows 安装包/完整打包版与干净 GitHub runner 仍未验收；安全与长视频边界见下节。
 

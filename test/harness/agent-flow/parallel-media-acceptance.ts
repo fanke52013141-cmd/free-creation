@@ -2,7 +2,7 @@
 import type { BrowserWindow } from 'electron'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { getDb } from '../store/db'
+import { getDb } from '../../../src/main/store/db'
 
 export function installParallelMediaSupplier(directory: string, phase: string): void {
   const db = getDb()

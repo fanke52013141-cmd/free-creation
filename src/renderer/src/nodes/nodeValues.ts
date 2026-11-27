@@ -95,22 +95,53 @@ export function parseNodeExtra(stored: unknown): Record<string, unknown> {
  * 用户改完即真值，与运行无关——这类节点此前被同一个闸门误伤：空正文点一次「运行」得到
  * skipped，之后照常用双击填好正文，下游却永远读不到，卡片上状态点还显示「未运行」。
  */
+interface CachedOutputProjection {
+  nodeType: unknown
+  text: unknown
+  config: unknown
+  mediaId: unknown
+  mediaPath: unknown
+  pinnedOutput: unknown
+  nodeResult: unknown
+  nodeExtra: unknown
+  nodeRun: unknown
+  nodeRunStatus: unknown
+  outputs: RawNodeOutputs
+}
+
 const outputProjectionCache = new WeakMap<
   NodeCardShape['props'],
-  WeakMap<NodeCardShape['meta'], RawNodeOutputs>
+  WeakMap<NodeCardShape['meta'], CachedOutputProjection>
 >()
 
 export function projectNodeOutputs(shape: NodeCardShape): RawNodeOutputs {
+  const nodeRun = shape.meta?.nodeRun
+  const nodeRunStatus =
+    nodeRun && typeof nodeRun === 'object' ? (nodeRun as { status?: unknown }).status : undefined
   let byMeta = outputProjectionCache.get(shape.props)
   const cached = byMeta?.get(shape.meta)
-  if (cached) return cached
+  if (
+    cached &&
+    cached.nodeType === shape.props.nodeType &&
+    cached.text === shape.props.text &&
+    cached.config === shape.props.config &&
+    cached.mediaId === shape.props.mediaId &&
+    cached.mediaPath === shape.props.mediaPath &&
+    cached.pinnedOutput === shape.meta?.pinnedOutput &&
+    cached.nodeResult === shape.meta?.nodeResult &&
+    cached.nodeExtra === shape.meta?.nodeExtra &&
+    cached.nodeRun === nodeRun &&
+    cached.nodeRunStatus === nodeRunStatus
+  ) {
+    return cached.outputs
+  }
   const spec = getNodeType(shape.props.nodeType)
   const pinned = readPinnedOutputs(shape.meta?.pinnedOutput)
   let result: RawNodeOutputs
   if (pinned) {
     result = pinned
   } else if (spec?.outputSource !== 'document') {
-    const lastRun = readNodeRunRecord(shape.meta?.nodeRun)
+    const lastRun = readNodeRunRecord(nodeRun)
     if (lastRun && lastRun.status !== 'success') return {}
     result = spec?.projectOutputs?.(shape) ?? {}
   } else {
@@ -120,7 +151,19 @@ export function projectNodeOutputs(shape: NodeCardShape): RawNodeOutputs {
     byMeta = new WeakMap()
     outputProjectionCache.set(shape.props, byMeta)
   }
-  byMeta.set(shape.meta, result)
+  byMeta.set(shape.meta, {
+    nodeType: shape.props.nodeType,
+    text: shape.props.text,
+    config: shape.props.config,
+    mediaId: shape.props.mediaId,
+    mediaPath: shape.props.mediaPath,
+    pinnedOutput: shape.meta?.pinnedOutput,
+    nodeResult: shape.meta?.nodeResult,
+    nodeExtra: shape.meta?.nodeExtra,
+    nodeRun,
+    nodeRunStatus,
+    outputs: result
+  })
   return result
 }
 

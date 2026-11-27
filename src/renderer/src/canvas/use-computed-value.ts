@@ -14,10 +14,8 @@ export function useComputedValue<T>(
   isEqual: (prev: T, next: T) => boolean,
   deps: readonly unknown[]
 ): T {
-  const signal = useMemo(
-    () => computed(name, compute, { isEqual }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    deps
-  )
+  // 与 tldraw `useValue(name, fn, deps)` 保持一致，依赖数组由调用方显式传入。
+  // eslint-disable-next-line react-hooks/use-memo, react-hooks/exhaustive-deps
+  const signal = useMemo(() => computed(name, compute, { isEqual }), deps)
   return useValue(signal)
 }

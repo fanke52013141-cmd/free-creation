@@ -5308,7 +5308,7 @@
       "idempotent": false,
       "destructive": false,
       "cost": "none",
-      "description": "把本机文件登记为项目受控媒体（复制入库、去敏索引）；返回受控 mediaId 供节点引用，不接收二进制报文",
+      "description": "把本机文件登记为项目受控媒体（复制入库、去敏索引）；filePath 必须位于数据目录下的受控 agent-exports 目录内；返回受控 mediaId 供节点引用，不接收二进制报文",
       "interactive": false,
       "responseTimeoutMs": 15000,
       "openWorld": false,
@@ -48013,6 +48013,27 @@
                 "required": [
                   "in",
                   "out"
+                ],
+                "additionalProperties": false
+              },
+              "configGuide": {
+                "type": "object",
+                "properties": {
+                  "summary": {
+                    "type": "string",
+                    "maxLength": 600
+                  },
+                  "example": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "summary",
+                  "example"
                 ],
                 "additionalProperties": false
               }

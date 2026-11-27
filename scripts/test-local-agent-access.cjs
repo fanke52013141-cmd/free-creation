@@ -94,7 +94,7 @@ async function captureDesktop(app,file){
     const repeated=await runCli(directory,['project','create'],{input:{name:'Agent vertical slice'},idempotencyKey:created.response.idempotencyKey})
     check(repeated.response.data.meta.id===projectId,'CREATE_DUPLICATED')
     const mcpEnv={...process.env,ELECTRON_RUN_AS_NODE:'1'}
-    transport=new StdioClientTransport({command:electron,args:[cliPath,'mcp','serve','--stdio','--data-dir',directory],env:mcpEnv,stderr:'pipe'})
+    transport=new StdioClientTransport({command:electron,args:[cliPath,'mcp','serve','--profile','full','--stdio','--data-dir',directory],env:mcpEnv,stderr:'pipe'})
     client=new Client({name:'canvas-local-acceptance',version:'1.0.0'},{capabilities:{}})
     await client.connect(transport)
     const tools=await client.listTools()

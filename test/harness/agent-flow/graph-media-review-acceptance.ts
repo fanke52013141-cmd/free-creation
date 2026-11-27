@@ -3,7 +3,7 @@
 import type { BrowserWindow } from 'electron'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { getDb } from '../store/db'
+import { getDb } from '../../../src/main/store/db'
 
 export function installGraphMediaReviewSupplier(directory: string): void {
   const db = getDb()

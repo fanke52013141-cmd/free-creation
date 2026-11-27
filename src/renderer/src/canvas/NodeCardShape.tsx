@@ -44,6 +44,7 @@ const nodeCardMigrationIds = createShapePropsMigrationIds('node-card', {
   addStructuredConfig: 1
 })
 
+// eslint-disable-next-line react-refresh/only-export-components
 function NodeCardViewportGate({ shape }: { shape: NodeCardShape }): React.JSX.Element {
   const editor = useEditor()
   const mounted = useValue(

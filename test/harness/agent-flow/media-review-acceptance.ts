@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { BrowserWindow } from 'electron'
-import { importMedia } from '../store/media.repo'
+import { importMedia } from '../../../src/main/store/media.repo'
 
 type ReviewMedia = { id: string; path: string; mime: string }
 

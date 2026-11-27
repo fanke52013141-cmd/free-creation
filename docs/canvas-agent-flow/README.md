@@ -28,10 +28,10 @@
 
 ## 2.1 C0 测试专用资产
 
-- **决策：保留，不删除。** [`src/main/agent-flow/c0/`](../../src/main/agent-flow/c0/README.md) 与对应脚本/测试仍是活跃测试基础设施：16 项单测覆盖 checkpoint、命令回执、人工等待与诊断隔离；双进程 Electron pause/resume 用例仍验证跨进程恢复且工具效果计数为 1。
+- **决策：保留，不删除。** [`test/harness/agent-flow/c0/`](../../test/harness/agent-flow/c0/README.md) 与对应脚本/测试仍是活跃测试基础设施：16 项单测覆盖 checkpoint、命令回执、人工等待与诊断隔离；双进程 Electron pause/resume 用例仍验证跨进程恢复且工具效果计数为 1。
 - **边界**：C0 只使用隔离数据库、隐藏 fixture 窗口和确定性模型，不注册生产节点、不打开产品项目库、不调用真实供应商；不得作为新功能入口或生产真值。
-- **删除条件**：独有覆盖已迁移到正式测试、双进程恢复用例已有替代且持续通过、所有构建/脚本/文档引用清理完毕，并在同一变更中通过完整验证。详见 [C0 README](../../src/main/agent-flow/c0/README.md)。
-- **迁移影响**：现在不移动到 `test/fixtures`；该动作会同时影响测试导入、shared 契约、Electron 独立构建入口、产物名、npm 脚本与 native ABI 运行方式，需另开变更处理。
+- **删除条件**：独有覆盖已迁移到正式测试、双进程恢复用例已有替代且持续通过、所有构建/脚本/文档引用清理完毕，并在同一变更中通过完整验证。详见 [C0 README](../../test/harness/agent-flow/c0/README.md)。
+- **迁移状态**：2026-11-27 已随其余纯测试/验收入口一并迁出 `src/main/agent-flow/` 至 `test/harness/agent-flow/`，生产源码目录不再混放测试夹具。
 
 ## 3. 已验证与未证明
 

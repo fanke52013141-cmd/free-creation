@@ -69,23 +69,26 @@ vi.mock('../src/main/store/db', () => ({
 // repo 内部事务细节已由 save-transaction-rollback.test.ts 与 F01 覆盖。
 vi.mock('../src/main/store/projects.repo', async () => {
   const { GraphVersionConflictError } = await import('../src/shared/graph-snapshot-sync')
+  const saveProjectMock = (input: { id: string; expectedGraphVersion?: number }) => {
+    const path = join(ipcState.projectsDir, input.id, 'project.json')
+    const file = JSON.parse(readFileSync(path, 'utf-8')) as {
+      meta: { graphVersion: number }
+    }
+    if (
+      input.expectedGraphVersion !== undefined &&
+      file.meta.graphVersion !== input.expectedGraphVersion
+    ) {
+      throw new GraphVersionConflictError(input.expectedGraphVersion, file.meta.graphVersion)
+    }
+    const next = file.meta.graphVersion + 1
+    file.meta.graphVersion = next
+    writeFileSync(path, JSON.stringify(file, null, 2), 'utf-8')
+    return { graphVersion: next }
+  }
   return {
-    saveProject: (input: { id: string; expectedGraphVersion?: number }) => {
-      const path = join(ipcState.projectsDir, input.id, 'project.json')
-      const file = JSON.parse(readFileSync(path, 'utf-8')) as {
-        meta: { graphVersion: number }
-      }
-      if (
-        input.expectedGraphVersion !== undefined &&
-        file.meta.graphVersion !== input.expectedGraphVersion
-      ) {
-        throw new GraphVersionConflictError(input.expectedGraphVersion, file.meta.graphVersion)
-      }
-      const next = file.meta.graphVersion + 1
-      file.meta.graphVersion = next
-      writeFileSync(path, JSON.stringify(file, null, 2), 'utf-8')
-      return { graphVersion: next }
-    },
+    saveProject: saveProjectMock,
+    saveProjectAsync: async (input: { id: string; expectedGraphVersion?: number }) =>
+      saveProjectMock(input),
     // T04：恢复副本四函数（容错语义对齐真 repo：主文件缺失时以最小基线建副本）
     saveRecoveryCopySync: (input: { id: string; tldrawSnapshot?: unknown }) => {
       const mainPath = join(ipcState.projectsDir, input.id, 'project.json')
@@ -245,7 +248,7 @@ describe('project.ipc saveSync 信封语义', () => {
     expect((e.returnValue as { error: { message: string } }).error.message).toBeTruthy()
   })
 
-  it('异步保存、同步保存和恢复副本都以各自 trace/span 配对唯一终态', () => {
+  it('异步保存、同步保存和恢复副本都以各自 trace/span 配对唯一终态', async () => {
     seedProject('p1', 5)
     const events: Array<{
       event: string
@@ -256,7 +259,9 @@ describe('project.ipc saveSync 信封语义', () => {
     }> = []
     setGatewayEventSink({ emit: (event) => { if (event) events.push(event) } })
 
-    expect(ipcState.handlers['project:save']!({}, { id: 'p1', expectedGraphVersion: 5 })).toEqual({
+    expect(
+      await ipcState.handlers['project:save']!({}, { id: 'p1', expectedGraphVersion: 5 })
+    ).toEqual({
       ok: true,
       data: { graphVersion: 6 }
     })

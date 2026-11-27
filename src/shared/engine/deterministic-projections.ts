@@ -174,22 +174,27 @@ export function projectImageGenOutputs(shape: NodeShape): RawNodeOutputs {
   return latestResultMediaOutput(shape, 'image', 'out-image')
 }
 
-/** 拆分节点 out-image 投影「当前选中格」，无选中时回退第一格（与执行器写入语义一致）。 */
+/**
+ * 拆分节点同时投影「当前选中格（out-image）」与「全部真实产物列表（out-images）」
+ * （与 GUI `outputProjections.ts:projectImageSplitOutputs` 同源，避免外部 output.get 丢失 out-images）。
+ */
 export function projectImageSplitOutputs(shape: NodeShape): RawNodeOutputs {
   const collection = parseMediaResultCollection(shape.meta?.nodeResult ?? '')
   if (!collection || collection.results.length === 0) return {}
-  let selected: string | null = null
-  try {
-    const config = JSON.parse(shape.props.config ?? '{}') as Record<string, unknown>
-    if (typeof config.selectedMediaId === 'string') selected = config.selectedMediaId
-  } catch {
-    selected = null
+  let selected: string | null = collection.selectedMediaId ?? null
+  if (!selected) {
+    try {
+      const config = JSON.parse(shape.props.config ?? '{}') as Record<string, unknown>
+      if (typeof config.selectedMediaId === 'string') selected = config.selectedMediaId
+    } catch {
+      selected = null
+    }
   }
   const item =
     collection.results.find((entry) => entry.mediaId === selected) ?? collection.results[0]
-  if (!item) return {}
-  return {
-    'out-image': {
+  const outputs: RawNodeOutputs = {}
+  if (item) {
+    outputs['out-image'] = {
       kind: 'image',
       mediaId: item.mediaId,
       mediaPath: item.mediaPath,
@@ -197,6 +202,18 @@ export function projectImageSplitOutputs(shape: NodeShape): RawNodeOutputs {
       ...(shape.props.title ? { name: shape.props.title } : {})
     }
   }
+  outputs['out-images'] = {
+    kind: 'json',
+    data: collection.results.map((entry, index) => ({
+      id: `grid-${index + 1}-${entry.mediaId}`,
+      index: index + 1,
+      kind: 'image',
+      mediaId: entry.mediaId,
+      mediaPath: entry.mediaPath,
+      mime: entry.mime
+    }))
+  }
+  return outputs
 }
 
 export function projectImageEditOutputs(shape: NodeShape): RawNodeOutputs {

@@ -23,7 +23,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@renderer': resolve(__dirname, 'src/renderer/src'),
-      '@shared': resolve(__dirname, 'src/shared')
+      '@shared': resolve(__dirname, 'src/shared'),
+      '@free-creation/model-contracts': resolve(__dirname, 'packages/model-contracts/src/index.ts'),
+      '@free-creation/license-protocol': resolve(__dirname, 'packages/license-protocol/src/index.ts')
     }
   },
   server: {

@@ -2,9 +2,9 @@
 import type { BrowserWindow } from 'electron'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { getDb } from '../store/db'
-import { assertVideoReviewEvidence } from './video-review'
-import type { ReviewDecision } from '../../shared/agent-flow/node-contracts'
+import { getDb } from '../../../src/main/store/db'
+import { assertVideoReviewEvidence } from '../../../src/main/agent-flow/video-review'
+import type { ReviewDecision } from '../../../src/shared/agent-flow/node-contracts'
 
 export function installVideoReworkSupplier(directory: string, phase: string): void {
   const db = getDb()

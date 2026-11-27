@@ -75,7 +75,7 @@ describe('CFG-04 actual project-save IPC and repository persistence', () => {
     { key: 'maxParallelTasks=1', patch: { maxParallelTasks: 1 }, legal: true },
     { key: 'maxParallelTasks=4', patch: { maxParallelTasks: 4 }, legal: true },
     { key: 'maxParallelTasks=5', patch: { maxParallelTasks: 5 }, legal: false }
-  ])('$key is accepted only within the schema boundary', ({ key, patch, legal }) => {
+  ])('$key is accepted only within the schema boundary', async ({ key, patch, legal }) => {
     const project = createProject(`CFG04 IPC ${key}`)
     const config = { ...DEFAULT_AGENT_NODE_CONFIG, ...patch }
     const node = {
@@ -93,7 +93,7 @@ describe('CFG-04 actual project-save IPC and repository persistence', () => {
       exec: { status: 'idle' },
       meta: { source: 'input', createdAt: 1 }
     }
-    const reply = state.handlers[IPC.project.save]({}, {
+    const reply = await state.handlers[IPC.project.save]({}, {
       id: project.id,
       expectedGraphVersion: 0,
       graph: { nodes: [node], edges: [], groups: [] }

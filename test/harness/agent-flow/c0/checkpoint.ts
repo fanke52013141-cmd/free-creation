@@ -10,7 +10,7 @@ import {
   type PendingWrite,
   type CheckpointPendingWrite
 } from '@langchain/langgraph-checkpoint'
-import { C0Error } from '../../../shared/agent-flow/c0-contracts'
+import { C0Error } from '../../../../src/shared/agent-flow/c0-contracts'
 import type { C0Telemetry } from './diagnostics'
 
 interface CheckpointRow {

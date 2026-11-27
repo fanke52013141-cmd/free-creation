@@ -7,7 +7,7 @@ import {
   type C0Output,
   type C0Scope,
   type C0Transport
-} from '../../../shared/agent-flow/c0-contracts'
+} from '../../../../src/shared/agent-flow/c0-contracts'
 import type { C0Telemetry } from './diagnostics'
 
 interface Receipt {

@@ -41,7 +41,8 @@ export const MCP_CORE_OPERATION_IDS: readonly string[] = [
   // 复合节点流（可复用黑盒能力）
   'composite.search',
   'composite.get',
-  'composite.run',
+  'composite.execute',
+  'composite.execute.wait',
   // 素材、模型与能力自省
   'media.list',
   'media.import',
@@ -57,11 +58,12 @@ export const MCP_META_TOOL_NAMES = {
 
 export const MCP_SERVER_INSTRUCTIONS = [
   'Canvas Studio Local Agent MCP Server.',
+  'Required envelope rule: every non-read tool requires top-level idempotencyKey matching "<13-digit-ms-timestamp>:<lowercase-uuid-v4>" (e.g. "1764244200000:550e8400-e29b-41d4-a716-446655440000").',
   'Recommended external workflow (all 34 node types + published composites):',
-  '1. Discover: call project_list / project_open, then graph_get and node_type_list (or node_type_get) to inspect ports and config contracts.',
-  '2. Build with human preview (preferred): call graph_patch_propose with typed ops (node.create / edge.create / etc.) to display ghost nodes & edges on the user canvas without mutating it; then call graph_patch_confirm (triggers desktop human approval) or let the user click confirm in the canvas preview panel. For minor direct edits use graph_patch.',
-  '3. Execute & verify: call node_execute (or composite_run) -> run_wait -> output_get. Never assume success without checking run status and outputs.',
-  '4. Extended operations: for library, history, providers, diagnostics, director, or legacy flowAgent operations not listed directly, use canvas_ops_search -> canvas_ops_schema -> canvas_ops_call.'
+  '1. Discover: call project_list / project_open, then graph_get (prefer view="latest" when the project is open to get the freshest graphVersion) and node_type_get (includes ports & configGuide examples). For local file import, place files under <dataDirectory>/agent-exports before calling media_import.',
+  '2. Build with human preview (preferred): call graph_patch_propose with typed ops (node.create / edge.create / etc.) and autoLayout=true to validate ports/configs and display ghost nodes & edges on the user canvas without mutating it; then let the user click confirm in the canvas preview panel or call graph_patch_confirm (triggers desktop human approval). Note: video node image port is "in-images" (not in-first-frame); processor ports are "in-value"/"out-value" with "{{value}}" template placeholder.',
+  '3. Execute & verify: call node_execute (or composite_execute + composite_execute_wait) -> run_wait -> output_get. Pure local nodes (code/processor/image-crop/image-split/video-frame/video-clip/sound-adjust/silence-trim) do not require confirmPaidRerun; paid model upstream nodes require explicit user consent and confirmPaidRerun=true. Never assume success without checking run status and outputs.',
+  '4. Extended operations: for library, history, providers, diagnostics, node.runPlan, director, or legacy flowAgent operations not listed directly, use canvas_ops_search -> canvas_ops_schema -> canvas_ops_call.'
 ].join('\n')
 
 export function resolveMcpProfile(argv: readonly string[], env: NodeJS.ProcessEnv = process.env): McpProfile {

@@ -112,6 +112,22 @@ function transferFailure(
   })
 }
 
+const inFlightAsyncSaves = new Set<Promise<unknown>>()
+
+/** 等待在途异步项目保存落盘并完成终态诊断写入，避免退出阶段截断落盘或留下未配对 started 事件。 */
+export async function drainInFlightProjectSaves(timeoutMs = 2000): Promise<void> {
+  if (inFlightAsyncSaves.size === 0) return
+  const deadline = Date.now() + Math.max(0, timeoutMs)
+  while (inFlightAsyncSaves.size > 0) {
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) break
+    await Promise.race([
+      Promise.allSettled([...inFlightAsyncSaves]),
+      new Promise<void>((resolve) => setTimeout(resolve, remaining))
+    ])
+  }
+}
+
 export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
   ipcMain.handle(IPC.app.bootstrap, (): IpcEnvelope<BootstrapInfo> => {
     const snapshot = licenseSnapshot()
@@ -272,47 +288,52 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
 
   ipcMain.handle(
     IPC.project.save,
-    (_e, input: SaveProjectInput): IpcEnvelope<{ graphVersion: number } | null> => {
-      if (!input?.id) return err('INVALID_INPUT', '参数不完整')
-      const context = projectSaveContext(input)
-      emitDomainEvent('project.save.started', '项目保存开始', {
-        context
-      })
-      if (hasInvalidAgentConfig(input)) {
-        emitInvalidAgentConfigFailure(context)
-        return err('INVALID_AGENT_CONFIG', 'Agent 节点配置无效，项目未保存')
-      }
-      try {
-        const result = repo.saveProject(input)
-        if (result) watcher?.notifySelfSave(result.graphVersion)
-        emitDomainEvent('project.save.completed', '项目保存完成', {
-          context,
-          status: 'success',
-          attributes: { graphVersion: result?.graphVersion }
+    (_e, input: SaveProjectInput): Promise<IpcEnvelope<{ graphVersion: number } | null>> => {
+      const task = (async (): Promise<IpcEnvelope<{ graphVersion: number } | null>> => {
+        if (!input?.id) return err('INVALID_INPUT', '参数不完整')
+        const context = projectSaveContext(input)
+        emitDomainEvent('project.save.started', '项目保存开始', {
+          context
         })
-        return ok(result)
-      } catch (e) {
-        if (e instanceof GraphVersionConflictError) {
-          emitDomainEvent('project.save.conflict', '项目保存版本冲突', {
-            context,
-            error: e
-          })
-          return err('REVISION_CONFLICT', e.message)
+        if (hasInvalidAgentConfig(input)) {
+          emitInvalidAgentConfigFailure(context)
+          return err('INVALID_AGENT_CONFIG', 'Agent 节点配置无效，项目未保存')
         }
-        if (e instanceof GraphWriteInProgressError) {
-          emitDomainEvent('project.save.conflict', '项目保存被并发写入阻塞', {
+        try {
+          const result = await repo.saveProjectAsync(input)
+          if (result) watcher?.notifySelfSave(result.graphVersion)
+          emitDomainEvent('project.save.completed', '项目保存完成', {
             context,
-            error: e
+            status: 'success',
+            attributes: { graphVersion: result?.graphVersion }
           })
-          return err('REVISION_CONFLICT', '项目正在被另一项写入操作更新，请稍后重试')
+          return ok(result)
+        } catch (e) {
+          if (e instanceof GraphVersionConflictError) {
+            emitDomainEvent('project.save.conflict', '项目保存版本冲突', {
+              context,
+              error: e
+            })
+            return err('REVISION_CONFLICT', e.message)
+          }
+          if (e instanceof GraphWriteInProgressError) {
+            emitDomainEvent('project.save.conflict', '项目保存被并发写入阻塞', {
+              context,
+              error: e
+            })
+            return err('REVISION_CONFLICT', '项目正在被另一项写入操作更新，请稍后重试')
+          }
+          emitDomainEvent('project.save.failed', '项目保存失败', {
+            context,
+            status: 'failed',
+            ...projectSaveFailureDiagnostics(e)
+          })
+          return err('SAVE_FAILED', e instanceof Error ? e.message : String(e))
         }
-        emitDomainEvent('project.save.failed', '项目保存失败', {
-          context,
-          status: 'failed',
-          ...projectSaveFailureDiagnostics(e)
-        })
-        return err('SAVE_FAILED', e instanceof Error ? e.message : String(e))
-      }
+      })()
+      inFlightAsyncSaves.add(task)
+      void task.finally(() => inFlightAsyncSaves.delete(task))
+      return task
     }
   )
 

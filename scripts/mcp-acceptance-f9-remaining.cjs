@@ -1,7 +1,11 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
 /**
- * F9 剩余可做项验收：供应商管理（3�? 凭据包导入闸门（2�? 即梦登录闸门�?）�? *
- * 真实 MCP 协议�?+ 真实桌面会话�? * 注意�?*人工确认路径无法自动�?*（会�?GUI 弹确认框等人点），因此这里验证的�? * "没有人的确认就绝对进不去"这一侧；人工确认后的导入需要真人手测（报告中说明）�? */
+ * F9 剩余可做项验收：供应商管理（3）+ 凭据包导入闸门（2）+ 即梦登录闸门（2）。
+ *
+ * 真实 MCP 协议栈 + 真实桌面会话。
+ * 注意：**人工确认路径无法自动化**（会在 GUI 弹确认框等人点），因此这里验证的是
+ * "没有人的确认就绝对进不去"这一侧；人工确认后的导入需要真人手测（报告中说明）。
+ */
 const { _electron } = require('playwright')
 const { cp, mkdir, mkdtemp, readFile, writeFile, rm } = require('node:fs/promises')
 const { existsSync } = require('node:fs')
@@ -95,12 +99,12 @@ async function main() {
     const project = ok(await call('project.create', { name: 'F9 收尾验收' }), 'project.create')
     ok(await call('project.open', { projectId: project.meta.id }), 'project.open')
 
-    // ── 供应商管�?──
+    // ── 供应商管理 ──
     const saved = await check('provider.save 保存连接且回执不回显密钥', async () => {
       const data = ok(
         await call('provider.save', {
           id: 'acc-admin-1',
-          name: '验收供应�?,
+          name: '验收供应商',
           specId: 'toapis',
           baseUrl: 'http://127.0.0.1:9/v1',
           apiKey: 'sk-acceptance-admin-secret-0001',
@@ -116,33 +120,33 @@ async function main() {
       return { id: data.id, modelCount: data.modelCount }
     })
 
-    await check('provider.save 更新时留�?apiKey 保留原密�?, async () => {
+    await check('provider.save 更新时留空 apiKey 保留原密钥', async () => {
       const data = ok(
         await call('provider.save', {
           id: 'acc-admin-1',
-          name: '验收供应�?改名',
+          name: '验收供应商-改名',
           specId: 'toapis',
           baseUrl: 'http://127.0.0.1:9/v1'
         }),
         'provider.save update'
       )
-      expect(data.name === '验收供应�?改名', '名称未更�?)
-      expect(data.hasApiKey === true, '留空 apiKey 后密钥丢�?)
+      expect(data.name === '验收供应商-改名', '名称未更新')
+      expect(data.hasApiKey === true, '留空 apiKey 后密钥丢失')
       return { name: data.name }
     })
 
-    await check('provider.probe 未确认联网必须拒�?, async () => {
+    await check('provider.probe 未确认联网必须拒绝', async () => {
       const response = await call('provider.probe', { providerId: 'acc-admin-1' })
-      expect(response?.status === 'failed', '未确认却执行了探�?)
-      expect(response.error?.code === 'NETWORK_CONFIRM_REQUIRED', `错误�?${response.error?.code}`)
+      expect(response?.status === 'failed', '未确认却执行了探测')
+      expect(response.error?.code === 'NETWORK_CONFIRM_REQUIRED', `错误码=${response.error?.code}`)
       return { code: response.error.code }
     })
 
-    // ── �?4 解锁项：模型发现 / Agent 工具调用验证（与 GUI 共用同一实现）──
+    // ── 批 4 解锁项：模型发现 / Agent 工具调用验证（与 GUI 共用同一实现）──
     await check('model.discover 未确认必须拒绝（零请求）', async () => {
       const response = await call('model.discover', { connectionId: 'acc-conn' })
-      expect(response?.status === 'failed', '未确认却发起了拉取请�?)
-      expect(response.error?.code === 'NETWORK_CONFIRM_REQUIRED', `错误�?${response.error?.code}`)
+      expect(response?.status === 'failed', '未确认却发起了拉取请求')
+      expect(response.error?.code === 'NETWORK_CONFIRM_REQUIRED', `错误码=${response.error?.code}`)
       return { code: response.error.code }
     })
 
@@ -166,15 +170,15 @@ async function main() {
         connectionId: 'no-such-conn',
         confirmNetwork: true
       })
-      expect(response?.status === 'failed', `不应成功�?{JSON.stringify(response?.data)}`)
+      expect(response?.status === 'failed', `不应成功：${JSON.stringify(response?.data)}`)
       expect(
         ['DISCOVERY_FAILED', 'NOT_FOUND', 'MODEL_CONFIGURATION_ERROR'].includes(response.error?.code),
-        `错误�?${response.error?.code}`
+        `错误码=${response.error?.code}`
       )
       return { code: response.error.code }
     })
 
-    await check('provider.probe 确认后只探测已保存供应商（不发起计费调用�?, async () => {
+    await check('provider.probe 确认后只探测已保存供应商（不发起计费调用）', async () => {
       const response = await call('provider.probe', {
         providerId: 'acc-admin-1',
         confirmNetwork: true
@@ -196,14 +200,14 @@ async function main() {
     await check('provider.delete 删除后目录里消失', async () => {
       ok(await call('provider.delete', { id: 'acc-admin-1' }), 'provider.delete')
       const list = ok(await call('provider.list', { limit: 50 }), 'provider.list')
-      expect(!(list.items ?? []).some((item) => item.id === 'acc-admin-1'), '删除后仍在目�?)
+      expect(!(list.items ?? []).some((item) => item.id === 'acc-admin-1'), '删除后仍在目录')
       return {}
     })
 
     await check('provider.delete 不存在的 id 如实 NOT_FOUND', async () => {
       const response = await call('provider.delete', { id: 'no-such-provider' })
-      expect(response?.status === 'failed', '不存在的供应商不应删除成�?)
-      expect(response.error?.code === 'NOT_FOUND', `错误�?${response.error?.code}`)
+      expect(response?.status === 'failed', '不存在的供应商不应删除成功')
+      expect(response.error?.code === 'NOT_FOUND', `错误码=${response.error?.code}`)
       return { code: response.error.code }
     })
 
@@ -213,8 +217,8 @@ async function main() {
         fileName: 'not-there.cskeys',
         password: 'pw'
       })
-      expect(response?.status === 'failed', '未确认却执行了导�?)
-      expect(response.error?.code === 'IMPORT_CONFIRM_REQUIRED', `错误�?${response.error?.code}`)
+      expect(response?.status === 'failed', '未确认却执行了导入')
+      expect(response.error?.code === 'IMPORT_CONFIRM_REQUIRED', `错误码=${response.error?.code}`)
       return { code: response.error.code }
     })
 
@@ -225,21 +229,22 @@ async function main() {
         confirmImport: true
       })
       expect(response?.status === 'failed', '文件不存在却成功')
-      expect(response.error?.code === 'INPUT_NOT_FOUND', `错误�?${response.error?.code}`)
+      expect(response.error?.code === 'INPUT_NOT_FOUND', `错误码=${response.error?.code}`)
       return { code: response.error.code }
     })
 
-    await check('provider.package.importProviders 未确认必须拒�?, async () => {
+    await check('provider.package.importProviders 未确认必须拒绝', async () => {
       const response = await call('provider.package.importProviders', {
         fileName: 'not-there.cskeys',
         password: 'pw'
       })
-      expect(response?.status === 'failed', '未确认却执行了导�?)
-      expect(response.error?.code === 'IMPORT_CONFIRM_REQUIRED', `错误�?${response.error?.code}`)
+      expect(response?.status === 'failed', '未确认却执行了导入')
+      expect(response.error?.code === 'IMPORT_CONFIRM_REQUIRED', `错误码=${response.error?.code}`)
       return { code: response.error.code }
     })
 
-    // 人工确认路径：放一个真实格式的假包，确认会走到"等人确认"这一步而不会静默导�?    await check('provider.package.import 走到人工确认（无人在场时不落库）', async () => {
+    // 人工确认路径：放一个真实格式的假包，确认会走到"等人确认"这一步而不会静默导入
+    await check('provider.package.import 走到人工确认（无人在场时不落库）', async () => {
       const packageFile = join(directory, 'agent-exports', 'confirm-probe.cskeys')
       await writeFile(packageFile, 'not-a-real-package', 'utf8')
       const response = await call('provider.package.import', {
@@ -247,41 +252,41 @@ async function main() {
         password: 'pw',
         confirmImport: true
       })
-      // 假包会先�?openKeyPackagePreview 处失败（包无效）；关键是没有静默导入
+      // 假包会先在 openKeyPackagePreview 处失败（包无效）；关键是没有静默导入
       expect(response?.status === 'failed', '假包不应导入成功')
-      report.notes.push('provider.package.import 假包返回�? + response.error?.code)
+      report.notes.push('provider.package.import 假包返回：' + response.error?.code)
       return { code: response.error?.code }
     })
 
-    // ── 即梦登录：确认闸�?──
-    await check('dreamina.login.start 未确认联网必须拒�?, async () => {
+    // ── 即梦登录：确认闸门 ──
+    await check('dreamina.login.start 未确认联网必须拒绝', async () => {
       const response = await call('dreamina.login.start', {})
-      expect(response?.status === 'failed', '未确认却发起了登录请�?)
-      expect(response.error?.code === 'NETWORK_CONFIRM_REQUIRED', `错误�?${response.error?.code}`)
+      expect(response?.status === 'failed', '未确认却发起了登录请求')
+      expect(response.error?.code === 'NETWORK_CONFIRM_REQUIRED', `错误码=${response.error?.code}`)
       return { code: response.error.code }
     })
 
-    await check('dreamina.login.check 未确认联网必须拒�?, async () => {
+    await check('dreamina.login.check 未确认联网必须拒绝', async () => {
       const response = await call('dreamina.login.check', { deviceCode: 'x' })
-      expect(response?.status === 'failed', '未确认却查询了登录状�?)
-      expect(response.error?.code === 'NETWORK_CONFIRM_REQUIRED', `错误�?${response.error?.code}`)
+      expect(response?.status === 'failed', '未确认却查询了登录状态')
+      expect(response.error?.code === 'NETWORK_CONFIRM_REQUIRED', `错误码=${response.error?.code}`)
       return { code: response.error.code }
     })
 
     await check('dreamina.login.start 确认后如实反映本机状态（不伪造成功）', async () => {
       const response = await call('dreamina.login.start', { confirmNetwork: true })
       if (response?.status === 'completed') {
-        expect(['already', 'pending', 'failed'].includes(response.data.status), `状�?${response.data.status}`)
-        report.notes.push('dreamina.login.start 返回 ' + response.data.status + '�? + response.data.message + '�?)
+        expect(['already', 'pending', 'failed'].includes(response.data.status), `状态=${response.data.status}`)
+        report.notes.push('dreamina.login.start 返回 ' + response.data.status + '（' + response.data.message + '）')
         return { status: response.data.status }
       }
-      expect(response.error?.code, '失败但无错误�?)
+      expect(response.error?.code, '失败但无错误码')
       report.notes.push('dreamina.login.start 失败码：' + response.error.code)
       return { code: response.error.code }
     })
 
-    // ── diagnostics.exportNodeRun：真实执行一次节点再导出，验证脱�?──
-    await check('diagnostics.exportNodeRun 导出节点诊断且抹掉正�?, async () => {
+    // ── diagnostics.exportNodeRun：真实执行一次节点再导出，验证脱敏 ──
+    await check('diagnostics.exportNodeRun 导出节点诊断且抹掉正文', async () => {
       const SECRET_TEXT = 'F9-EXPORT-SECRET-TEXT-0001'
       const patched = await call('graph.patch', {
         projectId: project.meta.id,
@@ -339,28 +344,29 @@ async function main() {
         'graph.get after patch'
       )
       const nodeId = (graph.nodes ?? []).find((node) => node.title === '诊断节点')?.nodeId
-      expect(nodeId, '找不到诊断节�?)
+      expect(nodeId, '找不到诊断节点')
 
       const exported = await call('diagnostics.exportNodeRun', {
         projectId: project.meta.id,
         nodeId
       })
-      // 允许"该节点还没有运行记录"这类业务拒绝，但不允许协议层纯文本错�?      if (exported?.status !== 'completed') {
+      // 允许"该节点还没有运行记录"这类业务拒绝，但不允许协议层纯文本错误
+      if (exported?.status !== 'completed') {
         expect(
           !String(exported?.error?.code ?? '').startsWith('PLAIN_TEXT:'),
-          '协议层纯文本错误�? + exported?.error?.code
+          '协议层纯文本错误：' + exported?.error?.code
         )
-        report.notes.push('diagnostics.exportNodeRun 返回�? + exported?.error?.code)
+        report.notes.push('diagnostics.exportNodeRun 返回：' + exported?.error?.code)
         return { code: exported?.error?.code }
       }
       const data = exported.data
       const target = join(directory, 'agent-exports', data.fileName)
-      expect(existsSync(target), '诊断文件不存�?)
+      expect(existsSync(target), '诊断文件不存在')
       const text = await readFile(target, 'utf8')
       // 报告含中文：必须比字节数而不是字符数
       expect(Buffer.byteLength(text, 'utf8') === data.byteSize, '字节数与回执不符')
-      expect(!text.includes(SECRET_TEXT), '导出文件泄漏了节点正�?)
-      expect(!text.includes('"sk-'), '导出文件泄漏了密钥形�?)
+      expect(!text.includes(SECRET_TEXT), '导出文件泄漏了节点正文')
+      expect(!text.includes('"sk-'), '导出文件泄漏了密钥形态')
       const parsed = JSON.parse(text)
       expect(parsed.format === 'canvas-studio-node-diagnostics-v1', '报告格式不符')
       return { fileName: data.fileName, runCount: data.runCount }
@@ -382,7 +388,7 @@ async function main() {
     try {
       await rm(directory, { recursive: true, force: true })
     } catch {}
-    console.log(`\nF9 剩余可做项验收：检�?${report.total} 通过=${report.passed} 失败=${report.failed}`)
+    console.log(`\nF9 剩余可做项验收：检查=${report.total} 通过=${report.passed} 失败=${report.failed}`)
     for (const failure of report.failures.slice(0, 15)) console.log('  FAIL ' + failure.name + ' :: ' + failure.detail)
     for (const note of report.notes) console.log('  NOTE ' + note)
     console.log('报告：qa/local-agent-access/f9-remaining-doable/report.json')

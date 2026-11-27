@@ -167,7 +167,7 @@ const ok = (res, label) => {
     // ── 6. MCP 工具目录与调用一致 ──
     const transport = new StdioClientTransport({
       command: require('electron'),
-      args: [path.join(root, 'out/main/local-agent.js'), 'mcp', 'serve', '--stdio', '--data-dir', dir],
+      args: [path.join(root, 'out/main/local-agent.js'), 'mcp', 'serve', '--profile', 'full', '--stdio', '--data-dir', dir],
       env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
       stderr: 'pipe'
     })

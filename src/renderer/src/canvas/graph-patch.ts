@@ -613,7 +613,14 @@ export function planGraphPatch(
     const toPorts = livePorts(toNode.nodeType, toNode.config, 260, toNode.compositeManifest).in
     const fromPort = fromPorts.find((p) => p.id === op.from.portId)
     const toPort = toPorts.find((p) => p.id === op.to.portId)
-    if (!fromPort || !toPort) return fail(index, 'EDGE_PORT_INVALID', `${op.from.portId}->${op.to.portId}`)
+    if (!fromPort) {
+      const valid = fromPorts.map((p) => p.id).join(', ') || 'none'
+      return fail(index, 'EDGE_PORT_INVALID', `${fromNode.nodeType}.out missing '${op.from.portId}' (valid: ${valid})`)
+    }
+    if (!toPort) {
+      const valid = toPorts.map((p) => p.id).join(', ') || 'none'
+      return fail(index, 'EDGE_PORT_INVALID', `${toNode.nodeType}.in missing '${op.to.portId}' (valid: ${valid})`)
+    }
     if (!portPairCompatible(fromPort, toPort)) return fail(index, 'EDGE_INCOMPATIBLE')
     if (
       toPort.cardinality === 'one' &&

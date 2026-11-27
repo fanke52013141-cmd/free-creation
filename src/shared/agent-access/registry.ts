@@ -282,7 +282,7 @@ export const ACCESS_OPERATIONS = {
     destructive: false,
     cost: 'none',
     description:
-      '把本机文件登记为项目受控媒体（复制入库、去敏索引）；返回受控 mediaId 供节点引用，不接收二进制报文',
+      '把本机文件登记为项目受控媒体（复制入库、去敏索引）；filePath 必须位于数据目录下的受控 agent-exports 目录内；返回受控 mediaId 供节点引用，不接收二进制报文',
     input: project
       .extend({
         filePath: z.string().min(2).max(1000),
@@ -1223,7 +1223,14 @@ export function toolInputSchema(operationId: AccessOperationId): z.ZodObject {
       input: spec.input,
       requestId: identifier.optional(),
       idempotencyKey:
-        spec.effect === 'read' ? z.string().optional() : z.string().regex(/^\d{13}:[a-f0-9-]{36}$/)
+        spec.effect === 'read'
+          ? z.string().optional()
+          : z
+              .string()
+              .regex(/^\d{13}:[a-f0-9-]{36}$/)
+              .describe(
+                '必填幂等键，格式为 "<13位毫秒时间戳>:<小写UUIDv4>"，例如 "1764244200000:550e8400-e29b-41d4-a716-446655440000"'
+              )
     })
     .strict()
 }

@@ -3,7 +3,7 @@ import {
   newProducerId,
   type DiagnosticContext,
   type DiagnosticsEventInput
-} from '../../../shared/observability'
+} from '../../../../src/shared/observability'
 
 export type C0Event =
   | 'started'

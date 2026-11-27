@@ -1,7 +1,5 @@
 import {
-  atom,
   computed,
-  type Atom,
   type Computed,
   type Editor,
   type TLShape,
@@ -245,6 +243,7 @@ interface StoreChangeRecord {
   type?: string
   index?: string
   parentId?: string
+  currentPageId?: string
   opacity?: number
   fromId?: string
   toId?: string
@@ -258,6 +257,9 @@ function recordAffectsTopology(
 ): boolean {
   const rec = after ?? before
   if (!rec) return false
+  if (rec.typeName === 'instance') {
+    return before?.currentPageId !== after?.currentPageId
+  }
   if (rec.typeName === 'binding') {
     if (!before || !after) return true
     return (
@@ -316,43 +318,58 @@ function changesAffectTopology(changes: {
   return false
 }
 
-interface IncrementalEntry {
-  state: Atom<NodePageIndex>
-  dispose: () => void
+interface StoreHistoryAtom {
+  get: () => number
+  getDiffSince: (epoch: number) => unknown
 }
 
-const incrementalIndexes = new WeakMap<Editor, IncrementalEntry>()
+const incrementalIndexes = new WeakMap<Editor, Computed<NodePageIndex>>()
 const fallbackIndexes = new WeakMap<Editor, Computed<NodePageIndex>>()
 
 /**
  * 编辑器级共享拓扑与序号索引。
  *
- * - 真实 Editor：监听 `store.listen(..., { scope: 'document' })` 的增量 diff；
- *   纯坐标移动（x/y）、尺寸调整（w/h）、文本编辑、运行状态更新期间 O(1) 跳过，
- *   零全页扫描、零排序、零 JSON.stringify。
- * - 无 `store.listen` 的轻量单测 mock：自动回退 `computed` 路径保持 100% 兼容。
+ * - 真实 Editor：直接订阅 `editor.store.history`（同步推进，不经过 `store.listen` 的 rAF 节流）
+ *   并通过 `getDiffSince(lastComputedEpoch)` 增量判断拓扑变更：
+ *   纯坐标移动（x/y）、尺寸调整（w/h）、文本编辑、运行状态更新期间 O(1) 返回旧引用，
+ *   零全页扫描、零排序、零 JSON.stringify；新增/删除节点或连线则在同 tick 同步可见。
+ * - 无 `store.history` 的轻量单测 mock：自动回退 `computed` 路径保持 100% 兼容。
  */
 export function nodePageIndex(editor: Editor): NodePageIndex {
-  if (typeof editor.store?.listen === 'function') {
-    let entry = incrementalIndexes.get(editor)
-    if (!entry) {
-      let version = 1
-      const state = atom<NodePageIndex>(
+  const history = (editor.store as unknown as { history?: StoreHistoryAtom } | undefined)?.history
+  if (history && typeof history.get === 'function' && typeof history.getDiffSince === 'function') {
+    let index = incrementalIndexes.get(editor)
+    if (!index) {
+      let version = 0
+      index = computed<NodePageIndex>(
         'node page relation index',
-        buildNodePageIndex(editor, version, false)
-      )
-      const offDoc = editor.store.listen(
-        (change) => {
-          if (!changesAffectTopology(change.changes)) return
+        (prev, lastComputedEpoch) => {
+          history.get()
+          if (prev && typeof prev === 'object' && 'version' in prev) {
+            const diffs = history.getDiffSince(lastComputedEpoch)
+            if (
+              Array.isArray(diffs) &&
+              !diffs.some((diff) =>
+                changesAffectTopology(
+                  diff as {
+                    added: Record<string, unknown>
+                    updated: Record<string, [unknown, unknown]>
+                    removed: Record<string, unknown>
+                  }
+                )
+              )
+            ) {
+              return prev as NodePageIndex
+            }
+          }
           version += 1
-          state.set(buildNodePageIndex(editor, version, false))
+          return buildNodePageIndex(editor, version, false)
         },
-        { scope: 'document' }
+        { isEqual: (a: NodePageIndex, b: NodePageIndex) => a === b }
       )
-      entry = { state, dispose: offDoc }
-      incrementalIndexes.set(editor, entry)
+      incrementalIndexes.set(editor, index)
     }
-    return entry.state.get()
+    return index.get()
   }
 
   let index = fallbackIndexes.get(editor)
@@ -372,8 +389,6 @@ export function nodePageIndex(editor: Editor): NodePageIndex {
 }
 
 export function disposeNodePageIndex(editor: Editor): void {
-  const entry = incrementalIndexes.get(editor)
-  if (!entry) return
-  entry.dispose()
   incrementalIndexes.delete(editor)
+  fallbackIndexes.delete(editor)
 }

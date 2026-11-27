@@ -2,6 +2,12 @@ import type { Editor } from 'tldraw'
 
 const VERTICAL_OVERFLOW = new Set(['auto', 'scroll', 'overlay'])
 
+function escapeAttrSelector(value: string): string {
+  return typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+    ? CSS.escape(value)
+    : value.replace(/["\\]/g, '\\$&')
+}
+
 function wheelPixels(event: WheelEvent, pageHeight: number): { x: number; y: number } {
   const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? pageHeight : 1
   return { x: event.deltaX * unit, y: event.deltaY * unit }
@@ -28,10 +34,14 @@ function scrollTargets(body: HTMLElement, target: Element): HTMLElement[] {
 
   // Some node bodies use a nested scroll area while the outer body has no overflow.
   // Keep that area reachable when the pointer is over the header or an adjacent control.
-  // 仅检查已知带滚动能力的语义容器，避免 querySelectorAll('*') 对数百子节点逐一 getComputedStyle。
+  // 优先检查已知带滚动能力的语义容器，避免常规路径对数百子节点逐一查询；
+  // 若未命中则回退检查其余内部滚动容器（如自定义列表 div），仍先以 scrollHeight > clientHeight 短路。
   for (const element of body.querySelectorAll<HTMLElement>(
     '.node-standard-scroll, .ai-process-result-frame, .storyboard-body, .timeline-scroll, .chat-messages, textarea, pre, [data-node-scrollable]'
   )) {
+    if (hasVerticalScroll(element)) return [element]
+  }
+  for (const element of body.querySelectorAll<HTMLElement>('*')) {
     if (hasVerticalScroll(element)) return [element]
   }
   return []
@@ -56,7 +66,9 @@ function selectedScrollTargets(editor: Editor, target: Element): HTMLElement[] {
       ? hoveredCard
       : editor
           .getContainer()
-          .querySelector<HTMLElement>(`.node-card-wrap[data-node-id="${CSS.escape(selectedId)}"]`)
+          .querySelector<HTMLElement>(
+            `.node-card-wrap[data-node-id="${escapeAttrSelector(selectedId)}"]`
+          )
   const body = card?.querySelector<HTMLElement>('.node-standard-scroll, .node-body')
   return body ? scrollTargets(body, target) : []
 }

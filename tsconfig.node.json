@@ -5,7 +5,8 @@
     "src/main/**/*",
     "src/local-agent/**/*",
     "src/preload/**/*",
-    "src/shared/**/*"
+    "src/shared/**/*",
+    "test/harness/agent-flow/**/*"
   ],
   "compilerOptions": {
     "composite": true,

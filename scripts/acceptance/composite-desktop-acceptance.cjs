@@ -640,7 +640,7 @@ async function waitForOutputs(dir, projectId, nodeId, predicate, label, timeoutM
     // MCP：同一 Registry/业务实现，验证工具目录与 composite.validate 输出。
     const transport = new StdioClientTransport({
       command: require('electron'),
-      args: [path.join(root, 'out/main/local-agent.js'), 'mcp', 'serve', '--stdio', '--data-dir', dir],
+      args: [path.join(root, 'out/main/local-agent.js'), 'mcp', 'serve', '--profile', 'full', '--stdio', '--data-dir', dir],
       env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
       stderr: 'pipe'
     })

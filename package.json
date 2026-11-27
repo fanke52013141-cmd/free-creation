@@ -50,6 +50,7 @@
     "benchmark:graph": "node scripts/benchmark-graph.mjs",
     "build:demo": "node scripts/build-demo-bundle.mjs",
     "benchmark:canvas": "node scripts/benchmark-canvas.mjs",
+    "benchmark:canvas:tiers": "node scripts/benchmark-canvas-tiers.cjs",
     "verify": "node scripts/run-verification.cjs",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
