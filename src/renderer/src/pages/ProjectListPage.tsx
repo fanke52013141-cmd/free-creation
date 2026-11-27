@@ -13,6 +13,7 @@ import { ModalShell } from '../components/ModalShell'
 import { modalBtn } from '../components/modal-btn'
 import { ProjectCreateDialog } from '../components/ProjectCreateDialog'
 import { ResourceLibraryPage } from '../library/ResourceLibraryPage'
+import { buildExternalAgentBrief } from '../lib/external-agent-brief'
 import freeCreationLogo from '../assets/free-creation-logo.png'
 import './project-list-page.css'
 
@@ -45,6 +46,39 @@ export function ProjectListPage(): React.JSX.Element {
   // 打包版非 DEV；浏览器验收页没有 preload（window.api 缺失）——两者都不渲染。
   const devReloadAvailable = import.meta.env.DEV && Boolean(window.api)
   const [devReloading, setDevReloading] = useState(false)
+  const [agentGuideCopied, setAgentGuideCopied] = useState(false)
+  const agentGuideTimerRef = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      if (agentGuideTimerRef.current !== null) window.clearTimeout(agentGuideTimerRef.current)
+    },
+    []
+  )
+  const copyExternalAgentGuide = useCallback(async (): Promise<void> => {
+    const brief = buildExternalAgentBrief(projects.map((p) => ({ id: p.id, name: p.name })))
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(brief)
+      } else {
+        throw new Error('clipboard unavailable')
+      }
+    } catch {
+      const textarea = document.createElement('textarea')
+      textarea.value = brief
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+    }
+    setAgentGuideCopied(true)
+    if (agentGuideTimerRef.current !== null) window.clearTimeout(agentGuideTimerRef.current)
+    agentGuideTimerRef.current = window.setTimeout(() => setAgentGuideCopied(false), 2000)
+    useToastStore
+      .getState()
+      .show('已复制外部 Agent 对接说明，可直接粘贴给 Claude / Cursor / Antigravity 等外部 Agent')
+  }, [projects])
   const reloadRendererUi = useCallback((): void => {
     if (devReloading) return
     setDevReloading(true)
@@ -262,6 +296,15 @@ export function ProjectListPage(): React.JSX.Element {
               <Icon name="download" size={16} />
             </TopbarIconButton>
           </div>
+          <button
+            type="button"
+            className="project-home-button project-home-button-quiet project-home-agent-guide"
+            onClick={() => void copyExternalAgentGuide()}
+            title="复制外部 Agent（MCP / CLI）完整对接说明与全部节点端口清单，可直接发给外部 Agent 查看"
+          >
+            <Icon name={agentGuideCopied ? 'check' : 'agent'} size={14} />
+            {agentGuideCopied ? '已复制说明' : 'Agent 对接'}
+          </button>
           {/* 2026-11-21 用户裁决：开发重载按钮固定放在「新建项目」左侧。 */}
           {devReloadAvailable && (
             <button
