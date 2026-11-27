@@ -36,6 +36,15 @@ sources:
 > - **验证**：定向回归 74 文件/1050 用例通过；composite desktop/GUI、CLI/MCP remediation/legacy/retry、Agent Flow capability/parallel/end-to-end/human-task/review/collab/media/queue/recovery 桌面验收通过；完整 `ELECTRON_DISABLE_SANDBOX=1 npm run verify` 退出码 0（`qa/verification/run-Qd20tV/status.json`，4157 单元通过/7 跳过，model-runtime 6/6，桌面与 R09 链路通过）。remediation 已补 Windows UI Automation 真实原生「允许提交」驱动（非 Windows 明确人工步骤），CLI/MCP H09 与整组连续两轮 8/8 通过。完整报告见 [节点流深度审查与真实验收](<canvas-agent-flow/audits/node-flow-deep-review-2026-11-27.md>)。
 > - **边界**：真实付费模型、物理掉电/真实磁盘故障、Windows 安装包与干净 Runner 仍未覆盖；Agent Flow 若干 P2 展示/归因问题保留，详见报告 §5。
 
+> **2026-11-27 外部上帝 Agent 优先架构收口（已实施）**
+>
+> - **架构拍板**：不内置上帝 Agent（`role: 'builder'` 退役，交由外部强 Agent 经 MCP / CLI 驱动），内部 `coordinator-host` 冻结新编排概念扩张，重心聚焦「全 34 节点 + 复合节点流执行宿主 + 幽灵预览与人工确认门禁」。
+> - **落地项**：
+>   1. **MCP 分层精简（渐进发现）**：`src/local-agent/mcp-profile.ts` 默认启用 `core` 档位（24 核心工具 + `canvas_ops_search` / `canvas_ops_schema` / `canvas_ops_call` 3 个元工具，移除冗余 `outputSchema` 并附带 `MCP_SERVER_INSTRUCTIONS`），`tools/list` 体积压缩 >90%，兼容 `--profile full` 全量验收；
+>   2. **退役内置 `builder`**：GUI 职责下拉移除新建 `builder` 入口，`FlowBuilderControls` 停止触发内置建图模型循环（历史节点只读提示 + 既有预览收口），`flowAgent.build.*` 标记废弃并移出 MCP `core` 档位；
+>   3. **方案 A 全节点幽灵预览**：新增 `graph.patch.propose` / `graph.patch.confirm`（BL-01 人工决定门禁）/ `graph.patch.discard`，复用 `flow_builds(source='patch')`、`FlowBuildPreviewLayer` 与 `FlowGraphPreviewPanel`，解锁全部 34 种节点与复合节点流的“幽灵预览 → 人工确认 → 单撤销步原子落盘”；
+>   4. **外部接入指引**：新增 [外部 Agent 接入指南](<local-agent-access/EXTERNAL_AGENT_SKILL.md>)。
+
 ## 当前未闭环边界（基线 `57a7e60d`）
 
 以下事项仍然真实未完成，不因 BL 系列已完成而关闭：

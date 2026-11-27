@@ -164,6 +164,40 @@ export const ACCESS_OPERATIONS = {
       .extend({ ops: GraphPatchOpsSchema, autoLayout: z.boolean().default(false) })
       .strict()
   },
+  'graph.patch.propose': {
+    effect: 'write',
+    idempotent: false,
+    destructive: false,
+    cost: 'none',
+    description:
+      '【推荐外部建图入口】提交一批全 34 节点/复合节点流的类型化画布变更提案：校验全部引用与契约后持久化为画布幽灵预览（零画布写入），用户在画布预览后可点击「确认落画布」或由外部调 graph.patch.confirm 经桌面人工确认后落盘',
+    input: revision
+      .extend({
+        name: z.string().trim().min(1).max(120).optional(),
+        ops: GraphPatchOpsSchema,
+        autoLayout: z.boolean().default(false)
+      })
+      .strict()
+  },
+  'graph.patch.confirm': {
+    effect: 'write',
+    idempotent: false,
+    destructive: false,
+    cost: 'none',
+    // BL-01 人工决定：落画布前必须在桌面弹窗由人确认，拒绝/超时/无桌面均零副作用。
+    interactive: true,
+    description:
+      '确认并原子应用一条已持久化的 graph.patch.propose 幽灵预览（单撤销步 + 保存屏障 + 版本核对）；BL-01 人工决定动作，外部调用会在桌面弹出确认，只有人点击允许才生效，拒绝/超时/无桌面均零副作用',
+    input: project.extend({ previewId: z.string().min(1).max(120) }).strict()
+  },
+  'graph.patch.discard': {
+    effect: 'write',
+    idempotent: true,
+    destructive: false,
+    cost: 'none',
+    description: '取消一条待确认的 graph.patch.propose 幽灵预览（清除画布幽灵展示）；已落盘的预览幂等返回 committed',
+    input: project.extend({ previewId: z.string().min(1).max(120) }).strict()
+  },
   'graph.layout': {
     effect: 'write',
     idempotent: false,
@@ -830,6 +864,66 @@ export const ACCESS_OUTPUTS = {
         })
         .strict()
         .optional()
+    })
+    .strict(),
+  'graph.patch.propose': z
+    .object({
+      projectId: identifier,
+      previewId: z.string().min(1).max(120),
+      name: z.string().min(1).max(160),
+      state: z.literal('preview'),
+      expectedGraphVersion: z.number().int().nonnegative(),
+      autoLayout: z.boolean(),
+      summary: z
+        .object({
+          nodeCreated: z.number().int().nonnegative(),
+          nodeUpdated: z.number().int().nonnegative(),
+          nodeDeleted: z.number().int().nonnegative(),
+          edgeCreated: z.number().int().nonnegative(),
+          edgeDeleted: z.number().int().nonnegative()
+        })
+        .strict(),
+      nodeCount: z.number().int().nonnegative(),
+      edgeCount: z.number().int().nonnegative()
+    })
+    .strict(),
+  'graph.patch.confirm': z
+    .object({
+      projectId: identifier,
+      previewId: z.string().min(1).max(120),
+      state: z.literal('committed'),
+      graphVersion: z.number().int().nonnegative(),
+      saved: z.literal(true),
+      created: z
+        .array(z.object({ ref: accessClientRef.optional(), nodeId: z.string().max(180) }).strict())
+        .max(GRAPH_PATCH_MAX_OPS),
+      groups: z
+        .array(z.object({ ref: accessClientRef.optional(), groupId: z.string().max(180) }).strict())
+        .max(GRAPH_PATCH_MAX_OPS)
+        .optional(),
+      applied: z
+        .object({
+          nodeCreated: z.number().int().nonnegative(),
+          nodeUpdated: z.number().int().nonnegative(),
+          nodeDeleted: z.number().int().nonnegative(),
+          edgeCreated: z.number().int().nonnegative(),
+          edgeDeleted: z.number().int().nonnegative()
+        })
+        .strict(),
+      layout: z
+        .object({
+          mode: z.enum(['flow', 'lanes', 'grid']),
+          moved: z.number().int().nonnegative()
+        })
+        .strict()
+        .optional()
+    })
+    .strict(),
+  'graph.patch.discard': z
+    .object({
+      projectId: identifier,
+      previewId: z.string().min(1).max(120),
+      state: z.enum(['discarded', 'committed'])
     })
     .strict(),
   'graph.layout': z

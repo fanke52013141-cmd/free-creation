@@ -1,5 +1,4 @@
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto'
-import { z } from 'zod'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js'
@@ -8,14 +7,21 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import {
   ACCESS_MAX_BYTES,
   ACCESS_OPERATIONS,
-  operationResponseSchema,
   nodeAccessDirectory,
   operationDirectory,
-  operationSpec,
   toolInputSchema,
   validateAccessRegistry,
   type AccessOperationId
 } from '../shared/agent-access/registry'
+import {
+  buildMcpToolsList,
+  MCP_META_TOOL_NAMES,
+  MCP_SERVER_INSTRUCTIONS,
+  parseOpsCallArgs,
+  resolveMcpProfile,
+  runOpsSchema,
+  runOpsSearch
+} from './mcp-profile'
 import { callLocalOperation, defaultDataDirectory } from './client'
 import { CliInputError, cliFailure, parseCliInput, writeCliResponse } from './cli'
 
@@ -43,6 +49,7 @@ async function main(): Promise<void> {
     return
   }
   if (argv[0] === 'mcp' && argv[1] === 'serve') {
+    const profile = resolveMcpProfile(argv)
     /**
      * 每个连接一个新 Server：SSE 传输下 Server 与 transport 一对一绑定，
      * 复用同一实例会让第二个客户端抢走第一个的会话。
@@ -50,36 +57,79 @@ async function main(): Promise<void> {
     const createMcpServer = (): Server => {
       const server = new Server(
         { name: 'canvas-studio-local-agent', version: '1.0.0' },
-        { capabilities: { tools: {} } }
+        {
+          capabilities: { tools: {} },
+          instructions: MCP_SERVER_INSTRUCTIONS
+        }
       )
       server.setRequestHandler(ListToolsRequestSchema, async () => ({
-        tools: Object.keys(ACCESS_OPERATIONS).map((id) => {
-          const spec = operationSpec(id as AccessOperationId)
-          return {
-            name: id.replaceAll('.', '_'),
-            description: spec.cost === 'none' ? spec.description :
-              `${spec.description}（费用：${{ possible: '可能产生费用', certain: '会产生费用' }[spec.cost]}）`,
-            inputSchema: z.toJSONSchema(toolInputSchema(id as AccessOperationId)) as {
-              type: 'object'
-              [key: string]: unknown
-            },
-            outputSchema: z.toJSONSchema(operationResponseSchema(id as AccessOperationId)) as {
-              type: 'object'
-              [key: string]: unknown
-            },
-            annotations: {
-              readOnlyHint: spec.effect === 'read',
-              destructiveHint: spec.destructive,
-              idempotentHint: spec.idempotent,
-              openWorldHint: spec.openWorld === true
-            }
-          }
-        })
+        tools: buildMcpToolsList(profile)
       }))
       server.setRequestHandler(CallToolRequestSchema, async (request) => {
-        const id = Object.keys(ACCESS_OPERATIONS).find(
-          (candidate) => candidate.replaceAll('.', '_') === request.params.name
-        ) as AccessOperationId | undefined
+        const toolName = String(request.params.name)
+        // 元工具（core 档位渐进发现）：本地查表或按同一校验/门禁通道透传调用。
+        if (toolName === MCP_META_TOOL_NAMES.search) {
+          const res = runOpsSearch(request.params.arguments)
+          if (!res.ok) {
+            return {
+              isError: true,
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({ error: { code: res.code, detail: res.detail } })
+                }
+              ]
+            }
+          }
+          return {
+            isError: false,
+            structuredContent: res.data,
+            content: [{ type: 'text', text: JSON.stringify(res.data) }]
+          }
+        }
+        if (toolName === MCP_META_TOOL_NAMES.schema) {
+          const res = runOpsSchema(request.params.arguments)
+          if (!res.ok) {
+            return {
+              isError: true,
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({ error: { code: res.code, detail: res.detail } })
+                }
+              ]
+            }
+          }
+          return {
+            isError: false,
+            structuredContent: res.data,
+            content: [{ type: 'text', text: JSON.stringify(res.data) }]
+          }
+        }
+
+        let targetOperationId: AccessOperationId | undefined
+        let rawArguments: unknown = request.params.arguments
+        if (toolName === MCP_META_TOOL_NAMES.call) {
+          const unwrapped = parseOpsCallArgs(request.params.arguments)
+          if (!unwrapped.ok) {
+            return {
+              isError: true,
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({ error: { code: unwrapped.code, detail: unwrapped.detail } })
+                }
+              ]
+            }
+          }
+          targetOperationId = unwrapped.operationId
+          rawArguments = unwrapped.args
+        } else {
+          targetOperationId = Object.keys(ACCESS_OPERATIONS).find(
+            (candidate) => candidate.replaceAll('.', '_') === toolName
+          ) as AccessOperationId | undefined
+        }
+        const id = targetOperationId
         // 协议层失败也给**结构化**回执：真实 Agent 要能按 error.code 分支，
         // 不能只收到一串纯文本（否则"缺幂等键"和"字段类型不对"无法区分）。
         // detail 只放字段路径，不放请求正文、路径或密钥。
@@ -95,8 +145,10 @@ async function main(): Promise<void> {
           // 必须满足 operationResponseSchema（strict）：含 traceId，失败态不带 data。
           const failure = {
             apiVersion: 1 as const,
-            requestId: String(request.params.arguments?.requestId ?? '') || `mcp-${Date.now()}`,
-            operationId: id ?? String(request.params.name),
+            requestId:
+              String((rawArguments as Record<string, unknown> | undefined)?.requestId ?? '') ||
+              `mcp-${Date.now()}`,
+            operationId: id ?? toolName,
             traceId: 'unavailable',
             status: 'failed' as const,
             error: { code, phase, retryable: false, ...(detail ? { detail } : {}) }
@@ -104,11 +156,11 @@ async function main(): Promise<void> {
           return {
             isError: true,
             structuredContent: failure,
-            content: [{ type: 'text' as const, text: JSON.stringify(failure) }]
+            content: [{ type: 'text', text: JSON.stringify(failure) }]
           }
         }
         if (!id) return protocolFailure('UNSUPPORTED_OPERATION', 'dispatch')
-        const parsed = toolInputSchema(id).safeParse(request.params.arguments)
+        const parsed = toolInputSchema(id).safeParse(rawArguments)
         if (!parsed.success) {
           const issue = parsed.error.issues[0]
           const path = issue?.path.join('.') || 'input'

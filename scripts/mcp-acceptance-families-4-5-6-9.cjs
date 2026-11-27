@@ -1,18 +1,13 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
 /**
- * MCP 验收 · 第 4/5/6/9 族：资源库、Agent Flow、模型与环境、执行与对话。
- *
- * 真实 MCP 协议栈 + 真实桌面会话。按业务链路组织：
- *  - 资源库：文件夹/收藏集/分类 → 资源创建→读→归档→归属→发布修订→检索 → 采集(媒体/节点)
- *            → 导出/导入包 → 物化到画布 → 丢弃物化 → 批量删除
- *  - 模型：连接保存→凭据指纹→定义保存→绑定保存→解析→目录读取→环境探测→安装闸门→清理
- *  - Flow：Agent 节点上的 inspect/catalog/collaboration/run/pause/stop/cooperate/build/review
+ * MCP 验收 · �?4/5/6/9 族：资源库、Agent Flow、模型与环境、执行与对话�? *
+ * 真实 MCP 协议�?+ 真实桌面会话。按业务链路组织�? *  - 资源库：文件�?收藏�?分类 �?资源创建→读→归档→归属→发布修订→检�?�?采集(媒体/节点)
+ *            �?导出/导入�?�?物化到画�?�?丢弃物化 �?批量删除
+ *  - 模型：连接保存→凭据指纹→定义保存→绑定保存→解析→目录读取→环境探测→安装闸门→清�? *  - Flow：Agent 节点上的 inspect/catalog/collaboration/run/pause/stop/cooperate/build/review
  *          + flow.command.* + flowAsset.* + director.publish.*
- *  - 执行/对话：node.execute → run.get/wait → output.get → run.cancel；chat.*；skill.*
+ *  - 执行/对话：node.execute �?run.get/wait �?output.get �?run.cancel；chat.*；skill.*
  *
- * 判定：completed 或"稳定业务码（缺前置数据/模型/授权）"都算接通；只有异常/超时/纯文本错误、
- * 或声称 completed 却没有真实副作用才算失败。
- */
+ * 判定：completed �?稳定业务码（缺前置数�?模型/授权�?都算接通；只有异常/超时/纯文本错误�? * 或声�?completed 却没有真实副作用才算失败�? */
 const { _electron } = require('playwright')
 const { cp, mkdir, mkdtemp, readFile, writeFile, rm, stat } = require('node:fs/promises')
 const { existsSync } = require('node:fs')
@@ -94,7 +89,7 @@ async function main() {
     }
     const transport = new StdioClientTransport({
       command: electron,
-      args: [cliPath, 'mcp', 'serve', '--stdio', '--data-dir', directory],
+      args: [cliPath, 'mcp', 'serve', '--profile', 'full', '--stdio', '--data-dir', directory],
       env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
       stderr: 'pipe'
     })
@@ -118,12 +113,12 @@ async function main() {
       expect(response?.status === 'completed', `${name} :: ${JSON.stringify(response?.error ?? response).slice(0, 240)}`)
       return response.data
     }
-    /** completed 或稳定业务码都算接通；记录业务码便于汇总。 */
+    /** completed 或稳定业务码都算接通；记录业务码便于汇总�?*/
     const wire = (response, name) => {
       const code = response?.error?.code ?? ''
       if (response?.status === 'completed') return { completed: true, data: response.data }
       expect(!String(code).startsWith('PLAIN_TEXT:'), `${name}: 协议层纯文本错误 ${code}`)
-      expect(response?.status === 'failed', `${name}: 异常状态 ${response?.status}`)
+      expect(response?.status === 'failed', `${name}: 异常状�?${response?.status}`)
       expect(
         MISSING_PREREQ.includes(code) || /^[A-Z_]+$/.test(code),
         `${name}: 非预期错误码 ${code}`
@@ -158,7 +153,7 @@ async function main() {
     }
 
     // ── 准备 ──
-    const created = ok(await call('project.create', { name: '族4-9 验收项目' }), 'project.create')
+    const created = ok(await call('project.create', { name: '�?-9 验收项目' }), 'project.create')
     projectId = created.meta.id
     ok(await call('project.open', { projectId }), 'project.open')
     let graphVersion = await version(projectId)
@@ -189,24 +184,24 @@ async function main() {
     )
     const imported = ok(await call('media.import', { projectId, filePath: sourceImage }), 'media.import')
 
-    // ========== 第 4 族：资源库 ==========
+    // ========== �?4 族：资源�?==========
     const lib = family('family-4-library')
     const folder = await lib('library.folder.create', async () => {
-      const data = ok(await call('library.folder.create', { name: '验收文件夹' }), 'folder.create')
+      const data = ok(await call('library.folder.create', { name: '验收文件�? }), 'folder.create')
       expect(data.folderId, '缺文件夹 ID')
       return { folderId: data.folderId }
     })
-    await lib('library.folder.list 含新文件夹', async () => {
+    await lib('library.folder.list 含新文件�?, async () => {
       const data = ok(await call('library.folder.list', {}), 'folder.list')
-      expect((data.folders ?? []).some((item) => item.folderId === folder?.folderId), '列表缺新文件夹')
+      expect((data.folders ?? []).some((item) => item.folderId === folder?.folderId), '列表缺新文件�?)
       return { total: (data.folders ?? []).length }
     })
     await lib('library.folder.rename', async () => {
-      ok(await call('library.folder.rename', { folderId: folder?.folderId, name: '验收文件夹-改' }), 'folder.rename')
+      ok(await call('library.folder.rename', { folderId: folder?.folderId, name: '验收文件�?�? }), 'folder.rename')
       return {}
     })
     const collection = await lib('library.collection.create', async () => {
-      const data = ok(await call('library.collection.create', { name: '验收收藏集' }), 'collection.create')
+      const data = ok(await call('library.collection.create', { name: '验收收藏�? }), 'collection.create')
       expect(data.collectionId, '缺收藏集 ID')
       return { collectionId: data.collectionId }
     })
@@ -219,7 +214,7 @@ async function main() {
       const data = ok(await call('library.category.list', {}), 'category.list')
       return { total: (data.categories ?? []).length }
     })
-    const resource = await lib('library.resource.create 建文本资源', async () => {
+    const resource = await lib('library.resource.create 建文本资�?, async () => {
       const data = ok(
         await call('library.resource.create', {
           title: '验收资源',
@@ -229,7 +224,7 @@ async function main() {
         'resource.create'
       )
       const id = data.resourceId
-      expect(id, '缺资源 ID')
+      expect(id, '缺资�?ID')
       return { resourceId: id }
     })
     await lib('library.resource.get', async () => {
@@ -237,12 +232,12 @@ async function main() {
         await call('library.resource.get', { resourceId: resource?.resourceId }),
         'resource.get'
       )
-      expect((data.components ?? []).length >= 1, '缺组件')
+      expect((data.components ?? []).length >= 1, '缺组�?)
       return { components: data.components.length }
     })
     await lib('library.resource.list', async () => {
       const data = ok(await call('library.resource.list', { limit: 20 }), 'resource.list')
-      expect((data.items ?? []).some((item) => item.resourceId === resource?.resourceId), '列表缺资源')
+      expect((data.items ?? []).some((item) => item.resourceId === resource?.resourceId), '列表缺资�?)
       return { total: data.total }
     })
     await lib('library.search 能检索到', async () => {
@@ -284,7 +279,7 @@ async function main() {
       const response = await call('library.captureProjectMedia', {
         projectId,
         mediaId: imported.mediaId,
-        title: '采集的媒体'
+        title: '采集的媒�?
       })
       const result = wire(response, 'captureProjectMedia')
       return result
@@ -293,13 +288,13 @@ async function main() {
       if (!textNodeId) throw new Error('缺少文本节点')
       const response = await call('library.captureProjectNodes', {
         projectId,
-        title: '采集的节点',
+        title: '采集的节�?,
         nodes: [{ nodeId: textNodeId, title: '文本节点', nodeType: 'text', text: '' }]
       })
       return wire(response, 'captureProjectNodes')
     })
     let libraryPackage = null
-    await lib('library.export 资源包导出（指纹自洽）', async () => {
+    await lib('library.export 资源包导出（指纹自洽�?, async () => {
       const data = ok(
         await call('library.export', { fileName: 'accept.canvaslib' }),
         'library.export'
@@ -312,12 +307,12 @@ async function main() {
       libraryPackage = name
       return { fileName: name, resourceCount: data.resourceCount }
     })
-    await lib('library.import 导入刚导出的资源包', async () => {
+    await lib('library.import 导入刚导出的资源�?, async () => {
       expect(libraryPackage, '缺资源包')
       const response = await call('library.import', { filePath: libraryPackage })
       return wire(response, 'library.import')
     })
-    await lib('library.resource.materialize（物化到画布）', async () => {
+    await lib('library.resource.materialize（物化到画布�?, async () => {
       const response = await call('library.resource.materialize', {
         projectId,
         resourceId: resource?.resourceId
@@ -328,11 +323,11 @@ async function main() {
       const response = await call('library.materialization.discard', { projectId })
       return wire(response, 'materialization.discard')
     })
-    await lib('node.library.* 形态检查（需 chat/agent 模板）', async () => {
+    await lib('node.library.* 形态检查（需 chat/agent 模板�?, async () => {
       const codes = []
       for (const [operationId, input] of [
         ['node.library.list', {}],
-        ['node.library.save', { projectId, expectedGraphVersion: graphVersion, nodeId: textNodeId, name: '节点库条目' }],
+        ['node.library.save', { projectId, expectedGraphVersion: graphVersion, nodeId: textNodeId, name: '节点库条�? }],
         ['node.library.search', { query: '节点' }],
         ['node.library.get', { entryId: 'missing-entry' }],
         ['node.library.update', { entryId: 'missing-entry', name: 'x' }],
@@ -345,7 +340,7 @@ async function main() {
         codes.push(operationId + '=' + (result.code ?? 'completed'))
         if (response?.status === 'completed') graphVersion = await version(projectId)
       }
-      report.notes.push('node.library.* 实际返回：' + codes.join(', '))
+      report.notes.push('node.library.* 实际返回�? + codes.join(', '))
       return { codes }
     })
     await lib('library.resource.delete_many', async () => {
@@ -356,9 +351,9 @@ async function main() {
       return result
     })
 
-    // ========== 第 6 族：模型与环境（放在 Flow 前，因为 Flow 需要模型绑定） ==========
+    // ========== �?6 族：模型与环境（放在 Flow 前，因为 Flow 需要模型绑定） ==========
     const model = family('family-6-model')
-    await model('model.connection.save（假密钥，不回显）', async () => {
+    await model('model.connection.save（假密钥，不回显�?, async () => {
       const data = ok(
         await call('model.connection.save', {
           id: 'acc-conn',
@@ -441,13 +436,13 @@ async function main() {
       const engine = ok(await call('environment.videoEngine.status', {}), 'videoEngine.status')
       return { python: local.python?.available, engineReady: engine.ready, phase: local.videoEngine?.phase }
     })
-    await model('environment.videoEngine.install 未确认必须拒绝', async () => {
+    await model('environment.videoEngine.install 未确认必须拒�?, async () => {
       const response = await call('environment.videoEngine.install', {})
-      expect(response?.status === 'failed', '未确认却启动了安装')
-      expect(response.error?.code === 'INSTALL_CONFIRM_REQUIRED', `错误码=${response.error?.code}`)
+      expect(response?.status === 'failed', '未确认却启动了安�?)
+      expect(response.error?.code === 'INSTALL_CONFIRM_REQUIRED', `错误�?${response.error?.code}`)
       return { code: response.error.code }
     })
-    await model('model.validate / provider.testConnection 未确认必须拒绝', async () => {
+    await model('model.validate / provider.testConnection 未确认必须拒�?, async () => {
       const validate = await call('model.validate', {
         connectionId: 'acc-conn',
         modelDefinitionId: 'acc-model',
@@ -458,7 +453,7 @@ async function main() {
       expect(test.error?.code === 'NETWORK_CONFIRM_REQUIRED', `testConnection=${test.error?.code}`)
       return { validate: validate.error.code, test: test.error.code }
     })
-    await model('provider.package.* 形态检查', async () => {
+    await model('provider.package.* 形态检�?, async () => {
       const codes = []
       for (const [operationId, input] of [
         ['provider.package.export', { fileName: 'x.cskeys', password: 'pw' }],
@@ -469,7 +464,7 @@ async function main() {
         const result = wire(response, operationId)
         codes.push(operationId + '=' + (result.code ?? 'completed'))
       }
-      report.notes.push('provider.package.* 实际返回：' + codes.join(', '))
+      report.notes.push('provider.package.* 实际返回�? + codes.join(', '))
       return { codes }
     })
     await model('model.definition.deleteMany / connection.delete 清理', async () => {
@@ -482,7 +477,7 @@ async function main() {
       return wire(response, 'skill.list')
     })
 
-    // ========== 第 5 族：Agent Flow ==========
+    // ========== �?5 族：Agent Flow ==========
     const flow = family('family-5-flow')
     await flow('flowAgent.inspect', async () => {
       if (!agentNodeId) throw new Error('缺少 Agent 节点')
@@ -521,10 +516,8 @@ async function main() {
         text: '验收备注'
       })
       if (response?.status === 'unknown') {
-        // 写操作在"已准入但宿主抛错"时按账本语义返回 unknown（不谎报成功）。
-        // 但业务前置缺失本应给稳定码，这里记为可用性问题。
-        report.notes.push(
-          'flowAgent.cooperate 缺任务时返回 unknown（而非稳定的 AGENT_TASK_MISSING）：调用方无法区分"没发生"和"不确定"'
+        // 写操作在"已准入但宿主抛错"时按账本语义返回 unknown（不谎报成功）�?        // 但业务前置缺失本应给稳定码，这里记为可用性问题�?        report.notes.push(
+          'flowAgent.cooperate 缺任务时返回 unknown（而非稳定�?AGENT_TASK_MISSING）：调用方无法区�?没发�?�?不确�?'
         )
         return { status: 'unknown' }
       }
@@ -549,7 +542,7 @@ async function main() {
         'review'
       )
     })
-    await flow('flow.command 六项形态检查', async () => {
+    await flow('flow.command 六项形态检�?, async () => {
       const codes = []
       for (const [operationId, input] of [
         ['flow.command.lookup', { projectId }],
@@ -563,7 +556,7 @@ async function main() {
         const result = wire(response, operationId)
         codes.push(operationId + '=' + (result.code ?? 'completed'))
       }
-      report.notes.push('flow.command.* 实际返回：' + codes.join(', '))
+      report.notes.push('flow.command.* 实际返回�? + codes.join(', '))
       return { codes }
     })
     await flow('flowAsset.list / read / submit', async () => {
@@ -591,7 +584,7 @@ async function main() {
       return { prepare, status, continue: cont }
     })
 
-    // ========== 第 9 族：执行与对话 ==========
+    // ========== �?9 族：执行与对�?==========
     const exec = family('family-9-execution-chat')
     await exec('node.execute（文本节点本地执行）+ run.get/wait + output.get', async () => {
       if (!textNodeId) throw new Error('缺少文本节点')
@@ -628,7 +621,7 @@ async function main() {
         const result = wire(response, operationId)
         codes.push(operationId + '=' + (result.code ?? 'completed'))
       }
-      report.notes.push('chat.* 实际返回：' + codes.join(', '))
+      report.notes.push('chat.* 实际返回�? + codes.join(', '))
       return { codes }
     })
   } catch (error) {
@@ -649,7 +642,7 @@ async function main() {
     try {
       await rm(directory, { recursive: true, force: true })
     } catch {}
-    console.log(`\n族 4/5/6/9 验收：步骤=${report.total} 通过=${report.passed} 失败=${report.failed}`)
+    console.log(`\n�?4/5/6/9 验收：步�?${report.total} 通过=${report.passed} 失败=${report.failed}`)
     for (const [name, entries] of Object.entries(report.families)) {
       console.log(`  ${name}: ${entries.filter((e) => e.ok).length}/${entries.length}`)
     }

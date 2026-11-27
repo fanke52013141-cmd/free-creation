@@ -33,6 +33,7 @@ import { ModalShell } from '../../../components/ModalShell'
 import { AppSelect } from '../../../components/AppSelect'
 import './image-edit-model-row.css'
 import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../registry'
+import { useMediaDisplayUrl } from '../../../canvas/use-media-display-url'
 import { selectedSuccessMediaResult } from '@shared/engine/deterministic-projections'
 import {
   clearSelectedMediaHistory,
@@ -84,6 +85,7 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
   // 操作节点不持久化 mediaPath：卡内结果区读本次成功运行的 nodeResult。
   const resultMedia = selectedSuccessMediaResult(shape)
   const outputMediaPath = resultMedia?.mediaPath ?? ''
+  const outputDisplayUrl = useMediaDisplayUrl(outputMediaPath, 680)
 
   // 卸载时清理 tldraw 编辑态，防止键盘事件被画布扣留。
   useEffect(() => {
@@ -165,7 +167,13 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
           )
         }
       >
-        <img src={mediaUrl(outputMediaPath)} alt={shape.props.title} draggable={false} />
+        <img
+          src={outputDisplayUrl}
+          alt={shape.props.title}
+          draggable={false}
+          decoding="async"
+          loading="lazy"
+        />
       </div>
       <div className="node-media-actions">
         <button

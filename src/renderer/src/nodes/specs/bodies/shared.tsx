@@ -5,14 +5,22 @@
 // 本文件同时导出工具函数（非组件）与少量 UI 组件（ModelSelect/NoModelHint），
 // 是共享模块而非单一组件文件，故豁免 React Fast Refresh 的组件-only 规则。
 /* eslint-disable react-refresh/only-export-components */
-import { createShapeId, stopEventPropagation, useValue, type Editor, type TLShapeId } from 'tldraw'
+import {
+  createShapeId,
+  stopEventPropagation,
+  useEditor,
+  useValue,
+  type Editor,
+  type TLShapeId
+} from 'tldraw'
 import { findNodeContinuationPlacement } from '../../../canvas/node-placement'
+import { canvasPerfPolicy } from '../../../canvas/canvas-performance-tier'
 import { modelsByModality } from '../../../stores/gateway'
 import type { NodeCardShape, NodeCardProps } from '../../../canvas/NodeCardShape'
 import { countIncomingConnections, createEdge } from '../../../canvas/graph'
 import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
-import { getNodeType, mediaUrl } from '../../registry'
+import { getNodeType, mediaThumbUrl, mediaUrl } from '../../registry'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
 import { NodeHeaderActions, NodeIdentity } from '../../../canvas/NodePresentation'
@@ -635,6 +643,12 @@ export function MediaResultGrid({
   /** 结果的业务位置标签，例如拆图的「R2 · C3」。 */
   itemLabel?: (index: number) => string | undefined
 }): React.JSX.Element | null {
+  const editor = useEditor()
+  const useThumb = useValue(
+    'media result grid thumb mode',
+    () => canvasPerfPolicy(editor).useMediaThumbnails && editor.getCamera().z <= 1.5,
+    [editor]
+  )
   // 滚轮由画布统一路由；结果网格不再自行截获事件。
   const collection = parseMediaResultCollection(
     typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
@@ -712,7 +726,13 @@ export function MediaResultGrid({
               }}
             >
               {kind === 'image' ? (
-                <img src={mediaUrl(item.mediaPath)} alt="生成结果" draggable={false} />
+                <img
+                  src={useThumb ? mediaThumbUrl(item.mediaPath, 680) : mediaUrl(item.mediaPath)}
+                  alt="生成结果"
+                  draggable={false}
+                  decoding="async"
+                  loading="lazy"
+                />
               ) : kind === 'video' ? (
                 <video src={mediaUrl(item.mediaPath)} preload="metadata" muted playsInline />
               ) : (

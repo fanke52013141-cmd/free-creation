@@ -1,5 +1,16 @@
 # 日志覆盖清单
 
+## 2026-11-27（续）：外部上帝 Agent 优先优化（MCP core 档位 + 退役内置 builder + graph.patch 幽灵预览方案 A）
+
+- **影响范围**：`src/local-agent/mcp-profile.ts` & `src/local-agent/index.ts`（MCP 分层发现）、`src/main/agent-access/graph-patch-preview.ts` & `service.ts`（`graph.patch.propose` / `graph.patch.confirm` / `graph.patch.discard`）、`src/main/ipc/flow-agents.ipc.ts` & `FlowGraphPreviewPanel.tsx`（GUI 幽灵预览确认与取消）、`agentFlow.tsx` & `FlowBuilderControls.tsx`（退役内置 `builder` 创建入口）。
+- **复用事件**：
+  - 外部 `graph.patch.propose` / `confirm` / `discard` 复用公共 `agent.access.*` 操作开始/终态；
+  - `graph.patch.confirm` 人工确认未生效时复用唯一终态 `agent.human_decision.rejected`（`operation: 'graph.patch.confirm'`、稳定 `code`/`reason`）；确认通过后复用 `executeGraphPatch` 既有保存与核对链路；
+  - GUI 预览面板的 `prepare-patch` / `mark-patch-committed` / `discard` 复用 `IPC.flowAgents.graph` 既有 `agent.desktop.started/completed/failed` 诊断；
+  - MCP `core` 档位元工具 `canvas_ops_search` / `canvas_ops_schema` 为纯静态注册表只读查询，`canvas_ops_call` 透传既有 `callLocalOperation`，不新增业务事件或重复终态。
+- **脱敏**：不记录节点正文、提示词、补丁操作明文或确认框业务内容，仅记录稳定操作 ID、阶段与错误码；日志写入失败不改变业务结果。
+- **验证与未覆盖边界**：覆盖 `test/local-agent-mcp-core-profile.test.ts`、`test/graph-patch-preview-access.test.ts`、`test/local-agent-interactive-timeout.test.ts`、`npm run typecheck`、`npm run guard:agent-parity`、`npm run verify:agent-access`、`npm run verify:specs`；真实外部 MCP 客户端（Claude Code / Cursor）与真实付费模型端到端仍需在桌面真机实测。
+
 ## 2026-11-27：节点流深度审查与执行/恢复修复
 
 - **影响范围**：composite 编辑保存/重开、画布等待续跑、公开输出落账；Agent Flow 图路由、协作等待/返工、checkpoint pending writes 迁移 M37。属于执行、数据持久化与恢复路径变更。

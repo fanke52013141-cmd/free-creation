@@ -187,7 +187,18 @@ const api = {
     ipcRenderer.invoke(IPC.flowAgents.build, input),
   graphFlowAgent: (
     input: {
-      action: 'list' | 'preview' | 'authorize' | 'confirm' | 'discard' | 'restore-preview' | 'restore-verify' | 'export-preview' | 'export-publish'
+      action:
+        | 'list'
+        | 'preview'
+        | 'authorize'
+        | 'confirm'
+        | 'discard'
+        | 'restore-preview'
+        | 'restore-verify'
+        | 'export-preview'
+        | 'export-publish'
+        | 'prepare-patch'
+        | 'mark-patch-committed'
       projectId: string
       buildId?: string
       expectedRevision?: string

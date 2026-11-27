@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useEditor, type TLShapeId } from 'tldraw'
+import { useEditor } from 'tldraw'
 import type { NodeBodyProps } from '../registry'
 import type { BuildPreview } from '@shared/agent-flow/builder'
 import { useAppStore } from '../../stores/app'
@@ -7,7 +7,6 @@ import { NodeIdentity, NodePrimaryButton } from '../../canvas/NodePresentation'
 import { ensureCanvasSaved } from '../../canvas/flow-asset-actions'
 import { commitFlowBuild } from '../../canvas/flow-build-actions'
 import { setFlowBuildPreview } from '../../canvas/flow-build-preview-store'
-import { runNodeManually } from '../../engine/executor'
 
 const capabilityLabel: Record<string, string> = {
   'text-template@1': '文本模板',
@@ -53,7 +52,7 @@ export function FlowBuilderControls({ shape }: Pick<NodeBodyProps, 'shape'>): Re
       clearTimeout(timer)
     }
   }, [projectId, shape.id])
-  const act = async (action: 'propose' | 'commit' | 'discard'): Promise<void> => {
+  const act = async (action: 'commit' | 'discard'): Promise<void> => {
     if (!projectId || busy) return
     setBusy(true)
     setError('')
@@ -63,37 +62,13 @@ export function FlowBuilderControls({ shape }: Pick<NodeBodyProps, 'shape'>): Re
         const result = await commitFlowBuild(editor, preview)
         setPreview(result)
         setFlowBuildPreview(projectId, shape.id, result)
-      } else if (action === 'propose') {
-        const run = await runNodeManually(editor, projectId, [], shape.id)
-        if (run.status === 'failed') throw new Error(run.reason ?? '建图提案失败')
-        const reply = await window.api.buildFlowAgent({
-          projectId,
-          nodeId: shape.id,
-          action: 'inspect'
-        })
-        if (!reply.ok) throw new Error(reply.error.message)
-        setPreview(reply.data)
-        setFlowBuildPreview(projectId, shape.id, reply.data)
-        if (reply.data?.state === 'preview') {
-          const bounds = [
-            ...reply.data.nodes.map((node) => ({ x: node.x, y: node.y, w: 340, h: 260 })),
-            editor.getShapePageBounds(shape.id as TLShapeId)
-          ].filter((item): item is { x: number; y: number; w: number; h: number } => !!item)
-          if (bounds.length) {
-            const x = Math.min(...bounds.map((item) => item.x)),
-              y = Math.min(...bounds.map((item) => item.y)),
-              maxX = Math.max(...bounds.map((item) => item.x + item.w)),
-              maxY = Math.max(...bounds.map((item) => item.y + item.h))
-            editor.zoomToBounds({ x, y, w: maxX - x, h: maxY - y }, { inset: 80 })
-          }
-        }
       } else {
         const reply = await window.api.buildFlowAgent({
           projectId,
           nodeId: shape.id,
           action: 'discard',
           requestId: crypto.randomUUID(),
-          ...(action === 'discard' && preview ? { buildId: preview.buildId } : {})
+          ...(preview ? { buildId: preview.buildId } : {})
         })
         if (!reply.ok) throw new Error(reply.error.message)
         setPreview(reply.data)
@@ -108,7 +83,9 @@ export function FlowBuilderControls({ shape }: Pick<NodeBodyProps, 'shape'>): Re
   return (
     <>
       <NodeIdentity>
-        <p className="agent-flow-pending">预览只提出图变更，提交后由主 Agent 启动。</p>
+        <p className="agent-flow-pending">
+          内置搭建 Agent 已退役：请通过外部 Agent（MCP / CLI）使用 graph.patch.propose 提议建图并在画布确认。
+        </p>
         {preview && (
           <>
             <p className="agent-flow-pending">
@@ -150,7 +127,7 @@ export function FlowBuilderControls({ shape }: Pick<NodeBodyProps, 'shape'>): Re
           </p>
         )}
       </NodeIdentity>
-      {preview?.state === 'preview' ? (
+      {preview?.state === 'preview' && (
         <>
           <NodePrimaryButton disabled={busy} onClick={() => void act('commit')}>
             {busy ? '处理中' : '提交图变更'}
@@ -159,10 +136,6 @@ export function FlowBuilderControls({ shape }: Pick<NodeBodyProps, 'shape'>): Re
             取消预览
           </NodePrimaryButton>
         </>
-      ) : (
-        <NodePrimaryButton disabled={busy || !projectId} onClick={() => void act('propose')}>
-          {busy ? '生成预览中' : '生成建图预览'}
-        </NodePrimaryButton>
       )}
     </>
   )

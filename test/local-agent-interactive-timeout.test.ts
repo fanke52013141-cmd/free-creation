@@ -13,6 +13,7 @@ import {
 // 造成「客户端以为失败、服务端后来生效」的错位。
 const HUMAN_DECISION_OPERATIONS = [
   'flowGraph.confirm',
+  'graph.patch.confirm',
   'flowAgent.build.commit',
   'humanTask.submit',
   'composite.run.submitHuman',

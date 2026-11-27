@@ -7,6 +7,7 @@ import {
 import { useEditor } from 'tldraw'
 import { stopEventPropagation } from 'tldraw'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
+import { useMediaDisplayUrl } from '../../../canvas/use-media-display-url'
 import { ImageContinuationActions, MediaFileActions, pickImportedAsset, useClickGuard } from './shared'
 import { useAppStore } from '../../../stores/app'
 import { toast } from '../../../stores/toast'
@@ -17,6 +18,7 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const guard = useClickGuard()
   const editor = useEditor()
   const project = useAppStore((s) => s.currentProject)
+  const displayUrl = useMediaDisplayUrl(shape.props.mediaPath, 680)
 
   const chooseAsset = async (): Promise<void> => {
     if (!project) return toast('项目未就绪')
@@ -84,7 +86,13 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           )
         }
       >
-        <img src={mediaUrl(shape.props.mediaPath)} alt={shape.props.title} draggable={false} />
+        <img
+          src={displayUrl}
+          alt={shape.props.title}
+          draggable={false}
+          decoding="async"
+          loading="lazy"
+        />
       </div>
       <NodeFooterActions>
         <ImageContinuationActions

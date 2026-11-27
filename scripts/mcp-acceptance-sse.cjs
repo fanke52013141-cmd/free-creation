@@ -1,15 +1,9 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-unused-vars, no-empty */
 /**
- * MCP SSE 传输验收：给只支持 SSE 的客户端用。
- *
- * 断言：
- * 1) `mcp serve --transport sse` 启动后把 {url, token} 打到 stdout；
- * 2) 真实 SSE 客户端能用该 url 与 Authorization 请求头连上，tools/list 与契约快照一致；
+ * MCP SSE 传输验收：给只支�?SSE 的客户端用�? *
+ * 断言�? * 1) `mcp serve --transport sse` 启动后把 {url, token} 打到 stdout�? * 2) 真实 SSE 客户端能用该 url �?Authorization 请求头连上，tools/list 与契约快照一致；
  * 3) 能真实调用一个只读操作（capability.list）；
- * 4) **缺失/错误 Authorization 请求头必须 401，带 query token 不再足够**；
- * 5) Host/Origin 校验仍然可用（回归）。
- * 6) stdio 传输仍然可用（回归）。
- */
+ * 4) **缺失/错误 Authorization 请求头必�?401，带 query token 不再足够**�? * 5) Host/Origin 校验仍然可用（回归）�? * 6) stdio 传输仍然可用（回归）�? */
 const { spawn } = require('node:child_process')
 const { cp, mkdir, mkdtemp, readFile, rm, writeFile } = require('node:fs/promises')
 const { existsSync, readFileSync } = require('node:fs')
@@ -24,8 +18,7 @@ const { SSEClientTransport } = require('@modelcontextprotocol/sdk/client/sse.js'
 const electron = require('electron')
 const appRoot = resolve('.')
 const cliPath = join(appRoot, 'out/main/local-agent.js')
-// 期望工具数以门禁契约快照为唯一事实源，不再硬编码。
-const expectedToolCount = JSON.parse(readFileSync(join(appRoot, 'docs/local-agent-access/generated/contracts.json'), 'utf8')).operations.length
+// 期望工具数以门禁契约快照为唯一事实源，不再硬编码�?const expectedToolCount = JSON.parse(readFileSync(join(appRoot, 'docs/local-agent-access/generated/contracts.json'), 'utf8')).operations.length
 const key = () => `${Date.now()}:${randomUUID()}`
 const licensedSecurityDir = (() => {
   const roaming = process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming')
@@ -68,7 +61,7 @@ async function main() {
   const startSseProbe = () => {
     const processHandle = spawn(
       electron,
-      [cliPath, 'mcp', 'serve', '--transport', 'sse', '--port', '0', '--data-dir', directory],
+      [cliPath, 'mcp', 'serve', '--profile', 'full', '--transport', 'sse', '--port', '0', '--data-dir', directory],
       { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }
     )
     processHandle.stderr.resume()
@@ -111,45 +104,45 @@ async function main() {
       }
     }
 
-    const started = await check('SSE 服务启动并打印发现信息', async () => {
+    const started = await check('SSE 服务启动并打印发现信�?, async () => {
       discovery = await startSseProbe()
       const parsed = new URL(discovery.url)
-      expect(parsed.protocol === 'http:' && parsed.hostname === '127.0.0.1', 'SSE 未绑定 loopback')
+      expect(parsed.protocol === 'http:' && parsed.hostname === '127.0.0.1', 'SSE 未绑�?loopback')
       expect(parsed.pathname === '/sse' && !parsed.search, 'SSE 发现 URL 不应携带 query')
       return { url: discovery.url, tokenLength: discoveryTokenLength }
     })
     expect(started, 'SSE 服务没起来，后续无法继续')
 
-    await check('缺失 Authorization 请求头必须 401', async () => {
+    await check('缺失 Authorization 请求头必�?401', async () => {
       const url = new URL(discovery.url)
       const response = await fetch(url.origin + '/sse', { method: 'GET' })
-      expect(response.status === 401, `期望 401，实际 ${response.status}`)
+      expect(response.status === 401, `期望 401，实�?${response.status}`)
       expect(response.headers.get('www-authenticate')?.startsWith('Bearer'), '缺少 Bearer challenge')
       await response.body?.cancel()
       return { status: response.status }
     })
 
-    await check('错误 Authorization 请求头必须 401', async () => {
+    await check('错误 Authorization 请求头必�?401', async () => {
       const url = new URL(discovery.url)
       const response = await fetch(url.origin + '/sse', {
         method: 'GET',
         headers: { Authorization: 'Bearer wrong-token' }
       })
-      expect(response.status === 401, `期望 401，实际 ${response.status}`)
+      expect(response.status === 401, `期望 401，实�?${response.status}`)
       await response.body?.cancel()
       return { status: response.status }
     })
 
-    await check('带 query token 的请求必须 401', async () => {
+    await check('�?query token 的请求必�?401', async () => {
       const url = new URL(discovery.url)
       url.searchParams.set('token', discovery.token)
       const response = await fetch(url, { method: 'GET' })
-      expect(response.status === 401, `期望 401，实际 ${response.status}`)
+      expect(response.status === 401, `期望 401，实�?${response.status}`)
       await response.body?.cancel()
       return { status: response.status }
     })
 
-    await check('Host 与 Origin 校验保持生效', async () => {
+    await check('Host �?Origin 校验保持生效', async () => {
       const url = new URL(discovery.url)
       const { request: httpRequest } = require('node:http')
       const badHostStatus = await new Promise((done, reject) => {
@@ -164,21 +157,21 @@ async function main() {
         req.once('error', reject)
         req.end()
       })
-      expect(badHostStatus === 403, `Host 期望 403，实际 ${badHostStatus}`)
+      expect(badHostStatus === 403, `Host 期望 403，实�?${badHostStatus}`)
       const badHost = { status: badHostStatus }
       const badOrigin = await fetch(url, {
         method: 'GET',
         headers: { Authorization: `Bearer ${discovery.token}`, Origin: 'https://evil.invalid' }
       })
-      expect(badOrigin.status === 403, `Origin 期望 403，实际 ${badOrigin.status}`)
+      expect(badOrigin.status === 403, `Origin 期望 403，实�?${badOrigin.status}`)
       await badOrigin.body?.cancel()
       return { host: badHost.status, origin: badOrigin.status }
     })
 
-    await check(`真实 SSE 客户端可连上并列出 ${expectedToolCount} 项工具`, async () => {
+    await check(`真实 SSE 客户端可连上并列�?${expectedToolCount} 项工具`, async () => {
       probe = spawn(
         electron,
-        [cliPath, 'mcp', 'serve', '--transport', 'sse', '--port', '0', '--data-dir', directory],
+        [cliPath, 'mcp', 'serve', '--profile', 'full', '--transport', 'sse', '--port', '0', '--data-dir', directory],
         { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }
       )
       probe.stderr.resume()
@@ -213,7 +206,7 @@ async function main() {
       try {
         await sseClient.connect(transport)
         const tools = await sseClient.listTools()
-        expect(tools.tools.length === expectedToolCount, `工具数=${tools.tools.length}，期望 ${expectedToolCount}`)
+        expect(tools.tools.length === expectedToolCount, `工具�?${tools.tools.length}，期�?${expectedToolCount}`)
         const response = await sseClient.callTool({ name: 'capability_list', arguments: { input: {} } })
         const structured = response.structuredContent
         expect(structured?.status === 'completed', 'capability.list 未成功：' + JSON.stringify(structured?.error))
@@ -229,7 +222,7 @@ async function main() {
     await check('stdio 传输仍然可用', async () => {
       const transport = new StdioClientTransport({
         command: electron,
-        args: [cliPath, 'mcp', 'serve', '--transport', 'stdio', '--data-dir', directory],
+        args: [cliPath, 'mcp', 'serve', '--profile', 'full', '--transport', 'stdio', '--data-dir', directory],
         env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
         stderr: 'pipe'
       })
@@ -238,7 +231,7 @@ async function main() {
         await stdioClient.connect(transport)
         const response = await stdioClient.callTool({ name: 'capability_list', arguments: { input: {} } })
         const structured = response.structuredContent
-        expect(structured?.status === 'completed', 'stdio capability.list 未成功')
+        expect(structured?.status === 'completed', 'stdio capability.list 未成�?)
         return { operations: structured.data.operations.length }
       } finally {
         await stdioClient.close().catch(() => undefined)
@@ -261,7 +254,7 @@ async function main() {
     try {
       await rm(directory, { recursive: true, force: true })
     } catch {}
-    console.log(`\nMCP SSE 传输验收：检查=${report.total} 通过=${report.passed} 失败=${report.failed}`)
+    console.log(`\nMCP SSE 传输验收：检�?${report.total} 通过=${report.passed} 失败=${report.failed}`)
     for (const failure of report.failures.slice(0, 12)) console.log('  FAIL ' + failure.name + ' :: ' + failure.detail)
     console.log('报告：qa/local-agent-access/mcp-sse-transport/report.json')
     process.exit(report.failed === 0 ? 0 : 1)

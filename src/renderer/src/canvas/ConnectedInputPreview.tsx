@@ -5,6 +5,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Icon, type IconName } from '../components/Icon'
 import { mediaUrl } from '../nodes/registry'
+import { useMediaDisplayUrl } from './use-media-display-url'
+import { VideoThumb } from '../nodes/specs/bodies/media-thumbnail'
 import type { NodeCardShape } from './NodeCardShape'
 import { readConnectedNodeInputs, type ConnectedNodeInput } from './graph'
 import { referenceLayout } from './reference-layout'
@@ -92,6 +94,10 @@ function iconOf(input: ConnectedNodeInput): IconName {
 function ReferenceVisual({ input, sequence }: { input: ConnectedNodeInput; sequence: number | undefined }): React.JSX.Element {
   const [failed, setFailed] = useState(false)
   const value = input.value
+  const thumbUrl = useMediaDisplayUrl(
+    value?.kind === 'image' ? value.mediaPath : undefined,
+    128
+  )
   if (value?.kind === 'image' || value?.kind === 'video')
     return (
       <>
@@ -99,19 +105,15 @@ function ReferenceVisual({ input, sequence }: { input: ConnectedNodeInput; seque
           <Icon name="warning" size={16} />
         ) : value.kind === 'image' ? (
           <img
-            src={mediaUrl(value.mediaPath)}
+            src={thumbUrl}
             alt=""
             draggable={false}
+            decoding="async"
+            loading="lazy"
             onError={() => setFailed(true)}
           />
         ) : (
-          <video
-            src={mediaUrl(value.mediaPath)}
-            preload="metadata"
-            muted
-            playsInline
-            onError={() => setFailed(true)}
-          />
+          <VideoThumb path={value.mediaPath} alt="" />
         )}
         {value.kind === 'video' && <Icon name="play" size={12} className="reference-video-mark" />}
       </>

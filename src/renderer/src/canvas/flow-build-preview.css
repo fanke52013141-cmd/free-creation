@@ -87,3 +87,43 @@
   font-size: 11px;
   line-height: 1.3;
 }
+
+.flow-build-preview-diff {
+  position: absolute;
+  box-sizing: border-box;
+  border-radius: var(--node-radius);
+  pointer-events: none;
+}
+
+.flow-build-preview-diff.is-update {
+  border: 2px dashed #38bdf8;
+  background: rgba(56, 189, 248, 0.08);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);
+}
+
+.flow-build-preview-diff.is-delete {
+  border: 2px dashed #f87171;
+  background: rgba(248, 113, 113, 0.14);
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.28);
+}
+
+.flow-build-preview-diff-badge {
+  position: absolute;
+  top: -10px;
+  right: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  color: #0b0d12;
+}
+
+.flow-build-preview-diff-badge.is-update {
+  background: #38bdf8;
+}
+
+.flow-build-preview-diff-badge.is-delete {
+  background: #f87171;
+}

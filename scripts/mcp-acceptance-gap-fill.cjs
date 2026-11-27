@@ -1,14 +1,9 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type, no-empty */
 /**
- * MCP 验收 · 补齐最后 10 项（前几族未触及的操作）。
- *
- * 覆盖：skill.install、library.create_resource（别名）、library.resource.preview_files、
- * library.resource.delete、library.folder.delete、library.category.save、history.restore、
- * history.recovery.resolve、flowAgent.build.commit、model.definition.delete。
- *
- * 判定沿用前几族：completed 或"稳定业务码（缺前置/需参数）"都算接通；
- * 异常/超时/纯文本错误才算失败。
- */
+ * MCP 验收 · 补齐最�?10 项（前几族未触及的操作）�? *
+ * 覆盖：skill.install、library.create_resource（别名）、library.resource.preview_files�? * library.resource.delete、library.folder.delete、library.category.save、history.restore�? * history.recovery.resolve、flowAgent.build.commit、model.definition.delete�? *
+ * 判定沿用前几族：completed �?稳定业务码（缺前�?需参数�?都算接通；
+ * 异常/超时/纯文本错误才算失败�? */
 const { _electron } = require('playwright')
 const { cp, mkdir, mkdtemp, readFile, writeFile, rm } = require('node:fs/promises')
 const { existsSync } = require('node:fs')
@@ -74,7 +69,7 @@ async function main() {
     }
     const transport = new StdioClientTransport({
       command: electron,
-      args: [cliPath, 'mcp', 'serve', '--stdio', '--data-dir', directory],
+      args: [cliPath, 'mcp', 'serve', '--profile', 'full', '--stdio', '--data-dir', directory],
       env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
       stderr: 'pipe'
     })
@@ -101,7 +96,7 @@ async function main() {
       if (response?.status === 'completed') return { completed: true, data: response.data }
       const code = response?.error?.code ?? ''
       expect(!String(code).startsWith('PLAIN_TEXT:'), `${name}: 协议层纯文本错误`)
-      expect(response?.status === 'failed' || response?.status === 'unknown', `${name}: 异常状态 ${response?.status}`)
+      expect(response?.status === 'failed' || response?.status === 'unknown', `${name}: 异常状�?${response?.status}`)
       report.codes[code] = (report.codes[code] ?? 0) + 1
       return { code, status: response.status }
     }
@@ -136,7 +131,7 @@ async function main() {
     }
 
     // library.create_resource（别名）
-    const resource = await step('library.create_resource（旧别名）', async () => {
+    const resource = await step('library.create_resource（旧别名�?, async () => {
       const response = await call('library.create_resource', {
         title: '补齐资源',
         formPreset: 'prompt',
@@ -162,7 +157,7 @@ async function main() {
       return wire(response, 'category.save')
     })
     const folder = await step('library.folder.create（为删除做准备）', async () => {
-      const response = await call('library.folder.create', { name: '待删文件夹' })
+      const response = await call('library.folder.create', { name: '待删文件�? })
       if (response?.status !== 'completed') return wire(response, 'folder.create')
       return { folderId: response.data.folderId }
     })
@@ -175,8 +170,7 @@ async function main() {
       return wire(response, 'resource.delete')
     })
 
-    // 历史：建快照 → 真恢复 → 删快照
-    ok(
+    // 历史：建快照 �?真恢�?�?删快�?    ok(
       await writeRetry('graph.patch', (version) => ({
         projectId,
         expectedGraphVersion: version,
@@ -248,8 +242,7 @@ async function main() {
       return result
     })
 
-    // Flow 建图提交（无预览时应给稳定码）
-    await step('flowAgent.build.commit（无预览应稳定拒绝）', async () => {
+    // Flow 建图提交（无预览时应给稳定码�?    await step('flowAgent.build.commit（无预览应稳定拒绝）', async () => {
       const graph = ok(await call('graph.get', { projectId, view: 'latest', offset: 0, limit: 5 }), 'graph.get')
       const nodeId = (graph.nodes ?? [])[0]?.nodeId
       expect(nodeId, '缺少节点')
@@ -261,8 +254,7 @@ async function main() {
       return wire(response, 'build.commit')
     })
 
-    // 技能安装（无包源应稳定拒绝）
-    await step('skill.install（无包源应稳定拒绝）', async () => {
+    // 技能安装（无包源应稳定拒绝�?    await step('skill.install（无包源应稳定拒绝）', async () => {
       const response = await call('skill.install', { packagePath: '/nonexistent/skill.zip' })
       return wire(response, 'skill.install')
     })
@@ -283,7 +275,7 @@ async function main() {
     try {
       await rm(directory, { recursive: true, force: true })
     } catch {}
-    console.log(`\n补齐验收：步骤=${report.total} 通过=${report.passed} 失败=${report.failed}`)
+    console.log(`\n补齐验收：步�?${report.total} 通过=${report.passed} 失败=${report.failed}`)
     for (const failure of report.failures.slice(0, 12)) console.log('  FAIL ' + failure.name + ' :: ' + failure.detail)
     for (const note of report.notes) console.log('  NOTE ' + note)
     console.log(' 业务码：' + JSON.stringify(report.codes))

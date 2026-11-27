@@ -18,6 +18,9 @@ export const OPERATION_REQUIREMENTS: Record<string, readonly string[]> = {
   // 需要目标项目已在桌面画布中打开
   'graph.get': ['openProject'],
   'graph.patch': ['openProject'],
+  'graph.patch.propose': ['openProject'],
+  'graph.patch.confirm': ['openProject'],
+  'graph.patch.discard': ['openProject'],
   'node.get': ['openProject'],
   'node.execute': ['openProject', 'verifiedModel'],
   'run.get': ['openProject'],

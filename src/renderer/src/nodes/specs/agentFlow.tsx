@@ -989,7 +989,11 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
               value={String(draft.role)}
               onChange={(event) => update('role', event.target.value)}
             >
-              <option value="builder">搭建 Agent</option>
+              {draft.role === 'builder' && (
+                <option value="builder" disabled>
+                  搭建 Agent（已退役，请使用外部 Agent）
+                </option>
+              )}
               <option value="coordinator">主控 Agent</option>
               <option value="specialist">专业 Agent</option>
             </AppSelect>

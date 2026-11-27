@@ -49,6 +49,12 @@ import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import { ACCESS_ERROR_CATALOG } from '../../shared/agent-access/metadata'
 import { assertLicenseActive } from '../security/license/gate'
 import { DesktopAccessError, type AccessDesktop } from './desktop'
+import {
+  buildGraphPatchPreview,
+  getGraphPatchPreview,
+  saveGraphPatchPreview,
+  updateGraphPatchPreviewState
+} from './graph-patch-preview'
 import { runNodeLibraryOperation } from './node-library-ops'
 import {
   normalizeCompositeOutputPortId,
@@ -657,6 +663,20 @@ export class LocalAccessService {
         result = await this.executeGraphPatch(id!, active, input, () => {
           metadataCommitted = true
         })
+      } else if (operationId === 'graph.patch.propose') {
+        result = this.proposeGraphPatch(id!, active, input)
+      } else if (operationId === 'graph.patch.confirm') {
+        result = await this.confirmGraphPatch(
+          id!,
+          active,
+          input,
+          { requestId: request.requestId, traceId: base.traceId, spanId },
+          () => {
+            metadataCommitted = true
+          }
+        )
+      } else if (operationId === 'graph.patch.discard') {
+        result = this.discardGraphPatch(id!, input)
       } else if (operationId === 'graph.layout') {
         result = await this.executeGraphLayout(id!, active, input, () => {
           metadataCommitted = true
@@ -1514,6 +1534,157 @@ export class LocalAccessService {
       previousVersion: preview.previousVersion,
       version: next.version,
       graphVersion: patch.graphVersion
+    }
+  }
+
+  /** 方案 A：外部 Agent 全 34 节点画布变更提案（校验并持久化为幽灵预览，零画布写入）。 */
+  private proposeGraphPatch(
+    id: string,
+    activeId: string | null | undefined,
+    input: Record<string, unknown>
+  ): unknown {
+    if (id !== activeId || !this.options.desktop)
+      throw new AccessFailure(
+        'ACTIVE_PROJECT_REQUIRED',
+        'desktop-ownership',
+        'project.open the target canvas first, then retry graph.patch.propose'
+      )
+    const current = projects.openProject(id)
+    if (!current) throw new AccessFailure('NOT_FOUND', 'read')
+    const expectedGraphVersion = input.expectedGraphVersion as number
+    if (current.meta.graphVersion !== expectedGraphVersion) {
+      throw new AccessFailure('REVISION_CONFLICT', 'precheck', undefined, current.meta.graphVersion)
+    }
+    const patchOps = input.ops as GraphPatchOp[]
+    const resolved = resolvePatchReferences(patchOps, {
+      nodes: current.nodes,
+      edges: current.edges
+    })
+    if (!resolved.ok)
+      throw new AccessFailure(
+        'PATCH_REFERENCE_INVALID',
+        'precheck',
+        resolved.errors
+          .slice(0, 5)
+          .map((e) => `op[${e.index}]:${e.code}`)
+          .join(',')
+      )
+    const chatOpCount = patchOps.filter((op) => op.action === 'chat.patch').length
+    if (chatOpCount > 0 && chatOpCount !== patchOps.length)
+      throw new AccessFailure(
+        'MIXED_PATCH_UNSUPPORTED',
+        'precheck',
+        'chat.patch must be submitted in its own batch'
+      )
+    for (const op of patchOps) {
+      const mediaRef =
+        op.action === 'node.create' || op.action === 'node.update' ? op.media : undefined
+      if (mediaRef && !listMedia(id).some((candidate) => candidate.id === mediaRef.mediaId)) {
+        throw new AccessFailure('MEDIA_NOT_FOUND', 'precheck', mediaRef.mediaId)
+      }
+      if (op.action === 'chat.patch') {
+        const chatNode = current.nodes.find((candidate) => candidate.id === op.nodeId)
+        if (!chatNode || chatNode.type !== 'chat')
+          throw new AccessFailure('CHAT_NODE_REQUIRED', 'precheck', op.nodeId.slice(0, 60))
+      }
+      if (op.action === 'node.create' || op.action === 'node.update') {
+        const cfg = op.config as Record<string, unknown> | undefined
+        if (cfg && !cfg.manifest && typeof cfg.capabilityId === 'string' && typeof cfg.version === 'string') {
+          const isComposite =
+            op.action === 'node.create'
+              ? op.nodeType === 'composite'
+              : current.nodes.find((node) => node.id === op.nodeId)?.type === 'composite'
+          if (!isComposite)
+            throw new AccessFailure('INVALID_INPUT', 'precheck', 'composite-ref-on-non-composite')
+          const record = getCompositeVersion(cfg.capabilityId, cfg.version)
+          if (!record) throw new AccessFailure('NOT_FOUND', 'precheck', 'published-version')
+          if (typeof cfg.contentHash === 'string' && cfg.contentHash !== record.contentHash)
+            throw new AccessFailure('INVALID_INPUT', 'precheck', 'composite-content-hash-mismatch')
+        }
+      }
+    }
+    const preview = buildGraphPatchPreview({
+      projectId: id,
+      name: typeof input.name === 'string' ? input.name : undefined,
+      expectedGraphVersion,
+      autoLayout: input.autoLayout === true,
+      ops: patchOps,
+      currentFile: current
+    })
+    saveGraphPatchPreview(getDb(), preview)
+    return {
+      projectId: id,
+      previewId: preview.buildId,
+      name: preview.name,
+      state: 'preview' as const,
+      expectedGraphVersion: preview.expectedGraphVersion,
+      autoLayout: preview.autoLayout,
+      summary: preview.summary,
+      nodeCount: preview.nodes.length,
+      edgeCount: preview.edges.length
+    }
+  }
+
+  /** 方案 A：经 BL-01 桌面人工确认后，将已持久化的幽灵预览通过 executeGraphPatch 原子落盘。 */
+  private async confirmGraphPatch(
+    id: string,
+    activeId: string | null | undefined,
+    input: Record<string, unknown>,
+    diagnostics: { requestId: string; traceId: string; spanId: string },
+    markCommitted: () => void
+  ): Promise<unknown> {
+    const previewId = String(input.previewId ?? '')
+    const preview = getGraphPatchPreview(getDb(), id, previewId)
+    if (!preview) throw new AccessFailure('NOT_FOUND', 'read', 'preview-not-found')
+    if (preview.state === 'discarded')
+      throw new AccessFailure('INVALID_INPUT', 'precheck', 'preview-discarded')
+    if (preview.state === 'committed')
+      throw new AccessFailure('INVALID_INPUT', 'precheck', 'preview-already-committed')
+
+    const decision = await requestHumanDecision({
+      operation: 'graph.patch.confirm',
+      desktop: this.options.desktop,
+      projectId: id,
+      activeProjectId: activeId ?? null,
+      prompt: {
+        title: '允许外部画布变更落盘？',
+        message: `外部 Agent 请求将预览「${preview.name}」落到画布（+${preview.summary.nodeCreated} 节点 / +${preview.summary.edgeCreated} 连线 / 改 ${preview.summary.nodeUpdated} / 删 ${preview.summary.nodeDeleted}）。`,
+        confirmText: '允许落画布'
+      },
+      diagnostics
+    })
+    if (!decision.ok) {
+      throw new AccessFailure(decision.code, 'human-decision', decision.detail)
+    }
+
+    const applied = (await this.executeGraphPatch(
+      id,
+      activeId,
+      {
+        expectedGraphVersion: preview.expectedGraphVersion,
+        ops: preview.ops,
+        autoLayout: preview.autoLayout
+      },
+      markCommitted
+    )) as Record<string, unknown>
+
+    updateGraphPatchPreviewState(getDb(), id, previewId, 'committed')
+    return {
+      ...applied,
+      previewId,
+      state: 'committed' as const
+    }
+  }
+
+  /** 方案 A：取消待确认的画布变更幽灵预览（已落盘则幂等返回 committed）。 */
+  private discardGraphPatch(id: string, input: Record<string, unknown>): unknown {
+    const previewId = String(input.previewId ?? '')
+    const updated = updateGraphPatchPreviewState(getDb(), id, previewId, 'discarded')
+    if (!updated) throw new AccessFailure('NOT_FOUND', 'read', 'preview-not-found')
+    return {
+      projectId: id,
+      previewId,
+      state: updated.state
     }
   }
 
@@ -3020,7 +3191,10 @@ export class LocalAccessService {
         // 让整族操作都落进这个 throw（曾经真的踩过）。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'graph.patch':
-        // graph.patch 在 dispatch 中经权威宿主握手执行，不落在这里。
+      case 'graph.patch.propose':
+      case 'graph.patch.confirm':
+      case 'graph.patch.discard':
+        // graph.patch 族在 dispatch 中经权威宿主握手执行，不落在这里。
         throw new AccessFailure('UNSUPPORTED_OPERATION', 'dispatch')
       case 'flowAgent.inspect':
       case 'flowStage.context.preview':

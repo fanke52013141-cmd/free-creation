@@ -168,6 +168,14 @@ function FlowBuildPreviewContent({
           const to = rects.get(relation.to) ?? rectForExisting(relation.to)
           return from && to ? [{ ...relation, path: edgePath(from, to) }] : []
         })
+        const updatedRects = (preview.updatedNodeIds ?? []).flatMap((nodeId) => {
+          const rect = rectForExisting(nodeId)
+          return rect ? [{ nodeId, rect }] : []
+        })
+        const deletedRects = (preview.deletedNodeIds ?? []).flatMap((nodeId) => {
+          const rect = rectForExisting(nodeId)
+          return rect ? [{ nodeId, rect }] : []
+        })
         return (
           <div
             key={`${preview.projectId}:${preview.buildId}`}
@@ -186,6 +194,8 @@ function FlowBuildPreviewContent({
             data-preview-rework-edges={
               relations.filter((relation) => relation.kind === 'rework').length
             }
+            data-preview-updated-nodes={updatedRects.length}
+            data-preview-deleted-nodes={deletedRects.length}
           >
             <svg className="flow-build-preview-edges" aria-hidden="true">
               <defs>
@@ -232,6 +242,28 @@ function FlowBuildPreviewContent({
                 </div>
               )
             })}
+            {updatedRects.map(({ nodeId, rect }) => (
+              <div
+                key={`upd-${nodeId}`}
+                className="flow-build-preview-diff is-update"
+                data-preview-diff-node={nodeId}
+                aria-label="拟修改节点"
+                style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
+              >
+                <span className="flow-build-preview-diff-badge is-update">拟修改</span>
+              </div>
+            ))}
+            {deletedRects.map(({ nodeId, rect }) => (
+              <div
+                key={`del-${nodeId}`}
+                className="flow-build-preview-diff is-delete"
+                data-preview-diff-node={nodeId}
+                aria-label="拟删除节点"
+                style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
+              >
+                <span className="flow-build-preview-diff-badge is-delete">拟删除</span>
+              </div>
+            ))}
           </div>
         )
       })}

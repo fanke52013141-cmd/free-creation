@@ -22,6 +22,8 @@ export type FlowBuildPreviewLike = Pick<
     y: number
   }>
   edges: ReadonlyArray<{ from: { nodeId: string; portId: string }; to: { nodeId: string; portId: string } }>
+  updatedNodeIds?: readonly string[]
+  deletedNodeIds?: readonly string[]
 }
 
 const previews = new Map<string, FlowBuildPreviewLike>()

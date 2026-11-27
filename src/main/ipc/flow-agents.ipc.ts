@@ -31,6 +31,13 @@ import type { ModelIdentity } from '../../shared/agent-flow/coordination'
 import type { AgentModelPort } from '../agent-flow/runtime'
 import { FlowBuilderHost } from '../agent-flow/builder-host'
 import { BuildRequestSchema, type BuildRequest } from '../../shared/agent-flow/builder'
+import {
+  getGraphPatchPreview,
+  listGraphPatchPreviews,
+  updateGraphPatchPreviewState
+} from '../agent-access/graph-patch-preview'
+import { listMedia } from '../store/media.repo'
+import { getCompositeVersion } from '../store/composite.repo'
 import { FlowReviewHost } from '../agent-flow/review-host'
 import { FlowReviewStore, reviewBinding } from '../agent-flow/review-store'
 import { readStoredNodeRunStatus } from '../../shared/engine/run-status'
@@ -518,7 +525,8 @@ export function registerFlowAgentsIpc(
       if (!projectId) throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
       const buildId = typeof input.buildId === 'string' ? input.buildId : ''
       let data: unknown
-      if (action === 'list') data = builder.listGraphPreviews(projectId)
+      if (action === 'list')
+        data = [...builder.listGraphPreviews(projectId), ...listGraphPatchPreviews(getDb(), projectId)]
       else if (action === 'preview')
         data = await builder.previewGraph({ projectId, ...(buildId ? { buildId } : {}) })
       else if (action === 'restore-preview') data = builder.restorationPreview({ projectId, buildId })
@@ -531,8 +539,59 @@ export function registerFlowAgentsIpc(
       else if (action === 'restore-verify') data = builder.verifyRestoredGraph({ projectId, buildId })
       else if (action === 'authorize') data = await builder.authorizeGraph({ projectId, buildId })
       else if (action === 'confirm') data = await builder.confirmGraph({ projectId, buildId })
-      else if (action === 'discard') data = await builder.discardGraph({ projectId, buildId })
-      else throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
+      else if (action === 'prepare-patch') {
+        const patchPreview = getGraphPatchPreview(getDb(), projectId, buildId)
+        if (!patchPreview || patchPreview.state !== 'preview')
+          throw new AgentRuntimeError('FLOW_BUILD_MISSING', 'graph')
+        const mediaAssets = listMedia(projectId)
+        const mediaResolutions: Record<
+          string,
+          { mediaId: string; mediaPath: string; mediaMime: string; name?: string }
+        > = {}
+        const compositeResolutions: Record<string, { manifest: unknown; contentHash: string }> = {}
+        for (const [opIndex, op] of patchPreview.ops.entries()) {
+          if (op.action === 'node.create' || op.action === 'node.update') {
+            if (op.media && !mediaResolutions[op.media.mediaId]) {
+              const asset = mediaAssets.find((candidate) => candidate.id === op.media!.mediaId)
+              if (asset) {
+                mediaResolutions[asset.id] = {
+                  mediaId: asset.id,
+                  mediaPath: asset.path,
+                  mediaMime: asset.mime,
+                  ...(asset.name ? { name: asset.name.slice(0, 200) } : {})
+                }
+              }
+            }
+            const cfg = op.config as Record<string, unknown> | undefined
+            if (cfg && !cfg.manifest && typeof cfg.capabilityId === 'string' && typeof cfg.version === 'string') {
+              const record = getCompositeVersion(cfg.capabilityId, cfg.version)
+              if (record) {
+                const key =
+                  op.action === 'node.create'
+                    ? op.ref
+                      ? `ref:${op.ref}`
+                      : `index:${opIndex}`
+                    : `node:${op.nodeId}`
+                compositeResolutions[key] = {
+                  manifest: record.manifest,
+                  contentHash: record.contentHash
+                }
+              }
+            }
+          }
+        }
+        data = {
+          preview: patchPreview,
+          mediaResolutions,
+          compositeResolutions
+        }
+      } else if (action === 'mark-patch-committed') {
+        data = updateGraphPatchPreviewState(getDb(), projectId, buildId, 'committed')
+      } else if (action === 'discard') {
+        data = buildId.startsWith('patch:')
+          ? updateGraphPatchPreviewState(getDb(), projectId, buildId, 'discarded')
+          : await builder.discardGraph({ projectId, buildId })
+      } else throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
       if (log)
         emitGatewayEvent('agent.desktop.completed', '外部建图预览操作完成', context, {
           status: 'success',

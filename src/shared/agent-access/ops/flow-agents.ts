@@ -573,14 +573,14 @@ export const FLOW_AGENTS_OPERATIONS = {
       '停止当前打开的 Agent 任务（与 GUI 停止按钮同一宿主方法）；调用后的终态仍以 flowAgent.inspect 读取的账本事实为准',
     input: project.extend({ nodeId }).strict()
   },
-  // F8 收官：建图预览/提交（FlowBuilderHost，启动时创建的同一个实例）。
+  // F8 历史兼容：内置上帝 Agent（role=builder）已退役，新外部建图统一走 graph.patch.propose / graph.patch.confirm。
   'flowAgent.build.inspect': {
     effect: 'read',
     idempotent: true,
     destructive: false,
     cost: 'none',
     description:
-      '读取 Flow 建图预览（最近一次或指定 buildId）：buildId/状态/计划步骤/节点身份与几何；只读已持久化预览，不调用模型、不修改画布；要求目标项目已在桌面打开',
+      '【已废弃，仅历史兼容】读取旧 builder 角色的建图预览；内置上帝 Agent 已退役，新外部建图请改用 graph.patch.propose / graph.patch.confirm',
     input: project.extend({ nodeId, buildId: flowId.optional() }).strict()
   },
   'flowAgent.build.propose': {
@@ -590,7 +590,7 @@ export const FLOW_AGENTS_OPERATIONS = {
     cost: 'possible',
     responseTimeoutMs: MODEL_RESPONSE_TIMEOUT_MS,
     description:
-      '在 builder 角色的 Agent 节点上提交建图目标，由同一桌面宿主的模型端口生成预览并持久化（不落画布）；需要已验证工具调用能力的模型，模型预检失败时零模型请求；request/trace/span 由 main 生成，外部不能自造',
+      '【已废弃，仅历史兼容】在旧 builder 角色的 Agent 节点上生成预览；内置上帝 Agent 已退役，新外部建图请改用 graph.patch.propose（支持全部 34 节点与幽灵预览）',
     input: project.extend({ nodeId }).strict()
   },
   'flowAgent.build.commit': {
@@ -601,7 +601,7 @@ export const FLOW_AGENTS_OPERATIONS = {
     // 人工决定：返回前等人在 GUI 点「允许落画布」。
     interactive: true,
     description:
-      '按 buildId 把已生成的建图预览提交到当前打开的权威画布（复用 GUI 同一 commitFlowBuild：authorize/confirm + 单撤销步 + 保存屏障）；外部不能自带预览内容；已 committed 的重复提交按持久化事实返回，不重复建节点；BL-01：这是人工决定，外部调用会在桌面弹出确认，只有人点允许才生效，拒绝/超时/无桌面分别返回 HUMAN_DENIED / HUMAN_DECISION_TIMEOUT / DESKTOP_UNAVAILABLE（均零副作用）',
+      '【已废弃，仅历史兼容】提交旧 builder 建图预览（人工决定需桌面确认）；内置上帝 Agent 已退役，新外部建图请改用 graph.patch.confirm',
     input: project.extend({ nodeId, buildId }).strict()
   },
   // F8 收官：模型审核（FlowReviewHost，同一实例）。审核结论由模型产生，外部只能提交与读取。

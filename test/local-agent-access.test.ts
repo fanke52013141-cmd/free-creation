@@ -137,7 +137,7 @@ describe('local Agent vertical slice', () => {
     const client = new Client({ name: 'skill-acceptance', version: '1' }, { capabilities: {} })
     const transport = new StdioClientTransport({
       command: process.execPath,
-      args: [resolve('out/main/local-agent.js'), 'mcp', 'serve', '--data-dir', directory],
+      args: [resolve('out/main/local-agent.js'), 'mcp', 'serve', '--profile', 'full', '--data-dir', directory],
       env: {
         ...Object.fromEntries(
           Object.entries(process.env).filter(
