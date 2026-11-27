@@ -28,10 +28,21 @@ export function beginConnectionDrag(from: ConnectionFrom, pt: Pt): void {
   detachListeners?.()
   useConnectionStore.getState().start(from, pt)
 
+  let moveFrame = 0
+  let latestPt: Pt | null = null
   const onMove = (e: PointerEvent): void => {
-    useConnectionStore.getState().move({ x: e.clientX, y: e.clientY })
+    latestPt = { x: e.clientX, y: e.clientY }
+    if (moveFrame) return
+    moveFrame = requestAnimationFrame(() => {
+      moveFrame = 0
+      if (latestPt) useConnectionStore.getState().move(latestPt)
+    })
   }
   const onUp = (e: PointerEvent): void => {
+    if (moveFrame) {
+      cancelAnimationFrame(moveFrame)
+      moveFrame = 0
+    }
     const current = useConnectionStore.getState().draft
     cleanup()
     useConnectionStore.getState().clear()
@@ -52,6 +63,10 @@ export function beginConnectionDrag(from: ConnectionFrom, pt: Pt): void {
     }
   }
   const cleanup = (): void => {
+    if (moveFrame) {
+      cancelAnimationFrame(moveFrame)
+      moveFrame = 0
+    }
     window.removeEventListener('pointermove', onMove)
     window.removeEventListener('pointerup', onUp)
     window.removeEventListener('keydown', onKey)

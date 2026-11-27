@@ -7,9 +7,12 @@ export { portPairCompatible }
 import { getNodePorts, getNodeType, type NodeTypeSpec } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { collectNodePortConnections, createNodePortLayout } from './node-port-layout'
+import { nodePageIndex } from './node-page-index'
 import type { BatchConnectionMember, ConnectionFrom } from '../stores/connection'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 import { TEXT_MERGE_SEPARATOR } from '@shared/engine/helpers'
+
+const EMPTY_CONNECTED_INPUTS: ConnectedNodeInput[] = Object.freeze([]) as unknown as ConnectedNodeInput[]
 
 /**
  * resolvePorts 动态生成的端口 ID（如代码节点自定义参数、多字段输出）。
@@ -72,14 +75,6 @@ function getArrowBindings(editor: Editor, arrowId: TLShapeId): ArrowBindings {
   const start = bindings.find((b) => b.props.terminal === 'start')
   const end = bindings.find((b) => b.props.terminal === 'end')
   return { start, end }
-}
-
-/** 统一的保存顺序，供 many 输入的运行时读取与画布摘要共同使用。 */
-function orderedPageArrows(editor: Editor): ReturnType<Editor['getCurrentPageShapes']> {
-  return editor
-    .getCurrentPageShapes()
-    .filter((shape) => shape.type === 'arrow')
-    .sort((a, b) => a.index.localeCompare(b.index))
 }
 
 /** 现有全部连线（仅两端都是 node-card 的 arrow） */
@@ -1128,29 +1123,27 @@ export function readConnectedNodeInputs(
   editor: Editor,
   targetNodeId: TLShapeId
 ): ConnectedNodeInput[] {
+  const incoming = nodePageIndex(editor).incomingByNode.get(targetNodeId)
+  if (!incoming || incoming.length === 0) return EMPTY_CONNECTED_INPUTS
+
   const target = editor.getShape<NodeCardShape>(targetNodeId)
   const targetSpec = target ? getNodeType(target.props.nodeType) : undefined
-  if (!target || !targetSpec) return []
+  if (!target || !targetSpec) return EMPTY_CONNECTED_INPUTS
 
   const targetPorts = getNodePorts(targetSpec, target).in
   const perPortOrder = new Map<string, number>()
   const seenConnections = new Set<string>()
   const connected: ConnectedNodeInput[] = []
-  // tldraw 的 shape index 是保存到快照的稳定顺序。显式排序让 many 输入在刷新后
-  // 仍以同一顺序呈现，并与执行器读取连线时采用的边顺序保持一致。
-  const arrows = orderedPageArrows(editor)
 
-  for (const arrow of arrows) {
-    const { start, end } = getArrowBindings(editor, arrow.id)
-    const sourcePortId = typeof arrow.meta?.fromPort === 'string' ? arrow.meta.fromPort : null
-    const targetPortId = typeof arrow.meta?.toPort === 'string' ? arrow.meta.toPort : null
-    if (!start || !end || !sourcePortId || !targetPortId || end.toId !== targetNodeId) continue
-    const connectionKey = `${start.toId}:${sourcePortId}->${end.toId}:${targetPortId}`
+  for (const edge of incoming) {
+    const { startId, endId, fromPort: sourcePortId, toPort: targetPortId } = edge
+    if (!startId || !endId || !sourcePortId || !targetPortId || endId !== targetNodeId) continue
+    const connectionKey = `${startId}:${sourcePortId}->${endId}:${targetPortId}`
     if (seenConnections.has(connectionKey)) continue
     seenConnections.add(connectionKey)
 
     const targetPort = targetPorts.find((port) => port.id === targetPortId)
-    const source = editor.getShape<NodeCardShape>(start.toId)
+    const source = editor.getShape<NodeCardShape>(startId)
     const sourceSpec = source ? getNodeType(source.props.nodeType) : undefined
     if (!targetPort || !source || !sourceSpec) continue
     const sourcePort = getNodePorts(sourceSpec, source).out.find((port) => port.id === sourcePortId)
@@ -1172,6 +1165,7 @@ export function readConnectedNodeInputs(
       value: projectNodeOutputs(source)[sourcePort.id] ?? null
     })
   }
+  if (connected.length === 0) return EMPTY_CONNECTED_INPUTS
   return connected.sort(
     (left, right) =>
       targetPorts.findIndex((port) => port.id === left.targetPortId) -
@@ -1188,30 +1182,27 @@ export function gatherUpstreamText(
   targetNodeId: TLShapeId,
   targetPortId = 'in-text'
 ): string {
+  const incoming = nodePageIndex(editor).incomingByNode.get(targetNodeId)
+  if (!incoming || incoming.length === 0) return ''
   const parts: string[] = []
   const seenConnections = new Set<string>()
-  // 同一源节点的 text/markdown 双端口投影同一内容（AI 对话），互斥输出节点
-  // （AI 处理）同一时刻只有一个端口有值；历史画布遗留的重复连线按「源节点 + 内容」
-  // 去重，避免同一回复被合并注入两次。代码节点两个不同文本输出内容不同，不受影响。
   const seenTextsBySource = new Map<TLShapeId, Set<string>>()
-  for (const shape of orderedPageArrows(editor)) {
-    const { start, end } = getArrowBindings(editor, shape.id)
-    if (!start || !end) continue
-    if (end.toId !== targetNodeId || shape.meta?.toPort !== targetPortId) continue
-    const src = editor.getShape<NodeCardShape>(start.toId)
+  for (const edge of incoming) {
+    if (!edge.startId || edge.endId !== targetNodeId || edge.toPort !== targetPortId) continue
+    const src = editor.getShape<NodeCardShape>(edge.startId)
     if (!src || src.type !== 'node-card') continue
-    const fromPort = shape.meta?.fromPort as string | undefined
+    const fromPort = edge.fromPort
     if (!fromPort) continue
-    const connectionKey = `${start.toId}:${fromPort}->${end.toId}:${targetPortId}`
+    const connectionKey = `${edge.startId}:${fromPort}->${edge.endId}:${targetPortId}`
     if (seenConnections.has(connectionKey)) continue
     seenConnections.add(connectionKey)
     const output = projectNodeOutputs(src)[fromPort]
     if ((output?.kind === 'text' || output?.kind === 'markdown') && output.text.trim()) {
       const text = output.text.trim()
-      const seen = seenTextsBySource.get(start.toId) ?? new Set<string>()
+      const seen = seenTextsBySource.get(edge.startId) ?? new Set<string>()
       if (seen.has(text)) continue
       seen.add(text)
-      seenTextsBySource.set(start.toId, seen)
+      seenTextsBySource.set(edge.startId, seen)
       parts.push(text)
     }
   }
@@ -1228,14 +1219,14 @@ export function gatherUpstreamJson(
   targetNodeId: TLShapeId,
   targetPortId = 'in-json'
 ): unknown | null {
-  for (const shape of orderedPageArrows(editor)) {
-    const { start, end } = getArrowBindings(editor, shape.id)
-    if (!start || !end || end.toId !== targetNodeId || shape.meta?.toPort !== targetPortId) continue
-    const fromPort = shape.meta?.fromPort as string | undefined
-    if (!fromPort) continue
-    const source = editor.getShape<NodeCardShape>(start.toId)
+  const incoming = nodePageIndex(editor).incomingByNode.get(targetNodeId)
+  if (!incoming || incoming.length === 0) return null
+  for (const edge of incoming) {
+    if (!edge.startId || edge.endId !== targetNodeId || edge.toPort !== targetPortId || !edge.fromPort)
+      continue
+    const source = editor.getShape<NodeCardShape>(edge.startId)
     if (!source || source.type !== 'node-card') continue
-    const output = projectNodeOutputs(source)[fromPort]
+    const output = projectNodeOutputs(source)[edge.fromPort]
     if (output?.kind === 'json' || output?.kind === 'camera') return output.data
   }
   return null
@@ -1248,19 +1239,19 @@ export function gatherUpstreamMedia<K extends 'image' | 'video' | 'audio' | 'fil
   targetPortId: string,
   kind: K
 ): Extract<NodeValue, { kind: K }> | null {
-  for (const shape of orderedPageArrows(editor)) {
-    const { start, end } = getArrowBindings(editor, shape.id)
+  const incoming = nodePageIndex(editor).incomingByNode.get(targetNodeId)
+  if (!incoming || incoming.length === 0) return null
+  for (const edge of incoming) {
     if (
-      !start ||
-      !end ||
-      end.toId !== targetNodeId ||
-      shape.meta?.toPort !== targetPortId ||
-      typeof shape.meta?.fromPort !== 'string'
+      !edge.startId ||
+      edge.endId !== targetNodeId ||
+      edge.toPort !== targetPortId ||
+      !edge.fromPort
     )
       continue
-    const source = editor.getShape<NodeCardShape>(start.toId)
+    const source = editor.getShape<NodeCardShape>(edge.startId)
     if (!source || source.type !== 'node-card') continue
-    const output = projectNodeOutputs(source)[shape.meta.fromPort]
+    const output = projectNodeOutputs(source)[edge.fromPort]
     if (output?.kind === kind) return output as Extract<NodeValue, { kind: K }>
   }
   return null
@@ -1287,30 +1278,20 @@ export function gatherUpstreamMediaSources<K extends 'image' | 'video' | 'audio'
   targetPortId: string,
   kind: K
 ): { source: NodeCardShape; value: Extract<NodeValue, { kind: K }> }[] {
+  const ordered = nodePageIndex(editor).orderedIncomingByNode.get(targetNodeId)
+  if (!ordered || ordered.length === 0) return []
   const assets: { source: NodeCardShape; value: Extract<NodeValue, { kind: K }> }[] = []
-  // 批量接入的箭头带 connectOrder（框选/接触顺序），优先按它排序；
-  // 未标注的箭头维持 z 序，且排在有标注的之后，避免与 图N 顺序交叉。
-  const ordered = orderedPageArrows(editor).sort((a, b) => {
-    const ao = typeof a.meta?.connectOrder === 'number' ? (a.meta.connectOrder as number) : null
-    const bo = typeof b.meta?.connectOrder === 'number' ? (b.meta.connectOrder as number) : null
-    if (ao !== null && bo !== null) return ao - bo
-    if (ao !== null) return -1
-    if (bo !== null) return 1
-    return 0
-  })
-  for (const shape of ordered) {
-    const { start, end } = getArrowBindings(editor, shape.id)
+  for (const edge of ordered) {
     if (
-      !start ||
-      !end ||
-      end.toId !== targetNodeId ||
-      shape.meta?.toPort !== targetPortId ||
-      typeof shape.meta?.fromPort !== 'string'
+      !edge.startId ||
+      edge.endId !== targetNodeId ||
+      edge.toPort !== targetPortId ||
+      !edge.fromPort
     )
       continue
-    const source = editor.getShape<NodeCardShape>(start.toId)
+    const source = editor.getShape<NodeCardShape>(edge.startId)
     if (!source || source.type !== 'node-card') continue
-    const output = projectNodeOutputs(source)[shape.meta.fromPort]
+    const output = projectNodeOutputs(source)[edge.fromPort]
     if (output?.kind === kind)
       assets.push({ source, value: output as Extract<NodeValue, { kind: K }> })
   }
@@ -1334,8 +1315,11 @@ export function countIncomingConnections(
   targetNodeId: TLShapeId,
   targetPortId: string
 ): number {
-  return editor.getCurrentPageShapes().filter((shape) => {
-    if (shape.type !== 'arrow' || shape.meta?.toPort !== targetPortId) return false
-    return getArrowBindings(editor, shape.id).end?.toId === targetNodeId
-  }).length
+  const incoming = nodePageIndex(editor).incomingByNode.get(targetNodeId)
+  if (!incoming || incoming.length === 0) return 0
+  let count = 0
+  for (const edge of incoming) {
+    if (edge.toPort === targetPortId && edge.endId === targetNodeId) count += 1
+  }
+  return count
 }

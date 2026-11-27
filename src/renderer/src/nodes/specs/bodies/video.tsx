@@ -5,7 +5,8 @@ import {
 } from '../../../canvas/NodePresentation'
 // 视频节点 Body（路线图 R6：bodies.tsx 拆分）
 import { useEffect, useRef, useState } from 'react'
-import { stopEventPropagation, useEditor, useValue } from 'tldraw'
+import { stopEventPropagation, useEditor } from 'tldraw'
+import { useComputedValue } from '../../../canvas/use-computed-value'
 import type { VideoGenerationMode, VideoGenParams } from '@shared/types'
 import {
   isSeedanceGatewayProxy,
@@ -139,18 +140,39 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const [draft, setDraft] = useState(shape.props.text)
   const [submitting, setSubmitting] = useState(false)
   // 视频的所有图片只占一个绿色端口；模式决定连接顺序的协议角色。
-  const images = useValue(
+  const sameMediaSources = <T extends { source: { id: string; props: { title: string } }; value: { mediaId: string; mediaPath: string } }>(
+    prev: T[],
+    next: T[]
+  ): boolean =>
+    prev.length === next.length &&
+    prev.every(
+      (item, i) =>
+        item.source.id === next[i].source.id &&
+        item.source.props.title === next[i].source.props.title &&
+        item.value.mediaId === next[i].value.mediaId &&
+        item.value.mediaPath === next[i].value.mediaPath
+    )
+  const images = useComputedValue(
     'video prompt references',
     () => gatherUpstreamMediaSources(editor, shape.id, 'in-images', 'image'),
+    sameMediaSources,
     [editor, shape.id]
   )
 
-  const motionReferences = useValue(
+  const motionReferences = useComputedValue(
     'video prompt motion references',
     () => gatherUpstreamMediaSources(editor, shape.id, 'in-reference-video', 'video'),
+    sameMediaSources,
     [editor, shape.id]
   )
-  const audioReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-audio', 'audio')
+  const audioReferences = useComputedValue(
+    'video prompt audio references',
+    () => gatherUpstreamMediaList(editor, shape.id, 'in-reference-audio', 'audio'),
+    (prev, next) =>
+      prev.length === next.length &&
+      prev.every((item, i) => item.mediaId === next[i].mediaId && item.mediaPath === next[i].mediaPath),
+    [editor, shape.id]
+  )
   // 图片引用按多值输入端口的连接顺序传入，提示词使用相同顺序。
   const opt = options.find((o) => o.key === data.modelKey)
   // 兼容网关代理属于供应商接入事实，统一收在能力层；UI 只读取结构化能力。

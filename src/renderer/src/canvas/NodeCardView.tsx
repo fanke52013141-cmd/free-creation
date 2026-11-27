@@ -2,11 +2,29 @@ import { toast } from '../stores/toast'
 import { checkModelAvailability, providerAvailabilityKey } from './model-availability'
 import type { ModelOperation } from '@free-creation/model-contracts'
 import { nodePageIndex } from './node-page-index'
+import { nodePortOcclusionSignature } from './port-occlusion-index'
+import { useComputedValue } from './use-computed-value'
+import type { GenerationTimingSample } from '@shared/contracts'
 import { nodeRunDurationIndex } from './node-run-duration-index'
+import {
+  averageNodeExecutionDuration,
+  DEFAULT_NODE_EXECUTION_ESTIMATE_MS,
+  DEFAULT_NODE_EXECUTION_ESTIMATES_MS,
+  nodeExecutionProgressPercent
+} from './node-execution-progress'
+import {
+  DEFAULT_IMAGE_GENERATION_ESTIMATE_MS,
+  estimateImageGenerationDuration,
+  imageGenerationProgressPercent
+} from './image-generation-progress'
+import { estimateGenerationDuration } from './generation-time-estimate'
+import { GenerationLoadingOverlay } from './GenerationLoadingOverlay'
+import type { NodeRunRecord } from '../engine/runRecord'
+import type { Editor } from 'tldraw'
 // NodeCard 卡片视图：头部（序号/图标/标题/状态灯）+ 类型化内容体 + 端口圆点 + 媒体预览浮层
 import { HTMLContainer, stopEventPropagation, useEditor, useValue, getPointerInfo } from 'tldraw'
 import { nodeOwnsPointer, nodeSelectableText, nodeTextField } from './node-pointer-policy'
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { getNodePorts, getNodeType, nodeIconColor, PORT_TYPE_LABELS } from '../nodes/registry'
 import type { PortDecl, PortSchemaRef, PortType } from '@shared/types'
@@ -36,7 +54,6 @@ import { NODE_PORT_OUTSET, NODE_PORT_SIZE } from './edge-geometry'
 import { createNodePortLayout } from './node-port-layout'
 import { ConnectedInputPreview } from './ConnectedInputPreview'
 import { FlowReviewFeedback } from './FlowReviewFeedback'
-import { GenerationLoadingOverlay } from './GenerationLoadingOverlay'
 import { FixedFlowAssetBody } from './FixedFlowAssetBody'
 import { readFlowAssetSnapshot } from './flow-asset-snapshot'
 import { IterationSnapshotBody } from './IterationSnapshotBody'
@@ -47,22 +64,201 @@ import {
   readIterationSnapshot,
   toggleIterationTemplate
 } from './iteration-lanes'
-import {
-  averageNodeExecutionDuration,
-  DEFAULT_NODE_EXECUTION_ESTIMATE_MS,
-  DEFAULT_NODE_EXECUTION_ESTIMATES_MS,
-  nodeExecutionProgressPercent
-} from './node-execution-progress'
-import {
-  DEFAULT_IMAGE_GENERATION_ESTIMATE_MS,
-  estimateImageGenerationDuration,
-  imageGenerationProgressPercent
-} from './image-generation-progress'
 import { readNodeRunRecord } from '../engine/runRecord'
-import type { GenerationTimingSample } from '@shared/contracts'
-import { estimateGenerationDuration } from './generation-time-estimate'
 import './image-gen-adaptive.css'
 import { NodeCardShell } from './NodePresentation'
+
+const EMPTY_STRING_SET: ReadonlySet<string> = new Set<string>()
+const EMPTY_PORTS: { in: PortDecl[]; out: PortDecl[] } = { in: [], out: [] }
+
+const EXECUTION_LABELS: Record<string, string> = {
+  audio: '音频处理中',
+  code: '代码执行中',
+  director: '导演任务处理中',
+  file: '文件处理中',
+  image: '图片处理中',
+  'image-gen': '图片生成中',
+  'image-edit': 'P图中',
+  'image-split': '正在拆分图片',
+  'image-crop': '正在裁剪图片',
+  json: 'JSON 处理中',
+  processor: 'AI 处理中',
+  video: '视频生成中',
+  'video-asset': '视频素材处理中',
+  'video-audio': '正在提取音轨',
+  'video-clip': '正在裁剪视频',
+  'video-depth': '深度视频生成中',
+  'video-clay': '白模视频生成中',
+  'video-frame': '正在提取视频帧',
+  chat: 'AI 对话处理中',
+  'ai-process': 'AI 处理中',
+  speech: '语音生成中',
+  tts: '配音生成中',
+  'voice-design': '音色生成中',
+  'vocal-separate': '人声分离中',
+  script: '脚本生成中',
+  iterate: '内容迭代中',
+  storyboard: '分镜生成中',
+  structured: '结构化内容生成中',
+  text: '文本生成中'
+}
+
+/**
+ * 仅在节点处于 pending/queued/running 时挂载的独立运行遮罩组件。
+ * 空闲节点不再挂载 500ms 计时器、不拉取历史耗时 IPC、不订阅 nodeRunDurationIndex。
+ */
+function NodeExecutionOverlay({
+  editor,
+  shape,
+  nodeRun,
+  configuredProviderKey,
+  configuredModelKey,
+  imageProviderKey,
+  imageModelKey,
+  imageCount
+}: {
+  editor: Editor
+  shape: NodeCardShape
+  nodeRun: NodeRunRecord | null
+  configuredProviderKey: string
+  configuredModelKey: string
+  imageProviderKey: string
+  imageModelKey: string
+  imageCount: number
+}): React.JSX.Element {
+  const imageRunActive = shape.props.nodeType === 'image-gen' && nodeRun?.status === 'running'
+  const [imageTimingEstimateMs, setImageTimingEstimateMs] = useState(
+    DEFAULT_IMAGE_GENERATION_ESTIMATE_MS
+  )
+  const [executionElapsedMs, setExecutionElapsedMs] = useState(0)
+  const [generationTimingSamples, setGenerationTimingSamples] = useState<GenerationTimingSample[]>(
+    []
+  )
+
+  useEffect(() => {
+    if (nodeRun?.status !== 'running') return
+    const startedAt = nodeRun.startedAt
+    const refreshElapsed = (): void => setExecutionElapsedMs(Math.max(0, Date.now() - startedAt))
+    const frame = window.requestAnimationFrame(refreshElapsed)
+    const timer = window.setInterval(refreshElapsed, 500)
+    let current = true
+    if (shape.props.nodeType === 'image-gen' && imageProviderKey && imageModelKey) {
+      void window.api.workspace
+        .getImageGenerationTimings()
+        .then((response) => {
+          if (!current || !response.ok) return
+          setImageTimingEstimateMs(
+            estimateImageGenerationDuration(
+              response.data,
+              imageProviderKey,
+              imageModelKey,
+              imageCount
+            )
+          )
+        })
+        .catch(() => undefined)
+    } else {
+      void window.api.workspace
+        .getGenerationTimings()
+        .then((response) => {
+          if (current && response.ok) setGenerationTimingSamples(response.data)
+        })
+        .catch(() => undefined)
+    }
+    return () => {
+      current = false
+      window.cancelAnimationFrame(frame)
+      window.clearInterval(timer)
+    }
+  }, [
+    nodeRun?.runId,
+    nodeRun?.status,
+    nodeRun?.startedAt,
+    shape.props.nodeType,
+    imageProviderKey,
+    imageModelKey,
+    imageCount
+  ])
+
+  const nodeRunDurationEstimateMs = useValue(
+    'node execution average duration',
+    () => {
+      const runs = nodeRunDurationIndex(editor).samples.get(shape.props.nodeType) ?? []
+      const exactModelRuns = configuredModelKey
+        ? runs.filter(
+            (run) =>
+              run.modelId === configuredModelKey &&
+              (!configuredProviderKey || run.providerId === configuredProviderKey)
+          )
+        : []
+      const exactProviderRuns = configuredProviderKey
+        ? runs.filter((run) => run.providerId === configuredProviderKey)
+        : []
+      const matchingRuns = exactModelRuns.length
+        ? exactModelRuns
+        : configuredProviderKey
+          ? exactProviderRuns
+          : runs
+      const recentDurations = matchingRuns.slice(0, 20).map((run) => run.durationMs)
+      return averageNodeExecutionDuration(
+        recentDurations,
+        DEFAULT_NODE_EXECUTION_ESTIMATES_MS[shape.props.nodeType] ??
+          DEFAULT_NODE_EXECUTION_ESTIMATE_MS
+      )
+    },
+    [editor, shape.props.nodeType, configuredProviderKey, configuredModelKey]
+  )
+
+  const executionEstimateMs = imageRunActive
+    ? imageTimingEstimateMs
+    : estimateGenerationDuration(
+        shape.props.nodeType,
+        nodeRun?.estimateFeatures,
+        nodeRun?.estimateProviderKey ?? configuredProviderKey,
+        nodeRun?.estimateModelKey ?? configuredModelKey,
+        generationTimingSamples,
+        nodeRunDurationEstimateMs
+      )
+
+  const executionProgress =
+    nodeRun?.status === 'running'
+      ? shape.props.nodeType === 'image-gen'
+        ? imageGenerationProgressPercent(executionElapsedMs, executionEstimateMs)
+        : nodeExecutionProgressPercent(executionElapsedMs, executionEstimateMs)
+      : 0
+
+  const remainingEstimateMs = executionEstimateMs - executionElapsedMs
+  const executionTitle = EXECUTION_LABELS[shape.props.nodeType] ?? '节点执行中'
+
+  return (
+    <div className="node-execution-overlay">
+      <GenerationLoadingOverlay
+        title={executionTitle}
+        progress={executionProgress}
+        remainingMs={remainingEstimateMs}
+        waiting={nodeRun?.status !== 'running'}
+      />
+    </div>
+  )
+}
+
+type OpenMediaPreviewFn = (next: {
+  url: string
+  kind: 'image' | 'video' | 'audio'
+  title: string
+}) => void
+
+const MemoizedNodeBody = memo(function MemoizedNodeBody({
+  Body,
+  shape,
+  openPreview
+}: {
+  Body: NonNullable<ReturnType<typeof getNodeType>>['Body']
+  shape: NodeCardShape
+  openPreview: OpenMediaPreviewFn
+}): React.JSX.Element {
+  return <Body shape={shape} openPreview={openPreview} />
+})
 
 const EXEC_COLORS: Record<string, string> = {
   idle: '#6b7280',
@@ -202,7 +398,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     shape.props.nodeType === 'speech' && shape.props.title === '配音'
       ? '语音合成'
       : shape.props.title
-  const draft = useConnectionStore((s) => s.draft)
+  // 只订阅稳定的 draft.from，避免拖线 pointermove 每帧触发全画布 N 张卡重渲染。
+  const draftFrom = useConnectionStore((s) => s.draft?.from ?? null)
+  const draft = useMemo(() => (draftFrom ? { from: draftFrom } : null), [draftFrom])
   const [preview, setPreview] = useState<{
     url: string
     kind: 'image' | 'video' | 'audio'
@@ -211,7 +409,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const [headerActions, setHeaderActions] = useState<HTMLSpanElement | null>(null)
-  const [portFollow, setPortFollow] = useState<PortFollowPosition | null>(null)
   const portFollowRef = useRef<PortFollowPosition | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLDivElement>(null)
@@ -227,10 +424,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   )
   const titleEditable = !iterationSnapshot
 
-  /** Follow within the detached hit area, in canvas-local pixels. */
+  /** Follow within the detached hit area, in canvas-local pixels (direct CSS var write, 0 React re-render). */
   const updatePortFollow = (event: React.PointerEvent<HTMLSpanElement>, key: string): void => {
-    const rect = event.currentTarget.getBoundingClientRect()
     if (event.pointerType !== 'mouse' || event.buttons !== 0) return
+    const el = event.currentTarget
+    const rect = el.getBoundingClientRect()
     const zoom = rect.width / NODE_PORT_SIZE || 1
     let x = (event.clientX - (rect.left + rect.width / 2)) / zoom
     let y = (event.clientY - (rect.top + rect.height / 2)) / zoom
@@ -241,29 +439,18 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       x *= ratio
       y *= ratio
     }
-    const position = { key, x, y }
-    portFollowRef.current = position
-    setPortFollow((current) =>
-      current?.key === key && Math.abs(current.x - x) < 0.5 && Math.abs(current.y - y) < 0.5
-        ? current
-        : position
-    )
+    const prev = portFollowRef.current
+    if (prev?.key === key && Math.abs(prev.x - x) < 0.5 && Math.abs(prev.y - y) < 0.5) return
+    portFollowRef.current = { key, x, y }
+    el.style.setProperty('--port-follow-x', `${x}px`)
+    el.style.setProperty('--port-follow-y', `${y}px`)
   }
 
-  const clearPortFollow = (key: string): void => {
+  const clearPortFollow = (event: React.PointerEvent<HTMLSpanElement>, key: string): void => {
+    event.currentTarget.style.removeProperty('--port-follow-x')
+    event.currentTarget.style.removeProperty('--port-follow-y')
     if (portFollowRef.current?.key !== key) return
     portFollowRef.current = null
-    setPortFollow(null)
-  }
-
-  const portFollowStyle = (key: string): Record<string, string> => {
-    const position = portFollow?.key === key ? portFollow : null
-    return position
-      ? {
-          ['--port-follow-x' as string]: `${position?.x ?? 0}px`,
-          ['--port-follow-y' as string]: `${position?.y ?? 0}px`
-        }
-      : {}
   }
 
   /** 连线起点取随鼠标移动后的可见圆心，而不是透明命中区中的任意点。 */
@@ -282,14 +469,13 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
 
   // 预览切换时不能沿用上一份媒体的错误状态；尤其是同一节点重新生成视频后，
   // 新输出应立即获得一个干净的播放器，而不是继续显示旧文件的加载错误。
-  const openMediaPreview = (next: {
-    url: string
-    kind: 'image' | 'video' | 'audio'
-    title: string
-  }): void => {
-    setPreviewError(null)
-    setPreview(next)
-  }
+  const openMediaPreview = useCallback(
+    (next: { url: string; kind: 'image' | 'video' | 'audio'; title: string }): void => {
+      setPreviewError(null)
+      setPreview(next)
+    },
+    []
+  )
   // 媒体预览浮层与「Esc 关闭」的全局面板行为保持一致
   useEffect(() => {
     if (!preview) return
@@ -326,7 +512,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     useNodePanelStore.getState().open('contract', shape.id, 'settings')
   }
 
-  const beginTitleEditing = (): void => {
+  const beginTitleEditing = useCallback((): void => {
     if (!titleEditable) return
     setEditing(true)
     requestAnimationFrame(() => {
@@ -335,7 +521,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       title.focus()
       window.getSelection()?.selectAllChildren(title)
     })
-  }
+  }, [titleEditable])
 
   // 双击标题进入编辑模式。原生 CustomEvent 是画布捕获指针后的可靠桥接，
   // 否则 tldraw 会把第二击的 dblclick 重定向到画布而不是标题元素。
@@ -344,7 +530,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     if (!title) return
     title.addEventListener('canvas:edit-node-title', beginTitleEditing)
     return () => title.removeEventListener('canvas:edit-node-title', beginTitleEditing)
-  })
+  }, [beginTitleEditing])
 
   const handleTitleDoubleClick = (e: React.MouseEvent): void => {
     stopEventPropagation(e)
@@ -394,12 +580,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     return () => document.removeEventListener('pointerdown', finishOnOutsidePointerDown, true)
   }, [editing, finishTitleEditing])
 
-  const portsKey = JSON.stringify(spec ? getNodePorts(spec, shape) : { in: [], out: [] })
-  // JSON key is an immutable value snapshot; cloned port data is never mutated.
   const resolvedPorts = useMemo(
-    () => JSON.parse(portsKey) as { in: PortDecl[]; out: PortDecl[] },
-    // eslint-disable-next-line react-hooks/preserve-manual-memoization -- immutable serialized contract snapshot
-    [portsKey]
+    () => (spec ? getNodePorts(spec, shape) : EMPTY_PORTS),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dynamic ports only depend on nodeType/config/text/meta
+    [spec, shape.props.config, shape.props.text, shape.meta]
   )
   const inPorts = resolvedPorts.in
   const outPorts = resolvedPorts.out
@@ -414,30 +598,29 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     artifactProducer?.type === 'node-card'
       ? (getNodeType(artifactProducer.props.nodeType)?.color ?? nodePortColor)
       : nodePortColor
-  const isSource = draft?.from.shapeId === shape.id
+  const isSource = draftFrom?.shapeId === shape.id
   const statusLabel = nodeExecLabel(shape.props.exec)
   const activeExecution = ['pending', 'queued', 'running'].includes(shape.props.exec)
   const nodeRun = readNodeRunRecord(shape.meta?.nodeRun)
   const imageRun = shape.props.nodeType === 'image-gen' ? nodeRun : null
-  const imageRunActive = Boolean(
-    shape.props.nodeType === 'image-gen' && activeExecution && imageRun?.status === 'running'
-  )
-  const nodeConfig = (() => {
+  const nodeConfig = useMemo(() => {
+    if (!shape.props.config) return null
     try {
       const parsed = JSON.parse(shape.props.config) as Record<string, unknown>
       return parsed && typeof parsed === 'object' ? parsed : null
     } catch {
       return null
     }
-  })()
-  const textConfig = (() => {
+  }, [shape.props.config])
+  const textConfig = useMemo(() => {
+    if (!shape.props.text || shape.props.text[0] !== '{') return null
     try {
       const parsed = JSON.parse(shape.props.text) as Record<string, unknown>
       return parsed && typeof parsed === 'object' ? parsed : null
     } catch {
       return null
     }
-  })()
+  }, [shape.props.text])
   const configuredModelKey =
     typeof nodeConfig?.modelKey === 'string' && nodeConfig.modelKey
       ? nodeConfig.modelKey
@@ -465,60 +648,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     (typeof nodeConfig?.count === 'number' && Number.isFinite(nodeConfig.count)
       ? Math.max(1, Math.min(9, Math.floor(nodeConfig.count)))
       : 1)
-  const [imageTimingEstimateMs, setImageTimingEstimateMs] = useState(
-    DEFAULT_IMAGE_GENERATION_ESTIMATE_MS
-  )
-  const [executionElapsedMs, setExecutionElapsedMs] = useState(0)
-  const [generationTimingSamples, setGenerationTimingSamples] = useState<GenerationTimingSample[]>(
-    []
-  )
   const timingRecordedRunRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    if (!activeExecution || nodeRun?.status !== 'running') return
-    const startedAt = nodeRun.startedAt
-    const refreshElapsed = (): void => setExecutionElapsedMs(Math.max(0, Date.now() - startedAt))
-    const frame = window.requestAnimationFrame(refreshElapsed)
-    const timer = window.setInterval(refreshElapsed, 500)
-    let current = true
-    if (shape.props.nodeType === 'image-gen' && imageProviderKey && imageModelKey) {
-      void window.api.workspace
-        .getImageGenerationTimings()
-        .then((response) => {
-          if (!current || !response.ok) return
-          setImageTimingEstimateMs(
-            estimateImageGenerationDuration(
-              response.data,
-              imageProviderKey,
-              imageModelKey,
-              imageCount
-            )
-          )
-        })
-        .catch(() => undefined)
-    } else {
-      void window.api.workspace
-        .getGenerationTimings()
-        .then((response) => {
-          if (current && response.ok) setGenerationTimingSamples(response.data)
-        })
-        .catch(() => undefined)
-    }
-    return () => {
-      current = false
-      window.cancelAnimationFrame(frame)
-      window.clearInterval(timer)
-    }
-  }, [
-    activeExecution,
-    nodeRun?.runId,
-    nodeRun?.status,
-    nodeRun?.startedAt,
-    shape.props.nodeType,
-    imageProviderKey,
-    imageModelKey,
-    imageCount
-  ])
 
   useEffect(() => {
     if (
@@ -544,8 +674,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       })
       .catch(() => undefined)
   }, [
-    activeExecution,
-    nodeRun?.status,
     shape.props.nodeType,
     imageRun?.runId,
     imageRun?.status,
@@ -556,88 +684,13 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     imageCount
   ])
 
-  const nodeRunDurationEstimateMs = useValue(
-    'node execution average duration',
-    () => {
-      // 共享索引：全页运行历史每修订只扫描解析一次，不再每张卡各扫一遍。
-      const runs = nodeRunDurationIndex(editor).samples.get(shape.props.nodeType) ?? []
-      const exactModelRuns = configuredModelKey
-        ? runs.filter(
-            (run) =>
-              run.modelId === configuredModelKey &&
-              (!configuredProviderKey || run.providerId === configuredProviderKey)
-          )
-        : []
-      const exactProviderRuns = configuredProviderKey
-        ? runs.filter((run) => run.providerId === configuredProviderKey)
-        : []
-      const matchingRuns = exactModelRuns.length
-        ? exactModelRuns
-        : configuredProviderKey
-          ? exactProviderRuns
-          : runs
-      const recentDurations = matchingRuns
-        .sort((left, right) => right.recordedAt - left.recordedAt)
-        .slice(0, 20)
-        .map((run) => run.durationMs)
-      return averageNodeExecutionDuration(
-        recentDurations,
-        DEFAULT_NODE_EXECUTION_ESTIMATES_MS[shape.props.nodeType] ??
-          DEFAULT_NODE_EXECUTION_ESTIMATE_MS
-      )
-    },
-    [editor, shape.props.nodeType, configuredProviderKey, configuredModelKey]
+  const projectedOutputs = useMemo(
+    () => (spec?.projectOutputs?.(shape) ?? {}),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- shape props/meta are immutable
+    [spec, shape.props, shape.meta]
   )
-  const executionEstimateMs = imageRunActive
-    ? imageTimingEstimateMs
-    : estimateGenerationDuration(
-        shape.props.nodeType,
-        nodeRun?.estimateFeatures,
-        nodeRun?.estimateProviderKey ?? configuredProviderKey,
-        nodeRun?.estimateModelKey ?? configuredModelKey,
-        generationTimingSamples,
-        nodeRunDurationEstimateMs
-      )
-  const executionProgress =
-    activeExecution && nodeRun?.status === 'running'
-      ? shape.props.nodeType === 'image-gen'
-        ? imageGenerationProgressPercent(executionElapsedMs, executionEstimateMs)
-        : nodeExecutionProgressPercent(executionElapsedMs, executionEstimateMs)
-      : 0
-  const remainingEstimateMs = executionEstimateMs - executionElapsedMs
-  const executionLabel: Record<string, string> = {
-    audio: '音频处理中',
-    code: '代码执行中',
-    director: '导演任务处理中',
-    file: '文件处理中',
-    image: '图片处理中',
-    'image-gen': '图片生成中',
-    'image-edit': 'P图中',
-    'image-split': '正在拆分图片',
-    'image-crop': '正在裁剪图片',
-    json: 'JSON 处理中',
-    processor: 'AI 处理中',
-    video: '视频生成中',
-    'video-asset': '视频素材处理中',
-    'video-audio': '正在提取音轨',
-    'video-clip': '正在裁剪视频',
-    'video-depth': '深度视频生成中',
-    'video-clay': '白模视频生成中',
-    'video-frame': '正在提取视频帧',
-    chat: 'AI 对话处理中',
-    'ai-process': 'AI 处理中',
-    speech: '语音生成中',
-    tts: '配音生成中',
-    'voice-design': '音色生成中',
-    'vocal-separate': '人声分离中',
-    script: '脚本生成中',
-    iterate: '内容迭代中',
-    storyboard: '分镜生成中',
-    structured: '结构化内容生成中',
-    text: '文本生成中'
-  }
-  const executionTitle = executionLabel[shape.props.nodeType] ?? '节点执行中'
-  const readinessState = useValue(
+
+  const readinessState = useComputedValue(
     'node readiness',
     () => {
       const incomingCounts = new Map<string, number>()
@@ -646,45 +699,33 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       const incomingNodeColors = new Map<string, string>()
       const incomingPortIds = new Set<string>()
       const outgoingPortIds = new Set<string>()
-      for (const arrow of nodePageIndex(editor).arrows.get(shape.id) ?? []) {
-        if (arrow.type !== 'arrow') continue
-        const bindings = editor.getBindingsFromShape(arrow.id, 'arrow')
-        if (typeof arrow.meta?.toPort === 'string') {
-          const end = bindings.find((binding) => binding.props.terminal === 'end')
-          if (end?.toId === shape.id) {
-            incomingCounts.set(arrow.meta.toPort, (incomingCounts.get(arrow.meta.toPort) ?? 0) + 1)
-            incomingPortIds.add(arrow.meta.toPort)
-            const start = bindings.find((binding) => binding.props.terminal === 'start')
-            const source = start ? editor.getShape<NodeCardShape>(start.toId) : undefined
-            const sourceOutput =
-              source?.type === 'node-card' && typeof arrow.meta.fromPort === 'string'
-                ? projectNodeOutputs(source)[arrow.meta.fromPort]
-                : undefined
-            if (sourceOutput)
-              availableInputCounts.set(
-                arrow.meta.toPort,
-                (availableInputCounts.get(arrow.meta.toPort) ?? 0) + 1
-              )
-            const sourceColor =
-              source?.type === 'node-card' ? getNodeType(source.props.nodeType)?.color : undefined
-            // 同类型的多值输入共用一个连接点，按第一条真实来源取色。
-            if (sourceColor && !incomingNodeColors.has(arrow.meta.toPort)) {
-              incomingNodeColors.set(arrow.meta.toPort, sourceColor)
-            }
+      const pageIndex = nodePageIndex(editor)
+      for (const edge of pageIndex.incomingByNode.get(shape.id) ?? []) {
+        if (edge.toPort && edge.endId === shape.id) {
+          incomingCounts.set(edge.toPort, (incomingCounts.get(edge.toPort) ?? 0) + 1)
+          incomingPortIds.add(edge.toPort)
+          const source = edge.startId ? editor.getShape<NodeCardShape>(edge.startId) : undefined
+          const sourceOutput =
+            source?.type === 'node-card' && edge.fromPort
+              ? projectNodeOutputs(source)[edge.fromPort]
+              : undefined
+          if (sourceOutput) {
+            availableInputCounts.set(edge.toPort, (availableInputCounts.get(edge.toPort) ?? 0) + 1)
           }
-        }
-        if (typeof arrow.meta?.fromPort === 'string') {
-          const start = bindings.find((binding) => binding.props.terminal === 'start')
-          if (start?.toId === shape.id) {
-            outgoingPortIds.add(arrow.meta.fromPort)
-            outgoingCounts.set(
-              arrow.meta.fromPort,
-              (outgoingCounts.get(arrow.meta.fromPort) ?? 0) + 1
-            )
+          const sourceColor =
+            source?.type === 'node-card' ? getNodeType(source.props.nodeType)?.color : undefined
+          if (sourceColor && !incomingNodeColors.has(edge.toPort)) {
+            incomingNodeColors.set(edge.toPort, sourceColor)
           }
         }
       }
-      for (const card of nodePageIndex(editor).artifacts.get(shape.id) ?? []) {
+      for (const edge of pageIndex.outgoingByNode.get(shape.id) ?? []) {
+        if (edge.fromPort && edge.startId === shape.id) {
+          outgoingPortIds.add(edge.fromPort)
+          outgoingCounts.set(edge.fromPort, (outgoingCounts.get(edge.fromPort) ?? 0) + 1)
+        }
+      }
+      for (const card of pageIndex.artifacts.get(shape.id) ?? []) {
         if (card.type !== 'node-card') continue
         const meta = card.meta as Record<string, unknown> | undefined
         if (
@@ -699,8 +740,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           )
         }
       }
-      // 节点流公开输入带 defaultValue（内部正文/固定配置）时，运行时允许不接外部值；
-      // 就绪判定与 planCompositeInputBindings 的必填口径保持一致，不再误置灰运行按钮。
       const fixedSatisfiedInputPorts = new Set<string>()
       if (shape.props.nodeType === 'composite') {
         const manifest = readCompositeInstanceManifest(shape)
@@ -708,42 +747,41 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           if (input.defaultValue !== undefined) fixedSatisfiedInputPorts.add(`in-${input.id}`)
         }
       }
+      const readiness = deriveNodeReadiness({
+        executionMode: spec?.executionMode ?? 'auto',
+        exec: shape.props.exec,
+        nodeType: shape.props.nodeType,
+        text: shape.props.text,
+        inputs: inPorts,
+        incomingCounts,
+        availableInputCounts,
+        modelAvailable,
+        fixedSatisfiedInputPorts,
+        configIssue:
+          spec?.executionDisabledReason ??
+          (shape.props.nodeType === 'processor'
+            ? processorConfigurationIssue(editor, shape)
+            : undefined),
+        outputs: projectedOutputs
+      })
+      const fingerprint = successfulInputFingerprint(shape)
+      const inputStale = Boolean(fingerprint && currentNodeFingerprint(editor, shape) !== fingerprint)
+      const signature = `${readiness.kind}|${readiness.reason ?? ''}|${readiness.label}|${inputStale ? 1 : 0}|${[...incomingPortIds].sort().join(',')}|${[...outgoingPortIds].sort().join(',')}|${[...incomingNodeColors.entries()].map(([k, v]) => `${k}:${v}`).sort().join(',')}`
       return {
-        readiness: deriveNodeReadiness({
-          executionMode: spec?.executionMode ?? 'auto',
-          exec: shape.props.exec,
-          nodeType: shape.props.nodeType,
-          text: shape.props.text,
-          inputs: inPorts,
-          incomingCounts,
-          availableInputCounts,
-          modelAvailable,
-          fixedSatisfiedInputPorts,
-          configIssue:
-            spec?.executionDisabledReason ??
-            (shape.props.nodeType === 'processor'
-              ? processorConfigurationIssue(editor, shape)
-              : undefined),
-          outputs: spec?.projectOutputs?.(shape) ?? {}
-        }),
+        signature,
+        readiness,
         incomingCounts,
         outgoingCounts,
         incomingNodeColors,
         incomingPortIds,
         outgoingPortIds,
-        // T09（F08）：当前输入指纹与上次成功运行不一致 = 输入已修改。
-        // 使用与执行器相同的正文、配置、真实端口与输入产物口径。
-        inputStale: (() => {
-          const fingerprint = successfulInputFingerprint(shape)
-          return Boolean(fingerprint && currentNodeFingerprint(editor, shape) !== fingerprint)
-        })()
+        inputStale
       }
     },
-    [editor, shape, spec, inPorts, modelAvailable]
+    (prev, next) => prev.signature === next.signature,
+    [editor, shape, spec, inPorts, modelAvailable, projectedOutputs]
   )
   const readiness = readinessState.readiness
-  // T09：输入已修改时在状态文案后追加标注——只标注不阻断：旧结果保留且仍可
-  // 作为下游输入，是否重新生成由用户决定。
   const readinessWithFreshness =
     readinessState.inputStale && (readiness.kind === 'ready' || readiness.kind === 'manual-publish')
       ? {
@@ -752,73 +790,44 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           detail: `${readiness.detail} 输入在上次成功运行后有修改，当前结果可能不再对应最新输入。`
         }
       : readiness
-  // 每侧每种数据类型呈现一个连接点：同类型端口共用锚点，不同类型分别均分卡片高度。
-  // 可见圆点始终绑定真实契约 portId，拖线候选只选择同类型组中的代表端口。
-  // 用户显式声明的动态端口（代码参数/输出字段）例外：始终渲染且各自独立锚点。
-  const candidateInPortIds = new Set(
-    draft && draft.from.direction !== 'in' && !isSource
-      ? inPorts.filter((port) => canAttachPort(draft.from, port)).map((port) => port.id)
-      : []
-  )
-  const candidateOutPortIds = new Set(
-    draft && draft.from.direction === 'in' && !isSource
-      ? outPorts.filter((port) => canAttachPort(draft.from, port, 'in')).map((port) => port.id)
-      : []
-  )
-  const dynamicPortIds = dynamicPortIdsForShape(shape)
-  const layoutKey = JSON.stringify([
-    inPorts,
-    outPorts,
-    [...readinessState.incomingPortIds],
-    [...readinessState.outgoingPortIds],
-    shape.props.h,
-    [...candidateInPortIds],
-    [...candidateOutPortIds],
-    [...dynamicPortIds.in],
-    [...dynamicPortIds.out]
-  ])
   const [inLayout, outLayout] = useMemo(() => {
-    const [
-      inputs,
-      outputs,
-      incoming,
-      outgoing,
-      height,
-      candidatesIn,
-      candidatesOut,
-      dynamicIn,
-      dynamicOut
-    ] = JSON.parse(layoutKey) as [
-      PortDecl[],
-      PortDecl[],
-      string[],
-      string[],
-      number,
-      string[],
-      string[],
-      string[],
-      string[]
-    ]
+    const candidateInPortIds = new Set(
+      draftFrom && draftFrom.direction !== 'in' && !isSource
+        ? inPorts.filter((port) => canAttachPort(draftFrom, port)).map((port) => port.id)
+        : []
+    )
+    const candidateOutPortIds = new Set(
+      draftFrom && draftFrom.direction === 'in' && !isSource
+        ? outPorts.filter((port) => canAttachPort(draftFrom, port, 'in')).map((port) => port.id)
+        : []
+    )
+    const dynamicPortIds = dynamicPortIdsForShape(shape)
     return [
       createNodePortLayout(
-        inputs,
-        new Set(incoming),
-        height,
-        new Set(candidatesIn),
-        new Set(dynamicIn)
+        inPorts,
+        readinessState.incomingPortIds,
+        shape.props.h,
+        candidateInPortIds,
+        dynamicPortIds.in
       ),
       createNodePortLayout(
-        outputs,
-        new Set(outgoing),
-        height,
-        new Set(candidatesOut),
-        new Set(dynamicOut)
+        outPorts,
+        readinessState.outgoingPortIds,
+        shape.props.h,
+        candidateOutPortIds,
+        dynamicPortIds.out
       )
     ]
-  }, [layoutKey])
-  // 折叠堆叠的成员卡片不呈现端口：只露层级边缘，端口圆点会戳出堆叠轮廓。
-  // 首位卡（stackRole=top）承担"折叠节点"呈现：隐藏正文与属性入口，
-  // 由卡片右上角的展开/运行图标提供组合级操作。
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dynamicPortIds only depends on shape props/meta
+  }, [
+    inPorts,
+    outPorts,
+    readinessState.incomingPortIds,
+    readinessState.outgoingPortIds,
+    shape.props.h,
+    draftFrom,
+    isSource
+  ])
   const stackMeta = shape.meta as Record<string, unknown> | undefined
   const stackMember = stackMeta?.stackRole === 'member'
   const comboTop = stackMeta?.stackRole === 'top'
@@ -827,57 +836,15 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const visibleInY = inLayout.offsets
   const visibleOutY = outLayout.offsets
 
-  /** 被更上层卡片盖住的端口不可见、不可命中，不能从节点覆盖关系中穿透出来。 */
-  const occludedPortKeys = useValue(
+  /** 被更上层卡片盖住的端口不可见、不可命中：走编辑器级共享空间网格索引，未重叠卡 0 次重渲染。 */
+  const occlusionSignature = useValue(
     'occluded node ports',
-    () => {
-      const bounds = editor.getShapePageBounds(shape.id)
-      if (!bounds) return new Set<string>()
-      const coveringBounds = editor
-        .getCurrentPageShapes()
-        .filter(
-          (candidate): candidate is NodeCardShape =>
-            candidate.type === 'node-card' &&
-            candidate.id !== shape.id &&
-            candidate.index.localeCompare(shape.index) > 0
-        )
-        .map((candidate) => editor.getShapePageBounds(candidate.id))
-        .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== undefined)
-      const isCovered = (x: number, y: number): boolean =>
-        coveringBounds.some(
-          (cover) =>
-            x >= cover.x - 12 && x <= cover.maxX + 12 && y >= cover.y - 12 && y <= cover.maxY + 12
-        )
-      const pageY = (offset: number): number =>
-        shape.props.h > 0 ? bounds.y + (bounds.height * offset) / shape.props.h : bounds.y
-      const keys = new Set<string>()
-      visibleInPorts.forEach((port) => {
-        if (isCovered(bounds.x - NODE_PORT_OUTSET, pageY(visibleInY.get(port.id) ?? 0)))
-          keys.add(`in:${port.id}`)
-      })
-      visibleOutPorts.forEach((port) => {
-        if (isCovered(bounds.maxX + NODE_PORT_OUTSET, pageY(visibleOutY.get(port.id) ?? 0))) {
-          keys.add(`out:${port.id}`)
-        }
-      })
-      if (
-        inPorts.length === 0 &&
-        isCovered(bounds.x - NODE_PORT_OUTSET, bounds.y + bounds.height / 2)
-      ) {
-        keys.add('in:artifact')
-      }
-      return keys
-    },
-    [
-      editor,
-      shape.id,
-      shape.index,
-      shape.props.h,
-      visibleInPorts,
-      visibleOutPorts,
-      visibleInY,
-      visibleOutY
-    ]
+    () => nodePortOcclusionSignature(editor, shape.id),
+    [editor, shape.id]
+  )
+  const occludedPortKeys = useMemo(
+    () => (occlusionSignature ? new Set(occlusionSignature.split('|')) : EMPTY_STRING_SET),
+    [occlusionSignature]
   )
 
   // 运行按钮常驻在标题行右侧（用户 2026-09-18 拍板：不能用时置灰，而不是消失）。
@@ -899,16 +866,31 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     runBlockedReason ??
     (runInputGap ? `${readinessWithFreshness.label}（点击补充输入并运行）` : '运行节点')
 
+  const openDescription = useCallback(
+    () => useNodePanelStore.getState().open('contract', shape.id, 'overview'),
+    [shape.id]
+  )
+
+  const autoFitEnabled =
+    !isTemplateCard &&
+    !isBoundaryMarker &&
+    spec?.sizePolicy !== 'free' &&
+    shape.meta.nodeHeightMode !== 'manual'
+
   // 全节点统一高度边界；旧尺寸仅迁移几何，不改业务内容。
+  // manual/free/模板卡不创建 Observer；Observer 生命周期固定，不再随输入反复拆建。
   useEffect(() => {
+    if (!autoFitEnabled) return
     const body = bodyRef.current
     const scroll = body?.closest<HTMLElement>('.node-standard-scroll')
     if (!body || !scroll) return
     let frame = 0
+    let debounceTimer = 0
     let composing = false
     const fitHeight = (): void => {
       cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => {
+        if (editor.inputs.isDragging) return
         const latest = editor.getShape<NodeCardShape>(shape.id)
         if (!latest) return
         const metadata = latest.meta
@@ -918,10 +900,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           latest.props.nodeType === 'video'
             ? NODE_UI.height.autoMaxVideoGen
             : NODE_UI.height.autoMax
-        // free 尺寸节点（时间线）的高度完全由用户拖动决定，内容不参与量高：
-        // 时间轴每帧改 style 会持续触发这里的 MutationObserver，参与测算会反复写文档。
         if (getNodeType(latest.props.nodeType)?.sizePolicy === 'free') return
-        // 循环体模板卡是紧凑投影占位，高度由内容决定，不参与自动量高/最小档钳制。
         if (metadata.iterationTemplateCard || metadata.iterationBoundary) return
         if (latest.props.nodeType === 'storyboard') {
           if (metadata.nodeHeightMode === 'manual') return
@@ -952,7 +931,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           }
           return
         }
-        // 旧尺寸迁移：超过上限（视频生成节点用专用上限）才回收，不碰合法档位。
         const minimum = metadata.nodeHeightMode === 'manual' ? 260 : NODE_UI.height.min
         const clamped = Math.max(minimum, Math.min(heightCap, current))
         if (clamped !== current) {
@@ -989,69 +967,68 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           )
           return
         }
-        const identity = scroll.querySelector<HTMLElement>('.node-standard-identity')
-        // 正文实际子项与顶部说明量高；不把 flex 填充的空白反算成内容。
-        // 文本/JSON 编辑态 textarea 用 flex 填满正文剩余空间（用户 2026-11-02 裁决），
-        // 填充后的高度不是内容需求，按名义高度参与测算，避免逐档膨胀到高度上限。
-        const content = body.querySelector<HTMLElement>('.node-body-content')
-        const natural = content
-          ? Array.from(content.children).reduce((sum, child) => {
-              if (!(child instanceof HTMLElement)) return sum
-              if (
-                child.matches(
-                  '.node-textarea[data-node-interactive="text-editor"], .node-textarea[data-node-interactive="json-editor"]'
-                )
-              ) {
-                return sum + NODE_UI.textEditor.naturalHeight
-              }
-              const style = getComputedStyle(child)
-              return (
-                sum +
-                Math.max(child.offsetHeight, child.scrollHeight) +
-                (Number.parseFloat(style.marginTop) || 0) +
-                (Number.parseFloat(style.marginBottom) || 0)
-              )
-            }, 0)
-          : body.scrollHeight
         const references = body.querySelector<HTMLElement>('.connected-inputs')?.offsetHeight ?? 0
-        const required =
-          NODE_UI.header.height +
-          (scroll.parentElement?.querySelector<HTMLElement>('.node-standard-action-bar')
-            ?.offsetHeight || NODE_UI.actionBar.bottomInset) +
-          NODE_UI.content.padding +
-          natural -
-          (identity ? Math.max(0, identity.offsetHeight - NODE_UI.identity.minHeight) : 0) +
-          references
         const fittedPreview =
           ['image', 'image-split', 'image-crop', 'video-asset'].includes(latest.props.nodeType) ||
           (latest.props.nodeType === 'video' && Boolean(latest.props.mediaPath))
-        const prompt = body.querySelector<HTMLElement>('.gen-prompt')
-        const promptLayout = prompt?.closest('.image-mention-prompt') ?? prompt
-        const formMinimum =
-          latest.props.nodeType === 'image-gen' && prompt
-            ? required -
-              natural +
-              Array.from(promptLayout?.parentElement?.children ?? []).reduce(
-                (height, child) =>
-                  child instanceof HTMLElement && child !== promptLayout
-                    ? height + child.offsetHeight + 8
-                    : height,
-                0
-              ) +
-              Math.max(72, Number.parseFloat(prompt.style.height) || 72) +
-              (references ? 8 : 0)
-            : required
-        // 引用是新增内容：从至少默认正文高度开始增加，不消耗原正文的空白。
-        const referencedMinimum = references
-          ? Math.max(NODE_UI.height.default, formMinimum - references - (prompt ? 8 : 0)) +
-            references +
-            8
-          : formMinimum
-        let next = fittedPreview
-          ? resolveNodeHeight(
-              NODE_UI.height.default + (references ? references + NODE_UI.reference.bottomGap : 0)
-            )
-          : resolveNodeHeight(referencedMinimum, heightCap)
+        let next: number
+        if (fittedPreview) {
+          next = resolveNodeHeight(
+            NODE_UI.height.default + (references ? references + NODE_UI.reference.bottomGap : 0)
+          )
+        } else {
+          const identity = scroll.querySelector<HTMLElement>('.node-standard-identity')
+          const content = body.querySelector<HTMLElement>('.node-body-content')
+          const natural = content
+            ? Array.from(content.children).reduce((sum, child) => {
+                if (!(child instanceof HTMLElement)) return sum
+                if (
+                  child.matches(
+                    '.node-textarea[data-node-interactive="text-editor"], .node-textarea[data-node-interactive="json-editor"]'
+                  )
+                ) {
+                  return sum + NODE_UI.textEditor.naturalHeight
+                }
+                const style = getComputedStyle(child)
+                return (
+                  sum +
+                  Math.max(child.offsetHeight, child.scrollHeight) +
+                  (Number.parseFloat(style.marginTop) || 0) +
+                  (Number.parseFloat(style.marginBottom) || 0)
+                )
+              }, 0)
+            : body.scrollHeight
+          const required =
+            NODE_UI.header.height +
+            (scroll.parentElement?.querySelector<HTMLElement>('.node-standard-action-bar')
+              ?.offsetHeight || NODE_UI.actionBar.bottomInset) +
+            NODE_UI.content.padding +
+            natural -
+            (identity ? Math.max(0, identity.offsetHeight - NODE_UI.identity.minHeight) : 0) +
+            references
+          const prompt = body.querySelector<HTMLElement>('.gen-prompt')
+          const promptLayout = prompt?.closest('.image-mention-prompt') ?? prompt
+          const formMinimum =
+            latest.props.nodeType === 'image-gen' && prompt
+              ? required -
+                natural +
+                Array.from(promptLayout?.parentElement?.children ?? []).reduce(
+                  (height, child) =>
+                    child instanceof HTMLElement && child !== promptLayout
+                      ? height + child.offsetHeight + 8
+                      : height,
+                  0
+                ) +
+                Math.max(72, Number.parseFloat(prompt.style.height) || 72) +
+                (references ? 8 : 0)
+              : required
+          const referencedMinimum = references
+            ? Math.max(NODE_UI.height.default, formMinimum - references - (prompt ? 8 : 0)) +
+              references +
+              8
+            : formMinimum
+          next = resolveNodeHeight(referencedMinimum, heightCap)
+        }
         const focused = document.activeElement
         const editingInput =
           scroll.contains(focused) &&
@@ -1072,6 +1049,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         )
       })
     }
+    const scheduleFit = (): void => {
+      if (debounceTimer) window.clearTimeout(debounceTimer)
+      debounceTimer = window.setTimeout(fitHeight, 80)
+    }
     const compositionStart = (): void => {
       composing = true
     }
@@ -1080,38 +1061,29 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       fitHeight()
     }
     fitHeight()
-    const observer = new ResizeObserver(fitHeight)
+    const observer = new ResizeObserver(scheduleFit)
     observer.observe(scroll)
-    const mutations = new MutationObserver(fitHeight)
+    const mutations = new MutationObserver(scheduleFit)
     mutations.observe(body, {
       childList: true,
       characterData: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['style', 'src', 'class']
+      subtree: true
     })
-    scroll.addEventListener('input', fitHeight)
+    scroll.addEventListener('input', scheduleFit)
     scroll.addEventListener('focusout', fitHeight)
     scroll.addEventListener('compositionstart', compositionStart)
     scroll.addEventListener('compositionend', compositionEnd)
     return () => {
       cancelAnimationFrame(frame)
+      if (debounceTimer) window.clearTimeout(debounceTimer)
       observer.disconnect()
       mutations.disconnect()
-      scroll.removeEventListener('input', fitHeight)
+      scroll.removeEventListener('input', scheduleFit)
       scroll.removeEventListener('focusout', fitHeight)
       scroll.removeEventListener('compositionstart', compositionStart)
       scroll.removeEventListener('compositionend', compositionEnd)
     }
-  }, [
-    editor,
-    shape.id,
-    shape.props.h,
-    shape.props.nodeType,
-    shape.props.text,
-    shape.props.config,
-    shape.meta
-  ])
+  }, [editor, shape.id, autoFitEnabled, shape.props.nodeType])
 
   // 端口 tooltip 只保留身份信息（呈现规范 v1.0 §11：名称 · 类型，类型给中文名），
   // 连接手势、多选建线等操作教学不再随 tooltip 重复。
@@ -1409,7 +1381,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           )}
         </div>
         <span className="node-hover-spot" aria-hidden="true" />
-        <span className="node-selection-beam" aria-hidden="true" />
+        {selected && <span className="node-selection-beam" aria-hidden="true" />}
         <div
           className={`node-card type-${shape.props.nodeType}${isTemplateCard ? ' iteration-template-card' : ''}`}
           data-node-type={shape.props.nodeType}
@@ -1445,9 +1417,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                   spec={spec}
                   busy={activeExecution}
                   header={headerActions}
-                  openDescription={() =>
-                    useNodePanelStore.getState().open('contract', shape.id, 'overview')
-                  }
+                  openDescription={openDescription}
                 >
                   <div ref={bodyRef} className="node-body">
                     {comboTop ? (
@@ -1481,7 +1451,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                           ) : readFlowAssetSnapshot(shape) ? (
                             <FixedFlowAssetBody shape={shape} openPreview={openMediaPreview} />
                           ) : (
-                            <spec.Body shape={shape} openPreview={openMediaPreview} />
+                            <MemoizedNodeBody
+                              Body={spec.Body}
+                              shape={shape}
+                              openPreview={openMediaPreview}
+                            />
                           )}
                         </div>
                       </>
@@ -1498,19 +1472,21 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           )}
         </div>
         {activeExecution && spec?.executor && (
-          <div className="node-execution-overlay">
-            <GenerationLoadingOverlay
-              title={executionTitle}
-              progress={executionProgress}
-              remainingMs={remainingEstimateMs}
-              waiting={nodeRun?.status !== 'running'}
-            />
-          </div>
+          <NodeExecutionOverlay
+            editor={editor}
+            shape={shape}
+            nodeRun={nodeRun}
+            configuredProviderKey={configuredProviderKey}
+            configuredModelKey={configuredModelKey}
+            imageProviderKey={imageProviderKey}
+            imageModelKey={imageModelKey}
+            imageCount={imageCount}
+          />
         )}
         {/* 输入端口（左侧）：out 方向拖线时按类型兼容高亮；从输入端口也可发起反向连线 */}
         {visibleInPorts.map((p) => {
           if (occludedPortKeys.has(`in:${p.id}`)) return null
-          const draftIn = draft && draft.from.direction === 'in' ? draft.from : null
+          const draftIn = draftFrom && draftFrom.direction === 'in' ? draftFrom : null
           const isAnchor = draftIn && draftIn.shapeId === shape.id && draftIn.portId === p.id
           const ok =
             draft && draft.from.direction !== 'in'
@@ -1522,25 +1498,24 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           )
           const isConnected = Boolean(connectedPort)
           const inputColor =
-            (ok && draft?.from.nodeColor) ||
+            (ok && draftFrom?.nodeColor) ||
             (connectedPort && readinessState.incomingNodeColors.get(connectedPort.id)) ||
             nodePortColor
           const portKey = `in:${p.id}`
           return (
             <span
               key={p.id}
-              className={`port-dot in ${isConnected ? 'connected' : 'unconnected'} ${isAnchor ? 'ok' : draft && draft.from.direction !== 'in' ? (ok ? 'ok' : 'dim') : ''}`}
+              className={`port-dot in ${isConnected ? 'connected' : 'unconnected'} ${isAnchor ? 'ok' : draftFrom && draftFrom.direction !== 'in' ? (ok ? 'ok' : 'dim') : ''}`}
               data-port-id={p.id}
               style={{
                 top: (visibleInY.get(p.id) ?? shape.props.h / 2) - NODE_PORT_SIZE / 2,
                 ['--pc' as string]: inputColor,
-                ['--node-port-color' as string]: inputColor,
-                ...portFollowStyle(portKey)
+                ['--node-port-color' as string]: inputColor
               }}
               aria-label={portHint(p)}
               onPointerEnter={(event) => updatePortFollow(event, portKey)}
               onPointerMove={(event) => updatePortFollow(event, portKey)}
-              onPointerLeave={() => clearPortFollow(portKey)}
+              onPointerLeave={(event) => clearPortFollow(event, portKey)}
               onPointerDown={(e) => {
                 stopEventPropagation(e)
                 beginConnectionDrag(
@@ -1588,31 +1563,29 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         {visibleOutPorts.map((p) => {
           if (occludedPortKeys.has(`out:${p.id}`)) return null
           const hasOutput = outPorts.some(
-            (candidate) =>
-              candidate.type === p.type && Boolean(spec?.projectOutputs?.(shape)[candidate.id])
+            (candidate) => candidate.type === p.type && Boolean(projectedOutputs[candidate.id])
           )
           const isConnected = outPorts.some(
             (candidate) =>
               candidate.type === p.type && readinessState.outgoingPortIds.has(candidate.id)
           )
-          const draftIn = draft && draft.from.direction === 'in' ? draft.from : null
+          const draftIn = draftFrom && draftFrom.direction === 'in' ? draftFrom : null
           const okUpstream = draftIn && !isSource ? canAttachPort(draftIn, p, 'in') : false
           const portKey = `out:${p.id}`
           return (
             <span
               key={p.id}
-              className={`port-dot out ${hasOutput ? 'has-output' : 'no-output'} ${isConnected ? 'connected' : 'unconnected'} ${isSource && draft?.from.portId === p.id && draft.from.direction !== 'in' ? 'ok' : ''} ${draftIn ? (okUpstream ? 'ok' : 'dim') : ''}`}
+              className={`port-dot out ${hasOutput ? 'has-output' : 'no-output'} ${isConnected ? 'connected' : 'unconnected'} ${isSource && draftFrom?.portId === p.id && draftFrom.direction !== 'in' ? 'ok' : ''} ${draftIn ? (okUpstream ? 'ok' : 'dim') : ''}`}
               data-port-id={p.id}
               style={{
                 top: (visibleOutY.get(p.id) ?? shape.props.h / 2) - NODE_PORT_SIZE / 2,
                 ['--pc' as string]: nodePortColor,
-                ['--node-port-color' as string]: nodePortColor,
-                ...portFollowStyle(portKey)
+                ['--node-port-color' as string]: nodePortColor
               }}
               aria-label={portHint(p)}
               onPointerEnter={(event) => updatePortFollow(event, portKey)}
               onPointerMove={(event) => updatePortFollow(event, portKey)}
-              onPointerLeave={() => clearPortFollow(portKey)}
+              onPointerLeave={(event) => clearPortFollow(event, portKey)}
               onPointerDown={(e) => {
                 stopEventPropagation(e)
                 const selectedNodeIds = editor

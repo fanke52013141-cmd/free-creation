@@ -2,7 +2,8 @@ import { NodePrimaryButton } from '../../../canvas/NodePresentation'
 // 生图节点 Body（路线图 R6：bodies.tsx 拆分）
 // 多供应商级联：选中哪个供应商，就按其能力表呈现参数页（画幅/分辨率），默认 ToAPIS 优先。
 import { useEffect, useRef, useState } from 'react'
-import { stopEventPropagation, useEditor, useValue } from 'tldraw'
+import { stopEventPropagation, useEditor } from 'tldraw'
+import { useComputedValue } from '../../../canvas/use-computed-value'
 import {
   imageCapabilitiesFor,
   IMAGE_GENERATION_ASPECT_RATIOS,
@@ -136,7 +137,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
   }
 
   // 所有图片都使用同一个多值端口，连接顺序就是 @图片 1…N 的顺序；N 的上限来自能力表。
-  const references = useValue(
+  const references = useComputedValue(
     'image prompt references',
     (): PromptMediaReference[] => {
       const connected = gatherUpstreamMediaSources(editor, shape.id, 'in-images', 'image')
@@ -154,6 +155,14 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
           token: `@图片 ${index + 1}`
         }))
     },
+    (prev, next) =>
+      prev.length === next.length &&
+      prev.every(
+        (item, index) =>
+          item.mediaPath === next[index].mediaPath &&
+          item.title === next[index].title &&
+          item.token === next[index].token
+      ),
     [editor, shape.id, capabilities.maxReferenceImages]
   )
 

@@ -95,15 +95,33 @@ export function parseNodeExtra(stored: unknown): Record<string, unknown> {
  * 用户改完即真值，与运行无关——这类节点此前被同一个闸门误伤：空正文点一次「运行」得到
  * skipped，之后照常用双击填好正文，下游却永远读不到，卡片上状态点还显示「未运行」。
  */
+const outputProjectionCache = new WeakMap<
+  NodeCardShape['props'],
+  WeakMap<NodeCardShape['meta'], RawNodeOutputs>
+>()
+
 export function projectNodeOutputs(shape: NodeCardShape): RawNodeOutputs {
+  let byMeta = outputProjectionCache.get(shape.props)
+  const cached = byMeta?.get(shape.meta)
+  if (cached) return cached
   const spec = getNodeType(shape.props.nodeType)
   const pinned = readPinnedOutputs(shape.meta?.pinnedOutput)
-  if (pinned) return pinned
-  if (spec?.outputSource !== 'document') {
+  let result: RawNodeOutputs
+  if (pinned) {
+    result = pinned
+  } else if (spec?.outputSource !== 'document') {
     const lastRun = readNodeRunRecord(shape.meta?.nodeRun)
     if (lastRun && lastRun.status !== 'success') return {}
+    result = spec?.projectOutputs?.(shape) ?? {}
+  } else {
+    result = spec?.projectOutputs?.(shape) ?? {}
   }
-  return spec?.projectOutputs?.(shape) ?? {}
+  if (!byMeta) {
+    byMeta = new WeakMap()
+    outputProjectionCache.set(shape.props, byMeta)
+  }
+  byMeta.set(shape.meta, result)
+  return result
 }
 
 /** A pinned snapshot is independent of later runs/candidate selection and survives reopening. */

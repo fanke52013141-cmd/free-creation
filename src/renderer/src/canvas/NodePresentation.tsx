@@ -83,12 +83,25 @@ export function NodeIdentity({ children }: { children?: ReactNode }): React.JSX.
       setIconOnly((previous) => (previous === !hasVisibleChild ? previous : !hasVisibleChild))
     }
     measure()
-    // jsdom 等无 ResizeObserver 的环境退化为「每次渲染测一次」，不影响运行时正确性。
-    if (typeof ResizeObserver === 'undefined') return
+  }, [children])
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host || typeof ResizeObserver === 'undefined') return
+    const measure = (): void => {
+      const icon = host.querySelector(':scope > .node-standard-identity-icon')
+      const hasVisibleChild = Array.from(host.children).some((child) => {
+        if (child === icon) return false
+        const style = getComputedStyle(child)
+        if (style.display === 'none' || style.visibility === 'hidden') return false
+        const rect = child.getBoundingClientRect()
+        return rect.width > 0 && rect.height > 0
+      })
+      setIconOnly((previous) => (previous === !hasVisibleChild ? previous : !hasVisibleChild))
+    }
     const observer = new ResizeObserver(measure)
     observer.observe(host)
     return () => observer.disconnect()
-  })
+  }, [])
   if (!context) return null
   return (
     <div

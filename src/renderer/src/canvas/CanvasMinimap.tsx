@@ -159,8 +159,17 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
         selection = nextSelection
         return
       }
-      const vp = editor.getViewportPageBounds()
       const zoom = editor.getCamera().z
+      if (!showMap) {
+        const roundedZoom = Math.round(zoom * 100) / 100
+        setData((previous) =>
+          Math.round(previous.zoom * 100) === Math.round(roundedZoom * 100)
+            ? previous
+            : { ...previous, zoom }
+        )
+        return
+      }
+      const vp = editor.getViewportPageBounds()
       setData((previous) => {
         const viewport = { x: vp.minX, y: vp.minY, w: vp.w, h: vp.h }
         if (

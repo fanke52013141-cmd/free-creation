@@ -2,7 +2,10 @@
 import { createShapePropsMigrationIds, createShapePropsMigrationSequence } from '@tldraw/tlschema'
 import {
   BaseBoxShapeUtil,
+  HTMLContainer,
   T,
+  useEditor,
+  useValue,
   type RecordProps,
   type TLBaseShape,
   type TLResizeInfo,
@@ -10,6 +13,7 @@ import {
   type TLShapePartial
 } from 'tldraw'
 import { NodeCardView } from './NodeCardView'
+import { shouldMountNodeCardView } from './node-viewport-gate'
 import { NODE_UI } from './node-ui-tokens'
 import { getNodeType } from '../nodes/registry'
 
@@ -39,6 +43,30 @@ export type NodeCardShape = TLBaseShape<'node-card', NodeCardProps>
 const nodeCardMigrationIds = createShapePropsMigrationIds('node-card', {
   addStructuredConfig: 1
 })
+
+function NodeCardViewportGate({ shape }: { shape: NodeCardShape }): React.JSX.Element {
+  const editor = useEditor()
+  const mounted = useValue(
+    'node-card viewport gate',
+    () => shouldMountNodeCardView(editor, shape),
+    [editor, shape.id, shape.props.exec]
+  )
+  if (!mounted) {
+    return (
+      <HTMLContainer
+        id={shape.id}
+        style={{ width: shape.props.w, height: shape.props.h, pointerEvents: 'auto' }}
+      >
+        <div
+          className="node-card-dormant-shell"
+          data-node-id={shape.id}
+          data-node-type={shape.props.nodeType}
+        />
+      </HTMLContainer>
+    )
+  }
+  return <NodeCardView shape={shape} />
+}
 
 export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
   static override type = 'node-card' as const
@@ -89,7 +117,7 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
   }
 
   override component(shape: NodeCardShape): React.JSX.Element {
-    return <NodeCardView shape={shape} />
+    return <NodeCardViewportGate shape={shape} />
   }
 
   override onBeforeCreate(shape: NodeCardShape): NodeCardShape {

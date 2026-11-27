@@ -1,16 +1,34 @@
 import { useEffect, useId, useState, type RefObject } from 'react'
-import type { Editor, TLShapeId } from 'tldraw'
+import { useValue, type Editor, type TLShapeId } from 'tldraw'
 import { canvasFlowDeclarations } from './agent-flow-declarations'
 import { resolveFlowDeclaration, CONTROL_LABELS } from '@shared/agent-flow/declarations'
 import { NODE_ACCENTS } from '../nodes/registry'
 import { useNodePanelStore } from '../stores/nodePanel'
 import { useEdgeSelectionStore } from '../stores/edgeSelection'
+import { nodePageIndex } from './node-page-index'
 import './agent-flow-relations.css'
 import { NODE_UI } from './node-ui-tokens'
 import { buildControlRelationGeometry } from './agent-flow-relation-geometry'
 
 /** Read-only control view. Config is the only persisted truth, not another shape/edge graph. */
 export function AgentFlowRelationLayer({
+  editor,
+  hostRef
+}: {
+  editor: Editor
+  hostRef: RefObject<HTMLDivElement | null>
+}): React.JSX.Element | null {
+  const hasControlNodes = useValue(
+    'agent-flow control nodes present',
+    () => nodePageIndex(editor).counts.controlFlowNodes > 0,
+    [editor]
+  )
+  // 画布无控制类节点时不挂载任何监听/tick，彻底零开销。
+  if (!hasControlNodes) return null
+  return <AgentFlowRelationContent editor={editor} hostRef={hostRef} />
+}
+
+function AgentFlowRelationContent({
   editor,
   hostRef
 }: {

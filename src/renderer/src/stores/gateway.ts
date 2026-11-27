@@ -63,11 +63,16 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
   closeCatalog: () => set({ catalogOpen: false })
 }))
 
-/** 全部供应商里指定模态的模型，展平成下拉选项 */
+/** 全部供应商里指定模态的模型，展平成下拉选项（按 providers 引用缓存，避免每张卡每次渲染重建数组）。 */
+const modalityCache = new WeakMap<ProviderSummary[], Map<ModelModality, ModelOption[]>>()
+
 export function modelsByModality(
   providers: ProviderSummary[],
   modality: ModelModality
 ): ModelOption[] {
+  let byModality = modalityCache.get(providers)
+  const cached = byModality?.get(modality)
+  if (cached) return cached
   const out: ModelOption[] = []
   for (const p of providers) {
     for (const m of p.models) {
@@ -87,6 +92,11 @@ export function modelsByModality(
       })
     }
   }
+  if (!byModality) {
+    byModality = new Map()
+    modalityCache.set(providers, byModality)
+  }
+  byModality.set(modality, out)
   return out
 }
 

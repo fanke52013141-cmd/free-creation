@@ -124,6 +124,17 @@ import { PALETTE_CATEGORY_META, nodesForPaletteCategory } from './palette-catego
 import type { PaletteCategoryId } from '@shared/palette-preferences'
 import { DEFAULT_PALETTE_CATEGORY_ORDER } from '@shared/palette-menu-order'
 import { routeCanvasWheel } from './canvas-wheel-routing'
+import { findPortNearPagePoint } from './edge-hit-math'
+import { disposeNodePageIndex, nodePageIndex } from './node-page-index'
+import { disposeNodeRunDurationIndex } from './node-run-duration-index'
+import { disposePortOcclusionIndex } from './port-occlusion-index'
+import {
+  canvasPerfPolicy,
+  DEFAULT_POLICY,
+  disposeCanvasPerfPolicy,
+  type CanvasPerfPolicy
+} from './canvas-performance-tier'
+import './canvas-performance-tiers.css'
 
 // Stable by design: tldraw requires component overrides to keep their identity across renders.
 const TL_COMPONENTS = {
@@ -397,6 +408,52 @@ export function CanvasEditor({
   }, [])
   // 在 React 状态中持有 editor，让右下角停靠簇能订阅画布变化（editorRef 变化不会触发重渲染）
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null)
+  const [perfPolicy, setPerfPolicy] = useState<CanvasPerfPolicy>(DEFAULT_POLICY)
+  useEffect(() => {
+    if (!editorInstance) return
+    const syncPolicy = (): void => {
+      const next = canvasPerfPolicy(editorInstance)
+      setPerfPolicy((prev) =>
+        prev.tier === next.tier && prev.useMediaThumbnails === next.useMediaThumbnails ? prev : next
+      )
+    }
+    syncPolicy()
+    const offDoc = editorInstance.store.listen(
+      (change) => {
+        if (
+          Object.keys(change.changes.added).length > 0 ||
+          Object.keys(change.changes.removed).length > 0
+        ) {
+          syncPolicy()
+        }
+      },
+      { scope: 'document' }
+    )
+    const el = wrapRef.current
+    let dragging = false
+    const onPointerMove = (): void => {
+      const nowDragging = editorInstance.inputs.isDragging
+      if (nowDragging === dragging) return
+      dragging = nowDragging
+      el?.classList.toggle('is-canvas-dragging', dragging)
+    }
+    const onPointerUp = (): void => {
+      if (!dragging) return
+      dragging = false
+      el?.classList.remove('is-canvas-dragging')
+    }
+    window.addEventListener('pointermove', onPointerMove, { passive: true })
+    window.addEventListener('pointerup', onPointerUp, { passive: true })
+    window.addEventListener('pointercancel', onPointerUp, { passive: true })
+    return () => {
+      offDoc()
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerUp)
+      el?.classList.remove('is-canvas-dragging')
+      disposeCanvasPerfPolicy(editorInstance)
+    }
+  }, [editorInstance])
   // 右键侧栏面板：资产 / 工作流 / 历史记录
   const [panelTab, setPanelTab] = useState<SidePanelTab | null>(null)
   const [searchDestination, setSearchDestination] = useState<(SearchDestination & { selection: number }) | null>(null)
@@ -725,16 +782,20 @@ export function CanvasEditor({
       routeCanvasWheel(e, editor)
       // 滚轮改变相机期间提升合成层：直接缩放已有纹理，避免每个步进整层重栅格化
       // （快速 Ctrl+滚轮时表现为"闪一下 / 加载不完全"）。停止 220ms 后恢复默认。
+      const pageEl = el.closest('.canvas-page')
       el.classList.add('is-camera-interacting')
+      pageEl?.classList.add('is-camera-interacting')
       window.clearTimeout(settleTimer)
       settleTimer = window.setTimeout(() => {
         el.classList.remove('is-camera-interacting')
+        pageEl?.classList.remove('is-camera-interacting')
       }, 220)
     }
     el.addEventListener('wheel', onWheel, { capture: true, passive: false })
     return () => {
       window.clearTimeout(settleTimer)
       el.classList.remove('is-camera-interacting')
+      el.closest('.canvas-page')?.classList.remove('is-camera-interacting')
       el.removeEventListener('wheel', onWheel, { capture: true })
     }
   }, [editorInstance])
@@ -3162,10 +3223,16 @@ export function CanvasEditor({
       editor.sideEffects.registerOperationCompleteHandler(() => {
         if (!backdropLayoutDirty) return
         backdropLayoutDirty = false
+        if (nodePageIndex(editor).counts.backdrops === 0) return
         syncBackdropLayouts(editor)
       })
     )
-    syncBackdropLayouts(editor)
+    if (nodePageIndex(editor).counts.backdrops > 0) syncBackdropLayouts(editor)
+    disposers.push(
+      () => disposeNodePageIndex(editor),
+      () => disposeNodeRunDurationIndex(editor),
+      () => disposePortOcclusionIndex(editor)
+    )
     disposers.push(
       editor.store.listen(
         () => {
@@ -3173,7 +3240,13 @@ export function CanvasEditor({
           // T04：编辑事件 → 协调器 markDirty（状态徽标即时变「未保存」），800ms 防抖后 flush。
           useSaveCoordinator.getState().markDirty()
           if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-          saveTimerRef.current = setTimeout(flushSave, 800)
+          saveTimerRef.current = setTimeout(() => {
+            if (typeof window.requestIdleCallback === 'function') {
+              window.requestIdleCallback(() => void flushSave(), { timeout: 1200 })
+            } else {
+              void flushSave()
+            }
+          }, 800)
         },
         { scope: 'document' }
       )
@@ -3412,6 +3485,7 @@ export function CanvasEditor({
   return (
     <div
       className={`canvas-host canvas-theme-dark ${dragOver ? 'drag-over' : ''}`}
+      data-perf-tier={perfPolicy.tier}
       ref={wrapRef}
       onPointerDownCapture={(event) => {
         const target = event.target as HTMLElement
@@ -3430,33 +3504,36 @@ export function CanvasEditor({
         }
         // Selection overlays sit above HTML nodes. Reserve the port's screen-space
         // hit area before tldraw can interpret the same press as an edge resize.
-        if (event.button === 0 && target.closest('.tl-container') && !target.closest('.port-dot')) {
-          const port = Array.from(wrapRef.current?.querySelectorAll<HTMLElement>('.port-dot') ?? [])
-            .reverse()
-            .find((item) => {
-              const rect = item.getBoundingClientRect()
-              const radius = Math.max(14, rect.width / 2)
-              return (
-                Math.hypot(
-                  event.clientX - rect.x - rect.width / 2,
-                  event.clientY - rect.y - rect.height / 2
-                ) <= radius
-              )
-            })
-          if (port) {
-            event.preventDefault()
-            event.stopPropagation()
-            port.dispatchEvent(
-              new PointerEvent('pointerdown', {
-                bubbles: true,
-                clientX: event.clientX,
-                clientY: event.clientY,
-                button: event.button,
-                pointerId: event.pointerId,
-                pointerType: event.pointerType
-              })
+        // 纯数学命中：不再每次按下扫描全画布 .port-dot + getBoundingClientRect()。
+        if (
+          event.button === 0 &&
+          editorRef.current &&
+          target.closest('.tl-container') &&
+          !target.closest('.port-dot')
+        ) {
+          const editor = editorRef.current
+          const zoom = editor.getCamera().z || 1
+          const pagePt = editor.screenToPage({ x: event.clientX, y: event.clientY })
+          const hitPort = findPortNearPagePoint(editor, pagePt, 14 / zoom)
+          if (hitPort) {
+            const port = wrapRef.current?.querySelector<HTMLElement>(
+              `[data-node-id="${hitPort.shapeId}"] .port-dot.${hitPort.side}[data-port-id="${hitPort.portId}"]`
             )
-            return
+            if (port) {
+              event.preventDefault()
+              event.stopPropagation()
+              port.dispatchEvent(
+                new PointerEvent('pointerdown', {
+                  bubbles: true,
+                  clientX: event.clientX,
+                  clientY: event.clientY,
+                  button: event.button,
+                  pointerId: event.pointerId,
+                  pointerType: event.pointerType
+                })
+              )
+              return
+            }
           }
         }
         // 防御性重置：默认工具不应参与本应用的节点画布交互。
@@ -3549,7 +3626,13 @@ export function CanvasEditor({
           }
         />
       )}
-      {editorInstance && <DataEdgeLayer editor={editorInstance} />}
+      {editorInstance && (
+        <DataEdgeLayer
+          editor={editorInstance}
+          activeOnlyEdgeFlow={perfPolicy.activeOnlyEdgeFlow}
+          skipEdgeHitDom={perfPolicy.skipEdgeHitDom}
+        />
+      )}
       {editorInstance && <AgentFlowRelationLayer editor={editorInstance} hostRef={wrapRef} />}
       {editorInstance && (
         <FlowBuildPreviewLayer editor={editorInstance} hostRef={wrapRef} projectId={project.id} />

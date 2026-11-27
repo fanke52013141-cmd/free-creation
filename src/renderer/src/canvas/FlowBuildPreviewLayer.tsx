@@ -80,14 +80,33 @@ export function FlowBuildPreviewLayer({
   hostRef: RefObject<HTMLDivElement | null>
   projectId: string
 }): React.JSX.Element | null {
-  const [, setRevision] = useState(0)
-  const [host, setHost] = useState<HTMLDivElement | null>(null)
-  const markerId = `flow-build-preview-arrow-${useId().replace(/:/g, '')}`
   useSyncExternalStore(
     subscribeFlowBuildPreviews,
     getFlowBuildPreviewRevision,
     getFlowBuildPreviewRevision
   )
+  const previews = getFlowBuildPreviews(projectId).filter(
+    (preview) => !editor.isShapeHidden(preview.nodeId as TLShapeId)
+  )
+  // 无建图预览时不挂载任何 editor/tick 监听，彻底消除 60fps 空转刷新。
+  if (!previews.length) return null
+  return (
+    <FlowBuildPreviewContent editor={editor} hostRef={hostRef} previews={previews} />
+  )
+}
+
+function FlowBuildPreviewContent({
+  editor,
+  hostRef,
+  previews
+}: {
+  editor: Editor
+  hostRef: RefObject<HTMLDivElement | null>
+  previews: FlowBuildPreviewLike[]
+}): React.JSX.Element | null {
+  const [, setRevision] = useState(0)
+  const [host, setHost] = useState<HTMLDivElement | null>(null)
+  const markerId = `flow-build-preview-arrow-${useId().replace(/:/g, '')}`
   useEffect(() => {
     setHost(hostRef.current)
   }, [hostRef])
@@ -102,24 +121,19 @@ export function FlowBuildPreviewLayer({
     }
     const document = editor.store.listen(update, { scope: 'document' })
     const session = editor.store.listen(update, { scope: 'session' })
-    editor.on('tick', update)
     editor.on('resize', update)
     window.addEventListener('resize', update)
     update()
     return () => {
       document()
       session()
-      editor.off('tick', update)
       editor.off('resize', update)
       window.removeEventListener('resize', update)
       if (frame) cancelAnimationFrame(frame)
     }
   }, [editor])
 
-  const previews = getFlowBuildPreviews(projectId).filter(
-    (preview) => !editor.isShapeHidden(preview.nodeId as TLShapeId)
-  )
-  if (!host || !previews.length) return null
+  if (!host) return null
   const hostBounds = host.getBoundingClientRect(),
     zoom = editor.getCamera().z
   const rectForPlanned = (node: FlowBuildPreviewLike['nodes'][number]): Rect => {

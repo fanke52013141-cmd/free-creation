@@ -11,12 +11,18 @@
 // 现在几何只依赖页面坐标，缩放/平移交给与 tldraw 完全一致的 CSS transform 镜像：
 // 路径、滤镜、mask 只在文档变化时重算，相机变化只写一个 transform 字符串（在绘制前由
 // MutationObserver 同步），连线因此与节点卡片在同一合成层节奏上移动，不再闪烁。
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useValue, type Editor, type TLShapeId } from 'tldraw'
 import { getNodePorts, getNodeType, PORT_COLORS } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { useEdgeSelectionStore } from '../stores/edgeSelection'
-import { buildDataEdgePath, isBackwardEdge, NODE_PORT_OUTSET } from './edge-geometry'
+import { isBackwardEdge, NODE_PORT_OUTSET } from './edge-geometry'
+import {
+  buildDataEdgeCurve,
+  distancePointToCubicBezier,
+  findPortNearPagePoint,
+  type CubicBezierCurve
+} from './edge-hit-math'
 import { useConnectionStore, type ConnectionFrom } from '../stores/connection'
 import { dynamicPortIdsForShape, portPairCompatible } from './graph'
 import { collectNodePortConnections, createNodePortLayout } from './node-port-layout'
@@ -28,6 +34,7 @@ import { toast } from '../stores/toast'
 interface PageEdge {
   id: TLShapeId
   path: string
+  curve: CubicBezierCurve
   color: string
   /** 视觉流向始终由真实数据源指向真实消费者（或由操作节点指向其产物）。 */
   sourceId: TLShapeId
@@ -107,31 +114,24 @@ function collectEdges(editor: Editor, draftFrom: ConnectionFrom | null): PageEdg
     return visible
   }
 
-  for (const arrow of editor.getCurrentPageShapes()) {
-    if (arrow.type !== 'arrow') continue
-    const bindings = editor.getBindingsFromShape(arrow.id, 'arrow')
-    const start = bindings.find((binding) => binding.props.terminal === 'start')
-    const end = bindings.find((binding) => binding.props.terminal === 'end')
-    // 循环泳道串行箭头（循环→AI处理→生图）：tldraw 箭头本体是隐藏载体，
-    // 可见业务线统一由本层绘制；无端口 meta，按节点边缘中点收口，只作视觉溯源。
-    if (typeof arrow.meta?.iterationProvenance === 'string' && start && end) {
-      const source = editor.getShape<NodeCardShape>(start.toId)
-      const target = editor.getShape<NodeCardShape>(end.toId)
-      if (source?.type !== 'node-card' || target?.type !== 'node-card') continue
-      const sourceBounds = editor.getShapePageBounds(source.id)
-      const targetBounds = editor.getShapePageBounds(target.id)
-      if (!sourceBounds || !targetBounds) continue
-      const sourceSnapshot = readIterationSnapshot(source)
-      const sourceSpec = sourceSnapshot
-        ? getNodeType(sourceSnapshot.role)
-        : getNodeType(source.props.nodeType)
-      result.push({
-        id: arrow.id,
-        color: sourceSpec?.color ?? '#94a3b8',
-        sourceId: source.id,
-        targetId: target.id,
-        provenance: true,
-        path: buildDataEdgePath(
+  for (const shape of editor.getCurrentPageShapes()) {
+    if (shape.type === 'arrow') {
+      const arrow = shape
+      const bindings = editor.getBindingsFromShape(arrow.id, 'arrow')
+      const start = bindings.find((binding) => binding.props.terminal === 'start')
+      const end = bindings.find((binding) => binding.props.terminal === 'end')
+      if (typeof arrow.meta?.iterationProvenance === 'string' && start && end) {
+        const source = editor.getShape<NodeCardShape>(start.toId)
+        const target = editor.getShape<NodeCardShape>(end.toId)
+        if (source?.type !== 'node-card' || target?.type !== 'node-card') continue
+        const sourceBounds = editor.getShapePageBounds(source.id)
+        const targetBounds = editor.getShapePageBounds(target.id)
+        if (!sourceBounds || !targetBounds) continue
+        const sourceSnapshot = readIterationSnapshot(source)
+        const sourceSpec = sourceSnapshot
+          ? getNodeType(sourceSnapshot.role)
+          : getNodeType(source.props.nodeType)
+        const { path, curve } = buildDataEdgeCurve(
           { x: sourceBounds.maxX + NODE_PORT_OUTSET, y: sourceBounds.y + sourceBounds.height / 2 },
           { x: targetBounds.x - NODE_PORT_OUTSET, y: targetBounds.y + targetBounds.height / 2 },
           {
@@ -141,75 +141,61 @@ function collectEdges(editor: Editor, draftFrom: ConnectionFrom | null): PageEdg
             )
           }
         )
-      })
-      continue
-    }
-    if (
-      !start ||
-      !end ||
-      typeof arrow.meta?.fromPort !== 'string' ||
-      typeof arrow.meta?.toPort !== 'string'
-    ) {
-      continue
-    }
-    const source = editor.getShape<NodeCardShape>(start.toId)
-    const target = editor.getShape<NodeCardShape>(end.toId)
-    if (source?.type !== 'node-card' || target?.type !== 'node-card') continue
-    // 隐藏节点（循环体模板态的定义节点 opacity=0）及其数据边不绘制，
-    // 本体只留唯一虚线关联循环，避免多余连线。
-    if (source.opacity === 0 || target.opacity === 0 || arrow.opacity === 0) continue
-    // 展开态跨容器边界的 loop↔循环体 数据边不绘制：框↔循环已由唯一模板虚线表达，
-    // 输入/输出由边界圆点接口表达，避免重复连线交叉穿过框内节点链。
-    const srcMember = Boolean((source.meta as Record<string, unknown>)?.iterationTemplateMember)
-    const tgtMember = Boolean((target.meta as Record<string, unknown>)?.iterationTemplateMember)
-    if (srcMember !== tgtMember) continue
-    const sourcePorts = getNodePortsForShape(source)
-    const targetPorts = getNodePortsForShape(target)
-    // 端口有效性判定与 deriveGraph / collectContractInputs 同源：都经 getNodeType +
-    // getNodePorts 动态解析，不在本层另立一套判定。
-    const fromIndex = sourcePorts.out.findIndex((port) => port.id === arrow.meta.fromPort)
-    const toIndex = targetPorts.in.findIndex((port) => port.id === arrow.meta.toPort)
-    const portMissing = fromIndex < 0 || toIndex < 0
-    const fromY = portMissing
-      ? undefined
-      : getOffsets(source, 'out', sourcePorts.out).get(arrow.meta.fromPort)
-    const toY = portMissing
-      ? undefined
-      : getOffsets(target, 'in', targetPorts.in).get(arrow.meta.toPort)
-    if (!portMissing && (fromY === undefined || toY === undefined)) continue
-    // 分组后 shape.x/y 是相对父 group 的局部坐标，直接相加会让连线“飘走”。
-    // getShapePageBounds 返回页面绝对边界（含父级 group 的平移），端口纵向偏移
-    // 再按高度比例映射到页面 bounds，保证任何嵌套层级下锚点都贴住节点边缘。
-    const sourceBounds = editor.getShapePageBounds(source.id)
-    const targetBounds = editor.getShapePageBounds(target.id)
-    if (!sourceBounds || !targetBounds) continue
-    // 失效边没有可用端口锚点，退化为两端节点的竖直中线，仍按节点边缘收口。
-    const sourceAnchorY =
-      fromY === undefined
-        ? sourceBounds.y + sourceBounds.height / 2
-        : source.props.h > 0
-          ? sourceBounds.y + (sourceBounds.height * fromY) / source.props.h
-          : sourceBounds.y
-    const targetAnchorY =
-      toY === undefined
-        ? targetBounds.y + targetBounds.height / 2
-        : target.props.h > 0
-          ? targetBounds.y + (targetBounds.height * toY) / target.props.h
-          : targetBounds.y
-    // 端口圆心位于卡片外侧，正式数据线也以圆心为锚点，不能留一段“线没接上”的空隙。
-    // 这里的坐标全部是页面坐标：屏幕位置由镜像的相机 transform 一次性给出。
-    const fromPort = sourcePorts.out[fromIndex]
-    result.push({
-      id: arrow.id,
-      // A connection inherits the source node accent, matching its output port.
-      color:
-        getNodeType(source.props.nodeType)?.color ??
-        PORT_COLORS[fromPort?.type ?? 'any'] ??
-        '#8f73ff',
-      sourceId: source.id,
-      targetId: target.id,
-      invalid: portMissing,
-      path: buildDataEdgePath(
+        result.push({
+          id: arrow.id,
+          color: sourceSpec?.color ?? '#94a3b8',
+          sourceId: source.id,
+          targetId: target.id,
+          provenance: true,
+          curve,
+          path
+        })
+        continue
+      }
+      if (
+        !start ||
+        !end ||
+        typeof arrow.meta?.fromPort !== 'string' ||
+        typeof arrow.meta?.toPort !== 'string'
+      ) {
+        continue
+      }
+      const source = editor.getShape<NodeCardShape>(start.toId)
+      const target = editor.getShape<NodeCardShape>(end.toId)
+      if (source?.type !== 'node-card' || target?.type !== 'node-card') continue
+      if (source.opacity === 0 || target.opacity === 0 || arrow.opacity === 0) continue
+      const srcMember = Boolean((source.meta as Record<string, unknown>)?.iterationTemplateMember)
+      const tgtMember = Boolean((target.meta as Record<string, unknown>)?.iterationTemplateMember)
+      if (srcMember !== tgtMember) continue
+      const sourcePorts = getNodePortsForShape(source)
+      const targetPorts = getNodePortsForShape(target)
+      const fromIndex = sourcePorts.out.findIndex((port) => port.id === arrow.meta.fromPort)
+      const toIndex = targetPorts.in.findIndex((port) => port.id === arrow.meta.toPort)
+      const portMissing = fromIndex < 0 || toIndex < 0
+      const fromY = portMissing
+        ? undefined
+        : getOffsets(source, 'out', sourcePorts.out).get(arrow.meta.fromPort)
+      const toY = portMissing
+        ? undefined
+        : getOffsets(target, 'in', targetPorts.in).get(arrow.meta.toPort)
+      if (!portMissing && (fromY === undefined || toY === undefined)) continue
+      const sourceBounds = editor.getShapePageBounds(source.id)
+      const targetBounds = editor.getShapePageBounds(target.id)
+      if (!sourceBounds || !targetBounds) continue
+      const sourceAnchorY =
+        fromY === undefined
+          ? sourceBounds.y + sourceBounds.height / 2
+          : source.props.h > 0
+            ? sourceBounds.y + (sourceBounds.height * fromY) / source.props.h
+            : sourceBounds.y
+      const targetAnchorY =
+        toY === undefined
+          ? targetBounds.y + targetBounds.height / 2
+          : target.props.h > 0
+            ? targetBounds.y + (targetBounds.height * toY) / target.props.h
+            : targetBounds.y
+      const fromPort = sourcePorts.out[fromIndex]
+      const { path, curve } = buildDataEdgeCurve(
         { x: sourceBounds.maxX + NODE_PORT_OUTSET, y: sourceAnchorY },
         { x: targetBounds.x - NODE_PORT_OUTSET, y: targetAnchorY },
         {
@@ -219,146 +205,174 @@ function collectEdges(editor: Editor, draftFrom: ConnectionFrom | null): PageEdg
           )
         }
       )
-    })
-  }
-  // 运行产物与操作节点的关系只作可视化追溯，绝不能被当成可执行数据边。
-  for (const asset of editor.getCurrentPageShapes()) {
-    if (asset.type !== 'node-card') continue
-    const producerId = (asset.meta as Record<string, unknown> | undefined)?.artifactProducerId
-    if (typeof producerId !== 'string' || asset.meta.artifactLinkHidden === true) continue
-    const producer = editor.getShape<NodeCardShape>(producerId as TLShapeId)
-    if (!producer || producer.type !== 'node-card') continue
-    const producerBounds = editor.getShapePageBounds(producer.id)
-    const assetBounds = editor.getShapePageBounds(asset.id)
-    if (!producerBounds || !assetBounds) continue
-    const producerPorts = getNodePortsForShape(producer)
-    const artifactPortId = (asset.meta as Record<string, unknown> | undefined)
-      ?.artifactProducerPortId
-    const fromIndex =
-      typeof artifactPortId === 'string'
-        ? producerPorts.out.findIndex((p) => p.id === artifactPortId)
-        : -1
-    const outIdx = fromIndex >= 0 ? fromIndex : producerPorts.out.length > 0 ? 0 : -1
-    const producerOutOffsets = getOffsets(producer, 'out', producerPorts.out)
-    const fromY = outIdx >= 0 ? producerOutOffsets.get(producerPorts.out[outIdx].id) : undefined
-    const sourceAnchorY =
-      fromY !== undefined && producer.props.h > 0
-        ? producerBounds.y + (producerBounds.height * fromY) / producer.props.h
-        : producerBounds.y + producerBounds.height / 2
+      result.push({
+        id: arrow.id,
+        color:
+          getNodeType(source.props.nodeType)?.color ??
+          PORT_COLORS[fromPort?.type ?? 'any'] ??
+          '#8f73ff',
+        sourceId: source.id,
+        targetId: target.id,
+        invalid: portMissing,
+        curve,
+        path
+      })
+      continue
+    }
 
-    const assetPorts = getNodePortsForShape(asset as NodeCardShape)
-    const inIdx = assetPorts.in.length > 0 ? 0 : -1
-    const toY =
-      inIdx >= 0
-        ? getOffsets(asset as NodeCardShape, 'in', assetPorts.in).get(assetPorts.in[inIdx].id)
-        : undefined
-    const targetAnchorY =
-      toY !== undefined && (asset as NodeCardShape).props.h > 0
-        ? assetBounds.y + (assetBounds.height * toY) / (asset as NodeCardShape).props.h
-        : assetBounds.y + assetBounds.height / 2
+    if (shape.type !== 'node-card') continue
+    const card = shape as NodeCardShape
+    const meta = card.meta as Record<string, unknown> | undefined
+    const producerId = meta?.artifactProducerId
+    if (typeof producerId === 'string' && meta?.artifactLinkHidden !== true) {
+      const producer = editor.getShape<NodeCardShape>(producerId as TLShapeId)
+      if (producer && producer.type === 'node-card') {
+        const producerBounds = editor.getShapePageBounds(producer.id)
+        const assetBounds = editor.getShapePageBounds(card.id)
+        if (producerBounds && assetBounds) {
+          const producerPorts = getNodePortsForShape(producer)
+          const artifactPortId = meta?.artifactProducerPortId
+          const fromIndex =
+            typeof artifactPortId === 'string'
+              ? producerPorts.out.findIndex((p) => p.id === artifactPortId)
+              : -1
+          const outIdx = fromIndex >= 0 ? fromIndex : producerPorts.out.length > 0 ? 0 : -1
+          const producerOutOffsets = getOffsets(producer, 'out', producerPorts.out)
+          const fromY =
+            outIdx >= 0 ? producerOutOffsets.get(producerPorts.out[outIdx].id) : undefined
+          const sourceAnchorY =
+            fromY !== undefined && producer.props.h > 0
+              ? producerBounds.y + (producerBounds.height * fromY) / producer.props.h
+              : producerBounds.y + producerBounds.height / 2
 
-    const outPort = outIdx >= 0 ? producerPorts.out[outIdx] : undefined
-    // 追溯线同样从生产节点出发，颜色必须跟随该节点的输出色。
-    // 循环分支快照卡内核是文本节点，颜色按呈现层身份（AI 处理/生图）取，与卡片一致。
-    const producerSnapshot = readIterationSnapshot(producer)
-    const producerSpec = producerSnapshot
-      ? getNodeType(producerSnapshot.role)
-      : getNodeType(producer.props.nodeType)
-    const assetOutType = assetPorts.out[0]?.type
-    result.push({
-      id: `artifact:${asset.id}` as TLShapeId,
-      color:
-        producerSpec?.color ??
-        (assetOutType
-          ? (PORT_COLORS[assetOutType] ?? '#94a3b8')
-          : outPort
-            ? (PORT_COLORS[outPort.type] ?? '#94a3b8')
-            : '#94a3b8'),
-      sourceId: producer.id,
-      targetId: asset.id,
-      provenance: true,
-      path: buildDataEdgePath(
-        { x: producerBounds.maxX + NODE_PORT_OUTSET, y: sourceAnchorY },
-        { x: assetBounds.x - NODE_PORT_OUTSET, y: targetAnchorY },
-        {
-          backward: isBackwardEdge(
-            producerBounds.x + producerBounds.width / 2,
-            assetBounds.x + assetBounds.width / 2
+          const assetPorts = getNodePortsForShape(card)
+          const inIdx = assetPorts.in.length > 0 ? 0 : -1
+          const toY =
+            inIdx >= 0
+              ? getOffsets(card, 'in', assetPorts.in).get(assetPorts.in[inIdx].id)
+              : undefined
+          const targetAnchorY =
+            toY !== undefined && card.props.h > 0
+              ? assetBounds.y + (assetBounds.height * toY) / card.props.h
+              : assetBounds.y + assetBounds.height / 2
+
+          const outPort = outIdx >= 0 ? producerPorts.out[outIdx] : undefined
+          const producerSnapshot = readIterationSnapshot(producer)
+          const producerSpec = producerSnapshot
+            ? getNodeType(producerSnapshot.role)
+            : getNodeType(producer.props.nodeType)
+          const assetOutType = assetPorts.out[0]?.type
+          const { path, curve } = buildDataEdgeCurve(
+            { x: producerBounds.maxX + NODE_PORT_OUTSET, y: sourceAnchorY },
+            { x: assetBounds.x - NODE_PORT_OUTSET, y: targetAnchorY },
+            {
+              backward: isBackwardEdge(
+                producerBounds.x + producerBounds.width / 2,
+                assetBounds.x + assetBounds.width / 2
+              )
+            }
           )
+          result.push({
+            id: `artifact:${card.id}` as TLShapeId,
+            color:
+              producerSpec?.color ??
+              (assetOutType
+                ? (PORT_COLORS[assetOutType] ?? '#94a3b8')
+                : outPort
+                  ? (PORT_COLORS[outPort.type] ?? '#94a3b8')
+                  : '#94a3b8'),
+            sourceId: producer.id,
+            targetId: card.id,
+            provenance: true,
+            curve,
+            path
+          })
         }
-      )
-    })
-  }
-  // 循环体模板卡 → 循环节点的竖向虚线关联：按模板卡 meta 渲染，
-  // 本体唯一连线（非数据边），不依赖箭头载体。
-  for (const shape of editor.getCurrentPageShapes()) {
-    if (shape.type !== 'node-card') continue
-    const loopId = (shape.meta as Record<string, unknown>)?.iterationTemplateCard
-    if (typeof loopId !== 'string') continue
-    const cardBounds = editor.getShapePageBounds(shape.id)
-    const loopBounds = editor.getShapePageBounds(loopId as TLShapeId)
-    if (!cardBounds || !loopBounds) continue
-    // 框底中心 → 循环节点顶部中心，虚线关联（折叠/展开态均显示）。
-    const sx = cardBounds.x + cardBounds.width / 2
-    const sy = cardBounds.maxY
-    const tx = loopBounds.x + loopBounds.width / 2
-    const ty = loopBounds.y
-    const midY = (sy + ty) / 2
-    result.push({
-      id: `template-link:${shape.id}` as TLShapeId,
-      color: '#e0a458',
-      sourceId: shape.id,
-      targetId: loopId as TLShapeId,
-      provenance: true,
-      dash: '9 7',
-      path: `M ${sx} ${sy} C ${sx} ${midY}, ${tx} ${midY}, ${tx} ${ty}`
-    })
-  }
-  // 循环体边界接口连线（视觉）：框左边中点→首节点输入、末节点输出→框右边中点。
-  // 圆点是框卡呈现层元素（贴框边中点），锚点直接由框边界计算，随框移动/缩放同步。
-  for (const shape of editor.getCurrentPageShapes()) {
-    if (shape.type !== 'node-card') continue
-    const meta = shape.meta as Record<string, unknown>
-    if (!meta?.iterationTemplateCard || !meta?.iterationTemplateExpanded) continue
-    const frame = editor.getShapePageBounds(shape.id)
-    if (!frame) continue
-    const bodyIds = (
-      Array.isArray(meta.iterationTemplateBodyIds) ? meta.iterationTemplateBodyIds : []
-    ).filter((id): id is string => typeof id === 'string')
-    const bodies = bodyIds
-      .map((id) => editor.getShape<NodeCardShape>(id as TLShapeId))
-      .filter(
-        (s): s is NodeCardShape => s !== undefined && s.type === 'node-card' && s.opacity !== 0
-      )
-    if (bodies.length === 0) continue
-    const first = editor.getShapePageBounds(bodies[0].id)
-    const last = editor.getShapePageBounds(bodies[bodies.length - 1].id)
-    if (!first || !last) continue
-    const frameCenterY = frame.y + frame.height / 2
-    result.push({
-      id: `boundary-link:${shape.id}:input` as TLShapeId,
-      color: '#34d399',
-      sourceId: shape.id,
-      targetId: bodies[0].id,
-      provenance: true,
-      path: buildDataEdgePath(
-        { x: frame.x, y: frameCenterY },
-        { x: first.x - NODE_PORT_OUTSET, y: first.y + first.height / 2 },
-        { backward: false }
-      )
-    })
-    result.push({
-      id: `boundary-link:${shape.id}:output` as TLShapeId,
-      color: '#34d399',
-      sourceId: bodies[bodies.length - 1].id,
-      targetId: shape.id,
-      provenance: true,
-      path: buildDataEdgePath(
-        { x: last.maxX + NODE_PORT_OUTSET, y: last.y + last.height / 2 },
-        { x: frame.maxX, y: frameCenterY },
-        { backward: false }
-      )
-    })
+      }
+    }
+
+    const loopId = meta?.iterationTemplateCard
+    if (typeof loopId === 'string') {
+      const cardBounds = editor.getShapePageBounds(card.id)
+      const loopBounds = editor.getShapePageBounds(loopId as TLShapeId)
+      if (cardBounds && loopBounds) {
+        const sx = cardBounds.x + cardBounds.width / 2
+        const sy = cardBounds.maxY
+        const tx = loopBounds.x + loopBounds.width / 2
+        const ty = loopBounds.y
+        const midY = (sy + ty) / 2
+        const path = `M ${sx} ${sy} C ${sx} ${midY}, ${tx} ${midY}, ${tx} ${ty}`
+        const curve: CubicBezierCurve = {
+          x0: sx,
+          y0: sy,
+          c1x: sx,
+          c1y: midY,
+          c2x: tx,
+          c2y: midY,
+          x1: tx,
+          y1: ty,
+          minX: Math.min(sx, tx),
+          minY: Math.min(sy, ty, midY),
+          maxX: Math.max(sx, tx),
+          maxY: Math.max(sy, ty, midY)
+        }
+        result.push({
+          id: `template-link:${card.id}` as TLShapeId,
+          color: '#e0a458',
+          sourceId: card.id,
+          targetId: loopId as TLShapeId,
+          provenance: true,
+          dash: '9 7',
+          curve,
+          path
+        })
+      }
+      if (meta?.iterationTemplateExpanded && cardBounds) {
+        const bodyIds = (
+          Array.isArray(meta.iterationTemplateBodyIds) ? meta.iterationTemplateBodyIds : []
+        ).filter((id): id is string => typeof id === 'string')
+        const bodies = bodyIds
+          .map((id) => editor.getShape<NodeCardShape>(id as TLShapeId))
+          .filter(
+            (s): s is NodeCardShape => s !== undefined && s.type === 'node-card' && s.opacity !== 0
+          )
+        if (bodies.length > 0) {
+          const first = editor.getShapePageBounds(bodies[0].id)
+          const last = editor.getShapePageBounds(bodies[bodies.length - 1].id)
+          if (first && last) {
+            const frameCenterY = cardBounds.y + cardBounds.height / 2
+            const inRes = buildDataEdgeCurve(
+              { x: cardBounds.x, y: frameCenterY },
+              { x: first.x - NODE_PORT_OUTSET, y: first.y + first.height / 2 },
+              { backward: false }
+            )
+            result.push({
+              id: `boundary-link:${card.id}:input` as TLShapeId,
+              color: '#34d399',
+              sourceId: card.id,
+              targetId: bodies[0].id,
+              provenance: true,
+              curve: inRes.curve,
+              path: inRes.path
+            })
+            const outRes = buildDataEdgeCurve(
+              { x: last.maxX + NODE_PORT_OUTSET, y: last.y + last.height / 2 },
+              { x: cardBounds.maxX, y: frameCenterY },
+              { backward: false }
+            )
+            result.push({
+              id: `boundary-link:${card.id}:output` as TLShapeId,
+              color: '#34d399',
+              sourceId: bodies[bodies.length - 1].id,
+              targetId: card.id,
+              provenance: true,
+              curve: outRes.curve,
+              path: outRes.path
+            })
+          }
+        }
+      }
+    }
   }
   return result
 }
@@ -435,12 +449,127 @@ function mirrorCameraTransform(editor: Editor, frame: HTMLElement): () => void {
  * 改为在 window 捕获阶段用 SVGGeometryElement.isPointInStroke 手动判定：
  * 命中连线才拦截事件，其余区域完全放行给 tldraw。
  */
+const DataEdgeItem = memo(function DataEdgeItem({
+  edge,
+  active,
+  hovered,
+  dimmed,
+  showFlow
+}: {
+  edge: PageEdge
+  active: boolean
+  hovered: boolean
+  dimmed: boolean
+  showFlow: boolean
+}): React.JSX.Element {
+  if (edge.provenance) {
+    return (
+      <g
+        data-edge-id={edge.id}
+        className={dimmed ? 'is-dimmed' : undefined}
+      >
+        <path
+          className="data-edge-visible artifact-provenance-edge"
+          d={edge.path}
+          vectorEffect="non-scaling-stroke"
+          style={{
+            stroke: edge.color,
+            color: edge.color,
+            ...(edge.dash ? { strokeDasharray: edge.dash } : {})
+          }}
+        />
+        {showFlow && (
+          <path
+            className="data-edge-flow artifact-provenance-flow"
+            d={edge.path}
+            pathLength="1000"
+            vectorEffect="non-scaling-stroke"
+            style={{ color: edge.color }}
+          />
+        )}
+      </g>
+    )
+  }
+  if (edge.invalid) {
+    return (
+      <g
+        className={`data-edge is-invalid${active ? ' is-selected' : ''}${
+          hovered ? ' is-hovered' : ''
+        }${dimmed ? ' is-dimmed' : ''}`}
+        data-edge-id={edge.id}
+      >
+        <path
+          className="data-edge-visible"
+          d={edge.path}
+          vectorEffect="non-scaling-stroke"
+          style={{ strokeDasharray: '10 7' }}
+        />
+      </g>
+    )
+  }
+  return (
+    <g
+      className={`data-edge${active ? ' is-selected' : ''}${
+        hovered ? ' is-hovered' : ''
+      }${dimmed ? ' is-dimmed' : ''}`}
+      data-edge-id={edge.id}
+    >
+      <path
+        className="data-edge-visible"
+        d={edge.path}
+        vectorEffect="non-scaling-stroke"
+        style={{ stroke: edge.color, color: edge.color }}
+      />
+      {showFlow && (
+        <path
+          className="data-edge-flow"
+          d={edge.path}
+          pathLength="1000"
+          vectorEffect="non-scaling-stroke"
+          style={{ color: edge.color }}
+        />
+      )}
+    </g>
+  )
+})
+
+function isEdgeGeometryRecordChange(
+  record: { typeName?: string; type?: string },
+  prev?: { x?: number; y?: number; opacity?: number; props?: Record<string, unknown>; meta?: Record<string, unknown> }
+): boolean {
+  if (record.typeName === 'binding') return true
+  if (record.typeName !== 'shape') return false
+  if (record.type === 'arrow' || record.type === 'group') return true
+  if (record.type !== 'node-card') return false
+  if (!prev) return true
+  const next = record as {
+    x?: number
+    y?: number
+    opacity?: number
+    props?: Record<string, unknown>
+    meta?: Record<string, unknown>
+  }
+  return (
+    next.x !== prev.x ||
+    next.y !== prev.y ||
+    next.opacity !== prev.opacity ||
+    next.props?.w !== prev.props?.w ||
+    next.props?.h !== prev.props?.h ||
+    next.props?.nodeType !== prev.props?.nodeType ||
+    next.meta !== prev.meta
+  )
+}
+
 export function DataEdgeLayer({
   editor,
-  interactive = true
+  interactive = true,
+  activeOnlyEdgeFlow = false,
+  skipEdgeHitDom = false
 }: {
   editor: Editor
   interactive?: boolean
+  activeOnlyEdgeFlow?: boolean
+  skipEdgeHitDom?: boolean
 }): React.JSX.Element {
   const [revision, setRevision] = useState(0)
   const selectedEdgeId = useEdgeSelectionStore((state) => state.selectedEdgeId)
@@ -493,7 +622,47 @@ export function DataEdgeLayer({
     }
     // 相机变化不再重算几何；只有文档变化（位置、端口、节点尺寸、连线本身）才需要重新收集。
     // 不再监听 session：tldraw 把相机放在实例状态里，session 会在每个缩放帧触发一次全量重渲染。
-    const offDocument = editor.store.listen(update, { scope: 'document' })
+    const offDocument = editor.store.listen(
+      (entry) => {
+        const { added, updated, removed } = entry.changes
+        let relevant = false
+        for (const rec of Object.values(added)) {
+          if (isEdgeGeometryRecordChange(rec as { typeName?: string; type?: string })) {
+            relevant = true
+            break
+          }
+        }
+        if (!relevant) {
+          for (const rec of Object.values(removed)) {
+            if (isEdgeGeometryRecordChange(rec as { typeName?: string; type?: string })) {
+              relevant = true
+              break
+            }
+          }
+        }
+        if (!relevant) {
+          for (const [prev, next] of Object.values(updated)) {
+            if (
+              isEdgeGeometryRecordChange(
+                next as { typeName?: string; type?: string },
+                prev as {
+                  x?: number
+                  y?: number
+                  opacity?: number
+                  props?: Record<string, unknown>
+                  meta?: Record<string, unknown>
+                }
+              )
+            ) {
+              relevant = true
+              break
+            }
+          }
+        }
+        if (relevant) update()
+      },
+      { scope: 'document' }
+    )
     return () => {
       offDocument()
       if (frame) cancelAnimationFrame(frame)
@@ -517,24 +686,13 @@ export function DataEdgeLayer({
     nodeRectsRef.current = nodeRects
     edgesRef.current = edges
   })
-  // 命中路径包围盒缓存：按 edges 身份失效。isPointInStroke 逐条全量判定很贵，
-  // 先用 bbox 粗筛把每帧候选降到指针附近的少数几条。
-  const hitBoxCacheRef = useRef<{
-    key: PageEdge[] | null
-    items: Array<{ path: SVGPathElement; box: DOMRect }>
-  }>({ key: null, items: [] })
   const mask = edgeMaskExtents(nodeRects)
   const hoveredEdgeId = hoveredEdge?.id ?? null
   const hoveredEdgeIsArtifact = hoveredEdge !== null && hoveredEdge.id.startsWith('artifact:')
 
-  /** 判断屏幕坐标是否落在任一连线的可点击描边区域内。 */
+  /** 纯数学命中测试：无 SVG getScreenCTM / getBBox / isPointInStroke，无 .port-dot DOM 扫描。 */
   const hitTest = (clientX: number, clientY: number): TLShapeId | null => {
-    const svg = svgRef.current
-    if (!svg) return null
-    const matrix = svg.getScreenCTM()
-    if (!matrix) return null
-    // 指针换算到连线层的 user space（= 页面坐标），与 path 的 d 同一坐标系。
-    const point = new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse())
+    const point = editor.screenToPage({ x: clientX, y: clientY })
     // 数据线即使几何上穿过卡片，也只能在节点下方；节点内部不能选中线、更不能出现剪刀。
     if (
       nodeRectsRef.current.some(
@@ -547,54 +705,16 @@ export function DataEdgeLayer({
     ) {
       return null
     }
+    const scale = editor.getCamera().z || 1
     // 端口可在无可见半圆提示的范围内跟随鼠标。该范围优先属于端口，不属于连线删除。
-    // 端口都贴在卡片边缘：指针远离所有节点矩形时直接跳过昂贵的
-    // querySelectorAll + getBoundingClientRect（鼠标在空白画布移动是常态）。
-    const scale = Math.abs(matrix.a) || 1
-    const portReach = 27 / scale + 24
-    const nearNode = nodeRectsRef.current.some(
-      (node) =>
-        point.x >= node.x - portReach &&
-        point.x <= node.x + node.width + portReach &&
-        point.y >= node.y - portReach &&
-        point.y <= node.y + node.height + portReach
-    )
-    if (nearNode) {
-      const insidePortZone = Array.from(document.querySelectorAll<HTMLElement>('.port-dot')).some(
-        (port) => {
-          const portRect = port.getBoundingClientRect()
-          return (
-            Math.hypot(
-              clientX - (portRect.left + portRect.width / 2),
-              clientY - (portRect.top + portRect.height / 2)
-            ) <= 27
-          )
-        }
-      )
-      if (insidePortZone) return null
+    if (findPortNearPagePoint(editor, point, 27 / scale)) {
+      return null
     }
-    // bbox 粗筛后再做精确描边命中；缓存按 edges 身份失效（几何未变不重建）。
-    const cache = hitBoxCacheRef.current
-    if (cache.key !== edgesRef.current) {
-      cache.key = edgesRef.current
-      cache.items = Array.from(svg.querySelectorAll<SVGPathElement>('.data-edge-hit')).map(
-        (path) => ({ path, box: path.getBBox() })
-      )
-    }
-    // 命中描边恒为屏幕 14px（--edge-hit-width 已按 1/zoom 折算），半宽换算到页面坐标。
+    // 命中描边恒为屏幕 14px，半宽换算到页面坐标。
     const pad = 7 / scale + 1
-    for (const { path, box } of cache.items) {
-      if (
-        point.x < box.x - pad ||
-        point.x > box.x + box.width + pad ||
-        point.y < box.y - pad ||
-        point.y > box.y + box.height + pad
-      )
-        continue
-      if (path.isPointInStroke(point)) {
-        const edgeId = path.dataset.edgeId
-        if (!edgeId) return null
-        return edgeId as TLShapeId
+    for (const edge of edgesRef.current) {
+      if (distancePointToCubicBezier(point.x, point.y, edge.curve, pad) <= pad) {
+        return edge.id
       }
     }
     return null
@@ -729,95 +849,30 @@ export function DataEdgeLayer({
             {edges.length > 0 && (
               <g mask={`url(#${overlapMaskId})`}>
                 {edges.map((edge) => {
-                  if (edge.provenance) {
-                    // 追溯线只在节点之外可见，但沿用普通连线的颜色和流动层级。
-                    return (
-                      <g
-                        key={edge.id}
-                        data-edge-id={edge.id}
-                        className={isDimmed(edge) ? 'is-dimmed' : undefined}
-                      >
-                        <path
-                          className="data-edge-glow artifact-provenance-glow"
-                          d={edge.path}
-                          vectorEffect="non-scaling-stroke"
-                          style={{ stroke: edge.color, color: edge.color }}
-                        />
-                        <path
-                          className="data-edge-visible artifact-provenance-edge"
-                          d={edge.path}
-                          vectorEffect="non-scaling-stroke"
-                          style={{
-                            stroke: edge.color,
-                            color: edge.color,
-                            ...(edge.dash ? { strokeDasharray: edge.dash } : {})
-                          }}
-                        />
-                        <path
-                          className="data-edge-flow artifact-provenance-flow"
-                          d={edge.path}
-                          pathLength="1000"
-                          vectorEffect="non-scaling-stroke"
-                          style={{ color: edge.color }}
-                        />
-                      </g>
-                    )
-                  }
                   const active = edge.id === selectedEdgeId
                   const hovered = edge.id === hoveredEdgeId
-                  if (edge.invalid) {
-                    // 失效边：红色虚线并降透明度，不画流光；命中路径照常注册，
-                    // 用户仍可选中 / 悬浮出剪刀手动删除（不做自动清理）。
-                    return (
-                      <g
-                        className={`data-edge is-invalid${active ? ' is-selected' : ''}${
-                          hovered ? ' is-hovered' : ''
-                        }${isDimmed(edge) ? ' is-dimmed' : ''}`}
-                        key={edge.id}
-                        data-edge-id={edge.id}
-                      >
-                        <path
-                          className="data-edge-visible"
-                          d={edge.path}
-                          vectorEffect="non-scaling-stroke"
-                          style={{ strokeDasharray: '10 7' }}
-                        />
-                      </g>
-                    )
-                  }
+                  const dimmed = isDimmed(edge)
+                  const showFlow =
+                    !activeOnlyEdgeFlow ||
+                    active ||
+                    hovered ||
+                    selectedNodeIds.has(edge.sourceId) ||
+                    selectedNodeIds.has(edge.targetId)
                   return (
-                    <g
-                      className={`data-edge${active ? ' is-selected' : ''}${
-                        hovered ? ' is-hovered' : ''
-                      }${isDimmed(edge) ? ' is-dimmed' : ''}`}
+                    <DataEdgeItem
                       key={edge.id}
-                      data-edge-id={edge.id}
-                    >
-                      <path
-                        className="data-edge-glow"
-                        d={edge.path}
-                        vectorEffect="non-scaling-stroke"
-                        style={{ stroke: edge.color, color: edge.color }}
-                      />
-                      <path
-                        className="data-edge-visible"
-                        d={edge.path}
-                        vectorEffect="non-scaling-stroke"
-                        style={{ stroke: edge.color, color: edge.color }}
-                      />
-                      <path
-                        className="data-edge-flow"
-                        d={edge.path}
-                        pathLength="1000"
-                        vectorEffect="non-scaling-stroke"
-                        style={{ color: edge.color }}
-                      />
-                    </g>
+                      edge={edge}
+                      active={active}
+                      hovered={hovered}
+                      dimmed={dimmed}
+                      showFlow={showFlow}
+                    />
                   )
                 })}
               </g>
             )}
             {interactive &&
+              !skipEdgeHitDom &&
               edges.map((edge) => (
                 <path
                   className="data-edge-hit"

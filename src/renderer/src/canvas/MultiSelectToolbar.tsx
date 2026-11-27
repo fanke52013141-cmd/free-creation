@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
 import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import { Icon } from '../components/Icon'
 import { applyBackdropAction } from './backdrop-actions'
+import { useComputedValue } from './use-computed-value'
 
 interface MultiSelectToolbarProps {
   editor: Editor
@@ -24,34 +24,29 @@ export function MultiSelectToolbar({
   onRunFlow,
   onSaveWorkflow
 }: MultiSelectToolbarProps): React.JSX.Element | null {
-  const [selectedIds, setSelectedIds] = useState<TLShapeId[]>([])
-  const [selectedGroupIds, setSelectedGroupIds] = useState<TLShapeId[]>([])
-  const [selectedBackdropId, setSelectedBackdropId] = useState<TLShapeId | null>(null)
-
-  useEffect((): (() => void) => {
-    const update = (): void => {
+  const selection = useComputedValue(
+    'multiselect toolbar state',
+    () => {
       const selected = editor.getSelectedShapes()
-      setSelectedIds(selected.filter((s) => s.type === 'node-card').map((s) => s.id))
-      setSelectedBackdropId(
+      const selectedIds = selected.filter((s) => s.type === 'node-card').map((s) => s.id)
+      const selectedBackdropId =
         selected.length === 1 && selected[0].type === 'backdrop' ? selected[0].id : null
-      )
-      // 选中的 tldraw group：包含节点子项时提供「拆分」入口。
-      setSelectedGroupIds(
-        selected
-          .filter(
-            (s) =>
-              s.type === 'group' &&
-              editor
-                .getSortedChildIdsForParent(s.id)
-                .some((id) => editor.getShape(id)?.type === 'node-card')
-          )
-          .map((s) => s.id)
-      )
-    }
-    update()
-    const unsub = editor.store.listen(update, { scope: 'session' })
-    return unsub
-  }, [editor])
+      const selectedGroupIds = selected
+        .filter(
+          (s) =>
+            s.type === 'group' &&
+            editor
+              .getSortedChildIdsForParent(s.id)
+              .some((id) => editor.getShape(id)?.type === 'node-card')
+        )
+        .map((s) => s.id)
+      const sig = `${selectedIds.join(',')}|${selectedGroupIds.join(',')}|${selectedBackdropId ?? ''}`
+      return { sig, selectedIds, selectedGroupIds, selectedBackdropId }
+    },
+    (prev, next) => prev.sig === next.sig,
+    [editor]
+  )
+  const { selectedIds, selectedGroupIds, selectedBackdropId } = selection
 
   // 单选时工具栏没有任何可用操作，不能留下空的灰色圆角岛。
   if (selectedIds.length < 2 && selectedGroupIds.length === 0 && !selectedBackdropId) return null

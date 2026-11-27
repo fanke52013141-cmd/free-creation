@@ -1,4 +1,4 @@
-import { useValue, type Editor } from 'tldraw'
+import { type Editor } from 'tldraw'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import ReactMarkdown from 'react-markdown'
@@ -11,6 +11,27 @@ import { referenceLayout } from './reference-layout'
 import { NODE_UI } from './node-ui-tokens'
 import { nodePageIndex } from './node-page-index'
 import { referenceIdentity } from './reference-identity'
+import { useComputedValue } from './use-computed-value'
+
+function connectedInputsEqual(a: ConnectedNodeInput[], b: ConnectedNodeInput[]): boolean {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i += 1) {
+    const left = a[i]
+    const right = b[i]
+    if (
+      left.targetPortId !== right.targetPortId ||
+      left.sourceNodeId !== right.sourceNodeId ||
+      left.sourceNodeName !== right.sourceNodeName ||
+      left.sourcePortId !== right.sourcePortId ||
+      left.order !== right.order ||
+      left.value !== right.value
+    ) {
+      return false
+    }
+  }
+  return true
+}
 
 type OpenPreview = (next: { url: string; kind: 'image' | 'video' | 'audio'; title: string }) => void
 const keyOf = (input: ConnectedNodeInput): string =>
@@ -199,13 +220,35 @@ export function ConnectedInputPreview({
   shape: NodeCardShape
   openPreview: OpenPreview
 }): React.JSX.Element | null {
-  const inputs = useValue(
+  const inputs = useComputedValue(
     'connected node inputs',
     () => readConnectedNodeInputs(editor, shape.id),
+    connectedInputsEqual,
     [editor, shape.id]
   )
   const resolved = inputs.filter((input) => input.value !== null)
-  const sequence = useValue('reference source sequences', () => nodePageIndex(editor).sequence, [editor])
+  const sourceIdsKey = resolved.map((input) => input.sourceNodeId).join(',')
+  const sequence = useComputedValue(
+    'reference source sequences',
+    () => {
+      if (!sourceIdsKey) return new Map<string, number>()
+      const all = nodePageIndex(editor).sequence
+      const subset = new Map<string, number>()
+      for (const id of sourceIdsKey.split(',')) {
+        const seq = all.get(id)
+        if (seq !== undefined) subset.set(id, seq)
+      }
+      return subset
+    },
+    (prev, next) => {
+      if (prev.size !== next.size) return false
+      for (const [k, v] of prev) {
+        if (next.get(k) !== v) return false
+      }
+      return true
+    },
+    [editor, sourceIdsKey]
+  )
   const row = useRef<HTMLDivElement>(null)
   const panel = useRef<HTMLDivElement>(null)
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null)

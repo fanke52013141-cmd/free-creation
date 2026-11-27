@@ -1,0 +1,38 @@
+/* 四档自适应画布性能样式：由 .canvas-host[data-perf-tier="0|1|2|3"] 驱动。
+ * Tier 0 (<=60 节点)：0 条视觉削减规则生效，100% 保持原貌。
+ * Tier 1 (>60 节点)：静默空闲未连接端口的呼吸动画（悬停/拖线/连接态保留）。
+ * Tier 2 (>150 节点或 >200 边)：
+ *   - 拖拽/框选期间暂停装饰动画与顶栏模糊；
+ *   - 亮色主题关闭卡片 backdrop-filter。
+ */
+
+.canvas-host[data-perf-tier='1'] .port-dot.unconnected:not(:hover):not(.ok) .port-radar,
+.canvas-host[data-perf-tier='2'] .port-dot.unconnected:not(:hover):not(.ok) .port-radar,
+.canvas-host[data-perf-tier='3'] .port-dot.unconnected:not(:hover):not(.ok) .port-radar {
+  animation: none !important;
+}
+
+.canvas-host[data-perf-tier='2'].is-canvas-dragging .data-edge-flow,
+.canvas-host[data-perf-tier='2'].is-canvas-dragging .node-selection-beam,
+.canvas-host[data-perf-tier='2'].is-canvas-dragging .port-radar,
+.canvas-host[data-perf-tier='3'].is-canvas-dragging .data-edge-flow,
+.canvas-host[data-perf-tier='3'].is-canvas-dragging .node-selection-beam,
+.canvas-host[data-perf-tier='3'].is-canvas-dragging .port-radar {
+  animation-play-state: paused !important;
+}
+
+.canvas-host[data-perf-tier='2'].canvas-theme-light .node-card,
+.canvas-host[data-perf-tier='3'].canvas-theme-light .node-card {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.node-card-dormant-shell {
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  background: var(--surface-card, rgba(24, 26, 32, 0.92));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  box-sizing: border-box;
+  pointer-events: auto;
+}

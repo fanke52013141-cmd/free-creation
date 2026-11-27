@@ -28,7 +28,10 @@ function scrollTargets(body: HTMLElement, target: Element): HTMLElement[] {
 
   // Some node bodies use a nested scroll area while the outer body has no overflow.
   // Keep that area reachable when the pointer is over the header or an adjacent control.
-  for (const element of body.querySelectorAll<HTMLElement>('*')) {
+  // 仅检查已知带滚动能力的语义容器，避免 querySelectorAll('*') 对数百子节点逐一 getComputedStyle。
+  for (const element of body.querySelectorAll<HTMLElement>(
+    '.node-standard-scroll, .ai-process-result-frame, .storyboard-body, .timeline-scroll, .chat-messages, textarea, pre, [data-node-scrollable]'
+  )) {
     if (hasVerticalScroll(element)) return [element]
   }
   return []
@@ -51,9 +54,9 @@ function selectedScrollTargets(editor: Editor, target: Element): HTMLElement[] {
   const card =
     hoveredCard?.dataset.nodeId === selectedId
       ? hoveredCard
-      : Array.from(
-          editor.getContainer().querySelectorAll<HTMLElement>('.node-card-wrap[data-node-id]')
-        ).find((element) => element.dataset.nodeId === selectedId)
+      : editor
+          .getContainer()
+          .querySelector<HTMLElement>(`.node-card-wrap[data-node-id="${CSS.escape(selectedId)}"]`)
   const body = card?.querySelector<HTMLElement>('.node-standard-scroll, .node-body')
   return body ? scrollTargets(body, target) : []
 }

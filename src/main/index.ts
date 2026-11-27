@@ -52,6 +52,7 @@ import { SecretVault, setActiveVault } from './security/keystore/vault'
 import { migrateSecretsToVault } from './security/keystore/migrate'
 import type { DeviceKeyAdapter } from './security/license/device/adapter'
 import { getMediaAbsPath } from './store/media.repo'
+import { getOrCreateThumb } from './media/thumb-cache'
 import { mimeForExtension } from '../shared/mime'
 import { runModelSmokeTest, printSmokeGateBlocked } from './model-smoke'
 import { LicenseService, type LicenseSnapshot } from './security/license/service'
@@ -181,6 +182,23 @@ function registerMediaProtocol(): void {
 
     const ext = extname(abs).toLowerCase()
     const contentType = mimeForExtension(ext)
+
+    // 可选 2x Retina 缩略图参数 ?w=128|680|1024（大画布 Tier 1+ 卡片渲染用，未命中或非栅格图自动回退原图）。
+    const wParam = url.searchParams.get('w')
+    if (wParam) {
+      const requestedWidth = Number.parseInt(wParam, 10)
+      const thumb = await getOrCreateThumb(abs, requestedWidth)
+      if (thumb) {
+        return new Response(new Uint8Array(thumb), {
+          status: 200,
+          headers: {
+            'Content-Type': 'image/jpeg',
+            'Content-Length': String(thumb.byteLength),
+            'Cache-Control': 'public, max-age=31536000, immutable'
+          }
+        })
+      }
+    }
 
     // 异步 stat：避免在主进程事件循环同步阻塞（慢盘 / 网络盘会卡住整个主进程）。
     let fileSize: number

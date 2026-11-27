@@ -4,8 +4,12 @@ import { resolveFeatureOption } from '@shared/engine/models'
 import { rendererGateway } from '../engine/rendererGateway'
 
 const pending = new Map<string, Promise<boolean>>()
+const providerKeyCache = new WeakMap<ProviderSummary[], string>()
+
 export function providerAvailabilityKey(providers: ProviderSummary[]): string {
-  return JSON.stringify(
+  const cached = providerKeyCache.get(providers)
+  if (cached !== undefined) return cached
+  const key = JSON.stringify(
     providers.map(({ id, baseURL, specId, hasApiKey, models }) => ({
       id,
       baseURL,
@@ -14,6 +18,8 @@ export function providerAvailabilityKey(providers: ProviderSummary[]): string {
       models
     }))
   )
+  providerKeyCache.set(providers, key)
+  return key
 }
 /** Dedupe only concurrent checks; settled entries are removed so binding changes can be rechecked. */
 export function checkModelAvailability(

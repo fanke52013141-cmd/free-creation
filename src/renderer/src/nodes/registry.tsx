@@ -485,3 +485,13 @@ export function mediaUrl(relPath: string): string {
   if (relPath.startsWith('blob:') || relPath.startsWith('data:')) return relPath
   return `media:///${relPath.split('/').map(encodeURIComponent).join('/')}`
 }
+
+/**
+ * 2x Retina 缩略图地址（?w=128|680|1024）。
+ * data:/blob: URL 或非媒体路径自动回退原地址；大图预览/导出/执行器始终使用 mediaUrl()。
+ */
+export function mediaThumbUrl(relPath: string, width: 128 | 680 | 1024): string {
+  const base = mediaUrl(relPath)
+  if (base.startsWith('blob:') || base.startsWith('data:')) return base
+  return `${base}?w=${width}`
+}

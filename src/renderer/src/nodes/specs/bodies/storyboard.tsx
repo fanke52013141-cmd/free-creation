@@ -104,22 +104,33 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
     setEditingInput(true)
   }
 
-  // 从上游接收分镜数据。监听画布变更，保证“先创建节点、后连接连线”也能同步。
+  // 从上游接收分镜数据。监听画布变更，保证“先创建节点、后连接连线”也能同步；
+  // 导入完成后立即取消监听，不再常驻空跑。
   useEffect(() => {
+    if (importedRef.current) return
+    if (shotCount > 0) {
+      importedRef.current = true
+      return
+    }
+    let disposed = false
+    let unsubscribe: (() => void) | undefined
     const importUpstream = (): void => {
-      if (importedRef.current) return
-      if (shotCount > 0) {
-        importedRef.current = true
-        return
-      }
+      if (disposed || importedRef.current) return
       const parsed = parseStoryboardData(gatherUpstreamJson(editor, shape.id))
       if (!parsed || parsed.shots.length === 0) return
-      update(parsed)
       importedRef.current = true
+      unsubscribe?.()
+      update(parsed)
       markUndoPoint(editor, 'storyboard-import')
     }
     importUpstream()
-    return editor.store.listen(importUpstream, { scope: 'document' })
+    if (!importedRef.current) {
+      unsubscribe = editor.store.listen(importUpstream, { scope: 'document' })
+    }
+    return () => {
+      disposed = true
+      unsubscribe?.()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, shape.id, shotCount])
 

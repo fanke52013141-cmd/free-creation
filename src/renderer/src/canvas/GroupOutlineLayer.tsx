@@ -10,6 +10,7 @@ import {
 import { markUndoPoint } from './history'
 import { beginConnectionDrag } from './connection-drag'
 import { batchConnectionFromSelection } from './batch-connection'
+import { nodePageIndex } from './node-page-index'
 import {
   collapsedGroupNodeIds,
   reconcileCollapsedStacks,
@@ -189,69 +190,76 @@ export function GroupOutlineLayer({
 
   useEffect(() => {
     let frame = 0
+    let hiddenTimer = 0
+    let cachedHostBounds: DOMRect | null = hostRef.current?.getBoundingClientRect() ?? null
+    const refreshHostBounds = (): void => {
+      cachedHostBounds = hostRef.current?.getBoundingClientRect() ?? null
+    }
     const updateNow = (): void => {
       const host = hostRef.current
       if (!host) return
-      // 先校正被拖离堆叠的成员卡（恢复标题/端口），再计算本帧的视觉层。
-      reconcileCollapsedStacks(editor)
-      const hostBounds = host.getBoundingClientRect()
+      const counts = nodePageIndex(editor).counts
+      const selectedIds = selectedNodeIds(editor)
+      // 画布无分组且未多选时 O(1) 短路，不再每帧扫描全页。
+      if (counts.groups === 0 && selectedIds.length < 2) {
+        setOutlines((current) => (current.length === 0 ? current : []))
+        setCombos((current) => (current.length === 0 ? current : []))
+        setSelection((current) => (current === null ? current : null))
+        return
+      }
+      const hostBounds = cachedHostBounds ?? host.getBoundingClientRect()
       const zoom = editor.getCamera().z || 1
-      // 线框定位在屏幕覆盖层中，节点 page bounds 先转成屏幕坐标；留白使用固定屏幕像素，
-      // 不再乘画布 zoom，避免缩放时框与节点之间的距离跟着变化。
       const sidePad = OUTLINE_SIDE_PAD
       const topPad = OUTLINE_TOP_PAD
       const next: GroupOutline[] = []
       const nextCombos: CollapsedCombo[] = []
 
-      for (const shape of editor.getCurrentPageShapes()) {
-        if (shape.type !== 'group') continue
-        // 循环体模板组合由模板卡自身渲染容器框，跳过通用分组框避免双重边框。
-        if ((shape.meta as Record<string, unknown>)?.iterationTemplateLoopId) continue
-        const bounds = editor.getShapePageBounds(shape.id)
-        if (!bounds) continue
-        const topLeft = editor.pageToScreen({ x: bounds.x, y: bounds.y })
-        const bottomRight = editor.pageToScreen({ x: bounds.maxX, y: bounds.maxY })
-        const meta = shape.meta as Record<string, unknown> | undefined
-        const label = typeof meta?.label === 'string' ? meta.label : ''
-        const collapsed = meta?.collapsed === true
-        const nodeIds = editor
-          .getSortedChildIdsForParent(shape.id)
-          .filter((id) => editor.getShape(id)?.type === 'node-card')
-        if (nodeIds.length < 2) continue
-        // 折叠组合是"节点状态"而非分组：外框按 Stitch 规格渲染（细边框+可复用徽标），
-        // 右上角浮【展开】【运行】两个图标。首位卡标题隐藏后不需要 34px 头部缓冲。
-        if (collapsed) {
-          nextCombos.push({
+      if (counts.groups > 0) {
+        // 先校正被拖离堆叠的成员卡（恢复标题/端口），再计算本帧的视觉层。
+        reconcileCollapsedStacks(editor)
+        for (const shape of editor.getCurrentPageShapes()) {
+          if (shape.type !== 'group') continue
+          // 循环体模板组合由模板卡自身渲染容器框，跳过通用分组框避免双重边框。
+          if ((shape.meta as Record<string, unknown>)?.iterationTemplateLoopId) continue
+          const bounds = editor.getShapePageBounds(shape.id)
+          if (!bounds) continue
+          const topLeft = editor.pageToScreen({ x: bounds.x, y: bounds.y })
+          const bottomRight = editor.pageToScreen({ x: bounds.maxX, y: bounds.maxY })
+          const meta = shape.meta as Record<string, unknown> | undefined
+          const label = typeof meta?.label === 'string' ? meta.label : ''
+          const collapsed = meta?.collapsed === true
+          const nodeIds = editor
+            .getSortedChildIdsForParent(shape.id)
+            .filter((id) => editor.getShape(id)?.type === 'node-card')
+          if (nodeIds.length < 2) continue
+          if (collapsed) {
+            nextCombos.push({
+              id: shape.id,
+              left: topLeft.x - hostBounds.left - sidePad,
+              top: topLeft.y - hostBounds.top - sidePad - COMBO_HEADER_H,
+              width: bottomRight.x - topLeft.x + sidePad * 2,
+              height: bottomRight.y - topLeft.y + sidePad * 2 + COMBO_HEADER_H,
+              nodeCount: collapsedGroupNodeIds(editor, shape.id).length,
+              label,
+              zoom
+            })
+            continue
+          }
+          next.push({
             id: shape.id,
             left: topLeft.x - hostBounds.left - sidePad,
-            // 2026-10-31 用户裁决：可复用徽标与展开/运行按钮收进框体顶部标题行，
-            // 不再骑在框边外；框架上移一个标题行高度给标题行留位。
-            top: topLeft.y - hostBounds.top - sidePad - COMBO_HEADER_H,
+            top: topLeft.y - hostBounds.top - topPad,
             width: bottomRight.x - topLeft.x + sidePad * 2,
-            height: bottomRight.y - topLeft.y + sidePad * 2 + COMBO_HEADER_H,
-            nodeCount: collapsedGroupNodeIds(editor, shape.id).length,
+            height: bottomRight.y - topLeft.y + topPad + sidePad,
+            count: nodeIds.length,
             label,
             zoom
           })
-          continue
         }
-        next.push({
-          id: shape.id,
-          left: topLeft.x - hostBounds.left - sidePad,
-          top: topLeft.y - hostBounds.top - topPad,
-          width: bottomRight.x - topLeft.x + sidePad * 2,
-          height: bottomRight.y - topLeft.y + topPad + sidePad,
-          count: nodeIds.length,
-          label,
-          zoom
-        })
       }
       setOutlines((current) => (outlinesEqual(current, next) ? current : next))
       setCombos((current) => (combosEqual(current, nextCombos) ? current : nextCombos))
 
-      // 多选不是分组：只在 2 个以上节点被同时选中时绘制细虚线范围框，
-      // 让它和常驻的分组容器维持完全不同的视觉语义。
-      const selectedIds = selectedNodeIds(editor)
       if (selectedIds.length < 2) {
         setSelection((current) => (current === null ? current : null))
         return
@@ -284,36 +292,49 @@ export function GroupOutlineLayer({
       )
     }
 
-    // 拖动时 document/session 会在同一帧内连续变化；每帧最多计算一次分组框，
-    // 避免额外的 pageToScreen 与 React state 更新拖慢节点拖拽。
     const update = (): void => {
       if (frame) return
       const run = (): void => {
         frame = 0
+        if (hiddenTimer) {
+          window.clearTimeout(hiddenTimer)
+          hiddenTimer = 0
+        }
         updateNow()
       }
       frame = requestAnimationFrame(run)
-      // 后台/被遮挡的 tab 会冻结 rAF，折叠状态会永远等不到计算帧；
-      // 用短定时器兜底：前台 rAF 先跑（frame 归零）则定时器直接跳过。
-      window.setTimeout(() => {
-        if (frame) {
-          cancelAnimationFrame(frame)
-          run()
-        }
-      }, 90)
+      if (document.hidden && !hiddenTimer) {
+        hiddenTimer = window.setTimeout(() => {
+          hiddenTimer = 0
+          if (frame) {
+            cancelAnimationFrame(frame)
+            run()
+          }
+        }, 90)
+      }
     }
+
+    const onResize = (): void => {
+      refreshHostBounds()
+      update()
+    }
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined' && hostRef.current
+        ? new ResizeObserver(onResize)
+        : null
+    if (resizeObserver && hostRef.current) resizeObserver.observe(hostRef.current)
 
     updateNow()
     const offDocument = editor.store.listen(update, { scope: 'document' })
     const offSession = editor.store.listen(update, { scope: 'session' })
-    window.addEventListener('resize', update)
-    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', onResize)
     return () => {
       offDocument()
       offSession()
+      resizeObserver?.disconnect()
       if (frame) cancelAnimationFrame(frame)
-      window.removeEventListener('resize', update)
-      window.removeEventListener('scroll', update, true)
+      if (hiddenTimer) window.clearTimeout(hiddenTimer)
+      window.removeEventListener('resize', onResize)
     }
   }, [editor, hostRef])
 
