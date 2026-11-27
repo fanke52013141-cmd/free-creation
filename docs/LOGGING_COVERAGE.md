@@ -8,6 +8,7 @@
 - **脱敏**：不记录节点流正文、提示词、模型回复、协作文本、输入值、checkpoint 内容或原始异常；调试输出已移除。日志写入失败不改变运行结果。
 - **验证**：定向 74 文件/1050 用例通过；composite desktop/GUI、CLI/MCP remediation/legacy/retry 与 Agent Flow capability/parallel/end-to-end/human-task/review/collab/media/queue/recovery 桌面验收通过；`typecheck`、`lint`、`verify:agent-access` 通过。完整 `ELECTRON_DISABLE_SANDBOX=1 npm run verify` 退出码 0（`qa/verification/run-Qd20tV/status.json`，4157 单元通过/7 跳过，model-runtime 6/6，桌面与 R09 链路通过）。
 - **未覆盖边界**：真实付费模型、物理掉电/真实磁盘故障、Windows 安装包与干净 Runner；既有 P2 展示/归因问题不在本轮日志闭环范围。
+- **验收驱动补充**：remediation 的 H09 通过 Windows UI Automation 点击真实原生「允许提交」控件，不 mock `desktop.ask` 或授权回执；报告只记录 transport/nodeId/mode/时间，不记录确认框业务内容。非 Windows 明确打印人工步骤并等待生产门禁返回。
 
 ## 2026-11-26：三大规范体系收敛、节点流版本契约对齐与外部操作风险分级
 

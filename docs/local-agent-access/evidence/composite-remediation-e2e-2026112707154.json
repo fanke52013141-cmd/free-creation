@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "startedAt": "2026-11-27T07:00:35.122Z",
+  "transports": {
+    "cli": "real Electron local-agent process",
+    "mcp": "official MCP SDK stdio client"
+  },
+  "restartVerified": true,
+  "humanConfirmations": [
+    {
+      "transport": "cli",
+      "nodeId": "h1",
+      "mode": "windows-uia-invoke",
+      "confirmedAt": "2026-11-27T07:00:46.433Z"
+    },
+    {
+      "transport": "cli",
+      "nodeId": "h2",
+      "mode": "windows-uia-invoke",
+      "confirmedAt": "2026-11-27T07:00:48.307Z"
+    },
+    {
+      "transport": "mcp",
+      "nodeId": "h2",
+      "mode": "windows-uia-invoke",
+      "confirmedAt": "2026-11-27T07:00:55.519Z"
+    },
+    {
+      "transport": "mcp",
+      "nodeId": "h1",
+      "mode": "windows-uia-invoke",
+      "confirmedAt": "2026-11-27T07:00:56.462Z"
+    }
+  ],
+  "scenarios": [
+    {
+      "transport": "cli",
+      "scenario": "H01",
+      "runId": "ade277ad-5411-4830-8444-7332267280bf",
+      "status": "failed",
+      "failedStep": "bad-json",
+      "failureAdmissions": 1,
+      "independentCompleted": true
+    },
+    {
+      "transport": "cli",
+      "scenario": "H09",
+      "runId": "c400668d-9995-4832-8dc5-ed288e45ba24",
+      "order": "h1->h2",
+      "revisions": [
+        1,
+        2
+      ],
+      "steps": [
+        {
+          "stepKey": "h1",
+          "status": "completed"
+        },
+        {
+          "stepKey": "h2",
+          "status": "completed"
+        }
+      ],
+      "outputPorts": [
+        "out-h1",
+        "out-h2"
+      ],
+      "restart": true
+    },
+    {
+      "transport": "cli",
+      "scenario": "H10-direct",
+      "runId": "95648339-e3f6-4ecf-a664-e8ebc9b92f39",
+      "levels": 2,
+      "validationCode": "NESTED_MANUAL_GATE_UNSUPPORTED",
+      "runError": "NESTED_MANUAL_GATE_UNSUPPORTED",
+      "internalSteps": 0
+    },
+    {
+      "transport": "cli",
+      "scenario": "H10-indirect",
+      "runId": "1cba3808-d48b-4f02-8a68-d58186c3ba53",
+      "levels": 3,
+      "validationCode": "NESTED_MANUAL_GATE_UNSUPPORTED",
+      "runError": "NESTED_MANUAL_GATE_UNSUPPORTED",
+      "internalSteps": 0
+    },
+    {
+      "transport": "mcp",
+      "scenario": "H01",
+      "runId": "bcc75703-9ab3-469c-8591-4889f42d0132",
+      "status": "failed",
+      "failedStep": "bad-json",
+      "failureAdmissions": 1,
+      "independentCompleted": true
+    },
+    {
+      "transport": "mcp",
+      "scenario": "H09",
+      "runId": "70f79752-83f0-4e1c-bc81-7d3478d67b4c",
+      "order": "h2->h1",
+      "revisions": [
+        1,
+        2
+      ],
+      "steps": [
+        {
+          "stepKey": "h2",
+          "status": "completed"
+        },
+        {
+          "stepKey": "h1",
+          "status": "completed"
+        }
+      ],
+      "outputPorts": [
+        "out-h1",
+        "out-h2"
+      ],
+      "restart": false
+    },
+    {
+      "transport": "mcp",
+      "scenario": "H10-direct",
+      "runId": "c60ffc66-f88f-4ad3-8964-d3727ccb6f39",
+      "levels": 2,
+      "validationCode": "NESTED_MANUAL_GATE_UNSUPPORTED",
+      "runError": "NESTED_MANUAL_GATE_UNSUPPORTED",
+      "internalSteps": 0
+    },
+    {
+      "transport": "mcp",
+      "scenario": "H10-indirect",
+      "runId": "ec360604-7f0a-4947-9a4a-25cb3d12ef54",
+      "levels": 3,
+      "validationCode": "NESTED_MANUAL_GATE_UNSUPPORTED",
+      "runError": "NESTED_MANUAL_GATE_UNSUPPORTED",
+      "internalSteps": 0
+    }
+  ],
+  "finishedAt": "2026-11-27T07:00:56.932Z"
+}

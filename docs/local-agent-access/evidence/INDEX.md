@@ -247,3 +247,4 @@
 | parity-gaps-prefix-b | 2026112705304 | 步骤 10 / 通过 9 / 失败 1 | [parity-gaps-prefix-b-2026112705304.json](parity-gaps-prefix-b-2026112705304.json) |
 | parity-gaps-prefix-c | 2026112705304 | 步骤 12 / 通过 12 / 失败 0 | [parity-gaps-prefix-c-2026112705304.json](parity-gaps-prefix-c-2026112705304.json) |
 | vertical-slice | 2026112705304 | 步骤 13 / 通过 0 | [vertical-slice-2026112705304.json](vertical-slice-2026112705304.json) |
+| composite-remediation-e2e | 2026112707154 | ok | [composite-remediation-e2e-2026112707154.json](composite-remediation-e2e-2026112707154.json) |

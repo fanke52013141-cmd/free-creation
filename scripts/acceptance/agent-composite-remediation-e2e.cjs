@@ -8,6 +8,7 @@ const fsp = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
 const { createHash } = require('node:crypto')
+const { spawn } = require('node:child_process')
 const {
   root,
   sleep,
@@ -20,6 +21,7 @@ const {
 
 const evidenceDir = path.join(root, 'qa', 'local-agent-access', 'composite-remediation-e2e')
 const reportPath = path.join(evidenceDir, 'report.json')
+const nativeConfirmScript = path.join(root, 'scripts', 'acceptance', 'lib', 'confirm-native-dialog.ps1')
 const report = {
   schemaVersion: 1,
   status: 'running',
@@ -29,6 +31,7 @@ const report = {
     mcp: 'official MCP SDK stdio client'
   },
   restartVerified: false,
+  humanConfirmations: [],
   scenarios: []
 }
 let currentScenario = 'startup'
@@ -456,6 +459,51 @@ async function runH01(driver, session) {
   })
 }
 
+function confirmNativeHumanDecision(session) {
+  if (process.platform !== 'win32') {
+    console.log('[manual] 请在应用弹出的原生确认框中点击「允许提交」；脚本会等待生产门禁返回')
+    return Promise.resolve('manual-native-dialog')
+  }
+  return new Promise((resolve, reject) => {
+    const child = spawn('powershell.exe', [
+      '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+      '-File', nativeConfirmScript,
+      '-ProcessId', String(session.pid),
+      '-WindowTitle', '外部 Agent 请求代你提交节点流人工结果',
+      '-ButtonName', '允许提交',
+      '-TimeoutMs', '60000'
+    ], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+    let stdout = '', stderr = ''
+    child.stdout.on('data', (chunk) => { stdout += chunk })
+    child.stderr.on('data', (chunk) => { stderr += chunk })
+    child.once('error', reject)
+    child.once('exit', (code, signal) => {
+      if (code === 0 && stdout.includes('NATIVE_CONFIRM_INVOKED')) {
+        resolve('windows-uia-invoke')
+        return
+      }
+      reject(new Error(
+        `NATIVE_CONFIRM_DRIVER_FAILED: code=${code} signal=${signal} ${stdout}\n${stderr}`.slice(0, 1000)
+      ))
+    })
+  })
+}
+
+async function submitHumanWithConfirmation(driver, session, input) {
+  console.log(`[human] ${driver.kind}/${input.nodeId}: 发起生产人工确认并等待真实「允许提交」按钮`)
+  const pending = driver.ok('composite.run.submitHuman', input)
+  const confirmation = confirmNativeHumanDecision(session)
+  const [result, mode] = await Promise.all([pending, confirmation])
+  report.humanConfirmations.push({
+    transport: driver.kind,
+    nodeId: input.nodeId,
+    mode,
+    confirmedAt: new Date().toISOString()
+  })
+  persist()
+  return result
+}
+
 async function runH09(driver, session, first, restart) {
   const second = first === 'h1' ? 'h2' : 'h1'
   const capabilityId = `accept-h09-${driver.kind}-${first}`
@@ -504,7 +552,7 @@ async function runH09(driver, session, first, restart) {
     persist()
   }
 
-  await driver.ok('composite.run.submitHuman', {
+  await submitHumanWithConfirmation(driver, session, {
     runId,
     nodeId: first,
     value: { kind: 'text', text: submissions[first] }
@@ -527,7 +575,7 @@ async function runH09(driver, session, first, restart) {
   assert(secondWait.db.steps.filter((step) => step.step_key === first && step.status === 'completed').length === 1,
     `H09 first human completed before second wait: ${JSON.stringify(secondWait.db.steps)}`)
 
-  await driver.ok('composite.run.submitHuman', {
+  await submitHumanWithConfirmation(driver, session, {
     runId,
     nodeId: second,
     value: { kind: 'text', text: submissions[second] }

@@ -89,7 +89,7 @@
 | --- | --- | --- |
 | `acceptance:composite-desktop` | 通过 | 发布/升级/引用/嵌套/递归/预算/媒体/删除保护/MCP |
 | `acceptance:composite-gui` | 通过 | GUI 发布、草稿恢复、版本切换、升级、撤销、缺输入阻止 |
-| `acceptance:agent-composite-remediation` | 通过（8 scenarios） | H01/H09/H10，CLI+MCP，重启恢复、双人工等待顺序 |
+| `acceptance:agent-composite-remediation` | 通过（8 scenarios，连续 2 轮） | H01/H09/H10，CLI+MCP，重启恢复、双人工等待顺序；真实原生人工确认驱动 |
 | `acceptance:agent-composite-legacy-runtime` | 通过（2 scenarios） | 历史 v1 headless/inline 兼容 |
 | `acceptance:agent-capability-params` | 通过 | processor field/path、video featureKey/seed、真实 Host/Store |
 | `acceptance:agent-flow-composite-failure` | 通过 | 失败阶段/节点/端口定位、skipped 如实记账 |
@@ -98,6 +98,8 @@
 | `acceptance:agent-flow-state-machine` | 通过 | 状态推进、修订冲突、输出投影、MCP 一致 |
 | `acceptance:agent-flow-human-task` | 通过 | 人工等待、提交/冲突、续跑消费、公开输出落账 |
 | Agent Flow graph 桌面组 | 通过 | capability/parallel/end-to-end/review/collab/media/queue/recovery；含协作等待、返工、重启与停止 |
+
+**H09 人工确认复核补充**：pure headless `composite.run.submitHuman` 使用主进程原生确认框。验收脚本现在通过 Windows UI Automation 按 Electron 主进程 PID 与精确按钮名调用真实「允许提交」控件，不 mock `desktop.ask`、不伪造授权回执；非 Windows 会明确打印人工点击步骤并继续等待生产门禁。修复后 CLI 与 MCP 的 H09 均完成两次确认，整组连续两轮 8/8 通过，每轮报告记录 4 次 `windows-uia-invoke`。此前一次 `HUMAN_DECISION_TIMEOUT` 的根因是脚本没有驱动原生确认框，不作为产品执行逻辑回归。
 
 ### 4.3 完整验证
 
@@ -127,7 +129,7 @@
 - 本报告：`docs/canvas-agent-flow/audits/node-flow-deep-review-2026-11-27.md`
 - 定向测试与完整 verify：`qa/verification/`
 - composite GUI：`qa/composite-gui-acceptance/`
-- composite remediation：`qa/local-agent-access/composite-remediation-e2e/report.json`
+- composite remediation：`qa/local-agent-access/composite-remediation-e2e/report.json`；归档证据 `docs/local-agent-access/evidence/composite-remediation-e2e-2026112707154.json`
 - composite legacy：`qa/local-agent-access/composite-legacy-runtime-e2e/report.json`
 - capability params：`qa/local-agent-access/capability-params-e2e/`
 - composite failure/retry：`qa/agent-flow-composite-failure/`、`qa/agent-flow-composite-retry/`

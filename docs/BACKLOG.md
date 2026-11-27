@@ -33,7 +33,7 @@ sources:
 >
 > - **范围**：基础节点串联/并联、composite 编辑保存重开与公开边界、人工等待/续跑、Agent Flow 图路由/循环/协作返工、checkpoint 恢复与整画布单驱动。
 > - **主要修复**：composite ref 重载丢线与边界合并、画布续跑原输入/输出落账、等待不再误报完成、runtimeVersion/依赖/删除历史门禁；Agent Flow review 工具、循环轮次、受控子节点重复执行、空路由绕过、大上下文 M36、完成前子任务断言、selector 真值来源、ContextManifest 多来源去重、loop skipped exit、额外受控入边、deadline/stop、协作返工单驱动与 M37 pending writes 迁移。
-> - **验证**：定向回归 74 文件/1050 用例通过；composite desktop/GUI、CLI/MCP remediation/legacy/retry、Agent Flow capability/parallel/end-to-end/human-task/review/collab/media/queue/recovery 桌面验收通过；完整 `ELECTRON_DISABLE_SANDBOX=1 npm run verify` 退出码 0（`qa/verification/run-Qd20tV/status.json`，4157 单元通过/7 跳过，model-runtime 6/6，桌面与 R09 链路通过）。完整报告见 [节点流深度审查与真实验收](<canvas-agent-flow/audits/node-flow-deep-review-2026-11-27.md>)。
+> - **验证**：定向回归 74 文件/1050 用例通过；composite desktop/GUI、CLI/MCP remediation/legacy/retry、Agent Flow capability/parallel/end-to-end/human-task/review/collab/media/queue/recovery 桌面验收通过；完整 `ELECTRON_DISABLE_SANDBOX=1 npm run verify` 退出码 0（`qa/verification/run-Qd20tV/status.json`，4157 单元通过/7 跳过，model-runtime 6/6，桌面与 R09 链路通过）。remediation 已补 Windows UI Automation 真实原生「允许提交」驱动（非 Windows 明确人工步骤），CLI/MCP H09 与整组连续两轮 8/8 通过。完整报告见 [节点流深度审查与真实验收](<canvas-agent-flow/audits/node-flow-deep-review-2026-11-27.md>)。
 > - **边界**：真实付费模型、物理掉电/真实磁盘故障、Windows 安装包与干净 Runner 仍未覆盖；Agent Flow 若干 P2 展示/归因问题保留，详见报告 §5。
 
 ## 当前未闭环边界（基线 `57a7e60d`）
