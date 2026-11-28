@@ -27,6 +27,7 @@ import {
 } from '@shared/voice-design'
 import {
   clearSelectedMediaHistory,
+  InlineNoModelHint,
   MediaFileActions,
   MediaResultGrid,
   removeMediaResultFromShape,
@@ -201,7 +202,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
           ))}
         </AppSelect>
         {providersLoaded && !minimaxProviders.length && (
-          <span>请前往项目首页的模型设置配置 MiniMax 供应商</span>
+          <InlineNoModelHint text="尚未配置 MiniMax 供应商" />
         )}
       </div>
 

@@ -64,7 +64,6 @@ export function ResourceQueuePanel({ projectId }: { projectId: string }): React.
           </label>
         ))}
         <p style={{ fontSize: 12 }}>额度适用于当前窗口。调整不会中断运行中的任务。</p>
-        {visible.length === 0 && <p>暂无任务</p>}
         {visible.map((task) => (
           <div key={task.id} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             <span style={{ flex: 1 }}>

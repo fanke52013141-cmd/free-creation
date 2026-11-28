@@ -23,7 +23,7 @@ import {
 } from '@shared/tts'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { parseNodeExtra } from '../../nodeValues'
-import { pickImportedAsset } from './shared'
+import { InlineNoModelHint, pickImportedAsset } from './shared'
 
 export function TtsBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
@@ -197,7 +197,7 @@ export function TtsBody({ shape }: NodeBodyProps): React.JSX.Element {
             </option>
           ))}
         </AppSelect>
-        {loaded && !models.length && <span>请前往项目首页的模型设置添加 MiniMax 模型</span>}
+        {loaded && !models.length && <InlineNoModelHint text="尚未配置 MiniMax 模型" />}
         <input
           className="gen-input"
           aria-label="自定义音色 ID"

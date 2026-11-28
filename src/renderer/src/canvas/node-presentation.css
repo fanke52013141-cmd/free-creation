@@ -89,7 +89,7 @@
   min-height: 0;
   overflow: visible;
 }
-.node-card .node-standard-shell .node-body-content > div {
+.node-card .node-standard-shell .node-body-content > div:not(.node-standard-identity) {
   padding: 0;
   flex: 0 0 auto;
 }
@@ -141,10 +141,14 @@
 .node-standard-shell[data-has-identity='true'] .node-standard-scroll,
 .node-standard-shell[data-has-identity='true'] .node-body-content {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
+  min-height: 0;
 }
 .node-standard-shell[data-has-identity='true'] .node-body {
-  flex: 1;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
   min-height: 0;
 }
 .node-standard-identity {
@@ -294,7 +298,8 @@
   color: var(--node-text-muted);
 }
 
-/* v1.5：文字按钮不再显示图标（纯图标功能控件保留，如播放/缩放/删除）。 */
+/* v1.5 / 2026-11-28：节点内所有文字按钮不显示任何图标（纯图标功能控件 .icon-btn 保留）。 */
+.node-card .node-standard-action-bar button:not(.icon-btn) > svg,
 .node-card .node-body
   :is(
     .btn-ghost,
@@ -719,13 +724,41 @@
   text-overflow: ellipsis;
 }
 
-/* 空态身份块下方的模型占位提示（NoModelHint，2026-11-02）。 */
+/* 空态身份块下方的模型占位提示（NoModelHint，2026-11-28 规整：次级说明文字）。 */
 .node-standard-identity > .gen-empty-model-hint {
-  margin: 14px 0 0;
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  text-align: center;
+}
+
+.gen-inline-model-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.gen-inline-model-hint-btn {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid var(--node-edge-strong, var(--line));
+  border-radius: 6px;
+  background: transparent;
   color: var(--txt);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 20px;
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.gen-inline-model-hint-btn:hover {
+  border-color: var(--accent, rgba(255, 255, 255, 0.35));
+  background: rgba(255, 255, 255, 0.06);
 }
 
 /* 分镜板 JSON 编辑态（2026-11-02 裁决）：编辑框填满正文剩余空间，给足编辑面积。 */
@@ -876,20 +909,6 @@
 }
 
 /* Identity stays centered while its explanatory text appears below. */
-.node-card.type-video .node-standard-identity:has(> .gen-empty-model-hint) .node-standard-identity-icon {
-  position: absolute;
-  left: 50%;
-  top: calc(50% + (var(--node-standard-action-height) - var(--node-standard-padding)) / 2);
-  transform: translate(-50%, -50%);
-}
-.node-card.type-video .node-standard-identity:has(> .gen-empty-model-hint) > .gen-empty-model-hint {
-  position: absolute;
-  top: calc(50% + (var(--node-standard-action-height) - var(--node-standard-padding)) / 2 + 44px);
-  left: 12px;
-  right: 12px;
-  text-align: center;
-}
-
 .node-card .video-thumbnail-stage {
   display: grid;
   flex: 1 1 0;

@@ -34,6 +34,24 @@ type Shape = {
   meta?: Record<string, unknown>
 }
 
+/** Find one translation for the proposal, preserving every internal offset. */
+function proposalOffset(file: ProjectFile, nodes: FlowGraphPreview['nodes']): number {
+  const store = (file.tldrawSnapshot as { store?: Record<string, Shape & { type?: string }> } | undefined)?.store
+  const obstacles = Object.values(store ?? {}).filter(shape => shape.type === 'node-card')
+  let offset = 0
+  for (const obstacle of obstacles.sort((a, b) => (a.x ?? 0) - (b.x ?? 0))) {
+    const x = obstacle.x ?? 0
+    const y = obstacle.y ?? 0
+    const right = x + (obstacle.props.w ?? 340)
+    const bottom = y + (obstacle.props.h ?? 300)
+    if (nodes.some(node => node.x + offset < right + 32 && node.x + offset + 340 > x - 32 &&
+      node.y < bottom + 32 && node.y + 300 > y - 32)) {
+      offset = right + 120 - Math.min(...nodes.map(node => node.x))
+    }
+  }
+  return offset
+}
+
 type BuildPreviewNode = BuildPreview['nodes'][number]
 type BuildTarget = {
   type: BuildPreviewNode['type']
@@ -288,6 +306,8 @@ export class FlowBuilderHost {
     const store = (file.tldrawSnapshot as { store?: Record<string, unknown> } | undefined)?.store ?? {}
     if (compiled.nodes.some((node) => store[node.id]))
       throw new AgentRuntimeError('FLOW_BUILD_CONFLICT', 'builder')
+    const offset = proposalOffset(file, compiled.nodes)
+    for (const node of compiled.nodes) node.x += offset
     const preview: FlowGraphPreview = {
       source: 'graph',
       buildId,
@@ -362,6 +382,8 @@ export class FlowBuilderHost {
     const store = (file.tldrawSnapshot as { store?: Record<string, unknown> } | undefined)?.store ?? {}
     if (preview.nodes.some((node) => store[node.id]))
       throw new AgentRuntimeError('FLOW_BUILD_CONFLICT', 'builder')
+    if (proposalOffset(file, preview.nodes) !== 0)
+      throw new AgentRuntimeError('FLOW_CANVAS_DIVERGED', 'builder')
     return preview
   }
   /** P5.3：核对已保存图含预览节点（committed）才置 committed；不把渲染器回执当成功。 */

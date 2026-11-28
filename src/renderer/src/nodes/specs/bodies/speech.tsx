@@ -18,6 +18,7 @@ import { useAppStore } from '../../../stores/app'
 import { AppSelect } from '../../../components/AppSelect'
 import { Icon } from '../../../components/Icon'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
+import { InlineNoModelHint } from './shared'
 import {
   SPEECH_BACKENDS,
   SPEECH_BITRATES,
@@ -413,7 +414,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
               </AppSelect>
             </div>
             {providersLoaded && options.length === 0 && (
-              <span>请前往项目首页的模型设置配置供应商</span>
+              <InlineNoModelHint text="尚未配置可用语音模型" />
             )}
           </>
         )}

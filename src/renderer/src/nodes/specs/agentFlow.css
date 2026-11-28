@@ -26,53 +26,11 @@
   color: #e0b970;
   border-color: rgba(224, 185, 112, 0.42);
 }
-.agent-flow-inline-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  margin-top: auto;
-}
 .agent-flow-compact-textarea {
   flex: 1 1 auto;
   min-height: 72px;
   border-radius: 8px;
   resize: none;
-}
-.agent-flow-inline-actions > * {
-  flex: 1 1 0;
-  min-width: 0;
-}
-.agent-flow-studio-btn {
-  width: 100%;
-  height: 32px;
-  padding: 0 10px;
-  border-radius: 8px;
-  border: 1px solid #333b48;
-  background: linear-gradient(180deg, #1d2430, #161b24);
-  color: #e7ebf2;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  transition: filter 140ms ease, border-color 140ms ease, background 140ms ease;
-}
-.agent-flow-studio-btn:hover {
-  background: linear-gradient(180deg, #242b37, #1c222c);
-  border-color: #465266;
-}
-.agent-flow-studio-btn.is-amber {
-  border-color: #f0d295;
-  background: linear-gradient(180deg, #e8c47c, #d4a454);
-  color: #13161b;
-  font-weight: 700;
-  box-shadow: 0 4px 14px rgba(224, 185, 112, 0.24);
-}
-.agent-flow-studio-btn.is-amber:hover {
-  filter: brightness(1.06);
 }
 .agent-flow-role-chip {
   display: inline-flex;
@@ -153,7 +111,10 @@
 }
 .node-card.type-ai-review .node-standard-scroll,
 .node-card.type-ai-review .node-standard-scroll > .node-body,
-.node-card.type-ai-review .node-standard-scroll > .node-body > .node-body-content {
+.node-card.type-ai-review .node-standard-scroll > .node-body > .node-body-content,
+.node-card.type-human-task .node-standard-scroll,
+.node-card.type-human-task .node-standard-scroll > .node-body,
+.node-card.type-human-task .node-standard-scroll > .node-body > .node-body-content {
   display: flex;
   flex-direction: column;
   flex: 1 1 0;
@@ -161,7 +122,9 @@
 }
 .node-card.type-ai-review .node-standard-shell .node-body-content > .agent-flow-body,
 .node-card.type-ai-review .agent-flow-text,
-.node-card.type-ai-review .agent-flow-text textarea {
+.node-card.type-ai-review .agent-flow-text textarea,
+.node-card.type-human-task .node-standard-shell .node-body-content > .agent-flow-body,
+.node-card.type-human-task .agent-flow-compact-textarea {
   flex: 1 1 auto;
   min-height: 0;
 }

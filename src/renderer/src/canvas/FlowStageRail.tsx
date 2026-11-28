@@ -9,7 +9,7 @@ import { useGatewayStore } from '../stores/gateway'
 import { toast } from '../stores/toast'
 import { runNodeManually } from '../engine/executor'
 import { ensureCanvasSaved } from './flow-asset-actions'
-import { deriveFlowSteps, deriveNow, type FlowStepState } from './flow-overview-model'
+import { deriveFlowSteps, deriveNow, STATE_META, type FlowStepState } from './flow-overview-model'
 import { deriveGraph } from './graph'
 import { nodePageIndex } from './node-page-index'
 import type { NodeCardShape } from './NodeCardShape'
@@ -29,11 +29,11 @@ interface FlowStageRailProps {
 }
 
 function discoverFlowMeta(editor: Editor): {
-  coordinators: Array<{ nodeId: string; title: string }>
+  coordinators: Array<{ nodeId: string; title: string; members: Set<string> }>
   controlledNodeIds: Set<string>
   stageNodes: NodeCardShape[]
 } {
-  const coordinators: Array<{ nodeId: string; title: string }> = []
+  const coordinators: Array<{ nodeId: string; title: string; members: Set<string> }> = []
   const controlledNodeIds = new Set<string>()
   const stageNodes: NodeCardShape[] = []
 
@@ -49,17 +49,19 @@ function discoverFlowMeta(editor: Editor): {
           stages?: Array<{ nodeId?: string }>
         }
         if (cfg.role === 'coordinator') {
-          coordinators.push({ nodeId: card.id, title: card.props.title || '主控' })
+          const members = new Set<string>()
           if (Array.isArray(cfg.allowedNodeIds)) {
             for (const id of cfg.allowedNodeIds) {
-              if (typeof id === 'string') controlledNodeIds.add(id)
+              if (typeof id === 'string') members.add(id)
             }
           }
           if (Array.isArray(cfg.stages)) {
             for (const st of cfg.stages) {
-              if (typeof st?.nodeId === 'string' && st.nodeId) controlledNodeIds.add(st.nodeId)
+              if (typeof st?.nodeId === 'string' && st.nodeId) members.add(st.nodeId)
             }
           }
+          for (const member of members) controlledNodeIds.add(member)
+          coordinators.push({ nodeId: card.id, title: card.props.title || '主控', members })
           continue
         }
       } catch {
@@ -104,16 +106,6 @@ function roleTagForOverviewStep(kind: string, participation: string): RailStageI
   if (kind === 'review') return '审核'
   if (participation === 'collaborative') return '人机'
   return 'AI'
-}
-
-function stateGlyph(state: FlowStepState): string {
-  if (state === 'completed' || state === 'review-passed') return '✓'
-  if (state === 'waiting-human') return '●'
-  if (state === 'rejected') return '↩'
-  if (state === 'gated') return '🔒'
-  if (state === 'running' || state === 'review-pending') return '●'
-  if (state === 'failed' || state === 'blocked' || state === 'stalled') return '!'
-  return '○'
 }
 
 function toShapeId(nodeId: string): TLShapeId {
@@ -169,7 +161,10 @@ function FlowStageRailContent({ editor, projectId }: FlowStageRailProps): React.
   const toggleControlRelations = useFlowFocusStore((s) => s.toggleControlRelations)
 
   const canvasMeta = useValue('flow-stage-rail-meta', () => discoverFlowMeta(editor), [editor])
-  const coordinatorId = canvasMeta.coordinators[0]?.nodeId ?? null
+  const track = useRef<HTMLDivElement>(null)
+  const [chosenFlow, setChosenFlow] = useState('')
+  const coordinator = canvasMeta.coordinators.find(item => item.nodeId === chosenFlow) ?? canvasMeta.coordinators[0]
+  const coordinatorId = coordinator?.nodeId ?? null
 
   // 轮询主控 Agent 实时运行投影（与 FlowOverviewPanel 同一权威来源）
   useEffect(() => {
@@ -209,7 +204,7 @@ function FlowStageRailContent({ editor, projectId }: FlowStageRailProps): React.
     }
   }, [projectId, coordinatorId])
 
-  const activeOverview = coordinatorId ? overview : null
+  const activeOverview = coordinatorId && overview?.nodeId === coordinatorId ? overview : null
 
   const steps = useMemo<RailStageItem[]>(() => {
     if (activeOverview) {
@@ -224,8 +219,10 @@ function FlowStageRailContent({ editor, projectId }: FlowStageRailProps): React.
         }))
       }
     }
-    // 未启动或无主控时：按画布 x 坐标（从左到右）列出清晰阶段链
-    const sorted = [...canvasMeta.stageNodes].sort((a, b) => a.x - b.x || a.y - b.y)
+    // 未运行时列出阶段索引，画布坐标不表示执行顺序。
+    const sorted = coordinator?.members.size
+      ? canvasMeta.stageNodes.filter(node => coordinator.members.has(node.id))
+      : canvasMeta.stageNodes
     return sorted.map((card) => ({
       nodeId: card.id,
       title: card.props.title || '未命名',
@@ -240,7 +237,7 @@ function FlowStageRailContent({ editor, projectId }: FlowStageRailProps): React.
               : 'idle',
       needsYou: false
     }))
-  }, [overview, canvasMeta.stageNodes])
+  }, [activeOverview, canvasMeta.stageNodes, coordinator])
 
   const now = useMemo(
     () => (activeOverview ? deriveNow(activeOverview, deriveFlowSteps(activeOverview)) : null),
@@ -303,10 +300,10 @@ function FlowStageRailContent({ editor, projectId }: FlowStageRailProps): React.
     if (busy) return
     setBusy(true)
     try {
-      if (overview?.state === 'running') {
+      if (activeOverview?.state === 'running') {
         const reply = await window.api.pauseFlowAgent({ projectId, nodeId: coordinatorId })
         if (!reply.ok) toast(reply.error.message)
-        else toast(overview.paused ? '已恢复' : '已暂停')
+        else toast(activeOverview.paused ? '已恢复' : '已暂停')
         return
       }
       await ensureCanvasSaved()
@@ -324,18 +321,18 @@ function FlowStageRailContent({ editor, projectId }: FlowStageRailProps): React.
       setBusy(false)
       window.dispatchEvent(new Event('canvas-agent-task-updated'))
     }
-  }, [attentionNodeId, busy, coordinatorId, editor, focusedNodeId, openStudio, overview, projectId, steps])
+  }, [attentionNodeId, busy, coordinatorId, editor, focusedNodeId, openStudio, activeOverview, projectId, steps])
 
-  if (steps.length === 0) return null
+  if (!steps.length && !coordinatorId) return null
 
   const activeStageId = focusedNodeId ?? attentionNodeId ?? steps[0]?.nodeId ?? null
   const primaryLabel = attentionNodeId
     ? '进入工作台 →'
-    : overview?.state === 'running'
-      ? overview.paused
+    : activeOverview?.state === 'running'
+      ? activeOverview.paused
         ? '恢复'
         : '暂停'
-      : overview?.state === 'waiting'
+      : activeOverview?.state === 'waiting'
         ? '继续流程'
         : coordinatorId
           ? '启动流程'
@@ -343,8 +340,16 @@ function FlowStageRailContent({ editor, projectId }: FlowStageRailProps): React.
 
   return (
     <div className="flow-stage-rail" role="region" aria-label="流程阶段轨">
-      <div className="flow-stage-rail-track">
-        {steps.map((step, index) => {
+      {canvasMeta.coordinators.length > 1 && (
+        <select aria-label="当前流程" value={coordinatorId ?? ''} onChange={event => {
+          setFocusedNode(null)
+          setChosenFlow(event.target.value)
+        }}>
+          {canvasMeta.coordinators.map(item => <option key={item.nodeId} value={item.nodeId}>{item.title}</option>)}
+        </select>
+      )}
+      <div className="flow-stage-rail-track" ref={track}>
+        {steps.map((step) => {
           const isSelected = step.nodeId === focusedNodeId
           const toneClass =
             step.needsYou
@@ -365,24 +370,26 @@ function FlowStageRailContent({ editor, projectId }: FlowStageRailProps): React.
                 onDoubleClick={() => openStudio(step.nodeId)}
                 title={`${step.title}（单击聚光，双击进入工作台）`}
               >
-                <span className="flow-stage-num">{String(index + 1).padStart(2, '0')}</span>
+                {activeOverview?.graph?.edges.some(edge => edge.to === step.nodeId &&
+                  activeOverview.graph!.edges.some(peer => peer.from === edge.from && peer.to !== edge.to && peer.kind === 'data') && edge.kind === 'data') && <span>分支</span>}
                 <span className="flow-stage-name">{step.title}</span>
                 <span className="flow-stage-role">{step.roleTag}</span>
                 <span className={`flow-stage-glyph${step.needsYou || step.state === 'running' ? ' is-pulse' : ''}`}>
-                  {stateGlyph(step.state)}
+                  {STATE_META[step.state].label}
                 </span>
               </button>
-              {index < steps.length - 1 && (
-                <span className="flow-stage-sep" aria-hidden="true">
-                  ›
-                </span>
-              )}
+
             </div>
           )
         })}
       </div>
 
       <div className="flow-stage-rail-actions">
+        {steps.length > 1 && <>
+          <button type="button" className="flow-rail-icon-btn" aria-label="向前查看阶段" onClick={() => track.current?.scrollBy({ left: -track.current.clientWidth * 0.8 })}>‹</button>
+          <span>{steps.length} 个环节</span>
+          <button type="button" className="flow-rail-icon-btn" aria-label="向后查看阶段" onClick={() => track.current?.scrollBy({ left: track.current.clientWidth * 0.8 })}>›</button>
+        </>}
         {activeStageId && !attentionNodeId && (
           <Tooltip label="进入当前环节工作台">
             <button
@@ -424,7 +431,7 @@ function FlowStageRailContent({ editor, projectId }: FlowStageRailProps): React.
         </Tooltip>
         <button
           type="button"
-          className={`flow-rail-cta${attentionNodeId ? ' is-amber' : ''}`}
+          className="flow-rail-cta"
           disabled={busy}
           onClick={() => void runPrimaryAction()}
         >

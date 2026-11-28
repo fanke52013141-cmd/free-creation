@@ -142,6 +142,7 @@
   place-items: center;
   width: 28px;
   height: 28px;
+  padding: 0;
   border: none;
   border-radius: 8px;
   background: transparent;

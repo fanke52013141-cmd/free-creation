@@ -1,3 +1,4 @@
+import { NodePrimaryButton } from '../../canvas/NodePresentation'
 /* eslint-disable react-refresh/only-export-components -- Node spec registration, like specs/index.tsx. */
 import { admitHumanTaskSubmission } from '@shared/agent-flow/human-task-submission'
 import { useState } from 'react'
@@ -165,23 +166,19 @@ function HumanTaskBody({ shape }: NodeBodyProps): React.JSX.Element {
           {error}
         </p>
       ) : null}
-      <div className="agent-flow-inline-actions">
-        <button
-          type="button"
-          className="agent-flow-studio-btn"
+      <>
+        <NodePrimaryButton allowWhileBusy
           disabled={picking}
           onClick={() => void submit()}
         >
           {picking ? '选择中…' : mediaKind ? '上传媒体' : '提交'}
-        </button>
-        <button
-          type="button"
-          className={`agent-flow-studio-btn${!completed ? ' is-amber' : ''}`}
+        </NodePrimaryButton>
+        <NodePrimaryButton allowWhileBusy
           onClick={() => useNodePanelStore.getState().open('stage-studio', shape.id, 'collaboration')}
         >
-          进入工作台 →
-        </button>
-      </div>
+          进入工作台
+        </NodePrimaryButton>
+      </>
     </div>
   )
 }

@@ -45,6 +45,7 @@
   /* 主按钮（CTA）统一主题：与主页「新建项目」同源（2026-11-12 用户裁决）。
      所有应用级主按钮（新建/保存/确认/运行/提交）共用这一组令牌，保持整体调性。
      节点内部中性灰控件（--node-control-*）属节点视觉规范，不在此列。 */
+  --flow-primary-gradient: linear-gradient(100deg, #6ad6eb, #84ead4 52%, #6cc6f1);
   --primary-ink: #080a0f;
   --primary-grad: linear-gradient(100deg, #22d3ee, #5eead4 52%, #38bdf8);
   --primary-grad-hover: linear-gradient(100deg, #67e8f9, #99f6e4 52%, #7dd3fc);

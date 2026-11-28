@@ -126,11 +126,7 @@ export function LibraryResourcePicker({
 
       {loading && resources.length === 0 ? (
         <div className="side-panel-empty">正在加载资源…</div>
-      ) : resources.length === 0 ? (
-        <div className="side-panel-empty">
-          资源库还没有内容，在项目素材里保存素材，或到资源库页面新建资源。
-        </div>
-      ) : (
+      ) : resources.length > 0 ? (
         <div className="assets-grid">
           {resources.map((resource) => (
             <LibraryCard
@@ -143,7 +139,7 @@ export function LibraryResourcePicker({
             />
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

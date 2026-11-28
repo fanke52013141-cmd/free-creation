@@ -49,6 +49,8 @@ export type IconName =
   | 'home'
   | 'minimap'
   | 'fit'
+  | 'focus-canvas'
+  | 'auto-layout'
   | 'zoom-in'
   | 'zoom-out'
   | 'reset'
@@ -58,6 +60,8 @@ export type IconName =
   | 'align-vertical'
   | 'distribute-horizontal'
   | 'distribute-vertical'
+  | 'gap-horizontal'
+  | 'gap-vertical'
   | 'group'
   | 'ungroup'
   | 'refresh'
@@ -376,14 +380,26 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   minimap: (
     <>
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <path d="M7 8h.01M7 12h.01M7 16h.01M11 8h6M11 12h4M11 16h6" />
+      <path d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20V6.5Z" />
+      <path d="M9 4v13.5M15 6.5V20" />
     </>
   ),
   fit: (
     <>
       <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" />
       <path d="m9 9 6 6M15 9l-6 6" />
+    </>
+  ),
+  'focus-canvas': (
+    <>
+      <path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" />
+      <rect x="8.5" y="8.5" width="7" height="7" rx="1.5" />
+    </>
+  ),
+  'auto-layout': (
+    <>
+      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+      <path d="M3 3v5h5" />
     </>
   ),
   // 2026-11-03 用户裁决：缩放按钮不用放大镜（太小太丑），改成干净的 − / +，16px 下清晰可辨。
@@ -423,16 +439,28 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   'distribute-horizontal': (
     <>
-      <rect x="3" y="7" width="4" height="10" rx="1" />
-      <rect x="10" y="7" width="4" height="10" rx="1" />
-      <rect x="17" y="7" width="4" height="10" rx="1" />
+      <rect x="4.25" y="6" width="2.5" height="12" rx="1" />
+      <rect x="10.75" y="6" width="2.5" height="12" rx="1" />
+      <rect x="17.25" y="6" width="2.5" height="12" rx="1" />
     </>
   ),
   'distribute-vertical': (
     <>
-      <rect x="7" y="3" width="10" height="4" rx="1" />
-      <rect x="7" y="10" width="10" height="4" rx="1" />
-      <rect x="7" y="17" width="10" height="4" rx="1" />
+      <rect x="6" y="4.25" width="12" height="2.5" rx="1" />
+      <rect x="6" y="10.75" width="12" height="2.5" rx="1" />
+      <rect x="6" y="17.25" width="12" height="2.5" rx="1" />
+    </>
+  ),
+  'gap-horizontal': (
+    <>
+      <path d="M4 5v14M20 5v14M8 12h8" />
+      <path d="m10.25 9.75-2.25 2.25 2.25 2.25M13.75 9.75 16 12l-2.25 2.25" />
+    </>
+  ),
+  'gap-vertical': (
+    <>
+      <path d="M5 4h14M5 20h14M12 8v8" />
+      <path d="M9.75 10.25 12 8l2.25 2.25M9.75 13.75 12 16l2.25-2.25" />
     </>
   ),
   group: (

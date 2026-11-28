@@ -484,20 +484,8 @@
   }
 }
 
-/* 开发模式专属：「重载界面」按钮（2026-11-21 用户裁决：固定放「新建项目」左侧；
-   打包版/浏览器验收页不渲染，见 ProjectListPage 门控）。虚线边框标识非正式功能。 */
-.project-home-dev-reload {
-  border-style: dashed;
-  border-color: rgba(231, 238, 247, 0.22);
-  background: rgba(23, 27, 32, 0.85);
-  color: var(--muted);
-}
-
-.project-home-dev-reload:hover {
-  color: var(--txt);
-  border-color: rgba(231, 238, 247, 0.4);
-}
-
+/* 开发模式专属：「重载界面」按钮（2026-11-28 用户裁决：纯图标按钮，与左侧 Agent 按钮样式一致；
+   打包版/浏览器验收页不渲染，见 ProjectListPage 门控）。 */
 .project-home-dev-reload:disabled {
   opacity: 0.6;
   cursor: default;

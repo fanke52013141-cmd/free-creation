@@ -15,7 +15,7 @@ import {
 } from 'tldraw'
 import { findNodeContinuationPlacement } from '../../../canvas/node-placement'
 import { canvasPerfPolicy } from '../../../canvas/canvas-performance-tier'
-import { modelsByModality } from '../../../stores/gateway'
+import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import type { NodeCardShape, NodeCardProps } from '../../../canvas/NodeCardShape'
 import { countIncomingConnections, createEdge } from '../../../canvas/graph'
 import { markUndoPoint } from '../../../canvas/history'
@@ -23,7 +23,7 @@ import { readNodeConfig } from '../../../canvas/node-persistence'
 import { getNodeType, mediaThumbUrl, mediaUrl } from '../../registry'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
-import { NodeHeaderActions, NodeIdentity } from '../../../canvas/NodePresentation'
+import { NodeHeaderActions, NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 import { toast } from '../../../stores/toast'
 import { useConfirmStore } from '../../../stores/confirm'
 import { useMediaStore } from '../../../stores/media'
@@ -163,15 +163,48 @@ export function ModelSelect({
   )
 }
 
-// 未配置任何对应模态模型时的占位引导（2026-11-02 裁决：统一空态身份块，
-// 不再展示供应商预设清单，主操作进底部操作条与其他节点一致）
+// 未配置任何对应模态模型时的占位引导（2026-11-28 规整：对齐 NODE_UI_STANDARD §6，
+// 次级文字说明 + 固定底部 CTA 直接打开全局模型设置弹窗）
 export function NoModelHint(): React.JSX.Element {
   return (
     <>
       <NodeIdentity>
-        <span className="gen-empty-model-hint">尚未配置可用模型，请前往项目首页的模型设置</span>
+        <span className="gen-empty-model-hint">尚未配置可用模型</span>
       </NodeIdentity>
+      <NodePrimaryButton
+        type="button"
+        onPointerDown={stopEventPropagation}
+        onClick={(e) => {
+          e.stopPropagation()
+          useGatewayStore.getState().openModelSettings()
+        }}
+      >
+        模型设置
+      </NodePrimaryButton>
     </>
+  )
+}
+
+export function InlineNoModelHint({
+  text = '尚未配置可用模型'
+}: {
+  text?: string
+}): React.JSX.Element {
+  return (
+    <div className="gen-inline-model-hint">
+      <span>{text}</span>
+      <button
+        type="button"
+        className="gen-inline-model-hint-btn"
+        onPointerDown={stopEventPropagation}
+        onClick={(e) => {
+          e.stopPropagation()
+          useGatewayStore.getState().openModelSettings()
+        }}
+      >
+        前往设置
+      </button>
+    </div>
   )
 }
 

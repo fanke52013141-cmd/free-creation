@@ -469,7 +469,7 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
               aria-label="智能整理画布"
               onClick={() => editor && organizeCanvas(editor)}
             >
-              <Icon name="align-horizontal" size={16} />
+              <Icon name="auto-layout" size={16} />
             </button>
           </Tooltip>
           <Tooltip label="定位画布内容">
@@ -478,7 +478,7 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
               aria-label="定位画布内容"
               onClick={() => editor && focusCanvas(editor)}
             >
-              <Icon name="target" size={16} />
+              <Icon name="focus-canvas" size={16} />
             </button>
           </Tooltip>
         </div>

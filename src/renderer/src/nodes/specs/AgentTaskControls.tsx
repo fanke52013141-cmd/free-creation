@@ -204,13 +204,11 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
         </p>
       ))}
       {quietControlledSpecialist ? (
-        <button
-          type="button"
-          className={`agent-flow-studio-btn${needsHumanAction ? ' is-amber' : ''}`}
+        <NodePrimaryButton allowWhileBusy
           onClick={() => useNodePanelStore.getState().open('stage-studio', shape.id, 'collaboration')}
         >
           {needsHumanAction ? '进入工作台 →' : '进入工作台'}
-        </button>
+        </NodePrimaryButton>
       ) : (
         <>
           <NodePrimaryButton allowWhileBusy disabled={!projectId} onClick={() => void act()}>

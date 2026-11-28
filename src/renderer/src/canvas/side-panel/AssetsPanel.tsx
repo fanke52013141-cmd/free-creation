@@ -471,9 +471,7 @@ export function AssetsPanel({
           查看全部素材
         </button>
       )}
-      {visible.length === 0 ? (
-        <div className="side-panel-empty">没有找到匹配的素材，调整筛选条件或导入新素材。</div>
-      ) : (
+      {visible.length > 0 && (
         <div className="assets-grid">
           {visible.map((asset) => (
             <AssetCard

@@ -312,27 +312,67 @@
   box-shadow: inset 0 0 0 1px rgba(66, 185, 245, 0.35);
 }
 
-/* ── 分类筛选行 ─────────────────────────────────────────── */
+/* ── 分类筛选与操作单行栏（2026-11-28 Stitch 优化） ─────────── */
 .library-filter-row {
   position: relative;
-  flex: 0 0 46px;
-  min-height: 46px;
+  flex: 0 0 48px;
+  min-height: 48px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 12px;
   padding: 0 14px;
   background: #0d0d0d;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.library-category-tabs-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
 }
 .library-category-tabs {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 0;
+  padding: 6px 20px 6px 0;
   overflow-x: auto;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  cursor: grab;
+  user-select: none;
 }
-.library-filter-row button {
+.library-category-tabs::-webkit-scrollbar {
+  display: none;
+}
+.library-category-tabs.is-dragging {
+  cursor: grabbing;
+}
+.library-row-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(231, 238, 247, 0.08);
+}
+.library-row-actions .library-secondary {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.library-row-actions .library-primary {
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+.library-batch-status {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.library-category-tabs button {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -341,19 +381,19 @@
   padding: 0 12px;
   color: var(--muted);
   background: transparent;
-  border-radius: 8px;
+  border-radius: 6px 6px 0 0;
   font-size: 12px;
+  white-space: nowrap;
   cursor: pointer;
   transition: color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
 }
-.library-filter-row button:hover {
+.library-category-tabs button:hover {
   color: var(--txt);
   background: var(--card-hover);
 }
 /* 分类选中态：文字变青 + 2px 下划线（与 Stitch 参考稿一致，不再整块填充）。 */
 .library-category-tabs button {
   position: relative;
-  border-radius: 6px 6px 0 0;
 }
 .library-category-tabs button.active {
   color: #8bdcff;
@@ -1504,7 +1544,7 @@
 .library-slot-options input { accent-color: var(--brand); }
 .library-slot-row button,
 .library-picker-batch button,
-.library-category-dialog button:not(.library-form-primary):not(.library-icon-button) {
+.library-category-dialog button:not(.library-form-primary):not(.library-icon-button):not(.modal-btn):not(.modal-shell-close) {
   min-height: 32px;
   padding: 0 13px;
   color: var(--muted);
@@ -1517,7 +1557,7 @@
 }
 .library-slot-row button:hover,
 .library-picker-batch button:hover,
-.library-category-dialog button:not(.library-form-primary):not(.library-icon-button):hover {
+.library-category-dialog button:not(.library-form-primary):not(.library-icon-button):not(.modal-btn):not(.modal-shell-close):hover {
   color: var(--brand);
   background: rgba(66, 185, 245, 0.1);
 }

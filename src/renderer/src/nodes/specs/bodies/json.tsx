@@ -210,9 +210,7 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
             enterEditing()
           }}
         >
-          <NodeIdentity>
-            <small>粘贴数据，或连接上游结构化内容</small>
-          </NodeIdentity>
+          <NodeIdentity />
         </div>
       )}
       {/* 2026-11-02 用户裁决：空态不再渲染这条只有一条描边的空工具栏（按钮上方那道横线）。

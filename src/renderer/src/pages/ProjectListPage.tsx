@@ -295,29 +295,27 @@ export function ProjectListPage(): React.JSX.Element {
             >
               <Icon name="download" size={16} />
             </TopbarIconButton>
-          </div>
-          <button
-            type="button"
-            className="project-home-button project-home-button-quiet project-home-agent-guide"
-            onClick={() => void copyExternalAgentGuide()}
-            title="复制外部 Agent（MCP / CLI）完整对接说明与全部节点端口清单，可直接发给外部 Agent 查看"
-          >
-            <Icon name={agentGuideCopied ? 'check' : 'agent'} size={14} />
-            {agentGuideCopied ? '已复制说明' : 'Agent 对接'}
-          </button>
-          {/* 2026-11-21 用户裁决：开发重载按钮固定放在「新建项目」左侧。 */}
-          {devReloadAvailable && (
-            <button
+            <TopbarIconButton
               type="button"
-              className="project-home-button project-home-button-quiet project-home-dev-reload"
-              onClick={reloadRendererUi}
-              disabled={devReloading}
-              title="重新加载界面代码（仅开发模式）：改完渲染层代码后点击生效，无需重启应用"
+              className="project-home-tool-btn project-home-agent-guide"
+              aria-label="复制 Agent 对接说明"
+              onClick={() => void copyExternalAgentGuide()}
             >
-              <Icon name="refresh" size={14} />
-              {devReloading ? '重载中…' : '重载'}
-            </button>
-          )}
+              <Icon name={agentGuideCopied ? 'check' : 'agent'} size={16} />
+            </TopbarIconButton>
+            {/* 2026-11-28 用户裁决：开发重载按钮与左侧 Agent 按钮保持一致的纯图标样式。 */}
+            {devReloadAvailable && (
+              <TopbarIconButton
+                type="button"
+                className="project-home-tool-btn project-home-dev-reload"
+                aria-label={devReloading ? '重载中…' : '重载界面'}
+                onClick={reloadRendererUi}
+                disabled={devReloading}
+              >
+                <Icon name="refresh" size={16} />
+              </TopbarIconButton>
+            )}
+          </div>
           <button
             type="button"
             className="project-home-button project-home-button-primary"
@@ -428,15 +426,6 @@ export function ProjectListPage(): React.JSX.Element {
 
         <main className="project-home-workspace">
           <div className="project-home-grid">
-            {!loading && projects.length === 0 && !creating && (
-              <div className="project-home-empty project-home-empty-action">
-                <span>还没有项目</span>
-                <button type="button" className="project-home-button project-home-button-primary"
-                  onClick={() => setCreating(true)}>
-                  <Icon name="add" size={15} /> 创建第一个项目
-                </button>
-              </div>
-            )}
             {projects.map((p) => (
               <article
                 key={p.id}

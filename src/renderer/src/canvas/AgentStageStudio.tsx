@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import { createShapeId, useValue, type Editor, type TLShapeId } from 'tldraw'
 import type { FlowAgentCollaboration, FlowAgentCollaborationView } from '@shared/agent-flow/desktop-tasks'
 import { admitHumanTaskSubmission } from '@shared/agent-flow/human-task-submission'
@@ -178,6 +178,22 @@ function MultimodalValueView({
   return <div className="ass-media-placeholder">{value.mime || value.kind}</div>
 }
 
+const studioDrafts = new WeakMap<Editor, Map<string, string>>()
+
+function useStageDraft(editor: Editor, key: string): readonly [string, Dispatch<SetStateAction<string>>] {
+  const [value, setValue] = useState(() => studioDrafts.get(editor)?.get(key) ?? '')
+  useEffect(() => {
+    let drafts = studioDrafts.get(editor)
+    if (!drafts) {
+      drafts = new Map<string, string>()
+      studioDrafts.set(editor, drafts)
+    }
+    if (value) drafts.set(key, value)
+    else drafts.delete(key)
+  }, [editor, key, value])
+  return [value, setValue] as const
+}
+
 export function AgentStageStudio({
   editor,
   projectId,
@@ -214,9 +230,10 @@ export function AgentStageStudio({
           nodes.push(card)
         }
       }
-      return nodes.sort((a, b) => a.x - b.x || a.y - b.y)
+      const owner = findCoordinatorForNode(editor, shapeId)
+      return owner ? nodes.filter(node => findCoordinatorForNode(editor, node.id) === owner) : nodes
     },
-    [editor]
+    [editor, shapeId]
   )
 
   const upstreamItems = useValue(
@@ -263,12 +280,13 @@ export function AgentStageStudio({
 
   const [collabView, setCollabView] = useState<FlowAgentCollaborationView | null>(null)
   const [candidatePreviews, setCandidatePreviews] = useState<Record<string, NodeValue>>({})
-  const [selectedCandidateId, setSelectedCandidateId] = useState('')
-  const [chatInput, setChatInput] = useState('')
-  const [outputDraft, setOutputDraft] = useState('')
-  const [humanDraft, setHumanDraft] = useState('')
-  const [humanMediaId, setHumanMediaId] = useState('')
-  const [humanMediaPath, setHumanMediaPath] = useState('')
+  const draftKey = JSON.stringify([projectId, shapeId])
+  const [selectedCandidateId, setSelectedCandidateId] = useStageDraft(editor, draftKey + '/selectedCandidateId')
+  const [chatInput, setChatInput] = useStageDraft(editor, draftKey + '/chatInput')
+  const [outputDraft, setOutputDraft] = useStageDraft(editor, draftKey + '/outputDraft')
+  const [humanDraft, setHumanDraft] = useStageDraft(editor, draftKey + '/humanDraft')
+  const [humanMediaId, setHumanMediaId] = useStageDraft(editor, draftKey + '/humanMediaId')
+  const [humanMediaPath, setHumanMediaPath] = useStageDraft(editor, draftKey + '/humanMediaPath')
   const [busy, setBusy] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
 
@@ -374,8 +392,6 @@ export function AgentStageStudio({
   })()
 
   const inputBytes = upstreamItems.reduce((sum, item) => sum + estimateNodeValueBytes(item.value), 0)
-  const budgetLimit = 65536
-  const budgetPercent = Math.min(100, Math.max(inputBytes > 0 ? 4 : 0, Math.round((inputBytes / budgetLimit) * 100)))
 
   const collabReady =
     !busy && collabView?.task.state === 'waiting' && collabView.task.waitKind === 'human'
@@ -418,6 +434,8 @@ export function AgentStageStudio({
       setCollabView(reply.data)
       if (actionKind === 'discuss' || actionKind === 'note') setChatInput('')
       if (actionKind === 'submit' && accepted) {
+        setSelectedCandidateId('')
+        setOutputDraft('')
         toast('已确认交付')
       }
       const current = editor.getShape(shape.id)
@@ -487,6 +505,9 @@ export function AgentStageStudio({
       }
       await ensureCanvasSaved()
       window.dispatchEvent(new Event('canvas-agent-task-updated'))
+      setHumanDraft('')
+      setHumanMediaId('')
+      setHumanMediaPath('')
       toast('已提交交付')
     } finally {
       setBusy(false)
@@ -561,31 +582,32 @@ export function AgentStageStudio({
     })
     const coordinatorId = findCoordinatorForNode(editor, shape.id)
     let serverLines: string[] = []
-    let canServerRework = false
 
-    if (coordinatorId && window.api?.flowAgentStageReworkPreview) {
+    if (coordinatorId) {
       try {
         const preview = await window.api.flowAgentStageReworkPreview({
           projectId,
           nodeId: coordinatorId,
           stageKey: shape.id
         })
-        if (preview.ok && preview.data?.canRework) {
-          canServerRework = true
-          serverLines = [
+        if (!preview.ok || !preview.data?.canRework) {
+          toast(preview.ok ? '当前阶段无法返工' : preview.error.message)
+          return
+        }
+        serverLines = [
             `受影响阶段：${preview.data.willRerunStages.length} 个`,
             `${preview.data.staleDeliveries.length} 份旧交付将移入历史，保留上游 ${preview.data.keptDeliveries} 份`
-          ]
-        }
+        ]
       } catch {
-        /* 退回到画布路径依赖清空 */
+        toast('返工影响尚未确认')
+        return
       }
     }
 
     const impactLines = [
       downstreamNames.length > 0
         ? `将清空下游 ${downstreamNames.length} 个受依赖节点：${downstreamNames.join('、')}`
-        : '无受影响的下游节点，仅重置当前步骤。',
+        : '没有下游节点需要清理。',
       ...serverLines,
       '旧产物自动归档至各节点「历史」，不物理删除；无关分支不受影响。'
     ]
@@ -601,13 +623,16 @@ export function AgentStageStudio({
 
     setBusy(true)
     try {
-      if (canServerRework && coordinatorId) {
+      if (coordinatorId) {
         const reply = await window.api.flowAgentStageRework({
           projectId,
           nodeId: coordinatorId,
           stageKey: shape.id
         })
-        if (!reply.ok) toast(reply.error.message)
+        if (!reply.ok) {
+          toast(reply.error.message)
+          return
+        }
       }
       const { clearedIds, archivedCount } = archiveAndClearDownstreamCanvasNodes(editor, shape.id)
       await ensureCanvasSaved()
@@ -615,8 +640,10 @@ export function AgentStageStudio({
       toast(
         clearedIds.length > 0
           ? `已清空 ${clearedIds.length} 个下游节点，${archivedCount} 份旧产物已归档历史`
-          : '已重置本步，可重新执行'
+          : '本步没有需要清理的下游节点'
       )
+    } catch {
+      toast('返工结果尚未确认，请核对流程状态')
     } finally {
       setBusy(false)
     }
@@ -655,7 +682,7 @@ export function AgentStageStudio({
           ? firstSelfOutput.kind.toUpperCase()
           : '交付物'
 
-  const stageIndex = stageList.findIndex((s) => s.id === shape.id)
+
 
   return (
     <div className="ass-overlay" role="dialog" aria-modal="true" aria-label="环节聚焦工作台">
@@ -668,9 +695,7 @@ export function AgentStageStudio({
           </button>
           <span className="ass-divider" />
           <span className={`ass-dot ${meta.tone}`} />
-          <span className="ass-stage-num">
-            {stageIndex >= 0 ? String(stageIndex + 1).padStart(2, '0') : '··'}
-          </span>
+
           <h1 className="ass-stage-title">{shape.props.title || '环节工作台'}</h1>
           <span className={`ass-mode-chip ${meta.tone}`}>{meta.label}</span>
         </div>
@@ -678,14 +703,13 @@ export function AgentStageStudio({
         {/* 居中紧凑阶段切换 */}
         {stageList.length > 1 && (
           <nav className="ass-stage-switcher" aria-label="切换环节">
-            {stageList.map((item, idx) => (
+            {stageList.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 className={`ass-switch-pill${item.id === shape.id ? ' is-current' : ''}`}
                 onClick={() => switchStage(item.id)}
               >
-                <span>{String(idx + 1).padStart(2, '0')}</span>
                 <span>{item.props.title || '环节'}</span>
               </button>
             ))}
@@ -768,11 +792,8 @@ export function AgentStageStudio({
                 输入 · 上游节点
               </span>
               <span className="ass-budget-text">
-                {formatBytes(inputBytes)} / {formatBytes(budgetLimit)}
+                约 {formatBytes(inputBytes)}
               </span>
-            </div>
-            <div className="ass-budget-track">
-              <div className="ass-budget-fill" style={{ width: `${budgetPercent}%` }} />
             </div>
             <div className="ass-io-scroll">
               {upstreamItems.length === 0 ? (
@@ -857,7 +878,7 @@ export function AgentStageStudio({
               {mode === 'human' && (
                 <button
                   type="button"
-                  className="ass-primary-cta is-amber"
+                  className="ass-primary-cta is-cyan"
                   disabled={busy}
                   onClick={() => void submitHumanDelivery()}
                 >
@@ -867,11 +888,11 @@ export function AgentStageStudio({
               {mode === 'collab' && (
                 <button
                   type="button"
-                  className="ass-primary-cta is-amber"
-                  disabled={!collabReady}
-                  onClick={() => void runCollabAction('submit', true)}
+                  className="ass-primary-cta is-cyan"
+                  disabled={collabView ? !collabReady : busy}
+                  onClick={() => void (collabView ? runCollabAction('submit', true) : runThisStage())}
                 >
-                  确认交付 →
+                  {collabView ? '确认交付 →' : '启动本步对话'}
                 </button>
               )}
               {mode === 'ai' && (
@@ -978,16 +999,7 @@ export function AgentStageStudio({
             <div className="ass-ws-chat">
               <div className="ass-chat-stream">
                 {!collabView ? (
-                  <div className="ass-chat-empty">
-                    <button
-                      type="button"
-                      className="ass-primary-cta is-cyan"
-                      disabled={busy}
-                      onClick={() => void runThisStage()}
-                    >
-                      启动本步对话
-                    </button>
-                  </div>
+                  <div className="ass-chat-empty">等待启动本步对话</div>
                 ) : (
                   <>
                     {collabView.workingDraft !== undefined && (

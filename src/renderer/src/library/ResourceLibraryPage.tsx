@@ -352,26 +352,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
             <TopbarIconButton type="button" className="library-tool-btn" aria-label="导入资产包" onClick={() => void importLibrary()}><Icon name="upload" size={16} /></TopbarIconButton>
             <TopbarIconButton type="button" className="library-tool-btn" aria-label="导出资产包" onClick={() => void exportLibrary()}><Icon name="download" size={16} /></TopbarIconButton>
           </div>
-          <button type="button" className="library-header-text-btn" onClick={() => setCategoryEditor({})}>
-            <Icon name="add" size={13} />新建分类
-          </button>
-          <AppSelect
-            className="library-edit-category-select"
-            value=""
-            aria-label="编辑分类"
-            onChange={(event) => {
-              const category = categories.find((item) => item.id === event.target.value)
-              if (category) setCategoryEditor({ initial: category })
-            }}
-          >
-            <option value="">编辑分类</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </AppSelect>
-          <button className="library-primary" onClick={() => { setSelectedId(null); setFormOpen(true) }}><span className="library-primary-icon"><Icon name="add" size={14} /></span>新建资源</button>
           {/* 2026-11-06 用户反馈：进入资源库后找不到返回入口——在系统窗口按钮左侧再放一个固定返回图标。 */}
           <TopbarIconButton type="button" className="library-home-btn" aria-label="返回项目列表" onClick={onBack}>
             <Icon name="home" size={16} />
@@ -380,36 +360,100 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
       </header>
 
       <nav className="library-filter-row" aria-label="资源分类">
-        <div className="library-category-tabs">
-          <button className={!categoryId ? 'active' : ''} onClick={() => { clearBatchSelection(); setCategoryId('') }}>全部</button>
-          <button className={categoryId === 'legacy' ? 'active' : ''} onClick={() => { clearBatchSelection(); setCategoryId('legacy') }}>未分类</button>
-          {categories.map((category) => (
-            <button
-              key={category.id}
-              className={categoryId === category.id ? 'active' : ''}
-              onClick={() => { clearBatchSelection(); setCategoryId(category.id) }}
-              title={`浏览分类：${category.name}`}
-            >
-              {category.name}
-            </button>
-          ))}
+        <div className="library-category-tabs-wrap">
+          <div
+            className="library-category-tabs"
+            onPointerDown={(event) => {
+              if (event.button !== 0) return
+              const el = event.currentTarget
+              const startX = event.clientX
+              const startScrollLeft = el.scrollLeft
+              let dragged = false
+              const onMove = (moveEvent: PointerEvent): void => {
+                const dx = moveEvent.clientX - startX
+                if (!dragged && Math.abs(dx) > 4) {
+                  dragged = true
+                  el.classList.add('is-dragging')
+                }
+                if (dragged) el.scrollLeft = startScrollLeft - dx
+              }
+              const onUp = (): void => {
+                window.removeEventListener('pointermove', onMove)
+                window.removeEventListener('pointerup', onUp)
+                el.classList.remove('is-dragging')
+                if (dragged) {
+                  const suppressClick = (clickEvent: MouseEvent): void => {
+                    clickEvent.preventDefault()
+                    clickEvent.stopPropagation()
+                  }
+                  el.addEventListener('click', suppressClick, { capture: true, once: true })
+                  window.setTimeout(() => el.removeEventListener('click', suppressClick, { capture: true }), 0)
+                }
+              }
+              window.addEventListener('pointermove', onMove)
+              window.addEventListener('pointerup', onUp)
+            }}
+            onWheel={(event) => {
+              if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+                event.currentTarget.scrollLeft += event.deltaY
+              }
+            }}
+          >
+            <button className={!categoryId ? 'active' : ''} onClick={() => { clearBatchSelection(); setCategoryId('') }}>全部</button>
+            <button className={categoryId === 'legacy' ? 'active' : ''} onClick={() => { clearBatchSelection(); setCategoryId('legacy') }}>未分类</button>
+            {categories.map((category) => (
+              <button
+                key={category.id}
+                className={categoryId === category.id ? 'active' : ''}
+                onClick={() => { clearBatchSelection(); setCategoryId(category.id) }}
+                title={`浏览分类：${category.name}`}
+              >
+                {category.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="library-row-actions">
+          <button type="button" className="library-secondary" disabled={batchBusy} aria-pressed={batchMode} onClick={() => { clearBatchSelection(); setBatchMode(!batchMode) }}>
+            {batchMode ? '退出批量管理' : '批量管理'}
+          </button>
+          {batchMode ? (
+            <>
+              <span className="library-batch-status" role="status">已选 {batchIds.size} 项</span>
+              <button type="button" className="library-secondary" disabled={!batchIds.size || batchBusy || !batchReady} onClick={() => void runBatch('export')}>批量导出</button>
+              <button type="button" className="library-secondary library-batch-delete" disabled={!batchIds.size || batchBusy || !batchReady} onClick={() => void runBatch('delete')}>批量删除</button>
+              <button type="button" className="library-secondary" disabled={!resources.length || batchBusy || !batchReady} onClick={() => {
+                batchAnchor.current = null
+                setBatchIds(allSelected ? new Set() : new Set(resources.map((item) => item.id)))
+              }}>{allSelected ? '取消全选' : nextCursor ? '全选已加载' : '全选'}</button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="library-header-text-btn" onClick={() => setCategoryEditor({})}>
+                <Icon name="add" size={13} />新建分类
+              </button>
+              <AppSelect
+                className="library-edit-category-select"
+                value=""
+                aria-label="编辑分类"
+                onChange={(event) => {
+                  const category = categories.find((item) => item.id === event.target.value)
+                  if (category) setCategoryEditor({ initial: category })
+                }}
+              >
+                <option value="">编辑分类</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </AppSelect>
+              <button className="library-primary" onClick={() => { setSelectedId(null); setFormOpen(true) }}><span className="library-primary-icon"><Icon name="add" size={14} /></span>新建资源</button>
+            </>
+          )}
         </div>
       </nav>
-
-      <div className="library-batch-toolbar">
-        <button type="button" className="library-secondary" disabled={batchBusy} aria-pressed={batchMode} onClick={() => { clearBatchSelection(); setBatchMode(!batchMode) }}>
-          {batchMode ? '退出批量管理' : '批量管理'}
-        </button>
-        {batchMode && <>
-          <span role="status">已选 {batchIds.size} 项</span>
-          <button type="button" className="library-secondary" disabled={!batchIds.size || batchBusy || !batchReady} onClick={() => void runBatch('export')}>批量导出</button>
-          <button type="button" className="library-secondary library-batch-delete" disabled={!batchIds.size || batchBusy || !batchReady} onClick={() => void runBatch('delete')}>批量删除</button>
-          <button type="button" className="library-secondary library-batch-select-all" disabled={!resources.length || batchBusy || !batchReady} onClick={() => {
-            batchAnchor.current = null
-            setBatchIds(allSelected ? new Set() : new Set(resources.map((item) => item.id)))
-          }}>{allSelected ? '取消全选' : nextCursor ? '全选已加载' : '全选'}</button>
-        </>}
-      </div>
       <div className="library-workspace">
           <main ref={browserRef} className="library-resource-browser">
             {resources.length > 0 && (

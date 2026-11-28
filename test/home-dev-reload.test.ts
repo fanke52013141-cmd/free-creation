@@ -16,11 +16,12 @@ const cssSource = readFileSync(
 describe('主页开发工具「重载界面」', () => {
   it('仅在真实 Electron 开发会话显示（打包版与浏览器验收页都不渲染）', () => {
     expect(pageSource).toContain('import.meta.env.DEV && Boolean(window.api)')
-    // 2026-11-21 用户裁决：按钮固定放「新建项目」左侧，标签为「重载」。
+    // 2026-11-28 用户裁决：按钮固定放「新建项目」左侧，纯图标样式与左侧 Agent 按钮一致。
     expect(pageSource.indexOf('project-home-dev-reload')).toBeLessThan(
       pageSource.indexOf('project-home-button-primary')
     )
-    expect(pageSource).toContain("devReloading ? '重载中…' : '重载'")
+    expect(pageSource).toContain('project-home-tool-btn project-home-dev-reload')
+    expect(pageSource).toContain("aria-label={devReloading ? '重载中…' : '重载界面'}")
   })
 
   it('重载前冲刷保存协调器，防止未落盘内容丢失', () => {
@@ -41,9 +42,8 @@ describe('主页开发工具「重载界面」', () => {
     expect(pageSource).toContain('window.location.reload()')
   })
 
-  it('样式为顶栏安静按钮 + 虚线边框，标识非正式功能', () => {
-    expect(cssSource).toContain('.project-home-dev-reload')
-    expect(cssSource).toContain('border-style: dashed')
+  it('样式复用顶栏纯图标工具按钮，与左侧 Agent 按钮一致', () => {
+    expect(cssSource).toContain('.project-home-dev-reload:disabled')
     expect(cssSource).not.toContain('.project-home-dev-tools')
   })
 })

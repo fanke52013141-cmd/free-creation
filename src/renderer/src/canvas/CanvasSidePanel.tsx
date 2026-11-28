@@ -271,13 +271,7 @@ function WorkflowPanel({
             aria-label="搜索节点流"
           />
         </label>
-        {templates.length === 0 && composites.length === 0 ? (
-          <div className="side-panel-empty">
-            节点流还是空的。右键点击画布节点，选择「保存节点」中的流程模板；也可以多选节点后使用浮动工具栏保存。
-          </div>
-        ) : visibleTemplates.length === 0 && visibleComposites.length === 0 ? (
-          <div className="side-panel-empty">没有找到匹配的节点流条目。</div>
-        ) : (
+        {(visibleTemplates.length > 0 || visibleComposites.length > 0) && (
           <div className="assets-grid">
             {visibleComposites.map((capability) => (
               <CompositeCard
@@ -651,11 +645,7 @@ function RunsPanel({
           <button onClick={onClearFocus}>查看全部</button>
         </div>
       )}
-      {visible.length === 0 ? (
-        <div className="side-panel-empty">
-          {entries.length === 0 ? '当前项目还没有节点运行记录。' : '没有匹配的运行记录。'}
-        </div>
-      ) : (
+      {visible.length > 0 && (
         <div className="runs-list">
           {visible.map((run) => {
             const rowId = `${run.nodeId}:${run.runId}`
@@ -911,9 +901,7 @@ function HistoryPanel({
           <Icon name="history" size={14} /> 保存版本
         </button>
       </div>
-      {snapshots.length === 0 ? (
-        <div className="side-panel-empty">暂无历史版本。点击「保存版本」记录当前画布状态。</div>
-      ) : (
+      {snapshots.length > 0 && (
         <div className="history-list">
           {snapshots.map((snap, index) => (
             <div key={snap.id} className="history-card">
@@ -1031,11 +1019,7 @@ function TasksPanel({
           </select>
         </label>
       )}
-      {items.length === 0 ? (
-        <div className="side-panel-empty">
-          暂无待你处理的节点。人工任务待提交、或协作 Agent 等待确认时会出现在这里。
-        </div>
-      ) : (
+      {items.length > 0 &&
         [...groups]
           .filter(([roleId]) => !selectedRole || roleId === selectedRole)
           .map(([roleId, group]) => (
@@ -1043,8 +1027,7 @@ function TasksPanel({
               <strong>{group.name}</strong>
               {group.items.map(renderItem)}
             </section>
-          ))
-      )}
+          ))}
     </div>
   )
 }

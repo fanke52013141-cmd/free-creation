@@ -343,17 +343,9 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
-.ass-primary-cta.is-amber {
-  background: linear-gradient(180deg, #e8c47c, #d4a454);
-  color: #13161b;
-  box-shadow: 0 4px 14px rgba(224, 185, 112, 0.25);
-}
-.ass-primary-cta.is-amber:hover:not(:disabled) {
-  filter: brightness(1.06);
-}
 .ass-primary-cta.is-cyan {
-  background: linear-gradient(100deg, #22d3ee, #5eead4 52%, #38bdf8);
-  color: #09131a;
+  background: var(--flow-primary-gradient);
+  color: var(--primary-ink);
 }
 
 .ass-empty-slot {

@@ -24,6 +24,7 @@
 
 /* 2026-11-06 用户裁决：在应用按钮与系统最小化/关闭按钮之间加一条竖线，避免误触。 */
 .desktop-window-overlay .canvas-topbar::after {
+  display: block !important;
   position: absolute;
   top: 50%;
   right: var(--window-caption-width);

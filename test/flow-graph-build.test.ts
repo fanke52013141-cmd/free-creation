@@ -100,6 +100,13 @@ function fixture(existingIds: string[] = []) {
 }
 
 describe('P5 flowGraph.propose（外部建图提案）', () => {
+  it('keeps proposed nodes clear of existing cards and preserves the authorized preview', async () => {
+    const f = fixture(['shape:existing'])
+    const preview = await f.host.proposeGraph({ projectId: 'p', graph: seqGraph, requestId: 'occupied' })
+    expect(preview.nodes.every(node => node.x >= 372 || node.y >= 332)).toBe(true)
+    const authorized = await f.host.authorizeGraph({ projectId: 'p', buildId: preview.buildId })
+    expect(authorized.nodes).toEqual(preview.nodes)
+  })
   it('BL-05: rejects incompatible ports before saving a proposal', async () => {
     const f = fixture()
     const graph = {

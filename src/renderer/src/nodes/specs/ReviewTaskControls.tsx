@@ -1,3 +1,4 @@
+import { NodePrimaryButton } from '../../canvas/NodePresentation'
 import { useState } from 'react'
 import { useEditor } from 'tldraw'
 import type { NodeBodyProps } from '../registry'
@@ -87,23 +88,19 @@ export function ReviewTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Rea
           {error}
         </p>
       )}
-      <div className="agent-flow-inline-actions">
-        <button
-          type="button"
-          className="agent-flow-studio-btn"
+      <>
+        <NodePrimaryButton allowWhileBusy
           disabled={busy || !projectId}
           onClick={() => void run()}
         >
           {busy ? '审核中' : decision ? '复审' : '审核'}
-        </button>
-        <button
-          type="button"
-          className="agent-flow-studio-btn"
+        </NodePrimaryButton>
+        <NodePrimaryButton allowWhileBusy
           onClick={() => useNodePanelStore.getState().open('stage-studio', shape.id, 'collaboration')}
         >
-          审阅台 →
-        </button>
-      </div>
+          审阅台
+        </NodePrimaryButton>
+      </>
     </>
   )
 }
